@@ -25,6 +25,23 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RS = os.path.dirname(HERE)
+VD = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(RS))), 'video_data')
+
+
+def words_by_sec(vid, n):
+    """transcript words bucketed into each second — what's SAID at second t (the concept channel content)."""
+    out = ['' for _ in range(n)]
+    try:
+        a = json.load(open(os.path.join(VD, vid, 'analysis.json')))
+        w = (a.get('transcript') or {}).get('words') or []
+    except Exception:
+        return out
+    buck = {t: [] for t in range(n)}
+    for x in w:
+        ts = x.get('timestamp')
+        if isinstance(ts, (int, float)) and 0 <= int(ts) < n:
+            buck[int(ts)].append(x.get('word', ''))
+    return [' '.join(z for z in buck[t] if z).strip() for t in range(n)]
 rng = np.random.default_rng(7)
 
 MIN_GAP = 2            # seconds between reference and gratification (skip adjacency/continuity)
@@ -228,6 +245,7 @@ def main():
                         out.append(-128 if vals.size == 0 else int(np.clip(round(float(vals.mean()) / MAT_SCALE * 127), -127, 127)))
                 return out
             rec['mat'] = {m: ds(Rm[m]) for m in MODS}
+            rec['words'] = words_by_sec(vid, n)
             rec['vsurp'] = vsurp; rec['events'] = events
             rec['tension'] = tension; rec['drops'] = drops
             rec['unclosed'] = unclosed; rec['orphan_grat'] = orphan_grat

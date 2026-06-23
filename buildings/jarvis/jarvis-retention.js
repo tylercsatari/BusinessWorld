@@ -877,13 +877,14 @@ const JarvisRetention = (function () {
                 arcs += `<path d="M ${xi} ${ys} C ${xi} ${(ys + yd) / 2} ${mx} ${yd} ${xj} ${yd}" fill="none" stroke="${col}" stroke-width="${sw}" opacity="${op}"><title>${MOD_T(e)}</title></path>`;
             }
         });
-        // markers: triangle = reference (source), circle = gratification (dst)
+        // markers: triangle = reference (source), circle = gratification (dst) — all clickable
         let marks = '';
-        Object.keys(srcMark).forEach(k => { const i = +k.split(':')[1], yy = srcMark[k], xi = x(i); marks += `<path d="M ${xi - 4} ${yy + (yy === yV ? -6 : 6)} L ${xi + 4} ${yy + (yy === yV ? -6 : 6)} L ${xi} ${yy} Z" fill="${C.text}" opacity="0.85"/>`; });
-        Object.keys(dstMark).forEach(k => { const j = +k.split(':')[1], yy = dstMark[k], xj = x(j); marks += `<circle cx="${xj}" cy="${yy}" r="3.2" fill="none" stroke="${C.text}" stroke-width="1.4" opacity="0.9"/>`; });
+        Object.keys(srcMark).forEach(k => { const i = +k.split(':')[1], yy = srcMark[k], xi = x(i); marks += `<path data-rtgnode="${i}" style="cursor:pointer" d="M ${xi - 4.5} ${yy + (yy === yV ? -7 : 7)} L ${xi + 4.5} ${yy + (yy === yV ? -7 : 7)} L ${xi} ${yy} Z" fill="${C.text}" opacity="0.85"><title>reference at ${i}s — click to inspect + play</title></path>`; });
+        Object.keys(dstMark).forEach(k => { const j = +k.split(':')[1], yy = dstMark[k], xj = x(j); marks += `<circle data-rtgnode="${j}" style="cursor:pointer" cx="${xj}" cy="${yy}" r="4" fill="${C.bg}" stroke="${C.text}" stroke-width="1.5" opacity="0.95"><title>gratification at ${j}s — click to inspect + play</title></circle>`; });
         // orphans: open loops + payoffs with no partner (dashed orange, no arc)
-        (v.unclosed || []).forEach(u => { const yy = u.mod[0] === 'c' ? yC : yV, xi = x(u.i); marks += `<path d="M ${xi - 4} ${yy + (yy === yV ? -6 : 6)} L ${xi + 4} ${yy + (yy === yV ? -6 : 6)} L ${xi} ${yy} Z" fill="none" stroke="${C.orange}" stroke-width="1" stroke-dasharray="2 1.5"><title>unclosed reference (open loop) at ${u.i}s</title></path>`; });
-        (v.orphan_grat || []).forEach(t => { const xi = x(t); marks += `<circle cx="${xi}" cy="${yV}" r="3.6" fill="none" stroke="${C.orange}" stroke-width="1.3" stroke-dasharray="2 1.5"><title>orphan gratification (no setup) at ${t}s</title></circle>`; });
+        (v.unclosed || []).forEach(u => { const yy = u.mod[0] === 'c' ? yC : yV, xi = x(u.i); marks += `<path data-rtgnode="${u.i}" style="cursor:pointer" d="M ${xi - 4.5} ${yy + (yy === yV ? -7 : 7)} L ${xi + 4.5} ${yy + (yy === yV ? -7 : 7)} L ${xi} ${yy} Z" fill="none" stroke="${C.orange}" stroke-width="1.1" stroke-dasharray="2 1.5"><title>unclosed reference (open loop) at ${u.i}s — click to inspect</title></path>`; });
+        (v.orphan_grat || []).forEach(t => { const xi = x(t); marks += `<circle data-rtgnode="${t}" style="cursor:pointer" cx="${xi}" cy="${yV}" r="4" fill="none" stroke="${C.orange}" stroke-width="1.4" stroke-dasharray="2 1.5"><title>orphan gratification (no setup) at ${t}s — click to inspect</title></circle>`; });
+        const ph = `<line class="rtg-ph" data-x0="${pad}" data-x1="${W - pad}" data-n="${n}" x1="${pad}" y1="12" x2="${pad}" y2="${H - 18}" stroke="#fff" stroke-width="1.5" opacity="0" style="pointer-events:none"/>`;
         // second ticks + speech shading on C track
         let ticks = '';
         for (let s = 0; s < n; s++) { const xs = x(s); ticks += `<line x1="${xs}" y1="${yV}" x2="${xs}" y2="${yV}" />`;
@@ -895,10 +896,71 @@ const JarvisRetention = (function () {
             <line x1="${pad}" y1="${yC}" x2="${W - pad}" y2="${yC}" stroke="${C.border2}" stroke-width="1.5"/>
             <text x="6" y="${yV - 10}" fill="${C.dim}" font-size="11" font-weight="700">VISUAL</text>
             <text x="6" y="${yC + 22}" fill="${C.dim}" font-size="11" font-weight="700">CONCEPT</text>
-            ${arcs}${marks}${axisLab}</svg>`;
+            ${arcs}${marks}${ph}${axisLab}</svg>`;
     }
     function MOD_T(e) { return `${RTG.mod_label[e.mod]} · ${e.i}s → ${e.j}s · strength ${e.s}`; }
     const RMODS = ['cv', 'vv', 'cc', 'vc'];
+    // ---- synced YouTube player + playhead that crosses the RTG channels ----
+    let rtgPlayer = null, rtgYTLoading = false, rtgYTCbs = [], rtgRAF = null, rtgCurT = 0;
+    function rtgLoadYT(cb) {
+        if (typeof window === 'undefined' || !window.document) return;
+        if (window.YT && window.YT.Player) { cb(); return; }
+        rtgYTCbs.push(cb); if (rtgYTLoading) return; rtgYTLoading = true;
+        const prev = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = function () { if (typeof prev === 'function') prev(); rtgYTCbs.splice(0).forEach(f => { try { f(); } catch (e) { } }); };
+        const s = window.document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api';
+        (window.document.head || window.document.body).appendChild(s);
+    }
+    function rtgSetPlayhead(t) {
+        rtgCurT = t;
+        try {
+            window.document.querySelectorAll('.rtg-ph').forEach(ph => {
+                const x0 = +ph.getAttribute('data-x0'), x1 = +ph.getAttribute('data-x1'), n = +ph.getAttribute('data-n');
+                const x = x0 + Math.max(0, Math.min(n - 1, t)) / ((n - 1) || 1) * (x1 - x0);
+                ph.setAttribute('x1', x); ph.setAttribute('x2', x); ph.style.opacity = 0.9;
+            });
+            const lab = window.document.getElementById('rtg-curt'); if (lab) lab.textContent = t.toFixed(1) + 's';
+            const sl = window.document.getElementById('rtg-seek'); if (sl && window.document.activeElement !== sl) sl.value = t;
+            const cur = window.document.getElementById('rtg-cursec'); if (cur) cur.innerHTML = rtgSecInfo(Math.round(t));
+        } catch (e) { }
+    }
+    function rtgSeek(t) { try { if (rtgPlayer && rtgPlayer.seekTo) rtgPlayer.seekTo(t, true); if (rtgPlayer && rtgPlayer.playVideo) rtgPlayer.playVideo(); } catch (e) { } rtgSetPlayhead(t); }
+    function rtgTick() {
+        if (typeof requestAnimationFrame === 'undefined') return;
+        rtgRAF = requestAnimationFrame(rtgTick);
+        try { if (rtgPlayer && rtgPlayer.getCurrentTime) { const ct = rtgPlayer.getCurrentTime(); if (typeof ct === 'number' && isFinite(ct)) rtgSetPlayhead(ct); } } catch (e) { }
+    }
+    function rtgAfterRender() {
+        if (typeof window === 'undefined' || !window.document || !window.document.getElementById) return;
+        const host = window.document.getElementById('rtg-yt');
+        if (!host) { try { if (rtgPlayer && rtgPlayer.destroy) rtgPlayer.destroy(); } catch (e) { } rtgPlayer = null; return; }
+        const vid = host.getAttribute('data-vid');
+        try { if (rtgPlayer && rtgPlayer.destroy) rtgPlayer.destroy(); } catch (e) { } rtgPlayer = null;
+        rtgLoadYT(() => { try { rtgPlayer = new window.YT.Player('rtg-yt', { height: '391', width: '220', videoId: vid, playerVars: { playsinline: 1, rel: 0, modestbranding: 1 }, events: {} }); } catch (e) { } });
+        if (rtgRAF == null) rtgTick();
+    }
+    function rtgSecInfo(t) {
+        const v = RTG.videos[st.rtgSel]; if (!v || t < 0 || t >= v.n_sec) return '';
+        const refs = v.edges.filter(e => e.i === t), grats = v.edges.filter(e => e.j === t);
+        const uncl = (v.unclosed || []).filter(u => u.i === t), orph = (v.orphan_grat || []).includes(t), ev = (v.events || []).includes(t);
+        const w = (v.words && v.words[t]) || '';
+        const tag = (txt, col) => `<span style="background:${col}22;border:1px solid ${col};color:${col};border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700;margin:0 4px 4px 0;display:inline-block">${txt}</span>`;
+        let tags = '';
+        if (refs.length) tags += tag('REFERENCE ×' + refs.length, C.cyan);
+        if (grats.length) tags += tag('GRATIFICATION ×' + grats.length, C.green);
+        if (uncl.length) tags += tag('UNCLOSED LOOP', C.orange);
+        if (orph) tags += tag('ORPHAN', C.orange);
+        if (ev) tags += tag('EVENT', C.yellow);
+        const eline = e => `${RTG.mod_label[e.mod]} · ${e.i}s→${e.j}s · strength ${e.s} · residual ${e.r}`;
+        return `<div style="font-size:12px;color:${C.text};font-weight:800;margin-bottom:4px">Second ${t} <span style="color:${C.mute};font-weight:400">· ${t}.0s</span></div>
+            <div style="margin-bottom:5px">${tags || '<span style="color:' + C.mute + ';font-size:10px">no marker at this second — just a moment on the timeline</span>'}</div>
+            ${w ? `<div style="font-size:11px;color:${C.dim};margin-bottom:6px;line-height:1.4">🗣 “${esc(w)}”</div>` : `<div style="font-size:10px;color:${C.mute};margin-bottom:6px">(no speech this second)</div>`}
+            <div style="font-size:10px;color:${C.mute};line-height:1.7">visual surprise <b style="color:${C.cyan}">${(v.vsurp[t] || 0).toFixed(3)}</b> · tension <b style="color:${C.purple}">${(v.tension[t] || 0).toFixed(3)}</b> · speech ${v.has_c[t] ? 'yes' : 'no'}</div>
+            ${refs.map(e => `<div style="font-size:10px;color:${C.cyan};margin-top:3px">→ opens loop: ${eline(e)}</div>`).join('')}
+            ${grats.map(e => `<div style="font-size:10px;color:${C.green};margin-top:3px">← resolves reference at ${e.i}s: ${eline(e)}</div>`).join('')}
+            ${uncl.map(u => `<div style="font-size:10px;color:${C.orange};margin-top:3px">⌀ unclosed — best forward residual ${u.r}, below the null ceiling (${RTG.mod_label[u.mod]})</div>`).join('')}
+            ${orph ? `<div style="font-size:10px;color:${C.orange};margin-top:3px">◌ orphan gratification — a surprise spike bound to no earlier reference</div>` : ''}`;
+    }
     function rtgHeat(v) {
         const G = RTG.meta.ds_grid, n = v.n_sec, cell = 9, sz = G * cell;
         const grid = m => { const mat = v.mat[m]; let cells = '';
@@ -923,6 +985,7 @@ const JarvisRetention = (function () {
         return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Tension — unresolved reference mass over time</div>
             <div style="font-size:10px;color:${C.mute};margin-bottom:6px">Rises when a reference opens a loop, drops (<span style="color:${C.green}">green</span>) when a gratification resolves one. Open loops that never close stay elevated to the end.</div>
             <svg viewBox="0 0 ${W} ${H}" style="width:100%"><path d="${area}" fill="${C.purple}30" stroke="${C.purple}" stroke-width="1.5"/>${drops}
+            <line class="rtg-ph" data-x0="${pad}" data-x1="${W - 12}" data-n="${n}" x1="${pad}" y1="14" x2="${pad}" y2="${H - 22}" stroke="#fff" stroke-width="1.5" opacity="0" style="pointer-events:none"/>
             <text x="${pad}" y="${H - 6}" fill="${C.mute}" font-size="9">0s</text><text x="${W - 10}" y="${H - 6}" fill="${C.mute}" font-size="9" text-anchor="end">${n - 1}s</text></svg>`);
     }
     function rtgSurprise(v) {
@@ -934,6 +997,7 @@ const JarvisRetention = (function () {
         return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Surprise / event boundaries — "where something happened"</div>
             <div style="font-size:10px;color:${C.mute};margin-bottom:6px">Per-second visual change (1 − cos of consecutive frames). Spikes = reveals / cuts / transitions. <span style="color:${C.yellow}">●</span> event · <span style="color:${C.orange}">●</span> orphan gratification (a spike bound to no earlier reference).</div>
             <svg viewBox="0 0 ${W} ${H}" style="width:100%"><path d="${line}" fill="none" stroke="${C.cyan}" stroke-width="1.3"/>${ev}
+            <line class="rtg-ph" data-x0="${pad}" data-x1="${W - 12}" data-n="${n}" x1="${pad}" y1="12" x2="${pad}" y2="${H - 18}" stroke="#fff" stroke-width="1.5" opacity="0" style="pointer-events:none"/>
             <text x="${pad}" y="${H - 4}" fill="${C.mute}" font-size="9">0s</text><text x="${W - 10}" y="${H - 4}" fill="${C.mute}" font-size="9" text-anchor="end">${n - 1}s</text></svg>`);
     }
     function rtgMathCard() {
@@ -1020,6 +1084,18 @@ const JarvisRetention = (function () {
         // ---- per-video explorer ----
         if (st.rtgSel != null && RTG.videos[st.rtgSel]) {
             const v = RTG.videos[st.rtgSel], cc = v.counts || {};
+            // synced player + scrubber + moment inspector
+            h += cardc(`<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+                  <div style="width:220px;flex-shrink:0">
+                    <div id="rtg-yt" data-vid="${esc(v.id)}" data-n="${v.n_sec}" style="width:220px;height:391px;background:#000;border-radius:8px;overflow:hidden"></div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+                      <input id="rtg-seek" type="range" min="0" max="${v.n_sec - 1}" step="0.1" value="0" style="flex:1;accent-color:${C.purple};cursor:pointer">
+                      <span style="font-size:10px;color:${C.dim};font-weight:700;white-space:nowrap">t=<span id="rtg-curt">0.0s</span></span></div>
+                    <div style="font-size:10px;color:${C.mute};margin-top:4px;line-height:1.4">Play or drag — the white playhead crosses every channel below. Click any ▲ / ○ to jump here & inspect.</div>
+                  </div>
+                  <div style="flex:1;min-width:240px"><div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:5px">Moment inspector — everything encoded at the playhead</div>
+                    <div id="rtg-cursec" style="background:${C.card2};border-radius:8px;padding:11px 13px;min-height:120px">${rtgSecInfo(0)}</div></div>
+                </div>`, 14);
             const mtog = ['cv', 'vv', 'cc', 'vc'].map(m => `<span data-rtgmod="${m}" style="cursor:pointer;border:1px solid ${st.rtgMods[m] ? RMODC[m] : C.border};color:${st.rtgMods[m] ? RMODC[m] : C.faint};background:${st.rtgMods[m] ? RMODC[m] + '18' : 'transparent'};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${RTG.mod_label[m]}</span>`).join('');
             h += cardc(`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px">
                   <div><div style="font-size:13px;font-weight:800;color:${C.text}">${esc(v.title)}</div>
@@ -1071,6 +1147,7 @@ const JarvisRetention = (function () {
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
             <div style="font-size:21px;font-weight:900;color:${C.accent};margin-bottom:8px">Retention → Views</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${nav}</div>${sec}</div>`;
+        try { rtgAfterRender(); } catch (e) { }
     }
 
     function onClick(e) {
@@ -1095,6 +1172,7 @@ const JarvisRetention = (function () {
         const rg = e.target.closest('[data-rtg]'); if (rg) { st.rtgSel = +rg.getAttribute('data-rtg'); render(); return; }
         if (e.target.closest('[data-rtgclose]')) { st.rtgSel = null; render(); return; }
         const rm = e.target.closest('[data-rtgmod]'); if (rm) { const k = rm.getAttribute('data-rtgmod'); st.rtgMods[k] = st.rtgMods[k] ? 0 : 1; render(); return; }
+        const rnode = e.target.closest('[data-rtgnode]'); if (rnode) { rtgSeek(+rnode.getAttribute('data-rtgnode')); return; }
         if (e.target.closest('[data-reload]')) { err = null; DATA = null; mount(root); return; }
         if (e.target.closest('[data-novboxes]')) { st.novBoxes = !(st.novBoxes !== false); render(); return; }
         if (e.target.closest('[data-novclose]')) { st.novSel = null; render(); return; }
@@ -1106,6 +1184,7 @@ const JarvisRetention = (function () {
         if (tr) { const id = tr.getAttribute('data-row'); st.open = st.open === id ? null : id; render(); }
     }
     function onInput(e) {
+        if (e.target.id === 'rtg-seek') { rtgSeek(+e.target.value); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-pf')) { st.pvals = st.pvals || {}; st.pvals[e.target.getAttribute('data-pf')] = +e.target.value; updatePredict(); return; }
         if (e.target.closest('[data-q]')) { st.q = e.target.value; render(); }
     }
