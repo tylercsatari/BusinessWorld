@@ -48,3 +48,5 @@ buildings/jarvis/retention-study/principles/persec.log
 buildings/jarvis/retention-study/principles/text_emb.npz
 buildings/jarvis/retention-study/principles/ocr.log
 buildings/jarvis/retention-study/principles/embedtext.log
+buildings/jarvis/retention-study/principles/rtg_tokens.npz
+buildings/jarvis/retention-study/principles/rtg_embed.log
