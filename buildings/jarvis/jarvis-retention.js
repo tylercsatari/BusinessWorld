@@ -13,7 +13,7 @@ const JarvisRetention = (function () {
     let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTG = null, RTGP = null, RTGD = null, RTGF = null, RTGA = null, RTGS = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgMods: { cv: 1, vv: 1, cc: 1, vc: 1 }, rtgDet: 'declared', rtgLabel: false, rtgPending: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgMods: { cv: 1, vv: 1, cc: 1, vc: 1 }, rtgDet: 'declared', rtgLabel: false, rtgPending: null, rtgSignal: 'cv' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -1109,22 +1109,39 @@ const JarvisRetention = (function () {
               ${cells}${ph}${ax}</svg>
             <div style="margin-top:6px">${legend}</div>`);
     }
+    function rtgSig(v) { return (v.signals && st.rtgSignal && v.signals[st.rtgSignal]) || { refness: v.refness || [], payoff: v.payoff || [], links: v.links || [] }; }
+    function rtgSigSelector(v) {
+        if (!RTGF.meta || !RTGF.meta.signals) return '';
+        const lab = RTGF.meta.signal_labels || {};
+        return `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">signal</span>${RTGF.meta.signals.map(s => `<span data-rtgsignal="${s}" style="cursor:pointer;border:1px solid ${st.rtgSignal === s ? C.accent : C.border};background:${st.rtgSignal === s ? C.accent + '1e' : 'transparent'};color:${st.rtgSignal === s ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab[s] || s}</span>`).join('')}<span style="font-size:9px;color:${C.mute};margin-left:4px">— all unsupervised; your labels overlay as a guide, nothing is fit to them</span></div>`;
+    }
+    function rtgUpdateSignal() {
+        try { const v = RTGF.videos[st.rtgSel]; if (!v) return;
+            const ss = window.document.getElementById('rtg-sigsel'); if (ss) ss.innerHTML = rtgSigSelector(v);
+            const rp = window.document.getElementById('rtg-refpay'); if (rp) rp.innerHTML = rtgRefPayoff(v);
+            rtgUpdateLabelUI();
+        } catch (e) { }
+    }
     function rtgRefPayoff(v) {
         const n = v.n_sec, W = 820, pad = 30, iw = W - pad - 10, H = 156, yR = 56, yP = 100, amp = 40;
         const x = s => pad + (n <= 1 ? 0 : s * iw / (n - 1));
-        const ref = v.refness || [], pay = v.payoff || [];
+        const sg = rtgSig(v), ref = sg.refness || [], pay = sg.payoff || [];
         const refA = `M ${x(0)} ${yR} ` + ref.map((r, i) => `L ${x(i).toFixed(1)} ${(yR - r * amp).toFixed(1)}`).join(' ') + ` L ${x(n - 1)} ${yR} Z`;
         const payA = `M ${x(0)} ${yP} ` + pay.map((p, i) => `L ${x(i).toFixed(1)} ${(yP + p * amp).toFixed(1)}`).join(' ') + ` L ${x(n - 1)} ${yP} Z`;
-        const arcs = (v.links || []).map(l => { const xi = x(l.i), xj = x(l.j);
+        const arcs = (sg.links || []).map(l => { const xi = x(l.i), xj = x(l.j);
             return `<path d="M ${xi} ${yR} C ${xi} ${(yR + yP) / 2} ${xj} ${(yR + yP) / 2} ${xj} ${yP}" fill="none" stroke="${C.purple}" stroke-width="${(0.6 + l.s * 2.4).toFixed(1)}" opacity="${(0.18 + l.s * 0.6).toFixed(2)}"><title>reference @${l.i}s → fulfilled @${l.j}s · strength ${l.s}</title></path>`; }).join('');
+        // your hand-labels overlaid faintly (a guide — never fit to)
+        const lab = RTGLABELS[v.id] || { pairs: [], orphans: [] };
+        const labOv = lab.pairs.map(p => `<path d="M ${x(p.r)} ${yR} C ${x(p.r)} ${(yR + yP) / 2} ${x(p.g)} ${(yR + yP) / 2} ${x(p.g)} ${yP}" fill="none" stroke="#fff" stroke-width="1" stroke-dasharray="3 3" opacity="0.45"/><path d="M ${x(p.r) - 3.5} ${yR - 4} L ${x(p.r) + 3.5} ${yR - 4} L ${x(p.r)} ${yR} Z" fill="#fff" opacity="0.5"/>`).join('');
         const pk = (arr, base, up, col) => arr.map((r, i) => (r > 0.12 && (i === 0 || r >= arr[i - 1]) && (i === n - 1 || r >= arr[i + 1])) ? `<circle data-rtgnode="${i}" style="cursor:pointer" cx="${x(i).toFixed(1)}" cy="${(base + up * r * amp).toFixed(1)}" r="${(2 + r * 3).toFixed(1)}" fill="${col}" opacity="${(0.35 + r * 0.65).toFixed(2)}"><title>${i}s · ${(r).toFixed(2)}</title></circle>` : '').join('');
         const ph = `<line class="rtg-ph" data-x0="${pad}" data-x1="${x(n - 1)}" data-n="${n}" x1="${pad}" y1="14" x2="${pad}" y2="${H - 10}" stroke="#fff" stroke-width="1.5" opacity="0" style="pointer-events:none"/>`;
-        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Reference-ness & payoff-ness — continuous fields, markers are the peaks</div>
-            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5"><b style="color:${C.cyan}">Reference-ness</b> (top) = a spoken idea (in full context) points to a <i>specific</i> later visual that isn't present yet — intrinsic & causal, so it shows even when nothing pays it off. <b style="color:${C.green}">Payoff-ness</b> (bottom) = a later visual fulfils a real earlier reference. The <span style="color:${C.purple}">arcs</span> link each reference peak to where it lands. Nothing is thresholded — a "marker" is just a peak. <i>${(RTGF && RTGF.meta && RTGF.meta.refsource === 'jepa-head') ? 'Now from a probabilistic <b>JEPA predictor head</b> (Var-JEPA-style: sharpness = the model\'s confidence in a specific future) on the frozen <b>' + esc(RTGF.meta.encoder || 'SigLIP') + '</b> encoder, with full context — a real learned expectation, not a proxy. Swap the encoder → Qwen3-VL / Gemini for frontier performance.' : 'SigLIP proxy.'}</i></div>
+        const slab = (RTGF.meta && RTGF.meta.signal_labels && RTGF.meta.signal_labels[st.rtgSignal]) || st.rtgSignal;
+        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Reference-ness & payoff-ness — <span style="color:${C.accent}">${esc(slab)}</span> signal</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5"><b style="color:${C.cyan}">Reference-ness</b> (top) = this moment points to a <i>specific</i> later moment that isn't present yet (intrinsic & causal — shows even when nothing pays it off). <b style="color:${C.green}">Payoff-ness</b> (bottom) = a later moment fulfils a real earlier reference. <span style="color:${C.purple}">Arcs</span> = the link. ${labOv ? `<b style="color:#fff">Dashed white</b> = your hand-labels — a <i>guide</i> overlaid for comparison, never fit to. ` : ''}Encoder: <b>${esc((RTGF.meta && RTGF.meta.encoder) || '?')}</b>. Flip the signal above to see which one naturally lands where you'd expect.</div>
             <svg viewBox="0 0 ${W} ${H}" style="width:100%">
               <line x1="${pad}" y1="${yR}" x2="${W - 10}" y2="${yR}" stroke="${C.border2}"/><line x1="${pad}" y1="${yP}" x2="${W - 10}" y2="${yP}" stroke="${C.border2}"/>
               <path d="${refA}" fill="${C.cyan}26" stroke="${C.cyan}" stroke-width="1.2"/><path d="${payA}" fill="${C.green}26" stroke="${C.green}" stroke-width="1.2"/>
-              ${arcs}${pk(ref, yR, -1, C.cyan)}${pk(pay, yP, 1, C.green)}${ph}
+              ${labOv}${arcs}${pk(ref, yR, -1, C.cyan)}${pk(pay, yP, 1, C.green)}${ph}
               <text x="${pad}" y="14" fill="${C.cyan}" font-size="10" font-weight="700">reference-ness (anticipation set)</text>
               <text x="${pad}" y="${H - 4}" fill="${C.green}" font-size="10" font-weight="700">payoff-ness (anticipation met)</text></svg>`);
     }
@@ -1173,7 +1190,7 @@ const JarvisRetention = (function () {
         const L = RTGLABELS[v.id] || { pairs: [], orphans: [] };
         const n = v.n_sec, W = 820, pad = 30, iw = W - pad - 10, H = 116, yR = 38, yG = 84, cell = iw / (n || 1);
         const x = s => pad + (n <= 1 ? 0 : s * iw / (n - 1));
-        const ref = v.refness || [];
+        const ref = rtgSig(v).refness || [];
         const refArea = `M ${x(0)} ${yR} ` + ref.map((r, i) => `L ${x(i).toFixed(1)} ${(yR - r * 22).toFixed(1)}`).join(' ') + ` L ${x(n - 1)} ${yR} Z`;
         let hit = '';
         for (let s = 0; s < n; s++) hit += `<rect data-rtglabel-track="${s}" x="${(x(s) - cell / 2).toFixed(1)}" y="14" width="${Math.max(2, cell).toFixed(1)}" height="${H - 26}" fill="transparent" style="cursor:crosshair"><title>${s}s</title></rect>`;
@@ -1207,7 +1224,9 @@ const JarvisRetention = (function () {
             h += `<div style="display:flex;gap:16px;align-items:flex-start">
                 <div style="flex:1;min-width:0">
                     ${st.rtgLabel ? `<div id="rtg-labelui">${rtgRenderLabelUI(v)}</div>` : ''}
-                    ${rtgThreadTimeline(v)}${rtgRefPayoff(v)}
+                    ${rtgThreadTimeline(v)}
+                    <div id="rtg-sigsel">${rtgSigSelector(v)}</div>
+                    <div id="rtg-refpay">${rtgRefPayoff(v)}</div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">${rtgFieldHeat(v)}${rtgTokenMap(v)}</div>
                 </div>
                 <div style="width:236px;flex-shrink:0;position:sticky;top:14px">${rtgStickyPlayer(v)}</div>
@@ -1397,6 +1416,7 @@ const JarvisRetention = (function () {
         const ldel = e.target.closest('[data-rtglabel-del]'); if (ldel) { rtgLabelAct('del', +ldel.getAttribute('data-rtglabel-del')); return; }
         const ldlo = e.target.closest('[data-rtglabel-delorphan]'); if (ldlo) { rtgLabelAct('delorphan', +ldlo.getAttribute('data-rtglabel-delorphan')); return; }
         const lbtn = e.target.closest('[data-rtglabel]'); if (lbtn) { rtgLabelAct(lbtn.getAttribute('data-rtglabel'), Math.round(rtgCurT)); return; }
+        const sig = e.target.closest('[data-rtgsignal]'); if (sig) { st.rtgSignal = sig.getAttribute('data-rtgsignal'); rtgUpdateSignal(); return; }
         const rd = e.target.closest('[data-rtgdet]'); if (rd) { st.rtgDet = rd.getAttribute('data-rtgdet'); render(); return; }
         if (e.target.closest('[data-reload]')) { err = null; DATA = null; mount(root); return; }
         if (e.target.closest('[data-novboxes]')) { st.novBoxes = !(st.novBoxes !== false); render(); return; }
