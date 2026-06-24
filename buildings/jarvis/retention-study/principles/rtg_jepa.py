@@ -25,7 +25,7 @@ import numpy as np, torch, torch.nn as nn
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEV = 'mps' if torch.backends.mps.is_available() else 'cpu'
 torch.manual_seed(7); np.random.seed(7)
-TOKENS = 'rtg_tokens_ctx.npz' if os.path.exists(os.path.join(HERE, 'rtg_tokens_ctx.npz')) else 'rtg_tokens_siglip.npz'
+TOKENS = next((f for f in ['rtg_tokens_gemini.npz', 'rtg_tokens_ctx.npz', 'rtg_tokens_siglip.npz'] if os.path.exists(os.path.join(HERE, f))), 'rtg_tokens_siglip.npz')
 PCA_D = 256; H = 256; K = 8; EPOCHS = 45; LR = 1e-3
 
 

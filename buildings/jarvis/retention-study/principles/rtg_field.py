@@ -43,7 +43,7 @@ def words_by_sec(vid, n):
 
 
 def main():
-    tokf = 'rtg_tokens_ctx.npz' if os.path.exists(os.path.join(HERE, 'rtg_tokens_ctx.npz')) else 'rtg_tokens_siglip.npz'
+    tokf = next((f for f in ['rtg_tokens_gemini.npz', 'rtg_tokens_ctx.npz', 'rtg_tokens_siglip.npz'] if os.path.exists(os.path.join(HERE, f))), 'rtg_tokens_siglip.npz')
     print('tokens:', tokf, flush=True)
     z = np.load(os.path.join(HERE, tokf))
     owner, sec = z['owner'], z['sec']

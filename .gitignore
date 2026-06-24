@@ -59,3 +59,6 @@ buildings/jarvis/retention-study/principles/rtg_tokens_siglip.npz
 buildings/jarvis/retention-study/principles/rtg_embed_siglip.log
 buildings/jarvis/retention-study/principles/rtg_tokens_ctx.npz
 buildings/jarvis/retention-study/principles/rtg_context.log
+buildings/jarvis/retention-study/principles/rtg_tokens_gemini.npz
+buildings/jarvis/retention-study/principles/rtg_embed_gemini.log
+buildings/jarvis/retention-study/principles/rtg_gemini_rebuild.log
