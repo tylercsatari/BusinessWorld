@@ -17,6 +17,8 @@ if (fs.existsSync(envPath)) {
 const videoAnalyzer = require('./video-analyzer');
 const geminiWatch = require('./gemini-watch');
 const footageCoverage = require('./footage-coverage');
+const instagram = require('./instagram-service');
+const igPostJobs = {};   // jobId -> live progress of a trial-reel post (client polls)
 const videolabCoordinator = require('./videolab-coordinator');
 let codexRunner = null;
 try {
@@ -2457,6 +2459,75 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
         if (!job) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'job not found' })); return; }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ phase: job.phase, total: job.total, clips: job.clips, events: job.events, done: job.done, error: job.error, result: job.result, elapsed: Date.now() - job.startedAt }));
+        return;
+    }
+
+    // ===== INSTAGRAM TRIAL REELS — connect an account + post a final video as a
+    // trial reel (shown to non-followers first), for the Split Test stage. =====
+    if (pathname === '/api/instagram/status' && req.method === 'GET') {
+        try { const s = await instagram.status(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(s)); }
+        catch (e) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ connected: false, error: e.message })); }
+        return;
+    }
+    if (pathname === '/api/instagram/auth-url' && req.method === 'GET') {
+        try { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ url: instagram.authUrl(url.searchParams.get('state') || '') })); }
+        catch (e) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    if (pathname === '/api/instagram/callback' && req.method === 'GET') {
+        const code = url.searchParams.get('code');
+        const err = url.searchParams.get('error_description') || url.searchParams.get('error');
+        const page = (title, body) => `<!doctype html><meta charset=utf-8><body style="font-family:system-ui;padding:40px;text-align:center"><h2>${title}</h2><p>${body}</p><script>try{window.opener&&window.opener.postMessage({type:'instagram-connected'},'*')}catch(e){}; setTimeout(()=>window.close(),2500);</script></body>`;
+        if (err) { res.writeHead(400, { 'Content-Type': 'text/html' }); res.end(page('Instagram connection failed', String(err))); return; }
+        if (!code) { res.writeHead(400, { 'Content-Type': 'text/html' }); res.end(page('Instagram connection failed', 'No authorization code returned.')); return; }
+        try { const r = await instagram.exchangeCode(code); res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(page('Instagram connected ✓', `Connected as @${r.username || r.igUserId}. You can close this window.`)); }
+        catch (e) { res.writeHead(500, { 'Content-Type': 'text/html' }); res.end(page('Instagram connection failed', String(e.message))); }
+        return;
+    }
+    if (pathname === '/api/instagram/disconnect' && req.method === 'POST') {
+        try { const s = await instagram.disconnect(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(s)); }
+        catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    // Post a final video (a Dropbox path) as a Trial Reel. Background job — the
+    // client polls /post-progress (publishing can take a minute or two).
+    if (pathname === '/api/instagram/post-trial-reel' && req.method === 'POST') {
+        const body = await readBody(req);
+        const clipPath = body && body.videoPath;
+        if (!clipPath) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'videoPath (Dropbox path) is required' })); return; }
+        const st = await instagram.status().catch(() => ({ connected: false }));
+        if (!st.connected) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: st.configured ? 'Instagram is not connected — connect an account first.' : 'Instagram app is not configured (INSTAGRAM_APP_ID/SECRET missing).' })); return; }
+
+        const jobId = require('crypto').randomUUID();
+        const job = { events: [], done: false, error: null, result: null, startedAt: Date.now() };
+        igPostJobs[jobId] = job;
+        for (const k of Object.keys(igPostJobs)) { if (Date.now() - igPostJobs[k].startedAt > 30 * 60 * 1000) delete igPostJobs[k]; }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ jobId }));
+
+        (async () => {
+            const emit = (m) => { job.events.push(m); try { console.log(`[ig-post ${jobId.slice(0, 8)}] ${m}`); } catch (e) {} };
+            try {
+                // Public URL Instagram can fetch — a Dropbox temporary link (valid ~4h).
+                emit('Getting a public link to the video…');
+                const tok = await cloud.getDropboxToken();
+                const linkRes = await fetch('https://api.dropboxapi.com/2/files/get_temporary_link', { method: 'POST', headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ path: clipPath }) });
+                const linkData = await linkRes.json();
+                if (!linkData || !linkData.link) throw new Error('Could not get a public Dropbox link for the video.');
+                const out = await instagram.postTrialReel({ videoUrl: linkData.link, caption: (body.caption || ''), graduation: body.graduation || 'MANUAL', onStatus: emit });
+                job.result = out; job.done = true;
+            } catch (e) {
+                console.error('ig post error:', e);
+                job.error = e.message; job.done = true;
+            }
+        })();
+        return;
+    }
+    if (pathname === '/api/instagram/post-progress' && req.method === 'GET') {
+        const job = igPostJobs[url.searchParams.get('job')];
+        if (!job) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'job not found' })); return; }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ events: job.events, done: job.done, error: job.error, result: job.result, elapsed: Date.now() - job.startedAt }));
         return;
     }
 

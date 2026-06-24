@@ -1118,7 +1118,7 @@ const WorkshopUI = (() => {
         software: 'Code / firmware done — upload the build or a screenshot', assembly: 'The build assembled — upload a photo',
         artistic: 'Painted / finished — upload a result photo', hookfilm: 'The practical hook filmed & uploaded',
         film: 'Filming done (no upload — footage lives in Dropbox)', voiceover: 'A voiceover file linked',
-        edit: 'All THREE final video versions uploaded', splittest: 'Thumbnail / title variants — upload them',
+        edit: 'All THREE final video versions uploaded', splittest: 'Post a final video as an Instagram trial reel',
         post: 'Publish the video'
     };
     // How a stage gets completed: 'decomp' (validation gate), 'post' (publish),
@@ -1128,6 +1128,7 @@ const WorkshopUI = (() => {
     function deliverableKind(stageId) {
         if (stageId === 'decomp') return 'decomp';
         if (stageId === 'post') return 'post';
+        if (stageId === 'splittest') return 'instagram';   // post a final video as an IG trial reel
         if (PS().hasNoDeliverable && PS().hasNoDeliverable(stageId)) return 'manual';
         if (PS().isResultStage(stageId)) return 'result';
         return 'auto';
@@ -1279,6 +1280,15 @@ const WorkshopUI = (() => {
             return `<div class="wsp-deliv-banner ${stateCls}"><div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b>${flag}</div>
                 <div class="wsp-deliv-sub">Decide the branches and add components in the Decomposition section below.</div></div>`;
         }
+        if (kind === 'instagram') {
+            const posted = stageResultsFor(v, stage.id).filter(r => r && (r.mediaId || r.type === 'trialreel'));
+            return `<div class="wsp-deliv-banner ${stateCls}" data-deliv-stage="${stage.id}">
+                <div class="wsp-deliv-title">📲 ${escHtml(label)}${flag}</div>
+                <div class="wsp-deliv-sub">Post a final video straight to an <b>Instagram Trial Reel</b> — shown to non-followers first so you can test it before it hits your audience. Posting one completes this stage.</div>
+                <div id="wsp-ig-posted">${posted.map((r, i) => `<div class="wsp-row" style="border-left:3px solid #c13584"><span class="wsp-row-name">📲 ${escHtml(r.name || 'Trial reel')} <span class="wsp-hint">posted ✓</span></span>${r.permalink ? `<a class="wsp-mini-btn" href="${escAttr(r.permalink)}" target="_blank" rel="noopener">▶ View on Instagram</a>` : ''}<button class="wsp-mini-btn danger" data-ig-unlink="${i}" title="Remove this record (does not delete the reel on Instagram)">✕</button></div>`).join('')}</div>
+                <div id="wsp-ig-panel"><div class="wsp-hint">Checking Instagram connection…</div></div>
+            </div>`;
+        }
         if (kind === 'manual') {
             const gaps = Array.isArray(v.footageGaps) ? v.footageGaps : [];
             const rep = v.footageReport || null;
@@ -1372,7 +1382,8 @@ const WorkshopUI = (() => {
                 initMediaSection(ev, 'music');   // optional music link/file — not tied to a stage
                 initEditingHandoff(ev);
                 initEditSlots(ev);   // Editing — three final-video upload slots (was detail-page only)
-                if (selectedStageId && PS().isResultStage(selectedStageId)) initStageResultUploader(ev, selectedStageId, panel);
+                if (selectedStageId && PS().isResultStage(selectedStageId) && selectedStageId !== 'splittest') initStageResultUploader(ev, selectedStageId, panel);
+                if (selectedStageId === 'splittest') initInstagramPanel(ev, panel);
                 panel.querySelectorAll('[data-inline-delete]').forEach(b => b.addEventListener('click', () => deleteVideoAction(VideoService.getById(expandedStageVideoId))));
                 // [data-node-done] is bound once for the whole panel above (covers
                 // both the collapsed row button and this expanded-editor one).
@@ -1428,6 +1439,102 @@ const WorkshopUI = (() => {
                 toast(`Uploaded ${added.length} file${added.length === 1 ? '' : 's'} — add more or press Done`);
                 renderTab();   // stays on the node; the worker presses Done to move on
             } catch (e) { alert('Upload failed: ' + e.message); }
+        });
+    }
+
+    // SPLIT TEST → Instagram Trial Reels. Connect an account, pick a final video,
+    // post it as a trial reel (shown to non-followers first). Posting records it on
+    // the video (stageResults.splittest) which completes the stage.
+    async function initInstagramPanel(v, scope) {
+        const panel = scope.querySelector('#wsp-ig-panel');
+        if (!panel) return;
+        // Remove a posted-reel record (does not delete the actual reel on Instagram).
+        scope.querySelectorAll('[data-ig-unlink]').forEach(b => b.addEventListener('click', async () => {
+            const idx = Number(b.dataset.igUnlink);
+            await atomicVideoUpdate(v.id, (f) => ({ stageResults: { ...(f.stageResults || {}), splittest: stageResultsFor(f, 'splittest').filter((_, i) => i !== idx) }, status: normalizedStatus(f) }));
+            renderTab();
+        }));
+
+        let st;
+        try { st = await fetch('/api/instagram/status').then(r => r.json()); } catch (e) { st = { error: 'Could not reach the server.' }; }
+        if (!panel.isConnected) return;
+
+        if (st.error || st.configured === false) {
+            panel.innerHTML = `<div class="wsp-ig-setup">
+                <div class="wsp-hint">${st.configured === false
+                    ? 'Instagram isn\'t set up yet. Add a Meta app (INSTAGRAM_APP_ID / INSTAGRAM_APP_SECRET) with "Instagram API with Instagram Login" and the redirect URI <code>'+location.origin+'/api/instagram/callback</code>.'
+                    : escHtml(st.error || 'Instagram unavailable.')}</div></div>`;
+            return;
+        }
+        if (!st.connected) {
+            panel.innerHTML = `<button class="wsp-mini-btn done" id="wsp-ig-connect">📲 Connect Instagram${st.expired ? ' (reconnect — token expired)' : ''}</button>
+                <div class="wsp-hint" style="margin-top:4px">Connect the Professional (Business/Creator) Instagram account you post trial reels from.</div>`;
+            panel.querySelector('#wsp-ig-connect').addEventListener('click', async () => {
+                let a; try { a = await fetch('/api/instagram/auth-url').then(r => r.json()); } catch (e) { return alert('Could not start Instagram login.'); }
+                if (!a.url) return alert(a.error || 'Could not start Instagram login.');
+                const popup = window.open(a.url, 'ig-connect', 'width=600,height=720');
+                const onMsg = (e) => { if (e.data && e.data.type === 'instagram-connected') { window.removeEventListener('message', onMsg); try { popup && popup.close(); } catch (_) {} initInstagramPanel(VideoService.getById(v.id) || v, scope); } };
+                window.addEventListener('message', onMsg);
+            });
+            return;
+        }
+
+        // Connected — pick a final video to post + caption + post button.
+        const finals = [];
+        EDIT_SLOTS.forEach(slot => finalVideoItems((VideoService.getById(v.id) || v).finalVideos || {}, slot.key).forEach(it => finals.push({ label: slot.label, path: it.path, name: it.name || (it.path || '').split('/').pop() })));
+        const opts = finals.map((f, i) => `<option value="${i}">${escHtml(f.label)} — ${escHtml(f.name)}</option>`).join('');
+        panel.innerHTML = `
+            <div class="wsp-hint" style="margin-bottom:4px">Connected as <b>@${escHtml(st.username || st.igUserId)}</b> · <button class="wsp-linkbtn" id="wsp-ig-disconnect">disconnect</button></div>
+            ${finals.length ? `
+            <div class="wsp-add-row"><select id="wsp-ig-video" class="wsp-inline-select" style="flex:1 1 220px;font-size:11.5px;">${opts}</select></div>
+            <textarea id="wsp-ig-caption" class="wsp-editcontext" placeholder="Caption (optional)…" style="min-height:48px;margin-top:5px">${escHtml(v.editContext || '')}</textarea>
+            <div class="wsp-add-row" style="margin-top:5px;align-items:center">
+                <select id="wsp-ig-grad" class="wsp-inline-select" style="font-size:11.5px;" title="When the trial reel 'graduates' to your followers">
+                    <option value="MANUAL">Graduate manually (you decide in-app)</option>
+                    <option value="SS_PERFORMANCE">Graduate automatically if it performs</option>
+                </select>
+                <button class="wsp-mini-btn done" id="wsp-ig-post">📲 Post as Trial Reel</button>
+            </div>
+            <div id="wsp-ig-status" class="wsp-hint" style="margin-top:5px"></div>`
+            : `<div class="wsp-hint">Upload the final video in the Editing section first — then you can post it here as a trial reel.</div>`}`;
+
+        panel.querySelector('#wsp-ig-disconnect')?.addEventListener('click', async () => {
+            if (!confirm('Disconnect this Instagram account?')) return;
+            await fetch('/api/instagram/disconnect', { method: 'POST' }).catch(() => {});
+            initInstagramPanel(VideoService.getById(v.id) || v, scope);
+        });
+        const postBtn = panel.querySelector('#wsp-ig-post');
+        if (postBtn) postBtn.addEventListener('click', async () => {
+            const sel = panel.querySelector('#wsp-ig-video');
+            const chosen = finals[Number(sel.value) || 0];
+            if (!chosen) return alert('Pick a final video to post.');
+            const caption = panel.querySelector('#wsp-ig-caption').value || '';
+            const graduation = panel.querySelector('#wsp-ig-grad').value || 'MANUAL';
+            const statusEl = panel.querySelector('#wsp-ig-status');
+            postBtn.disabled = true; postBtn.textContent = 'Posting…';
+            const setS = (m, color) => { if (statusEl) { statusEl.textContent = m; statusEl.style.color = color || ''; } };
+            try {
+                const start = await fetch('/api/instagram/post-trial-reel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ videoPath: chosen.path, caption, graduation }) }).then(r => r.json());
+                if (!start.jobId) throw new Error(start.error || 'Could not start the post.');
+                let seen = 0;
+                while (true) {
+                    await new Promise(r => setTimeout(r, 1500));
+                    let pr; try { pr = await fetch('/api/instagram/post-progress?job=' + encodeURIComponent(start.jobId)).then(r => r.json()); } catch (_) { continue; }
+                    if (!pr) continue;
+                    (pr.events || []).slice(seen).forEach(m => setS(m)); seen = (pr.events || []).length;
+                    if (pr.done) {
+                        if (pr.error) throw new Error(pr.error);
+                        const reel = { type: 'trialreel', mediaId: pr.result.mediaId, permalink: pr.result.permalink || '', name: chosen.name, video: chosen.path, postedAt: new Date().toISOString() };
+                        await atomicVideoUpdate(v.id, (f) => ({ stageResults: { ...(f.stageResults || {}), splittest: [...stageResultsFor(f, 'splittest'), reel] }, status: normalizedStatus(f) }));
+                        toast('📲 Trial reel posted — Split Test ready, press Done');
+                        renderTab();
+                        break;
+                    }
+                }
+            } catch (e) {
+                setS('⚠ ' + (e.message || 'Post failed'), '#e74c3c');
+                postBtn.disabled = false; postBtn.textContent = '📲 Post as Trial Reel';
+            }
         });
     }
 

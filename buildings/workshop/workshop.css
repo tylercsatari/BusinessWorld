@@ -700,6 +700,9 @@
 .wsp-subsection.collapsible > .wsp-subsection-title:hover { filter: brightness(0.9); }
 /* The section description now lives in the body (shows only when expanded). */
 .wsp-sec-hint { margin: -1px 0 5px; font-size: 11px; line-height: 1.35; }
+/* Instagram trial-reel panel */
+.wsp-linkbtn { background: none; border: none; color: #c13584; cursor: pointer; font-size: 11px; padding: 0; text-decoration: underline; }
+.wsp-ig-setup code { background: #f1ece0; padding: 1px 4px; border-radius: 4px; font-size: 10.5px; }
 /* Optional editing-context notes */
 .wsp-editcontext { width: 100%; min-height: 60px; resize: vertical; box-sizing: border-box; font-size: 12.5px;
     padding: 7px 9px; border: 1px solid #ddd6c6; border-radius: 7px; background: #fff; color: #3a3328; }
