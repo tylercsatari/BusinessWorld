@@ -902,7 +902,7 @@ const JarvisRetention = (function () {
     function MOD_T(e) { return `${RTGA.mod_label[e.mod]} · ${e.i}s → ${e.j}s · strength ${e.s}`; }
     const RMODS = ['cv', 'vv', 'cc', 'vc'];
     // ---- synced YouTube player + playhead that crosses the RTG channels ----
-    let rtgPlayer = null, rtgYTLoading = false, rtgYTCbs = [], rtgRAF = null, rtgCurT = 0;
+    let rtgPlayer = null, rtgYTLoading = false, rtgYTCbs = [], rtgRAF = null, rtgCurT = 0, rtgLastSec = -1;
     function rtgLoadYT(cb) {
         if (typeof window === 'undefined' || !window.document) return;
         if (window.YT && window.YT.Player) { cb(); return; }
@@ -922,10 +922,11 @@ const JarvisRetention = (function () {
             });
             const lab = window.document.getElementById('rtg-curt'); if (lab) lab.textContent = t.toFixed(1) + 's';
             const sl = window.document.getElementById('rtg-seek'); if (sl && window.document.activeElement !== sl) sl.value = t;
-            const cur = window.document.getElementById('rtg-cursec'); if (cur) cur.innerHTML = rtgSecInfo(Math.round(t));
+            const sc = Math.round(t);
+            if (sc !== rtgLastSec) { rtgLastSec = sc; const cur = window.document.getElementById('rtg-cursec'); if (cur) cur.innerHTML = rtgSecInfo(sc); }
         } catch (e) { }
     }
-    function rtgSeek(t, play) { try { if (rtgPlayer && rtgPlayer.seekTo) rtgPlayer.seekTo(t, true); if (rtgPlayer) { if (play && rtgPlayer.playVideo) rtgPlayer.playVideo(); else if (rtgPlayer.pauseVideo) rtgPlayer.pauseVideo(); } } catch (e) { } rtgSetPlayhead(t); }
+    function rtgSeek(t) { try { if (rtgPlayer && rtgPlayer.seekTo) { rtgPlayer.seekTo(t, true); if (rtgPlayer.playVideo) rtgPlayer.playVideo(); } } catch (e) { } rtgSetPlayhead(t); }
     function rtgTick() {
         if (typeof requestAnimationFrame === 'undefined') return;
         rtgRAF = requestAnimationFrame(rtgTick);
@@ -934,10 +935,11 @@ const JarvisRetention = (function () {
     function rtgAfterRender() {
         if (typeof window === 'undefined' || !window.document || !window.document.getElementById) return;
         const host = window.document.getElementById('rtg-yt');
+        rtgLastSec = -1;
         if (!host) { try { if (rtgPlayer && rtgPlayer.destroy) rtgPlayer.destroy(); } catch (e) { } rtgPlayer = null; return; }
         const vid = host.getAttribute('data-vid');
         try { if (rtgPlayer && rtgPlayer.destroy) rtgPlayer.destroy(); } catch (e) { } rtgPlayer = null;
-        rtgLoadYT(() => { try { rtgPlayer = new window.YT.Player('rtg-yt', { height: '391', width: '220', videoId: vid, playerVars: { playsinline: 1, rel: 0, modestbranding: 1 }, events: {} }); } catch (e) { } });
+        rtgLoadYT(() => { try { rtgPlayer = new window.YT.Player('rtg-yt', { height: '373', width: '210', videoId: vid, playerVars: { playsinline: 1, rel: 0, modestbranding: 1 }, events: {} }); } catch (e) { } });
         if (rtgRAF == null) rtgTick();
     }
     function rtgSecInfo(t) {
@@ -1068,6 +1070,15 @@ const JarvisRetention = (function () {
                 <div id="rtg-cursec" style="background:${C.card2};border-radius:8px;padding:11px 13px;min-height:120px">${rtgSecInfo(0)}</div></div>
             </div>`, 14);
     }
+    function rtgStickyPlayer(v) {
+        return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:12px">
+            <div id="rtg-yt" data-vid="${esc(v.id)}" data-n="${v.n_sec}" style="width:210px;height:373px;background:#000;border-radius:8px;overflow:hidden;margin:0 auto"></div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="rtg-seek" type="range" min="0" max="${v.n_sec - 1}" step="0.1" value="0" style="flex:1;accent-color:${C.purple};cursor:pointer"><span style="font-size:10px;color:${C.dim};font-weight:700;white-space:nowrap">t=<span id="rtg-curt">0.0s</span></span></div>
+            <div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.35">Click any point on the charts → it jumps here & plays. Scroll the charts; this stays pinned and the playhead follows.</div>
+            <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin:9px 0 4px">moment at playhead</div>
+            <div id="rtg-cursec" style="background:${C.card2};border-radius:8px;padding:9px 11px">${rtgSecInfo(0)}</div>
+        </div>`;
+    }
     function rtgThreadTimeline(v) {
         const n = v.n_sec, W = 820, pad = 30, iw = W - pad - 10, cell = iw / n, yV = 40, yC = 84, ch = 30;
         let cells = '';
@@ -1135,10 +1146,13 @@ const JarvisRetention = (function () {
             h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                 <div style="font-size:13px;font-weight:800;color:${C.text}">${esc(v.title)} <span style="font-size:10px;color:${C.mute};font-weight:400">· ${v.n_sec}s · ${v.n_threads} clusters</span></div>
                 <div style="display:flex;gap:6px"><a href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" style="background:${C.accent}18;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;text-decoration:none">▶ YouTube</a><span data-rtgclose style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px">✕ close</span></div></div>`, 10);
-            h += rtgPlayerCard(v);
-            h += rtgThreadTimeline(v);
-            h += rtgRefPayoff(v);
-            h += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">${rtgFieldHeat(v)}${rtgTokenMap(v)}</div>`;
+            h += `<div style="display:flex;gap:16px;align-items:flex-start">
+                <div style="flex:1;min-width:0">
+                    ${rtgThreadTimeline(v)}${rtgRefPayoff(v)}
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">${rtgFieldHeat(v)}${rtgTokenMap(v)}</div>
+                </div>
+                <div style="width:236px;flex-shrink:0;position:sticky;top:14px">${rtgStickyPlayer(v)}</div>
+            </div>`;
         }
         const list = RTGF.videos.map((v, i) => ({ v, i })).filter(o => o.v.n_threads).sort((a, b) => b.v.n_sec - a.v.n_sec);
         h += cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:6px">Every video — click to see its emergent threads</div>
