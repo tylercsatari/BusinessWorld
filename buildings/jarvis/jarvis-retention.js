@@ -10,7 +10,8 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTG = null, RTGP = null, RTGD = null, RTGA = null, RTGS = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTG = null, RTGP = null, RTGD = null, RTGF = null, RTGA = null, RTGS = null, err = null;
+    const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgMods: { cv: 1, vv: 1, cc: 1, vc: 1 }, rtgDet: 'declared' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
@@ -941,6 +942,15 @@ const JarvisRetention = (function () {
     }
     function rtgSecInfo(t) {
         const v = RTGA.videos[st.rtgSel]; if (!v || t < 0 || t >= v.n_sec) return '';
+        const w0 = (v.words && v.words[t]) || '';
+        if (v.threadV) {            // emergence schema — clusters, no labels
+            const tv = v.threadV[t], tc = v.threadC[t];
+            const chip = (th, lab) => th < 0 ? `<span style="font-size:10px;color:${C.mute}">${lab}: —</span>` : `<span style="background:${tcol(th)}22;border:1px solid ${tcol(th)};color:${tcol(th)};border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700">${lab} · cluster ${th}</span>`;
+            return `<div style="font-size:12px;color:${C.text};font-weight:800;margin-bottom:4px">Second ${t} · ${t}.0s</div>
+                <div style="margin-bottom:6px;display:flex;gap:6px;flex-wrap:wrap">${chip(tv, 'visual')} ${chip(tc, 'concept')}</div>
+                ${w0 ? `<div style="font-size:11px;color:${C.dim};margin-bottom:6px;line-height:1.4">🗣 “${esc(w0)}”</div>` : `<div style="font-size:10px;color:${C.mute};margin-bottom:6px">(no speech)</div>`}
+                <div style="font-size:10px;color:${C.mute};line-height:1.5">visual change <b style="color:${C.cyan}">${(v.vsurp && v.vsurp[t] || 0).toFixed(3)}</b>. The same cluster colour appearing earlier on one track and later on the other is an emergent reference→gratification — not labelled, just where the geometry put it.</div>`;
+        }
         const refs = v.edges.filter(e => e.i === t), grats = v.edges.filter(e => e.j === t);
         const uncl = (v.unclosed || []).filter(u => u.i === t), orph = (v.orphan_grat || []).includes(t), ev = (v.events || []).includes(t);
         const w = (v.words && v.words[t]) || '';
@@ -1043,6 +1053,80 @@ const JarvisRetention = (function () {
             <text x="${pad}" y="12" fill="${RMODC.cv}" font-size="10" font-weight="700">concept→visual: real (solid) vs shuffled (dashed)</text>
             <text x="${pad}" y="${Hh - 4}" fill="${C.mute}" font-size="9">gap ${xs[0]}s</text><text x="${W - 8}" y="${Hh - 4}" fill="${C.mute}" font-size="9" text-anchor="end">${xs[xs.length - 1]}s</text></svg>`;
     }
+    // ---- EMERGENCE view (declared / SigLIP2): full field + clusters, nothing labelled ----
+    const tcol = th => th < 0 ? C.card2 : THREAD_COLORS[((th % THREAD_COLORS.length) + THREAD_COLORS.length) % THREAD_COLORS.length];
+    function rtgPlayerCard(v) {
+        return cardc(`<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+              <div style="width:220px;flex-shrink:0">
+                <div id="rtg-yt" data-vid="${esc(v.id)}" data-n="${v.n_sec}" style="width:220px;height:391px;background:#000;border-radius:8px;overflow:hidden"></div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="rtg-seek" type="range" min="0" max="${v.n_sec - 1}" step="0.1" value="0" style="flex:1;accent-color:${C.purple};cursor:pointer"><span style="font-size:10px;color:${C.dim};font-weight:700;white-space:nowrap">t=<span id="rtg-curt">0.0s</span></span></div>
+                <div style="font-size:10px;color:${C.mute};margin-top:4px;line-height:1.4">Drag / click any second to <b>freeze</b> & inspect — the playhead crosses the threads below. Press ▶ to play.</div>
+              </div>
+              <div style="flex:1;min-width:240px"><div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:5px">Moment inspector — at the playhead</div>
+                <div id="rtg-cursec" style="background:${C.card2};border-radius:8px;padding:11px 13px;min-height:120px">${rtgSecInfo(0)}</div></div>
+            </div>`, 14);
+    }
+    function rtgThreadTimeline(v) {
+        const n = v.n_sec, W = 820, pad = 30, iw = W - pad - 10, cell = iw / n, yV = 40, yC = 84, ch = 30;
+        let cells = '';
+        for (let s = 0; s < n; s++) {
+            const x = (pad + s * cell).toFixed(1), w = Math.max(1, cell - 0.3).toFixed(1);
+            cells += `<rect data-rtgnode="${s}" style="cursor:pointer" x="${x}" y="${yV}" width="${w}" height="${ch}" fill="${tcol(v.threadV[s])}"><title>${s}s · visual cluster ${v.threadV[s]}</title></rect>`;
+            cells += `<rect data-rtgnode="${s}" style="cursor:pointer" x="${x}" y="${yC}" width="${w}" height="${ch}" fill="${tcol(v.threadC[s])}"><title>${s}s · concept cluster ${v.threadC[s]}</title></rect>`;
+        }
+        const ph = `<line class="rtg-ph" data-x0="${pad + cell / 2}" data-x1="${pad + (n - 1) * cell + cell / 2}" data-n="${n}" x1="${pad}" y1="34" x2="${pad}" y2="${yC + ch + 3}" stroke="#fff" stroke-width="2" opacity="0" style="pointer-events:none"/>`;
+        const ax = [0, n >> 2, n >> 1, (3 * n) >> 2, n - 1].map(s => `<text x="${(pad + s * cell + cell / 2).toFixed(0)}" y="${yC + ch + 13}" fill="${C.mute}" font-size="9" text-anchor="middle">${s}s</text>`).join('');
+        const legend = Array.from({ length: v.n_threads }, (_, t) => `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:8px"><span style="width:9px;height:9px;border-radius:2px;background:${tcol(t)};display:inline-block"></span><span style="font-size:9px;color:${C.mute}">${t}</span></span>`).join('');
+        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Emergent threads over time — same colour = same cluster</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Every second coloured by which cluster it fell into (k-means in SigLIP2 space — no thresholds, nothing called a reference or gratification). When a colour appears on the <b style="color:${C.dim}">C</b>oncept track and then later on the <b style="color:${C.dim}">V</b>isual track, a spoken idea and its later depiction fell into the same cluster — a loop that <i>emerged</i>. Click a second to inspect & play.</div>
+            <svg viewBox="0 0 ${W} ${yC + ch + 20}" style="width:100%">
+              <text x="2" y="${yV + ch / 2 + 4}" fill="${C.dim}" font-size="11" font-weight="800">V</text>
+              <text x="2" y="${yC + ch / 2 + 4}" fill="${C.dim}" font-size="11" font-weight="800">C</text>
+              ${cells}${ph}${ax}</svg>
+            <div style="margin-top:6px">${legend}</div>`);
+    }
+    function rtgFieldHeat(v) {
+        const n = v.n_sec, G = Math.min(n, 80), cell = Math.max(3, Math.round(380 / G)), sz = G * cell, fld = v.field;
+        const bn = a => [Math.floor(a * n / G), Math.max(Math.floor(a * n / G) + 1, Math.floor((a + 1) * n / G))];
+        let cells = '';
+        for (let a = 0; a < G; a++) { const [r0, r1] = bn(a); for (let b = 0; b < G; b++) { const [c0, c1] = bn(b);
+            let s = 0, c = 0; for (let i = r0; i < r1; i++) for (let j = c0; j < c1; j++) { s += fld[i * n + j]; c++; }
+            const t = c ? (s / c) / 127 : 0, al = Math.min(0.95, Math.abs(t) * 1.4 + 0.03);
+            cells += `<rect x="${b * cell}" y="${a * cell}" width="${cell}" height="${cell}" fill="${t >= 0 ? `rgba(248,113,113,${al})` : `rgba(56,189,248,${al})`}"/>`; } }
+        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">The full continuous field ⟨concept<sub>i</sub>, visual<sub>j</sub>⟩</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Every moment-pair, nothing thresholded. Row = spoken second i, column = visual second j. <span style="color:rgba(248,113,113,0.95)">Red</span> = the spoken idea matches that later frame above baseline. Bright off-diagonal regions = threads binding across time.${n > 80 ? ' (binned 80×80)' : ''}</div>
+            <svg viewBox="0 0 ${sz} ${sz}" style="width:100%;max-width:${sz}px">${cells}</svg>`, 12);
+    }
+    function rtgTokenMap(v) {
+        const S = 300, pad = 14, R = S - 2 * pad;
+        const dots = (v.tokens || []).map(t => { const cx = (pad + t.x * R).toFixed(1), cy = (pad + (1 - t.y) * R).toFixed(1), c = tcol(t.th);
+            return t.tr === 1
+                ? `<rect data-rtgnode="${t.s}" style="cursor:pointer" x="${(cx - 3)}" y="${(cy - 3)}" width="6" height="6" fill="${c}" opacity="0.92"><title>concept ${t.s}s · cluster ${t.th}</title></rect>`
+                : `<circle data-rtgnode="${t.s}" style="cursor:pointer" cx="${cx}" cy="${cy}" r="3.6" fill="${c}" opacity="0.8"><title>visual ${t.s}s · cluster ${t.th}</title></circle>`; }).join('');
+        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">The cluster geometry — moments in SigLIP2 space</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Every second's <span style="color:${C.dim}">● visual</span> and <span style="color:${C.dim}">▪ concept</span> token, projected to 2D, coloured by emergent cluster. Moments about the same thing group — a spoken word and the frame that shows it sit together. This is where the threads come from.</div>
+            <svg viewBox="0 0 ${S} ${S}" style="width:100%;max-width:${S}px;background:${C.card2};border-radius:8px">${dots}</svg>`, 12);
+    }
+    function renderRTGEmergence() {
+        let h = note(`<b style="color:${C.text}">Emergence, not labelling.</b> No thresholds, nothing stamped "reference" or "gratification". We embed every second — its frame and its spoken words — in SigLIP2's shared space and let k-means find clusters. A <b>thread</b> is just a cluster. A reference→gratification <i>emerges</i> when a thread's colour shows up on the concept track and then later on the visual track. Below: the threads over time, the full field, and the cluster geometry they come from.`, C.cyan);
+        if (st.rtgSel != null && RTGF.videos[st.rtgSel]) {
+            const v = RTGF.videos[st.rtgSel];
+            h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+                <div style="font-size:13px;font-weight:800;color:${C.text}">${esc(v.title)} <span style="font-size:10px;color:${C.mute};font-weight:400">· ${v.n_sec}s · ${v.n_threads} clusters</span></div>
+                <div style="display:flex;gap:6px"><a href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" style="background:${C.accent}18;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;text-decoration:none">▶ YouTube</a><span data-rtgclose style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px">✕ close</span></div></div>`, 10);
+            h += rtgPlayerCard(v);
+            h += rtgThreadTimeline(v);
+            h += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">${rtgFieldHeat(v)}${rtgTokenMap(v)}</div>`;
+        }
+        const list = RTGF.videos.map((v, i) => ({ v, i })).filter(o => o.v.n_threads).sort((a, b) => b.v.n_sec - a.v.n_sec);
+        h += cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:6px">Every video — click to see its emergent threads</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">${list.map(({ v, i }) => {
+                const on = st.rtgSel === i, strip = (v.threadV || []).map(th => `<span style="flex:1;background:${tcol(th)}"></span>`).join('');
+                return `<div data-rtg="${i}" style="display:flex;align-items:center;gap:8px;padding:4px 7px;border-radius:6px;cursor:pointer;background:${on ? C.card2 : 'transparent'};border:1px solid ${on ? C.purple : 'transparent'}">
+                    <div style="flex:1;min-width:0"><div style="font-size:11px;color:${C.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.title)}</div>
+                      <div style="display:flex;height:7px;border-radius:2px;overflow:hidden;margin-top:3px;background:${C.border}">${strip}</div></div></div>`; }).join('')}</div>`);
+        return h;
+    }
     function renderRTGExistPred() {
         const E = RTGP.existence_pred, exists = !!RTGP.exists;
         const maxa = Math.max(0.001, ...RMODS.flatMap(m => [E[m].learned_acc, E[m].similarity_acc, E[m].shuffled_acc]));
@@ -1076,15 +1160,17 @@ const JarvisRetention = (function () {
         if (!RTG && !RTGP && !RTGD) return cardc(`<div style="padding:30px;text-align:center;color:${C.dim}">Building RTG dependency map… <div style="font-size:11px;color:${C.mute};margin-top:6px">Run <code>principles/rtg_embed.py</code>, <code>rtg_build.py</code>, then <code>rtg_detector.py</code>.</div></div>`);
         let det = st.rtgDet;
         if (det === 'pred' && !RTGP) det = 'sim';
-        if (det === 'declared' && !RTGD) det = 'sim';
-        if (det === 'sim' && !RTG) det = RTGD ? 'declared' : 'pred';
+        if (det === 'declared' && !RTGD && !RTGF) det = 'sim';
+        if (det === 'sim' && !RTG) det = (RTGF || RTGD) ? 'declared' : 'pred';
         RTGA = det === 'pred' ? RTGP : det === 'declared' ? RTGD : RTG;
         RTGS = det === 'declared' ? RTGD : RTG;          // sim-schema dataset for the shuffle panels
         const isP = det === 'pred';
         let h = '';
         // ---- detector toggle ----
         const detPill = (id, lab, on, avail) => `<span ${avail ? `data-rtgdet="${id}"` : ''} style="cursor:${avail ? 'pointer' : 'default'};border:1px solid ${on ? C.accent : C.border};background:${on ? C.accent + '1e' : 'transparent'};color:${on ? C.accent : avail ? C.dim : C.faint};border-radius:7px;padding:4px 11px;font-size:11px;font-weight:700">${lab}</span>`;
-        h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">detector</span>${detPill('sim', 'v0 · CLIP similarity', det === 'sim', !!RTG)}${detPill('declared', 'v2 · declared (SigLIP2)', det === 'declared', !!RTGD)}${detPill('pred', 'v1 · predictive (CPC)', det === 'pred', !!RTGP)}</div>`;
+        h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">view</span>${detPill('declared', '⛓ emergence (SigLIP2)', det === 'declared', !!(RTGF || RTGD))}${detPill('sim', 'v0 · CLIP labels', det === 'sim', !!RTG)}${detPill('pred', 'v1 · predictive (CPC)', det === 'pred', !!RTGP)}</div>`;
+        // ---- EMERGENCE view (declared) — full field + clusters, nothing labelled ----
+        if (det === 'declared' && RTGF) { RTGA = RTGF; return h + renderRTGEmergence(); }
         // ---- existence (branch) ----
         if (isP) { h += renderRTGExistPred(); }
         else {
@@ -1249,6 +1335,7 @@ const JarvisRetention = (function () {
                     RTG = await loadJSON(base + 'principles/rtg.json').catch(() => null);
                     RTGP = await loadJSON(base + 'principles/rtg_pred.json').catch(() => null);
                     RTGD = await loadJSON(base + 'principles/rtg_declared.json').catch(() => null);
+                    RTGF = await loadJSON(base + 'principles/rtg_field.json').catch(() => null);
                 } catch (e) {
                     if (tries >= 3) { root.innerHTML = `<div style="padding:24px;color:${C.dim}">Couldn't load data — the site may be mid-deploy. <button data-reload style="background:${C.accent}22;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px">Retry</button></div>`; return; }
                     root.innerHTML = `<div style="padding:40px;text-align:center;color:${C.dim}">Loading… <span style="color:${C.mute};font-size:11px">(retry ${tries})</span></div>`;
