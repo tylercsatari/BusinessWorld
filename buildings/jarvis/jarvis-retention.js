@@ -946,10 +946,12 @@ const JarvisRetention = (function () {
         if (v.threadV) {            // emergence schema — clusters, no labels
             const tv = v.threadV[t], tc = v.threadC[t];
             const chip = (th, lab) => th < 0 ? `<span style="font-size:10px;color:${C.mute}">${lab}: —</span>` : `<span style="background:${tcol(th)}22;border:1px solid ${tcol(th)};color:${tcol(th)};border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700">${lab} · cluster ${th}</span>`;
+            const cx = (v.ctx && v.ctx[t]) || '', rf = (v.refness && v.refness[t]) || 0, pf = (v.payoff && v.payoff[t]) || 0;
             return `<div style="font-size:12px;color:${C.text};font-weight:800;margin-bottom:4px">Second ${t} · ${t}.0s</div>
                 <div style="margin-bottom:6px;display:flex;gap:6px;flex-wrap:wrap">${chip(tv, 'visual')} ${chip(tc, 'concept')}</div>
-                ${w0 ? `<div style="font-size:11px;color:${C.dim};margin-bottom:6px;line-height:1.4">🗣 “${esc(w0)}”</div>` : `<div style="font-size:10px;color:${C.mute};margin-bottom:6px">(no speech)</div>`}
-                <div style="font-size:10px;color:${C.mute};line-height:1.5">visual change <b style="color:${C.cyan}">${(v.vsurp && v.vsurp[t] || 0).toFixed(3)}</b>. The same cluster colour appearing earlier on one track and later on the other is an emergent reference→gratification — not labelled, just where the geometry put it.</div>`;
+                ${cx ? `<div style="font-size:11px;color:${C.dim};margin-bottom:6px;line-height:1.45">🗣 <span style="color:${C.mute}">utterance:</span> “${esc(cx)}”</div>` : `<div style="font-size:10px;color:${C.mute};margin-bottom:6px">(no speech)</div>`}
+                <div style="display:flex;gap:14px;font-size:11px;margin-bottom:5px"><span>reference-ness <b style="color:${C.cyan}">${rf.toFixed(2)}</b></span><span>payoff-ness <b style="color:${C.green}">${pf.toFixed(2)}</b></span><span style="color:${C.mute}">Δvisual ${(v.vsurp && v.vsurp[t] || 0).toFixed(3)}</span></div>
+                <div style="font-size:10px;color:${C.mute};line-height:1.5">reference-ness peaks where a spoken idea points to a <i>specific</i> later visual that isn't present yet; payoff-ness peaks where a later visual fulfils one. Both are continuous fields — the markers are just the peaks, nothing thresholded.</div>`;
         }
         const refs = v.edges.filter(e => e.i === t), grats = v.edges.filter(e => e.j === t);
         const uncl = (v.unclosed || []).filter(u => u.i === t), orph = (v.orphan_grat || []).includes(t), ev = (v.events || []).includes(t);
@@ -1085,6 +1087,25 @@ const JarvisRetention = (function () {
               ${cells}${ph}${ax}</svg>
             <div style="margin-top:6px">${legend}</div>`);
     }
+    function rtgRefPayoff(v) {
+        const n = v.n_sec, W = 820, pad = 30, iw = W - pad - 10, H = 156, yR = 56, yP = 100, amp = 40;
+        const x = s => pad + (n <= 1 ? 0 : s * iw / (n - 1));
+        const ref = v.refness || [], pay = v.payoff || [];
+        const refA = `M ${x(0)} ${yR} ` + ref.map((r, i) => `L ${x(i).toFixed(1)} ${(yR - r * amp).toFixed(1)}`).join(' ') + ` L ${x(n - 1)} ${yR} Z`;
+        const payA = `M ${x(0)} ${yP} ` + pay.map((p, i) => `L ${x(i).toFixed(1)} ${(yP + p * amp).toFixed(1)}`).join(' ') + ` L ${x(n - 1)} ${yP} Z`;
+        const arcs = (v.links || []).map(l => { const xi = x(l.i), xj = x(l.j);
+            return `<path d="M ${xi} ${yR} C ${xi} ${(yR + yP) / 2} ${xj} ${(yR + yP) / 2} ${xj} ${yP}" fill="none" stroke="${C.purple}" stroke-width="${(0.6 + l.s * 2.4).toFixed(1)}" opacity="${(0.18 + l.s * 0.6).toFixed(2)}"><title>reference @${l.i}s → fulfilled @${l.j}s · strength ${l.s}</title></path>`; }).join('');
+        const pk = (arr, base, up, col) => arr.map((r, i) => (r > 0.12 && (i === 0 || r >= arr[i - 1]) && (i === n - 1 || r >= arr[i + 1])) ? `<circle data-rtgnode="${i}" style="cursor:pointer" cx="${x(i).toFixed(1)}" cy="${(base + up * r * amp).toFixed(1)}" r="${(2 + r * 3).toFixed(1)}" fill="${col}" opacity="${(0.35 + r * 0.65).toFixed(2)}"><title>${i}s · ${(r).toFixed(2)}</title></circle>` : '').join('');
+        const ph = `<line class="rtg-ph" data-x0="${pad}" data-x1="${x(n - 1)}" data-n="${n}" x1="${pad}" y1="14" x2="${pad}" y2="${H - 10}" stroke="#fff" stroke-width="1.5" opacity="0" style="pointer-events:none"/>`;
+        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Reference-ness & payoff-ness — continuous fields, markers are the peaks</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5"><b style="color:${C.cyan}">Reference-ness</b> (top) = a spoken idea (in full context) points to a <i>specific</i> later visual that isn't present yet — intrinsic & causal, so it shows even when nothing pays it off. <b style="color:${C.green}">Payoff-ness</b> (bottom) = a later visual fulfils a real earlier reference. The <span style="color:${C.purple}">arcs</span> link each reference peak to where it lands. Nothing is thresholded — a "marker" is just a peak. <i>(SigLIP proxy for now; the true expectation face arrives with VL-JEPA.)</i></div>
+            <svg viewBox="0 0 ${W} ${H}" style="width:100%">
+              <line x1="${pad}" y1="${yR}" x2="${W - 10}" y2="${yR}" stroke="${C.border2}"/><line x1="${pad}" y1="${yP}" x2="${W - 10}" y2="${yP}" stroke="${C.border2}"/>
+              <path d="${refA}" fill="${C.cyan}26" stroke="${C.cyan}" stroke-width="1.2"/><path d="${payA}" fill="${C.green}26" stroke="${C.green}" stroke-width="1.2"/>
+              ${arcs}${pk(ref, yR, -1, C.cyan)}${pk(pay, yP, 1, C.green)}${ph}
+              <text x="${pad}" y="14" fill="${C.cyan}" font-size="10" font-weight="700">reference-ness (anticipation set)</text>
+              <text x="${pad}" y="${H - 4}" fill="${C.green}" font-size="10" font-weight="700">payoff-ness (anticipation met)</text></svg>`);
+    }
     function rtgFieldHeat(v) {
         const n = v.n_sec, G = Math.min(n, 80), cell = Math.max(3, Math.round(380 / G)), sz = G * cell, fld = v.field;
         const bn = a => [Math.floor(a * n / G), Math.max(Math.floor(a * n / G) + 1, Math.floor((a + 1) * n / G))];
@@ -1116,6 +1137,7 @@ const JarvisRetention = (function () {
                 <div style="display:flex;gap:6px"><a href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" style="background:${C.accent}18;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;text-decoration:none">▶ YouTube</a><span data-rtgclose style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px">✕ close</span></div></div>`, 10);
             h += rtgPlayerCard(v);
             h += rtgThreadTimeline(v);
+            h += rtgRefPayoff(v);
             h += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">${rtgFieldHeat(v)}${rtgTokenMap(v)}</div>`;
         }
         const list = RTGF.videos.map((v, i) => ({ v, i })).filter(o => o.v.n_threads).sort((a, b) => b.v.n_sec - a.v.n_sec);

@@ -43,7 +43,9 @@ def words_by_sec(vid, n):
 
 
 def main():
-    z = np.load(os.path.join(HERE, 'rtg_tokens_siglip.npz'))
+    tokf = 'rtg_tokens_ctx.npz' if os.path.exists(os.path.join(HERE, 'rtg_tokens_ctx.npz')) else 'rtg_tokens_siglip.npz'
+    print('tokens:', tokf, flush=True)
+    z = np.load(os.path.join(HERE, tokf))
     owner, sec = z['owner'], z['sec']
     V = z['clip_img'].astype(np.float64); C = z['clip_txt'].astype(np.float64)
     hasc = z['has_c'].astype(bool)
@@ -94,6 +96,40 @@ def main():
             rec['n_threads'] = int(k); rec['tokens'] = toklist
             # ---- continuous surprise (visual change) — not a label, just the signal ----
             rec['vsurp'] = [0.0] + [round(float(1 - Vv[t - 1] @ Vv[t]), 4) for t in range(1, n)]
+            # ---- continuous reference-ness / payoff-ness fields (proxy on SigLIP content) ----
+            # reference-ness = forwardness × sharpness: a spoken concept that points to a SPECIFIC
+            # later visual that ISN'T present now. Intrinsic & causal — defined even if never paid off.
+            ref = [0.0] * n
+            for i in range(n):
+                if not hc[i] or i >= n - 1:
+                    continue
+                fut = M[i, i + 1:]
+                fwd = float(fut.max() - M[i, i])             # later, not now
+                shp = float(fut.max() - fut.mean())          # one specific peak, not diffuse
+                ref[i] = max(0.0, fwd) * max(0.0, shp)
+            rmax = max(ref) + 1e-9
+            ref = [r / rmax for r in ref]
+            # payoff-ness = a visual that fulfils an earlier REAL reference (relational)
+            pay = [0.0] * n
+            for j in range(1, n):
+                best = 0.0
+                for i in range(j):
+                    if hc[i] and ref[i] > 0:
+                        best = max(best, ref[i] * float(M[i, j]))
+                pay[j] = best
+            pmax = max(pay) + 1e-9
+            pay = [p / pmax for p in pay]
+            # links: from each reference-ness PEAK (local max, emergent) to its best future visual
+            links = []
+            for i in range(n - 1):
+                if ref[i] > 0.12 and (i == 0 or ref[i] >= ref[i - 1]) and (i == n - 1 or ref[i] >= ref[i + 1]):
+                    j = int(max(range(i + 1, n), key=lambda j: M[i, j]))
+                    links.append({'i': i, 'j': j, 's': round(ref[i], 3), 'p': round(pay[j], 3)})
+            links = sorted(links, key=lambda l: -l['s'])[:14]
+            rec['refness'] = [round(r, 3) for r in ref]
+            rec['payoff'] = [round(p, 3) for p in pay]
+            rec['links'] = links
+            rec['ctx'] = [' '.join(w for w in rec['words'][max(0, t - 9):t + 1] if w).strip() for t in range(n)]
         out.append(rec)
         if (vi + 1) % 40 == 0:
             print(f"  {vi+1} videos", flush=True)
