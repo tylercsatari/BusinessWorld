@@ -1,80 +1,112 @@
 #!/usr/bin/env python3
 """
-RTG · the SWEEP. Many algorithm variants, each a different answer to "what is an open loop /
-an expectation?", all UNSUPERVISED (from the Gemini embeddings). Every variant is SCORED by
-how well it recovers Tyler's hand-labelled loops — PU-style: recall only, NEVER penalised for
-finding MORE loops than he labelled (his labels are confident positives, not complete truth).
+RTG · the DEEP sweep. Many algorithm variants, each a different THEORY of what an open loop /
+expectation is — grounded in the actual science (information-gap, suspense, Bayesian surprise,
+Zeigarnik). All UNSUPERVISED (from Gemini embeddings). Every variant SCORED by how well it
+recovers Tyler's hand-labelled loops, PU-style (recall + ranking, NEVER penalised for finding
+more than he marked — his labels are a guide, not truth).
 
-Axes (the philosophy):
-  DIRECTION  — which channel references which: cv/vv/cc/vc + "any" (max over modalities)
-  OPERATOR   — what "expecting a specific future" means:
-     content  = strongly matches a specific later moment (centred)
-     sharp    = that match is PEAKED (one future, not diffuse)
-     prod     = forwardness × sharpness
-     entail   = absolute semantic match, uncentred (abstract payoffs — "fittest alive"→a feat)
-     novel    = matches the FUTURE more than the recent past (forward-pointing vs continuity)
-  GAP        — a reference points >=g seconds ahead (skip adjacency): 1 / 2 / 4
-
-Scores all variants on the labelled videos, ranks, stores the TOP-K full graphs (browsable)
-+ the full ranked table. rec.signals[id] = {refness,payoff,links}; meta.signals = ranked ids.
+OPERATORS (the philosophy of "expecting a specific future"):
+  content   strongly matches a specific later moment (centred)
+  sharp     that match is PEAKED (one future, not diffuse)
+  prod      forwardness × sharpness
+  entail    absolute semantic match, uncentred — abstract payoffs ("fittest alive"→a feat)
+  novel     matches the FUTURE more than the recent past (forward vs continuity)
+  directed  matches the future MORE than it's matched by the past (asymmetry ~ transfer entropy)
+  infogap   salient pointer to a REGION of futures, answer not yet pinned (Loewenstein gap)
+  suspense  forward UNCERTAINTY among plausible outcomes that a strong future resolves (narratology)
+  incomplete doesn't fit its own local neighbourhood — points elsewhere (Zeigarnik incompleteness)
+  recur     bidirectional binding — points forward AND is returned to (recurrence)
+  tension   like content but the loop strengthens with the GAP it stays open (Zeigarnik duration)
+  surprise  payoff weighted by representation CHANGE — an anticipated belief-shift (Bayesian surprise)
+DIRECTION cv/vv/cc/vc + cAny/vAny/anyAny (max over modalities) · GAP 1/2/4/6
 """
 import os, json
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOK = next((f for f in ['rtg_tokens_gemini.npz', 'rtg_tokens_ctx.npz', 'rtg_tokens_siglip.npz'] if os.path.exists(os.path.join(HERE, f))), 'rtg_tokens_siglip.npz')
-TOP_K = 28
-TOL = 3            # a labelled pair is "captured" if a link lands within +-3s of both endpoints
+TOP_K = 30
+TOL = 3
 DIRS = ['cv', 'vv', 'cc', 'vc', 'cAny', 'vAny', 'anyAny']
-OPS = ['content', 'sharp', 'prod', 'entail', 'novel']
-GAPS = [1, 2, 4]
+OPS = ['content', 'sharp', 'prod', 'entail', 'novel', 'directed', 'infogap', 'suspense', 'incomplete', 'recur', 'tension', 'surprise']
+GAPS = [1, 2, 4, 6]
 
 
 def Mblock(C, V, d):
     cv, vv, cc, vc = C @ V.T, V @ V.T, C @ C.T, V @ C.T
-    return {'cv': cv, 'vv': vv, 'cc': cc, 'vc': vc,
-            'cAny': np.maximum(cv, cc), 'vAny': np.maximum(vv, vc),
-            'anyAny': np.maximum(np.maximum(cv, vv), np.maximum(cc, vc))}[d]
+    return {'cv': cv, 'vv': vv, 'cc': cc, 'vc': vc, 'cAny': np.maximum(cv, cc),
+            'vAny': np.maximum(vv, vc), 'anyAny': np.maximum(np.maximum(cv, vv), np.maximum(cc, vc))}[d]
 
 
 def validity(d, hc, n):
-    refC = d[0] == 'c'; payV = d[1:]
-    rv = hc.copy() if refC else np.ones(n, bool)
-    pv = hc.copy() if d in ('cc', 'vc') else np.ones(n, bool)   # explicit-concept payoff needs speech
-    if d in ('cAny', 'vAny', 'anyAny'):
-        pv = np.ones(n, bool)
+    rv = hc.copy() if d[0] == 'c' else np.ones(n, bool)
+    pv = hc.copy() if d in ('cc', 'vc') else np.ones(n, bool)
     return rv, pv
 
 
-def compute(M, gap, op, rv, pv):
+def softmax(a):
+    a = a - a.max(); e = np.exp(a / 0.1); return e / (e.sum() + 1e-9)
+
+
+def compute(M, gap, op, rv, pv, change):
     n = M.shape[0]
-    raw = M
     Mc = M - M.mean(1, keepdims=True) - M.mean(0, keepdims=True) + M.mean()
-    use = Mc if op != 'entail' else raw
-    I, J = np.indices((n, n))
-    mask = (J >= I + gap) & pv[None, :] & rv[:, None]
-    Mm = np.where(mask, use, -np.inf)
-    fmax = Mm.max(1); fmax[~np.isfinite(fmax)] = 0.0
-    cnt = mask.sum(1); fmean = np.where(mask, use, 0).sum(1) / np.maximum(cnt, 1)
-    if op in ('content', 'entail'):
-        ref = fmax
-    elif op == 'sharp':
-        ref = fmax - fmean
-    elif op == 'prod':
-        ref = np.clip(fmax, 0, None) * np.clip(fmax - fmean, 0, None)
-    elif op == 'novel':
-        past = np.where((J < I) & (J >= I - 3) & rv[:, None], use, -np.inf)
-        pmax = past.max(1); pmax[~np.isfinite(pmax)] = 0.0
-        ref = fmax - pmax
+    ref = np.zeros(n)
+    for i in range(n):
+        if not rv[i]:
+            continue
+        fj = [j for j in range(i + gap, n) if pv[j]]
+        if not fj:
+            continue
+        fc = Mc[i, fj]; mx = float(fc.max())
+        if op == 'content':
+            r = mx
+        elif op == 'sharp':
+            r = mx - float(fc.mean())
+        elif op == 'prod':
+            r = max(0.0, mx) * max(0.0, mx - float(fc.mean()))
+        elif op == 'entail':
+            r = float(M[i, fj].max())
+        elif op == 'novel':
+            pj = [j for j in range(max(0, i - 3), i) if pv[j]]; r = mx - (float(Mc[i, pj].max()) if pj else 0.0)
+        elif op == 'directed':
+            bj = [j for j in range(0, max(0, i - gap + 1)) if rv[j]]; r = mx - (float(Mc[bj, i].max()) if bj else 0.0)
+        elif op == 'infogap':
+            near = float((fc > mx - 0.04).mean()); r = max(0.0, mx) * near
+        elif op == 'suspense':
+            p = softmax(fc); H = float(-(p * np.log(p + 1e-12)).sum() / np.log(len(fc) + 1e-9)); r = H * max(0.0, mx)
+        elif op == 'incomplete':
+            nj = [j for j in range(max(0, i - 2), min(n, i + 3)) if j != i and pv[j]]; r = mx - (float(Mc[i, nj].max()) if nj else 0.0)
+        elif op == 'recur':
+            r = max((min(float(Mc[i, j]), float(Mc[j, i])) for j in fj), default=0.0)
+        elif op == 'tension':
+            r = mx
+        elif op == 'surprise':
+            r = mx
+        ref[i] = r
     ref = np.clip(ref, 0, None); ref = ref / (ref.max() + 1e-9)
-    refcol = ref[:, None] * np.where(mask, use, 0)
-    pay = np.clip(refcol.max(0), 0, None); pay = pay / (pay.max() + 1e-9)
+    pay = np.zeros(n)
+    for j in range(n):
+        if not pv[j]:
+            continue
+        cands = [ref[i] * float(Mc[i, j]) for i in range(max(0, j - gap + 1)) if rv[i]]
+        v = max(cands) if cands else 0.0
+        if op == 'surprise':
+            v *= float(change[j])
+        pay[j] = v
+    pay = np.clip(pay, 0, None); pay = pay / (pay.max() + 1e-9)
     links = []
     for i in range(n):
         if ref[i] > 0.12 and (i == 0 or ref[i] >= ref[i - 1]) and (i == n - 1 or ref[i] >= ref[i + 1]):
-            row = np.where(mask[i], use[i], -np.inf)
-            if np.isfinite(row).any():
-                links.append((i, int(np.argmax(row)), float(ref[i])))
+            fj = [j for j in range(i + gap, n) if pv[j]]
+            if not fj:
+                continue
+            if op == 'tension':
+                bj = max(fj, key=lambda j: float(Mc[i, j]) * min(1.0, (j - i) / 8.0))
+            else:
+                bj = max(fj, key=lambda j: float(Mc[i, j]))
+            links.append((i, int(bj), float(ref[i])))
     return ref, pay, sorted(links, key=lambda l: -l[2])
 
 
@@ -88,79 +120,75 @@ def main():
     meta = json.load(open(os.path.join(HERE, 'rtg_meta.json')))['videos']
     byid = {v['id']: v for v in d['videos']}
     try:
-        LBL = json.load(open(os.path.join(HERE, 'rtg_labels.json')))
+        LBL = {k: v for k, v in json.load(open(os.path.join(HERE, 'rtg_labels.json'))).items() if isinstance(v, dict) and v.get('pairs')}
     except Exception:
         LBL = {}
-    LBL = {k: v for k, v in LBL.items() if isinstance(v, dict) and v.get('pairs')}
-    print('labelled videos:', len(LBL), '· pairs:', sum(len(v['pairs']) for v in LBL.values()), flush=True)
-
+    print('labelled:', len(LBL), 'videos /', sum(len(v['pairs']) for v in LBL.values()), 'pairs', flush=True)
     seq = {}
     for r in range(len(owner)):
         seq.setdefault(int(owner[r]), []).append(r)
     rowsById = {meta[vi]['id']: np.array(sorted(seq[vi], key=lambda r: sec[r])) for vi in sorted(seq)}
 
-    variants = [(d_, o, g) for d_ in DIRS for o in OPS for g in GAPS]
-    desc = lambda v: f"{v[0]} · {v[1]} · gap{v[2]}"
+    def change_of(Vv):
+        n = len(Vv); return np.array([0.0] + [1 - float(Vv[t - 1] @ Vv[t]) for t in range(1, n)])
 
-    # --- score every variant on the labelled videos (PU recall + refness percentile) ---
+    variants = [(D, O, G) for D in DIRS for O in OPS for G in GAPS]
+    desc = lambda v: f"{v[0]} · {v[1]} · gap{v[2]}"
     scores = {}
     for var in variants:
-        d_, op, g = var
-        cap = tot = 0; perc = 0.0
+        D, O, G = var
+        cap = tot = 0; pct = atr = 0.0
         for vid, L in LBL.items():
             rows = rowsById.get(vid)
             if rows is None:
                 continue
             n = len(rows); Cc = C[rows]; Vv = V[rows]; hc = hasc[rows]
-            rv, pv = validity(d_, hc, n)
-            ref, pay, links = compute(Mblock(Cc, Vv, d_), g, op, rv, pv)
-            order = np.argsort(np.argsort(ref))  # rank
+            rv, pv = validity(D, hc, n)
+            ref, pay, links = compute(Mblock(Cc, Vv, D), G, O, rv, pv, change_of(Vv))
+            rank = np.argsort(np.argsort(ref))
             for p in L['pairs']:
                 r0, g0 = p['r'], p['g']
                 if r0 >= n:
                     continue
                 tot += 1
                 cap += any(abs(i - r0) <= TOL and abs(j - g0) <= TOL for i, j, s in links)
-                perc += float(order[r0]) / max(1, n - 1)
-        recall = cap / max(1, tot); ppct = perc / max(1, tot)
-        scores[var] = round(0.6 * recall + 0.4 * ppct, 4)
-        scores[(var, 'recall')] = round(recall, 3)
-
+                pct += float(rank[r0]) / max(1, n - 1)
+                atr += any(abs(i - r0) <= TOL for i, j, s in links)
+        recall = cap / max(1, tot); ppct = pct / max(1, tot); aref = atr / max(1, tot)
+        scores[var] = round(0.4 * recall + 0.3 * ppct + 0.3 * aref, 4)
+        scores[(var, 'r')] = round(recall, 3)
     ranked = sorted(variants, key=lambda v: -scores[v])
-    print('\nTOP 12 variants (score · recall · desc):')
-    for v in ranked[:12]:
-        print(f"  {scores[v]:.3f}  r={scores[(v,'recall')]:.2f}  {desc(v)}", flush=True)
 
-    # --- store TOP-K full graphs on ALL videos ---
-    top = ranked[:TOP_K]
-    sig_ids = [f"{v[0]}_{v[1]}_g{v[2]}" for v in top]
-    labels = {f"{v[0]}_{v[1]}_g{v[2]}": f"{desc(v)}  ({scores[v]:.2f})" for v in top}
-    sc = {f"{v[0]}_{v[1]}_g{v[2]}": scores[v] for v in top}
+    print('\nTOP 15 (score · recall · desc):')
+    for v in ranked[:15]:
+        print(f"  {scores[v]:.3f}  rec={scores[(v,'r')]:.2f}  {desc(v)}", flush=True)
+    print('\nbest per OPERATOR:')
+    for o in OPS:
+        bv = max((v for v in variants if v[1] == o), key=lambda v: scores[v]); print(f"  {o:11} {scores[bv]:.3f}  {desc(bv)}", flush=True)
+    print('best per DIRECTION:', {Dr: round(max(scores[v] for v in variants if v[0] == Dr), 3) for Dr in DIRS}, flush=True)
+    print('best per GAP:', {g: round(max(scores[v] for v in variants if v[2] == g), 3) for g in GAPS}, flush=True)
+
+    top = ranked[:TOP_K]; ids = [f"{v[0]}_{v[1]}_g{v[2]}" for v in top]
     for vid, rec in byid.items():
         rows = rowsById.get(vid)
         if rows is None or len(rows) < 3:
             continue
-        n = len(rows); Cc = C[rows]; Vv = V[rows]; hc = hasc[rows]
+        n = len(rows); Cc = C[rows]; Vv = V[rows]; hc = hasc[rows]; ch = change_of(Vv)
         sig = {}
         for v in top:
-            d_, op, g = v
-            rv, pv = validity(d_, hc, n)
-            ref, pay, links = compute(Mblock(Cc, Vv, d_), g, op, rv, pv)
-            sig[f"{d_}_{op}_g{g}"] = {'refness': [round(float(x), 3) for x in ref],
-                                     'payoff': [round(float(x), 3) for x in pay],
-                                     'links': [{'i': i, 'j': j, 's': round(s, 3), 'p': round(float(pay[j]), 3)} for i, j, s in links[:16]]}
-        rec['signals'] = sig
-        dflt = sig[sig_ids[0]]
+            D, O, G = v; rv, pv = validity(D, hc, n)
+            ref, pay, links = compute(Mblock(Cc, Vv, D), G, O, rv, pv, ch)
+            sig[f"{D}_{O}_g{G}"] = {'refness': [round(float(x), 3) for x in ref], 'payoff': [round(float(x), 3) for x in pay],
+                                    'links': [{'i': i, 'j': j, 's': round(s, 3), 'p': round(float(pay[j]), 3)} for i, j, s in links[:16]]}
+        rec['signals'] = sig; dflt = sig[ids[0]]
         rec['refness'] = dflt['refness']; rec['payoff'] = dflt['payoff']; rec['links'] = dflt['links']
-
-    d['meta']['signals'] = sig_ids
-    d['meta']['signal_default'] = sig_ids[0]
-    d['meta']['signal_labels'] = labels
-    d['meta']['signal_scores'] = sc
-    d['meta']['sweep'] = [{'id': f"{v[0]}_{v[1]}_g{v[2]}", 'desc': desc(v), 'score': scores[v], 'recall': scores[(v, 'recall')]} for v in ranked]
-    d['meta']['sweep_n'] = len(variants); d['meta']['labelled'] = len(LBL)
+    d['meta'].update({'signals': ids, 'signal_default': ids[0],
+                      'signal_labels': {f"{v[0]}_{v[1]}_g{v[2]}": f"{desc(v)} ({scores[v]:.2f})" for v in top},
+                      'signal_scores': {f"{v[0]}_{v[1]}_g{v[2]}": scores[v] for v in top},
+                      'sweep': [{'id': f"{v[0]}_{v[1]}_g{v[2]}", 'desc': desc(v), 'score': scores[v], 'recall': scores[(v, 'r')]} for v in ranked],
+                      'sweep_n': len(variants), 'labelled': len(LBL)})
     json.dump(d, open(os.path.join(HERE, 'rtg_field.json'), 'w'))
-    print(f"\nrtg_field.json · {len(variants)} variants scored · top {TOP_K} stored · default {sig_ids[0]}", flush=True)
+    print(f"\nrtg_field.json · {len(variants)} variants · top {TOP_K} stored · default {ids[0]}", flush=True)
 
 
 if __name__ == '__main__':
