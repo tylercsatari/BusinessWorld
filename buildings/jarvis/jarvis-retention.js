@@ -10,8 +10,8 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTG = null, RTGP = null, RTGA = null, err = null;
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgMods: { cv: 1, vv: 1, cc: 1, vc: 1 }, rtgDet: 'pred' };
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTG = null, RTGP = null, RTGD = null, RTGA = null, RTGS = null, err = null;
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgMods: { cv: 1, vv: 1, cc: 1, vc: 1 }, rtgDet: 'declared' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -1001,7 +1001,7 @@ const JarvisRetention = (function () {
             <text x="${pad}" y="${H - 4}" fill="${C.mute}" font-size="9">0s</text><text x="${W - 10}" y="${H - 4}" fill="${C.mute}" font-size="9" text-anchor="end">${n - 1}s</text></svg>`);
     }
     function rtgMathCard() {
-        const b = RTG.meta.baseline, E = RTG.existence;
+        const b = RTGS.meta.baseline, E = RTGS.existence;
         const row = m => `<tr><td style="padding:3px 10px 3px 0;color:${RMODC[m]};font-weight:700">${E[m].label}</td><td style="padding:3px 10px">${b[m]}</td><td style="padding:3px 10px">${E[m].real.toFixed(4)}</td><td style="padding:3px 10px">${E[m].shuf.toFixed(4)}</td><td style="padding:3px 10px;color:${E[m].delta > 0 ? C.green : C.orange}">${sgn(E[m].delta, 4)}</td><td style="padding:3px 10px">${E[m].p < 0.001 ? '<0.001' : E[m].p.toFixed(3)}</td></tr>`;
         return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:6px">All the math, written out</div>
             <div style="font-family:ui-monospace,monospace;font-size:11px;color:${C.dim};line-height:1.85;background:${C.card2};border-radius:8px;padding:11px 13px;margin-bottom:10px;overflow-x:auto">
@@ -1020,7 +1020,7 @@ const JarvisRetention = (function () {
             <div style="font-size:10px;color:${C.mute};margin-top:6px">Every Δ ≤ 0 → real never beats the null. That's the v0 result: similarity carries no directed binding above chance.</div>`);
     }
     function rtgBars() {
-        const E = RTG.existence, mods = ['cv', 'vv', 'cc', 'vc'];
+        const E = RTGS.existence, mods = ['cv', 'vv', 'cc', 'vc'];
         const maxv = Math.max(0.001, ...mods.flatMap(m => [E[m].real, E[m].shuf]));
         const rows = mods.map(m => { const e = E[m], wr = Math.max(1, e.real / maxv * 180), ws = Math.max(1, e.shuf / maxv * 180), sig = e.p < 0.001 ? '★★' : e.p < 0.05 ? '★' : '';
             return `<div style="margin-bottom:9px">
@@ -1030,7 +1030,7 @@ const JarvisRetention = (function () {
         return rows;
     }
     function rtgGapChart() {
-        const g = RTG.gap_curve, m = 'cv', gaps = g.gaps, R = g.real[m], Sh = g.shuf[m];
+        const g = RTGS.gap_curve, m = 'cv', gaps = g.gaps, R = g.real[m], Sh = g.shuf[m];
         const W = 360, Hh = 130, pad = 28; const xs = gaps;
         const all = R.concat(Sh).filter(v => v != null); const mn = Math.min(0, ...all), mx = Math.max(...all, 0.01);
         const X = i => pad + i / (xs.length - 1) * (W - pad - 8);
@@ -1073,29 +1073,32 @@ const JarvisRetention = (function () {
             <div style="font-size:10px;color:${C.mute};margin-top:6px">v1 = correct model, small data (${RTGP.meta.n} videos, 1fps). v2 = scrape 10⁴–10⁶ Shorts + V-JEPA/CLAP encoders + finer resolution + fine-tuned trunk.</div>`);
     }
     function renderRTG() {
-        if (!RTG && !RTGP) return cardc(`<div style="padding:30px;text-align:center;color:${C.dim}">Building RTG dependency map… <div style="font-size:11px;color:${C.mute};margin-top:6px">Run <code>principles/rtg_embed.py</code>, <code>rtg_build.py</code>, then <code>rtg_detector.py</code>.</div></div>`);
-        const det = (st.rtgDet === 'pred' && RTGP) ? 'pred' : 'sim';
-        RTGA = det === 'pred' ? RTGP : RTG;
-        if (!RTGA) { RTGA = RTGP || RTG; }
+        if (!RTG && !RTGP && !RTGD) return cardc(`<div style="padding:30px;text-align:center;color:${C.dim}">Building RTG dependency map… <div style="font-size:11px;color:${C.mute};margin-top:6px">Run <code>principles/rtg_embed.py</code>, <code>rtg_build.py</code>, then <code>rtg_detector.py</code>.</div></div>`);
+        let det = st.rtgDet;
+        if (det === 'pred' && !RTGP) det = 'sim';
+        if (det === 'declared' && !RTGD) det = 'sim';
+        if (det === 'sim' && !RTG) det = RTGD ? 'declared' : 'pred';
+        RTGA = det === 'pred' ? RTGP : det === 'declared' ? RTGD : RTG;
+        RTGS = det === 'declared' ? RTGD : RTG;          // sim-schema dataset for the shuffle panels
         const isP = det === 'pred';
         let h = '';
         // ---- detector toggle ----
         const detPill = (id, lab, on, avail) => `<span ${avail ? `data-rtgdet="${id}"` : ''} style="cursor:${avail ? 'pointer' : 'default'};border:1px solid ${on ? C.accent : C.border};background:${on ? C.accent + '1e' : 'transparent'};color:${on ? C.accent : avail ? C.dim : C.faint};border-radius:7px;padding:4px 11px;font-size:11px;font-weight:700">${lab}</span>`;
-        h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">detector</span>${detPill('sim', 'v0 · similarity', det === 'sim', !!RTG)}${detPill('pred', 'v1 · predictive (CPC)', det === 'pred', !!RTGP)}</div>`;
+        h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">detector</span>${detPill('sim', 'v0 · CLIP similarity', det === 'sim', !!RTG)}${detPill('declared', 'v2 · declared (SigLIP2)', det === 'declared', !!RTGD)}${detPill('pred', 'v1 · predictive (CPC)', det === 'pred', !!RTGP)}</div>`;
         // ---- existence (branch) ----
         if (isP) { h += renderRTGExistPred(); }
         else {
-        const exists = !!RTG.exists;
+        const exists = !!RTGS.exists, isD = det === 'declared';
         h += cardc(`<div style="font-size:13px;font-weight:800;color:${C.text};margin-bottom:2px">Step 1 — does a reference→gratification structure even exist?</div>
-            <div style="font-size:11px;color:${C.mute};margin-bottom:10px;line-height:1.5">Before reading any single arc, we test the whole phenomenon. For each video we build the directed dependency between its second-tokens (double-centred + gap-detrended, so generic-frame, popular-moment, and continuity effects are removed), then compare it to a <b>time-shuffled</b> copy of the same video (same content, scrambled order). The score = how sharply each reference's best gratification stands out from its own background. If real beats the shuffled null, a directed loop is real — not topic-continuity or noise.</div>
-            <div style="background:${exists ? C.green + '14' : C.orange + '14'};border-left:3px solid ${exists ? C.green : C.orange};border-radius:0 8px 8px 0;padding:9px 12px;margin-bottom:10px;font-size:12px;color:${C.text};font-weight:600">${exists ? '✓ ' : '⚠ '}${esc(RTG.verdict)}</div>
-            ${RTG.diagnosis ? `<div style="font-size:11px;color:${C.dim};line-height:1.55;margin-bottom:12px;background:${C.card2};border-radius:8px;padding:10px 12px"><b style="color:${C.text}">Why:</b> ${esc(RTG.diagnosis)}</div>` : ''}
+            <div style="font-size:11px;color:${C.mute};margin-bottom:10px;line-height:1.5">${isD ? 'The <b>declared route</b>: a spoken word (concept) and the later frame that depicts it, embedded with <b>SigLIP2</b>. M(i,j) = ⟨text<sub>i</sub>, visual<sub>j</sub>⟩, double-centred for specificity, vs a <b>time-shuffled</b> null. The strongest edges should be real naming loops (slingshot→slingshot).' : 'Before reading any single arc, we test the whole phenomenon. For each video we build the directed dependency between its second-tokens (double-centred + gap-detrended), then compare it to a <b>time-shuffled</b> copy of the same video. If real beats the shuffled null, a directed loop is real — not topic-continuity or noise.'}</div>
+            <div style="background:${exists ? C.green + '14' : C.orange + '14'};border-left:3px solid ${exists ? C.green : C.orange};border-radius:0 8px 8px 0;padding:9px 12px;margin-bottom:10px;font-size:12px;color:${C.text};font-weight:600">${exists ? '✓ ' : '⚠ '}${esc(RTGS.verdict)}</div>
+            ${RTGS.diagnosis ? `<div style="font-size:11px;color:${C.dim};line-height:1.55;margin-bottom:12px;background:${C.card2};border-radius:8px;padding:10px 12px"><b style="color:${C.text}">Why:</b> ${esc(RTGS.diagnosis)}</div>` : ''}
             <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px">
-              <div><div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:6px">Directed-binding score · real vs time-shuffled null</div>${rtgBars()}<div style="font-size:10px;color:${C.mute};margin-top:4px;line-height:1.45">Shuffled scoring ${exists ? 'below' : '<b style="color:' + C.orange + '">at or above</b>'} real means the real matrix is ${exists ? 'sharper than chance' : 'smoother than a random one — no isolated forward-pointing spikes survive the null'}.</div></div>
-              <div><div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:6px">Raw similarity vs gap (continuity)</div>${rtgGapChart()}<div style="font-size:10px;color:${C.mute};margin-top:4px;line-height:1.45">Real similarity (solid) sits above the shuffled baseline (dashed) and fades smoothly with the gap — that smooth continuity is exactly what dominates and masks any discrete loop.</div></div>
+              <div><div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:6px">${isD ? 'Declared (concept→visual) score · real vs shuffled' : 'Directed-binding score · real vs time-shuffled null'}</div>${rtgBars()}</div>
+              <div><div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:6px">${isD ? 'SigLIP2 affinity vs gap' : 'Raw similarity vs gap (continuity)'}</div>${rtgGapChart()}</div>
             </div>`, 16);
-        // ---- what would actually detect it ----
-        if (!exists) h += note(`<b style="color:${C.text}">The instrument, not the phenomenon.</b> This says CLIP cosine <i>similarity</i> can't expose directed binding — similarity is symmetric and continuity-dominated. A real "promise→proof" is a <b>predictive</b> relation: does moment <i>i</i> reduce uncertainty about a specific later moment <i>j</i>. Detecting it needs a trained predictive model — <b>V-JEPA / CPC</b> future-latent prediction for V→V, a <b>cross-modal moment-retrieval</b> model (Moment-DETR / UniVTG) for C→V — not raw embeddings. That's the next phase (scrape + GPU), and Step 1 just told us it's required before drawing conclusions. The arcs below are <b>unvalidated candidate</b> similarity structure, shown to exercise the instrument — not confirmed loops.`, C.orange);
+        if (isD) h += note(`<b style="color:${C.text}">Declared route, the honest read.</b> SigLIP2 catches "a word labels a later visible object" (slingshot→slingshot, boxes→boxes) — the top edges per video are semantically right, a real step up from the v0 CLIP detector. What it can't catch is "a statement sets up a future EVENT" (the premise→payoff loops that drive retention). That needs a predictive / state-linking model — <b>VL-JEPA</b> — which drops into this same pipeline when access clears. Open a video and read its top declared edges.`, C.cyan);
+        else if (!exists) h += note(`<b style="color:${C.text}">The instrument, not the phenomenon.</b> CLIP cosine <i>similarity</i> can't expose directed binding — it's symmetric and continuity-dominated. A real "promise→proof" is a <b>predictive</b> relation. The arcs below are <b>unvalidated candidate</b> similarity structure. (Try the <b>declared (SigLIP2)</b> detector — it recovers the real naming loops.)`, C.orange);
         }
         // ---- variable definitions ----
         const defs = [['Reference (▲)', 'a moment that opens a directed dependency toward a specific later moment — an open loop / setup'],
@@ -1245,6 +1248,7 @@ const JarvisRetention = (function () {
                     CF = await loadJSON(base + 'principles/confounds.json').catch(() => null);
                     RTG = await loadJSON(base + 'principles/rtg.json').catch(() => null);
                     RTGP = await loadJSON(base + 'principles/rtg_pred.json').catch(() => null);
+                    RTGD = await loadJSON(base + 'principles/rtg_declared.json').catch(() => null);
                 } catch (e) {
                     if (tries >= 3) { root.innerHTML = `<div style="padding:24px;color:${C.dim}">Couldn't load data — the site may be mid-deploy. <button data-reload style="background:${C.accent}22;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px">Retry</button></div>`; return; }
                     root.innerHTML = `<div style="padding:40px;text-align:center;color:${C.dim}">Loading… <span style="color:${C.mute};font-size:11px">(retry ${tries})</span></div>`;

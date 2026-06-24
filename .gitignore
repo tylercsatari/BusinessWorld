@@ -55,3 +55,5 @@ buildings/jarvis/retention-study/principles/rtg_tokens_vjepa.npz
 buildings/jarvis/retention-study/principles/rtg_embed_vjepa.log
 buildings/jarvis/retention-study/principles/novelty_reprocess.log
 buildings/jarvis/retention-study/principles/rtg_detector_vjepa.log
+buildings/jarvis/retention-study/principles/rtg_tokens_siglip.npz
+buildings/jarvis/retention-study/principles/rtg_embed_siglip.log
