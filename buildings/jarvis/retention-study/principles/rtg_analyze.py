@@ -91,36 +91,47 @@ chosenVars = [VARS[i] for i in chosen]
 print(f"\nensemble = {[f'{D}·{O}·g{G}' for D,O,G in chosenVars]}")
 allv = list(rowsById.keys())
 gsets = {cv: graphs(*cv, allv) for cv in chosenVars}
+NM = len(chosenVars)
+nz = lambda a: (lambda b: b / (b.max() + 1e-9))(np.clip(a - a.min(), 0, None))
 for vid, rec in byid.items():
     rows = rowsById.get(vid)
     if rows is None or len(rows) < 3:
         continue
     n = len(rows)
-    refs = []
+    refs, pays = [], []
     for cv in chosenVars:
-        if vid in gsets[cv]:
-            r = np.array(gsets[cv][vid][0]); refs.append((r - r.mean()) / (r.std() + 1e-9))
-    ens = np.mean(refs, 0) if refs else np.zeros(n)
-    ens = np.clip(ens - ens.min(), 0, None); ens = ens / (ens.max() + 1e-9)
-    # UNION of links across the chosen (the set-cover "OR" ensemble — keep ALL, dedup by
-    # proximity so a covering link is never dropped; tag each loop with the theory that caught it)
+        g = gsets[cv].get(vid)
+        if g:
+            r = np.array(g[0]); refs.append((r - r.mean()) / (r.std() + 1e-9))
+            p = np.array(g[1]); pays.append((p - p.mean()) / (p.std() + 1e-9))
+    ensR = nz(np.mean(refs, 0)) if refs else np.zeros(n)
+    ensP = nz(np.mean(pays, 0)) if pays else np.zeros(n)
+    # UNION of links across the chosen theories (the set-cover "OR" ensemble — keep ALL, dedup
+    # by proximity so a covering link is never dropped; tag each loop with the theory that caught it)
     alllinks = []
-    for (D, O, G) in chosenVars:
-        g = gsets[(D, O, G)].get(vid)
+    for cv in chosenVars:
+        g = gsets[cv].get(vid)
         if g:
             for i, j, s in g[2]:
-                alllinks.append((i, j, float(ens[i]), O))
+                alllinks.append((i, j, float(ensR[i]), cv[1]))
     alllinks.sort(key=lambda l: -l[2]); kept = []
     for i, j, s, src in alllinks:
         if not any(abs(i - ki) <= 2 and abs(j - kj) <= 2 for ki, kj, ks, ksrc in kept):
             kept.append((i, j, s, src))
-    pay = np.zeros(n)
+    kept = kept[:32]
+    # STRENGTH per loop: consensus = how many of the NM theories independently fire on it (robustness),
+    # intensity = reference-ness, fulfil = payoff-ness (the semantic "close enough" for abstract payoffs),
+    # span = how long it stays open (Zeigarnik), reinf = re-references converging on the same payoff (threads).
+    out = []
     for i, j, s, src in kept:
-        pay[j] = max(pay[j], s)
-    rec.setdefault('signals', {})['ensemble'] = {
-        'refness': [round(float(x), 3) for x in ens],
-        'payoff': [round(float(x), 3) for x in pay],
-        'links': [{'i': i, 'j': j, 's': round(s, 3), 'p': round(float(pay[j]), 3), 'src': src} for i, j, s, src in kept[:32]]}
+        cons = sum(1 for cv in chosenVars if gsets[cv].get(vid) and any(abs(i - li) <= 3 and abs(j - lj) <= 3 for li, lj, ls in gsets[cv][vid][2])) / NM
+        reinf = sum(1 for (ii, jj, ss, sr) in kept if abs(jj - j) <= 2)
+        intensity, fulfil, span = float(ensR[i]), float(ensP[j]), (j - i) / max(1, n - 1)
+        strength = round(0.45 * cons + 0.30 * intensity + 0.25 * fulfil, 3)
+        out.append({'i': i, 'j': j, 's': round(intensity, 3), 'p': round(fulfil, 3), 'c': round(cons, 3),
+                    'span': round(span, 3), 'reinf': reinf, 'str': strength, 'src': src})
+    rec.setdefault('signals', {})['ensemble'] = {'refness': [round(float(x), 3) for x in ensR],
+                                                 'payoff': [round(float(x), 3) for x in ensP], 'links': out}
     # per-label caught/missed for THIS video (for UI colouring), against each stored signal
     if vid in LBL:
         rec['mylabels'] = LBL[vid]['pairs']

@@ -1132,8 +1132,18 @@ const JarvisRetention = (function () {
         const sg = rtgSig(v), ref = sg.refness || [], pay = sg.payoff || [];
         const refA = `M ${x(0)} ${yR} ` + ref.map((r, i) => `L ${x(i).toFixed(1)} ${(yR - r * amp).toFixed(1)}`).join(' ') + ` L ${x(n - 1)} ${yR} Z`;
         const payA = `M ${x(0)} ${yP} ` + pay.map((p, i) => `L ${x(i).toFixed(1)} ${(yP + p * amp).toFixed(1)}`).join(' ') + ` L ${x(n - 1)} ${yP} Z`;
+        // line THICKNESS ∝ loop strength; COLOUR ∝ consensus (how many of the 6 theories agree)
         const arcs = (sg.links || []).map(l => { const xi = x(l.i), xj = x(l.j);
-            return `<path d="M ${xi} ${yR} C ${xi} ${(yR + yP) / 2} ${xj} ${(yR + yP) / 2} ${xj} ${yP}" fill="none" stroke="${C.purple}" stroke-width="${(0.6 + l.s * 2.4).toFixed(1)}" opacity="${(0.18 + l.s * 0.6).toFixed(2)}"><title>reference @${l.i}s → fulfilled @${l.j}s · strength ${l.s}${l.src ? ' · caught by the ' + l.src + ' theory' : ''}</title></path>`; }).join('');
+            const strg = (l.str != null ? l.str : l.s), cons = (l.c != null ? l.c : null);
+            const col = cons != null ? rtgConsColor(cons) : C.purple;
+            const tip = `reference @${l.i}s → fulfilled @${l.j}s · strength ${strg.toFixed(2)}`
+                + (cons != null ? ` · ${Math.round(cons * 6)}/6 theories agree` : '')
+                + (l.reinf > 1 ? ` · ${l.reinf} references converge here` : '')
+                + (l.src ? ` · caught by the ${l.src} theory` : '');
+            return `<path d="M ${xi} ${yR} C ${xi} ${(yR + yP) / 2} ${xj} ${(yR + yP) / 2} ${xj} ${yP}" fill="none" stroke="${col}" stroke-width="${(0.6 + strg * 3.6).toFixed(1)}" opacity="${(0.22 + strg * 0.62).toFixed(2)}"><title>${tip}</title></path>`; }).join('');
+        // re-reference THREADS — rings where multiple references converge on one payoff (taxonomy #2)
+        const conv = {}; (sg.links || []).forEach(l => { if (l.reinf > 1) conv[l.j] = Math.max(conv[l.j] || 0, l.reinf); });
+        const convMk = Object.keys(conv).map(j => `<circle cx="${x(+j).toFixed(1)}" cy="${yP}" r="${(3 + conv[j] * 1.5).toFixed(1)}" fill="none" stroke="${C.green}" stroke-width="1.3" opacity="0.6"><title>${conv[j]} references converge on this payoff — a re-reference thread</title></circle>`).join('');
         // your hand-labels overlaid — coloured by whether the ACTIVE signal catches each (±3s)
         const lab = RTGLABELS[v.id] || { pairs: [], orphans: [] };
         const links = sg.links || [];
@@ -1150,9 +1160,39 @@ const JarvisRetention = (function () {
             <svg viewBox="0 0 ${W} ${H}" style="width:100%">
               <line x1="${pad}" y1="${yR}" x2="${W - 10}" y2="${yR}" stroke="${C.border2}"/><line x1="${pad}" y1="${yP}" x2="${W - 10}" y2="${yP}" stroke="${C.border2}"/>
               <path d="${refA}" fill="${C.cyan}26" stroke="${C.cyan}" stroke-width="1.2"/><path d="${payA}" fill="${C.green}26" stroke="${C.green}" stroke-width="1.2"/>
-              ${labOv}${arcs}${pk(ref, yR, -1, C.cyan)}${pk(pay, yP, 1, C.green)}${ph}
+              ${labOv}${arcs}${convMk}${pk(ref, yR, -1, C.cyan)}${pk(pay, yP, 1, C.green)}${ph}
               <text x="${pad}" y="14" fill="${C.cyan}" font-size="10" font-weight="700">reference-ness (anticipation set)</text>
-              <text x="${pad}" y="${H - 4}" fill="${C.green}" font-size="10" font-weight="700">payoff-ness (anticipation met)</text></svg>`);
+              <text x="${pad}" y="${H - 4}" fill="${C.green}" font-size="10" font-weight="700">payoff-ness (anticipation met)</text></svg>
+            ${sg.links && sg.links[0] && sg.links[0].c != null ? `<div style="font-size:9.5px;color:${C.mute};margin-top:5px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+              <span><b style="color:${C.text}">Loop strength</b> = 0.45·consensus + 0.30·intensity + 0.25·fulfilment.</span>
+              <span>Thicker arc = <b style="color:${C.text}">stronger</b>.</span>
+              <span>Colour = how many theories agree: <span style="color:${rtgConsColor(1 / 6)}">▬</span> 1 (subtle) → <span style="color:${rtgConsColor(0.5)}">▬</span> → <span style="color:${rtgConsColor(1)}">▬</span> all&nbsp;6 (unambiguous).</span>
+              <span><span style="color:${C.green}">◯</span> ring = re-references converging on one payoff (a thread).</span></div>` : ''}`);
+    }
+    // consensus → colour: cool dim blue (1 theory, subtle) → bright gold (all theories agree, unambiguous)
+    function rtgConsColor(c) { const lo = [91, 140, 255], hi = [251, 191, 36], t = Math.max(0, Math.min(1, c));
+        return `rgb(${lo.map((a, k) => Math.round(a + (hi[k] - a) * t)).join(',')})`; }
+    // every reference→gratification nuance you flagged, and how the model handles each
+    function rtgTaxonomy() {
+        const rows = [
+            ['Cross-modal directions', 'spoken→shown (C→V) and shown→spoken-reveal (V→C), not just C→C / V→V', '<b>anyAny</b> direction takes the max over all four modality pairs; ensemble blends <i>anyAny·content</i> + <i>vc·entail</i>', 'full'],
+            ['Re-references / threads', 'the same thing referenced many times <i>before</i> the payoff, each reinforcing the tension', 'every reference→payoff link is drawn; a <span style="color:' + C.green + '">◯ ring</span> + <i>reinf</i> count mark where multiple references converge on one payoff', 'full'],
+            ['Continuous / sustained loops', 'progress bars, counters, timers — a persistent meter climbing toward a target', '<i>vv·recurrence</i> + <i>vv·tension</i> (strengthens with how long it stays open) catch sustained visual self-reference', 'partial'],
+            ['Implicit "where is he going"', 'ambient curiosity with no explicit referent — predictive incompleteness', '<i>cv·infogap</i> + <i>cv·incomplete</i> + <i>suspense</i> fire on salient-but-unresolved moments; weakest signals but <b>in the ensemble</b>', 'partial'],
+            ['Multi-part / spanning payoffs', 'tension discharges gradually across a set of moments; you labelled only the END', 'payoff-ness is a <i>continuous field</i>, not a point; the multi-theory union fans one reference out to several payoff moments', 'partial'],
+            ['Abstract / non-objective payoffs', '"become the fittest alive" — fulfilment never stated, must be inferred as "close enough"', '<i>vc·entail</i> = uncentred cosine in <b>Gemini</b> space; <b>fulfilment value = that semantic closeness</b> — quantifiable, no explicit mention needed', 'full'],
+            ['Labels are partial (PU)', 'many real loops exist even in labelled videos; absence of a label ≠ no loop', 'never capped at your labels — 336-algo union + tunable peak threshold surface more; scored by <b>recall only</b>', 'full'],
+        ];
+        const dot = s => ({ full: C.green, partial: C.orange }[s]);
+        const lab = s => ({ full: 'handled', partial: 'partial' }[s]);
+        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:3px">Every reference→gratification nuance you flagged — and how it's handled</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:9px;line-height:1.5">Your taxonomy is the <i>guide</i> for what the emergent detector must surface (never a checklist to overfit). <span style="color:${C.green}">●</span> handled · <span style="color:${C.orange}">●</span> partial / approximated.</div>
+            <div style="display:flex;flex-direction:column;gap:7px">${rows.map(r => `
+              <div style="display:grid;grid-template-columns:170px 1fr;gap:10px;border-top:1px solid ${C.border};padding-top:7px">
+                <div><div style="font-size:11px;font-weight:700;color:${C.text}"><span style="color:${dot(r[3])}">●</span> ${r[0]}</div>
+                  <div style="font-size:9.5px;color:${C.mute};margin-top:2px;line-height:1.4">${r[1]}</div>
+                  <div style="font-size:9px;color:${dot(r[3])};margin-top:2px;font-weight:700">${lab(r[3])}</div></div>
+                <div style="font-size:10px;color:${C.dim};line-height:1.5;align-self:center">${r[2]}</div></div>`).join('')}</div>`);
     }
     function rtgFieldHeat(v) {
         const n = v.n_sec, G = Math.min(n, 80), cell = Math.max(3, Math.round(380 / G)), sz = G * cell, fld = v.field;
@@ -1237,6 +1277,7 @@ const JarvisRetention = (function () {
                     ${rtgThreadTimeline(v)}
                     <div id="rtg-sigsel">${rtgSigSelector(v)}</div>
                     <div id="rtg-refpay">${rtgRefPayoff(v)}</div>
+                    ${rtgTaxonomy()}
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">${rtgFieldHeat(v)}${rtgTokenMap(v)}</div>
                 </div>
                 <div style="width:236px;flex-shrink:0;position:sticky;top:14px">${rtgStickyPlayer(v)}</div>
@@ -1453,7 +1494,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=49'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=50'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
