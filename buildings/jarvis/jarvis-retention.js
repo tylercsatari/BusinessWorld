@@ -12,7 +12,8 @@ const JarvisRetention = (function () {
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
     let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTG = null, RTGP = null, RTGD = null, RTGF = null, RTGA = null, RTGS = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgMods: { cv: 1, vv: 1, cc: 1, vc: 1 }, rtgDet: 'declared' };
+    let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgMods: { cv: 1, vv: 1, cc: 1, vc: 1 }, rtgDet: 'declared', rtgLabel: false, rtgPending: null };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -1149,15 +1150,63 @@ const JarvisRetention = (function () {
             <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Every second's <span style="color:${C.dim}">● visual</span> and <span style="color:${C.dim}">▪ concept</span> token, projected to 2D, coloured by emergent cluster. Moments about the same thing group — a spoken word and the frame that shows it sit together. This is where the threads come from.</div>
             <svg viewBox="0 0 ${S} ${S}" style="width:100%;max-width:${S}px;background:${C.card2};border-radius:8px">${dots}</svg>`, 12);
     }
+    function rtgSaveLabels(id) {
+        try { fetch('/api/rtg/labels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ videoId: id, labels: RTGLABELS[id] }) }); } catch (e) { }
+    }
+    function rtgUpdateLabelUI() {
+        try { const el = window.document.getElementById('rtg-labelui'); if (el && st.rtgSel != null && RTGF.videos[st.rtgSel]) el.innerHTML = rtgRenderLabelUI(RTGF.videos[st.rtgSel]); } catch (e) { }
+    }
+    function rtgLabelAct(kind, sec) {
+        const v = RTGF.videos[st.rtgSel]; if (!v) return;
+        const L = RTGLABELS[v.id] || (RTGLABELS[v.id] = { pairs: [], orphans: [] });
+        if (kind === 'ref') st.rtgPending = sec;
+        else if (kind === 'track') { if (st.rtgPending == null) st.rtgPending = sec; else { L.pairs.push({ r: st.rtgPending, g: sec }); st.rtgPending = null; rtgSaveLabels(v.id); } }
+        else if (kind === 'grat') { if (st.rtgPending != null) { L.pairs.push({ r: st.rtgPending, g: sec }); st.rtgPending = null; rtgSaveLabels(v.id); } }
+        else if (kind === 'orphan') { if (st.rtgPending != null) { L.orphans.push({ r: st.rtgPending }); st.rtgPending = null; rtgSaveLabels(v.id); } }
+        else if (kind === 'cancel') st.rtgPending = null;
+        else if (kind === 'del') { L.pairs.splice(sec, 1); rtgSaveLabels(v.id); }
+        else if (kind === 'delorphan') { L.orphans.splice(sec, 1); rtgSaveLabels(v.id); }
+        else if (kind === 'clear') { L.pairs = []; L.orphans = []; st.rtgPending = null; rtgSaveLabels(v.id); }
+        rtgUpdateLabelUI();
+    }
+    function rtgRenderLabelUI(v) {
+        const L = RTGLABELS[v.id] || { pairs: [], orphans: [] };
+        const n = v.n_sec, W = 820, pad = 30, iw = W - pad - 10, H = 116, yR = 38, yG = 84, cell = iw / (n || 1);
+        const x = s => pad + (n <= 1 ? 0 : s * iw / (n - 1));
+        const ref = v.refness || [];
+        const refArea = `M ${x(0)} ${yR} ` + ref.map((r, i) => `L ${x(i).toFixed(1)} ${(yR - r * 22).toFixed(1)}`).join(' ') + ` L ${x(n - 1)} ${yR} Z`;
+        let hit = '';
+        for (let s = 0; s < n; s++) hit += `<rect data-rtglabel-track="${s}" x="${(x(s) - cell / 2).toFixed(1)}" y="14" width="${Math.max(2, cell).toFixed(1)}" height="${H - 26}" fill="transparent" style="cursor:crosshair"><title>${s}s</title></rect>`;
+        const pairs = L.pairs.map((p, idx) => `<path d="M ${x(p.r)} ${yR} C ${x(p.r)} ${(yR + yG) / 2} ${x(p.g)} ${(yR + yG) / 2} ${x(p.g)} ${yG}" fill="none" stroke="${C.purple}" stroke-width="2" opacity="0.85"/><path data-rtglabel-del="${idx}" style="cursor:pointer" d="M ${x(p.r) - 5} ${yR - 6} L ${x(p.r) + 5} ${yR - 6} L ${x(p.r)} ${yR} Z" fill="${C.cyan}"><title>your loop ${p.r}s→${p.g}s · click to delete</title></path><circle data-rtglabel-del="${idx}" style="cursor:pointer" cx="${x(p.g)}" cy="${yG}" r="4.5" fill="${C.green}"><title>delete</title></circle>`).join('');
+        const orph = L.orphans.map((o, idx) => `<path data-rtglabel-delorphan="${idx}" style="cursor:pointer" d="M ${x(o.r) - 5} ${yR - 6} L ${x(o.r) + 5} ${yR - 6} L ${x(o.r)} ${yR} Z" fill="none" stroke="${C.orange}" stroke-width="1.4" stroke-dasharray="2 1.5"><title>unresolved ref @${o.r}s · click to delete</title></path>`).join('');
+        const pend = st.rtgPending != null ? `<line x1="${x(st.rtgPending)}" y1="14" x2="${x(st.rtgPending)}" y2="${H - 12}" stroke="${C.yellow}" stroke-width="1.5" stroke-dasharray="3 2"/><path d="M ${x(st.rtgPending) - 6} ${yR - 8} L ${x(st.rtgPending) + 6} ${yR - 8} L ${x(st.rtgPending)} ${yR} Z" fill="${C.yellow}"/>` : '';
+        const btn = (id, lab, col) => `<span data-rtglabel="${id}" style="cursor:pointer;background:${col}1e;border:1px solid ${col};color:${col};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">${lab}</span>`;
+        const controls = st.rtgPending == null
+            ? btn('ref', '◆ Mark reference @ playhead', C.cyan)
+            : `<span style="color:${C.yellow};font-size:11px;font-weight:700">Reference @ ${st.rtgPending}s — now mark its payoff:</span>${btn('grat', '● Mark payoff @ playhead', C.green)}${btn('orphan', '⌀ never pays off', C.orange)}${btn('cancel', 'cancel', C.mute)}`;
+        const chips = L.pairs.map((p, i) => `<span style="background:${C.card2};border-radius:5px;padding:2px 7px;font-size:10px;color:${C.dim}">▲${p.r}s→▼${p.g}s <span data-rtglabel-del="${i}" style="cursor:pointer;color:${C.mute}">✕</span></span>`).join('')
+            + L.orphans.map((o, i) => `<span style="background:${C.card2};border-radius:5px;padding:2px 7px;font-size:10px;color:${C.orange}">▲${o.r}s unresolved <span data-rtglabel-delorphan="${i}" style="cursor:pointer;color:${C.mute}">✕</span></span>`).join('');
+        return `<div style="background:${C.card};border:1px solid ${C.purple};border-radius:12px;padding:13px;margin-bottom:12px">
+            <div style="font-size:12px;font-weight:800;color:${C.purple};margin-bottom:3px">✎ Your reference→gratification labels (ground truth)</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Scrub the video to where YOU feel a reference is set → <b>Mark reference</b>; scrub to its payoff → <b>Mark payoff</b> (or click directly on the track). Faint cyan = what the model currently thinks, for comparison. Saves automatically.</div>
+            <svg viewBox="0 0 ${W} ${H}" style="width:100%">
+              <line x1="${pad}" y1="${yR}" x2="${W - 10}" y2="${yR}" stroke="${C.border2}"/><line x1="${pad}" y1="${yG}" x2="${W - 10}" y2="${yG}" stroke="${C.border2}"/>
+              <path d="${refArea}" fill="${C.cyan}14" stroke="${C.cyan}55" stroke-width="1"/>${hit}${pairs}${orph}${pend}
+              <text x="${W - 10}" y="12" fill="${C.cyan}" font-size="9" text-anchor="end">model reference-ness</text>
+              <text x="${pad}" y="${yR - 10}" fill="${C.dim}" font-size="9">▲ your references</text><text x="${pad}" y="${yG + 13}" fill="${C.dim}" font-size="9">▼ your payoffs</text></svg>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">${controls}<span style="margin-left:auto;font-size:10px;color:${C.mute}">${L.pairs.length} loop${L.pairs.length === 1 ? '' : 's'}${L.orphans.length ? ' · ' + L.orphans.length + ' unresolved' : ''}</span>${(L.pairs.length || L.orphans.length) ? `<span data-rtglabel="clear" style="cursor:pointer;font-size:10px;color:${C.mute};border:1px solid ${C.border};border-radius:5px;padding:2px 7px">clear all</span>` : ''}</div>
+            ${chips ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:7px">${chips}</div>` : ''}</div>`;
+    }
     function renderRTGEmergence() {
         let h = note(`<b style="color:${C.text}">Emergence, not labelling.</b> No thresholds, nothing stamped "reference" or "gratification". We embed every second — its frame and its spoken words — in SigLIP2's shared space and let k-means find clusters. A <b>thread</b> is just a cluster. A reference→gratification <i>emerges</i> when a thread's colour shows up on the concept track and then later on the visual track. Below: the threads over time, the full field, and the cluster geometry they come from.`, C.cyan);
         if (st.rtgSel != null && RTGF.videos[st.rtgSel]) {
             const v = RTGF.videos[st.rtgSel];
             h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                 <div style="font-size:13px;font-weight:800;color:${C.text}">${esc(v.title)} <span style="font-size:10px;color:${C.mute};font-weight:400">· ${v.n_sec}s · ${v.n_threads} clusters</span></div>
-                <div style="display:flex;gap:6px"><a href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" style="background:${C.accent}18;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;text-decoration:none">▶ YouTube</a><span data-rtgclose style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px">✕ close</span></div></div>`, 10);
+                <div style="display:flex;gap:6px"><span data-rtgtoggle-label style="cursor:pointer;background:${st.rtgLabel ? C.purple + '22' : 'transparent'};border:1px solid ${st.rtgLabel ? C.purple : C.border};color:${st.rtgLabel ? C.purple : C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">${st.rtgLabel ? '✓ Labeling' : '✎ Label'}</span><a href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" style="background:${C.accent}18;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;text-decoration:none">▶ YouTube</a><span data-rtgclose style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px">✕ close</span></div></div>`, 10);
             h += `<div style="display:flex;gap:16px;align-items:flex-start">
                 <div style="flex:1;min-width:0">
+                    ${st.rtgLabel ? `<div id="rtg-labelui">${rtgRenderLabelUI(v)}</div>` : ''}
                     ${rtgThreadTimeline(v)}${rtgRefPayoff(v)}
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">${rtgFieldHeat(v)}${rtgTokenMap(v)}</div>
                 </div>
@@ -1343,6 +1392,11 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-rtgclose]')) { st.rtgSel = null; render(); return; }
         const rm = e.target.closest('[data-rtgmod]'); if (rm) { const k = rm.getAttribute('data-rtgmod'); st.rtgMods[k] = st.rtgMods[k] ? 0 : 1; render(); return; }
         const rnode = e.target.closest('[data-rtgnode]'); if (rnode) { rtgSeek(+rnode.getAttribute('data-rtgnode')); return; }
+        const ltgl = e.target.closest('[data-rtgtoggle-label]'); if (ltgl) { st.rtgLabel = !st.rtgLabel; st.rtgPending = null; render(); return; }
+        const ltrk = e.target.closest('[data-rtglabel-track]'); if (ltrk) { rtgLabelAct('track', +ltrk.getAttribute('data-rtglabel-track')); return; }
+        const ldel = e.target.closest('[data-rtglabel-del]'); if (ldel) { rtgLabelAct('del', +ldel.getAttribute('data-rtglabel-del')); return; }
+        const ldlo = e.target.closest('[data-rtglabel-delorphan]'); if (ldlo) { rtgLabelAct('delorphan', +ldlo.getAttribute('data-rtglabel-delorphan')); return; }
+        const lbtn = e.target.closest('[data-rtglabel]'); if (lbtn) { rtgLabelAct(lbtn.getAttribute('data-rtglabel'), Math.round(rtgCurT)); return; }
         const rd = e.target.closest('[data-rtgdet]'); if (rd) { st.rtgDet = rd.getAttribute('data-rtgdet'); render(); return; }
         if (e.target.closest('[data-reload]')) { err = null; DATA = null; mount(root); return; }
         if (e.target.closest('[data-novboxes]')) { st.novBoxes = !(st.novBoxes !== false); render(); return; }
@@ -1382,6 +1436,7 @@ const JarvisRetention = (function () {
                     RTGP = await loadJSON(base + 'principles/rtg_pred.json').catch(() => null);
                     RTGD = await loadJSON(base + 'principles/rtg_declared.json').catch(() => null);
                     RTGF = await loadJSON(base + 'principles/rtg_field.json').catch(() => null);
+                    try { RTGLABELS = await (await fetch('/api/rtg/labels')).json() || {}; } catch (e) { RTGLABELS = {}; }
                 } catch (e) {
                     if (tries >= 3) { root.innerHTML = `<div style="padding:24px;color:${C.dim}">Couldn't load data — the site may be mid-deploy. <button data-reload style="background:${C.accent}22;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px">Retry</button></div>`; return; }
                     root.innerHTML = `<div style="padding:40px;text-align:center;color:${C.dim}">Loading… <span style="color:${C.mute};font-size:11px">(retry ${tries})</span></div>`;

@@ -2887,6 +2887,34 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
 
     // =========================================
+    // API: RTG hand-labels (ground truth) — persisted to R2 so they survive Render's disk
+    // =========================================
+    const RTG_LABELS_R2_KEY = 'data/rtg-labels.json';
+    if (pathname === '/api/rtg/labels' && req.method === 'GET') {
+        try {
+            let all = {};
+            try { const buf = await cloud.downloadFromR2(RTG_LABELS_R2_KEY); if (buf) all = JSON.parse(buf.toString('utf8')); } catch (e) {}
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify(all));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    if (pathname === '/api/rtg/labels' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const { videoId, labels } = body || {};
+            if (!videoId) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'videoId required' })); return; }
+            let all = {};
+            try { const buf = await cloud.downloadFromR2(RTG_LABELS_R2_KEY); if (buf) all = JSON.parse(buf.toString('utf8')); } catch (e) {}
+            if (labels && (labels.pairs || []).length || (labels && (labels.orphans || []).length)) all[videoId] = labels; else delete all[videoId];
+            await cloud.uploadToR2(RTG_LABELS_R2_KEY, Buffer.from(JSON.stringify(all)), 'application/json');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, n: Object.keys(all).length }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+
+    // =========================================
     // API: AI Chat — chat with Codex
     // =========================================
     const AI_CHAT_R2_KEY = 'data/ai-chat.json';
