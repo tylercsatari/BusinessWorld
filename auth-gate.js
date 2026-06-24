@@ -341,6 +341,7 @@
             </div>
             <div class="authgate-menu-who"><span id="ag-email"></span> <span class="authgate-menu-role" id="ag-rolebadge"></span></div>
             ${_account.role === 'owner' ? '<button class="authgate-menu-item" id="ag-menu-people">👥 People &amp; permissions</button>' : ''}
+            ${_account.role === 'owner' ? '<button class="authgate-menu-item" id="ag-menu-instagram" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span>📲 Instagram (trial reels)</span><span id="ag-ig-status" style="font-size:11px;color:#8a96a3">checking…</span></button>' : ''}
             <button class="authgate-menu-item signout" id="ag-menu-signout">↩ Sign out</button>
             <div class="divider"></div>`;
         panel.insertBefore(section, panel.children[1] || null);
@@ -367,7 +368,39 @@
         };
         const pe = section.querySelector('#ag-menu-people');
         if (pe) pe.onclick = () => { if (window.toggleMenu) window.toggleMenu(); openPeople(); };
+        const igBtn = section.querySelector('#ag-menu-instagram');
+        if (igBtn) wireInstagramMenu(igBtn, section.querySelector('#ag-ig-status'));
         section.querySelector('#ag-menu-signout').onclick = signOut;
+    }
+
+    // Connect Instagram ONCE (owner) — the token is stored server-side and used
+    // everywhere trial reels are posted (the Workshop Split Test stage).
+    async function wireInstagramMenu(btn, statusEl) {
+        const refresh = async () => {
+            let st; try { st = await fetch('/api/instagram/status').then(r => r.json()); } catch (e) { st = { error: 1 }; }
+            if (!statusEl) return st;
+            if (st.error) statusEl.textContent = 'unavailable';
+            else if (st.configured === false) statusEl.textContent = 'not set up';
+            else if (st.connected) { statusEl.textContent = '@' + (st.username || 'connected') + ' · disconnect'; statusEl.style.color = '#1c7a43'; }
+            else { statusEl.textContent = st.expired ? 'reconnect' : 'connect'; statusEl.style.color = '#c13584'; }
+            return st;
+        };
+        const st0 = await refresh();
+        btn.onclick = async () => {
+            const st = await fetch('/api/instagram/status').then(r => r.json()).catch(() => ({}));
+            if (st.configured === false) { alert('Instagram isn\'t set up yet. Add a Meta app (INSTAGRAM_APP_ID / INSTAGRAM_APP_SECRET) with "Instagram API with Instagram Login" and the redirect URI ' + location.origin + '/api/instagram/callback.'); return; }
+            if (st.connected) {
+                if (!confirm('Disconnect Instagram (@' + (st.username || '') + ')?')) return;
+                await fetch('/api/instagram/disconnect', { method: 'POST' }).catch(() => {});
+                refresh();
+                return;
+            }
+            const a = await fetch('/api/instagram/auth-url').then(r => r.json()).catch(() => ({}));
+            if (!a.url) { alert(a.error || 'Could not start Instagram login.'); return; }
+            const popup = window.open(a.url, 'ig-connect', 'width=600,height=720');
+            const onMsg = (e) => { if (e.data && e.data.type === 'instagram-connected') { window.removeEventListener('message', onMsg); try { popup && popup.close(); } catch (_) {} refresh(); } };
+            window.addEventListener('message', onMsg);
+        };
     }
     const ALL_BUILDINGS = ['Workshop', 'Storage', 'Money Pit', 'The Pen', 'Employee Island', 'Science Center', 'Jarvis', 'Library', 'Finance', 'The House', 'Movie Theatre', 'Gym', 'Chocolate Bar', 'Video Lab'];
     // Buildings with internal tabs that can be granted individually (mirrors access-registry.js).
