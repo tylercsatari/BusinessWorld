@@ -91,40 +91,79 @@ def main():
             print(f"  epoch {ep:2d}  loss {tot/max(1,nb):.4f}", flush=True)
     net.eval()
 
-    # ---- per video: expectation, sharpness, reference-ness, payoff-ness, links ----
+    # ---- per video: TWO predictive signals, ADDED to the zoo (never clobbering ensemble) ----
+    try:
+        LBL = {k: v for k, v in json.load(open(os.path.join(HERE, 'rtg_labels.json'))).items() if isinstance(v, dict) and v.get('pairs')}
+    except Exception:
+        LBL = {}
     d = json.load(open(os.path.join(HERE, 'rtg_field.json')))
     byid = {v['id']: v for v in d['videos']}
     meta = json.load(open(os.path.join(HERE, 'rtg_meta.json')))['videos']
+    order = sorted(seq)
+
+    def peaks(ref, n):
+        return [a for a in range(n - 1) if ref[a] > 0.12 and (a == 0 or ref[a] >= ref[a - 1]) and (a == n - 1 or ref[a] >= ref[a + 1])]
+    jepa_links, anti_links = {}, {}
     with torch.no_grad():
         for i, rows in enumerate(vids):
-            n = len(rows); vid = meta[sorted(seq)[i]]['id']; rec = byid.get(vid)
+            n = len(rows); vid = meta[order[i]]['id']; rec = byid.get(vid)
             if rec is None or n < 3:
                 continue
-            c = net.ctx(SRC[i])
-            mu1, lv1 = net.pred(c, t(np.ones(n, np.int64)))            # next-step expectation
-            mu = mu1.cpu().numpy(); lv = lv1.cpu().numpy()
-            Vn = TGT[i].cpu().numpy()
-            sharp = 1.0 / (1.0 + np.exp(lv - lv.mean()))               # low var -> sharp
-            fwd = np.clip(1 - np.sum(mu * Vn, 1), 0, None)             # predicts something not-now
-            ref = sharp * fwd
-            ref = ref / (ref.max() + 1e-9)
-            L = mu @ Vn.T                                              # link[i,j] = cos(μ_i, visual_j)
+            c = net.ctx(SRC[i]); Vn = TGT[i].cpu().numpy()
+            mus = np.zeros((K, n, PCA_D), np.float32); lvs = np.zeros((K, n), np.float32)
+            for k in range(1, K + 1):
+                m, lv = net.pred(c, t(np.full(n, k, np.int64))); mus[k - 1] = m.cpu().numpy(); lvs[k - 1] = lv.cpu().numpy()
+            # (1) CONCRETE predictive reference-ness: a SHARP expectation pointing forward
+            mu1, lv1 = mus[0], lvs[0]
+            sharp = 1.0 / (1.0 + np.exp(lv1 - lv1.mean()))
+            ref = sharp * np.clip(1 - np.sum(mu1 * Vn, 1), 0, None); ref = ref / (ref.max() + 1e-9)
+            L = mu1 @ Vn.T
             pay = np.zeros(n)
             for j in range(1, n):
                 pay[j] = max((ref[a] * L[a, j] for a in range(j)), default=0.0)
             pay = np.clip(pay, 0, None); pay = pay / (pay.max() + 1e-9)
-            links = []
-            for a in range(n - 1):
-                if ref[a] > 0.12 and (a == 0 or ref[a] >= ref[a - 1]) and (a == n - 1 or ref[a] >= ref[a + 1]):
-                    bj = int(max(range(a + 1, n), key=lambda j: L[a, j]))
-                    links.append({'i': a, 'j': bj, 's': round(float(ref[a]), 3), 'p': round(float(pay[bj]), 3)})
-            rec['refness'] = [round(float(x), 3) for x in ref]
-            rec['payoff'] = [round(float(x), 3) for x in pay]
-            rec['links'] = sorted(links, key=lambda l: -l['s'])[:14]
-    d['meta']['refsource'] = 'jepa-head'
-    d['meta']['encoder'] = TOKENS.replace('rtg_tokens_', '').replace('.npz', '')
+            jl = sorted([{'i': a, 'j': int(max(range(a + 1, n), key=lambda j: L[a, j])), 's': round(float(ref[a]), 3),
+                          'p': round(float(pay[int(max(range(a + 1, n), key=lambda j: L[a, j]))]), 3)} for a in peaks(ref, n)], key=lambda l: -l['s'])[:16]
+            rec.setdefault('signals', {})['jepa'] = {'refness': [round(float(x), 3) for x in ref], 'payoff': [round(float(x), 3) for x in pay], 'links': jl}
+            jepa_links[vid] = jl
+            # (2) IMPLICIT anticipation ("where is this going"): the model is sure the scene will
+            # CHANGE (high forwardness over the horizon) but UNCERTAIN which future (high variance).
+            uncert = np.exp(lvs).mean(0); uncert = uncert - uncert.min(); uncert = uncert / (uncert.max() + 1e-9)
+            fwdh = np.clip(np.mean([1 - np.sum(mus[k] * Vn, 1) for k in range(K)], 0), 0, None)
+            anti = uncert * fwdh; anti = anti / (anti.max() + 1e-9)
+            # resolution = a later moment where that open-ended uncertainty COLLAPSES (the reveal)
+            runmax = np.maximum.accumulate(uncert)
+            res = np.clip(np.concatenate([[0.0], runmax[:-1]]) - uncert, 0, None); res = res / (res.max() + 1e-9)
+            al = []
+            for a in peaks(anti, n):
+                bj = next((j for j in range(a + 2, n) if uncert[j] < 0.5 * uncert[a]), None)
+                if bj is None and a + 2 < n:
+                    bj = int(min(range(a + 2, n), key=lambda j: uncert[j]))
+                if bj is not None:
+                    al.append({'i': a, 'j': int(bj), 's': round(float(anti[a]), 3), 'p': round(float(res[int(bj)]), 3)})
+            al = sorted(al, key=lambda l: -l['s'])[:16]
+            rec['signals']['jepa_anticip'] = {'refness': [round(float(x), 3) for x in anti], 'payoff': [round(float(x), 3) for x in res], 'links': al}
+            anti_links[vid] = al
+
+    def recall(lm):
+        cap = tot = 0
+        for vid, Lb in LBL.items():
+            lk = lm.get(vid, [])
+            for p in Lb['pairs']:
+                tot += 1; cap += any(abs(l['i'] - p['r']) <= 3 and abs(l['j'] - p['g']) <= 3 for l in lk)
+        return cap, tot
+    jc, jt = recall(jepa_links); ac, at = recall(anti_links)
+    print(f"jepa recall {jc}/{jt}={jc/max(1,jt)*100:.0f}% · anticip recall {ac}/{at}={ac/max(1,at)*100:.0f}% (vs ensemble 87%)", flush=True)
+
+    sigs = d['meta'].get('signals', [])
+    for s in ['jepa', 'jepa_anticip']:
+        if s not in sigs:
+            sigs.append(s)
+    d['meta']['signals'] = sigs            # default stays 'ensemble' — these are added, not promoted
+    d['meta'].setdefault('signal_labels', {}).update({'jepa': '🧠 JEPA predictor', 'jepa_anticip': '❓ implicit anticipation'})
+    d['meta']['jepa_encoder'] = TOKENS.replace('rtg_tokens_', '').replace('.npz', '')
     json.dump(d, open(os.path.join(HERE, 'rtg_field.json'), 'w'))
-    print(f"updated rtg_field.json refness/payoff/links from JEPA head · encoder {d['meta']['encoder']}", flush=True)
+    print(f"added jepa + jepa_anticip signals · encoder {d['meta']['jepa_encoder']}", flush=True)
 
 
 if __name__ == '__main__':
