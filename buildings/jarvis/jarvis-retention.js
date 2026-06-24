@@ -926,7 +926,17 @@ const JarvisRetention = (function () {
             if (sc !== rtgLastSec) { rtgLastSec = sc; const cur = window.document.getElementById('rtg-cursec'); if (cur) cur.innerHTML = rtgSecInfo(sc); }
         } catch (e) { }
     }
-    function rtgSeek(t) { try { if (rtgPlayer && rtgPlayer.seekTo) { rtgPlayer.seekTo(t, true); if (rtgPlayer.playVideo) rtgPlayer.playVideo(); } } catch (e) { } rtgSetPlayhead(t); }
+    function rtgSeek(t) {
+        try {
+            if (rtgPlayer && rtgPlayer.seekTo) {
+                const ps = rtgPlayer.getPlayerState ? rtgPlayer.getPlayerState() : -1;   // -1 unstarted · 1 playing · 2 paused · 5 cued
+                rtgPlayer.seekTo(t, true);
+                // only auto-start when it has never shown a frame (else it'd be black); otherwise PRESERVE play/pause
+                if ((ps === -1 || ps === 5) && rtgPlayer.playVideo) rtgPlayer.playVideo();
+            }
+        } catch (e) { }
+        rtgSetPlayhead(t);
+    }
     function rtgTick() {
         if (typeof requestAnimationFrame === 'undefined') return;
         rtgRAF = requestAnimationFrame(rtgTick);
