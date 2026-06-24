@@ -1111,9 +1111,11 @@ const JarvisRetention = (function () {
     }
     function rtgSig(v) { return (v.signals && st.rtgSignal && v.signals[st.rtgSignal]) || { refness: v.refness || [], payoff: v.payoff || [], links: v.links || [] }; }
     function rtgSigSelector(v) {
-        if (!RTGF.meta || !RTGF.meta.signals) return '';
-        const lab = RTGF.meta.signal_labels || {};
-        return `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">signal</span>${RTGF.meta.signals.map(s => `<span data-rtgsignal="${s}" style="cursor:pointer;border:1px solid ${st.rtgSignal === s ? C.accent : C.border};background:${st.rtgSignal === s ? C.accent + '1e' : 'transparent'};color:${st.rtgSignal === s ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab[s] || s}</span>`).join('')}<span style="font-size:9px;color:${C.mute};margin-left:4px">— all unsupervised; your labels overlay as a guide, nothing is fit to them</span></div>`;
+        const m = RTGF.meta; if (!m || !m.signals) return '';
+        const lab = m.signal_labels || {};
+        const head = m.sweep_n ? `<div style="font-size:10px;color:${C.mute};margin-bottom:5px"><b style="color:${C.accent}">${m.sweep_n} algorithms</b> ranked by how well they recover the loops you labelled across ${m.labelled} videos — PU recall, never penalised for finding <i>more</i> than you marked (your labels are a guide, not truth). Browse the top ${m.signals.length}; default = best match. Your labels overlay as faint dashed-white.</div>` : '';
+        const pills = m.signals.map(s => `<span data-rtgsignal="${s}" title="${esc(lab[s] || s)}" style="cursor:pointer;border:1px solid ${st.rtgSignal === s ? C.accent : C.border};background:${st.rtgSignal === s ? C.accent + '1e' : 'transparent'};color:${st.rtgSignal === s ? C.accent : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;white-space:nowrap">${esc(lab[s] || s)}</span>`).join('');
+        return `<div style="margin-bottom:8px">${head}<div style="display:flex;gap:5px;flex-wrap:wrap;max-height:104px;overflow-y:auto;padding:2px">${pills}</div></div>`;
     }
     function rtgUpdateSignal() {
         try { const v = RTGF.videos[st.rtgSel]; if (!v) return;
@@ -1215,6 +1217,7 @@ const JarvisRetention = (function () {
             ${chips ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:7px">${chips}</div>` : ''}</div>`;
     }
     function renderRTGEmergence() {
+        if (RTGF.meta && RTGF.meta.signals && !RTGF.meta.signals.includes(st.rtgSignal)) st.rtgSignal = RTGF.meta.signal_default || RTGF.meta.signals[0];
         let h = note(`<b style="color:${C.text}">Emergence, not labelling.</b> No thresholds, nothing stamped "reference" or "gratification". We embed every second — its frame and its spoken words — in SigLIP2's shared space and let k-means find clusters. A <b>thread</b> is just a cluster. A reference→gratification <i>emerges</i> when a thread's colour shows up on the concept track and then later on the visual track. Below: the threads over time, the full field, and the cluster geometry they come from.`, C.cyan);
         if (st.rtgSel != null && RTGF.videos[st.rtgSel]) {
             const v = RTGF.videos[st.rtgSel];
