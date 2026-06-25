@@ -28,7 +28,7 @@ for r in range(len(owner)):
     seq.setdefault(int(owner[r]), []).append(r)
 rowsById = {meta[vi]['id']: np.array(sorted(seq[vi], key=lambda r: sec[r])) for vi in sorted(seq)}
 NS, GAP = 80, 4
-DIRS = ['cv', 'vc', 'vv', 'cc', 'cAny', 'vAny', 'anyAny']
+DIRS = ['cc', 'cAny', 'vc', 'anyAny']   # the KEPT (presence-validated) directions, raw — confirm all solid
 
 
 def Mblock(Cc, Vv, d):
