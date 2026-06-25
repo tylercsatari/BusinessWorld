@@ -2942,10 +2942,15 @@ const WorkshopUI = (() => {
         const needs = Array.isArray(c.needs) ? c.needs : [];
         const linkCount = Array.isArray(c.links) ? c.links.length : 0;
         const showDone = opts.advance && c.status !== 'done' && stageWritable(componentStageId(c));
-        return `<div class="wsp-comp-row" data-comp="${c.id}">
+        // "Ready to advance" — its deliverable is present, it just needs Done pressed.
+        // Same green highlight + badge the video rows get (and what the node's red
+        // count tracks), so you can see which components are ready at a glance.
+        let ready = false; try { ready = showDone && componentDeliverableStatus(c).met; } catch (e) {}
+        return `<div class="wsp-comp-row${ready ? ' wsp-ready' : ''}" data-comp="${c.id}">
             <button class="wsp-comp-name wsp-clickable" data-open-comp="${c.id}" title="Open this component">
                 ${icon('component', 'wsp-row-ic')} <span class="wsp-comp-name-text">${escHtml(c.name)}</span>
                 ${c.source === 'order' ? '<span class="wsp-comp-tag order">order</span>' : c.source === 'task' ? '<span class="wsp-comp-tag task">task</span>' : c.source === 'build' ? '<span class="wsp-comp-tag build">build</span>' : ''}
+                ${ready ? '<span class="wsp-ready-badge">✓ ready — press Done</span>' : ''}
             </button>
             <div class="wsp-comp-meta">
                 ${needs.map(f => `<span class="wsp-need-chip">${escHtml(COMPONENT_NEED_LABEL[f] || f)}</span>`).join('')}

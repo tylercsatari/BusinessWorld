@@ -761,6 +761,8 @@
 }
 .wsp-comp-name { font-size: 13px; font-weight: 700; color: #2a3340; flex: 1; min-width: 120px; display: flex; align-items: center; gap: 6px; }
 .wsp-comp-row .wsp-row-ic { color: #1565c0; }
+/* "Ready to advance" — deliverable present, just needs Done (matches video rows) */
+.wsp-comp-row.wsp-ready { border-color: #27ae60; border-left-color: #27ae60; background: linear-gradient(180deg, rgba(39,174,96,0.12), rgba(39,174,96,0.04)); box-shadow: 0 0 0 1px rgba(39,174,96,0.30); }
 .wsp-decomp-add { margin-top: 4px; }
 .wsp-decomp-add input[type="text"] { flex: 1 1 200px; }
 .wsp-hint { font-size: 11px; color: #aaa; font-weight: 500; font-style: italic; }
