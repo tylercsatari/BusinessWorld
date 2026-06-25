@@ -1159,15 +1159,33 @@ const JarvisRetention = (function () {
         const hitBadge = lab.pairs.length ? `<span style="color:${C.dim}">your labels: <b style="color:${C.green}">${nHit} caught</b> / <b style="color:#f87171">${lab.pairs.length - nHit} missed</b></span>` : '';
         const pk = (arr, base, up, col) => arr.map((r, i) => (r > 0.12 && (i === 0 || r >= arr[i - 1]) && (i === n - 1 || r >= arr[i + 1])) ? `<circle data-rtgnode="${i}" style="cursor:pointer" cx="${x(i).toFixed(1)}" cy="${(base + up * r * amp).toFixed(1)}" r="${(2 + r * 3).toFixed(1)}" fill="${col}" opacity="${(0.35 + r * 0.65).toFixed(2)}"><title>${i}s · ${(r).toFixed(2)}</title></circle>` : '').join('');
         const ph = `<line class="rtg-ph" data-x0="${pad}" data-x1="${x(n - 1)}" data-n="${n}" x1="${pad}" y1="14" x2="${pad}" y2="${H - 10}" stroke="#fff" stroke-width="1.5" opacity="0" style="pointer-events:none"/>`;
+        // REAL viewer retention overlaid (ground truth) + back-third risk flags from the validated champion
+        const rtv = (DATA && DATA.videos) ? DATA.videos.find(o => o.id === v.id) : null;
+        let retOv = '', riskMk = '', riskN = 0;
+        if (rtv && rtv.curve && rtv.curve.length) {
+            const cur = rtv.curve, rs = t => cur[Math.round(t / Math.max(1, n - 1) * (cur.length - 1))];
+            let mn = Infinity, mx = -Infinity; for (let t = 0; t < n; t++) { const c = rs(t); if (c < mn) mn = c; if (c > mx) mx = c; }
+            const span = (mx - mn) || 1, yC = t => 16 + (1 - (rs(t) - mn) / span) * (H - 28);
+            let pth = ''; for (let t = 0; t < n; t++) pth += (t ? 'L' : 'M') + x(t).toFixed(1) + ' ' + yC(t).toFixed(1) + ' ';
+            retOv = `<path d="${pth}" fill="none" stroke="#e879f9" stroke-width="1.3" opacity="0.6" stroke-dasharray="2 2"><title>real viewer retention</title></path>`;
+            const champ = RTGF.meta.retention_validation && RTGF.meta.retention_validation.phase2 && RTGF.meta.retention_validation.phase2.champion;
+            const cs = champ && v.signals && v.signals[champ] && v.signals[champ].refness;
+            if (cs) { const t0 = Math.ceil(0.67 * (n - 1));
+                for (let t = t0; t < n - 1; t++) { if ((rs(Math.min(n - 1, t + 3)) - rs(t)) < 0 && (cs[t] || 0) < 0.2) { riskN++;
+                    riskMk += `<rect x="${(x(t) - 2).toFixed(1)}" y="${H - 9}" width="4" height="5" fill="#f87171" opacity="0.85"><title>${t}s · retention dropping with no open loop — drop-zone risk: open a question here</title></rect>`; } }
+            }
+        }
         const slab = (RTGF.meta && RTGF.meta.signal_labels && RTGF.meta.signal_labels[st.rtgSignal]) || st.rtgSignal;
         return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Reference-ness & payoff-ness — <span style="color:${C.accent}">${esc(slab)}</span> signal &nbsp; ${hitBadge}</div>
             <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5"><b style="color:${C.cyan}">Reference-ness</b> (top) = this moment points to a <i>specific</i> later moment that isn't present yet (intrinsic & causal — shows even when nothing pays it off). <b style="color:${C.green}">Payoff-ness</b> (bottom) = a later moment fulfils a real earlier reference. <span style="color:${C.purple}">Arcs</span> = the link. ${labOv ? `Your hand-labels are dashed — <b style="color:${C.green}">green = this signal caught it</b>, <b style="color:#f87171">red = missed</b> (a guide, never fit to). ` : ''}Encoder: <b>${esc((RTGF.meta && RTGF.meta.encoder) || '?')}</b>. Flip the signal above to see which one lands where you'd expect.</div>
             <svg viewBox="0 0 ${W} ${H}" style="width:100%">
               <line x1="${pad}" y1="${yR}" x2="${W - 10}" y2="${yR}" stroke="${C.border2}"/><line x1="${pad}" y1="${yP}" x2="${W - 10}" y2="${yP}" stroke="${C.border2}"/>
               <path d="${refA}" fill="${C.cyan}26" stroke="${C.cyan}" stroke-width="1.2"/><path d="${payA}" fill="${C.green}26" stroke="${C.green}" stroke-width="1.2"/>
-              ${labOv}${arcs}${convMk}${pk(ref, yR, -1, C.cyan)}${pk(pay, yP, 1, C.green)}${ph}
+              ${retOv}${labOv}${arcs}${convMk}${pk(ref, yR, -1, C.cyan)}${pk(pay, yP, 1, C.green)}${riskMk}${ph}
               <text x="${pad}" y="14" fill="${C.cyan}" font-size="10" font-weight="700">reference-ness (anticipation set)</text>
+              ${retOv ? `<text x="${W - 10}" y="14" fill="#e879f9" font-size="10" font-weight="700" text-anchor="end">real retention</text>` : ''}
               <text x="${pad}" y="${H - 4}" fill="${C.green}" font-size="10" font-weight="700">payoff-ness (anticipation met)</text></svg>
+            ${retOv ? `<div style="font-size:9.5px;color:${C.mute};margin-top:5px;line-height:1.5"><span style="color:#e879f9">▬ ▬</span> real viewer retention overlaid. ${riskN ? `<span style="color:#f87171">▮</span> <b style="color:#f87171">${riskN} drop-zone risk ${riskN === 1 ? 'spot' : 'spots'}</b> — back-third seconds where retention is falling with <i>no open loop</i> active (the validated entailment champion is quiet). Open an abstract question here.` : `<span style="color:${C.green}">Back third is covered</span> — no drop-zone gaps where retention falls without an open loop.`}</div>` : ''}
             ${sg.links && sg.links[0] && sg.links[0].c != null ? `<div style="font-size:9.5px;color:${C.mute};margin-top:5px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
               <span><b style="color:${C.text}">Loop strength</b> = 0.45·consensus + 0.30·intensity + 0.25·fulfilment.</span>
               <span>Thicker arc = <b style="color:${C.text}">stronger</b>.</span>
@@ -1530,7 +1548,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=55'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=56'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
