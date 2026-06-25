@@ -1109,7 +1109,7 @@ const WorkshopUI = (() => {
     // Exactly what each stage's worker must DELIVER to push the video forward.
     // The deliverable is shown plainly on every video so it's unambiguous.
     const STAGE_DELIVERABLE = {
-        ideate: 'Queued from the Library', hook: 'At least one hook — a LINE + a TYPE (animation/practical)',
+        ideate: 'Queued from the Library', hook: 'At least one hook — a LINE + a TYPE. An animation hook also needs its assets uploaded (or "no assets needed" checked)',
         script: 'A written script (100+ characters)', animation: 'The animation hook video uploaded',
         decomp: 'Decide each branch + add ≥1 component (or mark “No decomposition needed”)',
         design: 'Design research — upload your notes / reference files', propdesign: 'A prop & set plan — upload it',
@@ -2531,17 +2531,20 @@ const WorkshopUI = (() => {
                     <button class="wsp-mini-btn wsp-ai-btn" id="wsp-ai-hooks" title="Let AI suggest hooks from the context + script, grounded in the channel's principles">✨ AI hooks</button>
                     ${PS().hooksOf(v).length === 0 ? '<span class="wsp-hint">none yet — write your first hook and pick its type</span>' : ''}
                 </div>
-                ${PS().hooksOf(v).some(h => h.type === 'animation') ? `
-                <div class="wsp-anim-assets">
+                ${PS().hooksOf(v).some(h => h.type === 'animation') ? (() => {
+                    const hasAssets = Array.isArray(v.animAssets) && v.animAssets.length > 0;
+                    const blocking = !v.animNoModels && !hasAssets;   // gate: upload assets OR check the box
+                    return `
+                <div class="wsp-anim-assets${blocking ? ' wsp-anim-blocking' : ''}">
                     <div class="wsp-cd-label" style="margin-top:10px;">🎞️ Animation assets <span class="wsp-hint">— the 3D models / reference files the animator needs to build the animation</span></div>
+                    ${blocking ? `<div class="wsp-anim-warn">⚠ Upload at least one asset, OR check "no assets needed", before this video can move forward.</div>` : ''}
                     <label class="wsp-anim-noassets"><input type="checkbox" id="wsp-anim-nomodels" ${v.animNoModels ? 'checked' : ''}> No 3D models / assets needed — the animator works from the hook + context alone</label>
                     <div id="wsp-anim-assets-body" style="${v.animNoModels ? 'display:none;' : ''}">
                         <div id="wsp-anim-asset-list">${(v.animAssets || []).map((a, i) => `<div class="wsp-row"><span class="wsp-row-name">${icon('cad', 'wsp-row-ic')} ${escHtml(a.name || (a.path || '').split('/').pop())}</span><button class="wsp-mini-btn" data-anim-asset-open="${i}">▶ Open</button><button class="wsp-mini-btn danger" data-anim-asset-del="${i}">✕</button></div>`).join('')}</div>
-                        ${v.project
-                            ? `<div class="wsp-add-row"><input type="file" id="wsp-anim-asset-file" multiple style="font-size:11.5px;flex:1 1 160px;"><button class="wsp-mini-btn done" id="wsp-anim-asset-up">⬆ Upload assets</button></div>`
-                            : `<div class="wsp-hint">Select a Channel Project first — assets go to that project's animation/assets folder in Dropbox.</div>`}
+                        <div class="wsp-add-row"><input type="file" id="wsp-anim-asset-file" multiple style="font-size:11.5px;flex:1 1 160px;"><button class="wsp-mini-btn done" id="wsp-anim-asset-up">⬆ Upload assets</button></div>
+                        ${v.project ? '' : `<div class="wsp-hint">Assets are stored in the project's animation/assets folder — pick a Channel Project below first (or check "no assets needed").</div>`}
                     </div>
-                </div>` : ''}
+                </div>`; })() : ''}
             </div>
 
             <div class="wsp-subsection ${sectionStatusClass(v, 'script')}" data-vfield="script" style="--accent:#27ae72">
@@ -4122,6 +4125,7 @@ const WorkshopUI = (() => {
         if (cb) cb.addEventListener('change', async (e) => {
             if (body) body.style.display = e.target.checked ? 'none' : '';
             await VideoService.update(v.id, { animNoModels: e.target.checked }).catch(() => {});
+            rerenderEditor(v.id);   // update the move-forward gate + warning live
         });
         const animAssets = () => (VideoService.getById(v.id) || v).animAssets || [];
         const list = get('wsp-anim-asset-list');
@@ -4138,7 +4142,7 @@ const WorkshopUI = (() => {
             list && list.querySelectorAll('[data-anim-asset-del]').forEach(b => b.addEventListener('click', async () => {
                 const idx = Number(b.dataset.animAssetDel);
                 await atomicVideoUpdate(v.id, (fresh) => ({ animAssets: (fresh.animAssets || []).filter((_, i) => i !== idx) })).catch(() => {});
-                rerenderList();
+                rerenderEditor(v.id);   // re-evaluate the gate (warning may reappear)
             }));
         };
         bindRows();
@@ -4157,7 +4161,7 @@ const WorkshopUI = (() => {
                 const added = metas.map((meta, i) => ({ path: meta.path_display || meta.path_lower, name: meta.name || files[i].name }));
                 await atomicVideoUpdate(v.id, (fresh) => ({ animAssets: [...(fresh.animAssets || []), ...added] })).catch(() => {});
                 bar.stage('Done ✓'); toast(`🎞️ ${added.length} asset${added.length === 1 ? '' : 's'} → animation/assets`);
-                rerenderList();
+                rerenderEditor(v.id);   // clears the warning + unlocks the move-forward gate
             } catch (e) { alert('Upload failed: ' + e.message); }
         });
     }

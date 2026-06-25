@@ -115,10 +115,17 @@ const PipelineStages = (() => {
             test: () => true
         },
         hook: {
-            desc: 'auto: done once there is at least one hook instance with phrasing + a type (animation/practical) chosen',
+            desc: 'auto: done once there is at least one hook instance with phrasing + a type; an animation hook also needs its assets uploaded OR "no assets needed" checked',
             test: (v) => {
                 const hs = hooksOf(v).filter(h => (h.text || h.label || '').trim() && h.type);
-                return hs.length > 0;
+                if (hs.length === 0) return false;
+                // An animation hook can't move forward until the animator's inputs are
+                // settled: either ≥1 asset uploaded, or "no assets needed" is checked.
+                if (hs.some(h => h.type === 'animation')) {
+                    const hasAssets = Array.isArray(v.animAssets) && v.animAssets.length > 0;
+                    if (!v.animNoModels && !hasAssets) return false;
+                }
+                return true;
             }
         },
         script: {
