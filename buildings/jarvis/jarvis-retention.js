@@ -10,10 +10,10 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cv' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cv', rtgMinStr: 0 };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -999,18 +999,44 @@ const JarvisRetention = (function () {
     function rtgUpdateSignal() {
         try { const v = RTGF.videos[st.rtgSel]; if (!v) return;
             const ss = window.document.getElementById('rtg-sigsel'); if (ss) ss.innerHTML = rtgSigSelector(v);
+            const sc = window.document.getElementById('rtg-strctl'); if (sc) sc.innerHTML = rtgStrengthSlider(v);
             const rp = window.document.getElementById('rtg-refpay'); if (rp) rp.innerHTML = rtgRefPayoff(v);
             rtgUpdateLabelUI();
+        } catch (e) { }
+    }
+    // confidence/relevance threshold slider — drag to let fewer/more connections emerge
+    function rtgStrengthSlider(v) {
+        const sg = rtgSig(v), all = sg.links || [], cstr = l => (l.str != null ? l.str : l.s), thr = st.rtgMinStr || 0;
+        const shown = all.filter(l => cstr(l) >= thr).length;
+        const isEns = !!(all[0] && all[0].c != null);
+        return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:10px;padding:10px 13px;margin-bottom:8px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="font-size:11px;font-weight:700;color:${C.text};white-space:nowrap">Connection threshold</span>
+              <input id="rtg-minstr" type="range" min="0" max="1" step="0.02" value="${thr}" style="flex:1;min-width:150px;accent-color:${C.purple};cursor:pointer">
+              <span style="font-size:11px;color:${C.dim};white-space:nowrap">≥ <b id="rtg-strval" style="color:${C.purple}">${thr.toFixed(2)}</b> · <b id="rtg-strcount" style="color:${C.text}">${shown}</b>/${all.length} shown</span>
+            </div>
+            <div style="font-size:9.5px;color:${C.mute};margin-top:5px;line-height:1.5">Each connection has a <b>${isEns ? 'confidence' : 'relevance'} strength</b> ${isEns ? '(0.45·consensus + 0.30·intensity + 0.25·fulfilment — how many theories agree × how strong the loop is)' : '(reference-ness intensity)'}. Drag <b>right</b> to keep only the strongest loops; <b>left</b> to let weaker ones emerge.</div>
+        </div>`;
+    }
+    function rtgUpdateThresh() {
+        try { const v = RTGF.videos[st.rtgSel]; if (!v) return;
+            const rp = window.document.getElementById('rtg-refpay'); if (rp) rp.innerHTML = rtgRefPayoff(v);
+            const sg = rtgSig(v), all = sg.links || [], cstr = l => (l.str != null ? l.str : l.s), thr = st.rtgMinStr || 0;
+            const sv = window.document.getElementById('rtg-strval'); if (sv) sv.textContent = thr.toFixed(2);
+            const cc = window.document.getElementById('rtg-strcount'); if (cc) cc.textContent = all.filter(l => cstr(l) >= thr).length;
         } catch (e) { }
     }
     function rtgRefPayoff(v) {
         const n = v.n_sec, W = 820, pad = 30, iw = W - pad - 10, H = 156, yR = 56, yP = 100, amp = 40;
         const x = s => pad + (n <= 1 ? 0 : s * iw / (n - 1));
         const sg = rtgSig(v), ref = sg.refness || [], pay = sg.payoff || [];
+        // each connection's confidence/relevance strength → filtered by the threshold slider
+        const allLinks = sg.links || [], cstr = l => (l.str != null ? l.str : l.s), thr = st.rtgMinStr || 0;
+        const links = allLinks.filter(l => cstr(l) >= thr);
         const refA = `M ${x(0)} ${yR} ` + ref.map((r, i) => `L ${x(i).toFixed(1)} ${(yR - r * amp).toFixed(1)}`).join(' ') + ` L ${x(n - 1)} ${yR} Z`;
         const payA = `M ${x(0)} ${yP} ` + pay.map((p, i) => `L ${x(i).toFixed(1)} ${(yP + p * amp).toFixed(1)}`).join(' ') + ` L ${x(n - 1)} ${yP} Z`;
         // line THICKNESS ∝ loop strength; COLOUR ∝ consensus (how many of the 6 theories agree)
-        const arcs = (sg.links || []).map(l => { const xi = x(l.i), xj = x(l.j);
+        const arcs = links.map(l => { const xi = x(l.i), xj = x(l.j);
             const strg = (l.str != null ? l.str : l.s), cons = (l.c != null ? l.c : null);
             const col = cons != null ? rtgConsColor(cons) : C.purple;
             const tip = `reference @${l.i}s → fulfilled @${l.j}s · strength ${strg.toFixed(2)}`
@@ -1019,11 +1045,10 @@ const JarvisRetention = (function () {
                 + (l.src ? ` · caught by the ${l.src} theory` : '');
             return `<path d="M ${xi} ${yR} C ${xi} ${(yR + yP) / 2} ${xj} ${(yR + yP) / 2} ${xj} ${yP}" fill="none" stroke="${col}" stroke-width="${(0.6 + strg * 3.6).toFixed(1)}" opacity="${(0.22 + strg * 0.62).toFixed(2)}"><title>${tip}</title></path>`; }).join('');
         // re-reference THREADS — rings where multiple references converge on one payoff (taxonomy #2)
-        const conv = {}; (sg.links || []).forEach(l => { if (l.reinf > 1) conv[l.j] = Math.max(conv[l.j] || 0, l.reinf); });
+        const conv = {}; links.forEach(l => { if (l.reinf > 1) conv[l.j] = Math.max(conv[l.j] || 0, l.reinf); });
         const convMk = Object.keys(conv).map(j => `<circle cx="${x(+j).toFixed(1)}" cy="${yP}" r="${(3 + conv[j] * 1.5).toFixed(1)}" fill="none" stroke="${C.green}" stroke-width="1.3" opacity="0.6"><title>${conv[j]} references converge on this payoff — a re-reference thread</title></circle>`).join('');
-        // your hand-labels overlaid — coloured by whether the ACTIVE signal catches each (±3s)
+        // your hand-labels overlaid — coloured by whether a SHOWN connection catches each (±3s)
         const lab = RTGLABELS[v.id] || { pairs: [], orphans: [] };
-        const links = sg.links || [];
         const caught = p => links.some(l => Math.abs(l.i - p.r) <= 3 && Math.abs(l.j - p.g) <= 3);
         let nHit = 0;
         const labOv = lab.pairs.map(p => { const hit = caught(p); if (hit) nHit++; const col = hit ? C.green : '#f87171';
@@ -1048,7 +1073,7 @@ const JarvisRetention = (function () {
             }
         }
         const slab = (RTGF.meta && RTGF.meta.signal_labels && RTGF.meta.signal_labels[st.rtgSignal]) || st.rtgSignal;
-        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Reference-ness & payoff-ness — <span style="color:${C.accent}">${esc(slab)}</span> signal &nbsp; ${hitBadge}</div>
+        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Reference-ness & payoff-ness — <span style="color:${C.accent}">${esc(slab)}</span> signal &nbsp; <span style="font-weight:400;color:${C.mute};font-size:10px">${links.length}/${allLinks.length} connections${thr > 0 ? ` ≥ ${thr.toFixed(2)}` : ''}</span> &nbsp; ${hitBadge}</div>
             <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5"><b style="color:${C.cyan}">Reference-ness</b> (top) = this moment points to a <i>specific</i> later moment that isn't present yet (intrinsic & causal — shows even when nothing pays it off). <b style="color:${C.green}">Payoff-ness</b> (bottom) = a later moment fulfils a real earlier reference. <span style="color:${C.purple}">Arcs</span> = the link. ${labOv ? `Your hand-labels are dashed — <b style="color:${C.green}">green = this signal caught it</b>, <b style="color:#f87171">red = missed</b> (a guide, never fit to). ` : ''}Encoder: <b>${esc((RTGF.meta && RTGF.meta.encoder) || '?')}</b>. Flip the signal above to see which one lands where you'd expect.</div>
             <svg viewBox="0 0 ${W} ${H}" style="width:100%">
               <line x1="${pad}" y1="${yR}" x2="${W - 10}" y2="${yR}" stroke="${C.border2}"/><line x1="${pad}" y1="${yP}" x2="${W - 10}" y2="${yP}" stroke="${C.border2}"/>
@@ -1203,6 +1228,7 @@ const JarvisRetention = (function () {
                     ${st.rtgLabel ? `<div id="rtg-labelui">${rtgRenderLabelUI(v)}</div>` : ''}
                     ${rtgThreadTimeline(v)}
                     <div id="rtg-sigsel">${rtgSigSelector(v)}</div>
+                    <div id="rtg-strctl">${rtgStrengthSlider(v)}</div>
                     <div id="rtg-refpay">${rtgRefPayoff(v)}</div>
                     ${rtgRetentionPanel()}
                     ${rtgTaxonomy()}
@@ -1211,6 +1237,7 @@ const JarvisRetention = (function () {
                 <div style="width:236px;flex-shrink:0;position:sticky;top:14px">${rtgStickyPlayer(v)}</div>
             </div>`;
         }
+        h += rtgGlobalEmbedMap();
         const list = RTGF.videos.map((v, i) => ({ v, i })).filter(o => o.v.n_threads).sort((a, b) => b.v.n_sec - a.v.n_sec);
         h += cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:6px">Every video — click to see its emergent threads</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">${list.map(({ v, i }) => {
@@ -1219,6 +1246,26 @@ const JarvisRetention = (function () {
                     <div style="flex:1;min-width:0"><div style="font-size:11px;color:${C.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.title)}</div>
                       <div style="display:flex;height:7px;border-radius:2px;overflow:hidden;margin-top:3px;background:${C.border}">${strip}</div></div></div>`; }).join('')}</div>`);
         return h;
+    }
+    // ALL embeddings — global 2D map of every second (visual + concept) of every video, in Gemini space
+    function rtgGlobalEmbedMap() {
+        if (!RTGE || !RTGE.x || !RTGE.x.length) return '';
+        const W = 760, H = 440, pad = 14, S = 1000, n = RTGE.x.length;
+        const X = g => (pad + g / S * (W - 2 * pad)), Yc = g => (pad + (1 - g / S) * (H - 2 * pad));
+        const sel = (st.rtgSel != null && RTGF.videos[st.rtgSel]) ? st.rtgSel : -1;
+        let base = '';
+        for (let i = 0; i < n; i++) { if (RTGE.v[i] === sel) continue;
+            base += `<circle cx="${X(RTGE.x[i]).toFixed(1)}" cy="${Yc(RTGE.y[i]).toFixed(1)}" r="1.2" fill="${tcol(RTGE.c[i])}" opacity="0.4"/>`; }
+        let hi = '';
+        if (sel >= 0) for (let i = 0; i < n; i++) { if (RTGE.v[i] !== sel) continue;
+            const cx = X(RTGE.x[i]).toFixed(1), cy = Yc(RTGE.y[i]).toFixed(1), col = tcol(RTGE.c[i]);
+            hi += RTGE.m[i] === 1
+                ? `<rect x="${(cx - 3)}" y="${(cy - 3)}" width="6" height="6" fill="${col}" stroke="#fff" stroke-width="1"><title>${RTGE.s[i]}s · concept · cluster ${RTGE.c[i]}</title></rect>`
+                : `<circle cx="${cx}" cy="${cy}" r="3.4" fill="${col}" stroke="#fff" stroke-width="1"><title>${RTGE.s[i]}s · visual · cluster ${RTGE.c[i]}</title></circle>`; }
+        const m = RTGE.meta;
+        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">All the embeddings — the whole ${esc(m.encoder)} space (${m.n.toLocaleString()} moments)</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Every second of all ${m.n_videos} videos — its <b>frame</b> (${m.n_visual.toLocaleString()} visual) and its <b>spoken utterance</b> (${m.n_concept.toLocaleString()} concept) — projected from 1536-dim Gemini space to 2D (global PCA), coloured by emergent <b>cluster</b> (k-means, ${m.k} groups). Moments about the same thing land together; a spoken idea sits near the frame that shows it. ${sel >= 0 ? `The open video’s seconds are <b style="color:#fff">highlighted</b> (● visual · ▪ concept) — see where its trajectory lives in the whole space.` : `<b>Open a video</b> to highlight its seconds within the space.`}</div>
+            <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px">${base}${hi}</svg>`, 12);
     }
     function renderRTG() {
         if (!RTGF) return cardc(`<div style="padding:30px;text-align:center;color:${C.dim}">Building the RTG field… <div style="font-size:11px;color:${C.mute};margin-top:6px">Run <code>principles/rtg_embed_gemini.py</code> → <code>rtg_field.py</code> → <code>rtg_sweep.py</code>.</div></div>`);
@@ -1295,6 +1342,7 @@ const JarvisRetention = (function () {
         if (tr) { const id = tr.getAttribute('data-row'); st.open = st.open === id ? null : id; render(); }
     }
     function onInput(e) {
+        if (e.target.id === 'rtg-minstr') { st.rtgMinStr = +e.target.value; rtgUpdateThresh(); return; }
         if (e.target.id === 'rtg-seek') { rtgSeek(+e.target.value); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-pf')) { st.pvals = st.pvals || {}; st.pvals[e.target.getAttribute('data-pf')] = +e.target.value; updatePredict(); return; }
         if (e.target.closest('[data-q]')) { st.q = e.target.value; render(); }
@@ -1309,7 +1357,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=58'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=59'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
@@ -1319,6 +1367,7 @@ const JarvisRetention = (function () {
                     INT = await loadJSON(base + 'principles/interactions.json').catch(() => null);
                     CF = await loadJSON(base + 'principles/confounds.json').catch(() => null);
                     RTGF = await loadJSON(base + 'principles/rtg_field.json').catch(() => null);
+                    RTGE = await loadJSON(base + 'principles/rtg_embedmap.json').catch(() => null);
                     try { RTGLABELS = await (await fetch('/api/rtg/labels')).json() || {}; } catch (e) { RTGLABELS = {}; }
                 } catch (e) {
                     if (tries >= 3) { root.innerHTML = `<div style="padding:24px;color:${C.dim}">Couldn't load data — the site may be mid-deploy. <button data-reload style="background:${C.accent}22;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px">Retry</button></div>`; return; }
