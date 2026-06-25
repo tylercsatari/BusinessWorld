@@ -1116,7 +1116,11 @@ const JarvisRetention = (function () {
         const cov = m.coverage;
         const covLine = cov ? `<div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5;border-left:2px solid ${C.accent};padding-left:7px"><b style="color:${C.accent}">No single theory tells the whole story.</b> The ${m.sweep_n} algorithms cluster into <b>${cov.families} families</b> (specific-match · semantic-entailment · info-gap · forward-vs-past · recurrence · incompleteness), and each family catches a <i>different</i> population of your loops — the best single one tops out at 70%. But every label is caught by <i>some</i> algorithm (<b style="color:${C.green}">${Math.round(cov.union_pct * 100)}% union ceiling</b>, 0 uncatchable). So we <b>combine</b>: set-cover picks one algorithm per family → the <b style="color:${C.accent}">⛓ ensemble</b> unions them and catches <b style="color:${C.green}">${Math.round(cov.ensemble_recall * 100)}%</b> of your ${cov.n_labels} labels. Each ensemble arc is tagged with the theory that caught it.</div>` : '';
         const head = m.sweep_n ? `${covLine}<div style="font-size:10px;color:${C.mute};margin-bottom:5px"><b style="color:${C.accent}">${m.sweep_n} algorithms</b> ranked by how well they recover the loops you labelled across ${m.labelled} videos — PU recall, never penalised for finding <i>more</i> than you marked (your labels are a guide, not truth). Browse them; default = the ensemble. Your labels overlay dashed: <b style="color:${C.green}">green caught</b>, <b style="color:#f87171">red missed</b>. Plus two learned <b>predictive lenses</b> — <b>🧠 JEPA</b> (sharp forward expectation) and <b>❓ implicit anticipation</b> (a world-model catching the "where is this going" loops similarity can't) — lower recall on your <i>explicit</i> labels by design, since they surface a different population.</div>` : '';
-        const pills = m.signals.map(s => `<span data-rtgsignal="${s}" title="${esc(lab[s] || s)}" style="cursor:pointer;border:1px solid ${st.rtgSignal === s ? C.accent : C.border};background:${st.rtgSignal === s ? C.accent + '1e' : 'transparent'};color:${st.rtgSignal === s ? C.accent : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;white-space:nowrap">${esc(lab[s] || s)}</span>`).join('');
+        const rv = (m.retention_validation && m.retention_validation.by_signal) || {};
+        const pills = m.signals.map(s => { const pf = rv[s] && rv[s].pFut;
+            const tip = esc(lab[s] || s) + (pf != null ? ` — retention-hold pFut ${pf >= 0 ? '+' : ''}${pf.toFixed(3)}` : '');
+            const tag = pf != null && pf >= 0.18 ? `<span style="color:#fbbf24"> ◆</span>` : '';
+            return `<span data-rtgsignal="${s}" title="${tip}" style="cursor:pointer;border:1px solid ${st.rtgSignal === s ? C.accent : C.border};background:${st.rtgSignal === s ? C.accent + '1e' : 'transparent'};color:${st.rtgSignal === s ? C.accent : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;white-space:nowrap">${esc(lab[s] || s)}${tag}</span>`; }).join('');
         return `<div style="margin-bottom:8px">${head}<div style="display:flex;gap:5px;flex-wrap:wrap;max-height:104px;overflow-y:auto;padding:2px">${pills}</div></div>`;
     }
     function rtgUpdateSignal() {
@@ -1172,6 +1176,24 @@ const JarvisRetention = (function () {
     // consensus → colour: cool dim blue (1 theory, subtle) → bright gold (all theories agree, unambiguous)
     function rtgConsColor(c) { const lo = [91, 140, 255], hi = [251, 191, 36], t = Math.max(0, Math.min(1, c));
         return `rgb(${lo.map((a, k) => Math.round(a + (hi[k] - a) * t)).join(',')})`; }
+    // THE real validation — against actual viewer retention, no labels, confound-controlled
+    function rtgRetentionPanel() {
+        const rv = RTGF.meta && RTGF.meta.retention_validation; if (!rv || !rv.by_signal) return '';
+        const by = rv.by_signal, lab = RTGF.meta.signal_labels || {};
+        const rows = Object.keys(by).map(s => Object.assign({ s }, by[s])).filter(r => r.pFut != null);
+        const hold = rows.slice().sort((a, b) => b.pFut - a.pFut).slice(0, 6);
+        const markers = rows.filter(r => r.rLvl >= 0.5).sort((a, b) => b.rLvl - a.rLvl).slice(0, 3);
+        const maxP = Math.max(0.01, ...rows.map(r => Math.abs(r.pFut)));
+        const nm = s => esc((lab[s] || s).replace(/\s*\([^)]*\)\s*$/, ''));
+        const bar = (v, col) => `<div style="flex:1;height:8px;background:${C.card2};border-radius:3px;overflow:hidden;position:relative"><div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:${C.border2}"></div><div style="position:absolute;left:${v >= 0 ? 50 : 50 + v / maxP * 50}%;top:0;bottom:0;width:${Math.abs(v) / maxP * 50}%;background:${col};border-radius:2px"></div></div>`;
+        const row = (r, col) => `<div style="display:flex;align-items:center;gap:8px;font-size:10px"><div style="width:150px;color:${C.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nm(r.s)}</div>${bar(r.pFut, col)}<div style="width:46px;text-align:right;color:${col};font-weight:700">${r.pFut >= 0 ? '+' : ''}${r.pFut.toFixed(3)}</div></div>`;
+        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Validated against real retention — <span style="color:${C.green}">no labels, ${rv.n_videos} videos</span></div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:9px;line-height:1.55">Your hand-labels are a guide; <b style="color:${C.text}">this is ground truth</b>. Per-second YouTube relative-retention (universal decay already divided out), within-video z-scored. <b>pFut</b> = partial correlation of reference-ness with the <i>forward 3-second retention slope</i>, controlling for current level + position — i.e. does opening a loop <b>hold attention beyond where retention already sits</b> (removing the mean-reversion artifact that any peak crests afterward).</div>
+            <div style="font-size:10.5px;color:${C.text};font-weight:700;margin-bottom:4px">What actually holds viewers forward</div>
+            <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:9px">${hold.map(r => row(r, '#fbbf24')).join('')}</div>
+            <div style="font-size:10px;color:${C.mute};line-height:1.55;border-left:2px solid ${C.green};padding-left:8px">
+              <b style="color:${C.text}">The finding:</b> <b style="color:#fbbf24">semantic-entailment</b> loops — abstract, long-range "<i>this implies a payoff that hasn't happened yet</i>" references — are the <b>only</b> family that predicts viewers <b>staying</b> (pFut ≈ +0.26). The dense concrete-callback signals${markers.length ? ` (${markers.map(m => nm(m.s)).join(', ')})` : ''} sit where retention is high (level corr +0.5–0.6) but collapse to ~0 once you control for level — they <b>mark</b> where attention already is, they don't <b>extend</b> it. So <b style="color:${C.text}">label-recall ≠ behavioural validity</b>: the ⛓ ensemble won at recovering your labels, but the <b>open abstract question</b> is what keeps people watching.</div>`);
+    }
     // every reference→gratification nuance you flagged, and how the model handles each
     function rtgTaxonomy() {
         const rows = [
@@ -1277,6 +1299,7 @@ const JarvisRetention = (function () {
                     ${rtgThreadTimeline(v)}
                     <div id="rtg-sigsel">${rtgSigSelector(v)}</div>
                     <div id="rtg-refpay">${rtgRefPayoff(v)}</div>
+                    ${rtgRetentionPanel()}
                     ${rtgTaxonomy()}
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">${rtgFieldHeat(v)}${rtgTokenMap(v)}</div>
                 </div>
@@ -1494,7 +1517,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=51'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=52'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
