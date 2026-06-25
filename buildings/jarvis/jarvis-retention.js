@@ -13,7 +13,7 @@ const JarvisRetention = (function () {
     let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cv', rtgMinStr: 0 };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cv', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -1237,7 +1237,7 @@ const JarvisRetention = (function () {
                 <div style="width:236px;flex-shrink:0;position:sticky;top:14px">${rtgStickyPlayer(v)}</div>
             </div>`;
         }
-        h += rtgGlobalEmbedMap();
+        h += `<div id="rtg-embedmap">${rtgGlobalEmbedMap()}</div>`;
         const list = RTGF.videos.map((v, i) => ({ v, i })).filter(o => o.v.n_threads).sort((a, b) => b.v.n_sec - a.v.n_sec);
         h += cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:6px">Every video — click to see its emergent threads</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">${list.map(({ v, i }) => {
@@ -1247,26 +1247,42 @@ const JarvisRetention = (function () {
                       <div style="display:flex;height:7px;border-radius:2px;overflow:hidden;margin-top:3px;background:${C.border}">${strip}</div></div></div>`; }).join('')}</div>`);
         return h;
     }
-    // ALL embeddings — global 2D map of every second (visual + concept) of every video, in Gemini space
+    // ALL embeddings — global 2D map of every second (visual + concept), with projection + focus toggles
     function rtgGlobalEmbedMap() {
-        if (!RTGE || !RTGE.x || !RTGE.x.length) return '';
-        const W = 760, H = 440, pad = 14, S = 1000, n = RTGE.x.length;
+        if (!RTGE || !RTGE.proj) return '';
+        const mode = st.rtgProj || 'aligned', focus = st.rtgEmbFocus || 'all';
+        const P = RTGE.proj[mode] || RTGE.proj.raw, m = RTGE.meta;
+        const W = 760, H = 460, pad = 14, S = 1000, n = P.x.length;
         const X = g => (pad + g / S * (W - 2 * pad)), Yc = g => (pad + (1 - g / S) * (H - 2 * pad));
         const sel = (st.rtgSel != null && RTGF.videos[st.rtgSel]) ? st.rtgSel : -1;
-        let base = '';
-        for (let i = 0; i < n; i++) { if (RTGE.v[i] === sel) continue;
-            base += `<circle cx="${X(RTGE.x[i]).toFixed(1)}" cy="${Yc(RTGE.y[i]).toFixed(1)}" r="1.2" fill="${tcol(RTGE.c[i])}" opacity="0.4"/>`; }
-        let hi = '';
-        if (sel >= 0) for (let i = 0; i < n; i++) { if (RTGE.v[i] !== sel) continue;
-            const cx = X(RTGE.x[i]).toFixed(1), cy = Yc(RTGE.y[i]).toFixed(1), col = tcol(RTGE.c[i]);
-            hi += RTGE.m[i] === 1
-                ? `<rect x="${(cx - 3)}" y="${(cy - 3)}" width="6" height="6" fill="${col}" stroke="#fff" stroke-width="1"><title>${RTGE.s[i]}s · concept · cluster ${RTGE.c[i]}</title></rect>`
-                : `<circle cx="${cx}" cy="${cy}" r="3.4" fill="${col}" stroke="#fff" stroke-width="1"><title>${RTGE.s[i]}s · visual · cluster ${RTGE.c[i]}</title></circle>`; }
-        const m = RTGE.meta;
-        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">All the embeddings — the whole ${esc(m.encoder)} space (${m.n.toLocaleString()} moments)</div>
-            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Every second of all ${m.n_videos} videos — its <b>frame</b> (${m.n_visual.toLocaleString()} visual) and its <b>spoken utterance</b> (${m.n_concept.toLocaleString()} concept) — projected from 1536-dim Gemini space to 2D (global PCA), coloured by emergent <b>cluster</b> (k-means, ${m.k} groups). Moments about the same thing land together; a spoken idea sits near the frame that shows it. ${sel >= 0 ? `The open video’s seconds are <b style="color:#fff">highlighted</b> (● visual · ▪ concept) — see where its trajectory lives in the whole space.` : `<b>Open a video</b> to highlight its seconds within the space.`}</div>
-            <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px">${base}${hi}</svg>`, 12);
+        let body = '';
+        if (focus === 'video' && sel >= 0) {
+            const idx = []; for (let i = 0; i < n; i++) if (RTGE.v[i] === sel) idx.push(i);
+            const vis = idx.filter(i => RTGE.m[i] === 0).sort((a, b) => RTGE.s[a] - RTGE.s[b]);
+            if (vis.length > 1) { let d = 'M ' + X(P.x[vis[0]]).toFixed(1) + ' ' + Yc(P.y[vis[0]]).toFixed(1);
+                for (let k = 1; k < vis.length; k++) d += ' L ' + X(P.x[vis[k]]).toFixed(1) + ' ' + Yc(P.y[vis[k]]).toFixed(1);
+                body += `<path d="${d}" fill="none" stroke="${C.dim}" stroke-width="1" opacity="0.3"/>`; }
+            idx.forEach(i => { const cx = X(P.x[i]).toFixed(1), cy = Yc(P.y[i]).toFixed(1), col = tcol(RTGE.c[i]);
+                body += RTGE.m[i] === 1
+                    ? `<rect x="${(cx - 3.5)}" y="${(cy - 3.5)}" width="7" height="7" fill="${col}" stroke="#fff" stroke-width="0.8"><title>${RTGE.s[i]}s · concept · cluster ${RTGE.c[i]}</title></rect>`
+                    : `<circle cx="${cx}" cy="${cy}" r="4" fill="${col}" stroke="#fff" stroke-width="0.8"><title>${RTGE.s[i]}s · visual · cluster ${RTGE.c[i]}</title></circle>`; });
+        } else {
+            let base = '', hi = '';
+            for (let i = 0; i < n; i++) { if (RTGE.v[i] === sel) continue;
+                base += `<circle cx="${X(P.x[i]).toFixed(1)}" cy="${Yc(P.y[i]).toFixed(1)}" r="1.2" fill="${tcol(RTGE.c[i])}" opacity="0.4"/>`; }
+            if (sel >= 0) for (let i = 0; i < n; i++) { if (RTGE.v[i] !== sel) continue;
+                const cx = X(P.x[i]).toFixed(1), cy = Yc(P.y[i]).toFixed(1), col = tcol(RTGE.c[i]);
+                hi += RTGE.m[i] === 1 ? `<rect x="${(cx - 3)}" y="${(cy - 3)}" width="6" height="6" fill="${col}" stroke="#fff" stroke-width="1"><title>${RTGE.s[i]}s · concept</title></rect>` : `<circle cx="${cx}" cy="${cy}" r="3.4" fill="${col}" stroke="#fff" stroke-width="1"><title>${RTGE.s[i]}s · visual</title></circle>`; }
+            body = base + hi;
+        }
+        const pill = (id, lab, on, attr) => `<span ${attr}="${id}" style="cursor:pointer;border:1px solid ${on ? C.accent : C.border};background:${on ? C.accent + '1e' : 'transparent'};color:${on ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
+        return cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:3px">
+              <div style="font-size:12px;font-weight:700;color:${C.text}">All the embeddings — ${esc(m.encoder)} space (${m.n.toLocaleString()} moments)</div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">${pill('aligned', 'semantic', mode === 'aligned', 'data-rtgproj')}${pill('raw', 'by modality', mode === 'raw', 'data-rtgproj')}<span style="width:8px"></span>${pill('all', 'all videos', focus === 'all', 'data-rtgembfocus')}${pill('video', 'this video', focus === 'video', 'data-rtgembfocus')}</div></div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Every second of all ${m.n_videos} videos (frame + spoken utterance), 1536-d Gemini → 2D, coloured by cluster (K=${m.k}). <b>The "two ends" was the modality gap</b> — PC1 is the visual-vs-concept split (corr ${m.pc1_modality_corr}); <b>semantic</b> centres each modality so meaning structures the map, <b>by modality</b> shows the raw split. ${focus === 'video' ? (sel >= 0 ? '<b>This video only</b> — its trajectory (● visual ▪ concept, line = time order).' : 'Open a video to see its trajectory.') : (sel >= 0 ? 'Open video <b style="color:#fff">highlighted</b>.' : 'Open a video to highlight its seconds.')}<br><span style="color:${C.dim}">Honest: aligning the gap improves the <i>picture</i> but NOT the signal — entailment drop-zone pFut is raw <b>${m.entail_pfut_raw}</b> vs aligned ${m.entail_pfut_aligned}, so the reference mapping stays on the raw cross-modal cosine.</span></div>
+            <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px">${body}</svg>`, 12);
     }
+    function rtgUpdateEmbedMap() { try { const el = window.document.getElementById('rtg-embedmap'); if (el) el.innerHTML = rtgGlobalEmbedMap(); } catch (e) { } }
     function renderRTG() {
         if (!RTGF) return cardc(`<div style="padding:30px;text-align:center;color:${C.dim}">Building the RTG field… <div style="font-size:11px;color:${C.mute};margin-top:6px">Run <code>principles/rtg_embed_gemini.py</code> → <code>rtg_field.py</code> → <code>rtg_sweep.py</code>.</div></div>`);
         RTGA = RTGF;
@@ -1331,6 +1347,8 @@ const JarvisRetention = (function () {
         const ldlo = e.target.closest('[data-rtglabel-delorphan]'); if (ldlo) { rtgLabelAct('delorphan', +ldlo.getAttribute('data-rtglabel-delorphan')); return; }
         const lbtn = e.target.closest('[data-rtglabel]'); if (lbtn) { rtgLabelAct(lbtn.getAttribute('data-rtglabel'), Math.round(rtgCurT)); return; }
         const sig = e.target.closest('[data-rtgsignal]'); if (sig) { st.rtgSignal = sig.getAttribute('data-rtgsignal'); rtgUpdateSignal(); return; }
+        const epj = e.target.closest('[data-rtgproj]'); if (epj) { st.rtgProj = epj.getAttribute('data-rtgproj'); rtgUpdateEmbedMap(); return; }
+        const ef = e.target.closest('[data-rtgembfocus]'); if (ef) { st.rtgEmbFocus = ef.getAttribute('data-rtgembfocus'); rtgUpdateEmbedMap(); return; }
         if (e.target.closest('[data-reload]')) { err = null; DATA = null; mount(root); return; }
         if (e.target.closest('[data-novboxes]')) { st.novBoxes = !(st.novBoxes !== false); render(); return; }
         if (e.target.closest('[data-novclose]')) { st.novSel = null; render(); return; }
@@ -1357,7 +1375,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=59'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=60'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
