@@ -10,10 +10,10 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cv', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -206,6 +206,35 @@ const JarvisRetention = (function () {
             ${row('④', `<b style="color:${C.purple}">Best driveable model = keep + retention + duration</b> (R² ${fmtv(S.selection.interp.cv_r2, 2)}), which <b>tightens the prediction</b> from ×/÷ ${fmtv(S.selection.baseline_range_mult, 1)} to ×/÷ ${fmtv(S.selection.interp.range_mult, 1)}.`)}
             <div style="font-size:11px;color:${C.mute};margin-top:8px;padding-top:8px;border-top:1px solid ${C.border};line-height:1.5">Honest ceiling: this is <b>observational + winners-only</b> (all 60K–285M views), so it's strong association, not proven cause. The ~${Math.round((1 - S.selection.interp.cv_r2) * 100)}% still unexplained is mostly the algorithm's impression push + topic + timing, which aren't in this data. <b>③ Drivers</b> ranks every indicator; <b>⑤ Predict</b> gives the expected-views range. Open each tab for the raw scatter behind every claim.</div></div>`;
     }
+    // RETENTION SOURCE OF TRUTH — natural-decay baseline + emergent per-second priority (rtg_hazard.json)
+    function rtgHazardPanel() {
+        if (!RTGH || !RTGH.natural_decay_pct) return '';
+        const H = RTGH, P = H.P, W = 820, ht = 200, pad = 34, top = 14, yH = ht - 30;
+        const X = p => pad + p / (P - 1) * (W - pad - 12);
+        const haz = H.natural_decay_pct, surv = H.mean_survival_pct, prio = H.priority_watch_pct;
+        const hmax = Math.max(...haz);
+        const yh = v => yH - (v / hmax) * (yH - top), yu = v => yH - v * (yH - top);
+        const survA = `M ${X(0)} ${yH} ` + surv.map((s, p) => `L ${X(p).toFixed(1)} ${yu(s).toFixed(1)}`).join(' ') + ` L ${X(P - 1)} ${yH} Z`;
+        const hazL = 'M ' + haz.map((v, p) => `${X(p).toFixed(1)} ${yh(v).toFixed(1)}`).join(' L ');
+        const prioL = 'M ' + prio.map((v, p) => `${X(p).toFixed(1)} ${yu(v).toFixed(1)}`).join(' L ');
+        const peakP = haz.indexOf(hmax);
+        const half = surv.findIndex(s => s <= 0.5); const halfPct = half < 0 ? '>100' : half;
+        const s5 = surv[5] != null ? surv[5] : surv[Math.round(P * 0.05)];
+        const grid = [0, 25, 50, 75, 100].map(p => `<line x1="${X(Math.min(p, P - 1))}" y1="${top}" x2="${X(Math.min(p, P - 1))}" y2="${yH}" stroke="${C.border}" opacity="0.5"/><text x="${X(Math.min(p, P - 1))}" y="${ht - 10}" fill="${C.mute}" font-size="9" text-anchor="middle">${p}%</text>`).join('');
+        const stat = (lab, val, col) => `<div style="background:${C.card2};border-radius:8px;padding:7px 11px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;letter-spacing:.04em">${lab}</div><div style="font-size:15px;font-weight:800;color:${col}">${val}</div></div>`;
+        return cardc(`<div style="font-size:13px;font-weight:800;color:${C.text};margin-bottom:2px">Retention model — the normalization source of truth <span style="font-size:10px;font-weight:400;color:${C.mute}">(${H.maxT}s max · 211 videos · all emergent, nothing chosen)</span></div>
+            <div style="font-size:10.5px;color:${C.mute};margin-bottom:9px;line-height:1.55">Everything is measured as <b style="color:#f87171">hazard</b> = fraction of the <i>current</i> audience lost per second (so a 5-pt drop at 80% = 6.25%, at 30% = 16.7% — handled), per real second (so 10% over 10s ≠ over 30s). <b style="color:${C.cyan}">Survival</b> is rewatch-decomposed (replays separated from real decay). The <b style="color:#fbbf24">priority</b> of each second emerges from the curve itself — the watch-time saved by flattening hazard there (early compounds across everyone downstream) — <b>no weights were chosen</b>. Signal effects get measured as <i>residual</i> hazard vs this baseline, weighted by this priority.</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${stat('Audience lost in first 5%', ((1 - s5) * 100).toFixed(0) + '%', '#f87171')}${stat('Half the audience gone by', halfPct + '% of video', C.orange)}${stat('Hazard: early vs mid', '~' + Math.round((haz[2] || 0.1) / (haz[50] || 0.007)) + '×', '#f87171')}${stat('Priority: first vs last second', '~' + Math.round((prio[0] || 1) / (prio[P - 1] || 0.007)) + '×', '#fbbf24')}</div>
+            <svg viewBox="0 0 ${W} ${ht}" style="width:100%">${grid}
+              <line x1="${pad}" y1="${yH}" x2="${W - 12}" y2="${yH}" stroke="${C.border2}"/>
+              <path d="${survA}" fill="${C.cyan}1e" stroke="${C.cyan}" stroke-width="1.3"/>
+              <path d="${hazL}" fill="none" stroke="#f87171" stroke-width="1.6"/>
+              <path d="${prioL}" fill="none" stroke="#fbbf24" stroke-width="1.6" stroke-dasharray="4 2"/>
+              <text x="${pad}" y="11" fill="${C.cyan}" font-size="10" font-weight="700">survival</text>
+              <text x="${pad + 70}" y="11" fill="#f87171" font-size="10" font-weight="700">hazard (decay rate)</text>
+              <text x="${pad + 195}" y="11" fill="#fbbf24" font-size="10" font-weight="700">priority weight</text></svg>
+            <div style="font-size:9.5px;color:${C.mute};margin-top:5px;line-height:1.5">The hazard spike at the very start is the rapid early bleed (stabilizing it is the biggest lever); the spike at the end is the outro. Priority falls from 1.0 to ~0 because flattening late saves almost no watch-time — <b>10% lost early can outweigh 50% lost late</b>, which is why it can't be a flat or front/back weighting.</div>`, 14);
+    }
     function renderData() {
         const v = rows();
         const head = COLS.map(c => `<th data-sort="${c.k}" style="text-align:${c.align || 'right'};width:${c.w};padding:7px 8px;font-size:11px;color:${st.sort === c.k ? C.accent : C.mute};cursor:pointer;user-select:none;white-space:nowrap">${c.l}${st.sort === c.k ? (st.dir < 0 ? ' ▼' : ' ▲') : ''}</th>`).join('');
@@ -235,6 +264,7 @@ const JarvisRetention = (function () {
         const kr = DATA.videos.map(r => r.keep_rate).filter(x => x != null).sort((a, b) => a - b);
         const krMed = kr.length ? kr[kr.length >> 1] : 0;
         return summaryBanner() + `<div style="font-size:12px;color:${C.dim};margin-bottom:12px">${DATA.meta.n} videos with the <b style="color:${C.cyan}">real Keep rate</b> (Viewed-vs-Swiped-Away, scraped from Studio) + retention curve + views. Keep rate ${kr.length ? kr[0] : '—'}–${kr.length ? kr[kr.length - 1] : '—'}% (median ${krMed}%). Click any row for its curve + YouTube link to confirm in Studio.</div>
+            ${rtgHazardPanel()}
             <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
                 <input data-q value="${esc(st.q)}" placeholder="search title…" style="background:${C.card2};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:7px 11px;font-size:13px;width:220px;font-family:inherit"/>
                 <span style="font-size:11px;color:${C.mute};margin-left:auto">${v.length} shown · click a header to sort</span></div>
@@ -1375,7 +1405,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=61'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=62'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
@@ -1386,6 +1416,7 @@ const JarvisRetention = (function () {
                     CF = await loadJSON(base + 'principles/confounds.json').catch(() => null);
                     RTGF = await loadJSON(base + 'principles/rtg_field.json').catch(() => null);
                     RTGE = await loadJSON(base + 'principles/rtg_embedmap.json').catch(() => null);
+                    RTGH = await loadJSON(base + 'principles/rtg_hazard.json').catch(() => null);
                     try { RTGLABELS = await (await fetch('/api/rtg/labels')).json() || {}; } catch (e) { RTGLABELS = {}; }
                 } catch (e) {
                     if (tries >= 3) { root.innerHTML = `<div style="padding:24px;color:${C.dim}">Couldn't load data — the site may be mid-deploy. <button data-reload style="background:${C.accent}22;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px">Retry</button></div>`; return; }
