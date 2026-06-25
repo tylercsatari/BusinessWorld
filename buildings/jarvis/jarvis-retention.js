@@ -1196,6 +1196,10 @@ const JarvisRetention = (function () {
             <div style="font-size:10.5px;color:${C.text};font-weight:700;margin-bottom:4px">What holds viewers forward (within-video)</div>
             <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:5px">${hold.map(r => row(r, '#fbbf24')).join('')}</div>
             ${ci ? `<div style="font-size:9.5px;color:${C.mute};margin-bottom:9px"><b style="color:#fbbf24">${nm(top.s)}</b>: pFut <b>${top.pFut >= 0 ? '+' : ''}${top.pFut.toFixed(3)}</b>, 95% CI [${ci[0] >= 0 ? '+' : ''}${ci[0].toFixed(3)}, ${ci[1] >= 0 ? '+' : ''}${ci[1].toFixed(3)}], permutation p=<b>${pp}</b> — cluster-bootstrapped over videos, autocorrelation-robust.</div>` : ''}
+            ${rv.phase4 ? (() => { const z = rv.phase4.by_zone.overall, rrow = (t, v, col) => `<div style="display:flex;align-items:center;gap:8px;font-size:10px"><div style="width:150px;color:${C.dim}">${t}</div>${bar(v, col)}<div style="width:46px;text-align:right;color:${col};font-weight:700">${v >= 0 ? '+' : ''}${v.toFixed(3)}</div></div>`;
+              return `<div style="font-size:10.5px;color:${C.text};font-weight:700;margin-bottom:4px">Open vs close — does closing the loop release attention?</div>
+              <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:5px">${rrow('REFERENCE · loop opens', z.ref[0], '#fbbf24')}${rrow('PAYOFF · loop closes', z.pay[0], '#f87171')}</div>
+              <div style="font-size:9.5px;color:${C.mute};margin-bottom:9px">References <b style="color:#fbbf24">hold</b> attention (CI excludes 0); payoffs <b style="color:#f87171">release / neutral</b> (CI [${z.pay[1].toFixed(3)}, ${z.pay[2].toFixed(3)}]). The loop <i>closing</i> coincides with viewers leaving — tension discharged. Validates <b style="color:${C.text}">"references hold retention, not gratifications"</b> on real behaviour.</div>`; })() : ''}
             ${third.late != null ? `<div style="font-size:10.5px;color:${C.text};font-weight:700;margin-bottom:2px">…and it lives in the drop zone</div>
             <div style="display:flex;gap:6px;align-items:flex-end;margin:4px 0 9px">${tb('Early', 'early')}${tb('Middle', 'mid')}${tb('Late · drop zone', 'late')}</div>` : ''}
             <div style="font-size:10px;color:${C.mute};line-height:1.55;border-left:2px solid ${C.green};padding-left:8px">
@@ -1526,7 +1530,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=54'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=55'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
