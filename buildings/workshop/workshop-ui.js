@@ -3275,7 +3275,7 @@ const WorkshopUI = (() => {
                     });
                 } else if (video && video.project) {
                     el.innerHTML = `<div class="wsp-add-row">
-                        <input type="file" id="cd-${s.kind}-file" accept="${s.accept}" multiple style="font-size:11.5px;flex:1 1 160px;">
+                        <input type="file" id="cd-${s.kind}-file" multiple style="font-size:11.5px;flex:1 1 160px;">
                         <button class="wsp-mini-btn done" data-cf-up>⬆ Upload</button></div>`;
                     el.querySelector('[data-cf-up]').addEventListener('click', async () => {
                         const input = q('#cd-' + s.kind + '-file');
@@ -4252,7 +4252,7 @@ const WorkshopUI = (() => {
             const hid = el.dataset.hookiMedia;
             el.innerHTML = `
                 ${files.length ? `<select data-hooki-pick="${escAttr(hid)}" class="wsp-inline-select"><option value="">Link existing footage…</option>${files.map(f => `<option value="${escAttr(f.path_display || f.path_lower)}">${escHtml(f.name)}</option>`).join('')}</select>` : ''}
-                <input type="file" data-hooki-file="${escAttr(hid)}" accept="video/*" multiple style="font-size:11px;flex:1 1 140px;">
+                <input type="file" data-hooki-file="${escAttr(hid)}" multiple style="font-size:11px;flex:1 1 140px;">
                 <button class="wsp-mini-btn done" data-hooki-up="${escAttr(hid)}">⬆ Upload</button>`;
         });
 
@@ -4907,7 +4907,7 @@ const WorkshopUI = (() => {
                 </select>
             </div>` : ''}
             <div class="wsp-add-row">
-                <input type="file" id="${cfg.elId}-file" accept="${cfg.accept}" multiple style="font-size:11.5px;flex:1 1 180px;">
+                <input type="file" id="${cfg.elId}-file" multiple style="font-size:11.5px;flex:1 1 180px;">
                 <button class="wsp-mini-btn done" id="${cfg.elId}-upload">⬆ Upload & link</button>
             </div>
             <div class="wsp-hint">Uploads go straight to Dropbox: ${escHtml(folder)}/ (folder is created automatically).</div>`
@@ -5354,7 +5354,7 @@ const WorkshopUI = (() => {
             el.innerHTML = `<div class="wsp-edit-slot-label">${escHtml(slot.label)}</div>
                 ${rows}
                 <div class="wsp-add-row">
-                    <input type="file" id="wsp-edit-file-${slot.key}" accept="video/*" multiple style="font-size:11.5px;flex:1 1 160px;">
+                    <input type="file" id="wsp-edit-file-${slot.key}" multiple style="font-size:11.5px;flex:1 1 160px;">
                     <button class="wsp-mini-btn done" data-edit-up="${slot.key}">${items.length ? '⬆ Upload more' : '⬆ Upload'}</button></div>
                 <div class="wsp-add-row" style="align-items:center">
                     <select data-edit-pick="${slot.key}" class="wsp-inline-select" style="flex:1 1 200px;font-size:11.5px;">
