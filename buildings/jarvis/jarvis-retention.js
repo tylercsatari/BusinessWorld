@@ -13,7 +13,7 @@ const JarvisRetention = (function () {
     let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50 };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -206,34 +206,65 @@ const JarvisRetention = (function () {
             ${row('④', `<b style="color:${C.purple}">Best driveable model = keep + retention + duration</b> (R² ${fmtv(S.selection.interp.cv_r2, 2)}), which <b>tightens the prediction</b> from ×/÷ ${fmtv(S.selection.baseline_range_mult, 1)} to ×/÷ ${fmtv(S.selection.interp.range_mult, 1)}.`)}
             <div style="font-size:11px;color:${C.mute};margin-top:8px;padding-top:8px;border-top:1px solid ${C.border};line-height:1.5">Honest ceiling: this is <b>observational + winners-only</b> (all 60K–285M views), so it's strong association, not proven cause. The ~${Math.round((1 - S.selection.interp.cv_r2) * 100)}% still unexplained is mostly the algorithm's impression push + topic + timing, which aren't in this data. <b>③ Drivers</b> ranks every indicator; <b>⑤ Predict</b> gives the expected-views range. Open each tab for the raw scatter behind every claim.</div></div>`;
     }
-    // RETENTION SOURCE OF TRUTH — natural-decay baseline + emergent per-second priority (rtg_hazard.json)
+    // RETENTION SOURCE OF TRUTH — natural-decay baseline + emergent per-second priority, compare any position vs any
+    function rtgHazArr() {
+        const H = RTGH, sec = (st.hazUnit || 'pct') === 'sec';
+        return sec
+            ? { N: H.maxT, surv: H.mean_survival_sec, haz: H.natural_decay_sec, prio: H.priority_watch_sec, unit: 's', lab: 'absolute seconds', span: H.maxT }
+            : { N: H.P, surv: H.mean_survival_pct, haz: H.natural_decay_pct, prio: H.priority_watch_pct, unit: '%', lab: '% of video', span: 100 };
+    }
+    function rtgHazCompareText() {
+        const A = rtgHazArr(), a = Math.min(st.hazA | 0, A.N - 1), b = Math.min(st.hazB | 0, A.N - 1);
+        const pa = A.prio[a] || 1e-6, pb = A.prio[b] || 1e-6, r = pa / pb;
+        const fmtpos = p => A.unit === '%' ? p + '%' : p + 's';
+        const more = r >= 1 ? `<b style="color:#fbbf24">${r.toFixed(1)}× more</b>` : `<b style="color:${C.dim}">${(1 / r).toFixed(1)}× less</b>`;
+        return `Retaining a viewer at <b style="color:${C.accent}">${fmtpos(a)}</b> is ${more} valuable than at <b style="color:${C.accent}">${fmtpos(b)}</b>. `
+            + `<span style="color:${C.mute}">Hazard there: ${((A.haz[a] || 0)).toFixed(3)} vs ${((A.haz[b] || 0)).toFixed(3)} · survival ${((A.surv[a] || 0) * 100).toFixed(0)}% vs ${((A.surv[b] || 0) * 100).toFixed(0)}%.</span>`;
+    }
     function rtgHazardPanel() {
         if (!RTGH || !RTGH.natural_decay_pct) return '';
-        const H = RTGH, P = H.P, W = 820, ht = 200, pad = 34, top = 14, yH = ht - 30;
-        const X = p => pad + p / (P - 1) * (W - pad - 12);
-        const haz = H.natural_decay_pct, surv = H.mean_survival_pct, prio = H.priority_watch_pct;
-        const hmax = Math.max(...haz);
-        const yh = v => yH - (v / hmax) * (yH - top), yu = v => yH - v * (yH - top);
-        const survA = `M ${X(0)} ${yH} ` + surv.map((s, p) => `L ${X(p).toFixed(1)} ${yu(s).toFixed(1)}`).join(' ') + ` L ${X(P - 1)} ${yH} Z`;
-        const hazL = 'M ' + haz.map((v, p) => `${X(p).toFixed(1)} ${yh(v).toFixed(1)}`).join(' L ');
-        const prioL = 'M ' + prio.map((v, p) => `${X(p).toFixed(1)} ${yu(v).toFixed(1)}`).join(' L ');
-        const peakP = haz.indexOf(hmax);
-        const half = surv.findIndex(s => s <= 0.5); const halfPct = half < 0 ? '>100' : half;
-        const s5 = surv[5] != null ? surv[5] : surv[Math.round(P * 0.05)];
-        const grid = [0, 25, 50, 75, 100].map(p => `<line x1="${X(Math.min(p, P - 1))}" y1="${top}" x2="${X(Math.min(p, P - 1))}" y2="${yH}" stroke="${C.border}" opacity="0.5"/><text x="${X(Math.min(p, P - 1))}" y="${ht - 10}" fill="${C.mute}" font-size="9" text-anchor="middle">${p}%</text>`).join('');
-        const stat = (lab, val, col) => `<div style="background:${C.card2};border-radius:8px;padding:7px 11px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;letter-spacing:.04em">${lab}</div><div style="font-size:15px;font-weight:800;color:${col}">${val}</div></div>`;
-        return cardc(`<div style="font-size:13px;font-weight:800;color:${C.text};margin-bottom:2px">Retention model — the normalization source of truth <span style="font-size:10px;font-weight:400;color:${C.mute}">(${H.maxT}s max · 211 videos · all emergent, nothing chosen)</span></div>
-            <div style="font-size:10.5px;color:${C.mute};margin-bottom:9px;line-height:1.55">Everything is measured as <b style="color:#f87171">hazard</b> = fraction of the <i>current</i> audience lost per second (so a 5-pt drop at 80% = 6.25%, at 30% = 16.7% — handled), per real second (so 10% over 10s ≠ over 30s). <b style="color:${C.cyan}">Survival</b> is rewatch-decomposed (replays separated from real decay). The <b style="color:#fbbf24">priority</b> of each second emerges from the curve itself — the watch-time saved by flattening hazard there (early compounds across everyone downstream) — <b>no weights were chosen</b>. Signal effects get measured as <i>residual</i> hazard vs this baseline, weighted by this priority.</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${stat('Audience lost in first 5%', ((1 - s5) * 100).toFixed(0) + '%', '#f87171')}${stat('Half the audience gone by', halfPct + '% of video', C.orange)}${stat('Hazard: early vs mid', '~' + Math.round((haz[2] || 0.1) / (haz[50] || 0.007)) + '×', '#f87171')}${stat('Priority: first vs last second', '~' + Math.round((prio[0] || 1) / (prio[P - 1] || 0.007)) + '×', '#fbbf24')}</div>
+        const H = RTGH, A = rtgHazArr(), N = A.N, W = 820, ht = 196, pad = 34, top = 14, yH = ht - 30;
+        const X = p => pad + p / (N - 1) * (W - pad - 12);
+        const hmax = Math.max(...A.haz), yh = v => yH - (v / hmax) * (yH - top), yu = v => yH - v * (yH - top);
+        const survA = `M ${X(0)} ${yH} ` + A.surv.map((s, p) => `L ${X(p).toFixed(1)} ${yu(s).toFixed(1)}`).join(' ') + ` L ${X(N - 1)} ${yH} Z`;
+        const hazL = 'M ' + A.haz.map((v, p) => `${X(p).toFixed(1)} ${yh(v).toFixed(1)}`).join(' L ');
+        const prioL = 'M ' + A.prio.map((v, p) => `${X(p).toFixed(1)} ${yu(v).toFixed(1)}`).join(' L ');
+        const a = Math.min(st.hazA | 0, N - 1), b = Math.min(st.hazB | 0, N - 1);
+        const tick = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(f * (N - 1)));
+        const grid = tick.map(p => `<line x1="${X(p)}" y1="${top}" x2="${X(p)}" y2="${yH}" stroke="${C.border}" opacity="0.5"/><text x="${X(p)}" y="${ht - 10}" fill="${C.mute}" font-size="9" text-anchor="middle">${p}${A.unit}</text>`).join('');
+        const mark = (p, id, col) => `<line id="${id}" x1="${X(p).toFixed(1)}" y1="${top}" x2="${X(p).toFixed(1)}" y2="${yH}" stroke="${col}" stroke-width="1.5" opacity="0.9"/>`;
+        const pill = (id, lab, on) => `<span data-hazunit="${id}" style="cursor:pointer;border:1px solid ${on ? C.accent : C.border};background:${on ? C.accent + '1e' : 'transparent'};color:${on ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
+        // duration-conflation overlay
+        const cf = H.conflation, gs = H.grp, sk = A.unit === '%' ? 'surv_pct' : 'surv_sec';
+        const gln = (arr, col) => 'M ' + arr.map((v, p) => v == null ? null : `${X(Math.min(p, N - 1)).toFixed(1)} ${yu(v).toFixed(1)}`).filter(Boolean).join(' L ');
+        return cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px">
+              <div style="font-size:13px;font-weight:800;color:${C.text}">Retention model — the normalization source of truth</div>
+              <div style="display:flex;gap:5px">${pill('pct', '% of video', A.unit === '%')}${pill('sec', 'absolute seconds', A.unit === 's')}</div></div>
+            <div style="font-size:10.5px;color:${C.mute};margin-bottom:9px;line-height:1.55">Measured as <b style="color:#f87171">hazard</b> = fraction of the <i>current</i> audience lost per second (5-pt drop at 80% = 6.25%, at 30% = 16.7% — handled; per real second). <b style="color:${C.cyan}">Survival</b> is rewatch-decomposed. The <b style="color:#fbbf24">priority</b> of each position emerges from the curve (watch-time saved by flattening hazard there — early compounds) — <b>no weights chosen</b>. Compare any two positions below.</div>
             <svg viewBox="0 0 ${W} ${ht}" style="width:100%">${grid}
               <line x1="${pad}" y1="${yH}" x2="${W - 12}" y2="${yH}" stroke="${C.border2}"/>
               <path d="${survA}" fill="${C.cyan}1e" stroke="${C.cyan}" stroke-width="1.3"/>
               <path d="${hazL}" fill="none" stroke="#f87171" stroke-width="1.6"/>
               <path d="${prioL}" fill="none" stroke="#fbbf24" stroke-width="1.6" stroke-dasharray="4 2"/>
+              ${mark(a, 'rtg-markA', C.accent)}${mark(b, 'rtg-markB', C.purple)}
               <text x="${pad}" y="11" fill="${C.cyan}" font-size="10" font-weight="700">survival</text>
-              <text x="${pad + 70}" y="11" fill="#f87171" font-size="10" font-weight="700">hazard (decay rate)</text>
-              <text x="${pad + 195}" y="11" fill="#fbbf24" font-size="10" font-weight="700">priority weight</text></svg>
-            <div style="font-size:9.5px;color:${C.mute};margin-top:5px;line-height:1.5">The hazard spike at the very start is the rapid early bleed (stabilizing it is the biggest lever); the spike at the end is the outro. Priority falls from 1.0 to ~0 because flattening late saves almost no watch-time — <b>10% lost early can outweigh 50% lost late</b>, which is why it can't be a flat or front/back weighting.</div>`, 14);
+              <text x="${pad + 70}" y="11" fill="#f87171" font-size="10" font-weight="700">hazard</text>
+              <text x="${pad + 145}" y="11" fill="#fbbf24" font-size="10" font-weight="700">priority</text></svg>
+            <div style="background:${C.card2};border-radius:10px;padding:10px 13px;margin-top:8px">
+              <div id="rtg-hazratio" style="font-size:11px;color:${C.text};line-height:1.5;margin-bottom:7px">${rtgHazCompareText()}</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="width:14px;color:${C.accent};font-weight:800">A</span><input id="rtg-hazA" type="range" min="0" max="${N - 1}" value="${a}" style="flex:1;accent-color:${C.accent};cursor:pointer"></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;color:${C.purple};font-weight:800">B</span><input id="rtg-hazB" type="range" min="0" max="${N - 1}" value="${b}" style="flex:1;accent-color:${C.purple};cursor:pointer"></div>
+            </div>
+            <div style="font-size:9.5px;color:${C.mute};margin-top:8px;line-height:1.5"><b style="color:${C.text}">Duration confound:</b> 5% of a 30s video (1.5s) ≠ 5% of a 180s video (9s). Splitting videos at the median (${H.median_dur}s) and overlaying short vs long, the survival spread over the first stretch is <b>${cf.pct_spread}</b> by % vs <b>${cf.sec_spread}</b> by second — so early retention is marginally more <b>${cf.pct_spread <= cf.sec_spread ? '%-locked (fraction)' : 'second-locked (absolute time)'}</b>, but both carry spread, so the toggle lets you read either. <span style="color:${C.dim}">(short ${gs.short[sk] ? '—' : ''} vs long, in the active unit.)</span>
+              <svg viewBox="0 0 ${W} 70" style="width:100%;margin-top:3px"><path d="${gln(gs.short[sk], C.green)}" fill="none" stroke="${C.green}" stroke-width="1.3" opacity="0.85"/><path d="${gln(gs.long[sk], C.orange)}" fill="none" stroke="${C.orange}" stroke-width="1.3" opacity="0.85"/><text x="${pad}" y="11" fill="${C.green}" font-size="9" font-weight="700">short (&lt;${H.median_dur}s)</text><text x="${pad + 90}" y="11" fill="${C.orange}" font-size="9" font-weight="700">long</text></svg></div>`, 14);
+    }
+    function rtgUpdateHaz() { try { const el = window.document.getElementById('rtg-hazpanel'); if (el) el.innerHTML = rtgHazardPanel(); } catch (e) { } }
+    function rtgUpdateHazCompare() {
+        try { const A = rtgHazArr(), W = 820, pad = 34, N = A.N, X = p => pad + p / (N - 1) * (W - pad - 12);
+            const r = window.document.getElementById('rtg-hazratio'); if (r) r.innerHTML = rtgHazCompareText();
+            const mA = window.document.getElementById('rtg-markA'); if (mA) { const x = X(Math.min(st.hazA | 0, N - 1)).toFixed(1); mA.setAttribute('x1', x); mA.setAttribute('x2', x); }
+            const mB = window.document.getElementById('rtg-markB'); if (mB) { const x = X(Math.min(st.hazB | 0, N - 1)).toFixed(1); mB.setAttribute('x1', x); mB.setAttribute('x2', x); }
+        } catch (e) { }
     }
     function renderData() {
         const v = rows();
@@ -264,7 +295,6 @@ const JarvisRetention = (function () {
         const kr = DATA.videos.map(r => r.keep_rate).filter(x => x != null).sort((a, b) => a - b);
         const krMed = kr.length ? kr[kr.length >> 1] : 0;
         return summaryBanner() + `<div style="font-size:12px;color:${C.dim};margin-bottom:12px">${DATA.meta.n} videos with the <b style="color:${C.cyan}">real Keep rate</b> (Viewed-vs-Swiped-Away, scraped from Studio) + retention curve + views. Keep rate ${kr.length ? kr[0] : '—'}–${kr.length ? kr[kr.length - 1] : '—'}% (median ${krMed}%). Click any row for its curve + YouTube link to confirm in Studio.</div>
-            ${rtgHazardPanel()}
             <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
                 <input data-q value="${esc(st.q)}" placeholder="search title…" style="background:${C.card2};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:7px 11px;font-size:13px;width:220px;font-family:inherit"/>
                 <span style="font-size:11px;color:${C.mute};margin-left:auto">${v.length} shown · click a header to sort</span></div>
@@ -303,6 +333,7 @@ const JarvisRetention = (function () {
     function renderQ2() {
         const Q = S.Q2;
         let h = h2c('② Shape — does the curve shape matter beyond the average?', 'Same average % viewed, different shape: an early cliff vs a gentle slide. Functional-PCA pulls out the shape that\'s independent of the level.');
+        h += `<div id="rtg-hazpanel">${rtgHazardPanel()}</div>`;
         if (Q.mean_curve && Q.mode1_plus) h += cardc(`<div style="font-weight:700;color:${C.text};margin-bottom:4px">What "shape" looks like</div>
             <div style="font-size:11px;color:${C.mute};margin-bottom:8px">The dominant shape mode, drawn as ± deformations of your average curve. Same area under the line — only <i>where</i> the drop lands changes.</div>
             ${curvesSvg([{ curve: Q.mode1_plus, color: C.green, label: 'flatter / holds late', dash: '5 3' }, { curve: Q.mean_curve, color: C.dim, label: 'average', w: 2.5 }, { curve: Q.mode1_minus, color: C.orange, label: 'early cliff', dash: '5 3' }])}`);
@@ -1379,6 +1410,7 @@ const JarvisRetention = (function () {
         const sig = e.target.closest('[data-rtgsignal]'); if (sig) { st.rtgSignal = sig.getAttribute('data-rtgsignal'); rtgUpdateSignal(); return; }
         const epj = e.target.closest('[data-rtgproj]'); if (epj) { st.rtgProj = epj.getAttribute('data-rtgproj'); rtgUpdateEmbedMap(); return; }
         const ef = e.target.closest('[data-rtgembfocus]'); if (ef) { st.rtgEmbFocus = ef.getAttribute('data-rtgembfocus'); rtgUpdateEmbedMap(); return; }
+        const hu = e.target.closest('[data-hazunit]'); if (hu) { st.hazUnit = hu.getAttribute('data-hazunit'); rtgUpdateHaz(); return; }
         if (e.target.closest('[data-reload]')) { err = null; DATA = null; mount(root); return; }
         if (e.target.closest('[data-novboxes]')) { st.novBoxes = !(st.novBoxes !== false); render(); return; }
         if (e.target.closest('[data-novclose]')) { st.novSel = null; render(); return; }
@@ -1391,6 +1423,8 @@ const JarvisRetention = (function () {
     }
     function onInput(e) {
         if (e.target.id === 'rtg-minstr') { st.rtgMinStr = +e.target.value; rtgUpdateThresh(); return; }
+        if (e.target.id === 'rtg-hazA') { st.hazA = +e.target.value; rtgUpdateHazCompare(); return; }
+        if (e.target.id === 'rtg-hazB') { st.hazB = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-seek') { rtgSeek(+e.target.value); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-pf')) { st.pvals = st.pvals || {}; st.pvals[e.target.getAttribute('data-pf')] = +e.target.value; updatePredict(); return; }
         if (e.target.closest('[data-q]')) { st.q = e.target.value; render(); }
@@ -1405,7 +1439,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=62'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=63'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');

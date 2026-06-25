@@ -100,7 +100,42 @@ views_prio = beta[1 + Cz.shape[1]:]   # per position-bin coefficient (assoc of l
 print("\nVIEWS priority by position-bin (−coef: lower hazard there ↔ more views; confound-controlled, associational):")
 print("  " + " ".join(f"{-views_prio[b]:+.2f}" for b in range(B)))
 
-out = {'P': P, 'maxT': int(maxT),
+# ---- by ABSOLUTE SECOND (the duration confound: 5% of 30s ≠ 5% of 180s) ----
+mean_surv_sec = np.zeros(maxT)
+for t in range(maxT):
+    vals = [data[v]['S'][t] for v in vids if t < data[v]['n']]
+    mean_surv_sec[t] = np.mean(vals) if vals else (mean_surv_sec[t - 1] if t > 0 else 1.0)
+prio_watch_sec = np.array([mean_surv_sec[t:].sum() for t in range(maxT)]); prio_watch_sec /= (prio_watch_sec[0] + 1e-9)
+
+# DISENTANGLE: do short and long videos overlay by SECONDS (absolute) or by % (fractional)?
+med = float(np.median([data[v]['n'] for v in vids]))
+groups = {'short': [v for v in vids if data[v]['n'] < med], 'long': [v for v in vids if data[v]['n'] >= med]}
+
+
+def grpcurves(grp):
+    hp, sp = [[] for _ in range(P)], [[] for _ in range(P)]; hs, ss = [[] for _ in range(maxT)], [[] for _ in range(maxT)]
+    for v in grp:
+        d = data[v]; n = d['n']; pos = (np.arange(n) / max(1, n - 1) * (P - 1)).astype(int)
+        for t in range(n):
+            hp[pos[t]].append(d['lam'][t]); sp[pos[t]].append(d['S'][t]); hs[t].append(d['lam'][t]); ss[t].append(d['S'][t])
+    f = lambda L: [round(float(np.mean(x)), 4) if x else None for x in L]
+    return {'haz_pct': f(hp), 'surv_pct': f(sp), 'haz_sec': f(hs), 'surv_sec': f(ss)}
+
+
+grp = {k: grpcurves(g) for k, g in groups.items()}
+# conflation metric: spread between short & long, by SEC vs by % over the first 6 units
+def spread(a, b, k):
+    aa = [a[i] for i in range(k) if a[i] is not None and b[i] is not None]; bb = [b[i] for i in range(k) if a[i] is not None and b[i] is not None]
+    return float(np.mean([abs(x - y) for x, y in zip(aa, bb)])) if aa else 0.0
+sp_sec = spread(grp['short']['surv_sec'], grp['long']['surv_sec'], 6)
+sp_pct = spread(grp['short']['surv_pct'], grp['long']['surv_pct'], 6)
+print(f"\nDURATION CONFOUND — short vs long survival spread over first 6 units: by-second {sp_sec:.3f} vs by-% {sp_pct:.3f}")
+print(f"  → early retention is more {'ABSOLUTE-TIME locked (use seconds early)' if sp_sec < sp_pct else 'FRACTION locked (use %)'}")
+
+out = {'P': P, 'maxT': int(maxT), 'median_dur': round(med, 1),
+       'mean_survival_sec': [round(float(x), 3) for x in mean_surv_sec],
+       'priority_watch_sec': [round(float(x), 3) for x in prio_watch_sec],
+       'grp': grp, 'conflation': {'sec_spread': round(sp_sec, 3), 'pct_spread': round(sp_pct, 3)},
        'natural_decay_pct': [round(float(x), 4) for x in base_lam_pct],
        'mean_survival_pct': [round(float(x), 3) for x in mean_surv_pct],
        'natural_decay_sec': [round(float(x), 4) for x in base_lam_sec],
