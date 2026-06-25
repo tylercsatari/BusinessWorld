@@ -10,10 +10,10 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTG = null, RTGP = null, RTGD = null, RTGF = null, RTGA = null, RTGS = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgMods: { cv: 1, vv: 1, cc: 1, vc: 1 }, rtgDet: 'declared', rtgLabel: false, rtgPending: null, rtgSignal: 'cv' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cv' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -856,52 +856,6 @@ const JarvisRetention = (function () {
         h += note(`Only <b style="color:${C.orange}">external</b> factors could be true confounds. <b style="color:${C.faint}">Downstream</b> (likes/shares/comments, subs gained) and <b style="color:${C.purple}">audience</b> (sub-fraction) correlations are expected — they're consequences of the same content that drives retention, not causes, so they don't threaten the novelty findings. <b style="color:${C.cyan}">Content</b> (duration) is intrinsic. The positive-control ⚙ volume targets show metadata barely predicts even views within one account.`, C.dim);
         return h;
     }
-    const RMODC = { cv: '#38bdf8', vv: '#34d399', cc: '#a78bfa', vc: '#fbbf24' };
-    function rtgArc(v) {
-        // two-track arc diagram: V track (top) + C track (bottom), arcs = directed dependencies
-        const n = v.n_sec; if (!n) return `<div style="color:${C.mute};padding:20px">no tokens</div>`;
-        const W = 820, pad = 34, innerW = W - 2 * pad, yV = 64, yC = 168, H = 232;
-        const x = s => pad + (n <= 1 ? 0 : s / (n - 1) * innerW);
-        const edges = (v.edges || []).filter(e => st.rtgMods[e.mod]);
-        // endpoints actually used (so we only mark real refs/grats)
-        const srcMark = {}, dstMark = {};
-        edges.forEach(e => { const sy = e.mod[0] === 'c' ? yC : yV, dy = e.mod[1] === 'c' ? yC : yV;
-            srcMark[e.mod[0] + ':' + e.i] = sy; dstMark[e.mod[1] + ':' + e.j] = dy; });
-        const sOp = s => Math.max(0.3, Math.min(0.92, (s - 0.05) / 0.4 + 0.3));
-        let arcs = '';
-        edges.forEach(e => {
-            const xi = x(e.i), xj = x(e.j), col = RMODC[e.mod], op = sOp(e.s), sw = 1 + Math.min(2.4, Math.max(0, e.z) * 30);
-            if (e.mod === 'vv' || e.mod === 'cc') {
-                const yy = e.mod === 'vv' ? yV : yC, bulge = Math.min(46, 10 + (xj - xi) * 0.35) * (e.mod === 'vv' ? -1 : 1);
-                arcs += `<path d="M ${xi} ${yy} Q ${(xi + xj) / 2} ${yy + bulge} ${xj} ${yy}" fill="none" stroke="${col}" stroke-width="${sw}" opacity="${op}"><title>${MOD_T(e)}</title></path>`;
-            } else {
-                const ys = e.mod[0] === 'c' ? yC : yV, yd = e.mod[1] === 'c' ? yC : yV, mx = (xi + xj) / 2;
-                arcs += `<path d="M ${xi} ${ys} C ${xi} ${(ys + yd) / 2} ${mx} ${yd} ${xj} ${yd}" fill="none" stroke="${col}" stroke-width="${sw}" opacity="${op}"><title>${MOD_T(e)}</title></path>`;
-            }
-        });
-        // markers: triangle = reference (source), circle = gratification (dst) — all clickable
-        let marks = '';
-        Object.keys(srcMark).forEach(k => { const i = +k.split(':')[1], yy = srcMark[k], xi = x(i); marks += `<path data-rtgnode="${i}" style="cursor:pointer" d="M ${xi - 4.5} ${yy + (yy === yV ? -7 : 7)} L ${xi + 4.5} ${yy + (yy === yV ? -7 : 7)} L ${xi} ${yy} Z" fill="${C.text}" opacity="0.85"><title>reference at ${i}s — click to inspect + play</title></path>`; });
-        Object.keys(dstMark).forEach(k => { const j = +k.split(':')[1], yy = dstMark[k], xj = x(j); marks += `<circle data-rtgnode="${j}" style="cursor:pointer" cx="${xj}" cy="${yy}" r="4" fill="${C.bg}" stroke="${C.text}" stroke-width="1.5" opacity="0.95"><title>gratification at ${j}s — click to inspect + play</title></circle>`; });
-        // orphans: open loops + payoffs with no partner (dashed orange, no arc)
-        (v.unclosed || []).forEach(u => { const yy = u.mod[0] === 'c' ? yC : yV, xi = x(u.i); marks += `<path data-rtgnode="${u.i}" style="cursor:pointer" d="M ${xi - 4.5} ${yy + (yy === yV ? -7 : 7)} L ${xi + 4.5} ${yy + (yy === yV ? -7 : 7)} L ${xi} ${yy} Z" fill="none" stroke="${C.orange}" stroke-width="1.1" stroke-dasharray="2 1.5"><title>unclosed reference (open loop) at ${u.i}s — click to inspect</title></path>`; });
-        (v.orphan_grat || []).forEach(t => { const xi = x(t); marks += `<circle data-rtgnode="${t}" style="cursor:pointer" cx="${xi}" cy="${yV}" r="4" fill="none" stroke="${C.orange}" stroke-width="1.4" stroke-dasharray="2 1.5"><title>orphan gratification (no setup) at ${t}s — click to inspect</title></circle>`; });
-        const ph = `<line class="rtg-ph" data-x0="${pad}" data-x1="${W - pad}" data-n="${n}" x1="${pad}" y1="12" x2="${pad}" y2="${H - 18}" stroke="#fff" stroke-width="1.5" opacity="0" style="pointer-events:none"/>`;
-        // second ticks + speech shading on C track
-        let ticks = '';
-        for (let s = 0; s < n; s++) { const xs = x(s); ticks += `<line x1="${xs}" y1="${yV}" x2="${xs}" y2="${yV}" />`;
-            if (v.has_c && v.has_c[s]) ticks += `<rect x="${xs - 1.4}" y="${yC - 3}" width="2.8" height="6" fill="${RMODC.cc}" opacity="0.5"/>`; }
-        const axisLab = [0, Math.floor((n - 1) / 4), Math.floor((n - 1) / 2), Math.floor(3 * (n - 1) / 4), n - 1].map(s =>
-            `<text x="${x(s)}" y="${H - 6}" fill="${C.mute}" font-size="9" text-anchor="middle">${s}s</text>`).join('');
-        return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:10px">
-            <line x1="${pad}" y1="${yV}" x2="${W - pad}" y2="${yV}" stroke="${C.border2}" stroke-width="1.5"/>
-            <line x1="${pad}" y1="${yC}" x2="${W - pad}" y2="${yC}" stroke="${C.border2}" stroke-width="1.5"/>
-            <text x="6" y="${yV - 10}" fill="${C.dim}" font-size="11" font-weight="700">VISUAL</text>
-            <text x="6" y="${yC + 22}" fill="${C.dim}" font-size="11" font-weight="700">CONCEPT</text>
-            ${arcs}${marks}${ph}${axisLab}</svg>`;
-    }
-    function MOD_T(e) { return `${RTGA.mod_label[e.mod]} · ${e.i}s → ${e.j}s · strength ${e.s}`; }
-    const RMODS = ['cv', 'vv', 'cc', 'vc'];
     // ---- synced YouTube player + playhead that crosses the RTG channels ----
     let rtgPlayer = null, rtgYTLoading = false, rtgYTCbs = [], rtgRAF = null, rtgCurT = 0, rtgLastSec = -1;
     function rtgLoadYT(cb) {
@@ -986,89 +940,7 @@ const JarvisRetention = (function () {
             ${uncl.map(u => `<div style="font-size:10px;color:${C.orange};margin-top:3px">⌀ unclosed — best forward score ${u.r}, below the null ceiling (${RTGA.mod_label[u.mod]})</div>`).join('')}
             ${orph ? `<div style="font-size:10px;color:${C.orange};margin-top:3px">◌ orphan gratification — a surprise spike bound to no earlier reference</div>` : ''}`;
     }
-    function rtgHeat(v) {
-        const G = RTGA.meta.ds_grid, n = v.n_sec, cell = 9, sz = G * cell;
-        const grid = m => { const mat = v.mat[m]; let cells = '';
-            for (let a = 0; a < G; a++) for (let b = 0; b < G; b++) { const q = mat[a * G + b], xx = b * cell, yy = a * cell;
-                let fill; if (q === -128) fill = C.card2; else { const t = q / 127, al = Math.min(0.95, Math.abs(t) * 1.3 + 0.05); fill = t >= 0 ? `rgba(248,113,113,${al})` : `rgba(56,189,248,${al})`; }
-                cells += `<rect x="${xx}" y="${yy}" width="${cell}" height="${cell}" fill="${fill}"/>`; }
-            const s2b = s => Math.min(G - 1, Math.floor(s / n * G));
-            const ev = v.edges.filter(e => e.mod === m).map(e => `<circle cx="${s2b(e.j) * cell + cell / 2}" cy="${s2b(e.i) * cell + cell / 2}" r="2.6" fill="none" stroke="#fff" stroke-width="1.1"/>`).join('');
-            return `<div><div style="font-size:10px;color:${RMODC[m]};font-weight:700;margin-bottom:3px">${RTGA.mod_label[m]}</div>
-                <svg viewBox="-12 0 ${sz + 14} ${sz + 14}" style="width:100%;max-width:210px">${cells}${ev}
-                <text x="-3" y="${sz / 2}" fill="${C.mute}" font-size="8" text-anchor="middle" transform="rotate(-90 -3 ${sz / 2})">reference i →</text>
-                <text x="${sz / 2}" y="${sz + 11}" fill="${C.mute}" font-size="8" text-anchor="middle">gratification j →</text></svg></div>`; };
-        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Dependency matrix A[i,j] — the causal attention map</div>
-            <div style="font-size:10px;color:${C.mute};margin-bottom:8px">${st.rtgDet === 'pred' ? 'Learned directed <b>PMI</b> = log p(z<sub>j</sub>|context≤i)/p(z<sub>j</sub>) from the CPC critic' : 'Residual affinity (double-centred + gap-detrended)'}, downsampled to ${G}×${G}. Row = reference second i, column = gratification second j. <span style="color:rgba(248,113,113,0.95)">red</span> = ${st.rtgDet === 'pred' ? 'j is predicted by i above the corpus baseline' : 'specific positive binding'} · <span style="color:rgba(56,189,248,0.95)">blue</span> = below expectation · dark = masked. ○ = a kept edge.</div>
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">${RMODS.map(grid).join('')}</div>`);
-    }
-    function rtgTension(v) {
-        const t = v.tension, n = v.n_sec, W = 820, H = 124, pad = 30, mx = Math.max(0.001, ...t);
-        const X = s => pad + (n <= 1 ? 0 : s / (n - 1) * (W - pad - 12)), Y = val => H - 24 - (val / mx) * (H - 40);
-        const area = `M ${X(0)} ${Y(0)} ` + t.map((val, i) => `L ${X(i).toFixed(1)} ${Y(val).toFixed(1)}`).join(' ') + ` L ${X(n - 1)} ${Y(0)} Z`;
-        const drops = (v.drops || []).map(d => `<line x1="${X(d.t)}" y1="22" x2="${X(d.t)}" y2="${H - 24}" stroke="${C.green}" stroke-width="1" opacity="0.35"/><circle cx="${X(d.t)}" cy="${Y(t[d.t] || 0)}" r="3" fill="${C.green}"><title>gratification at ${d.t}s resolves ${d.amt}</title></circle>`).join('');
-        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Tension — unresolved reference mass over time</div>
-            <div style="font-size:10px;color:${C.mute};margin-bottom:6px">Rises when a reference opens a loop, drops (<span style="color:${C.green}">green</span>) when a gratification resolves one. Open loops that never close stay elevated to the end.</div>
-            <svg viewBox="0 0 ${W} ${H}" style="width:100%"><path d="${area}" fill="${C.purple}30" stroke="${C.purple}" stroke-width="1.5"/>${drops}
-            <line class="rtg-ph" data-x0="${pad}" data-x1="${W - 12}" data-n="${n}" x1="${pad}" y1="14" x2="${pad}" y2="${H - 22}" stroke="#fff" stroke-width="1.5" opacity="0" style="pointer-events:none"/>
-            <text x="${pad}" y="${H - 6}" fill="${C.mute}" font-size="9">0s</text><text x="${W - 10}" y="${H - 6}" fill="${C.mute}" font-size="9" text-anchor="end">${n - 1}s</text></svg>`);
-    }
-    function rtgSurprise(v) {
-        const s = v.vsurp, n = v.n_sec, W = 820, H = 110, pad = 30, mx = Math.max(0.001, ...s);
-        const X = i => pad + (n <= 1 ? 0 : i / (n - 1) * (W - pad - 12)), Y = val => H - 20 - (val / mx) * (H - 34);
-        const line = `M ` + s.map((val, i) => `${X(i).toFixed(1)} ${Y(val).toFixed(1)}`).join(' L ');
-        const orph = new Set(v.orphan_grat || []);
-        const ev = (v.events || []).map(t => `<circle cx="${X(t)}" cy="${Y(s[t])}" r="3.2" fill="${orph.has(t) ? C.orange : C.yellow}"><title>${orph.has(t) ? 'orphan gratification (no setup)' : 'event boundary'} at ${t}s</title></circle>`).join('');
-        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Surprise / event boundaries — "where something happened"</div>
-            <div style="font-size:10px;color:${C.mute};margin-bottom:6px">Per-second visual change (1 − cos of consecutive frames). Spikes = reveals / cuts / transitions. <span style="color:${C.yellow}">●</span> event · <span style="color:${C.orange}">●</span> orphan gratification (a spike bound to no earlier reference).</div>
-            <svg viewBox="0 0 ${W} ${H}" style="width:100%"><path d="${line}" fill="none" stroke="${C.cyan}" stroke-width="1.3"/>${ev}
-            <line class="rtg-ph" data-x0="${pad}" data-x1="${W - 12}" data-n="${n}" x1="${pad}" y1="12" x2="${pad}" y2="${H - 18}" stroke="#fff" stroke-width="1.5" opacity="0" style="pointer-events:none"/>
-            <text x="${pad}" y="${H - 4}" fill="${C.mute}" font-size="9">0s</text><text x="${W - 10}" y="${H - 4}" fill="${C.mute}" font-size="9" text-anchor="end">${n - 1}s</text></svg>`);
-    }
-    function rtgMathCard() {
-        const b = RTGS.meta.baseline, E = RTGS.existence;
-        const row = m => `<tr><td style="padding:3px 10px 3px 0;color:${RMODC[m]};font-weight:700">${E[m].label}</td><td style="padding:3px 10px">${b[m]}</td><td style="padding:3px 10px">${E[m].real.toFixed(4)}</td><td style="padding:3px 10px">${E[m].shuf.toFixed(4)}</td><td style="padding:3px 10px;color:${E[m].delta > 0 ? C.green : C.orange}">${sgn(E[m].delta, 4)}</td><td style="padding:3px 10px">${E[m].p < 0.001 ? '<0.001' : E[m].p.toFixed(3)}</td></tr>`;
-        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:6px">All the math, written out</div>
-            <div style="font-family:ui-monospace,monospace;font-size:11px;color:${C.dim};line-height:1.85;background:${C.card2};border-radius:8px;padding:11px 13px;margin-bottom:10px;overflow-x:auto">
-              <b style="color:${C.text}">tokens</b>   V<sub>t</sub> = CLIP-image(frame t) · C<sub>t</sub> = CLIP-text(words in second t)  — L2-normalised, shared space<br>
-              <b style="color:${C.text}">similarity</b>   S<sub>xy</sub>[i,j] = cos(x<sub>i</sub>, y<sub>j</sub>)   for x,y ∈ {C,V},  j > i+${RTG.meta.min_gap}  (causal)<br>
-              <b style="color:${C.text}">baseline</b>   B<sub>xy</sub> = mean cos over cross-video token pairs   →   dep = S − B<br>
-              <b style="color:${C.text}">residual</b>   R = S − rowmean<sub>i</sub> − colmean<sub>j</sub> + grandmean   then   R[i,j] −= mean(same-gap cells)<br>
-              <b style="color:${C.text}">score</b>   rowpeak = mean<sub>i</sub>( max<sub>j</sub> R[i,j] − mean<sub>j</sub> R[i,j] )   — does each reference have ONE standout gratification<br>
-              <b style="color:${C.text}">null</b>   shuffle dst time order, recompute R, ×${RTG.meta.n_shuffles}   →   exists iff real ≫ shuffled<br>
-              <b style="color:${C.text}">edge i→j</b>   kept iff R[i,j] > 99.5ᵗʰ-pct of shuffled R (per video, per channel)<br>
-              <b style="color:${C.text}">tension(t)</b> = Σ refStrength · 1[loop open at t]   ·   heatmap int8 = round(R / ${RTG.meta.mat_scale} · 127)
-            </div>
-            <table style="border-collapse:collapse;font-size:11px;color:${C.text}"><thead><tr style="color:${C.mute};text-align:left;border-bottom:1px solid ${C.border}">
-              <th style="padding:3px 10px 3px 0">channel</th><th style="padding:3px 10px">baseline B</th><th style="padding:3px 10px">real</th><th style="padding:3px 10px">shuffled null</th><th style="padding:3px 10px">Δ</th><th style="padding:3px 10px">sign-test p</th></tr></thead>
-              <tbody>${RMODS.map(row).join('')}</tbody></table>
-            <div style="font-size:10px;color:${C.mute};margin-top:6px">Every Δ ≤ 0 → real never beats the null. That's the v0 result: similarity carries no directed binding above chance.</div>`);
-    }
-    function rtgBars() {
-        const E = RTGS.existence, mods = ['cv', 'vv', 'cc', 'vc'];
-        const maxv = Math.max(0.001, ...mods.flatMap(m => [E[m].real, E[m].shuf]));
-        const rows = mods.map(m => { const e = E[m], wr = Math.max(1, e.real / maxv * 180), ws = Math.max(1, e.shuf / maxv * 180), sig = e.p < 0.001 ? '★★' : e.p < 0.05 ? '★' : '';
-            return `<div style="margin-bottom:9px">
-                <div style="display:flex;justify-content:space-between;font-size:11px;color:${C.text};margin-bottom:3px"><b style="color:${RMODC[m]}">${e.label}</b><span style="color:${e.delta > 0 && e.p < 0.05 ? C.green : C.mute}">Δ ${sgn(e.delta, 4)} · ${Math.round(e.frac_pos * 100)}% of videos · p ${e.p < 0.001 ? '<0.001' : e.p.toFixed(3)} ${sig}</span></div>
-                <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span style="width:42px;font-size:9px;color:${C.mute};text-align:right">real</span><div style="height:10px;width:${wr}px;background:${RMODC[m]};border-radius:2px"></div><span style="font-size:9px;color:${C.dim}">${e.real.toFixed(4)}</span></div>
-                <div style="display:flex;align-items:center;gap:6px"><span style="width:42px;font-size:9px;color:${C.mute};text-align:right">shuffled</span><div style="height:10px;width:${ws}px;background:${C.border2};border-radius:2px"></div><span style="font-size:9px;color:${C.mute}">${e.shuf.toFixed(4)}</span></div></div>`; }).join('');
-        return rows;
-    }
-    function rtgGapChart() {
-        const g = RTGS.gap_curve, m = 'cv', gaps = g.gaps, R = g.real[m], Sh = g.shuf[m];
-        const W = 360, Hh = 130, pad = 28; const xs = gaps;
-        const all = R.concat(Sh).filter(v => v != null); const mn = Math.min(0, ...all), mx = Math.max(...all, 0.01);
-        const X = i => pad + i / (xs.length - 1) * (W - pad - 8);
-        const Y = val => Hh - pad - (val - mn) / (mx - mn) * (Hh - pad - 8);
-        const line = (arr, col, dash) => `<path d="${arr.map((val, i) => (val == null ? '' : (i && arr[i - 1] != null ? 'L' : 'M') + ' ' + X(i).toFixed(1) + ' ' + Y(val).toFixed(1))).filter(Boolean).join(' ')}" fill="none" stroke="${col}" stroke-width="2" ${dash ? 'stroke-dasharray="4 3"' : ''}/>`;
-        const zeroY = Y(0);
-        return `<svg viewBox="0 0 ${W} ${Hh}" style="width:100%;max-width:${W}px;height:auto">
-            <line x1="${pad}" y1="${zeroY}" x2="${W - 8}" y2="${zeroY}" stroke="${C.border2}" stroke-dasharray="2 2"/>
-            ${line(Sh, C.mute, true)}${line(R, RMODC.cv, false)}
-            <text x="${pad}" y="12" fill="${RMODC.cv}" font-size="10" font-weight="700">concept→visual: real (solid) vs shuffled (dashed)</text>
-            <text x="${pad}" y="${Hh - 4}" fill="${C.mute}" font-size="9">gap ${xs[0]}s</text><text x="${W - 8}" y="${Hh - 4}" fill="${C.mute}" font-size="9" text-anchor="end">${xs[xs.length - 1]}s</text></svg>`;
-    }
-    // ---- EMERGENCE view (declared / SigLIP2): full field + clusters, nothing labelled ----
+    // ---- EMERGENCE view (declared / Gemini): full field + clusters, nothing labelled ----
     const tcol = th => th < 0 ? C.card2 : THREAD_COLORS[((th % THREAD_COLORS.length) + THREAD_COLORS.length) % THREAD_COLORS.length];
     function rtgPlayerCard(v) {
         return cardc(`<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
@@ -1102,7 +974,7 @@ const JarvisRetention = (function () {
         const ax = [0, n >> 2, n >> 1, (3 * n) >> 2, n - 1].map(s => `<text x="${(pad + s * cell + cell / 2).toFixed(0)}" y="${yC + ch + 13}" fill="${C.mute}" font-size="9" text-anchor="middle">${s}s</text>`).join('');
         const legend = Array.from({ length: v.n_threads }, (_, t) => `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:8px"><span style="width:9px;height:9px;border-radius:2px;background:${tcol(t)};display:inline-block"></span><span style="font-size:9px;color:${C.mute}">${t}</span></span>`).join('');
         return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Emergent threads over time — same colour = same cluster</div>
-            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Every second coloured by which cluster it fell into (k-means in SigLIP2 space — no thresholds, nothing called a reference or gratification). When a colour appears on the <b style="color:${C.dim}">C</b>oncept track and then later on the <b style="color:${C.dim}">V</b>isual track, a spoken idea and its later depiction fell into the same cluster — a loop that <i>emerged</i>. Click a second to inspect & play.</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Every second coloured by which cluster it fell into (k-means in Gemini space — no thresholds, nothing called a reference or gratification). When a colour appears on the <b style="color:${C.dim}">C</b>oncept track and then later on the <b style="color:${C.dim}">V</b>isual track, a spoken idea and its later depiction fell into the same cluster — a loop that <i>emerged</i>. Click a second to inspect & play.</div>
             <svg viewBox="0 0 ${W} ${yC + ch + 20}" style="width:100%">
               <text x="2" y="${yV + ch / 2 + 4}" fill="${C.dim}" font-size="11" font-weight="800">V</text>
               <text x="2" y="${yC + ch / 2 + 4}" fill="${C.dim}" font-size="11" font-weight="800">C</text>
@@ -1267,7 +1139,7 @@ const JarvisRetention = (function () {
             return t.tr === 1
                 ? `<rect data-rtgnode="${t.s}" style="cursor:pointer" x="${(cx - 3)}" y="${(cy - 3)}" width="6" height="6" fill="${c}" opacity="0.92"><title>concept ${t.s}s · cluster ${t.th}</title></rect>`
                 : `<circle data-rtgnode="${t.s}" style="cursor:pointer" cx="${cx}" cy="${cy}" r="3.6" fill="${c}" opacity="0.8"><title>visual ${t.s}s · cluster ${t.th}</title></circle>`; }).join('');
-        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">The cluster geometry — moments in SigLIP2 space</div>
+        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">The cluster geometry — moments in Gemini space</div>
             <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Every second's <span style="color:${C.dim}">● visual</span> and <span style="color:${C.dim}">▪ concept</span> token, projected to 2D, coloured by emergent cluster. Moments about the same thing group — a spoken word and the frame that shows it sit together. This is where the threads come from.</div>
             <svg viewBox="0 0 ${S} ${S}" style="width:100%;max-width:${S}px;background:${C.card2};border-radius:8px">${dots}</svg>`, 12);
     }
@@ -1320,7 +1192,7 @@ const JarvisRetention = (function () {
     }
     function renderRTGEmergence() {
         if (RTGF.meta && RTGF.meta.signals && !RTGF.meta.signals.includes(st.rtgSignal)) st.rtgSignal = RTGF.meta.signal_default || RTGF.meta.signals[0];
-        let h = note(`<b style="color:${C.text}">Emergence, not labelling.</b> No thresholds, nothing stamped "reference" or "gratification". We embed every second — its frame and its spoken words — in SigLIP2's shared space and let k-means find clusters. A <b>thread</b> is just a cluster. A reference→gratification <i>emerges</i> when a thread's colour shows up on the concept track and then later on the visual track. Below: the threads over time, the full field, and the cluster geometry they come from.`, C.cyan);
+        let h = note(`<b style="color:${C.text}">Emergence, not labelling.</b> No thresholds, nothing stamped "reference" or "gratification". We embed every second — its frame and its spoken words — in Gemini's shared space and let k-means find clusters. A <b>thread</b> is just a cluster. A reference→gratification <i>emerges</i> when a thread's colour shows up on the concept track and then later on the visual track. Below: the threads over time, the full field, and the cluster geometry they come from.`, C.cyan);
         if (st.rtgSel != null && RTGF.videos[st.rtgSel]) {
             const v = RTGF.videos[st.rtgSel];
             h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
@@ -1348,121 +1220,10 @@ const JarvisRetention = (function () {
                       <div style="display:flex;height:7px;border-radius:2px;overflow:hidden;margin-top:3px;background:${C.border}">${strip}</div></div></div>`; }).join('')}</div>`);
         return h;
     }
-    function renderRTGExistPred() {
-        const E = RTGP.existence_pred, exists = !!RTGP.exists;
-        const maxa = Math.max(0.001, ...RMODS.flatMap(m => [E[m].learned_acc, E[m].similarity_acc, E[m].shuffled_acc]));
-        const bar = (lbl, val, col) => `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span style="width:62px;font-size:9px;color:${C.mute};text-align:right">${lbl}</span><div style="height:10px;width:${Math.max(1, val / maxa * 165)}px;background:${col};border-radius:2px"></div><span style="font-size:9px;color:${C.dim}">${(val * 100).toFixed(1)}%</span></div>`;
-        const rows = RMODS.map(m => { const e = E[m], win = e.learned_acc > e.shuffled_acc + 0.01 && e.learned_acc > e.similarity_acc + 0.01;
-            return `<div style="margin-bottom:11px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><b style="color:${RMODC[m]}">${e.label}</b><span style="color:${win ? C.green : C.mute}">MI ${e.mi_nats.toFixed(3)} nats · ${win ? 'beats baselines' : 'no edge over baselines'}</span></div>
-                ${bar('learned', e.learned_acc, RMODC[m])}${bar('similarity', e.similarity_acc, C.dim)}${bar('shuffled', e.shuffled_acc, C.border2)}${bar('chance', e.chance_acc, C.border)}</div>`; }).join('');
-        let h = cardc(`<div style="font-size:13px;font-weight:800;color:${C.text};margin-bottom:2px">Step 1 (v1 predictive) — does a directed channel exist, held out?</div>
-            <div style="font-size:11px;color:${C.mute};margin-bottom:10px;line-height:1.5">We train a small <b>CPC critic</b> (causal GRU context + InfoNCE with cross-video negatives) so its score f(c<sub>i</sub>,z<sub>j</sub>) ≈ log p(z<sub>j</sub>|context≤i)/p(z<sub>j</sub>) — the directed <b>PMI</b>. Trained on ${RTGP.meta.n_train} videos, tested on ${RTGP.meta.n_heldout} <b>held-out</b> ones it never saw. A channel exists if the learned critic predicts the true future moment (top-1 over ${RTGP.meta.neg} negatives) better than time-shuffled context, the v0 similarity score, and chance.</div>
-            <div style="background:${exists ? C.green + '14' : C.orange + '14'};border-left:3px solid ${exists ? C.green : C.orange};border-radius:0 8px 8px 0;padding:9px 12px;margin-bottom:10px;font-size:12px;color:${C.text};font-weight:600">${exists ? '✓ ' : '⚠ '}${esc(RTGP.verdict)}</div>
-            ${RTGP.diagnosis ? `<div style="font-size:11px;color:${C.dim};line-height:1.55;margin-bottom:12px;background:${C.card2};border-radius:8px;padding:10px 12px"><b style="color:${C.text}">Why:</b> ${esc(RTGP.diagnosis)}</div>` : ''}
-            <div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:6px">Held-out top-1 prediction accuracy · learned vs baselines (chance ${(E.cv.chance_acc * 100).toFixed(2)}%)</div>${rows}`, 16);
-        return h;
-    }
-    function rtgMathCardPred() {
-        const M = RTGP.meta;
-        return cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:6px">All the math — v1 predictive detector</div>
-            <div style="font-family:ui-monospace,monospace;font-size:11px;color:${C.dim};line-height:1.85;background:${C.card2};border-radius:8px;padding:11px 13px;overflow-x:auto">
-              <b style="color:${C.text}">goal</b>   D(i→j) = I( z<sub>i</sub> ; z<sub>j</sub> | c<sub>&lt;i</sub> )  — directed conditional mutual info (NOT symmetric similarity)<br>
-              <b style="color:${C.text}">context</b>   c<sub>i</sub> = causal GRU over the source channel, seconds 0..i   (hidden ${M.hidden})<br>
-              <b style="color:${C.text}">critic</b>   f(c<sub>i</sub>, z<sub>j</sub>, k) = pred(c<sub>i</sub>, k) · z<sub>j</sub>,   k = j − i   (lag ≤ ${M.max_lag}s)<br>
-              <b style="color:${C.text}">train</b>   InfoNCE:  −log[ e^{f(pos)/τ} / Σ e^{f(neg)/τ} ],   ${M.neg} cross-video negatives, τ=${M.temp}<br>
-              <b style="color:${C.text}">⇒ optimum</b>   f* = log p(z<sub>j</sub>|c<sub>i</sub>) / p(z<sub>j</sub>) = directed <b>PMI</b>   (the heatmap value)<br>
-              <b style="color:${C.text}">surprise</b>   S(j) = −PMI(z<sub>j</sub> | c<sub>j−1</sub>, lag 1)   ·   tension(t) = Σ open-loop PMI<br>
-              <b style="color:${C.text}">existence</b>   held-out top-1 retrieval of the true future vs shuffled-context / similarity / chance<br>
-              <b style="color:${C.text}">data</b>   visual = ${esc(M.visual_encoder || 'clip-vit-base-patch16')} · concept = CLIP-text · PCA-${M.pca_d} · ${M.n_train} train / ${M.n_heldout} held-out · ${M.epochs} epochs · lag ≤${M.max_lag}s
-            </div>
-            <div style="font-size:10px;color:${C.mute};margin-top:6px">v1 = correct model, small data (${RTGP.meta.n} videos, 1fps). v2 = scrape 10⁴–10⁶ Shorts + V-JEPA/CLAP encoders + finer resolution + fine-tuned trunk.</div>`);
-    }
     function renderRTG() {
-        if (!RTG && !RTGP && !RTGD) return cardc(`<div style="padding:30px;text-align:center;color:${C.dim}">Building RTG dependency map… <div style="font-size:11px;color:${C.mute};margin-top:6px">Run <code>principles/rtg_embed.py</code>, <code>rtg_build.py</code>, then <code>rtg_detector.py</code>.</div></div>`);
-        let det = st.rtgDet;
-        if (det === 'pred' && !RTGP) det = 'sim';
-        if (det === 'declared' && !RTGD && !RTGF) det = 'sim';
-        if (det === 'sim' && !RTG) det = (RTGF || RTGD) ? 'declared' : 'pred';
-        RTGA = det === 'pred' ? RTGP : det === 'declared' ? RTGD : RTG;
-        RTGS = det === 'declared' ? RTGD : RTG;          // sim-schema dataset for the shuffle panels
-        const isP = det === 'pred';
-        let h = '';
-        // ---- detector toggle ----
-        const detPill = (id, lab, on, avail) => `<span ${avail ? `data-rtgdet="${id}"` : ''} style="cursor:${avail ? 'pointer' : 'default'};border:1px solid ${on ? C.accent : C.border};background:${on ? C.accent + '1e' : 'transparent'};color:${on ? C.accent : avail ? C.dim : C.faint};border-radius:7px;padding:4px 11px;font-size:11px;font-weight:700">${lab}</span>`;
-        h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">view</span>${detPill('declared', '⛓ emergence (SigLIP2)', det === 'declared', !!(RTGF || RTGD))}${detPill('sim', 'v0 · CLIP labels', det === 'sim', !!RTG)}${detPill('pred', 'v1 · predictive (CPC)', det === 'pred', !!RTGP)}</div>`;
-        // ---- EMERGENCE view (declared) — full field + clusters, nothing labelled ----
-        if (det === 'declared' && RTGF) { RTGA = RTGF; return h + renderRTGEmergence(); }
-        // ---- existence (branch) ----
-        if (isP) { h += renderRTGExistPred(); }
-        else {
-        const exists = !!RTGS.exists, isD = det === 'declared';
-        h += cardc(`<div style="font-size:13px;font-weight:800;color:${C.text};margin-bottom:2px">Step 1 — does a reference→gratification structure even exist?</div>
-            <div style="font-size:11px;color:${C.mute};margin-bottom:10px;line-height:1.5">${isD ? 'The <b>declared route</b>: a spoken word (concept) and the later frame that depicts it, embedded with <b>SigLIP2</b>. M(i,j) = ⟨text<sub>i</sub>, visual<sub>j</sub>⟩, double-centred for specificity, vs a <b>time-shuffled</b> null. The strongest edges should be real naming loops (slingshot→slingshot).' : 'Before reading any single arc, we test the whole phenomenon. For each video we build the directed dependency between its second-tokens (double-centred + gap-detrended), then compare it to a <b>time-shuffled</b> copy of the same video. If real beats the shuffled null, a directed loop is real — not topic-continuity or noise.'}</div>
-            <div style="background:${exists ? C.green + '14' : C.orange + '14'};border-left:3px solid ${exists ? C.green : C.orange};border-radius:0 8px 8px 0;padding:9px 12px;margin-bottom:10px;font-size:12px;color:${C.text};font-weight:600">${exists ? '✓ ' : '⚠ '}${esc(RTGS.verdict)}</div>
-            ${RTGS.diagnosis ? `<div style="font-size:11px;color:${C.dim};line-height:1.55;margin-bottom:12px;background:${C.card2};border-radius:8px;padding:10px 12px"><b style="color:${C.text}">Why:</b> ${esc(RTGS.diagnosis)}</div>` : ''}
-            <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px">
-              <div><div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:6px">${isD ? 'Declared (concept→visual) score · real vs shuffled' : 'Directed-binding score · real vs time-shuffled null'}</div>${rtgBars()}</div>
-              <div><div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:6px">${isD ? 'SigLIP2 affinity vs gap' : 'Raw similarity vs gap (continuity)'}</div>${rtgGapChart()}</div>
-            </div>`, 16);
-        if (isD) h += note(`<b style="color:${C.text}">Declared route, the honest read.</b> SigLIP2 catches "a word labels a later visible object" (slingshot→slingshot, boxes→boxes) — the top edges per video are semantically right, a real step up from the v0 CLIP detector. What it can't catch is "a statement sets up a future EVENT" (the premise→payoff loops that drive retention). That needs a predictive / state-linking model — <b>VL-JEPA</b> — which drops into this same pipeline when access clears. Open a video and read its top declared edges.`, C.cyan);
-        else if (!exists) h += note(`<b style="color:${C.text}">The instrument, not the phenomenon.</b> CLIP cosine <i>similarity</i> can't expose directed binding — it's symmetric and continuity-dominated. A real "promise→proof" is a <b>predictive</b> relation. The arcs below are <b>unvalidated candidate</b> similarity structure. (Try the <b>declared (SigLIP2)</b> detector — it recovers the real naming loops.)`, C.orange);
-        }
-        // ---- variable definitions ----
-        const defs = [['Reference (▲)', 'a moment that opens a directed dependency toward a specific later moment — an open loop / setup'],
-            ['Gratification (○)', 'a later moment that resolves an earlier reference — the payoff that collapses the loop'],
-            ['Edge / arc', 'one directed dependency i→j (j at least ' + RTGA.meta.min_gap + 's later) that beats the ' + (isP ? 'null PMI ceiling' : 'time-shuffled null')],
-            ['Visual / Concept track', 'the two channels: V = CLIP image of each second, C = CLIP text of that second\'s words'],
-            ['concept→visual (C→V)', 'a spoken/written promise that is paid off visually later — the key structure for this content'],
-            ['visual→visual (V→V)', 'a shown setup (e.g. a half-built rig) paid off by a later shot'],
-            ['Strength', isP ? 'learned directed PMI = log p(z_j | context≤i) / p(z_j) from the CPC critic (nats)' : 'cosine dependency in CLIP space, minus the cross-video baseline (generic similarity floor)'],
-            isP ? ['Held-out test', 'the critic is scored on videos it never trained on — guards against memorising structure'] : ['Time-shuffled null', 'the same video with its moments reordered — destroys real loops, keeps the topic; what we must beat'],
-            ['Dependency matrix A[i,j]', 'the full causal attention map: row i = reference second, col j = gratification second, value = ' + (isP ? 'directed PMI (learned)' : 'specific affinity')],
-            ['Surprise', isP ? 'S(j) = −PMI(z_j | context, lag 1) — how unpredictable j is given the learned model' : 'per-second visual change (1 − cos of consecutive frames) — marks reveals, cuts, transitions'],
-            ['Event boundary', 'a local spike in surprise above mean + ' + RTGA.meta.surprise_k + '·sd — "where something happened"'],
-            ['Unclosed reference (dashed ▲)', 'a moment that points forward but whose best match never beats the null — an open loop with no payoff'],
-            ['Orphan gratification (dashed ○)', 'an event/reveal bound to no earlier reference — a payoff that came out of nowhere'],
-            ['Tension', 'total unresolved reference mass at each second — rises at references, drops at gratifications']];
-        h += cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:6px">What every variable means</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;font-size:11px;color:${C.dim};line-height:1.5">${defs.map(([t, d]) => `<div><b style="color:${C.text}">${t}</b> — ${d}</div>`).join('')}</div>`);
-        // ---- all the math ----
-        h += isP ? rtgMathCardPred() : rtgMathCard();
-        // ---- per-video explorer ----
-        if (st.rtgSel != null && RTGA.videos[st.rtgSel]) {
-            const v = RTGA.videos[st.rtgSel], cc = v.counts || {};
-            // synced player + scrubber + moment inspector
-            h += cardc(`<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
-                  <div style="width:220px;flex-shrink:0">
-                    <div id="rtg-yt" data-vid="${esc(v.id)}" data-n="${v.n_sec}" style="width:220px;height:391px;background:#000;border-radius:8px;overflow:hidden"></div>
-                    <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-                      <input id="rtg-seek" type="range" min="0" max="${v.n_sec - 1}" step="0.1" value="0" style="flex:1;accent-color:${C.purple};cursor:pointer">
-                      <span style="font-size:10px;color:${C.dim};font-weight:700;white-space:nowrap">t=<span id="rtg-curt">0.0s</span></span></div>
-                    <div style="font-size:10px;color:${C.mute};margin-top:4px;line-height:1.4">Click any ▲ / ○ (or drag) to <b>freeze</b> on that moment & inspect — the white playhead crosses every channel below. Press ▶ on the video to play.</div>
-                  </div>
-                  <div style="flex:1;min-width:240px"><div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:5px">Moment inspector — everything encoded at the playhead</div>
-                    <div id="rtg-cursec" style="background:${C.card2};border-radius:8px;padding:11px 13px;min-height:120px">${rtgSecInfo(0)}</div></div>
-                </div>`, 14);
-            const mtog = ['cv', 'vv', 'cc', 'vc'].map(m => `<span data-rtgmod="${m}" style="cursor:pointer;border:1px solid ${st.rtgMods[m] ? RMODC[m] : C.border};color:${st.rtgMods[m] ? RMODC[m] : C.faint};background:${st.rtgMods[m] ? RMODC[m] + '18' : 'transparent'};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${RTGA.mod_label[m]}</span>`).join('');
-            h += cardc(`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px">
-                  <div><div style="font-size:13px;font-weight:800;color:${C.text}">${esc(v.title)}</div>
-                    <div style="font-size:10px;color:${C.mute};margin-top:2px">${v.n_sec}s · ${cc.edges || 0} edges · ${cc.refs || 0} references · ${cc.grats || 0} gratifications · ${cc.unclosed || 0} unclosed · ${cc.orphan_grat || 0} orphan${v.published ? ' · ' + esc(v.published) : ''}</div></div>
-                  <div style="display:flex;gap:6px;flex-shrink:0"><a href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" style="background:${C.accent}18;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;text-decoration:none">▶ YouTube</a><span data-rtgclose style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px">✕ close</span></div></div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">show</span>${mtog}<span style="margin-left:auto;font-size:10px;color:${C.mute}">▲ reference · ○ gratification · <span style="color:${C.orange}">dashed</span> = orphan/open · arc = directed dependency</span></div>
-                ${rtgArc(v)}`, 14);
-            h += rtgHeat(v);
-            h += rtgTension(v);
-            h += rtgSurprise(v);
-        }
-        const list = RTGA.videos.map((v, i) => ({ v, i })).filter(o => (o.v.counts || {}).edges).sort((a, b) => (b.v.counts.edges) - (a.v.counts.edges));
-        h += cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">Every video — click to see its ${isP ? 'predicted' : 'candidate'} reference→gratification map</div>
-            <div style="font-size:10px;color:${C.mute};margin-bottom:8px">${RTGA.meta.n} videos · sorted by number of detected loops. Bar coloured by modality mix.</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">${list.map(({ v, i }) => {
-                const cb = v.counts.by_mod || {}, tot = v.counts.edges || 1, on = st.rtgSel === i;
-                const seg = ['cv', 'vv', 'cc', 'vc'].map(m => cb[m] ? `<div style="height:8px;width:${cb[m] / tot * 100}%;background:${RMODC[m]}"></div>` : '').join('');
-                return `<div data-rtg="${i}" style="display:flex;align-items:center;gap:8px;padding:4px 7px;border-radius:6px;cursor:pointer;background:${on ? C.card2 : 'transparent'};border:1px solid ${on ? C.purple : 'transparent'}">
-                    <div style="flex:1;min-width:0"><div style="font-size:11px;color:${C.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.title)}</div>
-                      <div style="display:flex;height:8px;border-radius:2px;overflow:hidden;margin-top:3px;background:${C.border}">${seg}</div></div>
-                    <div style="font-size:11px;color:${C.dim};font-weight:700;flex-shrink:0">${v.counts.edges}</div></div>`; }).join('')}</div>`);
-        return h;
+        if (!RTGF) return cardc(`<div style="padding:30px;text-align:center;color:${C.dim}">Building the RTG field… <div style="font-size:11px;color:${C.mute};margin-top:6px">Run <code>principles/rtg_embed_gemini.py</code> → <code>rtg_field.py</code> → <code>rtg_sweep.py</code>.</div></div>`);
+        RTGA = RTGF;
+        return renderRTGEmergence();
     }
     function renderPrinciples() {
         const pr = st.principle || 'novelty';
@@ -1516,7 +1277,6 @@ const JarvisRetention = (function () {
         const pp = e.target.closest('[data-principle]'); if (pp) { st.principle = pp.getAttribute('data-principle'); render(); return; }
         const rg = e.target.closest('[data-rtg]'); if (rg) { st.rtgSel = +rg.getAttribute('data-rtg'); render(); return; }
         if (e.target.closest('[data-rtgclose]')) { st.rtgSel = null; render(); return; }
-        const rm = e.target.closest('[data-rtgmod]'); if (rm) { const k = rm.getAttribute('data-rtgmod'); st.rtgMods[k] = st.rtgMods[k] ? 0 : 1; render(); return; }
         const rnode = e.target.closest('[data-rtgnode]'); if (rnode) { rtgSeek(+rnode.getAttribute('data-rtgnode')); return; }
         const ltgl = e.target.closest('[data-rtgtoggle-label]'); if (ltgl) { st.rtgLabel = !st.rtgLabel; st.rtgPending = null; render(); return; }
         const ltrk = e.target.closest('[data-rtglabel-track]'); if (ltrk) { rtgLabelAct('track', +ltrk.getAttribute('data-rtglabel-track')); return; }
@@ -1524,7 +1284,6 @@ const JarvisRetention = (function () {
         const ldlo = e.target.closest('[data-rtglabel-delorphan]'); if (ldlo) { rtgLabelAct('delorphan', +ldlo.getAttribute('data-rtglabel-delorphan')); return; }
         const lbtn = e.target.closest('[data-rtglabel]'); if (lbtn) { rtgLabelAct(lbtn.getAttribute('data-rtglabel'), Math.round(rtgCurT)); return; }
         const sig = e.target.closest('[data-rtgsignal]'); if (sig) { st.rtgSignal = sig.getAttribute('data-rtgsignal'); rtgUpdateSignal(); return; }
-        const rd = e.target.closest('[data-rtgdet]'); if (rd) { st.rtgDet = rd.getAttribute('data-rtgdet'); render(); return; }
         if (e.target.closest('[data-reload]')) { err = null; DATA = null; mount(root); return; }
         if (e.target.closest('[data-novboxes]')) { st.novBoxes = !(st.novBoxes !== false); render(); return; }
         if (e.target.closest('[data-novclose]')) { st.novSel = null; render(); return; }
@@ -1550,7 +1309,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=57'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=58'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
@@ -1559,9 +1318,6 @@ const JarvisRetention = (function () {
                     CR = await loadJSON(base + 'principles/correlations.json').catch(() => null);
                     INT = await loadJSON(base + 'principles/interactions.json').catch(() => null);
                     CF = await loadJSON(base + 'principles/confounds.json').catch(() => null);
-                    RTG = await loadJSON(base + 'principles/rtg.json').catch(() => null);
-                    RTGP = await loadJSON(base + 'principles/rtg_pred.json').catch(() => null);
-                    RTGD = await loadJSON(base + 'principles/rtg_declared.json').catch(() => null);
                     RTGF = await loadJSON(base + 'principles/rtg_field.json').catch(() => null);
                     try { RTGLABELS = await (await fetch('/api/rtg/labels')).json() || {}; } catch (e) { RTGLABELS = {}; }
                 } catch (e) {
