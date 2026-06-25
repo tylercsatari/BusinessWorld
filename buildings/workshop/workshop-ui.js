@@ -342,20 +342,37 @@ const WorkshopUI = (() => {
         scope.addEventListener('mouseout', (e) => { if (e.target.closest && e.target.closest('.wsp-node-avatar')) _avTip.style.display = 'none'; });
     }
 
-    // Compact "who's doing this item" control for a stage-panel row: the assigned
-    // worker's small avatar + a picker to reassign/unassign. Candidates = the node's
-    // roster (everyone whose role covers the stage).
-    function workerControlHtml(kind, id, currentWorker, stageId) {
+    // The people assigned to an item — supports MULTIPLE (workers array), with the
+    // legacy single `worker` field read as one.
+    function itemWorkers(item) {
+        if (!item) return [];
+        if (Array.isArray(item.workers)) return [...new Set(item.workers.filter(Boolean))];
+        return item.worker ? [item.worker] : [];
+    }
+    async function setItemWorkers(kind, id, workers) {
+        const clean = [...new Set((workers || []).filter(Boolean))];
+        const changes = { workers: clean, worker: clean[0] || '' };   // keep legacy `worker` synced to the first
+        if (kind === 'video') await atomicVideoUpdate(id, () => changes);
+        else await atomicComponentUpdate(id, () => changes);
+    }
+
+    // "Who's doing this item" control — shows each assigned person as an avatar chip
+    // (✕ to remove) plus an "+ add" dropdown so MORE THAN ONE person can be assigned
+    // to the same item. Candidates = the node's roster (everyone whose role covers it).
+    function workerControlHtml(kind, id, item, stageId) {
         if (!isOwnerUser()) return '';   // workers don't see/manage assignment — it's just their work
+        const assigned = itemWorkers(item);
         const pool = (nodeRoster[stageId] || []).map(p => p.name);
-        const names = [...new Set([...(currentWorker ? [currentWorker] : []), ...pool])];
-        const cur = nodeRoster[stageId] && nodeRoster[stageId].find(p => p.name === currentWorker);
-        const avatar = currentWorker ? personAvatarHtml(cur || { name: currentWorker }, 'wsp-worker-av') : '';
-        const picker = `<select class="wsp-worker-pick" data-worker-kind="${kind}" data-worker-id="${escAttr(id)}" title="Assign / reassign this to a person">
-            <option value="">${names.length ? '— unassigned —' : 'no one on this node'}</option>
-            ${names.map(n => `<option value="${escAttr(n)}" ${n === currentWorker ? 'selected' : ''}>${escHtml(n)}</option>`).join('')}
+        const addable = pool.filter(n => !assigned.includes(n));
+        const chips = assigned.map(n => {
+            const p = (nodeRoster[stageId] || []).find(x => x.name === n) || { name: n };
+            return `<span class="wsp-worker-chip">${personAvatarHtml(p, 'wsp-worker-av')}<button class="wsp-worker-x" data-worker-remove="${escAttr(n)}" data-worker-kind="${kind}" data-worker-id="${escAttr(id)}" title="Remove ${escAttr(n)}">✕</button></span>`;
+        }).join('');
+        const adder = `<select class="wsp-worker-add" data-worker-kind="${kind}" data-worker-id="${escAttr(id)}" title="Assign another person to this">
+            <option value="">${assigned.length ? '+ add' : (pool.length ? '— assign —' : 'no one on this node')}</option>
+            ${addable.map(n => `<option value="${escAttr(n)}">${escHtml(n)}</option>`).join('')}
         </select>`;
-        return `<span class="wsp-worker">${avatar}${picker}</span>`;
+        return `<span class="wsp-worker">${chips}${adder}</span>`;
     }
 
     // Round-robin the items at each node among the people on that node (1 person →
@@ -374,16 +391,16 @@ const WorkshopUI = (() => {
             const next = () => { if (!pool.length) return ''; if (pool.length === 1) return pool[0]; const w = pool[i % pool.length]; i++; return w; };
             e.videos.forEach(v => {
                 if (seenV.has(v.id)) return; seenV.add(v.id);   // a video can sit at several stages — assign once
-                if (v.worker) return;                            // ALREADY assigned (manual or prior) — never overwrite
+                if (itemWorkers(v).length) return;               // ALREADY assigned (manual or prior) — never overwrite
                 const w = next(); if (w) vUpd.push({ id: v.id, worker: w });
             });
             e.components.forEach(c => {
-                if (c.worker) return;                            // ALREADY assigned — never overwrite
+                if (itemWorkers(c).length) return;               // ALREADY assigned — never overwrite
                 const w = next(); if (w) cUpd.push({ id: c.id, worker: w });
             });
         });
-        for (const u of vUpd) { try { await VideoService.update(u.id, { worker: u.worker }); } catch (e) {} }
-        for (const u of cUpd) { try { await SVC().components.update(u.id, { worker: u.worker }); } catch (e) {} }
+        for (const u of vUpd) { try { await VideoService.update(u.id, { workers: [u.worker], worker: u.worker }); } catch (e) {} }
+        for (const u of cUpd) { try { await SVC().components.update(u.id, { workers: [u.worker], worker: u.worker }); } catch (e) {} }
     }
 
     function sponsorName(id) {
@@ -768,7 +785,7 @@ const WorkshopUI = (() => {
         let list = pipelineVideos();
         // PERSONAL VIEW: a non-owner sees ONLY videos assigned to them. Until their
         // identity loads, show nothing (never flash others' work to them).
-        if (personalView()) { if (!meLoaded || !myName) return []; list = list.filter(v => v.worker === myName); }
+        if (personalView()) { if (!meLoaded || !myName) return []; list = list.filter(v => itemWorkers(v).includes(myName)); }
         try {
             if (isStageScoped()) {
                 const ctx = ctxNow();
@@ -782,10 +799,10 @@ const WorkshopUI = (() => {
         if (fType) list = list.filter(v => v.videoType === fType);
         if (fProject) list = list.filter(v => (v.projectIds || []).includes(fProject));
         if (fSponsor) list = list.filter(v => v.sponsorId === fSponsor);
-        // "Show only this person's work": match the assigned worker (the single doer),
+        // "Show only this person's work": match any assigned worker (multiple allowed),
         // falling back to the legacy assignedToList membership.
-        if (fAssignee === 'none') list = list.filter(v => !v.worker && getAssignedPeople(v).length === 0);
-        else if (fAssignee) list = list.filter(v => v.worker === fAssignee || getAssignedPeople(v).includes(fAssignee));
+        if (fAssignee === 'none') list = list.filter(v => itemWorkers(v).length === 0 && getAssignedPeople(v).length === 0);
+        else if (fAssignee) list = list.filter(v => itemWorkers(v).includes(fAssignee) || getAssignedPeople(v).includes(fAssignee));
         if (fFlag === 'blocked') list = list.filter(v => videoBlockers(v).length > 0);
         if (fFlag === 'deadline') list = list.filter(v => { const d = deadlineInfo(v); return d && d.days <= 7; });
         // Soonest deadline first, then re-ordered so each video follows the one it's
@@ -801,7 +818,7 @@ const WorkshopUI = (() => {
     function filteredComponents() {
         let list = SVC().components.getAll().filter(c => c.status !== 'done');
         // PERSONAL VIEW: a non-owner sees ONLY components assigned to them.
-        if (personalView()) { if (!meLoaded || !myName) return []; list = list.filter(c => c.worker === myName); }
+        if (personalView()) { if (!meLoaded || !myName) return []; list = list.filter(c => itemWorkers(c).includes(myName)); }
         // Restricted accounts only see components/tasks sitting at a stage (node)
         // they have access to — same scoping as videos.
         try { if (isStageScoped()) list = list.filter(c => { const sid = componentStageId(c); return sid && stageVisible(sid); }); }
@@ -809,8 +826,8 @@ const WorkshopUI = (() => {
         if (fProject) list = list.filter(c => c.projectId === fProject);
         if (fSearch) { const q = fSearch.toLowerCase(); list = list.filter(c => (c.name || '').toLowerCase().includes(q)); }
         // "By account" filter — show only this person's components/tasks (or unassigned).
-        if (fAssignee === 'none') list = list.filter(c => !c.worker);
-        else if (fAssignee) list = list.filter(c => c.worker === fAssignee);
+        if (fAssignee === 'none') list = list.filter(c => itemWorkers(c).length === 0);
+        else if (fAssignee) list = list.filter(c => itemWorkers(c).includes(fAssignee));
         return list;
     }
 
@@ -1178,7 +1195,7 @@ const WorkshopUI = (() => {
                         ${sp ? `<span class="wsp-sponsor-chip">💰 ${escHtml(sp)}</span>` : ''}
                     </div>
                 </div>
-                <div class="wsp-stage-video-actions">${stage ? workerControlHtml('video', v.id, v.worker, stage.id) : ''}${actions}</div>
+                <div class="wsp-stage-video-actions">${stage ? workerControlHtml('video', v.id, v, stage.id) : ''}${actions}</div>
             </div>
             ${expanded ? stageVideoBodyHtml(v, stage) : ''}
         </div>`;
@@ -1342,19 +1359,37 @@ const WorkshopUI = (() => {
         // The per-node DONE button lives on every stage row (and in the expanded
         // editor) — bind them all here so a collapsed row's Done works too.
         panel.querySelectorAll('[data-node-done]').forEach(b => b.addEventListener('click', (ev) => { ev.stopPropagation(); pushNodeForward(b.dataset.nodeDone, b.dataset.nodeStage); }));
-        // Reassign / unassign the worker on a row (video or component).
-        panel.querySelectorAll('.wsp-worker-pick').forEach(sel => sel.addEventListener('change', async (ev) => {
+        // Add another person to a row (video or component) — multiple allowed.
+        panel.querySelectorAll('.wsp-worker-add').forEach(sel => sel.addEventListener('change', async (ev) => {
             ev.stopPropagation();
             const kind = sel.dataset.workerKind, id = sel.dataset.workerId, w = sel.value;
+            if (!w) return;
             sel.disabled = true;
             try {
-                if (kind === 'video') await VideoService.update(id, { worker: w });
-                else await SVC().components.update(id, { worker: w });
-                toast(w ? `Assigned to ${w}` : 'Unassigned');
+                const cur = kind === 'video' ? VideoService.getById(id) : SVC().components.getById(id);
+                const next = [...itemWorkers(cur), w];
+                await setItemWorkers(kind, id, next);
+                toast(`Assigned to ${w}`);
             } catch (e) {
-                console.warn('worker reassign failed', e);
+                console.warn('worker assign failed', e);
                 alert('Could not save the assignment: ' + (e && e.message || e));
             } finally { sel.disabled = false; }
+            renderTab();
+        }));
+        // Remove a person from a row.
+        panel.querySelectorAll('[data-worker-remove]').forEach(btn => btn.addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const kind = btn.dataset.workerKind, id = btn.dataset.workerId, name = btn.dataset.workerRemove;
+            btn.disabled = true;
+            try {
+                const cur = kind === 'video' ? VideoService.getById(id) : SVC().components.getById(id);
+                const next = itemWorkers(cur).filter(n => n !== name);
+                await setItemWorkers(kind, id, next);
+                toast(`Removed ${name}`);
+            } catch (e) {
+                console.warn('worker remove failed', e);
+                alert('Could not save the assignment: ' + (e && e.message || e));
+            } finally { btn.disabled = false; }
             renderTab();
         }));
         // Filming footage-coverage tool — run a scan, or delete a gap suggestion.
@@ -2957,7 +2992,7 @@ const WorkshopUI = (() => {
                 ${linkCount ? `<span class="wsp-comp-assets">${icon('link', 'wsp-cc-ic')} ${linkCount}</span>` : ''}
                 <span class="wsp-comp-stage">${escHtml(componentStatusLabel(c))}</span>
             </div>
-            ${workerControlHtml('component', c.id, c.worker, componentStageId(c))}
+            ${workerControlHtml('component', c.id, c, componentStageId(c))}
             ${showDone ? `<button class="wsp-mini-btn done" data-comp-done="${c.id}" title="Done">✓ Done</button>` : ''}
             <button class="wsp-mini-btn danger" data-comp-del="${c.id}" title="Remove component">✕</button>
         </div>`;
