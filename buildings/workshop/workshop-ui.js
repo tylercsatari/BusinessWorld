@@ -364,14 +364,22 @@ const WorkshopUI = (() => {
         const assigned = itemWorkers(item);
         const pool = (nodeRoster[stageId] || []).map(p => p.name);
         const addable = pool.filter(n => !assigned.includes(n));
+        // Each assignee is an avatar + a dropdown so you can SWITCH that person to
+        // someone else (or remove them). The options are everyone on the node, minus
+        // people already assigned to other chips (so each chip is a distinct person).
         const chips = assigned.map(n => {
             const p = (nodeRoster[stageId] || []).find(x => x.name === n) || { name: n };
-            return `<span class="wsp-worker-chip">${personAvatarHtml(p, 'wsp-worker-av')}<button class="wsp-worker-x" data-worker-remove="${escAttr(n)}" data-worker-kind="${kind}" data-worker-id="${escAttr(id)}" title="Remove ${escAttr(n)}">✕</button></span>`;
+            const others = assigned.filter(x => x !== n);                 // taken by other chips
+            const opts = [...new Set([n, ...pool])].filter(x => !others.includes(x));
+            return `<span class="wsp-worker-chip">${personAvatarHtml(p, 'wsp-worker-av')}<select class="wsp-worker-swap" data-worker-kind="${kind}" data-worker-id="${escAttr(id)}" data-worker-old="${escAttr(n)}" title="Switch or remove ${escAttr(n)}">
+                ${opts.map(o => `<option value="${escAttr(o)}" ${o === n ? 'selected' : ''}>${escHtml(o)}</option>`).join('')}
+                <option value="__remove__">✕ remove</option>
+            </select></span>`;
         }).join('');
-        const adder = `<select class="wsp-worker-add" data-worker-kind="${kind}" data-worker-id="${escAttr(id)}" title="Assign another person to this">
+        const adder = addable.length ? `<select class="wsp-worker-add" data-worker-kind="${kind}" data-worker-id="${escAttr(id)}" title="Assign another person to this">
             <option value="">${assigned.length ? '+ add' : (pool.length ? '— assign —' : 'no one on this node')}</option>
             ${addable.map(n => `<option value="${escAttr(n)}">${escHtml(n)}</option>`).join('')}
-        </select>`;
+        </select>` : (assigned.length ? '' : `<span class="wsp-worker-none">no one on this node</span>`);
         return `<span class="wsp-worker">${chips}${adder}</span>`;
     }
 
@@ -1376,20 +1384,23 @@ const WorkshopUI = (() => {
             } finally { sel.disabled = false; }
             renderTab();
         }));
-        // Remove a person from a row.
-        panel.querySelectorAll('[data-worker-remove]').forEach(btn => btn.addEventListener('click', async (ev) => {
+        // Switch a person on a row to someone else — or remove them (__remove__).
+        panel.querySelectorAll('.wsp-worker-swap').forEach(sel => sel.addEventListener('change', async (ev) => {
             ev.stopPropagation();
-            const kind = btn.dataset.workerKind, id = btn.dataset.workerId, name = btn.dataset.workerRemove;
-            btn.disabled = true;
+            const kind = sel.dataset.workerKind, id = sel.dataset.workerId, oldName = sel.dataset.workerOld, val = sel.value;
+            if (val === oldName) return;
+            sel.disabled = true;
             try {
                 const cur = kind === 'video' ? VideoService.getById(id) : SVC().components.getById(id);
-                const next = itemWorkers(cur).filter(n => n !== name);
+                const next = val === '__remove__'
+                    ? itemWorkers(cur).filter(n => n !== oldName)
+                    : itemWorkers(cur).map(n => n === oldName ? val : n);
                 await setItemWorkers(kind, id, next);
-                toast(`Removed ${name}`);
+                toast(val === '__remove__' ? `Removed ${oldName}` : `Switched to ${val}`);
             } catch (e) {
-                console.warn('worker remove failed', e);
+                console.warn('worker switch failed', e);
                 alert('Could not save the assignment: ' + (e && e.message || e));
-            } finally { btn.disabled = false; }
+            } finally { sel.disabled = false; }
             renderTab();
         }));
         // Filming footage-coverage tool — run a scan, or delete a gap suggestion.

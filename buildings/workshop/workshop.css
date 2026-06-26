@@ -453,10 +453,11 @@
 .wsp-worker-av.fallback { color: #fff; font-size: 8px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
 .wsp-worker-pick { font-size: 11px; max-width: 120px; border: 1px solid #d8d0bf; border-radius: 6px; padding: 2px 4px; background: #fff; color: #4a4234; cursor: pointer; }
 .wsp-worker-add { font-size: 11px; max-width: 120px; border: 1px dashed #c8bfa9; border-radius: 6px; padding: 2px 4px; background: #fbf8f1; color: #6a5f48; cursor: pointer; }
-/* One assignee chip — avatar + a ✕ to drop them. Multiple chips = multiple people. */
-.wsp-worker-chip { display: inline-flex; align-items: center; gap: 1px; }
-.wsp-worker-x { border: none; background: transparent; color: #b07a7a; font-size: 10px; line-height: 1; cursor: pointer; padding: 0 2px; border-radius: 4px; }
-.wsp-worker-x:hover { background: #f3dede; color: #a33; }
+/* One assignee chip — avatar + a dropdown to switch that person or remove them.
+   Multiple chips = multiple people. */
+.wsp-worker-chip { display: inline-flex; align-items: center; gap: 2px; background: #f4efe4; border: 1px solid #e2dac8; border-radius: 12px; padding: 1px 4px 1px 1px; }
+.wsp-worker-swap { font-size: 11px; max-width: 110px; border: none; background: transparent; color: #4a4234; cursor: pointer; padding: 1px 2px; }
+.wsp-worker-none { font-size: 11px; color: #9a8f78; font-style: italic; }
 /* Instant hover tooltip for node avatars */
 .wsp-av-tip { position: fixed; z-index: 100001; display: none; background: #2c3e50; color: #fff; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; pointer-events: none; transform: translate(-50%, -100%); white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
 .wsp-node-counts-corner { position: absolute; top: -9px; right: -9px; display: flex; gap: 3px; }
