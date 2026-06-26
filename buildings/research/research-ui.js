@@ -24,6 +24,8 @@ const ResearchUI = (() => {
     let vaultLoading = false;
     let vaultSort = 'views'; // 'views' | 'discoveredAt'
     let vaultFrameFilter = 'all'; // 'all' | 'done' | 'pending'
+    // Last-Year dataset (the big crawl: last-year vertical shorts 10k–100M+, full 720p on R2, with metadata + outlier)
+    let lyVideos = [], lyStats = null, lyLoading = false, lySort = 'recent'; // 'recent' | 'views' | 'outlier'
 
     const TIME_OPTIONS = [
         { key: 'week', label: 'This Week' },
@@ -137,10 +139,11 @@ const ResearchUI = (() => {
                 <div class="vault-tabs">
                     <button class="vault-tab${activeTab === 'search' ? ' active' : ''}" data-tab="search">🔍 Search</button>
                     <button class="vault-tab${activeTab === 'vault' ? ' active' : ''}" data-tab="vault">🗄️ Vault</button>
+                    <button class="vault-tab${activeTab === 'lastyear' ? ' active' : ''}" data-tab="lastyear">📅 Last Year</button>
                 </div>
             </div>
             <div id="research-tab-content">
-                ${activeTab === 'search' ? renderSearchTab() : renderVaultTab()}
+                ${activeTab === 'search' ? renderSearchTab() : activeTab === 'lastyear' ? renderLastYearTab() : renderVaultTab()}
             </div>
         </div>`;
     }
@@ -273,6 +276,83 @@ const ResearchUI = (() => {
         });
     }
 
+    /* ───── Last-Year dataset tab ───── */
+
+    function renderLastYearTab() {
+        const s = lyStats || {};
+        const sub = s.stored != null
+            ? `${(s.stored || 0).toLocaleString()} stored on R2 · ${(s.discovered || 0).toLocaleString()} discovered · ${s.removed ? s.removed + ' horizontals removed · ' : ''}target ${(s.target || 100000).toLocaleString()}`
+            : 'Loading…';
+        const sortBtn = (k, l) => `<button class="vault-filter-btn${lySort === k ? ' active' : ''}" data-ly-sort="${k}">${l}</button>`;
+        return `
+            <div class="vault-header">
+                <div class="vault-header-top">
+                    <div><h3 class="vault-title">📅 Last-Year Dataset</h3>
+                        <div class="vault-subtitle" id="ly-subtitle">${sub}</div></div>
+                    <button class="vault-refresh-btn" id="ly-refresh-btn">🔄</button>
+                </div>
+                <div class="vault-filters"><div class="vault-filter-group"><label>Sort:</label>
+                    ${sortBtn('recent', 'Newest')}${sortBtn('views', 'Views')}${sortBtn('outlier', 'Outlier')}</div></div>
+            </div>
+            <div class="research-results" id="lastyear-results">${lyLoading && lyVideos.length === 0
+                ? '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Loading dataset…</div></div>' : ''}</div>`;
+    }
+
+    function lyCard(v) {
+        const date = v.uploadDate ? `${v.uploadDate.slice(0, 4)}-${v.uploadDate.slice(4, 6)}-${v.uploadDate.slice(6, 8)}` : (v.publishedAt || '');
+        const subs = v.subs != null ? `${formatViews(v.subs)} subs` : '';
+        const out = v.outlier ? `<span class="vault-badge" style="background:${v.outlier >= 3 ? 'rgba(34,197,94,.18)' : 'rgba(148,163,184,.15)'};color:${v.outlier >= 3 ? '#4ade80' : '#94a3b8'}" title="views ÷ subscribers — how far it beat the channel's size">${v.outlier >= 1 ? v.outlier + '× subs' : v.outlier + '× subs'}</span>` : (v.src === 'vault' ? '<span class="vault-badge vault-badge-done">100M set</span>' : '');
+        return `
+            <div class="vault-card">
+                <div class="vault-card-thumb"><img src="https://i.ytimg.com/vi/${escAttr(v.videoId)}/hqdefault.jpg" alt="" loading="lazy" />${v.duration ? `<span class="research-thumb-duration">${escHtml(String(v.duration))}</span>` : ''}</div>
+                <div class="vault-card-info">
+                    <div class="vault-card-title" title="${escAttr(v.title || '')}">${escHtml(v.title || '')}</div>
+                    <div class="vault-card-channel">${v.channelUrl ? `<a href="${escAttr(v.channelUrl)}" target="_blank" style="color:inherit;text-decoration:none">${escHtml(v.channel || '')}</a>` : escHtml(v.channel || '')}${subs ? ' · ' + subs : ''}</div>
+                    <div class="vault-card-meta"><span class="vault-card-views">${formatViews(v.views)} views</span>${date ? `<span class="vault-card-published">${escHtml(date)}</span>` : ''}</div>
+                    <div class="vault-card-bottom">${out}<a href="https://www.youtube.com/shorts/${escAttr(v.videoId)}" target="_blank" class="vault-open-link">▶ Open</a></div>
+                </div>
+            </div>`;
+    }
+
+    function renderLastYearResults() {
+        const el = document.getElementById('lastyear-results');
+        if (!el) return;
+        if (!lyLoading && lyVideos.length === 0) { el.innerHTML = '<div class="research-empty">No videos yet — the crawler is downloading. Refresh in a minute.</div>'; return; }
+        el.innerHTML = lyVideos.map(lyCard).join('') + (lyLoading ? '<div class="research-loading" style="padding:12px"><div class="spinner" style="width:18px;height:18px;border-width:2px;display:inline-block"></div></div>' : '');
+    }
+
+    async function fetchLastYearVideos() {
+        lyLoading = true; renderLastYearResults();
+        try {
+            const [libR, statR, shR] = await Promise.all([
+                fetch(`/api/library/videos?limit=300&sort=${lySort}`).then(r => r.json()).catch(() => ({ videos: [] })),
+                fetch('/api/library/stats').then(r => r.json()).catch(() => null),
+                fetch('/api/shorts-db/videos?limit=400&sort=views&minViews=0').then(r => r.json()).catch(() => ({ videos: [] })),
+            ]);
+            lyStats = statR;
+            const lib = (libR.videos || []).map(v => ({ ...v, src: 'library' }));
+            const seen = new Set(lib.map(v => v.videoId));
+            const vaultLY = (shR.videos || []).filter(v => !/year/i.test(v.publishedAt || '') && !seen.has(v.videoId))
+                .map(v => ({ videoId: v.videoId, title: v.title, channel: v.channelTitle, views: v.views, publishedAt: v.publishedAt, duration: v.duration, src: 'vault' }));
+            lyVideos = lib.concat(vaultLY);
+            if (lySort === 'views') lyVideos.sort((a, b) => (b.views || 0) - (a.views || 0));
+            else if (lySort === 'outlier') lyVideos.sort((a, b) => (b.outlier || 0) - (a.outlier || 0));
+        } catch (e) { /* ignore */ }
+        lyLoading = false;
+        const sub = document.getElementById('ly-subtitle');
+        if (sub && lyStats) sub.textContent = `${(lyStats.stored || 0).toLocaleString()} stored on R2 · ${(lyStats.discovered || 0).toLocaleString()} discovered · ${lyStats.removed ? lyStats.removed + ' horizontals removed · ' : ''}target ${(lyStats.target || 100000).toLocaleString()}`;
+        renderLastYearResults();
+    }
+
+    function bindLastYearEvents() {
+        container.querySelectorAll('[data-ly-sort]').forEach(b => b.addEventListener('click', () => {
+            lySort = b.dataset.lySort;
+            container.querySelectorAll('[data-ly-sort]').forEach(x => x.classList.toggle('active', x.dataset.lySort === lySort));
+            fetchLastYearVideos();
+        }));
+        document.getElementById('ly-refresh-btn')?.addEventListener('click', () => fetchLastYearVideos());
+    }
+
     /* ───── Tab switching ───── */
 
     function switchTab(tab) {
@@ -288,6 +368,10 @@ const ResearchUI = (() => {
             content.innerHTML = renderSearchTab();
             bindSearchEvents();
             fetchShortsDbStats();
+        } else if (tab === 'lastyear') {
+            content.innerHTML = renderLastYearTab();
+            bindLastYearEvents();
+            fetchLastYearVideos();
         } else {
             content.innerHTML = renderVaultTab();
             bindVaultEvents();

@@ -2907,9 +2907,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 const buf = await cloud.downloadFromR2('library/db.json');
                 if (buf) {
                     const db = JSON.parse(buf.toString('utf8'));
-                    videos = Object.values(db.videos || {}).filter(v => v.stored)
-                        .sort((a, b) => (b.storedAt || 0) - (a.storedAt || 0)).slice(0, limit)
-                        .map(v => ({ videoId: v.videoId, title: v.title, channel: v.channel, views: v.views, publishedAt: v.publishedAt, duration: v.duration }));
+                    const sort = url.searchParams.get('sort') || 'recent';
+                    let arr = Object.values(db.videos || {}).filter(v => v.stored);
+                    arr.sort(sort === 'views' ? (a, b) => (b.views || 0) - (a.views || 0)
+                        : sort === 'outlier' ? (a, b) => (b.outlier || 0) - (a.outlier || 0)
+                        : (a, b) => (b.storedAt || 0) - (a.storedAt || 0));
+                    videos = arr.slice(0, limit).map(v => ({ videoId: v.videoId, title: v.title, channel: v.channel, channelUrl: v.channelUrl,
+                        views: v.views, subs: v.subs, outlier: v.outlier != null ? v.outlier : (v.subs > 0 ? +((v.views || 0) / v.subs).toFixed(1) : null),
+                        publishedAt: v.publishedAt, uploadDate: v.uploadDate, likes: v.likes, comments: v.comments, duration: v.duration, width: v.width, height: v.height }));
                 }
             } catch (e) {}
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });

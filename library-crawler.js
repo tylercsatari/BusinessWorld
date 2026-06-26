@@ -13,7 +13,7 @@ const sc = require('./shorts-crawler');
 if (cloud.initR2 && !cloud.isR2Ready()) cloud.initR2();
 
 const MIN_VIEWS = 10_000;
-const MAX_VIEWS = 100_000_000;          // strictly < 100M (no overlap with the owned/100M set)
+const MAX_VIEWS = Infinity;             // 10k → ∞ (include recent 100M+; the date filter keeps it last-year)
 const TARGET = 100_000;
 const UPLOAD_DATE = 5;                    // YouTube filter: this year
 const CONC = 4;                           // concurrent downloads
@@ -66,14 +66,17 @@ function computeStats() {
     const vids = Object.values(db.videos);
     const stored = vids.filter(v => v.stored);
     const bytes = stored.reduce((s, v) => s + (v.sizeBytes || 0), 0);
-    const buckets = { '10k-100k': 0, '100k-1M': 0, '1M-10M': 0, '10M-100M': 0 };
+    const buckets = { '10k-100k': 0, '100k-1M': 0, '1M-10M': 0, '10M-100M': 0, '100M+': 0 };
+    let outliers = 0;
     for (const v of stored) {
         const x = v.views;
         if (x < 1e5) buckets['10k-100k']++; else if (x < 1e6) buckets['100k-1M']++;
-        else if (x < 1e7) buckets['1M-10M']++; else buckets['10M-100M']++;
+        else if (x < 1e7) buckets['1M-10M']++; else if (x < 1e8) buckets['10M-100M']++; else buckets['100M+']++;
+        if ((v.outlier || 0) >= 3) outliers++;
     }
     return { target: TARGET, discovered: vids.length, stored: stored.length, storageBytes: bytes,
-        minViews: MIN_VIEWS, maxViews: MAX_VIEWS, viewBuckets: buckets, updated: Date.now(),
+        minViews: MIN_VIEWS, maxViews: MAX_VIEWS === Infinity ? null : MAX_VIEWS, viewBuckets: buckets, outliers3x: outliers,
+        removed: vids.filter(v => v.removed).length, updated: Date.now(),
         avgSizeMB: stored.length ? +(bytes / stored.length / 1e6).toFixed(2) : 0 };
 }
 
@@ -109,19 +112,59 @@ async function discover() {
     return added;
 }
 
-function ytdl(id, out) {
-    return new Promise((resolve, reject) => {
-        execFile('yt-dlp', ['--no-playlist', '-q', '--no-warnings', '--no-progress',
-            '-f', 'bv*[height<=720]+ba/b[height<=720]/best[height<=720]/best', '--merge-output-format', 'mp4',
-            '-o', out, `https://www.youtube.com/watch?v=${id}`],
-            { timeout: 180000 }, (err) => err ? reject(err) : resolve());
+// full metadata dump (no download) — dimensions for the vertical filter + everything else
+function ytJson(id) {
+    return new Promise(res => execFile('yt-dlp', ['--no-playlist', '-q', '--no-warnings', '-J', `https://www.youtube.com/watch?v=${id}`],
+        { timeout: 70000, maxBuffer: 96 * 1024 * 1024 }, (err, out) => { if (err) return res(null); try { res(JSON.parse(out)); } catch { res(null); } }));
+}
+// VERTICAL short only — reject horizontal/square (poisons the set) and long-form
+function isVerticalShort(info) {
+    const w = info.width || 0, h = info.height || 0, d = info.duration || 0;
+    if (w && h && h <= w) return false;     // horizontal or square
+    if (d && d > 185) return false;          // long-form
+    return true;
+}
+const chanCache = {};
+function flatChannel(cid) {
+    return new Promise(res => execFile('yt-dlp', ['--flat-playlist', '--no-warnings', '-I', '1:30', '--print', '%(id)s|%(view_count)s',
+        `https://www.youtube.com/channel/${cid}/videos`], { timeout: 70000, maxBuffer: 16 * 1024 * 1024 },
+        (err, out) => res(err ? [] : out.trim().split('\n').map(l => { const [i, vv] = l.split('|'); return { id: i, views: parseInt(vv) || 0 }; }).filter(x => x.id))));
+}
+// outlier = this video's views ÷ median views of the channel's ~10 videos posted before it
+async function channelOutlier(info) {
+    const cid = info.channel_id; if (!cid) return {};
+    if (!chanCache[cid]) chanCache[cid] = await flatChannel(cid);
+    const vids = chanCache[cid] || []; const idx = vids.findIndex(x => x.id === info.id);
+    let prev = (idx >= 0 ? vids.slice(idx + 1, idx + 11) : vids.slice(0, 10)).map(x => x.views).filter(x => x > 0);
+    if (!prev.length) return {};
+    prev.sort((a, b) => a - b); const med = prev[Math.floor(prev.length / 2)];
+    return { outlier: med ? +((info.view_count || 0) / med).toFixed(2) : null, baselineViews: med, baselineN: prev.length };
+}
+function enrich(v, info) {
+    Object.assign(v, {
+        title: info.title || v.title, channel: info.channel || info.uploader || v.channel, channelId: info.channel_id || null,
+        channelUrl: info.channel_url || info.uploader_url || null, subs: info.channel_follower_count ?? null,
+        uploadDate: info.upload_date || null, timestamp: info.timestamp || null, views: info.view_count ?? v.views,
+        likes: info.like_count ?? null, comments: info.comment_count ?? null, durationSec: info.duration ?? null,
+        width: info.width || null, height: info.height || null, url: info.webpage_url || `https://www.youtube.com/watch?v=${v.videoId}`,
+        // outlier = views ÷ subscribers (how far it overperformed the channel's size; viral-on-small-channel = high)
+        outlier: info.channel_follower_count > 0 ? +(((info.view_count || 0) / info.channel_follower_count)).toFixed(1) : null,
     });
+}
+function ytdl720(id, out) {
+    return new Promise((resolve, reject) => execFile('yt-dlp', ['--no-playlist', '-q', '--no-warnings', '--no-progress',
+        '-f', 'bv*[height<=720]+ba/b[height<=720]/best[height<=720]/best', '--merge-output-format', 'mp4', '-o', out,
+        `https://www.youtube.com/watch?v=${id}`], { timeout: 180000 }, (err) => err ? reject(err) : resolve()));
 }
 
 async function downloadOne(v) {
     const tmp = path.join(os.tmpdir(), `lib_${v.videoId}.mp4`);
     try {
-        await ytdl(v.videoId, tmp);
+        const info = await ytJson(v.videoId);
+        if (!info) { v.failed = (v.failed || 0) + 1; v.lastError = 'no-info'; return; }
+        if (!isVerticalShort(info)) { v.nonVertical = true; v.skip = true; v.stored = false; return; }  // not a vertical short — drop, don't retry
+        enrich(v, info);
+        await ytdl720(v.videoId, tmp);
         if (!fs.existsSync(tmp)) throw new Error('no file');
         const buf = fs.readFileSync(tmp);
         await cloud.uploadToR2(`library/videos/${v.videoId}.mp4`, buf, 'video/mp4');
@@ -131,6 +174,26 @@ async function downloadOne(v) {
     } finally {
         try { fs.unlinkSync(tmp); } catch (e) {}
     }
+}
+
+// one-time: re-check already-stored videos — DELETE horizontals from R2, backfill metadata on verticals
+async function recheckStored() {
+    const todo = Object.values(db.videos).filter(v => v.stored && !v.rechecked);
+    console.log(`library: rechecking ${todo.length} stored videos (vertical filter + metadata backfill)…`);
+    let removed = 0;
+    for (let i = 0; i < todo.length && !stop; i += CONC) {
+        await Promise.all(todo.slice(i, i + CONC).map(async v => {
+            const info = await ytJson(v.videoId);
+            if (!info) return;                          // couldn't verify — leave it, retry next pass (never delete on a fetch failure)
+            if (!isVerticalShort(info)) {
+                try { if (v.r2Key) await cloud.deleteFromR2(v.r2Key); } catch (e) {}
+                v.stored = false; v.nonVertical = true; v.removed = true; removed++;
+            } else { enrich(v, info); v.rechecked = true; }
+        }));
+        await saveDb(false);
+    }
+    await saveDb(true);
+    console.log(`library: recheck done — removed ${removed} horizontal/non-short, backfilled the rest`);
 }
 
 async function downloadPending() {
@@ -152,6 +215,7 @@ async function run() {
     if (running) return; running = true; stop = false;
     await loadDb();
     console.log(`library-crawler: ${computeStats().stored} stored, target ${TARGET}`);
+    await recheckStored();          // clean existing horizontals + backfill metadata before resuming
     while (!stop) {
         const storedNow = Object.values(db.videos).filter(v => v.stored).length;
         if (storedNow >= TARGET) break;
