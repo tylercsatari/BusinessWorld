@@ -10,7 +10,7 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50 };
@@ -283,7 +283,18 @@ const JarvisRetention = (function () {
             <div style="display:flex;gap:8px;flex-wrap:wrap">${stat('Stored on R2', stored.toLocaleString(), C.accent)}${stat('Storage used', gb + ' GB', C.cyan)}${stat('Avg size', (L.avgSizeMB || 0) + ' MB', C.green)}${stat('Owned (w/ retention)', owned.toLocaleString(), C.purple)}</div>`);
         h += cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:8px">View distribution — last-year Shorts, 10k–&lt;100M</div>
             ${bk.map(x => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:11px"><div style="width:74px;color:${C.dim}">${x[0]}</div><div style="flex:1;height:12px;background:${C.card2};border-radius:3px;overflow:hidden"><div style="height:100%;width:${x[1] / bmax * 100}%;background:${x[2]}"></div></div><div style="width:54px;text-align:right;color:${C.text};font-weight:700">${x[1].toLocaleString()}</div></div>`).join('')}`);
-        h += note(`<b>What this is for:</b> the big set trains the reference→gratification / encoder model at the scale it's currently starved for (211 → 100k), and powers views-based analysis. <b>Retention curves only exist for your ${owned} owned videos</b> (YouTube only gives audience retention to the owner), so the hold/flatten validation stays on the owned set — the big set ties in for content-structure + views. Target ${target.toLocaleString()} at 720p ≈ ~0.4 TB on R2.`, C.cyan);
+        const vidGrid = (list) => !list || !list.length ? `<div style="font-size:11px;color:${C.mute};padding:8px">none yet — ${LIBV === null ? 'loading…' : 'the crawler is still downloading'}</div>`
+            : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">${list.map(v => `
+                <a href="https://www.youtube.com/watch?v=${esc(v.videoId)}" target="_blank" style="text-decoration:none;color:inherit">
+                  <div style="background:${C.card2};border-radius:8px;overflow:hidden;border:1px solid ${C.border}">
+                    <img src="https://i.ytimg.com/vi/${esc(v.videoId)}/hqdefault.jpg" loading="lazy" style="width:100%;aspect-ratio:16/10;object-fit:cover;display:block;background:${C.bg}"/>
+                    <div style="padding:5px 7px"><div style="font-size:10px;color:${C.text};line-height:1.3;height:26px;overflow:hidden">${esc((v.title || '').slice(0, 52))}</div>
+                      <div style="font-size:9px;color:${C.mute};margin-top:3px">${fv(v.views)} views · ${esc(v.publishedAt || '')}${v.duration ? ' · ' + esc(v.duration) : ''}</div></div></div></a>`).join('')}</div>`;
+        h += cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">📥 New downloads — last-year Shorts (10k–&lt;100M), full 720p on R2 <span style="font-weight:400;color:${C.mute}">(${(LIBV || []).length} shown of ${stored.toLocaleString()})</span></div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:8px">Most recently downloaded. Click any to open on YouTube.</div>${vidGrid(LIBV)}`);
+        h += cardc(`<div style="font-size:12px;font-weight:700;color:${C.text};margin-bottom:2px">💯 The 100M-view set — filtered to the last year <span style="font-weight:400;color:${C.mute}">(${(SHORTSV || []).length} of ${'2,400+'})</span></div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:8px">Your existing high-view crawl (frames on R2), showing only those published in the last ~12 months.</div>${vidGrid(SHORTSV)}`);
+        h += note(`<b>What this is for:</b> the big set trains the reference→gratification / encoder model at the scale it's currently starved for (211 → 100k), and powers views-based analysis. <b>Retention curves only exist for your ${owned} owned videos</b> (YouTube only gives audience retention to the owner), so the hold/flatten validation stays on the owned set — the big set ties in for content-structure + views. Target ${target.toLocaleString()} at 720p ≈ ~0.15 TB on R2.`, C.cyan);
         return h;
     }
     function renderData() {
@@ -1431,7 +1442,10 @@ const JarvisRetention = (function () {
         const epj = e.target.closest('[data-rtgproj]'); if (epj) { st.rtgProj = epj.getAttribute('data-rtgproj'); rtgUpdateEmbedMap(); return; }
         const ef = e.target.closest('[data-rtgembfocus]'); if (ef) { st.rtgEmbFocus = ef.getAttribute('data-rtgembfocus'); rtgUpdateEmbedMap(); return; }
         const hu = e.target.closest('[data-hazunit]'); if (hu) { st.hazUnit = hu.getAttribute('data-hazunit'); rtgUpdateHaz(); return; }
-        if (e.target.closest('[data-libreload]')) { fetch('/api/library/stats').then(r => r.json()).then(j => { LIB = j; render(); }).catch(() => {}); return; }
+        if (e.target.closest('[data-libreload]')) { Promise.all([
+            fetch('/api/library/stats').then(r => r.json()).then(j => { LIB = j; }).catch(() => {}),
+            fetch('/api/library/videos?limit=150').then(r => r.json()).then(j => { LIBV = j.videos || []; }).catch(() => {})
+        ]).then(() => render()); return; }
         if (e.target.closest('[data-reload]')) { err = null; DATA = null; mount(root); return; }
         if (e.target.closest('[data-novboxes]')) { st.novBoxes = !(st.novBoxes !== false); render(); return; }
         if (e.target.closest('[data-novclose]')) { st.novSel = null; render(); return; }
@@ -1460,7 +1474,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=64'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=65'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
@@ -1474,6 +1488,8 @@ const JarvisRetention = (function () {
                     RTGH = await loadJSON(base + 'principles/rtg_hazard.json').catch(() => null);
                     try { RTGLABELS = await (await fetch('/api/rtg/labels')).json() || {}; } catch (e) { RTGLABELS = {}; }
                     try { LIB = await (await fetch('/api/library/stats')).json(); } catch (e) { LIB = null; }
+                    try { LIBV = (await (await fetch('/api/library/videos?limit=150')).json()).videos || []; } catch (e) { LIBV = []; }
+                    try { const sr = await (await fetch('/api/shorts-db/videos?limit=400&sort=views')).json(); SHORTSV = (sr.videos || []).filter(v => !/year/i.test(v.publishedAt || '')); } catch (e) { SHORTSV = []; }
                 } catch (e) {
                     if (tries >= 3) { root.innerHTML = `<div style="padding:24px;color:${C.dim}">Couldn't load data — the site may be mid-deploy. <button data-reload style="background:${C.accent}22;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px">Retry</button></div>`; return; }
                     root.innerHTML = `<div style="padding:40px;text-align:center;color:${C.dim}">Loading… <span style="color:${C.mute};font-size:11px">(retry ${tries})</span></div>`;

@@ -2899,6 +2899,24 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    if (pathname === '/api/library/videos' && req.method === 'GET') {
+        try {
+            const limit = Math.min(parseInt(url.searchParams.get('limit')) || 150, 400);
+            let videos = [];
+            try {
+                const buf = await cloud.downloadFromR2('library/db.json');
+                if (buf) {
+                    const db = JSON.parse(buf.toString('utf8'));
+                    videos = Object.values(db.videos || {}).filter(v => v.stored)
+                        .sort((a, b) => (b.storedAt || 0) - (a.storedAt || 0)).slice(0, limit)
+                        .map(v => ({ videoId: v.videoId, title: v.title, channel: v.channel, views: v.views, publishedAt: v.publishedAt, duration: v.duration }));
+                }
+            } catch (e) {}
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify({ videos }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
     const RTG_LABELS_R2_KEY = 'data/rtg-labels.json';
     if (pathname === '/api/rtg/labels' && req.method === 'GET') {
         try {
