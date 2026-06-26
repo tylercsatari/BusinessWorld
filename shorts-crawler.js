@@ -495,4 +495,6 @@ async function getVideoFromDb(videoId) {
     return db.videos[videoId] || null;
 }
 
-module.exports = { crawl, processFrames, getStats, getVideos, getFramePath, getFrameR2Url, getVideoFromDb, loadDb };
+module.exports = { crawl, processFrames, getStats, getVideos, getFramePath, getFrameR2Url, getVideoFromDb, loadDb,
+    // discovery helpers reused by library-crawler.js
+    buildSP, parseVideos, innerTubeSearch, innerTubeBrowse, isShort, durToSec, SHORTS_QUERIES, BROWSE_REGIONS };

@@ -66,3 +66,7 @@ buildings/jarvis/retention-study/principles/rtg_labels.json
 
 # RTG OCR run log
 buildings/jarvis/retention-study/principles/ocr_full.log
+
+# Library crawler (state on R2)
+library-db.json
+library-crawler.log

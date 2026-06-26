@@ -2889,6 +2889,16 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // =========================================
     // API: RTG hand-labels (ground truth) — persisted to R2 so they survive Render's disk
     // =========================================
+    // Library dataset stats (the big research video set on R2)
+    if (pathname === '/api/library/stats' && req.method === 'GET') {
+        try {
+            let stats = null;
+            try { const buf = await cloud.downloadFromR2('library/stats.json'); if (buf) stats = JSON.parse(buf.toString('utf8')); } catch (e) {}
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify(stats || { stored: 0, discovered: 0, target: 100000 }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
     const RTG_LABELS_R2_KEY = 'data/rtg-labels.json';
     if (pathname === '/api/rtg/labels' && req.method === 'GET') {
         try {
