@@ -2901,11 +2901,21 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     if (pathname === '/api/raw/map' && req.method === 'GET') {
         try {
+            const ch = (url.searchParams.get('channel') || 'visual').replace(/[^a-z]/g, '');
             let m = null;
-            try { const buf = await cloud.downloadFromR2('raw/map.json'); if (buf) m = JSON.parse(buf.toString('utf8')); } catch (e) {}
+            try { const buf = await cloud.downloadFromR2(`raw/${ch}/map.json`); if (buf) m = JSON.parse(buf.toString('utf8')); } catch (e) {}
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify(m || { n: 0 }));
+            res.end(JSON.stringify(m || { n: 0, channel: ch }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    const rawMon = pathname.match(/^\/api\/raw\/montage\/([\w-]{6,16})$/);
+    if (rawMon && req.method === 'GET') {
+        try {
+            const buf = await cloud.downloadFromR2(`raw/montage/${rawMon[1]}.jpg`);
+            if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); }
+            else { res.writeHead(404); res.end(); }
+        } catch (e) { res.writeHead(500); res.end(); }
         return;
     }
     if (pathname === '/api/library/videos' && req.method === 'GET') {
