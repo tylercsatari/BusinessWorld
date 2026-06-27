@@ -34,6 +34,31 @@ const QUERIES = [...sc.SHORTS_QUERIES,
     'car review', 'motorcycle', 'truck', 'racing', 'drift', 'mechanic',
     'language', 'study', 'exam', 'school', 'college', 'productivity', 'minimalism',
     'comedy skit', 'standup', 'impression', 'voice', 'animation', 'cartoon',
+    // broad single-word sweep — date-sorted, surfaces the long tail of recent uploads
+    'amazing', 'wow', 'crazy', 'insane', 'epic', 'genius', 'wholesome', 'emotional', 'shocking',
+    'before after', 'transformation', 'glow up', 'speedrun', 'world record', 'experiment', 'reaction',
+    'tutorial beginner', 'pro tips', 'mistakes', 'hacks', 'gadget', 'invention', 'robot', 'drone',
+    'football skills', 'goals', 'dunk', 'trick shot', 'gym', 'calisthenics', 'yoga', 'run', 'marathon',
+    'guitar solo', 'beat', 'remix', 'mashup', 'acapella', 'orchestra', 'violin', 'dj', 'producer',
+    'sushi', 'ramen', 'pizza', 'burger', 'dessert', 'cake', 'chocolate', 'spicy', 'mukbang', 'recipe easy',
+    'puppy', 'kitten', 'parrot', 'snake', 'spider', 'shark', 'ocean', 'volcano', 'storm', 'aurora',
+    'car mod', 'supercar', 'ev', 'tesla', 'engine', 'restoration', 'detailing',
+    'magic', 'illusion', 'card trick', 'escape', 'puzzle', 'riddle', 'iq test', 'optical illusion',
+    'art timelapse', 'sculpt', 'graffiti', 'tattoo', 'calligraphy', 'origami', 'lego', 'diorama',
+    'fortnite', 'minecraft build', 'roblox', 'valorant', 'cod', 'gta', 'speedrun glitch', 'gaming setup',
+    'history fact', 'ancient', 'war', 'science fact', 'math trick', 'coding tips', 'startup', 'investing',
+    'plane', 'train', 'ship', 'submarine', 'rocket launch', 'nasa', 'telescope',
+    'fashion haul', 'outfit', 'thrift', 'sneakers', 'watch', 'jewelry', 'nails',
+    'farm life', 'harvest', 'tractor', 'fishing', 'hunting', 'camping', 'hiking', 'van life',
+    'baby first', 'twins', 'grandma', 'wedding', 'proposal', 'surprise reunion', 'soldier homecoming',
+    'asmr eating', 'asmr slime', 'soap cutting', 'kinetic sand', 'pressure wash', 'cleaning', 'restore',
+    'street performer', 'busker', 'flash mob', 'crowd', 'concert', 'festival',
+    'hindi', 'tamil', 'telugu', 'bhojpuri', 'punjabi', 'urdu', 'arabic', 'spanish', 'portuguese',
+    'brasil', 'indonesia', 'filipino', 'korean', 'japanese', 'thai', 'vietnam', 'turkish', 'russian',
+    'nigeria', 'kenya', 'egypt', 'mexico', 'colombia', 'argentina', 'france', 'germany', 'italy',
+    'pov', 'storytime scary', 'true story', 'caught on camera', 'cctv', 'dashcam', 'bodycam',
+    'life hack kitchen', 'diy home', 'organize', 'declutter', 'budget', 'side hustle', 'passive income',
+    'prank gone wrong', 'social experiment', 'kindness', 'tip', 'homeless help', 'good deed',
 ];
 
 let db = null, running = false, stop = false;
@@ -86,29 +111,30 @@ function withinLastYear(pub) {
     return !/year/i.test(pub);                   // "1 year ago" / "2 years ago" → drop
 }
 
+// rotate through (sort × query) a FEW per call, then return so downloads run — tight interleave
+let qPos = 0;
+const SORTS = [3, 1];                      // 3 = view-count, 1 = upload-date (long tail)
+const TOTAL_Q = () => SORTS.length * QUERIES.length;
 async function discover() {
     const seen = new Set(Object.keys(db.videos));
     let added = 0;
-    // both view-sorted (high-view) and date-sorted (long tail) this-year shorts
-    for (const sort of [3, 1]) {
-        const sp = sc.buildSP(sort, UPLOAD_DATE, 6, null);
-        for (const q of QUERIES) {
-            if (stop) return added;
-            let vids = [];
-            try { vids = await sc.innerTubeSearch(q, sp); } catch (e) { continue; }
-            for (const v of vids) {
-                if (!v.videoId || seen.has(v.videoId)) continue;
-                if (!(v.views >= MIN_VIEWS && v.views < MAX_VIEWS)) continue;
-                if (!sc.isShort(v) || !withinLastYear(v.publishedAt)) continue;
-                seen.add(v.videoId); added++;
-                db.videos[v.videoId] = { videoId: v.videoId, title: v.title, channel: v.channelTitle,
-                    views: v.views, publishedAt: v.publishedAt, duration: v.duration, stored: false, addedAt: Date.now() };
-            }
-            await saveDb(false);
-            if (added >= 800) return added;                                    // interleave: go download these
-            if (Object.keys(db.videos).length >= TARGET * 1.3) return added;   // enough candidates queued
+    for (let n = 0; n < 8; n++) {          // ~8 queries per discover() call → yields to download often
+        if (stop) break;
+        const sort = SORTS[Math.floor(qPos / QUERIES.length) % SORTS.length];
+        const q = QUERIES[qPos % QUERIES.length];
+        qPos = (qPos + 1) % TOTAL_Q();
+        let vids = [];
+        try { vids = await sc.innerTubeSearch(q, sc.buildSP(sort, UPLOAD_DATE, 6, null)); } catch (e) { continue; }
+        for (const v of vids) {
+            if (!v.videoId || seen.has(v.videoId)) continue;
+            if (!(v.views >= MIN_VIEWS && v.views < MAX_VIEWS)) continue;
+            if (!sc.isShort(v) || !withinLastYear(v.publishedAt)) continue;
+            seen.add(v.videoId); added++;
+            db.videos[v.videoId] = { videoId: v.videoId, title: v.title, channel: v.channelTitle,
+                views: v.views, publishedAt: v.publishedAt, duration: v.duration, stored: false, addedAt: Date.now() };
         }
     }
+    await saveDb(false);
     return added;
 }
 
@@ -176,28 +202,24 @@ async function downloadOne(v) {
     }
 }
 
-// one-time: re-check already-stored videos — DELETE horizontals from R2, backfill metadata on verticals
-async function recheckStored() {
-    const todo = Object.values(db.videos).filter(v => v.stored && !v.rechecked);
-    console.log(`library: rechecking ${todo.length} stored videos (vertical filter + metadata backfill)…`);
-    let removed = 0;
-    for (let i = 0; i < todo.length && !stop; i += CONC) {
-        await Promise.all(todo.slice(i, i + CONC).map(async v => {
-            const info = await ytJson(v.videoId);
-            if (!info) return;                          // couldn't verify — leave it, retry next pass (never delete on a fetch failure)
-            if (!isVerticalShort(info)) {
-                try { if (v.r2Key) await cloud.deleteFromR2(v.r2Key); } catch (e) {}
-                v.stored = false; v.nonVertical = true; v.removed = true; removed++;
-            } else { enrich(v, info); v.rechecked = true; }
-        }));
-        await saveDb(false);
-    }
-    await saveDb(true);
-    console.log(`library: recheck done — removed ${removed} horizontal/non-short, backfilled the rest`);
+// interleaved backfill: re-check a SMALL batch of already-stored videos — DELETE horizontals from
+// R2, backfill metadata on verticals. Runs a few per loop so NEW downloads keep flowing.
+async function recheckBatch(limit) {
+    const todo = Object.values(db.videos).filter(v => v.stored && !v.rechecked).slice(0, limit);
+    if (!todo.length) return;
+    await Promise.all(todo.map(async v => {
+        const info = await ytJson(v.videoId);
+        if (!info) return;                              // couldn't verify — leave it, retry later (never delete on a fetch failure)
+        if (!isVerticalShort(info)) {
+            try { if (v.r2Key) await cloud.deleteFromR2(v.r2Key); } catch (e) {}
+            v.stored = false; v.nonVertical = true; v.removed = true;
+        } else { enrich(v, info); v.rechecked = true; }
+    }));
+    await saveDb(false);
 }
 
 async function downloadPending() {
-    const pending = Object.values(db.videos).filter(v => !v.stored && (v.failed || 0) < 3);
+    const pending = Object.values(db.videos).filter(v => !v.stored && !v.skip && (v.failed || 0) < 3);
     let done = 0;
     for (let i = 0; i < pending.length && !stop; i += CONC) {
         const batch = pending.slice(i, i + CONC);
@@ -215,12 +237,16 @@ async function run() {
     if (running) return; running = true; stop = false;
     await loadDb();
     console.log(`library-crawler: ${computeStats().stored} stored, target ${TARGET}`);
-    await recheckStored();          // clean existing horizontals + backfill metadata before resuming
     while (!stop) {
+        await recheckBatch(CONC * 2);   // trickle backfill/cleanup of old stored videos (non-blocking to new downloads)
         const storedNow = Object.values(db.videos).filter(v => v.stored).length;
         if (storedNow >= TARGET) break;
-        const pending = Object.values(db.videos).filter(v => !v.stored && (v.failed || 0) < 3).length;
-        if (pending < CONC * 10) { console.log('library: discovering…'); await discover(); }
+        const pending = Object.values(db.videos).filter(v => !v.stored && !v.skip && (v.failed || 0) < 3).length;
+        if (pending < CONC * 10) {
+            console.log('library: discovering…');
+            const added = await discover();
+            if (!added && pending === 0) { console.log('library: discovery dry — sleeping 90s (new uploads appear over time)'); await new Promise(r => setTimeout(r, 90000)); }
+        }
         await downloadPending();
         await saveDb(true);
     }
