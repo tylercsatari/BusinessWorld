@@ -81,34 +81,66 @@ print(f"already embedded: {len(ids)} · to embed now: {len(todo)} (RAW_MAX={RAW_
 lock = threading.Lock(); cnt = [0]; t0 = time.time()
 
 
-def save_all():
+def save_data():
     if not ids:
         return
-    Vec = np.array(veclist, np.float32)
     bio = io.BytesIO()
-    np.savez_compressed(bio, ids=np.array(ids, object), vecs=Vec, views=np.array(V, np.float64),
+    np.savez_compressed(bio, ids=np.array(ids, object), vecs=np.array(veclist, np.float32), views=np.array(V, np.float64),
                         outlier=np.array(O, np.float64), subs=np.array(SU, np.float64), title=np.array(TI, object))
     r2_put('raw/embeddings.npz', bio.getvalue(), 'application/octet-stream')
     r2_put('raw/manifest.json', json.dumps({'embedded': len(ids), 'updated': time.time()}).encode(), 'application/json')
-    # projection + clustering (unsupervised)
+
+
+def build_map():
+    """multiple PROJECTIONS of the 1536-dim space — unsupervised (pca/umap) AND target-steered
+    (PLS toward views / outlier / both; LDA toward >10M / top-outlier) so the user can pick the
+    2D view that best separates performance. Each tagged with how aligned it is to views/outlier."""
+    if len(ids) < 12:
+        return
     try:
-        Xn = Vec / (np.linalg.norm(Vec, axis=1, keepdims=True) + 1e-9)
+        from sklearn.cross_decomposition import PLSRegression
+        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
         import umap
-        xy = umap.UMAP(n_neighbors=15, min_dist=0.1, metric='cosine', random_state=0).fit_transform(Xn) if len(Xn) >= 10 else np.zeros((len(Xn), 2))
-        clusters = {}
-        for k in [6, 10, 16, 24]:
-            if len(Xn) >= k:
-                clusters[str(k)] = MiniBatchKMeans(k, random_state=0, n_init=3, batch_size=1024).fit_predict(Xn).tolist()
-        def g(a):
-            a = np.asarray(a, float); lo, hi = np.nanpercentile(a, 2), np.nanpercentile(a, 98)
-            return (np.clip((a - lo) / ((hi - lo) or 1), 0, 1) * 1000).round().astype(int)
-        out = {'n': len(ids), 'updated': time.time(),
-               'x': g(xy[:, 0]).tolist(), 'y': g(xy[:, 1]).tolist(),
+        X = np.array(veclist, np.float32); Xn = X / (np.linalg.norm(X, axis=1, keepdims=True) + 1e-9)
+        Xc = Xn - Xn.mean(0); P = np.linalg.svd(Xc, full_matrices=False)[2]
+        vv = np.array(V, float); ov = np.array(O, float)
+        lv = np.log10(vv + 1)
+        omed = np.nanmedian(ov[~np.isnan(ov)]) if (~np.isnan(ov)).any() else 0.0
+        ovf = np.where(np.isnan(ov), omed, ov); lo = np.log10(ovf + 1)
+
+        def gridcol(a):
+            a = np.asarray(a, float); q1, q99 = np.nanpercentile(a, 1), np.nanpercentile(a, 99)
+            return (np.clip((a - q1) / ((q99 - q1) or 1), 0, 1) * 1000).round().astype(int)
+
+        def corr(a, b):
+            a, b = np.asarray(a, float), np.asarray(b, float)
+            return abs(float(np.corrcoef(a, b)[0, 1])) if a.std() > 1e-9 and b.std() > 1e-9 else 0.0
+        proj = {}
+
+        def add(name, xy):
+            xy = np.asarray(xy, float)
+            cv = max(corr(xy[:, 0], lv), corr(xy[:, 1], lv))
+            co = max(corr(xy[:, 0], lo), corr(xy[:, 1], lo))
+            proj[name] = {'x': gridcol(xy[:, 0]).tolist(), 'y': gridcol(xy[:, 1]).tolist(),
+                          'cv': round(cv, 3), 'co': round(co, 3)}
+        add('pca', Xc @ P[:2].T)
+        try: add('umap', umap.UMAP(n_neighbors=15, min_dist=0.1, metric='cosine', random_state=0).fit_transform(Xn))
+        except Exception: pass
+        add('views', PLSRegression(2).fit(Xn, lv).transform(Xn))
+        add('outlier', PLSRegression(2).fit(Xn, lo).transform(Xn))
+        add('both', PLSRegression(2).fit(Xn, np.column_stack([lv, lo])).transform(Xn))
+        for nm, y in [('hi10m', (vv > 1e7).astype(int)), ('hiout', (ovf >= np.nanpercentile(ovf, 85)).astype(int))]:
+            if y.sum() > 5 and (len(y) - y.sum()) > 5:
+                lx = LDA(n_components=1).fit(Xn, y).transform(Xn)[:, 0]
+                add(nm, np.column_stack([lx, Xc @ P[0]]))
+        clusters = {str(k): MiniBatchKMeans(k, random_state=0, n_init=3, batch_size=1024).fit_predict(Xn).tolist() for k in [6, 10, 16, 24] if len(Xn) >= k}
+        out = {'n': len(ids), 'updated': time.time(), 'proj': proj,
                'views': [float(x) for x in V], 'outlier': [round(float(x), 1) if x == x else None for x in O],
                'subs': [float(x) for x in SU], 'id': list(ids), 'title': [str(t)[:60] for t in TI], 'clusters': clusters}
         r2_put('raw/map.json', json.dumps(out).encode(), 'application/json')
+        print('  map: ' + ' '.join(f"{k}(v{proj[k]['cv']}/o{proj[k]['co']})" for k in proj), flush=True)
     except Exception as e:
-        print('map build skipped:', str(e)[:80], flush=True)
+        print('map build skipped:', str(e)[:120], flush=True)
 
 
 def work(v):
@@ -127,10 +159,12 @@ def work(v):
         if cnt[0] % 100 == 0:
             el = time.time() - t0
             print(f"  embedded {len(ids)} (+{cnt[0]}) · {el/60:.0f}m · ~{el/cnt[0]*len(todo)/60:.0f}m left", flush=True)
-            save_all()
+            save_data()
+            if cnt[0] % 500 == 0:
+                build_map()
 
 
 with ThreadPoolExecutor(WORKERS) as ex:
     list(ex.map(work, todo))
-save_all()
+save_data(); build_map()
 print(f"done · {len(ids)} hooks embedded · raw/embeddings.npz + raw/map.json on R2", flush=True)

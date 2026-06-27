@@ -13,7 +13,7 @@ const JarvisRetention = (function () {
     let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -308,30 +308,33 @@ const JarvisRetention = (function () {
         if (!R || !R.n) return h2c('🔬 Raw — hook embeddings', 'The unsupervised playground.') + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Embedding hooks… <div style="font-size:11px;color:${C.mute};margin-top:6px">The first 5s of each library video is being montaged + embedded with Gemini. Refresh in a bit.</div></div>`);
         const n = R.n, W = 820, H = 520, pad = 16, S = 1000;
         const X = g => pad + g / S * (W - 2 * pad), Yc = g => pad + (1 - g / S) * (H - 2 * pad);
+        const PJ = R.proj || {};
+        const PROJS = [['both', '→ views+outlier'], ['views', '→ views'], ['outlier', '→ outlier'], ['hi10m', '>10M class'], ['hiout', 'top-outlier'], ['umap', 'UMAP raw'], ['pca', 'PCA raw']].filter(p => PJ[p[0]]);
+        let pm = st.rawProj || 'both'; if (!PJ[pm]) pm = PROJS.length ? PROJS[0][0] : null;
+        const proj = (pm && PJ[pm]) || { x: R.x || [], y: R.y || [], cv: 0, co: 0 };
+        const supervised = pm && !['umap', 'pca'].includes(pm);
         const mode = st.rawColor || 'cluster', k = st.rawK || '10';
-        // colour per point
         let colOf;
-        if (mode === 'cluster') {
-            const cl = (R.clusters || {})[k] || [];
-            colOf = i => tcol(cl[i] != null ? cl[i] : -1);
-        } else {
+        if (mode === 'cluster') { const cl = (R.clusters || {})[k] || []; colOf = i => tcol(cl[i] != null ? cl[i] : -1); }
+        else {
             const raw = mode === 'views' ? R.views : mode === 'outlier' ? R.outlier : R.subs;
             const vals = raw.map(x => x == null ? null : Math.log10((+x) + 1));
-            const ok = vals.filter(x => x != null && isFinite(x));
-            const lo = Math.min(...ok), hi = Math.max(...ok);
+            const ok = vals.filter(x => x != null && isFinite(x)); const lo = Math.min(...ok), hi = Math.max(...ok);
             colOf = i => vals[i] == null || !isFinite(vals[i]) ? '#334155' : rawRamp((vals[i] - lo) / ((hi - lo) || 1));
         }
         let dots = '';
         for (let i = 0; i < n; i++) {
             const tip = `${esc((R.title[i] || '').slice(0, 40))} · ${fv(R.views[i])} views${R.outlier && R.outlier[i] ? ' · ' + R.outlier[i] + '× subs' : ''}`;
-            dots += `<circle cx="${X(R.x[i]).toFixed(1)}" cy="${Yc(R.y[i]).toFixed(1)}" r="2.4" fill="${colOf(i)}" opacity="0.72"><title>${tip}</title></circle>`;
+            dots += `<circle cx="${X(proj.x[i]).toFixed(1)}" cy="${Yc(proj.y[i]).toFixed(1)}" r="2.4" fill="${colOf(i)}" opacity="0.72"><title>${tip}</title></circle>`;
         }
         const pill = (id, lab, on, attr) => `<span ${attr}="${id}" style="cursor:pointer;border:1px solid ${on ? C.accent : C.border};background:${on ? C.accent + '1e' : 'transparent'};color:${on ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
-        let h = h2c('🔬 Raw — hook embeddings', 'Pure unsupervised structure. The first 5s of every stored video, montaged and embedded with Gemini multimodal — no labels, no interpretation. Recolour to see if patterns line up with views / outliers.');
+        const projPill = ([id, lab]) => `<span data-rawproj="${id}" style="cursor:pointer;border:1px solid ${pm === id ? C.accent : C.border};background:${pm === id ? C.accent + '1e' : 'transparent'};color:${pm === id ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}${PJ[id] && !['umap', 'pca'].includes(id) ? ` <span style="opacity:.65;font-weight:400">v${PJ[id].cv}/o${PJ[id].co}</span>` : ''}</span>`;
+        let h = h2c('🔬 Raw — hook embeddings', 'Pure unsupervised structure projected different ways. The first 5s of every stored video, embedded with Gemini multimodal — no labels. UMAP/PCA show raw geometry; the steered projections (PLS/LDA) rotate the 1536-dim space so an axis trends toward views / outliers, to surface separation you can quantify.');
         h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
-              <div style="font-size:12px;font-weight:700;color:${C.text}">${n.toLocaleString()} hooks · UMAP-2D of Gemini embeddings</div>
-              <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${mode === 'cluster' ? `<span style="width:8px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div></div>
-            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Each dot = one video's hook. Clusters form from the embedding alone (k-means, k=${k}). ${mode === 'cluster' ? 'Coloured by cluster.' : `Coloured by <b>${mode}</b> (log scale, <span style="color:${rawRamp(0)}">low</span> → <span style="color:${rawRamp(1)}">high</span>) — if a cluster lights up, that visual hook style correlates with ${mode}.`} Hover a dot for its title + views.</div>
+              <div style="font-size:12px;font-weight:700;color:${C.text}">${n.toLocaleString()} hooks</div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${mode === 'cluster' ? `<span style="width:6px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div></div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">project</span>${PROJS.map(projPill).join('')}</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">${supervised ? `<b style="color:${C.accent}">Steered projection</b> — axes rotated toward the target. This one aligns with <b>views r=${proj.cv}</b>, <b>outlier r=${proj.co}</b> (each pill shows v/o; higher = the axes separate that target more — pick the highest for what you're hunting).` : `<b>Raw geometry</b> (no target). Switch to a steered projection to pull views/outliers apart.`} ${mode !== 'cluster' ? `Coloured by <b>${mode}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>).` : `Coloured by k-means cluster (k=${k}).`} Hover for title + views.</div>
             <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px">${dots}</svg>`, 12);
         return h;
     }
@@ -1483,6 +1486,7 @@ const JarvisRetention = (function () {
         const hu = e.target.closest('[data-hazunit]'); if (hu) { st.hazUnit = hu.getAttribute('data-hazunit'); rtgUpdateHaz(); return; }
         const rc = e.target.closest('[data-rawcolor]'); if (rc) { st.rawColor = rc.getAttribute('data-rawcolor'); rtgUpdateRaw(); return; }
         const rk = e.target.closest('[data-rawk]'); if (rk) { st.rawK = rk.getAttribute('data-rawk'); rtgUpdateRaw(); return; }
+        const rp = e.target.closest('[data-rawproj]'); if (rp) { st.rawProj = rp.getAttribute('data-rawproj'); rtgUpdateRaw(); return; }
         if (e.target.closest('[data-libreload]')) { Promise.all([
             fetch('/api/library/stats').then(r => r.json()).then(j => { LIB = j; }).catch(() => {}),
             fetch('/api/library/videos?limit=150').then(r => r.json()).then(j => { LIBV = j.videos || []; }).catch(() => {})
@@ -1515,7 +1519,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=67'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=68'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
