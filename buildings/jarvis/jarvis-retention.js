@@ -345,11 +345,24 @@ const JarvisRetention = (function () {
             const txt = (R.txt && R.txt[i]) || '';
             const monUrl = `/api/raw/montage/${id}`;
             const meta = [['views', fv(R.views[i])], ['outlier', R.outlier && R.outlier[i] ? R.outlier[i] + '× subs' : '—'], ['subs', R.subs && R.subs[i] != null ? fv(R.subs[i]) : '—']];
+            const lab = s => `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">${s}</div>`;
+            const imgEl = `<img src="${monUrl}" style="width:100%;border-radius:6px;background:#000;margin-bottom:8px;min-height:60px" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'Montage still rendering for this video — the embed run reaches it shortly.',style:'font-size:11px;color:#94a3b8;padding:14px;text-align:center;background:#0f172a;border-radius:6px;margin-bottom:8px'}))"/>`;
+            const txtEl = txt ? `<div style="font-size:12px;color:${C.text};font-style:italic;margin-bottom:8px;line-height:1.45;background:${C.bg || '#0f172a'};border-radius:6px;padding:9px 11px">"${esc(txt)}"</div>` : `<div style="font-size:11px;color:${C.dim};margin-bottom:8px">No speech in the first 5s — an empty transcript was embedded.</div>`;
+            // Show EXACTLY what this channel fed the embedder — nothing more.
+            let inputBlock;
+            if (chan === 'visual') {
+                inputBlock = lab('Exact input embedded — first-5s frames, 1/sec') + imgEl;
+            } else if (chan === 'text') {
+                inputBlock = lab('Exact input embedded — first-5s transcript (Whisper)') + txtEl
+                    + `<div style="font-size:9px;color:${C.faint};text-transform:uppercase;margin:2px 0 4px">↓ source video (for reference — NOT part of the text embedding)</div>` + imgEl;
+            } else {
+                inputBlock = txt
+                    ? lab('Exact input embedded — frames + transcript, fused into one vector') + imgEl + txtEl
+                    : lab('Exact input embedded — frames only (no speech in first 5s, so nothing text was added)') + imgEl;
+            }
             return `<div style="margin-top:10px;border:1px solid ${C.border};border-radius:10px;padding:12px;background:${C.card2}">
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="font-size:12px;font-weight:700;color:${C.text};line-height:1.4">${esc(R.title[i] || '(untitled)')}</div><span data-rawclose="1" style="cursor:pointer;color:${C.dim};font-size:16px;line-height:1;padding:0 4px">×</span></div>
-                  <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">exact input that was embedded — first 5s, 1 frame/sec</div>
-                  <img src="${monUrl}" style="width:100%;border-radius:6px;background:#000;margin-bottom:8px;min-height:60px" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'Montage still rendering for this video — the embed run reaches it shortly.',style:'font-size:11px;color:#94a3b8;padding:14px;text-align:center;background:#0f172a;border-radius:6px;margin-bottom:8px'}))"/>
-                  ${txt ? `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:2px">transcript (first 5s)</div><div style="font-size:11px;color:${C.text};font-style:italic;margin-bottom:8px;line-height:1.4">"${esc(txt)}"</div>` : (chan !== 'visual' ? `<div style="font-size:11px;color:${C.dim};margin-bottom:8px">No speech detected in the first 5s.</div>` : '')}
+                  ${inputBlock}
                   <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px">${meta.map(([k2, v]) => `<div><div style="font-size:9px;color:${C.mute};text-transform:uppercase">${k2}</div><div style="font-size:13px;font-weight:700;color:${C.text}">${v}</div></div>`).join('')}</div>
                   <a href="https://youtube.com/watch?v=${id}" target="_blank" style="font-size:11px;color:${C.accent};text-decoration:none">▶ Open on YouTube →</a>
                 </div>`;
@@ -1547,7 +1560,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=70'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=71'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
