@@ -2899,6 +2899,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    if (pathname === '/api/raw/map' && req.method === 'GET') {
+        try {
+            let m = null;
+            try { const buf = await cloud.downloadFromR2('raw/map.json'); if (buf) m = JSON.parse(buf.toString('utf8')); } catch (e) {}
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify(m || { n: 0 }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
     if (pathname === '/api/library/videos' && req.method === 'GET') {
         try {
             const limit = Math.min(parseInt(url.searchParams.get('limit')) || 150, 400);

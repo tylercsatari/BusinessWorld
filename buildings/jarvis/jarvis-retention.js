@@ -10,10 +10,10 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50 };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -297,6 +297,45 @@ const JarvisRetention = (function () {
         h += note(`<b>What this is for:</b> the big set trains the reference→gratification / encoder model at the scale it's currently starved for (211 → 100k), and powers views-based analysis. <b>Retention curves only exist for your ${owned} owned videos</b> (YouTube only gives audience retention to the owner), so the hold/flatten validation stays on the owned set — the big set ties in for content-structure + views. Target ${target.toLocaleString()} at 720p ≈ ~0.15 TB on R2.`, C.cyan);
         return h;
     }
+    // 🔬 RAW — unsupervised hook-embedding playground (first-5s montage → Gemini → UMAP-2D), recolour to find patterns
+    function rawRamp(t) { // 0..1 → cool→warm
+        const cool = [59, 76, 192], mid = [221, 221, 221], warm = [180, 4, 38]; t = Math.max(0, Math.min(1, t));
+        const [a, b, u] = t < 0.5 ? [cool, mid, t * 2] : [mid, warm, (t - 0.5) * 2];
+        return `rgb(${a.map((c, k) => Math.round(c + (b[k] - c) * u)).join(',')})`;
+    }
+    function renderRaw() {
+        const R = RAW;
+        if (!R || !R.n) return h2c('🔬 Raw — hook embeddings', 'The unsupervised playground.') + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Embedding hooks… <div style="font-size:11px;color:${C.mute};margin-top:6px">The first 5s of each library video is being montaged + embedded with Gemini. Refresh in a bit.</div></div>`);
+        const n = R.n, W = 820, H = 520, pad = 16, S = 1000;
+        const X = g => pad + g / S * (W - 2 * pad), Yc = g => pad + (1 - g / S) * (H - 2 * pad);
+        const mode = st.rawColor || 'cluster', k = st.rawK || '10';
+        // colour per point
+        let colOf;
+        if (mode === 'cluster') {
+            const cl = (R.clusters || {})[k] || [];
+            colOf = i => tcol(cl[i] != null ? cl[i] : -1);
+        } else {
+            const raw = mode === 'views' ? R.views : mode === 'outlier' ? R.outlier : R.subs;
+            const vals = raw.map(x => x == null ? null : Math.log10((+x) + 1));
+            const ok = vals.filter(x => x != null && isFinite(x));
+            const lo = Math.min(...ok), hi = Math.max(...ok);
+            colOf = i => vals[i] == null || !isFinite(vals[i]) ? '#334155' : rawRamp((vals[i] - lo) / ((hi - lo) || 1));
+        }
+        let dots = '';
+        for (let i = 0; i < n; i++) {
+            const tip = `${esc((R.title[i] || '').slice(0, 40))} · ${fv(R.views[i])} views${R.outlier && R.outlier[i] ? ' · ' + R.outlier[i] + '× subs' : ''}`;
+            dots += `<circle cx="${X(R.x[i]).toFixed(1)}" cy="${Yc(R.y[i]).toFixed(1)}" r="2.4" fill="${colOf(i)}" opacity="0.72"><title>${tip}</title></circle>`;
+        }
+        const pill = (id, lab, on, attr) => `<span ${attr}="${id}" style="cursor:pointer;border:1px solid ${on ? C.accent : C.border};background:${on ? C.accent + '1e' : 'transparent'};color:${on ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
+        let h = h2c('🔬 Raw — hook embeddings', 'Pure unsupervised structure. The first 5s of every stored video, montaged and embedded with Gemini multimodal — no labels, no interpretation. Recolour to see if patterns line up with views / outliers.');
+        h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+              <div style="font-size:12px;font-weight:700;color:${C.text}">${n.toLocaleString()} hooks · UMAP-2D of Gemini embeddings</div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${mode === 'cluster' ? `<span style="width:8px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div></div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Each dot = one video's hook. Clusters form from the embedding alone (k-means, k=${k}). ${mode === 'cluster' ? 'Coloured by cluster.' : `Coloured by <b>${mode}</b> (log scale, <span style="color:${rawRamp(0)}">low</span> → <span style="color:${rawRamp(1)}">high</span>) — if a cluster lights up, that visual hook style correlates with ${mode}.`} Hover a dot for its title + views.</div>
+            <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px">${dots}</svg>`, 12);
+        return h;
+    }
+    function rtgUpdateRaw() { try { const el = window.document.getElementById('rtg-rawpanel'); if (el) el.innerHTML = renderRaw(); } catch (e) { } }
     function renderData() {
         const v = rows();
         const head = COLS.map(c => `<th data-sort="${c.k}" style="text-align:${c.align || 'right'};width:${c.w};padding:7px 8px;font-size:11px;color:${st.sort === c.k ? C.accent : C.mute};cursor:pointer;user-select:none;white-space:nowrap">${c.l}${st.sort === c.k ? (st.dir < 0 ? ' ▼' : ' ▲') : ''}</th>`).join('');
@@ -1402,9 +1441,9 @@ const JarvisRetention = (function () {
 
     function render() {
         if (!root) return;
-        const SECS = [['data', '📋 Data'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
+        const SECS = [['data', '📋 Data'], ['raw', '🔬 Raw'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
         const nav = SECS.map(([id, l]) => `<button data-rs="${id}" style="background:${st.sec === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.sec === id ? C.accent : C.border};color:${st.sec === id ? C.accent : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('');
-        const sec = S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData();
+        const sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
             <div style="font-size:21px;font-weight:900;color:${C.accent};margin-bottom:8px">Retention → Views</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${nav}</div>${sec}</div>`;
@@ -1442,6 +1481,8 @@ const JarvisRetention = (function () {
         const epj = e.target.closest('[data-rtgproj]'); if (epj) { st.rtgProj = epj.getAttribute('data-rtgproj'); rtgUpdateEmbedMap(); return; }
         const ef = e.target.closest('[data-rtgembfocus]'); if (ef) { st.rtgEmbFocus = ef.getAttribute('data-rtgembfocus'); rtgUpdateEmbedMap(); return; }
         const hu = e.target.closest('[data-hazunit]'); if (hu) { st.hazUnit = hu.getAttribute('data-hazunit'); rtgUpdateHaz(); return; }
+        const rc = e.target.closest('[data-rawcolor]'); if (rc) { st.rawColor = rc.getAttribute('data-rawcolor'); rtgUpdateRaw(); return; }
+        const rk = e.target.closest('[data-rawk]'); if (rk) { st.rawK = rk.getAttribute('data-rawk'); rtgUpdateRaw(); return; }
         if (e.target.closest('[data-libreload]')) { Promise.all([
             fetch('/api/library/stats').then(r => r.json()).then(j => { LIB = j; }).catch(() => {}),
             fetch('/api/library/videos?limit=150').then(r => r.json()).then(j => { LIBV = j.videos || []; }).catch(() => {})
@@ -1474,7 +1515,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=66'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=67'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
@@ -1486,6 +1527,7 @@ const JarvisRetention = (function () {
                     RTGF = await loadJSON(base + 'principles/rtg_field.json').catch(() => null);
                     RTGE = await loadJSON(base + 'principles/rtg_embedmap.json').catch(() => null);
                     RTGH = await loadJSON(base + 'principles/rtg_hazard.json').catch(() => null);
+                    try { RAW = await (await fetch('/api/raw/map')).json(); } catch (e) { RAW = null; }
                     try { RTGLABELS = await (await fetch('/api/rtg/labels')).json() || {}; } catch (e) { RTGLABELS = {}; }
                 } catch (e) {
                     if (tries >= 3) { root.innerHTML = `<div style="padding:24px;color:${C.dim}">Couldn't load data — the site may be mid-deploy. <button data-reload style="background:${C.accent}22;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px">Retry</button></div>`; return; }

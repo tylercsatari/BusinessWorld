@@ -70,3 +70,6 @@ buildings/jarvis/retention-study/principles/ocr_full.log
 # Library crawler (state on R2)
 library-db.json
 library-crawler.log
+
+# Raw hook-embedding run log
+raw_embed.log
