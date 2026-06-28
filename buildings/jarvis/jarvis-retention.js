@@ -345,14 +345,16 @@ const JarvisRetention = (function () {
         };
         const BM = st.rawBands ? bandMetric() : null;
         let colOf, estLo = 0, estHi = 100;
-        if (ESTP && (mode === 'cluster' || mode === 'metric')) {
+        if (BM) {
+            // bands ON → ALWAYS colour by the metric the bands track (ignore the colour pills), so
+            // the colour gradient can never disagree with the trend path. Otherwise colouring by e.g.
+            // VIEWS while the bands track OUTLIER makes the dots fight the path (high views ≠ high outlier).
+            const ok = BM.dir.filter(x => x != null && isFinite(x)); estLo = Math.min(...ok); estHi = Math.max(...ok);
+            colOf = i => (BM.dir[i] == null || !isFinite(BM.dir[i])) ? '#334155' : rawRamp((BM.dir[i] - estLo) / ((estHi - estLo) || 1));
+        }
+        else if (ESTP && (mode === 'cluster' || mode === 'metric')) {
             const ok = ESTP.filter(x => x != null && isFinite(x)); estLo = Math.min(...ok); estHi = Math.max(...ok);
             colOf = i => { const v = (ACTP && ACTP[i] != null) ? ACTP[i] : ESTP[i]; return v == null || !isFinite(v) ? '#334155' : rawRamp((v - estLo) / ((estHi - estLo) || 1)); };
-        }
-        else if (BM && mode === 'cluster') {
-            // bands ON → colour by the tracked metric (low→high) so the trend is confirmable; only overrides the arbitrary cluster colouring
-            const ok = BM.dir.filter(x => x != null && isFinite(x)), lo = Math.min(...ok), hi = Math.max(...ok);
-            colOf = i => (BM.dir[i] == null || !isFinite(BM.dir[i])) ? '#334155' : rawRamp((BM.dir[i] - lo) / ((hi - lo) || 1));
         }
         else if (mode === 'cluster') { const cl = (R.clusters || {})[k] || []; colOf = i => tcol(cl[i] != null ? cl[i] : -1); }
         else if (mode === 'voiceover') { colOf = i => SILENT[i] ? '#475569' : C.green; }
@@ -462,7 +464,7 @@ const JarvisRetention = (function () {
                         bandOver += `<g style="pointer-events:none"><rect x="${(cx - w / 2).toFixed(1)}" y="${(cy - 9).toFixed(1)}" width="${w.toFixed(1)}" height="16" rx="4" fill="#0f172a" opacity="0.85" stroke="#1e293b"/><text x="${cx.toFixed(1)}" y="${(cy + 2.8).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#e2e8f0">${txt}</text></g>`;
                     }
                     const statWord = (binary || pctLinear) ? 'avg' : 'median';
-                    bandNote = `<b style="color:${C.cyan}">Trend bands ON</b> — dots are now coloured by <b>${label}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>); the cyan <b>path</b> (→ arrow) is the best-fit direction it rises; dashed lines cut <b>⟂ to that path</b> into ${K} equal-count bands, each labelled with its <b>${statWord} ${label}</b>.`;
+                    bandNote = `<b style="color:${C.cyan}">Trend bands ON</b> — dots are coloured by <b>${label}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>) so the colour <b>always matches the band metric</b> — the colour pills are paused; the cyan <b>path</b> (→ arrow) is the best-fit direction it rises; dashed lines cut <b>⟂ to that path</b> into ${K} equal-count bands, each labelled with its <b>${statWord} ${label}</b>.`;
                 }
             }
             if (!bandNote) bandNote = `<b style="color:${C.cyan}">Trend bands</b> — not enough data to fit a trend here.`;
@@ -2031,7 +2033,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=96'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=97'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
