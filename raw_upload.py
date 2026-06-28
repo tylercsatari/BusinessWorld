@@ -175,10 +175,29 @@ def _run():
                 if e is None: continue
                 en = e / (np.linalg.norm(e) + 1e-9); w = W[key]
                 indicators[key] = round(float(en @ w[:-1] + w[-1]), 4)
+        skof = {'visual': 'vis', 'text': 'txt', 'together': 'tog'}
         for mod, e in embmap.items():                   # global novelty = mean cos-dist to nearest hooks
             if e is None: continue
             nb = neighbors(mod, e, k=13)
-            if nb: indicators[f'nov_{mod[:3] if mod != "together" else "tog"}_global'] = round(float(np.mean([1 - x['sim'] for x in nb])), 4)
+            if nb: indicators[f'nov_{skof[mod]}_global'] = round(float(np.mean([1 - x['sim'] for x in nb])), 4)
+        # niche / temporal / combinatorial novelty via the saved corpus models
+        mb = r2_get('raw/novelty_models.npz')
+        if mb:
+            M = np.load(io.BytesIO(mb), allow_pickle=True)
+            nrm = {'vis': ev, 'txt': et, 'tog': eg}
+            for sk, e in nrm.items():
+                if e is None: continue
+                en = np.asarray(e, float); en = en / (np.linalg.norm(en) + 1e-9)
+                cen = M[f'{sk}_centroids']; indicators[f'nov_{sk}_niche'] = round(float(1 - np.max(cen @ en)), 4)
+                rc = M[f'{sk}_recent']; indicators[f'nov_{sk}_temporal'] = round(float(1 - en @ rc), 4)
+                comp = M[f'{sk}_pca_comp']; mu = M[f'{sk}_pca_mean']; recon = mu + (en - mu) @ comp.T @ comp
+                indicators[f'nov_{sk}_combinatorial'] = round(float(np.linalg.norm(en - recon) / (np.linalg.norm(en) + 1e-9)), 4)
+            if ev is not None and et is not None:
+                vn = np.asarray(ev, float); vn /= (np.linalg.norm(vn) + 1e-9); tn = np.asarray(et, float); tn /= (np.linalg.norm(tn) + 1e-9)
+                indicators['nov_coherence'] = round(float(vn @ tn), 4)
+                if eg is not None:
+                    gn = np.asarray(eg, float); gn /= (np.linalg.norm(gn) + 1e-9); mix = (vn + tn); mix /= (np.linalg.norm(mix) + 1e-9)
+                    indicators['nov_fusion_combinatorial'] = round(float(1 - gn @ mix), 4)
     except Exception: pass
     def preview(e):
         if e is None: return None

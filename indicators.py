@@ -154,7 +154,10 @@ q = bh([d['p'] for d in indicators])
 for d, qq in zip(indicators, q):
     d['fdr'] = round(float(qq), 4)
     eff = abs(d['auc'] - 0.5) * 2 if d['auc'] else abs(d['spearman'])
-    d['validated'] = bool(qq < 0.05 and eff >= 0.08)
+    d['effect'] = round(float(eff), 3)
+    # keep a real-but-weak tier (ret5 lives here) so it's usable; R conveys confidence
+    d['validated'] = bool(qq < 0.1 and eff >= 0.05)
+    d['strong'] = bool(qq < 0.05 and eff >= 0.1)
 
 # save weights for upload scoring
 bio = io.BytesIO(); np.savez_compressed(bio, **{k: v for k, v in weights.items()}); r2_put('raw/indicators/weights.npz', bio.getvalue(), 'application/octet-stream')

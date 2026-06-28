@@ -537,7 +537,7 @@ const JarvisRetention = (function () {
         if (!EXPREG || EXPREG.loading) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">Loading the indicator registry…</div>`);
         if (EXPREG.error || !EXPREG.indicators) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">No indicator registry yet — run <code>indicators.py</code>.</div>`);
         // scorable = the indicators a NEW hook can actually be scored on (content probes + global novelty)
-        const scorableKind = d => d.kind === 'content' || (d.kind === 'novelty' && d.name.endsWith('_global'));
+        const scorableKind = d => d.kind === 'content' || d.kind === 'novelty';
         const val = EXPREG.indicators.filter(d => d.validated && scorableKind(d));
         const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0];
         const keyOf = d => d.kind === 'content' ? `${d.name}__${d.target}` : d.name;
@@ -559,7 +559,11 @@ const JarvisRetention = (function () {
         // R = held-out strength; calib = read the actual metric off the corpus curve at the
         // hook's score (the raw probe over-shrinks at n=211, so we CALIBRATE through the curve).
         const Rof = d => d.auc ? Math.abs(d.auc - 0.5) * 2 : Math.abs(d.spearman || 0);
-        const calib = (d, sc) => { const c = d.curve || []; if (!c.length || sc == null) return null; let bi = c.findIndex(b => sc <= b.hi); if (bi < 0) bi = c.length - 1; if (sc < c[0].lo) bi = 0; return c[bi].mean; };
+        // percentile (0-1) of the hook among the corpus on this indicator, and a QUANTILE-
+        // calibrated estimate: map that rank → the actual-metric value at the same rank, so
+        // it spans the FULL observed range (not compressed to the mean / capped at ~77).
+        const pctOf = (d, sc) => { const p = d.pts || []; if (!p.length || sc == null) return null; let r = p.filter(x => x[0] <= sc).length / p.length; return (d.spearman || 0) < 0 ? 1 - r : r; };
+        const calib = (d, sc) => { const p = d.pts || []; if (!p.length || sc == null) return null; const r = pctOf(d, sc); const acts = p.map(x => x[1]).sort((a, b) => a - b); return acts[Math.max(0, Math.min(acts.length - 1, Math.round(r * (acts.length - 1))))]; };
         const dispV = (tn, v) => v == null ? null : (tn === 'views' ? fv(Math.pow(10, v)) : tn === 'gt10M' ? (v * 100).toFixed(0) + '%' : v.toFixed(0) + '%');
         const estFor = (tn, kind) => { const ds = val.filter(d => d.target === tn && d.kind === kind && up.indicators[keyOf(d)] != null); let num = 0, den = 0, parts = []; ds.forEach(d => { const sc = up.indicators[keyOf(d)], c = calib(d, sc); if (c == null) return; const w = Math.pow(Rof(d), 2); num += w * c; den += w; parts.push({ mod: d.modality, R: Rof(d), est: c, sc }); }); return den ? { val: num / den, parts } : null; };
         const METS = [['keep', 'keep rate', C.green], ['ret5', 'past 5s', C.accent], ['views', 'est. views', C.text], ['gt10M', '% >10M', C.purple]];
@@ -594,8 +598,8 @@ const JarvisRetention = (function () {
         };
         const projFor = { keep: 'keep', ret5: 'ret5', views: 'views', gt10M: 'hi10m' };
         const colorFor = { keep: 'axis', ret5: 'axis', views: 'views', gt10M: 'gt10m' };
-        const cardHTML = (d, tn, isNov) => { const ch = chMap[d.modality] || 'visual'; const sc = up.indicators[keyOf(d)]; const pj = isNov ? 'umap' : projFor[tn], cm = isNov ? 'novelty' : colorFor[tn]; const est = calib(d, sc), R = Rof(d);
-            return `<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:10px;color:${isNov ? C.purple : CY};font-weight:700">${d.name.replace('content_', '').replace('nov_', '')} <span style="color:${C.mute};font-weight:400">R=${R.toFixed(2)} · n=${d.n}</span></div>${cluster(ch, pj, cm)}<div style="font-size:9px;color:${C.mute}">embeds <b>${whatEmbedded(ch)}</b> → ${isNov ? 'distance from corpus' : 'projected toward ' + tn} → <span style="color:${CY}">◆ ${dispV(tn, est) || '—'}</span> · <span style="color:${C.accent}">Raw →</span></div></div>`; };
+        const cardHTML = (d, tn, isNov) => { const ch = chMap[d.modality] || 'visual'; const sc = up.indicators[keyOf(d)]; const pj = isNov ? 'umap' : projFor[tn], cm = isNov ? 'novelty' : colorFor[tn]; const est = calib(d, sc), R = Rof(d), pc = pctOf(d, sc);
+            return `<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:10px;color:${isNov ? C.purple : CY};font-weight:700">${d.name.replace('content_', '').replace('nov_', '')} <span style="color:${C.mute};font-weight:400">R=${R.toFixed(2)} · n=${d.n}</span></div>${cluster(ch, pj, cm)}<div style="font-size:9px;color:${C.mute}">embeds <b>${whatEmbedded(ch)}</b> → ${isNov ? 'distance from corpus' : 'toward ' + tn} → <span style="color:${CY}">◆ ${dispV(tn, est) || '—'}${pc != null ? ` · ${(pc * 100).toFixed(0)}th pctile` : ''}</span> · <span style="color:${C.accent}">Raw →</span></div></div>`; };
         const gridOf = arr => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${arr.join('')}</div>`;
         const weightLine = (tn) => { const e = estFor(tn, 'content'); if (!e || e.parts.length < 2) return ''; const sumW = e.parts.reduce((a, p) => a + p.R * p.R, 0); return `<div style="font-size:9px;color:${C.mute};margin-top:5px">content estimate = R²-weighted: ${e.parts.map(p => `${p.mod}(R=${p.R.toFixed(2)}, ${dispV(tn, p.est)}) ×${(p.R * p.R / sumW * 100).toFixed(0)}%`).join(' + ')} = <b style="color:${C.text}">${dispV(tn, e.val)}</b></div>`; };
         let body = '';
@@ -1979,7 +1983,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=89'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=90'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
