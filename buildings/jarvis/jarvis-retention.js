@@ -13,7 +13,7 @@ const JarvisRetention = (function () {
     let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUpload: null, rawUpShow: true, rawUpSel: false, rawUploading: false, rawUpErr: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUpload: null, rawUpShow: true, rawUpSel: false, rawUploading: false, rawUpErr: null, rawUpStage: 0 };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -399,8 +399,14 @@ const JarvisRetention = (function () {
         const nmine = R.nmine != null ? R.nmine : MINE.filter(Boolean).length;
         const nsilent = R.nsilent != null ? R.nsilent : SILENT.filter(Boolean).length;
         const mineBtn = `<span data-rawmine="1" style="cursor:pointer;border:1px solid ${hiMine ? GOLD : C.border};background:${hiMine ? GOLD + '22' : 'transparent'};color:${hiMine ? GOLD : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">★ My videos${nmine ? ' (' + nmine + ')' : ''}</span>`;
+        const UPSTAGES = ['Uploading video…', 'Extracting the 5 hook frames…', 'Transcribing the audio…', 'Embedding visual · text · together…', 'Placing it among similar hooks…'];
+        const upStage = Math.min(st.rawUpStage || 0, UPSTAGES.length - 1);
+        const upPct = Math.min(93, Math.round((upStage + 1) / UPSTAGES.length * 100));
         const upBtn = st.rawUploading
-            ? `<span style="border:1px solid ${CYAN};color:${CYAN};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">⏳ embedding your hook…</span>`
+            ? `<span style="display:inline-flex;flex-direction:column;gap:3px;min-width:250px;vertical-align:middle">
+                 <span style="font-size:10px;color:${CYAN};font-weight:700">⏳ ${UPSTAGES[upStage]} <span style="color:${C.mute};font-weight:400">${upPct}%</span></span>
+                 <span style="display:block;height:6px;background:${C.border};border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:${upPct}%;background:linear-gradient(90deg,${CYAN},#67e8f9);border-radius:4px;transition:width .5s ease"></span></span>
+               </span>`
             : st.rawUpload
                 ? `<span data-rawupshow="1" style="cursor:pointer;border:1px solid ${st.rawUpShow ? CYAN : C.border};background:${st.rawUpShow ? CYAN + '22' : 'transparent'};color:${st.rawUpShow ? CYAN : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">⬆ My upload</span><span data-rawupclear="1" style="cursor:pointer;color:${C.mute};font-size:10px;margin-left:4px">✕</span>`
                 : `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};background:transparent;color:${C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">⬆ Upload a video</span>`;
@@ -1618,16 +1624,17 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-tracked]')) { st.trackedOnly = e.target.checked; render(); }
     }
     async function rtgRawUpload(file) {
-        st.rawUploading = true; st.rawUpErr = null; rtgUpdateRaw();
+        st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 0; rtgUpdateRaw();
+        const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateRaw(); } }, 2400);
         try {
             const ext = (file.name.split('.').pop() || 'mp4').slice(0, 5);
             const buf = await file.arrayBuffer();
             const r = await fetch('/api/raw/embed-upload', { method: 'POST', headers: { 'X-Raw-Ext': ext, 'X-Raw-Title': (file.name || 'My upload').slice(0, 80) }, body: buf });
             const j = await r.json();
-            st.rawUploading = false;
             if (!r.ok || j.error) { st.rawUpErr = j.error || ('HTTP ' + r.status); }
             else { st.rawUpload = j; st.rawUpShow = true; st.rawUpSel = true; st.rawSel = null; }
-        } catch (e) { st.rawUploading = false; st.rawUpErr = e.message; }
+        } catch (e) { st.rawUpErr = e.message; }
+        window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0;
         rtgUpdateRaw();
     }
 
@@ -1639,7 +1646,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=73'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=74'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');

@@ -69,19 +69,38 @@ def whisper_text(wav):
     alp = float(np.mean([sg.get('avg_logprob', -5.0) for sg in segs])) if segs else -5.0
     return txt, (bool(txt) and nsp < 0.6 and alp > -1.0 and coherent(txt))
 
-def hook_inputs(mp4):
-    """first-5s montage (b64) + (transcript, is_voiceover) from a LOCAL file."""
+def _montage_audio(src, mon, wav):
+    """Extract the 5-frame montage + first-5s audio→transcript from one source file.
+    ffmpeg auto-detects the container/codec, so .mov/.mp4/.webm/.mkv all work here."""
+    subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-t', '5', '-i', src, '-vf', 'fps=1,scale=320:-1,tile=5x1', '-frames:v', '1', mon], timeout=90)
+    txt, good = '', False
+    if os.path.exists(mon):
+        try:
+            subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-t', '5', '-i', src, '-vn', '-ar', '16000', '-ac', '1', wav], timeout=90)
+            if os.path.exists(wav) and os.path.getsize(wav) > 1000: txt, good = whisper_text(wav)
+        except Exception: pass
+    return txt, good
+
+def hook_inputs(src):
+    """first-5s montage (b64) + (transcript, is_voiceover) from ANY local video file.
+    Tries the file directly first; if ffmpeg can't decode it (exotic codec/container),
+    normalizes to a clean H.264 mp4 and retries — so any uploadable format works."""
     tmp = tempfile.mkdtemp(prefix='rawup_')
     try:
-        mon, wav = os.path.join(tmp, 'm.jpg'), os.path.join(tmp, 'a.wav')
-        subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-t', '5', '-i', mp4, '-vf', 'fps=1,scale=320:-1,tile=5x1', '-frames:v', '1', mon], timeout=60)
+        mon, wav, norm = os.path.join(tmp, 'm.jpg'), os.path.join(tmp, 'a.wav'), os.path.join(tmp, 'norm.mp4')
+        txt, good = _montage_audio(src, mon, wav)
+        if not os.path.exists(mon):                       # decode failed → transcode then retry
+            try:
+                subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-i', src, '-t', '6',
+                                '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-movflags', '+faststart', norm], timeout=180)
+            except Exception: pass
+            if os.path.exists(norm):
+                for f in (mon, wav):
+                    try: os.remove(f)
+                    except Exception: pass
+                txt, good = _montage_audio(norm, mon, wav)
         if not os.path.exists(mon): return None
         b64 = base64.b64encode(open(mon, 'rb').read()).decode()
-        txt, good = '', False
-        try:
-            subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-t', '5', '-i', mp4, '-vn', '-ar', '16000', '-ac', '1', wav], timeout=60)
-            if os.path.exists(wav): txt, good = whisper_text(wav)
-        except Exception: pass
         return b64, txt, good
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -98,7 +117,7 @@ def neighbors(c, vec, k=12):
     top = np.argsort(-sims)[:k]
     return [{'id': str(ids[i]), 'sim': round(float(sims[i]), 4)} for i in top]
 
-def main():
+def _run():
     args = {}
     a = sys.argv[1:]
     for i in range(0, len(a) - 1, 2):
@@ -108,7 +127,7 @@ def main():
         print(json.dumps({'error': 'no file'})); return
     inp = hook_inputs(path)
     if not inp:
-        print(json.dumps({'error': 'could not read video / extract frames'})); return
+        print(json.dumps({'error': 'could not read this video — ffmpeg failed to decode it even after transcoding'})); return
     b64, txt, good = inp
     ev = embed([img_part(b64)])
     et = embed([{'text': txt}]) if good else None
@@ -125,6 +144,13 @@ def main():
         },
     }
     print(json.dumps(out))
+
+def main():
+    try:
+        _run()
+    except Exception as e:
+        import traceback
+        print(json.dumps({'error': 'processing failed: ' + str(e)[:200], 'trace': traceback.format_exc()[-500:]}))
 
 if __name__ == '__main__':
     main()
