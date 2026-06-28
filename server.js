@@ -426,14 +426,22 @@ const _tribeJobs = {};
 const TRIBE_PYTHON = process.env.TRIBE_PYTHON
     || '/Users/tylercsatari/Desktop/BusinessHub/tribev2/.venv/bin/python3.11';
 // Python that has the ML/data deps (boto3, whisper, numpy). The server is often
-// launched with a bare PATH where `python3` is system python WITHOUT these, so
-// prefer an explicit interpreter. Override with RAW_PYTHON.
+// launched with a bare PATH where `python3` is system python WITHOUT these, so we
+// TEST-IMPORT the deps in each candidate and pick the first that actually has them.
+// Override with RAW_PYTHON. PYTHONHOME/PYTHONPATH are stripped so the chosen
+// interpreter resolves its OWN site-packages (a leaked PYTHONHOME can hide numpy).
+const RAW_PY_ENV = (() => { const e = { ...process.env }; delete e.PYTHONHOME; delete e.PYTHONPATH; return e; })();
 const RAW_PYTHON = (() => {
+    const { execSync } = require('child_process');
     const cands = [process.env.RAW_PYTHON, '/Users/tylercsatari/miniforge3/bin/python3',
-        '/opt/homebrew/bin/python3', '/usr/local/bin/python3'].filter(Boolean);
-    for (const p of cands) { try { if (fs.existsSync(p)) return p; } catch (e) {} }
+        '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3', '/usr/bin/python3'].filter(Boolean);
+    for (const p of cands) {
+        try { execSync(`"${p}" -c "import numpy, boto3"`, { stdio: 'ignore', timeout: 12000, env: RAW_PY_ENV }); return p; }
+        catch (e) {}
+    }
     return 'python3';
 })();
+console.log('[raw-upload] using python:', RAW_PYTHON);
 const TRIBE_CACHE = process.env.TRIBE_CACHE
     || '/Users/tylercsatari/Desktop/BusinessHub/tribev2/cache';
 
@@ -1383,7 +1391,7 @@ const server = http.createServer(async (req, res) => {
             try { fs.writeFileSync(tmp, Buffer.concat(chunks)); }
             catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write failed: ' + e.message })); return; }
             const script = path.join(__dirname, 'raw_upload.py');
-            const py = spawn(RAW_PYTHON, [script, '--file', tmp, '--title', title], { env: { ...process.env } });
+            const py = spawn(RAW_PYTHON, [script, '--file', tmp, '--title', title], { env: RAW_PY_ENV });
             let out = '', err = '';
             py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
             const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 240000);
