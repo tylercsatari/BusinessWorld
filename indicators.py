@@ -130,9 +130,15 @@ for mk, (M, have) in MOD.items():
         weights[f'content_{mk}__{tname}'] = np.concatenate([full.coef_.ravel(), [float(full.intercept_).__float__() if np.ndim(full.intercept_) == 0 else float(full.intercept_[0])]]).astype(np.float32)
         # graph data on the held-out score (binned curve + the actual scatter points)
         crv = curve(oof[ok], ym[ok], kind)
+        # OWNED overlay (dataset-stabilized): where MY 211 land on this indicator + their
+        # ACTUAL outcomes — so we can see if my videos beat/trail the corpus prediction.
+        om = mine[idx][ok]
+        owned_pts = sample_pts(oof[ok][om], ym[ok][om], cap=250) if om.sum() >= 5 else []
+        owned_curve = curve(oof[ok][om], ym[ok][om], kind, nb=min(5, max(2, int(om.sum() // 8)))) if om.sum() >= 16 else []
         indicators.append({'name': f'content_{mk}', 'kind': 'content', 'modality': mk, 'target': tname, 'target_label': tlab,
                            'spearman': round(rho, 3), 'auc': round(auc, 3) if auc else None, 'p': round(p, 4),
-                           'n': int(ok.sum()), 'curve': crv, 'pts': sample_pts(oof[ok], ym[ok])})
+                           'n': int(ok.sum()), 'n_owned': int(om.sum()), 'curve': crv, 'pts': sample_pts(oof[ok], ym[ok]),
+                           'owned_pts': owned_pts, 'owned_curve': owned_curve})
         rows_for_fdr.append(p)
 
 # ---- NOVELTY indicators (single-source values), validated per target ----
@@ -144,9 +150,13 @@ for nm, val in NOV.items():
         rho = float(spearmanr(v, t)[0])
         auc = float(roc_auc_score(t, v)) if kind == 'clf' and len(np.unique(t)) == 2 else None
         p = perm_p(v, t)
+        om = mine[mask]
+        owned_pts = sample_pts(v[om], t[om], cap=250) if om.sum() >= 5 else []
+        owned_curve = curve(v[om], t[om], kind, nb=min(5, max(2, int(om.sum() // 8)))) if om.sum() >= 16 else []
         indicators.append({'name': f'nov_{nm}', 'kind': 'novelty', 'modality': nm.split('_')[0], 'target': tname, 'target_label': tlab,
                            'spearman': round(rho, 3), 'auc': round(auc, 3) if auc else None, 'p': round(p, 4),
-                           'n': int(mask.sum()), 'curve': curve(v, t, kind), 'pts': sample_pts(v, t)})
+                           'n': int(mask.sum()), 'n_owned': int(om.sum()), 'curve': curve(v, t, kind), 'pts': sample_pts(v, t),
+                           'owned_pts': owned_pts, 'owned_curve': owned_curve})
         rows_for_fdr.append(p)
 
 # FDR across all (indicator × target) tests + validated flag

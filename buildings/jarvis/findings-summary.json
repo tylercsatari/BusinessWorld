@@ -1,1076 +1,1066 @@
 {
-  "generated": "2026-04-07",
-  "source": "results.tsv (2271 rows, 203-210 videos)",
-  "model_history": [
-    {
-      "model": "v1",
-      "cv_r2": 0.147,
-      "n_features": 7,
-      "features": [
-        "keep",
-        "retention",
-        "z_score",
-        "novelty",
-        "cognitive_load",
-        "net_novelty",
-        "vz_score"
-      ],
-      "notes": "Baseline: 7 LLM-scored + YouTube Analytics signals"
-    },
-    {
-      "model": "v6",
-      "cv_r2": 0.361,
-      "n_features": 8,
-      "features": [
-        "keep",
-        "retention_per_sec",
-        "cognitive_load",
-        "ret_mid",
-        "keep_sq",
-        "max_cliff",
-        "sub_ret_gap",
-        "ret_mid_sq"
-      ],
-      "notes": "Backward elimination + retention curve signals. Dropped z_score, vz_score, novelty"
-    },
-    {
-      "model": "v9",
-      "cv_r2": 0.405,
-      "n_features": 9,
-      "features": [
-        "keep_sq",
-        "retention_per_sec",
-        "ret_mid_sq",
-        "max_cliff",
-        "sub_ret_gap",
-        "hook_word_density",
-        "pat_indestructible",
-        "cat_superhero",
-        "keep"
-      ],
-      "notes": "Concept categories (indestructible, superhero). +175% from baseline"
-    },
-    {
-      "model": "v13",
-      "cv_r2": 0.506,
-      "n_features": 13,
-      "features": [
-        "keep_sq",
-        "sub_ret_gap",
-        "ret_mid_sq",
-        "cat_superhero",
-        "prev_views",
-        "prev_keep",
-        "prev_views_sq",
-        "indestructible_x_prev_keep"
-      ],
-      "notes": "Milestone: CV > 0.50. Channel momentum + concept×momentum interactions"
-    },
-    {
-      "model": "v17",
-      "cv_r2": 0.5,
-      "n_features": 17,
-      "features": [
-        "keep_sq",
-        "sub_ret_gap",
-        "ret_mid_sq",
-        "cat_superhero",
-        "prev_views",
-        "prev_keep",
-        "prev_views_sq",
-        "indestructible_x_prev_keep",
-        "has_text_overlay",
-        "duration_x_retention",
-        "smoothed_slope",
-        "idea_length",
-        "stakes_x_duration",
-        "pat_making_v2",
-        "stakes",
-        "deriv_entropy",
-        "hook_silence"
-      ],
-      "notes": "Rebased to n=203 (different holdout). Pacing + hook signals. CV breaks 0.50"
-    },
-    {
-      "model": "v20",
-      "cv_r2": 0.664,
-      "n_features": 12,
-      "features": [
-        "view_accel_log",
-        "keep_sq",
-        "indestructible_x_prev_keep",
-        "deriv_entropy",
-        "prev_views",
-        "w2_w1_ratio",
-        "prev_keep",
-        "smoothed_slope",
-        "pat_making_v2",
-        "duration_x_retention",
-        "ret_mid_sq",
-        "idea_length"
-      ],
-      "notes": "Forward selection. Trajectory signals (view_accel_log, w2_w1_ratio) add +0.16. LOO=0.678"
-    },
-    {
-      "model": "v22",
-      "cv_r2": 0.7,
-      "n_features": 12,
-      "features": [
-        "view_accel_log",
-        "keep_sq",
-        "indestructible_x_prev_keep",
-        "deriv_std",
-        "prev_views",
-        "w2_w1_ratio",
-        "prev_keep",
-        "pat_making_v2",
-        "duration_x_retention",
-        "ret_mid_sq",
-        "idea_length",
-        "ret_25"
-      ],
-      "notes": "n=210. deriv_std replaces deriv_entropy+smoothed_slope. OLS optimal vs GBM/RF/etc."
-    },
-    {
-      "model": "v26_CORRUPTED",
-      "cv_r2": 0.942,
-      "n_features": 15,
-      "features": [
-        "view_accel_log",
-        "keep_sq",
-        "indestructible_x_prev_keep",
-        "w2_w1_ratio",
-        "duration_x_retention",
-        "prev_views",
-        "prev_keep",
-        "ret_mid_sq",
-        "pat_making_v2",
-        "sub_gap",
-        "like_ratio",
-        "rc_convexity",
-        "svf_log",
-        "engage_ratio",
-        "rpv"
-      ],
-      "notes": "CORRUPTED: Contains circular outcome features (like_ratio, svf_log, engage_ratio, rpv). R²=0.94 is meaningless for prediction."
-    }
-  ],
-  "kept_signals": [
-    {
-      "signal": "keep_sq",
-      "delta_r2": "+0.031",
-      "meaning": "Non-linear keep rate — accelerating returns above 75%. Marginal keep above 75 doubles hit rate.",
-      "signal_kind": "quality"
-    },
-    {
-      "signal": "max_cliff",
-      "delta_r2": "+0.093",
-      "meaning": "Biggest single-point retention drop. Signals initial virality spike (high initial replay → big drop). Counter-intuitive: bigger drops = more views.",
-      "signal_kind": "quality"
-    },
-    {
-      "signal": "ret_mid_sq",
-      "delta_r2": "+0.019",
-      "meaning": "Midpoint retention squared. Non-linear mid-video engagement. Videos maintaining middle engagement outperform.",
-      "signal_kind": "quality"
-    },
-    {
-      "signal": "sub_ret_gap",
-      "delta_r2": "+0.020",
-      "meaning": "Subscriber vs non-subscriber retention gap. Smaller gap = broader appeal = more views.",
-      "signal_kind": "quality"
-    },
-    {
-      "signal": "smoothed_slope",
-      "delta_r2": "+0.017",
-      "meaning": "Slope of 5-pt moving avg retention curve. Captures overall decay trend independently of max_cliff.",
-      "signal_kind": "quality"
-    },
-    {
-      "signal": "deriv_entropy",
-      "delta_r2": "+0.008",
-      "meaning": "Pacing complexity — entropy of retention curve derivative. Varied pacing beats monotonic.",
-      "signal_kind": "quality"
-    },
-    {
-      "signal": "duration_x_retention",
-      "delta_r2": "+0.018",
-      "meaning": "Duration × retention = total watch time proxy. Algorithm rewards absolute watch minutes.",
-      "signal_kind": "content"
-    },
-    {
-      "signal": "idea_length",
-      "delta_r2": "+0.012",
-      "meaning": "Word count of AI-generated videoIdea. Longer/richer video concepts predict slightly more views.",
-      "signal_kind": "content"
-    },
-    {
-      "signal": "pat_making_v2",
-      "delta_r2": "+0.012",
-      "meaning": "Title contains making/build/creat/construct. 34 videos avg 19.7M vs 5.6M rest.",
-      "signal_kind": "concept"
-    },
-    {
-      "signal": "indestructible_x_prev_keep",
-      "delta_r2": "+0.026",
-      "meaning": "Indestructible concept × previous keep rate. RELEASE STRATEGY: indestructible after high-keep = super-viral.",
-      "signal_kind": "concept"
-    },
-    {
-      "signal": "prev_views",
-      "delta_r2": "+0.034",
-      "meaning": "Previous video's log10 views. Channel momentum — algorithm gives bigger push after a hit.",
-      "signal_kind": "momentum"
-    },
-    {
-      "signal": "prev_keep",
-      "delta_r2": "+0.016",
-      "meaning": "Previous video's keep rate. Audience priming effect. Weight negative = rebound after low keep.",
-      "signal_kind": "momentum"
-    },
-    {
-      "signal": "view_accel_log",
-      "delta_r2": "+0.048",
-      "meaning": "Log10 of day3-7 avg / day1 views. Early trajectory signal. Strongest predictor of total views.",
-      "signal_kind": "trajectory"
-    },
-    {
-      "signal": "w2_w1_ratio",
-      "delta_r2": "+0.026",
-      "meaning": "Week2 / Week1 view ratio. Sustained growth predicts total views. Second-wave videos outperform.",
-      "signal_kind": "trajectory"
-    }
-  ],
-  "top_discoveries": [
-    {
-      "discovery": "log_7day_velocity",
-      "r_partial": 0.82,
-      "meaning": "STRONGEST signal. First 7-day view sum predicts total views even after controlling keep. Early algorithmic push is the mechanism.",
-      "loop": "B"
-    },
-    {
-      "discovery": "derivative_std",
-      "r_partial": 0.38,
-      "meaning": "StdDev of retention curve derivative = dramatic pacing. Varied rate-of-change beats monotonic decay.",
-      "loop": "B"
-    },
-    {
-      "discovery": "pacing_ratio",
-      "r_partial": 0.42,
-      "meaning": "deriv_std / retentionVariation = dramatic pacing efficiency. Sharp turns at specific moments + smooth overall arc.",
-      "loop": "B"
-    },
-    {
-      "discovery": "day1_share_inverse",
-      "r_partial": -0.37,
-      "meaning": "Viral videos DON'T peak day 1. Lower day-1 share = more total views. Algorithmic sustained push.",
-      "loop": "B"
-    },
-    {
-      "discovery": "day7_day1_ratio",
-      "r_partial": 0.31,
-      "meaning": "Day7/Day1 view ratio predicts total views. Sustained momentum is the key to virality.",
-      "loop": "B"
-    },
-    {
-      "discovery": "body_hold_ratio",
-      "r_partial": 0.26,
-      "meaning": "Retention at 75%/25% predicts views. The narrative middle separates viral from average.",
-      "loop": "B"
-    },
-    {
-      "discovery": "max_cliff_single_drop",
-      "r_partial": 0.36,
-      "meaning": "Counter-intuitive: BIGGER max retention drops = MORE views. Dramatic narrative turns drive virality.",
-      "loop": "B"
-    },
-    {
-      "discovery": "like_ratio_inverse",
-      "r_partial": -0.19,
-      "meaning": "Lower like/view ratio = MORE views. Viral videos reach beyond core audience, diluting engagement per view.",
-      "loop": "B"
-    },
-    {
-      "discovery": "combined_score",
-      "r_partial": 0.32,
-      "meaning": "body_hold*10 + d7d1 - retVar*5. Best multi-signal combo — captures 3 independent dimensions.",
-      "loop": "B"
-    },
-    {
-      "discovery": "duration_sweet_spot",
-      "r_partial": null,
-      "meaning": "46-60s = sweet spot (28/98 hit 10M+, 2.9M median). 15-30s = death zone (0/11, 513K median).",
-      "loop": "B"
-    },
-    {
-      "discovery": "title_making_keyword",
-      "r_partial": null,
-      "meaning": "'Making' = $24M avg (23 videos). Build/creation content is strongest format.",
-      "loop": "B"
-    },
-    {
-      "discovery": "golden_zone",
-      "r_partial": null,
-      "meaning": "keep>=75 AND maxCliff>=0.15: 45% of videos, 36% hit 10M+. Practical pre-screening formula.",
-      "loop": "B"
-    },
-    {
-      "discovery": "keep_threshold_75",
-      "r_partial": null,
-      "meaning": "Non-linear: <75% keep = 3-12% hit 10M+. 75-80% = 25%. 80-85% = 41%. Marginal keep above 75 doubles hit rate.",
-      "loop": "B"
-    }
-  ],
-  "causal_findings": [
-    {
-      "signal": "connector_density",
-      "r_vs_parent": 0.047,
-      "parent_metric": "retention",
-      "meaning": "Forward-momentum words (so/but/wait/actually) show r=0.05 vs retention but r=0.23 vs keep. Connector/pivot words predict KEEP not retention.",
-      "loop": "C"
-    },
-    {
-      "signal": "pivot_density",
-      "r_vs_parent": 0.26,
-      "parent_metric": "keep",
-      "meaning": "Pivot words (but/however/wait/suddenly) per 100 words. r=0.26 vs keep, r=0.10 vs retention. Narrative surprise drives initial hook.",
-      "loop": "C"
-    },
-    {
-      "signal": "has_callback",
-      "r_vs_parent": 0.14,
-      "parent_metric": "keep",
-      "meaning": "Hook concept callback in last 20%. Only r=0.05 vs end retention (weak). 46% callback rate. Callbacks help keep, not retention.",
-      "loop": "C"
-    },
-    {
-      "signal": "three_channel_frac",
-      "r_vs_parent": 0.07,
-      "parent_metric": "retention",
-      "meaning": "Fraction of seconds with audio+visual+concept all active. Weak signal (r=0.07). Multi-channel completeness is noise at n=203.",
-      "loop": "C"
-    },
-    {
-      "signal": "total_above_baseline",
-      "r_vs_parent": 0.27,
-      "parent_metric": "log_views",
-      "meaning": "Total above-baseline retention area vs views. r=0.27. Watch time above baseline correlates with views.",
-      "loop": "C"
-    },
-    {
-      "signal": "narrative_arc_score",
-      "r_vs_parent": 0.13,
-      "parent_metric": "keep",
-      "meaning": "Narrative arc quality (hook→climax→payoff). Weak: r=0.13 vs keep, r=-0.01 vs retention. Arc quality doesn't predict retention.",
-      "loop": "C"
-    },
-    {
-      "signal": "action_intensity_hook_seg",
-      "r_vs_parent": 0.15,
-      "parent_metric": "keep",
-      "meaning": "Action word density in hook segment vs keep. r=0.15. Physical/action hooks slightly better than talking hooks.",
-      "loop": "C"
-    }
-  ],
-  "retention_patterns": [
-    {
-      "pattern": "Late peak = 10x more views",
-      "evidence": "Videos peaking at 60-80% get ~10x more views than early-peaking (5.2M vs 530K median). Building narrative arc beats front-loaded content.",
-      "loop": "D"
-    },
-    {
-      "pattern": "Visceral words retain, transition words kill",
-      "evidence": "Retention GAIN: visceral/physical (painful +5.9%, difference +4.3%, hurt +2.5%). Retention DROP: transitions (so -11.2%, however -8.6%). Show don't tell.",
-      "loop": "D"
-    },
-    {
-      "pattern": "Golden final 5%",
-      "evidence": "Videos at 95-99% retention percentile: +8.0% above baseline while rest is -0.4%. Final 5% of video is THE differentiator for mega-virality.",
-      "loop": "D"
-    },
-    {
-      "pattern": "Hook window is 10-20%",
-      "evidence": "56% of videos have worst retention in first 20%. 10-20% is the critical make-or-break transition zone.",
-      "loop": "D"
-    },
-    {
-      "pattern": "Action retains, product drops",
-      "evidence": "Physical challenge visuals +12% at peaks. Product/food shots without human anchor cause drops.",
-      "loop": "D"
-    },
-    {
-      "pattern": "Speech rate: fast = retained, pauses = dropped",
-      "evidence": "Speech rate r=+0.24 vs retention. Long pauses >1s: r=-0.22 vs retention. Pacing speed matters.",
-      "loop": "D"
-    },
-    {
-      "pattern": "Anticipation phrases retain",
-      "evidence": "'would happen' +4.3%, 'my body' +3.3% retain. Transitional setups 'so, i' -10.4% kill retention. Bigrams matter.",
-      "loop": "D"
-    },
-    {
-      "pattern": "Late visceral amplification",
-      "evidence": "'crazy' at Q1=+0.000, Q4=+0.060. Visceral words 60x more effective later in narrative — context amplifies impact.",
-      "loop": "D"
-    },
-    {
-      "pattern": "Vocab diversity hurts keep but helps retention",
-      "evidence": "Type-token ratio: r=-0.33 vs keep but r=+0.13 vs retention. Simple vocabulary hooks viewers, but diversity sustains.",
-      "loop": "D"
-    },
-    {
-      "pattern": "Duration × retention sweet spot",
-      "evidence": "Duration r=-0.57 vs retention (longer = lower retention) but duration×retention r=+0.35 vs views. Algorithm rewards total watch minutes.",
-      "loop": "D"
-    }
-  ],
-  "discarded_reasons": {
-    "hook_clarity": "LLM vision score 1-10. r=+0.21 vs views individually but hurts regression (too noisy at n=203). r=-0.02 vs keep.",
-    "visual_surprise": "LLM vision score 1-10. r=+0.30 vs keep but too noisy for regression. Delta=-0.037.",
-    "face_presence": "80% of videos have faces. r=+0.12 vs views but hurts model. Too uniform a distribution.",
-    "vz_score": "Removed in backward elimination — captured by keep_sq and other features. Originally r=+0.30 individually.",
-    "z_score": "Removed in backward elimination — captured by other features in v6.",
-    "net_novelty": "Perfectly collinear with novelty - cognitive_load already in model.",
-    "roughness": "Mean abs 2nd derivative. r=+0.12. Collinear with max_cliff — doesn't add incremental value.",
-    "title_caps_ratio": "Uppercase ratio in title. Holdout +0.024 but CV drops. Unstable/noise at n=203.",
-    "hook_word_density": "Dropped in backward elimination v16. Captured by other features (has_text_overlay, hook_silence).",
-    "fft_features": "Signal-processing features from retention curve FFT. All hurt — curve info already captured by max_cliff.",
-    "knn_k7": "KNN regression doesn't beat OLS at n=203. Best k=7: holdout 0.538 vs OLS 0.566.",
-    "curve_clusters": "Retention curve clustering (k=2,3,4). No improvement over linear features.",
-    "LLM_content_scores": "5+ rounds of LLM-scored content attributes (hook quality, specificity, open loop). Consistently too noisy at n=200.",
-    "duration_buckets": "Only 10 shorts in dataset. Long videos R²=0.50 stratified but buckets don't help regression.",
-    "deep_curve_features": "66 deep retention curve features tested. All collinear with max_cliff. Curve signal fully captured.",
-    "RF_GBM_at_n203": "Random Forest and GBM both underperform OLS at n=203. RF overfits. OLS dominates at small n.",
-    "upload_day": "Saturday avg 14M views but CV delta < 0.01. Day of week is noise.",
-    "piecewise_keep": "Piecewise linear split on keep=75. Holdout +0.06 but CV worse and higher variance.",
-    "nonsub_fraction": "DATA LEAK: r=0.86 vs views. Algorithm pushes to non-subscribers. Consequence not cause."
+ "generated": "2026-04-07",
+ "source": "results.tsv (2271 rows, 203-210 videos)",
+ "model_history": [
+  {
+   "model": "v1",
+   "cv_r2": 0.147,
+   "n_features": 7,
+   "features": [
+    "keep",
+    "retention",
+    "z_score",
+    "novelty",
+    "cognitive_load",
+    "net_novelty",
+    "vz_score"
+   ],
+   "notes": "Baseline: 7 LLM-scored + YouTube Analytics signals"
   },
-  "overnight": {
-    "run_at": "2026-05-14T21:52:03.102Z",
-    "phase_results": {
-      "phase_1_init": {
-        "status": "completed",
-        "started_at": "2026-05-14T21:51:56.700Z",
-        "completed_at": "2026-05-14T21:52:00.162Z",
-        "written": {
-          "mechanisms": {
-            "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/mechanisms.json",
-            "bytes": 695
-          },
-          "components": {
-            "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/components.json",
-            "bytes": 565
-          },
-          "principles": {
-            "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/principles.json",
-            "bytes": 583
-          },
-          "mechanism_observations": {
-            "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/mechanism_observations.json",
-            "bytes": 90
-          },
-          "bridge_validation": {
-            "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/bridge_validation.json",
-            "bytes": 82
-          },
-          "research_questions": {
-            "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/research_questions.json",
-            "bytes": 536158459,
-            "n_questions": 36
-          },
-          "indicator_registry": {
-            "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/indicator-registry.json",
-            "bytes": 96034965,
-            "n_entries": 445978
-          }
-        }
-      },
-      "phase_2_mechanisms": {
-        "status": "completed",
-        "started_at": "2026-05-14T21:52:00.240Z",
-        "completed_at": "2026-05-14T21:52:01.536Z",
-        "n_videos_processed": 372,
-        "n_observations": 41119,
-        "n_mechanism_ids": 2444,
-        "n_mechanisms_in_scope_for_links": 114,
-        "n_links": 361
-      },
-      "phase_3_components": {
-        "status": "completed",
-        "started_at": "2026-05-14T21:52:01.608Z",
-        "completed_at": "2026-05-14T21:52:01.646Z",
-        "n_components": 87,
-        "n_mechanisms_decomposed": 2444,
-        "coverage_pct": 100
-      },
-      "phase_4_principles": {
-        "status": "completed",
-        "started_at": "2026-05-14T21:52:01.712Z",
-        "completed_at": "2026-05-14T21:52:01.971Z",
-        "n_principles": 312,
-        "n_gaps": 54,
-        "n_dropped_tautological": 49,
-        "n_unique_mechanisms_in_principles": 109
-      },
-      "phase_5_bridge": {
-        "status": "completed",
-        "started_at": "2026-05-14T21:52:02.040Z",
-        "completed_at": "2026-05-14T21:52:02.974Z",
-        "n_principles_validated": 312,
-        "n_dropped_tautological": 0,
-        "n_videos_used": 372,
-        "top_chain_strength": -0.0853,
-        "top_chain_strength_specificity_weighted": -0.1477,
-        "sanity_known_strong_in_top25": true,
-        "sanity_no_target_proxy_in_top25": true
-      },
-      "phase_6_persist": {
-        "status": "completed",
-        "started_at": "2026-05-14T21:50:08.309Z",
-        "completed_at": "2026-05-14T21:50:14.408Z",
-        "graph_merged_in_place": true,
-        "graph_extension_file": null,
-        "new_mech_nodes": 0,
-        "new_mech_edges": 361
-      }
-    },
-    "n_videos_processed": 372,
-    "n_mechanism_observations": 41119,
-    "n_mechanisms": 2444,
-    "n_components": 87,
-    "n_principles": 312,
-    "n_principle_gaps": 54,
-    "n_bridges_validated": 312,
-    "top_25_principles": [
-      {
-        "principle_id": "princ_00034",
-        "mechanism_id": "compound_frame_close_up_X_segment_setup_at_first_10s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.2844,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.0853,
-        "mech_to_views_rho_direct": 0.0053,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.2844,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 65,
-        "mechanism_prevalence_ratio": 0.1747,
-        "mechanism_specificity_idf": 1.7319,
-        "chain_strength_specificity_weighted": -0.1477
-      },
-      {
-        "principle_id": "princ_00024",
-        "mechanism_id": "compound_frame_direct_address_X_segment_setup_at_first_5s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": -0.3261,
-        "post_to_views_r": -0.3,
-        "chain_strength": 0.0978,
-        "mech_to_views_rho_direct": 0.1286,
-        "first_10s_signal": null,
-        "swipe_away_signal": -0.3261,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 86,
-        "mechanism_prevalence_ratio": 0.2312,
-        "mechanism_specificity_idf": 1.4557,
-        "chain_strength_specificity_weighted": 0.1424
-      },
-      {
-        "principle_id": "princ_00023",
-        "mechanism_id": "compound_frame_direct_address_X_segment_hook_at_first_5s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": -0.3359,
-        "post_to_views_r": -0.3,
-        "chain_strength": 0.1008,
-        "mech_to_views_rho_direct": 0.1589,
-        "first_10s_signal": null,
-        "swipe_away_signal": -0.3359,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 105,
-        "mechanism_prevalence_ratio": 0.2823,
-        "mechanism_specificity_idf": 1.2581,
-        "chain_strength_specificity_weighted": 0.1268
-      },
-      {
-        "principle_id": "princ_00046",
-        "mechanism_id": "segment_setup_at_first_10s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.2562,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.0769,
-        "mech_to_views_rho_direct": -0.0165,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.2562,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 73,
-        "mechanism_prevalence_ratio": 0.1962,
-        "mechanism_specificity_idf": 1.6175,
-        "chain_strength_specificity_weighted": -0.1244
-      },
-      {
-        "principle_id": "princ_00047",
-        "mechanism_id": "compound_frame_text_overlay_X_segment_setup_at_first_10s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.2562,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.0769,
-        "mech_to_views_rho_direct": -0.0165,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.2562,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 73,
-        "mechanism_prevalence_ratio": 0.1962,
-        "mechanism_specificity_idf": 1.6175,
-        "chain_strength_specificity_weighted": -0.1244
-      },
-      {
-        "principle_id": "princ_00061",
-        "mechanism_id": "compound_frame_relatability_X_segment_setup_at_first_5s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": -0.2283,
-        "post_to_views_r": -0.3,
-        "chain_strength": 0.0685,
-        "mech_to_views_rho_direct": 0.0081,
-        "first_10s_signal": null,
-        "swipe_away_signal": -0.2283,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 64,
-        "mechanism_prevalence_ratio": 0.172,
-        "mechanism_specificity_idf": 1.7472,
-        "chain_strength_specificity_weighted": 0.1197
-      },
-      {
-        "principle_id": "princ_00014",
-        "mechanism_id": "frame_close_up_at_hook_quarter",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.3725,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.1117,
-        "mech_to_views_rho_direct": 0.1922,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.3725,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 129,
-        "mechanism_prevalence_ratio": 0.3468,
-        "mechanism_specificity_idf": 1.054,
-        "chain_strength_specificity_weighted": -0.1177
-      },
-      {
-        "principle_id": "princ_00085",
-        "mechanism_id": "frame_natural_lighting_at_hook_quarter",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.1906,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.0572,
-        "mech_to_views_rho_direct": 0.0809,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.1906,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 50,
-        "mechanism_prevalence_ratio": 0.1344,
-        "mechanism_specificity_idf": 1.9898,
-        "chain_strength_specificity_weighted": -0.1138
-      },
-      {
-        "principle_id": "princ_00109",
-        "mechanism_id": "frame_reveal_at_mid",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.1595,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.0478,
-        "mech_to_views_rho_direct": -0.001,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.1595,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 35,
-        "mechanism_prevalence_ratio": 0.0941,
-        "mechanism_specificity_idf": 2.3381,
-        "chain_strength_specificity_weighted": -0.1118
-      },
-      {
-        "principle_id": "princ_00008",
-        "mechanism_id": "frame_direct_address_at_first_5s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": -0.434,
-        "post_to_views_r": -0.3,
-        "chain_strength": 0.1302,
-        "mech_to_views_rho_direct": 0.1398,
-        "first_10s_signal": null,
-        "swipe_away_signal": -0.434,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 160,
-        "mechanism_prevalence_ratio": 0.4301,
-        "mechanism_specificity_idf": 0.8402,
-        "chain_strength_specificity_weighted": 0.1094
-      },
-      {
-        "principle_id": "princ_00150",
-        "mechanism_id": "frame_direct_address_at_first_10s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": -0.1222,
-        "post_to_views_r": -0.3,
-        "chain_strength": 0.0367,
-        "mech_to_views_rho_direct": 0.012,
-        "first_10s_signal": null,
-        "swipe_away_signal": -0.1222,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 23,
-        "mechanism_prevalence_ratio": 0.0618,
-        "mechanism_specificity_idf": 2.7435,
-        "chain_strength_specificity_weighted": 0.1007
-      },
-      {
-        "principle_id": "princ_00170",
-        "mechanism_id": "compound_frame_natural_lighting_X_segment_main_point_at_first_10s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": -0.1123,
-        "post_to_views_r": -0.3,
-        "chain_strength": 0.0337,
-        "mech_to_views_rho_direct": -0.0339,
-        "first_10s_signal": null,
-        "swipe_away_signal": -0.1123,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 20,
-        "mechanism_prevalence_ratio": 0.0538,
-        "mechanism_specificity_idf": 2.8771,
-        "chain_strength_specificity_weighted": 0.097
-      },
-      {
-        "principle_id": "princ_00133",
-        "mechanism_id": "compound_frame_natural_lighting_X_segment_setup_at_first_10s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.1364,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.0409,
-        "mech_to_views_rho_direct": 0.0454,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.1364,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 35,
-        "mechanism_prevalence_ratio": 0.0941,
-        "mechanism_specificity_idf": 2.3381,
-        "chain_strength_specificity_weighted": -0.0956
-      },
-      {
-        "principle_id": "princ_00128",
-        "mechanism_id": "compound_frame_close_up_X_segment_main_point_at_first_10s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": -0.1389,
-        "post_to_views_r": -0.3,
-        "chain_strength": 0.0417,
-        "mech_to_views_rho_direct": -0.0286,
-        "first_10s_signal": null,
-        "swipe_away_signal": -0.1389,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 37,
-        "mechanism_prevalence_ratio": 0.0995,
-        "mechanism_specificity_idf": 2.284,
-        "chain_strength_specificity_weighted": 0.0952
-      },
-      {
-        "principle_id": "princ_00123",
-        "mechanism_id": "segment_main_point_at_first_10s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": -0.1423,
-        "post_to_views_r": -0.3,
-        "chain_strength": 0.0427,
-        "mech_to_views_rho_direct": -0.0646,
-        "first_10s_signal": null,
-        "swipe_away_signal": -0.1423,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 43,
-        "mechanism_prevalence_ratio": 0.1156,
-        "mechanism_specificity_idf": 2.1374,
-        "chain_strength_specificity_weighted": 0.0913
-      },
-      {
-        "principle_id": "princ_00124",
-        "mechanism_id": "compound_frame_text_overlay_X_segment_main_point_at_first_10s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": -0.1423,
-        "post_to_views_r": -0.3,
-        "chain_strength": 0.0427,
-        "mech_to_views_rho_direct": -0.0646,
-        "first_10s_signal": null,
-        "swipe_away_signal": -0.1423,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 43,
-        "mechanism_prevalence_ratio": 0.1156,
-        "mechanism_specificity_idf": 2.1374,
-        "chain_strength_specificity_weighted": 0.0913
-      },
-      {
-        "principle_id": "princ_00185",
-        "mechanism_id": "compound_frame_relatability_X_segment_call_to_action_at_late",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": -0.1047,
-        "post_to_views_r": -0.3,
-        "chain_strength": 0.0314,
-        "mech_to_views_rho_direct": 0.0494,
-        "first_10s_signal": null,
-        "swipe_away_signal": -0.1047,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 24,
-        "mechanism_prevalence_ratio": 0.0645,
-        "mechanism_specificity_idf": 2.7027,
-        "chain_strength_specificity_weighted": 0.0849
-      },
-      {
-        "principle_id": "princ_00151",
-        "mechanism_id": "frame_relatability_at_hook_quarter",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.1216,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.0365,
-        "mech_to_views_rho_direct": 0.1238,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.1216,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 36,
-        "mechanism_prevalence_ratio": 0.0968,
-        "mechanism_specificity_idf": 2.3107,
-        "chain_strength_specificity_weighted": -0.0843
-      },
-      {
-        "principle_id": "princ_00026",
-        "mechanism_id": "frame_text_overlay_at_hook_quarter",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.3191,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.0957,
-        "mech_to_views_rho_direct": 0.2186,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.3191,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 161,
-        "mechanism_prevalence_ratio": 0.4328,
-        "mechanism_specificity_idf": 0.834,
-        "chain_strength_specificity_weighted": -0.0798
-      },
-      {
-        "principle_id": "princ_00212",
-        "mechanism_id": "compound_frame_relatability_X_segment_setup_at_first_10s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.0884,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.0265,
-        "mech_to_views_rho_direct": -0.011,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.0884,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 24,
-        "mechanism_prevalence_ratio": 0.0645,
-        "mechanism_specificity_idf": 2.7027,
-        "chain_strength_specificity_weighted": -0.0716
-      },
-      {
-        "principle_id": "princ_00143",
-        "mechanism_id": "compound_frame_natural_lighting_X_segment_conclusion_at_late",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.1261,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.0378,
-        "mech_to_views_rho_direct": 0.0226,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.1261,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 57,
-        "mechanism_prevalence_ratio": 0.1532,
-        "mechanism_specificity_idf": 1.8611,
-        "chain_strength_specificity_weighted": -0.0703
-      },
-      {
-        "principle_id": "princ_00179",
-        "mechanism_id": "segment_introduction_at_first_5s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.1062,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.0319,
-        "mech_to_views_rho_direct": -0.0131,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.1062,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 42,
-        "mechanism_prevalence_ratio": 0.1129,
-        "mechanism_specificity_idf": 2.1604,
-        "chain_strength_specificity_weighted": -0.0689
-      },
-      {
-        "principle_id": "princ_00180",
-        "mechanism_id": "compound_frame_text_overlay_X_segment_introduction_at_first_5s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.1062,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.0319,
-        "mech_to_views_rho_direct": -0.0131,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.1062,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 42,
-        "mechanism_prevalence_ratio": 0.1129,
-        "mechanism_specificity_idf": 2.1604,
-        "chain_strength_specificity_weighted": -0.0689
-      },
-      {
-        "principle_id": "princ_00147",
-        "mechanism_id": "frame_direct_address_at_late",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.1228,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.0368,
-        "mech_to_views_rho_direct": 0.0091,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.1228,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 57,
-        "mechanism_prevalence_ratio": 0.1532,
-        "mechanism_specificity_idf": 1.8611,
-        "chain_strength_specificity_weighted": -0.0685
-      },
-      {
-        "principle_id": "princ_00210",
-        "mechanism_id": "compound_frame_motion_X_segment_hook_at_first_5s",
-        "via_indicator": "swipe_away_rate",
-        "to_outcome": "views_log10",
-        "pre_to_post_rho": 0.0888,
-        "post_to_views_r": -0.3,
-        "chain_strength": -0.0266,
-        "mech_to_views_rho_direct": 0.0017,
-        "first_10s_signal": null,
-        "swipe_away_signal": 0.0888,
-        "n_videos_used": 369,
-        "mechanism_n_videos": 31,
-        "mechanism_prevalence_ratio": 0.0833,
-        "mechanism_specificity_idf": 2.4558,
-        "chain_strength_specificity_weighted": -0.0653
-      }
-    ],
-    "top_10_mechanisms_by_support": [
-      {
-        "id": "frame_text_overlay_at_first_5s",
-        "n_videos": 371,
-        "n_observations": 2162
-      },
-      {
-        "id": "frame_text_overlay_at_first_10s",
-        "n_videos": 370,
-        "n_observations": 1782
-      },
-      {
-        "id": "frame_text_overlay_at_late",
-        "n_videos": 370,
-        "n_observations": 3709
-      },
-      {
-        "id": "frame_text_overlay_at_mid",
-        "n_videos": 368,
-        "n_observations": 7427
-      },
-      {
-        "id": "frame_close_up_at_first_5s",
-        "n_videos": 348,
-        "n_observations": 1386
-      },
-      {
-        "id": "frame_close_up_at_mid",
-        "n_videos": 345,
-        "n_observations": 4135
-      },
-      {
-        "id": "frame_close_up_at_late",
-        "n_videos": 336,
-        "n_observations": 1965
-      },
-      {
-        "id": "phrase_action_trigger_at_unknown",
-        "n_videos": 333,
-        "n_observations": 333
-      },
-      {
-        "id": "phrase_personal_stake_at_unknown",
-        "n_videos": 325,
-        "n_observations": 325
-      },
-      {
-        "id": "frame_close_up_at_first_10s",
-        "n_videos": 325,
-        "n_observations": 972
-      }
-    ],
-    "top_10_components": [
-      {
-        "id": "comp_0020",
-        "label": "source_kind: compound",
-        "n_mechanisms_using": 1943
-      },
-      {
-        "id": "comp_0009",
-        "label": "position_bucket: mid",
-        "n_mechanisms_using": 1363
-      },
-      {
-        "id": "comp_0034",
-        "label": "kind_at_bucket: compound__mid",
-        "n_mechanisms_using": 1127
-      },
-      {
-        "id": "comp_0007",
-        "label": "position_bucket: late",
-        "n_mechanisms_using": 500
-      },
-      {
-        "id": "comp_0018",
-        "label": "source_kind: segment",
-        "n_mechanisms_using": 430
-      },
-      {
-        "id": "comp_0036",
-        "label": "kind_at_bucket: compound__late",
-        "n_mechanisms_using": 397
-      },
-      {
-        "id": "comp_0005",
-        "label": "position_bucket: first_10s",
-        "n_mechanisms_using": 325
-      },
-      {
-        "id": "comp_0039",
-        "label": "kind_at_bucket: compound__first_10s",
-        "n_mechanisms_using": 250
-      },
-      {
-        "id": "comp_0032",
-        "label": "kind_at_bucket: segment__mid",
-        "n_mechanisms_using": 227
-      },
-      {
-        "id": "comp_0003",
-        "label": "position_bucket: first_5s",
-        "n_mechanisms_using": 161
-      }
-    ]
+  {
+   "model": "v6",
+   "cv_r2": 0.361,
+   "n_features": 8,
+   "features": [
+    "keep",
+    "retention_per_sec",
+    "cognitive_load",
+    "ret_mid",
+    "keep_sq",
+    "max_cliff",
+    "sub_ret_gap",
+    "ret_mid_sq"
+   ],
+   "notes": "Backward elimination + retention curve signals. Dropped z_score, vz_score, novelty"
+  },
+  {
+   "model": "v9",
+   "cv_r2": 0.405,
+   "n_features": 9,
+   "features": [
+    "keep_sq",
+    "retention_per_sec",
+    "ret_mid_sq",
+    "max_cliff",
+    "sub_ret_gap",
+    "hook_word_density",
+    "pat_indestructible",
+    "cat_superhero",
+    "keep"
+   ],
+   "notes": "Concept categories (indestructible, superhero). +175% from baseline"
+  },
+  {
+   "model": "v13",
+   "cv_r2": 0.506,
+   "n_features": 13,
+   "features": [
+    "keep_sq",
+    "sub_ret_gap",
+    "ret_mid_sq",
+    "cat_superhero",
+    "prev_views",
+    "prev_keep",
+    "prev_views_sq",
+    "indestructible_x_prev_keep"
+   ],
+   "notes": "Milestone: CV > 0.50. Channel momentum + concept\u00d7momentum interactions"
+  },
+  {
+   "model": "v17",
+   "cv_r2": 0.5,
+   "n_features": 17,
+   "features": [
+    "keep_sq",
+    "sub_ret_gap",
+    "ret_mid_sq",
+    "cat_superhero",
+    "prev_views",
+    "prev_keep",
+    "prev_views_sq",
+    "indestructible_x_prev_keep",
+    "has_text_overlay",
+    "duration_x_retention",
+    "smoothed_slope",
+    "idea_length",
+    "stakes_x_duration",
+    "pat_making_v2",
+    "stakes",
+    "deriv_entropy",
+    "hook_silence"
+   ],
+   "notes": "Rebased to n=203 (different holdout). Pacing + hook signals. CV breaks 0.50"
+  },
+  {
+   "model": "v20",
+   "cv_r2": 0.664,
+   "n_features": 12,
+   "features": [
+    "view_accel_log",
+    "keep_sq",
+    "indestructible_x_prev_keep",
+    "deriv_entropy",
+    "prev_views",
+    "w2_w1_ratio",
+    "prev_keep",
+    "smoothed_slope",
+    "pat_making_v2",
+    "duration_x_retention",
+    "ret_mid_sq",
+    "idea_length"
+   ],
+   "notes": "Forward selection. Trajectory signals (view_accel_log, w2_w1_ratio) add +0.16. LOO=0.678"
+  },
+  {
+   "model": "v22",
+   "cv_r2": 0.7,
+   "n_features": 12,
+   "features": [
+    "view_accel_log",
+    "keep_sq",
+    "indestructible_x_prev_keep",
+    "deriv_std",
+    "prev_views",
+    "w2_w1_ratio",
+    "prev_keep",
+    "pat_making_v2",
+    "duration_x_retention",
+    "ret_mid_sq",
+    "idea_length",
+    "ret_25"
+   ],
+   "notes": "n=210. deriv_std replaces deriv_entropy+smoothed_slope. OLS optimal vs GBM/RF/etc."
+  },
+  {
+   "model": "v26_CORRUPTED",
+   "cv_r2": 0.942,
+   "n_features": 15,
+   "features": [
+    "view_accel_log",
+    "keep_sq",
+    "indestructible_x_prev_keep",
+    "w2_w1_ratio",
+    "duration_x_retention",
+    "prev_views",
+    "prev_keep",
+    "ret_mid_sq",
+    "pat_making_v2",
+    "sub_gap",
+    "like_ratio",
+    "rc_convexity",
+    "svf_log",
+    "engage_ratio",
+    "rpv"
+   ],
+   "notes": "CORRUPTED: Contains circular outcome features (like_ratio, svf_log, engage_ratio, rpv). R\u00b2=0.94 is meaningless for prediction."
   }
+ ],
+ "kept_signals": [
+  {
+   "signal": "keep_sq",
+   "delta_r2": "+0.031",
+   "meaning": "Non-linear keep rate \u2014 accelerating returns above 75%. Marginal keep above 75 doubles hit rate.",
+   "signal_kind": "quality"
+  },
+  {
+   "signal": "max_cliff",
+   "delta_r2": "+0.093",
+   "meaning": "Biggest single-point retention drop. Signals initial virality spike (high initial replay \u2192 big drop). Counter-intuitive: bigger drops = more views.",
+   "signal_kind": "quality"
+  },
+  {
+   "signal": "ret_mid_sq",
+   "delta_r2": "+0.019",
+   "meaning": "Midpoint retention squared. Non-linear mid-video engagement. Videos maintaining middle engagement outperform.",
+   "signal_kind": "quality"
+  },
+  {
+   "signal": "sub_ret_gap",
+   "delta_r2": "+0.020",
+   "meaning": "Subscriber vs non-subscriber retention gap. Smaller gap = broader appeal = more views.",
+   "signal_kind": "quality"
+  },
+  {
+   "signal": "smoothed_slope",
+   "delta_r2": "+0.017",
+   "meaning": "Slope of 5-pt moving avg retention curve. Captures overall decay trend independently of max_cliff.",
+   "signal_kind": "quality"
+  },
+  {
+   "signal": "deriv_entropy",
+   "delta_r2": "+0.008",
+   "meaning": "Pacing complexity \u2014 entropy of retention curve derivative. Varied pacing beats monotonic.",
+   "signal_kind": "quality"
+  },
+  {
+   "signal": "duration_x_retention",
+   "delta_r2": "+0.018",
+   "meaning": "Duration \u00d7 retention = total watch time proxy. Algorithm rewards absolute watch minutes.",
+   "signal_kind": "content"
+  },
+  {
+   "signal": "idea_length",
+   "delta_r2": "+0.012",
+   "meaning": "Word count of AI-generated videoIdea. Longer/richer video concepts predict slightly more views.",
+   "signal_kind": "content"
+  },
+  {
+   "signal": "pat_making_v2",
+   "delta_r2": "+0.012",
+   "meaning": "Title contains making/build/creat/construct. 34 videos avg 19.7M vs 5.6M rest.",
+   "signal_kind": "concept"
+  },
+  {
+   "signal": "indestructible_x_prev_keep",
+   "delta_r2": "+0.026",
+   "meaning": "Indestructible concept \u00d7 previous keep rate. RELEASE STRATEGY: indestructible after high-keep = super-viral.",
+   "signal_kind": "concept"
+  },
+  {
+   "signal": "prev_views",
+   "delta_r2": "+0.034",
+   "meaning": "Previous video's log10 views. Channel momentum \u2014 algorithm gives bigger push after a hit.",
+   "signal_kind": "momentum"
+  },
+  {
+   "signal": "prev_keep",
+   "delta_r2": "+0.016",
+   "meaning": "Previous video's keep rate. Audience priming effect. Weight negative = rebound after low keep.",
+   "signal_kind": "momentum"
+  },
+  {
+   "signal": "view_accel_log",
+   "delta_r2": "+0.048",
+   "meaning": "Log10 of day3-7 avg / day1 views. Early trajectory signal. Strongest predictor of total views.",
+   "signal_kind": "trajectory"
+  },
+  {
+   "signal": "w2_w1_ratio",
+   "delta_r2": "+0.026",
+   "meaning": "Week2 / Week1 view ratio. Sustained growth predicts total views. Second-wave videos outperform.",
+   "signal_kind": "trajectory"
+  }
+ ],
+ "top_discoveries": [
+  {
+   "discovery": "derivative_std",
+   "r_partial": 0.38,
+   "meaning": "StdDev of retention curve derivative = dramatic pacing. Varied rate-of-change beats monotonic decay.",
+   "loop": "B"
+  },
+  {
+   "discovery": "pacing_ratio",
+   "r_partial": 0.42,
+   "meaning": "deriv_std / retentionVariation = dramatic pacing efficiency. Sharp turns at specific moments + smooth overall arc.",
+   "loop": "B"
+  },
+  {
+   "discovery": "body_hold_ratio",
+   "r_partial": 0.26,
+   "meaning": "Retention at 75%/25% predicts views. The narrative middle separates viral from average.",
+   "loop": "B"
+  },
+  {
+   "discovery": "max_cliff_single_drop",
+   "r_partial": 0.36,
+   "meaning": "Counter-intuitive: BIGGER max retention drops = MORE views. Dramatic narrative turns drive virality.",
+   "loop": "B"
+  },
+  {
+   "discovery": "combined_score",
+   "r_partial": 0.32,
+   "meaning": "body_hold*10 + d7d1 - retVar*5. Best multi-signal combo \u2014 captures 3 independent dimensions.",
+   "loop": "B"
+  },
+  {
+   "discovery": "duration_sweet_spot",
+   "r_partial": null,
+   "meaning": "46-60s = sweet spot (28/98 hit 10M+, 2.9M median). 15-30s = death zone (0/11, 513K median).",
+   "loop": "B"
+  },
+  {
+   "discovery": "title_making_keyword",
+   "r_partial": null,
+   "meaning": "'Making' = $24M avg (23 videos). Build/creation content is strongest format.",
+   "loop": "B"
+  },
+  {
+   "discovery": "golden_zone",
+   "r_partial": null,
+   "meaning": "keep>=75 AND maxCliff>=0.15: 45% of videos, 36% hit 10M+. Practical pre-screening formula.",
+   "loop": "B"
+  },
+  {
+   "discovery": "keep_threshold_75",
+   "r_partial": null,
+   "meaning": "Non-linear: <75% keep = 3-12% hit 10M+. 75-80% = 25%. 80-85% = 41%. Marginal keep above 75 doubles hit rate.",
+   "loop": "B"
+  }
+ ],
+ "causal_findings": [
+  {
+   "signal": "connector_density",
+   "r_vs_parent": 0.047,
+   "parent_metric": "retention",
+   "meaning": "Forward-momentum words (so/but/wait/actually) show r=0.05 vs retention but r=0.23 vs keep. Connector/pivot words predict KEEP not retention.",
+   "loop": "C"
+  },
+  {
+   "signal": "pivot_density",
+   "r_vs_parent": 0.26,
+   "parent_metric": "keep",
+   "meaning": "Pivot words (but/however/wait/suddenly) per 100 words. r=0.26 vs keep, r=0.10 vs retention. Narrative surprise drives initial hook.",
+   "loop": "C"
+  },
+  {
+   "signal": "has_callback",
+   "r_vs_parent": 0.14,
+   "parent_metric": "keep",
+   "meaning": "Hook concept callback in last 20%. Only r=0.05 vs end retention (weak). 46% callback rate. Callbacks help keep, not retention.",
+   "loop": "C"
+  },
+  {
+   "signal": "three_channel_frac",
+   "r_vs_parent": 0.07,
+   "parent_metric": "retention",
+   "meaning": "Fraction of seconds with audio+visual+concept all active. Weak signal (r=0.07). Multi-channel completeness is noise at n=203.",
+   "loop": "C"
+  },
+  {
+   "signal": "total_above_baseline",
+   "r_vs_parent": 0.27,
+   "parent_metric": "log_views",
+   "meaning": "Total above-baseline retention area vs views. r=0.27. Watch time above baseline correlates with views.",
+   "loop": "C"
+  },
+  {
+   "signal": "narrative_arc_score",
+   "r_vs_parent": 0.13,
+   "parent_metric": "keep",
+   "meaning": "Narrative arc quality (hook\u2192climax\u2192payoff). Weak: r=0.13 vs keep, r=-0.01 vs retention. Arc quality doesn't predict retention.",
+   "loop": "C"
+  },
+  {
+   "signal": "action_intensity_hook_seg",
+   "r_vs_parent": 0.15,
+   "parent_metric": "keep",
+   "meaning": "Action word density in hook segment vs keep. r=0.15. Physical/action hooks slightly better than talking hooks.",
+   "loop": "C"
+  }
+ ],
+ "retention_patterns": [
+  {
+   "pattern": "Late peak = 10x more views",
+   "evidence": "Videos peaking at 60-80% get ~10x more views than early-peaking (5.2M vs 530K median). Building narrative arc beats front-loaded content.",
+   "loop": "D"
+  },
+  {
+   "pattern": "Visceral words retain, transition words kill",
+   "evidence": "Retention GAIN: visceral/physical (painful +5.9%, difference +4.3%, hurt +2.5%). Retention DROP: transitions (so -11.2%, however -8.6%). Show don't tell.",
+   "loop": "D"
+  },
+  {
+   "pattern": "Golden final 5%",
+   "evidence": "Videos at 95-99% retention percentile: +8.0% above baseline while rest is -0.4%. Final 5% of video is THE differentiator for mega-virality.",
+   "loop": "D"
+  },
+  {
+   "pattern": "Hook window is 10-20%",
+   "evidence": "56% of videos have worst retention in first 20%. 10-20% is the critical make-or-break transition zone.",
+   "loop": "D"
+  },
+  {
+   "pattern": "Action retains, product drops",
+   "evidence": "Physical challenge visuals +12% at peaks. Product/food shots without human anchor cause drops.",
+   "loop": "D"
+  },
+  {
+   "pattern": "Speech rate: fast = retained, pauses = dropped",
+   "evidence": "Speech rate r=+0.24 vs retention. Long pauses >1s: r=-0.22 vs retention. Pacing speed matters.",
+   "loop": "D"
+  },
+  {
+   "pattern": "Anticipation phrases retain",
+   "evidence": "'would happen' +4.3%, 'my body' +3.3% retain. Transitional setups 'so, i' -10.4% kill retention. Bigrams matter.",
+   "loop": "D"
+  },
+  {
+   "pattern": "Late visceral amplification",
+   "evidence": "'crazy' at Q1=+0.000, Q4=+0.060. Visceral words 60x more effective later in narrative \u2014 context amplifies impact.",
+   "loop": "D"
+  },
+  {
+   "pattern": "Vocab diversity hurts keep but helps retention",
+   "evidence": "Type-token ratio: r=-0.33 vs keep but r=+0.13 vs retention. Simple vocabulary hooks viewers, but diversity sustains.",
+   "loop": "D"
+  },
+  {
+   "pattern": "Duration \u00d7 retention sweet spot",
+   "evidence": "Duration r=-0.57 vs retention (longer = lower retention) but duration\u00d7retention r=+0.35 vs views. Algorithm rewards total watch minutes.",
+   "loop": "D"
+  }
+ ],
+ "discarded_reasons": {
+  "hook_clarity": "LLM vision score 1-10. r=+0.21 vs views individually but hurts regression (too noisy at n=203). r=-0.02 vs keep.",
+  "visual_surprise": "LLM vision score 1-10. r=+0.30 vs keep but too noisy for regression. Delta=-0.037.",
+  "face_presence": "80% of videos have faces. r=+0.12 vs views but hurts model. Too uniform a distribution.",
+  "vz_score": "Removed in backward elimination \u2014 captured by keep_sq and other features. Originally r=+0.30 individually.",
+  "z_score": "Removed in backward elimination \u2014 captured by other features in v6.",
+  "net_novelty": "Perfectly collinear with novelty - cognitive_load already in model.",
+  "roughness": "Mean abs 2nd derivative. r=+0.12. Collinear with max_cliff \u2014 doesn't add incremental value.",
+  "title_caps_ratio": "Uppercase ratio in title. Holdout +0.024 but CV drops. Unstable/noise at n=203.",
+  "hook_word_density": "Dropped in backward elimination v16. Captured by other features (has_text_overlay, hook_silence).",
+  "fft_features": "Signal-processing features from retention curve FFT. All hurt \u2014 curve info already captured by max_cliff.",
+  "knn_k7": "KNN regression doesn't beat OLS at n=203. Best k=7: holdout 0.538 vs OLS 0.566.",
+  "curve_clusters": "Retention curve clustering (k=2,3,4). No improvement over linear features.",
+  "LLM_content_scores": "5+ rounds of LLM-scored content attributes (hook quality, specificity, open loop). Consistently too noisy at n=200.",
+  "duration_buckets": "Only 10 shorts in dataset. Long videos R\u00b2=0.50 stratified but buckets don't help regression.",
+  "deep_curve_features": "66 deep retention curve features tested. All collinear with max_cliff. Curve signal fully captured.",
+  "RF_GBM_at_n203": "Random Forest and GBM both underperform OLS at n=203. RF overfits. OLS dominates at small n.",
+  "upload_day": "Saturday avg 14M views but CV delta < 0.01. Day of week is noise.",
+  "piecewise_keep": "Piecewise linear split on keep=75. Holdout +0.06 but CV worse and higher variance.",
+  "nonsub_fraction": "DATA LEAK: r=0.86 vs views. Algorithm pushes to non-subscribers. Consequence not cause.",
+  "log_7day_velocity": "POST-HOC LEAK: downstream of views (view-trajectory / engagement), not a hook property \u2014 a generator cannot emit it. Predicts views because it IS views. Stripped from discoveries.",
+  "day1_share_inverse": "POST-HOC LEAK: downstream of views (view-trajectory / engagement), not a hook property \u2014 a generator cannot emit it. Predicts views because it IS views. Stripped from discoveries.",
+  "day7_day1_ratio": "POST-HOC LEAK: downstream of views (view-trajectory / engagement), not a hook property \u2014 a generator cannot emit it. Predicts views because it IS views. Stripped from discoveries.",
+  "like_ratio_inverse": "POST-HOC LEAK: downstream of views (view-trajectory / engagement), not a hook property \u2014 a generator cannot emit it. Predicts views because it IS views. Stripped from discoveries."
+ },
+ "overnight": {
+  "run_at": "2026-05-14T21:52:03.102Z",
+  "phase_results": {
+   "phase_1_init": {
+    "status": "completed",
+    "started_at": "2026-05-14T21:51:56.700Z",
+    "completed_at": "2026-05-14T21:52:00.162Z",
+    "written": {
+     "mechanisms": {
+      "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/mechanisms.json",
+      "bytes": 695
+     },
+     "components": {
+      "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/components.json",
+      "bytes": 565
+     },
+     "principles": {
+      "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/principles.json",
+      "bytes": 583
+     },
+     "mechanism_observations": {
+      "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/mechanism_observations.json",
+      "bytes": 90
+     },
+     "bridge_validation": {
+      "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/bridge_validation.json",
+      "bytes": 82
+     },
+     "research_questions": {
+      "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/research_questions.json",
+      "bytes": 536158459,
+      "n_questions": 36
+     },
+     "indicator_registry": {
+      "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/indicator-registry.json",
+      "bytes": 96034965,
+      "n_entries": 445978
+     }
+    }
+   },
+   "phase_2_mechanisms": {
+    "status": "completed",
+    "started_at": "2026-05-14T21:52:00.240Z",
+    "completed_at": "2026-05-14T21:52:01.536Z",
+    "n_videos_processed": 372,
+    "n_observations": 41119,
+    "n_mechanism_ids": 2444,
+    "n_mechanisms_in_scope_for_links": 114,
+    "n_links": 361
+   },
+   "phase_3_components": {
+    "status": "completed",
+    "started_at": "2026-05-14T21:52:01.608Z",
+    "completed_at": "2026-05-14T21:52:01.646Z",
+    "n_components": 87,
+    "n_mechanisms_decomposed": 2444,
+    "coverage_pct": 100
+   },
+   "phase_4_principles": {
+    "status": "completed",
+    "started_at": "2026-05-14T21:52:01.712Z",
+    "completed_at": "2026-05-14T21:52:01.971Z",
+    "n_principles": 312,
+    "n_gaps": 54,
+    "n_dropped_tautological": 49,
+    "n_unique_mechanisms_in_principles": 109
+   },
+   "phase_5_bridge": {
+    "status": "completed",
+    "started_at": "2026-05-14T21:52:02.040Z",
+    "completed_at": "2026-05-14T21:52:02.974Z",
+    "n_principles_validated": 312,
+    "n_dropped_tautological": 0,
+    "n_videos_used": 372,
+    "top_chain_strength": -0.0853,
+    "top_chain_strength_specificity_weighted": -0.1477,
+    "sanity_known_strong_in_top25": true,
+    "sanity_no_target_proxy_in_top25": true
+   },
+   "phase_6_persist": {
+    "status": "completed",
+    "started_at": "2026-05-14T21:50:08.309Z",
+    "completed_at": "2026-05-14T21:50:14.408Z",
+    "graph_merged_in_place": true,
+    "graph_extension_file": null,
+    "new_mech_nodes": 0,
+    "new_mech_edges": 361
+   }
+  },
+  "n_videos_processed": 372,
+  "n_mechanism_observations": 41119,
+  "n_mechanisms": 2444,
+  "n_components": 87,
+  "n_principles": 312,
+  "n_principle_gaps": 54,
+  "n_bridges_validated": 312,
+  "top_25_principles": [
+   {
+    "principle_id": "princ_00034",
+    "mechanism_id": "compound_frame_close_up_X_segment_setup_at_first_10s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.2844,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.0853,
+    "mech_to_views_rho_direct": 0.0053,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.2844,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 65,
+    "mechanism_prevalence_ratio": 0.1747,
+    "mechanism_specificity_idf": 1.7319,
+    "chain_strength_specificity_weighted": -0.1477
+   },
+   {
+    "principle_id": "princ_00024",
+    "mechanism_id": "compound_frame_direct_address_X_segment_setup_at_first_5s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": -0.3261,
+    "post_to_views_r": -0.3,
+    "chain_strength": 0.0978,
+    "mech_to_views_rho_direct": 0.1286,
+    "first_10s_signal": null,
+    "swipe_away_signal": -0.3261,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 86,
+    "mechanism_prevalence_ratio": 0.2312,
+    "mechanism_specificity_idf": 1.4557,
+    "chain_strength_specificity_weighted": 0.1424
+   },
+   {
+    "principle_id": "princ_00023",
+    "mechanism_id": "compound_frame_direct_address_X_segment_hook_at_first_5s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": -0.3359,
+    "post_to_views_r": -0.3,
+    "chain_strength": 0.1008,
+    "mech_to_views_rho_direct": 0.1589,
+    "first_10s_signal": null,
+    "swipe_away_signal": -0.3359,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 105,
+    "mechanism_prevalence_ratio": 0.2823,
+    "mechanism_specificity_idf": 1.2581,
+    "chain_strength_specificity_weighted": 0.1268
+   },
+   {
+    "principle_id": "princ_00046",
+    "mechanism_id": "segment_setup_at_first_10s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.2562,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.0769,
+    "mech_to_views_rho_direct": -0.0165,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.2562,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 73,
+    "mechanism_prevalence_ratio": 0.1962,
+    "mechanism_specificity_idf": 1.6175,
+    "chain_strength_specificity_weighted": -0.1244
+   },
+   {
+    "principle_id": "princ_00047",
+    "mechanism_id": "compound_frame_text_overlay_X_segment_setup_at_first_10s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.2562,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.0769,
+    "mech_to_views_rho_direct": -0.0165,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.2562,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 73,
+    "mechanism_prevalence_ratio": 0.1962,
+    "mechanism_specificity_idf": 1.6175,
+    "chain_strength_specificity_weighted": -0.1244
+   },
+   {
+    "principle_id": "princ_00061",
+    "mechanism_id": "compound_frame_relatability_X_segment_setup_at_first_5s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": -0.2283,
+    "post_to_views_r": -0.3,
+    "chain_strength": 0.0685,
+    "mech_to_views_rho_direct": 0.0081,
+    "first_10s_signal": null,
+    "swipe_away_signal": -0.2283,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 64,
+    "mechanism_prevalence_ratio": 0.172,
+    "mechanism_specificity_idf": 1.7472,
+    "chain_strength_specificity_weighted": 0.1197
+   },
+   {
+    "principle_id": "princ_00014",
+    "mechanism_id": "frame_close_up_at_hook_quarter",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.3725,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.1117,
+    "mech_to_views_rho_direct": 0.1922,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.3725,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 129,
+    "mechanism_prevalence_ratio": 0.3468,
+    "mechanism_specificity_idf": 1.054,
+    "chain_strength_specificity_weighted": -0.1177
+   },
+   {
+    "principle_id": "princ_00085",
+    "mechanism_id": "frame_natural_lighting_at_hook_quarter",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.1906,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.0572,
+    "mech_to_views_rho_direct": 0.0809,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.1906,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 50,
+    "mechanism_prevalence_ratio": 0.1344,
+    "mechanism_specificity_idf": 1.9898,
+    "chain_strength_specificity_weighted": -0.1138
+   },
+   {
+    "principle_id": "princ_00109",
+    "mechanism_id": "frame_reveal_at_mid",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.1595,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.0478,
+    "mech_to_views_rho_direct": -0.001,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.1595,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 35,
+    "mechanism_prevalence_ratio": 0.0941,
+    "mechanism_specificity_idf": 2.3381,
+    "chain_strength_specificity_weighted": -0.1118
+   },
+   {
+    "principle_id": "princ_00008",
+    "mechanism_id": "frame_direct_address_at_first_5s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": -0.434,
+    "post_to_views_r": -0.3,
+    "chain_strength": 0.1302,
+    "mech_to_views_rho_direct": 0.1398,
+    "first_10s_signal": null,
+    "swipe_away_signal": -0.434,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 160,
+    "mechanism_prevalence_ratio": 0.4301,
+    "mechanism_specificity_idf": 0.8402,
+    "chain_strength_specificity_weighted": 0.1094
+   },
+   {
+    "principle_id": "princ_00150",
+    "mechanism_id": "frame_direct_address_at_first_10s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": -0.1222,
+    "post_to_views_r": -0.3,
+    "chain_strength": 0.0367,
+    "mech_to_views_rho_direct": 0.012,
+    "first_10s_signal": null,
+    "swipe_away_signal": -0.1222,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 23,
+    "mechanism_prevalence_ratio": 0.0618,
+    "mechanism_specificity_idf": 2.7435,
+    "chain_strength_specificity_weighted": 0.1007
+   },
+   {
+    "principle_id": "princ_00170",
+    "mechanism_id": "compound_frame_natural_lighting_X_segment_main_point_at_first_10s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": -0.1123,
+    "post_to_views_r": -0.3,
+    "chain_strength": 0.0337,
+    "mech_to_views_rho_direct": -0.0339,
+    "first_10s_signal": null,
+    "swipe_away_signal": -0.1123,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 20,
+    "mechanism_prevalence_ratio": 0.0538,
+    "mechanism_specificity_idf": 2.8771,
+    "chain_strength_specificity_weighted": 0.097
+   },
+   {
+    "principle_id": "princ_00133",
+    "mechanism_id": "compound_frame_natural_lighting_X_segment_setup_at_first_10s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.1364,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.0409,
+    "mech_to_views_rho_direct": 0.0454,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.1364,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 35,
+    "mechanism_prevalence_ratio": 0.0941,
+    "mechanism_specificity_idf": 2.3381,
+    "chain_strength_specificity_weighted": -0.0956
+   },
+   {
+    "principle_id": "princ_00128",
+    "mechanism_id": "compound_frame_close_up_X_segment_main_point_at_first_10s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": -0.1389,
+    "post_to_views_r": -0.3,
+    "chain_strength": 0.0417,
+    "mech_to_views_rho_direct": -0.0286,
+    "first_10s_signal": null,
+    "swipe_away_signal": -0.1389,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 37,
+    "mechanism_prevalence_ratio": 0.0995,
+    "mechanism_specificity_idf": 2.284,
+    "chain_strength_specificity_weighted": 0.0952
+   },
+   {
+    "principle_id": "princ_00123",
+    "mechanism_id": "segment_main_point_at_first_10s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": -0.1423,
+    "post_to_views_r": -0.3,
+    "chain_strength": 0.0427,
+    "mech_to_views_rho_direct": -0.0646,
+    "first_10s_signal": null,
+    "swipe_away_signal": -0.1423,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 43,
+    "mechanism_prevalence_ratio": 0.1156,
+    "mechanism_specificity_idf": 2.1374,
+    "chain_strength_specificity_weighted": 0.0913
+   },
+   {
+    "principle_id": "princ_00124",
+    "mechanism_id": "compound_frame_text_overlay_X_segment_main_point_at_first_10s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": -0.1423,
+    "post_to_views_r": -0.3,
+    "chain_strength": 0.0427,
+    "mech_to_views_rho_direct": -0.0646,
+    "first_10s_signal": null,
+    "swipe_away_signal": -0.1423,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 43,
+    "mechanism_prevalence_ratio": 0.1156,
+    "mechanism_specificity_idf": 2.1374,
+    "chain_strength_specificity_weighted": 0.0913
+   },
+   {
+    "principle_id": "princ_00185",
+    "mechanism_id": "compound_frame_relatability_X_segment_call_to_action_at_late",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": -0.1047,
+    "post_to_views_r": -0.3,
+    "chain_strength": 0.0314,
+    "mech_to_views_rho_direct": 0.0494,
+    "first_10s_signal": null,
+    "swipe_away_signal": -0.1047,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 24,
+    "mechanism_prevalence_ratio": 0.0645,
+    "mechanism_specificity_idf": 2.7027,
+    "chain_strength_specificity_weighted": 0.0849
+   },
+   {
+    "principle_id": "princ_00151",
+    "mechanism_id": "frame_relatability_at_hook_quarter",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.1216,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.0365,
+    "mech_to_views_rho_direct": 0.1238,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.1216,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 36,
+    "mechanism_prevalence_ratio": 0.0968,
+    "mechanism_specificity_idf": 2.3107,
+    "chain_strength_specificity_weighted": -0.0843
+   },
+   {
+    "principle_id": "princ_00026",
+    "mechanism_id": "frame_text_overlay_at_hook_quarter",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.3191,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.0957,
+    "mech_to_views_rho_direct": 0.2186,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.3191,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 161,
+    "mechanism_prevalence_ratio": 0.4328,
+    "mechanism_specificity_idf": 0.834,
+    "chain_strength_specificity_weighted": -0.0798
+   },
+   {
+    "principle_id": "princ_00212",
+    "mechanism_id": "compound_frame_relatability_X_segment_setup_at_first_10s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.0884,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.0265,
+    "mech_to_views_rho_direct": -0.011,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.0884,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 24,
+    "mechanism_prevalence_ratio": 0.0645,
+    "mechanism_specificity_idf": 2.7027,
+    "chain_strength_specificity_weighted": -0.0716
+   },
+   {
+    "principle_id": "princ_00143",
+    "mechanism_id": "compound_frame_natural_lighting_X_segment_conclusion_at_late",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.1261,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.0378,
+    "mech_to_views_rho_direct": 0.0226,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.1261,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 57,
+    "mechanism_prevalence_ratio": 0.1532,
+    "mechanism_specificity_idf": 1.8611,
+    "chain_strength_specificity_weighted": -0.0703
+   },
+   {
+    "principle_id": "princ_00179",
+    "mechanism_id": "segment_introduction_at_first_5s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.1062,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.0319,
+    "mech_to_views_rho_direct": -0.0131,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.1062,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 42,
+    "mechanism_prevalence_ratio": 0.1129,
+    "mechanism_specificity_idf": 2.1604,
+    "chain_strength_specificity_weighted": -0.0689
+   },
+   {
+    "principle_id": "princ_00180",
+    "mechanism_id": "compound_frame_text_overlay_X_segment_introduction_at_first_5s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.1062,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.0319,
+    "mech_to_views_rho_direct": -0.0131,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.1062,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 42,
+    "mechanism_prevalence_ratio": 0.1129,
+    "mechanism_specificity_idf": 2.1604,
+    "chain_strength_specificity_weighted": -0.0689
+   },
+   {
+    "principle_id": "princ_00147",
+    "mechanism_id": "frame_direct_address_at_late",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.1228,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.0368,
+    "mech_to_views_rho_direct": 0.0091,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.1228,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 57,
+    "mechanism_prevalence_ratio": 0.1532,
+    "mechanism_specificity_idf": 1.8611,
+    "chain_strength_specificity_weighted": -0.0685
+   },
+   {
+    "principle_id": "princ_00210",
+    "mechanism_id": "compound_frame_motion_X_segment_hook_at_first_5s",
+    "via_indicator": "swipe_away_rate",
+    "to_outcome": "views_log10",
+    "pre_to_post_rho": 0.0888,
+    "post_to_views_r": -0.3,
+    "chain_strength": -0.0266,
+    "mech_to_views_rho_direct": 0.0017,
+    "first_10s_signal": null,
+    "swipe_away_signal": 0.0888,
+    "n_videos_used": 369,
+    "mechanism_n_videos": 31,
+    "mechanism_prevalence_ratio": 0.0833,
+    "mechanism_specificity_idf": 2.4558,
+    "chain_strength_specificity_weighted": -0.0653
+   }
+  ],
+  "top_10_mechanisms_by_support": [
+   {
+    "id": "frame_text_overlay_at_first_5s",
+    "n_videos": 371,
+    "n_observations": 2162
+   },
+   {
+    "id": "frame_text_overlay_at_first_10s",
+    "n_videos": 370,
+    "n_observations": 1782
+   },
+   {
+    "id": "frame_text_overlay_at_late",
+    "n_videos": 370,
+    "n_observations": 3709
+   },
+   {
+    "id": "frame_text_overlay_at_mid",
+    "n_videos": 368,
+    "n_observations": 7427
+   },
+   {
+    "id": "frame_close_up_at_first_5s",
+    "n_videos": 348,
+    "n_observations": 1386
+   },
+   {
+    "id": "frame_close_up_at_mid",
+    "n_videos": 345,
+    "n_observations": 4135
+   },
+   {
+    "id": "frame_close_up_at_late",
+    "n_videos": 336,
+    "n_observations": 1965
+   },
+   {
+    "id": "phrase_action_trigger_at_unknown",
+    "n_videos": 333,
+    "n_observations": 333
+   },
+   {
+    "id": "phrase_personal_stake_at_unknown",
+    "n_videos": 325,
+    "n_observations": 325
+   },
+   {
+    "id": "frame_close_up_at_first_10s",
+    "n_videos": 325,
+    "n_observations": 972
+   }
+  ],
+  "top_10_components": [
+   {
+    "id": "comp_0020",
+    "label": "source_kind: compound",
+    "n_mechanisms_using": 1943
+   },
+   {
+    "id": "comp_0009",
+    "label": "position_bucket: mid",
+    "n_mechanisms_using": 1363
+   },
+   {
+    "id": "comp_0034",
+    "label": "kind_at_bucket: compound__mid",
+    "n_mechanisms_using": 1127
+   },
+   {
+    "id": "comp_0007",
+    "label": "position_bucket: late",
+    "n_mechanisms_using": 500
+   },
+   {
+    "id": "comp_0018",
+    "label": "source_kind: segment",
+    "n_mechanisms_using": 430
+   },
+   {
+    "id": "comp_0036",
+    "label": "kind_at_bucket: compound__late",
+    "n_mechanisms_using": 397
+   },
+   {
+    "id": "comp_0005",
+    "label": "position_bucket: first_10s",
+    "n_mechanisms_using": 325
+   },
+   {
+    "id": "comp_0039",
+    "label": "kind_at_bucket: compound__first_10s",
+    "n_mechanisms_using": 250
+   },
+   {
+    "id": "comp_0032",
+    "label": "kind_at_bucket: segment__mid",
+    "n_mechanisms_using": 227
+   },
+   {
+    "id": "comp_0003",
+    "label": "position_bucket: first_5s",
+    "n_mechanisms_using": 161
+   }
+  ]
+ },
+ "leakage_audit": {
+  "stripped": [
+   "day1_share_inverse",
+   "day7_day1_ratio",
+   "like_ratio_inverse",
+   "log_7day_velocity"
+  ],
+  "rule": "No feature computed from post-publish view trajectory, subscriber mix, or engagement ratios. Only hook/content properties (frames, transcript, retention-curve SHAPE) are admissible predictors.",
+  "date": "2026-06-28"
+ }
 }
