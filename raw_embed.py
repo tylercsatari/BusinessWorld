@@ -197,9 +197,13 @@ def migrate_clean():
         for k in list(s.keys()): s[k] = [s[k][i] for i in keep]
         print(f"text: pruned {len(keep)} coherent voiceovers (dropped junk)", flush=True)
     s['silent'] = [False] * len(s['ids'])
-    # VISUAL + TOGETHER keep every video, but flag the silent ones.
+    # VISUAL + TOGETHER keep every video, but flag the silent ones. A video HAS a
+    # voiceover iff it produced a text embedding — derive silence from text-channel
+    # membership (authoritative + consistent), NOT each channel's own stored txt
+    # (the earliest-migrated visual rows have no txt and would falsely read silent).
+    voiced = set(store['text']['ids'])
     for c in ['visual', 'together']:
-        store[c]['silent'] = [not coherent(t) for t in store[c]['txt']]
+        store[c]['silent'] = [vid not in voiced for vid in store[c]['ids']]
     # TOGETHER: any hook that fused HALLUCINATED text → re-embed image-only (cheap:
     # the montage is already on R2, so no re-download), so junk text can't confound it.
     st = store['together']
