@@ -1360,6 +1360,36 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // RAW upload — embed an uploaded video's first-5s hook (visual/text/together) and
+    // locate it in the existing map by nearest neighbours. Raw binary body; ext in X-Raw-Ext.
+    if (pathname === '/api/raw/embed-upload' && req.method === 'POST') {
+        const ext = (req.headers['x-raw-ext'] || 'mp4').replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'mp4';
+        const title = (req.headers['x-raw-title'] || 'My upload').toString().slice(0, 80);
+        const chunks = []; let size = 0; const MAX = 200 * 1024 * 1024;
+        req.on('data', c => { size += c.length; if (size > MAX) req.destroy(); chunks.push(c); });
+        req.on('end', () => {
+            if (size === 0 || size > MAX) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'empty or too-large upload (max 200MB)' })); return; }
+            const os = require('os');
+            const tmp = path.join(os.tmpdir(), `rawup_${Date.now()}_${Math.round(Math.random() * 1e6)}.${ext}`);
+            try { fs.writeFileSync(tmp, Buffer.concat(chunks)); }
+            catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write failed: ' + e.message })); return; }
+            const script = path.join(__dirname, 'raw_upload.py');
+            const py = spawn('python3', [script, '--file', tmp, '--title', title], { env: { ...process.env } });
+            let out = '', err = '';
+            py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
+            const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 240000);
+            py.on('close', () => {
+                clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (e) {}
+                const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+                if (!line) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'embedding produced no result', stderr: err.slice(-600) })); return; }
+                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(line);
+            });
+            py.on('error', e => { clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (_) {} res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'spawn failed: ' + e.message })); });
+        });
+        req.on('error', () => { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'upload stream error' })); });
+        return;
+    }
+
     // Quant 2 (pure) — score a new hook from raw pixels/audio (DINOv2+VideoMAE+wav2vec2+DSP, no LLM)
     if (pathname === '/api/quant2/predict' && req.method === 'POST') {
         const chunks = []; let size = 0; const MAX = 200 * 1024 * 1024;
