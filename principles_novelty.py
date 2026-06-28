@@ -148,7 +148,47 @@ second = {'owner': list(range(N)), 'sec': [0] * N, 'proj': hook['proj'],
           'global': hook['global'], 'niche': hook['niche'],
           'coherence': hook['coherent']['coherence'], 'coh_pct': hook['coherent']['coh_pct'], 'temporal': hook['temporal']['nov']}
 
+# ---- novelty → metric correlations (the indicator question) ----
+from scipy.stats import spearmanr
+ret5 = np.full(N, np.nan); keep = np.full(N, np.nan)
+try:
+    rt = json.loads(open(os.path.join(HERE, 'buildings/jarvis/retention-study/retention_table.json')).read())
+    for v in rt.get('videos', []):
+        i = idpos.get(str(v.get('id', '')))
+        if i is None: continue
+        if v.get('ret5_surv') is not None: ret5[i] = float(v['ret5_surv'])
+        if v.get('keep_rate') is not None: keep[i] = float(v['keep_rate'])
+except Exception as e:
+    print('retention load failed:', str(e)[:60], flush=True)
+swipe = 100 - keep
+vw = META['views'].astype(float); minem = META['mine']
+INDS = {'whole_global': np.asarray(hook['global']['whole']['nov'], float),
+        'concept_global': np.asarray(hook['global']['concept']['nov'], float),
+        'visual_global': np.asarray(hook['global']['visual']['nov'], float),
+        'text_global': np.asarray(hook['global']['text']['nov'], float),
+        'whole_niche': np.asarray(hook['niche']['whole']['dist_to_centre'], float),
+        'temporal': np.array([np.nan if x is None else x for x in hook['temporal']['nov']], float),
+        'coherence': np.array([np.nan if x is None else x for x in hook['coherent']['coherence']], float),
+        'combinatorial': np.array([np.nan if x is None else x for x in combo['rarity']], float)}
+def sp(a, b, sub=None):
+    m = np.isfinite(a) & np.isfinite(b)
+    if sub is not None: m &= sub
+    return (round(float(spearmanr(a[m], b[m])[0]), 3), int(m.sum())) if m.sum() > 25 else (None, int(m.sum()))
+novcorr = {}
+for k, arr in INDS.items():
+    va, na = sp(arr, np.log10(vw + 1))
+    vo, no = sp(arr, np.log10(vw + 1), minem)
+    r5, n5 = sp(arr, ret5, minem)
+    sw, ns = sp(arr, swipe, minem)
+    novcorr[k] = {'views_all': va, 'views_owned': vo, 'ret5': r5, 'swipe': sw, 'n_all': na, 'n_owned': no, 'n_ret': n5}
+print('\n=== novelty → metric (Spearman) ===', flush=True)
+print(f'{"indicator":16s}{"views(11k)":>12s}{"views(211)":>12s}{"5s-ret":>9s}{"swipe":>9s}', flush=True)
+for k, c in novcorr.items():
+    f = lambda x: '—' if x is None else f'{x:+.3f}'
+    print(f'{k:16s}{f(c["views_all"]):>12s}{f(c["views_owned"]):>12s}{f(c["ret5"]):>9s}{f(c["swipe"]):>9s}', flush=True)
+
 out = {'meta': {'n': N, 'hook_seconds': 5, 'resolutions': ['hook'], 'corpus': N, 'owned': int(META['mine'].sum()),
+                'novcorr': novcorr, 'metric_labels': {'views_all': 'views · all 11k', 'views_owned': 'views · my 211', 'ret5': '5s-retention · my 211', 'swipe': 'swipe-away · my 211'},
                 'models': {'visual': 'gemini-embedding-2', 'whole': 'gemini (together)', 'concept': 'gemini (text)', 'detector': '— (library: none)'}},
        'ledger': LEDGER, 'videos': videos, 'hook': hook, 'second': second, 'combo': combo}
 

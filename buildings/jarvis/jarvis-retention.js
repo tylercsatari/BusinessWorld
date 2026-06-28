@@ -13,7 +13,7 @@ const JarvisRetention = (function () {
     let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, FUSION = null, NOV = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -110,18 +110,20 @@ const JarvisRetention = (function () {
     function latentMap(proj, opt) {
         if (!proj || !proj.length) return '';
         const w = 520, h = 330, pad = 16, X = x => pad + (x + 1) / 2 * (w - 2 * pad), Y = y => pad + (1 - (y + 1) / 2) * (h - 2 * pad);
-        let s = '', top = '';
+        let s = '', mineS = '', top = '';
         proj.forEach((p, i) => { if (!p) return; const pk = opt.pick ? opt.pick(i) : i, isSel = opt.sel != null && pk === opt.sel;
-            const c = opt.color(i), r = isSel && !opt.traj ? 6 : (opt.r ? opt.r(i) : 3.2);
-            const circ = `<circle data-hook="${pk}" cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="${r}" fill="${c}" opacity="${isSel ? 1 : (opt.op ? opt.op(i) : 0.72)}" stroke="${isSel ? '#fff' : '#0b1120'}" stroke-width="${isSel ? 1.6 : 0.4}" style="cursor:pointer"><title>${esc(opt.tip(i))}</title></circle>`;
-            if (isSel) top += circ; else s += circ; });
+            const mineOn = !!opt.mine, isMine = mineOn && opt.mine(pk);
+            const c = isMine ? '#fbbf24' : opt.color(i), r = isSel && !opt.traj ? 6 : isMine ? 4.4 : (opt.r ? opt.r(i) : 3.2);
+            const opac = isSel ? 1 : isMine ? 1 : (mineOn ? 0.1 : (opt.op ? opt.op(i) : 0.72));
+            const circ = `<circle data-hook="${pk}" cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="${r}" fill="${c}" opacity="${opac}" stroke="${isSel ? '#fff' : isMine ? '#fff' : '#0b1120'}" stroke-width="${isSel ? 1.6 : isMine ? 1.4 : 0.4}" style="cursor:pointer"><title>${esc((isMine ? '★ ' : '') + opt.tip(i))}</title></circle>`;
+            if (isSel) top += circ; else if (isMine) mineS += circ; else s += circ; });
         // numbered trajectory: connect the selected hook's seconds 0→4 so you can read the order
         if (opt.traj && opt.traj.length > 1) {
             let path = ''; opt.traj.forEach((p, k) => { path += (k ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1) + ' '; });
             top += `<path d="${path}" fill="none" stroke="#fff" stroke-width="1.6" opacity="0.65" stroke-dasharray="3 2"/>`;
             opt.traj.forEach((p, k) => { const x = X(p[0]).toFixed(1), y = Y(p[1]).toFixed(1); top += `<circle cx="${x}" cy="${y}" r="8.5" fill="#0b1120" stroke="#fff" stroke-width="1.5"/><text x="${x}" y="${(+y + 3).toFixed(1)}" text-anchor="middle" fill="#fff" font-size="10" font-weight="800">${k}</text>`; });
         }
-        return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${s}${top}</svg>`;
+        return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${s}${mineS}${top}</svg>`;
     }
     function legendBar(lo, hi, label) {
         const stops = [0, .25, .5, .75, 1].map(t => `${heatCol(t)} ${t * 100}%`).join(',');
@@ -932,16 +934,31 @@ const JarvisRetention = (function () {
     // ───────────────────── PRINCIPLES → NOVELTY ─────────────────────
     function novTip(i, extra) { const v = N.videos[i]; return (v.name || v.id) + ' · ' + fv(v.views) + ' views' + (extra ? ' · ' + extra : '') + ' · click for data'; }
     function rankPct(arr, i) { const v = arr[i]; if (v == null) return 0; const s = arr.filter(x => x != null).sort((a, b) => a - b); return s.indexOf(v) / (s.length - 1 || 1); }
+    function novMineFn() { return st.novMine ? (pk => !!(N && N.videos[pk] && N.videos[pk].mine)) : null; }
+    function novCorrPanel() {
+        const NC = N && N.meta && N.meta.novcorr; if (!NC) return '';
+        const ML = (N.meta.metric_labels) || { views_all: 'views · all', views_owned: 'views · mine', ret5: '5s-retention · mine', swipe: 'swipe-away · mine' };
+        const cols = ['views_all', 'views_owned', 'ret5', 'swipe'];
+        const rows = Object.keys(NC);
+        const cell = v => v == null ? `<td style="text-align:center;color:${C.faint};font-size:9px">—</td>` : `<td title="${v}" style="text-align:center;background:${fuHeat(v * 2.8)};color:${Math.abs(v) > 0.15 ? '#fff' : C.dim};font-size:10px;font-weight:${Math.abs(v) >= 0.1 ? 700 : 400};padding:4px 7px">${v >= 0 ? '+' : ''}${v}</td>`;
+        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">Is novelty an indicator? — Spearman of each novelty score vs each metric</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:8px">views measured on all 11k AND on your 211; 5s-retention &amp; swipe-away on your 211 only. <span style="color:${C.green}">●</span> positive · <span style="color:#60a5fa">●</span> negative. <b>swipe-away is "bad"</b> so a negative there = novelty keeps people. Bright = stronger.</div>
+            <table style="border-collapse:separate;border-spacing:2px;font-size:10px;width:100%">
+              <tr><td></td>${cols.map(c => `<td style="color:${C.mute};text-transform:uppercase;text-align:center;font-size:9px">${ML[c]}</td>`).join('')}</tr>
+              ${rows.map(r => `<tr><td style="color:${C.text};white-space:nowrap;padding-right:8px">${r.replace('_', ' ')}</td>${cols.map(c => cell((NC[r] || {})[c])).join('')}</tr>`).join('')}
+            </table>
+            <div style="font-size:10px;color:${C.mute};margin-top:8px;line-height:1.5"><b style="color:${C.text}">Read it:</b> visual novelty is negative to views (familiar wins distribution); but <b style="color:${C.green}">combinatorial novelty strongly cuts swipe-away (−0.25)</b> — unusual combinations keep people. Each row is an independent candidate indicator.</div>`, 12);
+    }
     // resolution-aware maps. hook → one point per video; second → one point per video-second.
     function resMaps(colorHook, colorSec, legend, hookExtra) {
         if (st.novRes === 'second') {
             const S = N.second, mods = [['whole', 'Whole / sec', 'CLIP image + spoken & on-screen text'], ['concept', 'Concept / sec', 'MiniLM of spoken + on-screen text'], ['visual', 'Visual / sec', 'DINOv2 of the frame (no text)'], ['text', 'Text / sec', 'on-screen caption text only']];
             const trajFor = mod => { if (st.novSel == null) return null; const rows = []; for (let i = 0; i < S.owner.length; i++) if (S.owner[i] === st.novSel) rows.push(i); rows.sort((a, b) => S.sec[a] - S.sec[b]); return rows.map(i => S.proj[mod][i]); };
-            const mk = ([mod, label, sub]) => mapCard(label, sub, latentMap(S.proj[mod], { color: i => colorSec(mod, i), pick: i => S.owner[i], sel: st.novSel, traj: trajFor(mod), r: i => (st.novSel != null && S.owner[i] === st.novSel) ? 5 : 2.3, op: () => 0.62, tip: i => novTip(S.owner[i], 'second ' + S.sec[i]) }), legend);
+            const mk = ([mod, label, sub]) => mapCard(label, sub, latentMap(S.proj[mod], { color: i => colorSec(mod, i), pick: i => S.owner[i], sel: st.novSel, traj: trajFor(mod), mine: novMineFn(), r: i => (st.novSel != null && S.owner[i] === st.novSel) ? 5 : 2.3, op: () => 0.62, tip: i => novTip(S.owner[i], 'second ' + S.sec[i]) }), legend);
             return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${mods.map(mk).join('')}<div style="font-size:11px;color:${C.mute};align-self:center;padding:10px">Each point is <b>one second</b> (${S.owner.length} total). Select a hook → its 5 seconds are <b>connected 0→4</b> with numbers, so you can read the path its hook takes through latent space (does it stay put or travel?).</div></div>`;
         }
         const H = N.hook, mods = [['whole', 'Whole hook', 'CLIP image + spoken & on-screen text'], ['concept', 'Concept', 'MiniLM of spoken + on-screen text'], ['visual', 'Visual', 'DINOv2 frames, pooled (no text)'], ['text', 'On-screen text', 'MiniLM of caption/overlay text only']];
-        const mk = ([mod, label, sub]) => mapCard(label, sub, latentMap(H.proj[mod], { color: i => colorHook(mod, i), sel: st.novSel, tip: i => novTip(i) }), legend);
+        const mk = ([mod, label, sub]) => mapCard(label, sub, latentMap(H.proj[mod], { color: i => colorHook(mod, i), sel: st.novSel, mine: novMineFn(), tip: i => novTip(i) }), legend);
         return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${mods.map(mk).join('')}${hookExtra || `<div style="font-size:11px;color:${C.mute};align-self:center;padding:10px">Each point is a <b>whole hook</b>. Switch to <b>per-second</b> (top right) to see the same geometry at granular resolution.</div>`}</div>`;
     }
     // committed thumbnail of a hook second (works on the deployed site; video_data/ frames are gitignored)
@@ -1692,10 +1709,13 @@ const JarvisRetention = (function () {
         if (!N) { h += cardc(`<div style="padding:30px;text-align:center;color:${C.dim}">Building novelty geometry… <div style="font-size:11px;color:${C.mute};margin-top:6px">Run the <code>principles/</code> pipeline to generate <code>novelty.json</code>.</div></div>`); return h; }
         const MS = [['global', 'A Global'], ['niche', 'B Niche'], ['temporal', 'C Temporal'], ['combo', 'D Combinatorial'], ['coherent', 'E Coherent'], ['correlations', '📊 Correlations'], ['interactions', '🔗 Interactions'], ['ledger', '📋 Ledger']];
         const resBtn = (id, l) => `<button data-novres="${id}" style="background:${st.novRes === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.novRes === id ? C.accent : C.border};color:${st.novRes === id ? C.accent : C.dim};border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">${l}</button>`;
+        const mineCount = (N.videos || []).filter(v => v.mine).length;
+        const mineBtn = mineCount ? `<span data-novmine="1" style="cursor:pointer;border:1px solid ${st.novMine ? '#fbbf24' : C.border};background:${st.novMine ? '#fbbf2422' : 'transparent'};color:${st.novMine ? '#fbbf24' : C.dim};border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700">★ My videos (${mineCount})</span>` : '';
         h += `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
             <div style="display:flex;gap:6px;flex-wrap:wrap">${MS.map(([id, l]) => `<button data-nov="${id}" style="background:${st.nov === id ? C.purple + '22' : 'transparent'};border:1px solid ${st.nov === id ? C.purple : C.border};color:${st.nov === id ? C.purple : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>
-            ${st.nov !== 'combo' && st.nov !== 'ledger' ? `<div style="margin-left:auto;display:flex;gap:6px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">resolution</span>${resBtn('hook', 'Whole hook')}${resBtn('second', 'Per second')}</div>` : ''}</div>`;
-        h += `<div style="font-size:11px;color:${C.mute};margin-bottom:10px">${N.meta.n} hooks · ${N.second.owner.length} seconds · visual ${N.meta.models.visual} · detector ${N.meta.models.detector}. <b>Click any point for its full data — objects (with boxes), concepts, and every metric.</b></div>`;
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center">${mineBtn}${st.nov !== 'combo' && st.nov !== 'ledger' ? `<span style="font-size:10px;color:${C.mute};text-transform:uppercase">resolution</span>${resBtn('hook', 'Whole hook')}${resBtn('second', 'Per second')}` : ''}</div></div>`;
+        h += `<div style="font-size:11px;color:${C.mute};margin-bottom:10px">${N.meta.n.toLocaleString()} hooks · corpus ${(N.meta.corpus || N.meta.n).toLocaleString()} · ${mineCount} of them yours (merged in). <b>Click any point for its full data; ★ to highlight your videos.</b></div>`;
+        h += novCorrPanel();
         if (st.novSel != null && N.videos[st.novSel]) h += renderHookDetail(st.novSel);
         h += ({ global: renderNovGlobal, niche: renderNovNiche, temporal: renderNovTemporal, combo: renderNovCombo, coherent: renderNovCoherent, correlations: renderNovCorrelations, interactions: renderNovInteractions, ledger: renderNovLedger }[st.nov] || renderNovGlobal)();
         return h;
@@ -1729,6 +1749,7 @@ const JarvisRetention = (function () {
         const cft = e.target.closest('[data-cftgt]'); if (cft) { st.cfTarget = cft.getAttribute('data-cftgt'); render(); return; }
         if (e.target.closest('[data-cfclose]')) { st.cfSel = null; render(); return; }
         const cff = e.target.closest('[data-cf]'); if (cff && !e.target.closest('a')) { st.cfSel = cff.getAttribute('data-cf'); render(); return; }
+        if (e.target.closest('[data-novmine]')) { st.novMine = !st.novMine; render(); return; }
         const nv = e.target.closest('[data-nov]'); if (nv) { st.nov = nv.getAttribute('data-nov'); render(); return; }
         const pp = e.target.closest('[data-principle]'); if (pp) { st.principle = pp.getAttribute('data-principle'); render(); return; }
         const rg = e.target.closest('[data-rtg]'); if (rg) { st.rtgSel = +rg.getAttribute('data-rtg'); render(); return; }
@@ -1865,7 +1886,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=83'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=84'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
