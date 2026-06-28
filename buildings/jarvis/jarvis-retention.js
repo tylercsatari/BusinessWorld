@@ -10,7 +10,7 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, FUSION = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, FUSION = null, NOV = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views' };
@@ -521,6 +521,35 @@ const JarvisRetention = (function () {
         const t = Math.max(-1, Math.min(1, v));
         if (t >= 0) { const a = t; return `rgb(${Math.round(51 + a * 197)},${Math.round(65 + a * 50)},${Math.round(85 - a * 30)})`; }
         const a = -t; return `rgb(${Math.round(51 - a * 20)},${Math.round(65 + a * 80)},${Math.round(85 + a * 150)})`;
+    }
+    function rtgUpdateNovCorpus() { try { const el = window.document.getElementById('rtg-novcorpus'); if (el) el.innerHTML = renderNovCorpus(); } catch (e) { } }
+    function renderNovCorpus() {
+        const intro = `<div style="font-size:11px;color:${C.mute};margin-bottom:10px;line-height:1.5">The <b style="color:${C.purple}">canonical novelty indicators</b> — computed once against the FULL corpus (recomputed as it grows, since novelty is corpus-relative) and consumed everywhere else. 14 indicators: 3 modalities × 4 types + 2 cross-modal. Each cell is the Spearman correlation between a novelty indicator and a metric.</div>`;
+        if (NOV === null) { NOV = { loading: 1 }; fetch('/api/principles/novelty').then(r => r.json()).then(j => { NOV = j; rtgUpdateNovCorpus(); }).catch(() => { NOV = { error: 1 }; rtgUpdateNovCorpus(); }); }
+        if (!NOV || NOV.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading corpus novelty…</div>`);
+        if (NOV.error || !NOV.indicators) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No corpus-novelty report yet — run <code>principles_novelty.py</code>.</div>`);
+        const cov = NOV.coverage || {}, METR = NOV.metrics || [], IND = NOV.indicators;
+        const mlab = { views: 'views', outlier: 'outlier', ret5: '5s-retention', keep: 'keep-rate' };
+        const covHead = cardc(`<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:baseline">
+            <div><span style="font-size:20px;font-weight:900;color:${C.purple}">${(cov.all || NOV.n).toLocaleString()}</span> <span style="font-size:11px;color:${C.mute}">hooks with novelty</span></div>
+            <div style="font-size:11px;color:${C.dim}">text-covered <b style="color:${C.text}">${(cov.text || 0).toLocaleString()}</b> · your videos <b style="color:${C.text}">${cov.owned || 0}</b> · with retention <b style="color:${C.text}">${cov.owned_retention || 0}</b></div>
+            <div style="font-size:10px;color:${C.mute};margin-left:auto">updated ${NOV.updated || ''} · recompute as the corpus grows</div></div>`, 12);
+        // correlation heatmap: rows = indicators, cols = metrics
+        const cell = (v) => v == null ? `<td style="background:${C.card2};color:${C.faint};text-align:center;font-size:9px;padding:5px 8px">—</td>` : `<td title="${v}" style="background:${fuHeat(v * 2.5)};color:${Math.abs(v) > 0.18 ? '#fff' : C.dim};text-align:center;font-size:10px;font-weight:${Math.abs(v) >= 0.1 ? 700 : 400};padding:5px 8px">${v >= 0 ? '+' : ''}${v}</td>`;
+        const grid = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">Novelty indicator × metric — independent correlations</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:8px"><span style="color:${C.green}">●</span> positive (more novel → more) · <span style="color:#60a5fa">●</span> negative. Bright = stronger. This is the "which independent indicator points at which metric" map.</div>
+            <table style="border-collapse:separate;border-spacing:2px;font-size:10px">
+              <tr><td></td>${METR.map(m => `<td style="color:${C.mute};text-transform:uppercase;text-align:center;font-size:9px;padding:2px 6px">${mlab[m] || m}</td>`).join('')}</tr>
+              ${IND.map(n => `<tr><td style="color:${n.startsWith('vis') ? C.cyan : n.startsWith('txt') ? '#f472b6' : n.startsWith('tog') ? C.purple : C.amber};text-align:right;padding-right:6px;white-space:nowrap">${n}</td>${METR.map(m => cell((NOV.corr[n] || {})[m])).join('')}</tr>`).join('')}
+            </table>
+            <div style="font-size:10px;color:${C.mute};margin-top:8px;line-height:1.5"><b style="color:${C.text}">Read it:</b> visual/together novelty is mildly <b>negative</b> to views (familiar wins distribution) — but <b style="color:${C.green}">text novelty is strongly positive to keep-rate</b> (unusual wording makes people stay). Different metric, independent signal — exactly what Fusion stacks.</div>`, 12);
+        // mini histograms
+        const H = NOV.hist || {};
+        const sparks = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">Distributions (all ${(cov.all || NOV.n).toLocaleString()} hooks)</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">
+              ${IND.filter(n => H[n]).map(n => { const c = H[n].counts, mx = Math.max(...c, 1); return `<div><div style="font-size:9px;color:${C.dim};margin-bottom:2px">${n}</div><svg viewBox="0 0 ${c.length * 5} 28" style="width:100%;height:28px">${c.map((v, i) => `<rect x="${i * 5}" y="${28 - v / mx * 26}" width="4" height="${v / mx * 26}" fill="${C.purple}" opacity="0.7"/>`).join('')}</svg><div style="font-size:8px;color:${C.faint};display:flex;justify-content:space-between"><span>${H[n].lo}</span><span>${H[n].hi}</span></div></div>`; }).join('')}
+            </div>`, 12);
+        return covHead + grid + sparks + `<div style="font-size:10px;color:${C.mute};margin-top:4px;text-align:center">${intro}</div>`;
     }
     function renderFusion() {
         const head = h2c('🧬 Fusion — everything vs everything, the honest read', 'Every hook signal tested against views and against outlier (channel-controlled overperformance), all held-out, FDR-controlled, and — critically — partialled against the confounds (channel size, video age, duration). The point isn\'t raw correlation; it\'s which signals carry INDEPENDENT information once everything else is known.');
@@ -1689,12 +1718,13 @@ const JarvisRetention = (function () {
             : 'Hook = the first 5 seconds of every confirmed video. Embedded several independent ways at two resolutions (whole hook + per second). Objects via detection, concepts via keyphrase math — see the 📋 Ledger for every definition.');
         h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${ppill('novelty', '✦ Novelty', pr === 'novelty')}${ppill('rtg', '⛓ RTG', pr === 'rtg')}<span style="border:1px dashed ${C.border2};color:${C.faint};border-radius:8px;padding:5px 12px;font-size:12px">coherence · soon</span></div>`;
         if (pr === 'rtg') return h + renderRTG();
-        if (!N) { h += cardc(`<div style="padding:30px;text-align:center;color:${C.dim}">Building novelty geometry… <div style="font-size:11px;color:${C.mute};margin-top:6px">Run the <code>principles/</code> pipeline (embed → detect → concepts → build_novelty) to generate <code>novelty.json</code>.</div></div>`); return h; }
-        const MS = [['global', 'A Global'], ['niche', 'B Niche'], ['temporal', 'C Temporal'], ['combo', 'D Combinatorial'], ['coherent', 'E Coherent'], ['correlations', '📊 Correlations'], ['interactions', '🔗 Interactions'], ['ledger', '📋 Ledger']];
+        const MS = [['corpus', '🌐 Corpus (11k)'], ['global', 'A Global'], ['niche', 'B Niche'], ['temporal', 'C Temporal'], ['combo', 'D Combinatorial'], ['coherent', 'E Coherent'], ['correlations', '📊 Correlations'], ['interactions', '🔗 Interactions'], ['ledger', '📋 Ledger']];
         const resBtn = (id, l) => `<button data-novres="${id}" style="background:${st.novRes === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.novRes === id ? C.accent : C.border};color:${st.novRes === id ? C.accent : C.dim};border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">${l}</button>`;
         h += `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
             <div style="display:flex;gap:6px;flex-wrap:wrap">${MS.map(([id, l]) => `<button data-nov="${id}" style="background:${st.nov === id ? C.purple + '22' : 'transparent'};border:1px solid ${st.nov === id ? C.purple : C.border};color:${st.nov === id ? C.purple : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>
-            ${st.nov !== 'combo' && st.nov !== 'ledger' ? `<div style="margin-left:auto;display:flex;gap:6px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">resolution</span>${resBtn('hook', 'Whole hook')}${resBtn('second', 'Per second')}</div>` : ''}</div>`;
+            ${st.nov !== 'combo' && st.nov !== 'ledger' && st.nov !== 'corpus' ? `<div style="margin-left:auto;display:flex;gap:6px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">resolution</span>${resBtn('hook', 'Whole hook')}${resBtn('second', 'Per second')}</div>` : ''}</div>`;
+        if (st.nov === 'corpus') return h + `<div id="rtg-novcorpus">${renderNovCorpus()}</div>`;
+        if (!N) { h += cardc(`<div style="padding:30px;text-align:center;color:${C.dim}">Building novelty geometry for the owned set… <div style="font-size:11px;color:${C.mute};margin-top:6px">The 🌐 Corpus view above works now (all 11k); the per-second owned views need the <code>principles/</code> pipeline.</div></div>`); return h; }
         h += `<div style="font-size:11px;color:${C.mute};margin-bottom:10px">${N.meta.n} hooks · ${N.second.owner.length} seconds · visual ${N.meta.models.visual} · detector ${N.meta.models.detector}. <b>Click any point for its full data — objects (with boxes), concepts, and every metric.</b></div>`;
         if (st.novSel != null && N.videos[st.novSel]) h += renderHookDetail(st.novSel);
         h += ({ global: renderNovGlobal, niche: renderNovNiche, temporal: renderNovTemporal, combo: renderNovCombo, coherent: renderNovCoherent, correlations: renderNovCorrelations, interactions: renderNovInteractions, ledger: renderNovLedger }[st.nov] || renderNovGlobal)();
@@ -1865,7 +1895,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=80'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=81'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
