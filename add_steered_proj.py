@@ -41,6 +41,7 @@ for v in rt.get('videos', []):
 print(f'owned retention: keep={len(KEEP)} ret5={len(RET5)}', flush=True)
 
 kf = KFold(5, shuffle=True, random_state=0)
+STEER = {}   # per-(channel,target) linear predictor + quantile map, so an UPLOAD can be scored identically
 for ch in ['visual', 'text', 'together']:
     z = np.load(io.BytesIO(r2_get(f'raw/{ch}/embeddings.npz')), allow_pickle=True)
     ids = [str(x) for x in z['ids']]; V = norm(np.asarray(z['vecs'], np.float32))
@@ -79,7 +80,33 @@ for ch in ['visual', 'text', 'together']:
         mp['proj'][tgt] = {'x': grid(XY[:, 0]), 'y': grid(XY[:, 1]), 'cv': round(cv, 3), 'co': 0.0, 'owned_only_label': True,
                            'est': [round(float(x), 2) for x in est],
                            'actual': [None if x != x else round(float(x), 2) for x in actual]}
-        print(f'  {ch}/{tgt}: held-out align {cv:.3f} (trained on {len(oi)} owned, projected {len(mids)})', flush=True)
+        # serialise the linear predictor so an upload gets the SAME extrapolated estimate.
+        # pls.predict(X) == X @ coef + intercept; recover both empirically (version-proof).
+        coef = np.asarray(pls.coef_).reshape(-1)
+        if coef.shape[0] != Vm.shape[1]: coef = np.asarray(pls.coef_).T.reshape(-1)
+        intercept = float(np.mean(pred_all - Vm @ coef))
+        err = float(np.max(np.abs((Vm @ coef + intercept) - pred_all)))
+        STEER[f'{ch}_{tgt}_coef'] = coef.astype(np.float32)
+        STEER[f'{ch}_{tgt}_int'] = np.float32(intercept)
+        STEER[f'{ch}_{tgt}_psort'] = np.sort(pred_all).astype(np.float32)   # corpus prediction distribution
+        STEER[f'{ch}_{tgt}_ysort'] = yo_sorted.astype(np.float32)           # owned actual distribution (quantile target)
+        print(f'  {ch}/{tgt}: held-out align {cv:.3f} (trained on {len(oi)} owned, projected {len(mids)}) · lin-recon err {err:.2e}', flush=True)
+    # RAW-VIEWS projection (Tyler's experiment): orient toward raw views, NOT log, so the
+    # log vs raw arrangement can be compared side by side. Held-out r(>10M) showed log wins
+    # (0.307 vs 0.288) — this lets you SEE why. All 11k have views, so it's fully supervised.
+    vmap = np.array(mp.get('views', []), float)
+    if len(vmap) == len(mids):
+        vmap[~np.isfinite(vmap)] = 0.0
+        oofv = np.full(len(mids), np.nan)
+        for tr, te in kf.split(Vm): oofv[te] = PLSRegression(1).fit(Vm[tr], vmap[tr]).predict(Vm[te]).ravel()
+        cvv = abs(float(spearmanr(oofv, vmap)[0]))
+        ch10 = abs(float(spearmanr(oofv, (vmap > 1e7).astype(float))[0]))
+        XYv = PLSRegression(2).fit(Vm, vmap).transform(Vm)
+        if spearmanr(XYv[:, 0], vmap)[0] < 0: XYv[:, 0] = -XYv[:, 0]
+        mp['proj']['rawviews'] = {'x': grid(XYv[:, 0]), 'y': grid(XYv[:, 1]), 'cv': round(cvv, 3), 'co': round(ch10, 3)}
+        print(f'  {ch}/rawviews: held-out r(self) {cvv:.3f} r(>10M) {ch10:.3f}', flush=True)
     r2_put(f'raw/{ch}/map.json', json.dumps(mp).encode(), 'application/json')
     print(f'  saved raw/{ch}/map.json', flush=True)
-print('done — keep/ret5 projections added to all maps', flush=True)
+bio = io.BytesIO(); np.savez_compressed(bio, **STEER)
+r2_put('raw/steer_models.npz', bio.getvalue(), 'application/octet-stream')
+print('done — keep/ret5 + rawviews projections added; raw/steer_models.npz saved for upload scoring', flush=True)

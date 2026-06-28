@@ -199,6 +199,27 @@ def _run():
                     gn = np.asarray(eg, float); gn /= (np.linalg.norm(gn) + 1e-9); mix = (vn + tn); mix /= (np.linalg.norm(mix) + 1e-9)
                     indicators['nov_fusion_combinatorial'] = round(float(1 - gn @ mix), 4)
     except Exception: pass
+    # STEERED keep / 5s-retention estimate — project the upload onto the same linear
+    # direction the 11k map uses, then quantile-map onto your 211's actual outcomes, so
+    # the upload lands on the identical extrapolated 0–100% scale (above/below your videos).
+    steer = {}
+    try:
+        sb = r2_get('raw/steer_models.npz')
+        if sb:
+            SM = np.load(io.BytesIO(sb), allow_pickle=True); keys = set(SM.files)
+            for mod, e in {'visual': ev, 'text': et, 'together': eg}.items():
+                if e is None: continue
+                en = np.asarray(e, float); en = en / (np.linalg.norm(en) + 1e-9)
+                for tgt in ('keep', 'ret5'):
+                    ck = f'{mod}_{tgt}_coef'
+                    if ck not in keys: continue
+                    pred = float(en @ SM[ck] + SM[f'{mod}_{tgt}_int'])
+                    psort = SM[f'{mod}_{tgt}_psort']; ysort = SM[f'{mod}_{tgt}_ysort']
+                    rank = float(np.searchsorted(psort, pred)) / max(1, len(psort) - 1)
+                    rank = min(1.0, max(0.0, rank))
+                    est = float(ysort[int(round(rank * (len(ysort) - 1)))])
+                    steer[f'{mod}_{tgt}'] = {'est': round(est, 1), 'pctile': round(rank * 100, 1)}
+    except Exception: pass
     def preview(e):
         if e is None: return None
         a = np.asarray(e, float)
@@ -209,6 +230,7 @@ def _run():
         'silent': (not good),
         'title': args.get('title', 'My hook'),
         'indicators': indicators,
+        'steer': steer,
         'emb_preview': {'visual': preview(ev), 'text': preview(et), 'together': preview(eg)},
         'channels': {
             'visual': {'neighbors': neighbors('visual', ev)} if ev is not None else None,

@@ -318,7 +318,7 @@ const JarvisRetention = (function () {
         const n = R.n, W = 820, H = 520, pad = 16, S = 1000;
         const X = g => pad + g / S * (W - 2 * pad), Yc = g => pad + (1 - g / S) * (H - 2 * pad);
         const PJ = R.proj || {};
-        const PROJS = [['both', '→ views+outlier'], ['views', '→ views'], ['outlier', '→ outlier'], ['hi10m', '>10M class'], ['hiout', 'top-outlier'], ['keep', '→ keep-rate'], ['ret5', '→ 5s-retention'], ['umap', 'UMAP raw'], ['pca', 'PCA raw']].filter(p => PJ[p[0]]);
+        const PROJS = [['both', '→ views+outlier'], ['views', '→ views (log)'], ['rawviews', '→ views (raw)'], ['outlier', '→ outlier'], ['hi10m', '>10M class'], ['hiout', 'top-outlier'], ['keep', '→ keep-rate'], ['ret5', '→ 5s-retention'], ['umap', 'UMAP raw'], ['pca', 'PCA raw']].filter(p => PJ[p[0]]);
         let pm = st.rawProj || 'both'; if (!PJ[pm]) pm = PROJS.length ? PROJS[0][0] : null;
         const proj = (pm && PJ[pm]) || { x: R.x || [], y: R.y || [], cv: 0, co: 0 };
         const supervised = pm && !['umap', 'pca'].includes(pm);
@@ -378,9 +378,11 @@ const JarvisRetention = (function () {
             ups.forEach((u, i) => {
                 const p = upPos(u); if (!p) return;
                 const col = upColor(i), ux = X(p.gx).toFixed(1), uy = Yc(p.gy).toFixed(1), selU = st.rawUpSel === i;
+                const sEst = ESTP && u.steer && u.steer[`${chan}_${pm}`] ? u.steer[`${chan}_${pm}`] : null;
+                const sTxt = sEst ? ` — est. ${sEst.est}% ${metLabel} (${sEst.pctile}th pctile of corpus)` : ` — among ${p.used} nearest hooks`;
                 dots += `<line x1="${ux}" y1="${(+uy - 10).toFixed(1)}" x2="${ux}" y2="${(+uy + 10).toFixed(1)}" stroke="${col}" stroke-width="1" opacity="0.55"/>`
                     + `<line x1="${(+ux - 10).toFixed(1)}" y1="${uy}" x2="${(+ux + 10).toFixed(1)}" y2="${uy}" stroke="${col}" stroke-width="1" opacity="0.55"/>`
-                    + `<circle data-rawupmark="${i}" cx="${ux}" cy="${uy}" r="${selU ? 9 : 7}" fill="${col}" stroke="#fff" stroke-width="${selU ? 3 : 2}" style="cursor:pointer"><title>⬆ #${i + 1} ${esc(u.title || 'upload')} — among ${p.used} nearest hooks</title></circle>`
+                    + `<circle data-rawupmark="${i}" cx="${ux}" cy="${uy}" r="${selU ? 9 : 7}" fill="${col}" stroke="#fff" stroke-width="${selU ? 3 : 2}" style="cursor:pointer"><title>⬆ #${i + 1} ${esc(u.title || 'upload')}${sTxt}</title></circle>`
                     + `<text x="${ux}" y="${(+uy + 3.5).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="700" fill="#0f172a" style="pointer-events:none">${i + 1}</text>`;
             });
         }
@@ -517,6 +519,7 @@ const JarvisRetention = (function () {
                   <img src="data:image/jpeg;base64,${U.montage}" style="width:100%;border-radius:6px;background:#000;margin-bottom:8px"/>
                   ${U.silent ? '' : `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:2px">transcript (first 5s)</div><div style="font-size:12px;color:${C.text};font-style:italic;margin-bottom:8px;line-height:1.45;background:#0f172a;border-radius:6px;padding:9px 11px">"${esc(U.transcript || '')}"</div>`}
                   ${placed}
+                  ${(() => { const s = U.steer || {}; const row = (tn, lab) => { for (const m of ['together', 'text', 'visual']) { const k = s[`${m}_${tn}`]; if (k) return `<div style="display:flex;justify-content:space-between;gap:10px;font-size:11px"><span style="color:${C.mute}">${lab}</span><span style="color:${C.text};font-weight:700">~${k.est}% <span style="color:${C.mute};font-weight:400">(${k.pctile}th pctile of corpus · via ${m})</span></span></div>`; } return ''; }; const kk = row('keep', 'est. keep-rate') + row('ret5', 'est. past-5s'); return kk ? `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">extrapolated onto your 211's scale</div>${kk}<div style="font-size:9px;color:${C.faint};margin-top:4px">Projected onto the same steered direction as the 11k map, quantile-mapped to your videos' actual outcomes. Open <b>→ keep-rate</b> to see it placed.</div></div>` : ''; })()}
                 </div>`;
         })() : '';
         h += `<input id="rawUpFile" type="file" accept="video/*" multiple style="display:none"><input id="rawFrameFile" type="file" accept="image/*" style="display:none">`;
@@ -586,7 +589,7 @@ const JarvisRetention = (function () {
         const srcRow = (klab, kcol, fn) => `<tr><td style="font-size:11px;font-weight:700;color:${kcol};padding:5px 10px 5px 0;white-space:nowrap">${klab}</td>${METS.map(([tn]) => { const v = fn(tn); return `<td style="text-align:center;padding:5px 12px"><span style="font-size:20px;font-weight:900;color:${v != null ? C.text : C.faint}">${v != null ? dispV(tn, v) : '—'}</span></td>`; }).join('')}</tr>`;
         const outputs = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:6px">Predicted outputs — one number for every (source × metric)</div>
             <table style="border-collapse:collapse"><tr><td></td>${METS.map(([tn, lab, col]) => `<td style="text-align:center;font-size:10px;color:${col};text-transform:uppercase;padding:0 12px">${lab}</td>`).join('')}</tr>
-              ${srcRow('content (corpus)', CY, tn => { const e = estFor(tn, 'content'); return e ? e.val : null; })}${srcRow('novelty', C.purple, tn => { const e = estFor(tn, 'novelty'); return e ? e.val : null; })}${srcRow('★ your 211 (stabilized)', '#fbbf24', estOwn)}</table>
+              ${srcRow('content (corpus)', CY, tn => { const e = estFor(tn, 'content'); return e ? e.val : null; })}${srcRow('novelty', C.purple, tn => { const e = estFor(tn, 'novelty'); return e ? e.val : null; })}${srcRow('◆ steered (map-direct)', C.cyan, tn => { if (tn !== 'keep' && tn !== 'ret5') return null; const s = up.steer || {}; for (const m of ['together', 'text', 'visual']) { if (s[`${m}_${tn}`]) return s[`${m}_${tn}`].est; } return null; })}${srcRow('★ your 211 (stabilized)', '#fbbf24', estOwn)}</table>
             <div style="font-size:9px;color:${C.mute};margin-top:7px">Calibrated off each curve at your hook's score (quantile-mapped → spans the real range). <b style="color:#fbbf24">★ your 211</b> reads the same off <b>only your videos'</b> outcomes (dataset-stabilized) — where it differs from corpus, your channel behaves differently. Content is R²-weighted; content &amp; novelty never mixed. Owned overlay is noisy (n≈42/bin) — read as a tilt, not gospel.</div>`, 14);
         // ── 3. per-indicator: the SAME Raw cluster (channel × projection), coloured by
         //    the target, with YOUR hook placed via its neighbours. Click → opens it in Raw. ──
@@ -2000,7 +2003,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=92'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=93'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
