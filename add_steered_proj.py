@@ -90,7 +90,39 @@ for ch in ['visual', 'text', 'together']:
         STEER[f'{ch}_{tgt}_int'] = np.float32(intercept)
         STEER[f'{ch}_{tgt}_psort'] = np.sort(pred_all).astype(np.float32)   # corpus prediction distribution
         STEER[f'{ch}_{tgt}_ysort'] = yo_sorted.astype(np.float32)           # owned actual distribution (quantile target)
+        STEER[f'{ch}_{tgt}_kind'] = np.array('pct')                         # est read directly as a % (keep / 5s-retention)
         print(f'  {ch}/{tgt}: held-out align {cv:.3f} (trained on {len(oi)} owned, projected {len(mids)}) · lin-recon err {err:.2e}', flush=True)
+    # ── steer models for the ALL-VIDEO metrics too (views / outlier / >10M-class) so an upload
+    #    gets the SAME number the map/graph would give it — used by the Experiment grid AND the
+    #    graph's hook marker. One global predictor per (channel × metric); no duplicated maths. ──
+    vv = np.array(mp.get('views', []), float)
+    ov = np.array([np.nan if x is None else x for x in (mp.get('outlier') or [])], float)
+    allm = []
+    if len(vv) == len(mids):
+        allm.append(('views', np.log10(np.where(vv > 0, vv, np.nan) + 1), 'logcount'))
+        allm.append(('gt10M', (vv > 1e7).astype(float), 'binary'))
+    if len(ov) == len(mids):
+        allm.append(('outlier', np.log10(np.where(ov > 0, ov, np.nan) + 1), 'logx'))
+    for tgt, yv, kind in allm:
+        ok = np.isfinite(yv) & (np.abs(Vm).sum(1) > 0)
+        if ok.sum() < 200: continue
+        Xo = Vm[ok]; yo = yv[ok]
+        pls = PLSRegression(1).fit(Xo, yo)
+        pred_ok = pls.predict(Xo).ravel()
+        coef = np.asarray(pls.coef_).reshape(-1)
+        if coef.shape[0] != Vm.shape[1]: coef = np.asarray(pls.coef_).T.reshape(-1)
+        intercept = float(np.mean(pred_ok - Xo @ coef))
+        order = np.argsort(pred_ok)
+        STEER[f'{ch}_{tgt}_coef'] = coef.astype(np.float32)
+        STEER[f'{ch}_{tgt}_int'] = np.float32(intercept)
+        STEER[f'{ch}_{tgt}_psort'] = pred_ok[order].astype(np.float32)
+        STEER[f'{ch}_{tgt}_kind'] = np.array(kind)
+        if kind == 'binary':
+            STEER[f'{ch}_{tgt}_ybypred'] = yo[order].astype(np.float32)     # >10M indicator ordered by prediction → local rate
+        else:
+            STEER[f'{ch}_{tgt}_ysort'] = np.sort(yo).astype(np.float32)     # quantile-map target (log units; UI un-logs)
+        hr = abs(float(spearmanr(pred_ok, yo)[0]))
+        print(f'  {ch}/{tgt}: steer model saved (n={int(ok.sum())}, in-sample r={hr:.3f}, kind={kind})', flush=True)
     # RAW-VIEWS projection (Tyler's experiment): orient toward raw views, NOT log, so the
     # log vs raw arrangement can be compared side by side. Held-out r(>10M) showed log wins
     # (0.307 vs 0.288) — this lets you SEE why. All 11k have views, so it's fully supervised.

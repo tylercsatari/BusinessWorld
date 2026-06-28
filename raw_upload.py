@@ -199,9 +199,11 @@ def _run():
                     gn = np.asarray(eg, float); gn /= (np.linalg.norm(gn) + 1e-9); mix = (vn + tn); mix /= (np.linalg.norm(mix) + 1e-9)
                     indicators['nov_fusion_combinatorial'] = round(float(1 - gn @ mix), 4)
     except Exception: pass
-    # STEERED keep / 5s-retention estimate — project the upload onto the same linear
-    # direction the 11k map uses, then quantile-map onto your 211's actual outcomes, so
-    # the upload lands on the identical extrapolated 0–100% scale (above/below your videos).
+    # STEERED estimate — the ONE global number. Project the upload onto the same linear
+    # direction the 11k map uses for each (channel × metric), then map it exactly the way
+    # the map does: keep/ret5 quantile-map onto your 211's actual outcomes; views/outlier
+    # quantile-map onto the corpus distribution; >10M = local >10M rate around the hook's
+    # rank. Whatever the graph shows for a video, an upload gets the identical maths.
     steer = {}
     try:
         sb = r2_get('raw/steer_models.npz')
@@ -210,15 +212,21 @@ def _run():
             for mod, e in {'visual': ev, 'text': et, 'together': eg}.items():
                 if e is None: continue
                 en = np.asarray(e, float); en = en / (np.linalg.norm(en) + 1e-9)
-                for tgt in ('keep', 'ret5'):
+                for tgt in ('keep', 'ret5', 'views', 'outlier', 'gt10M'):
                     ck = f'{mod}_{tgt}_coef'
                     if ck not in keys: continue
                     pred = float(en @ SM[ck] + SM[f'{mod}_{tgt}_int'])
-                    psort = SM[f'{mod}_{tgt}_psort']; ysort = SM[f'{mod}_{tgt}_ysort']
+                    psort = SM[f'{mod}_{tgt}_psort']
                     rank = float(np.searchsorted(psort, pred)) / max(1, len(psort) - 1)
                     rank = min(1.0, max(0.0, rank))
-                    est = float(ysort[int(round(rank * (len(ysort) - 1)))])
-                    steer[f'{mod}_{tgt}'] = {'est': round(est, 1), 'pctile': round(rank * 100, 1)}
+                    kind = str(SM[f'{mod}_{tgt}_kind']) if f'{mod}_{tgt}_kind' in keys else 'pct'
+                    if kind == 'binary':                                    # >10M class: local rate in a ±5% rank window
+                        yb = SM[f'{mod}_{tgt}_ybypred']; n = len(yb); c = int(round(rank * (n - 1))); w = max(1, n // 20)
+                        est = float(yb[max(0, c - w):min(n, c + w)].mean())
+                    else:
+                        ysort = SM[f'{mod}_{tgt}_ysort']; yv = float(ysort[int(round(rank * (len(ysort) - 1)))])
+                        est = float(10 ** yv) if kind in ('logcount', 'logx') else yv
+                    steer[f'{mod}_{tgt}'] = {'est': round(est, 4) if est < 100 else round(est), 'pctile': round(rank * 100, 1), 'kind': kind}
     except Exception: pass
     def preview(e):
         if e is None: return None
