@@ -406,47 +406,49 @@ const JarvisRetention = (function () {
             const px = proj.x, py = proj.y, idxV = [];
             for (let i = 0; i < n; i++) { if (dir[i] != null && isFinite(dir[i]) && px[i] != null) idxV.push(i); }
             if (idxV.length > 30) {
-                let a, b, aligned = false;
-                if (supervised) {
-                    // A STEERED projection already puts the metric on its X axis (that's what
-                    // steering does — held-out cv confirms it). So the bands MUST split ⟂ to X,
-                    // not to a re-fit gradient that curves off-axis. Orient +x = higher metric so
-                    // labels read low→high left→right. Guarantees the bands track THIS group's metric.
-                    let sx = 0, sm = 0; for (const i of idxV) { sx += px[i]; sm += dir[i]; } sx /= idxV.length; sm /= idxV.length;
-                    let sxm = 0; for (const i of idxV) sxm += (px[i] - sx) * (dir[i] - sm);
-                    a = sxm >= 0 ? 1 : -1; b = 0; aligned = true;
-                } else {
-                    // raw UMAP/PCA has no metric axis — empirically fit the metric's 2D gradient.
-                    let mx = 0, my = 0, mm = 0;
-                    for (const i of idxV) { mx += px[i]; my += py[i]; mm += dir[i]; }
-                    mx /= idxV.length; my /= idxV.length; mm /= idxV.length;
-                    let Sxx = 0, Syy = 0, Sxy = 0, Sxm = 0, Sym = 0;
-                    for (const i of idxV) { const dx = px[i] - mx, dy = py[i] - my, dm = dir[i] - mm; Sxx += dx * dx; Syy += dy * dy; Sxy += dx * dy; Sxm += dx * dm; Sym += dy * dm; }
-                    const det = Sxx * Syy - Sxy * Sxy;
-                    if (Math.abs(det) > 1e-6) { a = (Syy * Sxm - Sxy * Sym) / det; b = (Sxx * Sym - Sxy * Sxm) / det; aligned = true; }
-                }
-                if (aligned) {
-                        if (Math.hypot(a, b) > 1e-9) {
-                        const t = idxV.map(i => a * px[i] + b * py[i]);
-                        const tmin = Math.min(...t), tmax = Math.max(...t), K = Math.max(2, Math.min(20, st.rawBandK || 6));
-                        const bins = Array.from({ length: K }, () => ({ sum: 0, cnt: 0, gx: 0, gy: 0 }));
-                        for (let j = 0; j < idxV.length; j++) {
-                            let bi = Math.floor((t[j] - tmin) / ((tmax - tmin) || 1) * K); bi = bi < 0 ? 0 : bi >= K ? K - 1 : bi;
-                            const i = idxV[j], bn = bins[bi]; bn.sum += dir[i]; bn.cnt++; bn.gx += px[i]; bn.gy += py[i];
-                        }
-                        const clip = (A, B, c) => { const p = []; if (Math.abs(B) > 1e-9) { let y = c / B; if (y >= 0 && y <= S) p.push([0, y]); y = (c - A * S) / B; if (y >= 0 && y <= S) p.push([S, y]); } if (Math.abs(A) > 1e-9) { let x = c / A; if (x >= 0 && x <= S) p.push([x, 0]); x = (c - B * S) / A; if (x >= 0 && x <= S) p.push([x, S]); } return p.length >= 2 ? [p[0], p[1]] : null; };
-                        for (let bI = 1; bI < K; bI++) {
-                            const seg = clip(a, b, tmin + (tmax - tmin) * bI / K);
-                            if (seg) bandUnder += `<line x1="${X(seg[0][0]).toFixed(1)}" y1="${Yc(seg[0][1]).toFixed(1)}" x2="${X(seg[1][0]).toFixed(1)}" y2="${Yc(seg[1][1]).toFixed(1)}" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 5" opacity="0.3"/>`;
-                        }
-                        for (let bi = 0; bi < K; bi++) {
-                            const bn = bins[bi]; if (bn.cnt < 3) continue;
-                            const cx = X(bn.gx / bn.cnt), cy = Yc(bn.gy / bn.cnt), avg = bn.sum / bn.cnt;
-                            const txt = fmt((binary || pctLinear) ? avg : Math.pow(10, avg)), w = txt.length * 6.6 + 12;
-                            bandOver += `<g style="pointer-events:none"><rect x="${(cx - w / 2).toFixed(1)}" y="${(cy - 9).toFixed(1)}" width="${w.toFixed(1)}" height="16" rx="4" fill="#0f172a" opacity="0.85" stroke="#1e293b"/><text x="${cx.toFixed(1)}" y="${(cy + 2.8).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#e2e8f0">${txt}</text></g>`;
-                        }
-                        bandNote = `<b style="color:${C.cyan}">Trend bands ON</b> — dashed lines split the plot ${aligned && supervised ? `⟂ to <b>this projection's steered ${label.replace('avg ', '')} axis</b> (so they always line up with the metric this group tracks)` : `⟂ to the direction <b>${label.replace('avg ', '')}</b> increases`}; each band shows its <b>${label}</b> (${K} equal sections, low→high).`;
+                // Find the DIRECTION the tracked metric actually rises across this map, then
+                // split ⟂ to it. We fit the best-fit plane dir ≈ a·x + b·y + c by least squares
+                // IN SCREEN SPACE (the plot is 820×520, not square — fitting in data space then
+                // mapping to screen skews the angle, which is why it looked off). (a,b) = gradient.
+                const sxOf = i => X(px[i]), syOf = i => Yc(py[i]);
+                let mx = 0, my = 0, mm = 0;
+                for (const i of idxV) { mx += sxOf(i); my += syOf(i); mm += dir[i]; }
+                mx /= idxV.length; my /= idxV.length; mm /= idxV.length;
+                let Sxx = 0, Syy = 0, Sxy = 0, Sxm = 0, Sym = 0;
+                for (const i of idxV) { const dx = sxOf(i) - mx, dy = syOf(i) - my, dm = dir[i] - mm; Sxx += dx * dx; Syy += dy * dy; Sxy += dx * dy; Sxm += dx * dm; Sym += dy * dm; }
+                const det = Sxx * Syy - Sxy * Sxy;
+                let a = 0, b = 0;
+                if (Math.abs(det) > 1e-9) { a = (Syy * Sxm - Sxy * Sym) / det; b = (Sxx * Sym - Sxy * Sxm) / det; }
+                if (Math.hypot(a, b) > 1e-12) {
+                    const t = idxV.map(i => a * sxOf(i) + b * syOf(i));     // distance along the rise direction (screen units)
+                    const tmin = Math.min(...t), tmax = Math.max(...t), K = Math.max(2, Math.min(20, st.rawBandK || 6));
+                    const bins = Array.from({ length: K }, () => ({ sum: 0, cnt: 0, gx: 0, gy: 0 }));
+                    for (let j = 0; j < idxV.length; j++) {
+                        let bi = Math.floor((t[j] - tmin) / ((tmax - tmin) || 1) * K); bi = bi < 0 ? 0 : bi >= K ? K - 1 : bi;
+                        const i = idxV[j], bn = bins[bi]; bn.sum += dir[i]; bn.cnt++; bn.gx += sxOf(i); bn.gy += syOf(i);
                     }
+                    // dividers: clip the screen-space line a·x + b·y = c to the plot rectangle → drawn ⟂ to (a,b)
+                    const x0 = pad, x1 = W - pad, y0 = pad, y1 = H - pad;
+                    const clip = (A, B, c) => { const p = []; if (Math.abs(B) > 1e-9) { let y = (c - A * x0) / B; if (y >= y0 && y <= y1) p.push([x0, y]); y = (c - A * x1) / B; if (y >= y0 && y <= y1) p.push([x1, y]); } if (Math.abs(A) > 1e-9) { let x = (c - B * y0) / A; if (x >= x0 && x <= x1) p.push([x, y0]); x = (c - B * y1) / A; if (x >= x0 && x <= x1) p.push([x, y1]); } return p.length >= 2 ? [p[0], p[1]] : null; };
+                    for (let bI = 1; bI < K; bI++) {
+                        const seg = clip(a, b, tmin + (tmax - tmin) * bI / K);
+                        if (seg) bandUnder += `<line x1="${seg[0][0].toFixed(1)}" y1="${seg[0][1].toFixed(1)}" x2="${seg[1][0].toFixed(1)}" y2="${seg[1][1].toFixed(1)}" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 5" opacity="0.32"/>`;
+                    }
+                    // the trend PATH: a polyline through the band centroids (low→high), arrowhead at the high end
+                    const cents = [];
+                    for (let bi = 0; bi < K; bi++) { const bn = bins[bi]; if (bn.cnt < 3) continue; cents.push([bn.gx / bn.cnt, bn.gy / bn.cnt]); }
+                    if (cents.length >= 2) {
+                        bandUnder += `<polyline points="${cents.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')}" fill="none" stroke="${C.cyan}" stroke-width="2" opacity="0.65"/>`;
+                        const e0 = cents[cents.length - 2], e1 = cents[cents.length - 1], ang = Math.atan2(e1[1] - e0[1], e1[0] - e0[0]), ah = 9;
+                        bandUnder += `<path d="M${e1[0].toFixed(1)},${e1[1].toFixed(1)} L${(e1[0] - ah * Math.cos(ang - 0.45)).toFixed(1)},${(e1[1] - ah * Math.sin(ang - 0.45)).toFixed(1)} M${e1[0].toFixed(1)},${e1[1].toFixed(1)} L${(e1[0] - ah * Math.cos(ang + 0.45)).toFixed(1)},${(e1[1] - ah * Math.sin(ang + 0.45)).toFixed(1)}" stroke="${C.cyan}" stroke-width="2" fill="none" opacity="0.85"/>`;
+                    }
+                    for (let bi = 0; bi < K; bi++) {
+                        const bn = bins[bi]; if (bn.cnt < 3) continue;
+                        const cx = bn.gx / bn.cnt, cy = bn.gy / bn.cnt, avg = bn.sum / bn.cnt;
+                        const txt = fmt((binary || pctLinear) ? avg : Math.pow(10, avg)), w = txt.length * 6.6 + 12;
+                        bandOver += `<g style="pointer-events:none"><rect x="${(cx - w / 2).toFixed(1)}" y="${(cy - 9).toFixed(1)}" width="${w.toFixed(1)}" height="16" rx="4" fill="#0f172a" opacity="0.85" stroke="#1e293b"/><text x="${cx.toFixed(1)}" y="${(cy + 2.8).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#e2e8f0">${txt}</text></g>`;
+                    }
+                    bandNote = `<b style="color:${C.cyan}">Trend bands ON</b> — the cyan <b>path</b> (→ arrow) is the best-fit direction <b>${label.replace('avg ', '')}</b> rises across this map; dashed lines cut it into ${K} bands <b>⟂ to that path</b>, each labelled with its <b>${label}</b> (low→high).`;
                 }
             }
             if (!bandNote) bandNote = `<b style="color:${C.cyan}">Trend bands</b> — not enough data to fit a trend here.`;
@@ -2015,7 +2017,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=94'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=95'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
