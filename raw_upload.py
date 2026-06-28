@@ -62,7 +62,7 @@ def gemini_transcribe(wav):
     (e.g. the Render box). Returns (text, is_voiceover)."""
     try:
         data = base64.b64encode(open(wav, 'rb').read()).decode()
-        url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
+        url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent'
         body = json.dumps({'contents': [{'parts': [
             {'inlineData': {'mimeType': 'audio/wav', 'data': data}},
             {'text': 'Transcribe ONLY the spoken words in this short audio, verbatim. If there is no speech (music or ambient noise only), reply with exactly: NO_SPEECH'}]}]}).encode()
