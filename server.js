@@ -2993,6 +2993,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    if (pathname === '/api/indicators/registry' && req.method === 'GET') {
+        try {
+            let m = null;
+            try { const buf = await cloud.downloadFromR2('raw/indicators/registry.json'); if (buf) m = JSON.parse(buf.toString('utf8')); } catch (e) {}
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify(m || { error: 'no registry yet' }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
     if (pathname === '/api/raw/fusion' && req.method === 'GET') {
         try {
             let m = null;

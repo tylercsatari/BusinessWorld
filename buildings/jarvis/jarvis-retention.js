@@ -10,7 +10,7 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, FUSION = null, NOV = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, FUSION = null, NOV = null, EXPREG = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false };
@@ -517,7 +517,57 @@ const JarvisRetention = (function () {
             <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px;margin-top:6px">${bandUnder}${dots}${bandOver}</svg>${detail}${upDetail}`, 12);
         return h;
     }
-    function rtgUpdateRaw() { try { const el = window.document.getElementById('rtg-rawpanel'); if (el) el.innerHTML = renderRaw(); } catch (e) { } }
+    function rtgUpdateRaw() { try { const el = window.document.getElementById('rtg-rawpanel'); if (el) el.innerHTML = renderRaw(); } catch (e) { } try { const e2 = window.document.getElementById('rtg-exppanel'); if (e2) e2.innerHTML = renderExperiment(); } catch (e) { } }
+    function rtgUpdateExp() { try { const el = window.document.getElementById('rtg-exppanel'); if (el) el.innerHTML = renderExperiment(); } catch (e) { } }
+    function renderExperiment() {
+        const head = h2c('🧪 Experiment — score a hook against every validated indicator', 'Upload a video or build one from 5 frames + text. It gets embedded and scored on every independent indicator we have validated — see where it lands on each indicator\'s curve, plus an ensemble read. New indicators appear here automatically as you build them.');
+        if (EXPREG === null) { EXPREG = { loading: 1 }; fetch('/api/indicators/registry').then(r => r.json()).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(() => { EXPREG = { error: 1 }; rtgUpdateExp(); }); }
+        const CY = '#22d3ee';
+        const fr = st.rawFrames || [null, null, null, null, null], nFrames = fr.filter(Boolean).length;
+        const modePill = (m, lab) => `<span data-rawbuildmode="${m}" style="cursor:pointer;border:1px solid ${(!!st.rawBuildMode === !!m) ? CY : C.border};background:${(!!st.rawBuildMode === !!m) ? CY + '22' : 'transparent'};color:${(!!st.rawBuildMode === !!m) ? CY : C.dim};border-radius:${m ? '0 6px 6px 0' : '6px 0 0 6px'};padding:4px 10px;font-size:11px;font-weight:700">${lab}</span>`;
+        const UPSTAGES = ['Uploading…', 'Extracting 5 frames…', 'Transcribing…', 'Embedding…', 'Scoring indicators…'];
+        const prog = st.rawUploading ? `<span style="display:inline-flex;flex-direction:column;gap:3px;min-width:230px"><span style="font-size:10px;color:${CY};font-weight:700">⏳ ${UPSTAGES[Math.min(st.rawUpStage || 0, 4)]}</span><span style="height:6px;background:${C.border};border-radius:4px;overflow:hidden;display:block"><span style="display:block;height:100%;width:${Math.min(93, ((st.rawUpStage || 0) + 1) / 5 * 100)}%;background:${CY};border-radius:4px;transition:width .5s"></span></span></span>` : '';
+        const builder = st.rawBuildMode ? `<div style="margin-top:8px;display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">${[0, 1, 2, 3, 4].map(i => fr[i]
+            ? `<div style="position:relative"><img src="${fr[i]}" style="width:42px;height:75px;object-fit:cover;border-radius:5px;border:1px solid ${C.border}"/><span data-rawframedel="${i}" style="position:absolute;top:-7px;right:-7px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:15px;height:15px;line-height:13px;text-align:center;font-size:9px;cursor:pointer">✕</span></div>`
+            : `<div data-rawframe="${i}" style="width:42px;height:75px;border:1px dashed ${C.border};border-radius:5px;display:flex;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋${i + 1}</div>`).join('')}
+            <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="hook text…" style="flex:1;min-width:160px;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:12px"/>
+            <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CY : C.border};background:${nFrames ? CY + '22' : 'transparent'};color:${nFrames ? CY : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Score this hook</span></div>` : '';
+        const controls = `<input id="rawUpFile" type="file" accept="video/*" style="display:none"><input id="rawFrameFile" type="file" accept="image/*" style="display:none">` +
+            cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, '🖼 5 frames + text')}${!st.rawBuildMode ? `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ Upload video</span>` : ''}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red}">${esc(String(st.rawUpErr).slice(0, 70))}</span>` : ''}</div>${builder}`, 12);
+        if (!EXPREG || EXPREG.loading) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">Loading the indicator registry…</div>`);
+        if (EXPREG.error || !EXPREG.indicators) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">No indicator registry yet — run <code>indicators.py</code>.</div>`);
+        const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0];
+        const val = EXPREG.indicators.filter(d => d.validated);
+        if (!up) {
+            const byT = {}; val.forEach(d => { (byT[d.target] = byT[d.target] || []).push(d); });
+            return head + controls + cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:4px">${val.length} validated indicators ready</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Upload or build a hook above and it lands on each of these. Grouped by what they predict:</div>${(EXPREG.meta.targets || []).map(t => byT[t.name] ? `<div style="margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:${C.accent}">${t.label}</span> <span style="font-size:10px;color:${C.mute}">— ${byT[t.name].map(d => d.name.replace('content_', '').replace('nov_', 'nov ')).join(', ')}</span></div>` : '').join('')}`, 12);
+        }
+        const ORDER = ['swipe', 'ret5', 'views', 'gt10M'];
+        const curveSvg = (d, sc) => {
+            const c = d.curve || []; if (c.length < 2) return '';
+            const xs = c.map(b => (b.lo + b.hi) / 2), ys = c.map(b => b.mean);
+            const xmn = Math.min(...xs, sc != null ? sc : Infinity), xmx = Math.max(...xs, sc != null ? sc : -Infinity), ymn = Math.min(...ys), ymx = Math.max(...ys);
+            const W = 220, H = 64, px = 6, X = x => px + (x - xmn) / ((xmx - xmn) || 1) * (W - 2 * px), Y = y => H - 6 - (y - ymn) / ((ymx - ymn) || 1) * (H - 12);
+            const path = c.map((b, i) => (i ? 'L' : 'M') + X(xs[i]).toFixed(1) + ' ' + Y(ys[i]).toFixed(1)).join(' ');
+            let mark = '';
+            if (sc != null) { let bi = c.findIndex(b => sc <= b.hi); if (bi < 0) bi = c.length - 1; mark = `<line x1="${X(sc).toFixed(1)}" y1="2" x2="${X(sc).toFixed(1)}" y2="${H - 2}" stroke="${CY}" stroke-width="1.5"/><circle cx="${X(sc).toFixed(1)}" cy="${Y(ys[bi]).toFixed(1)}" r="3.5" fill="${CY}" stroke="#fff"/>`; }
+            return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:6px"><path d="${path}" fill="none" stroke="${C.accent}" stroke-width="1.6"/>${mark}</svg>`;
+        };
+        let body = '';
+        ORDER.forEach(tn => {
+            const ds = val.filter(d => d.target === tn); if (!ds.length) return;
+            const tl = (EXPREG.meta.targets.find(t => t.name === tn) || {}).label || tn;
+            const cps = ds.filter(d => d.kind === 'content').map(d => up.indicators[`${d.name}__${tn}`]).filter(v => v != null);
+            const ens = cps.length ? (cps.reduce((a, b) => a + b, 0) / cps.length) : null;
+            const ensTxt = ens == null ? '' : (tn === 'gt10M' ? `${(1 / (1 + Math.exp(-ens)) * 100).toFixed(0)}% chance >10M` : tn === 'swipe' ? `~${ens.toFixed(1)}% swipe-away` : tn === 'ret5' ? `~${ens.toFixed(1)}% stay past 5s` : `≈ ${fv(Math.pow(10, ens))} views`);
+            body += cardc(`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px"><div style="font-size:13px;font-weight:800;color:${C.text}">${tl}</div>${ens != null ? `<div style="font-size:13px;font-weight:800;color:${CY}">${ensTxt}</div>` : ''}</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">
+                ${ds.map(d => { const sc = up.indicators[d.kind === 'content' ? `${d.name}__${tn}` : d.name]; const eff = d.auc ? `AUC ${d.auc}` : `ρ ${d.spearman >= 0 ? '+' : ''}${d.spearman}`;
+                return `<div><div style="font-size:10px;color:${d.kind === 'content' ? CY : C.purple};font-weight:700">${d.name.replace('content_', '').replace('nov_', 'nov ')} <span style="color:${C.mute};font-weight:400">${eff}</span></div>${curveSvg(d, sc)}<div style="font-size:9px;color:${C.mute}">${sc == null ? 'not scorable yet' : 'your hook ◆ ' + (tn === 'gt10M' ? '' : (tn === 'views' ? fv(Math.pow(10, sc)) : sc.toFixed(1)))}</div></div>`; }).join('')}
+                </div>`, 12);
+        });
+        return head + controls + cardc(`<div style="font-size:11px;color:${C.text}"><b>${esc(up.title || 'Your hook')}</b> scored on ${Object.keys(up.indicators).length} indicators. Each curve = how the metric moves with that indicator across the corpus; the <span style="color:${CY}">◆ cyan line</span> is where your hook lands. The big number per group is the content-probe ensemble.</div>`, 12) + body;
+    }
     function rtgUpdateFusion() { try { const el = window.document.getElementById('rtg-fusionpanel'); if (el) el.innerHTML = renderFusion(); } catch (e) { } }
     function fuHeat(v) { // -1..1 correlation → blue(neg)…grey…red(pos)
         const t = Math.max(-1, Math.min(1, v));
@@ -1723,9 +1773,9 @@ const JarvisRetention = (function () {
 
     function render() {
         if (!root) return;
-        const SECS = [['data', '📋 Data'], ['raw', '🔬 Raw'], ['fusion', '🧬 Fusion'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
+        const SECS = [['data', '📋 Data'], ['raw', '🔬 Raw'], ['experiment', '🧪 Experiment'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
         const nav = SECS.map(([id, l]) => `<button data-rs="${id}" style="background:${st.sec === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.sec === id ? C.accent : C.border};color:${st.sec === id ? C.accent : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('');
-        const sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'fusion' ? `<div id="rtg-fusionpanel">${renderFusion()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
+        const sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
             <div style="font-size:21px;font-weight:900;color:${C.accent};margin-bottom:8px">Retention → Views</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${nav}</div>${sec}</div>`;
@@ -1886,7 +1936,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=84'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=85'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');

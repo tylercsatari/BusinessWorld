@@ -162,11 +162,30 @@ def _run():
     ev = embed([img_part(b64)])
     et = embed([{'text': txt}]) if good else None
     eg = embed([img_part(b64)] + ([{'text': txt}] if good else []))
+    # score the hook on every validated indicator (project its embedding onto the
+    # registry's probe weights; + per-modality global novelty from the neighbours).
+    indicators = {}
+    try:
+        wb = r2_get('raw/indicators/weights.npz')
+        embmap = {'visual': ev, 'text': et, 'together': eg}
+        if wb:
+            W = np.load(io.BytesIO(wb), allow_pickle=True)
+            for key in W.files:                         # content_{mod}__{target}
+                mod = key.split('content_')[-1].split('__')[0]; e = embmap.get(mod)
+                if e is None: continue
+                en = e / (np.linalg.norm(e) + 1e-9); w = W[key]
+                indicators[key] = round(float(en @ w[:-1] + w[-1]), 4)
+        for mod, e in embmap.items():                   # global novelty = mean cos-dist to nearest hooks
+            if e is None: continue
+            nb = neighbors(mod, e, k=13)
+            if nb: indicators[f'nov_{mod[:3] if mod != "together" else "tog"}_global'] = round(float(np.mean([1 - x['sim'] for x in nb])), 4)
+    except Exception: pass
     out = {
         'montage': b64,
         'transcript': txt if good else '',
         'silent': (not good),
         'title': args.get('title', 'My hook'),
+        'indicators': indicators,
         'channels': {
             'visual': {'neighbors': neighbors('visual', ev)} if ev is not None else None,
             'text': ({'neighbors': neighbors('text', et)} if (good and et is not None) else None),
