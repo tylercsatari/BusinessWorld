@@ -13,7 +13,7 @@ const JarvisRetention = (function () {
     let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0 };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -420,6 +420,17 @@ const JarvisRetention = (function () {
                </span>`
             : `${uploadBtn} ${showBtn}`;
         const upErr = st.rawUpErr ? `<span style="font-size:10px;color:${C.red}">upload failed: ${esc(String(st.rawUpErr).slice(0, 80))}</span>` : '';
+        const modeToggle = `<span data-rawbuildmode="0" style="cursor:pointer;border:1px solid ${!st.rawBuildMode ? CYAN : C.border};background:${!st.rawBuildMode ? CYAN + '22' : 'transparent'};color:${!st.rawBuildMode ? CYAN : C.dim};border-radius:6px 0 0 6px;padding:3px 9px;font-size:10px;font-weight:700">🎬 Video</span><span data-rawbuildmode="1" style="cursor:pointer;border:1px solid ${st.rawBuildMode ? CYAN : C.border};border-left:none;background:${st.rawBuildMode ? CYAN + '22' : 'transparent'};color:${st.rawBuildMode ? CYAN : C.dim};border-radius:0 6px 6px 0;padding:3px 9px;font-size:10px;font-weight:700">🖼 5 frames + text</span>`;
+        const fr = st.rawFrames || [null, null, null, null, null];
+        const nFrames = fr.filter(Boolean).length;
+        const builder = st.rawBuildMode ? `<div style="border:1px solid ${C.border};border-radius:10px;padding:10px;margin-bottom:8px;background:${C.card2}">
+              <div style="font-size:10px;color:${C.mute};margin-bottom:6px">Build a hook from photos — drop in up to 5 frames (any image type, auto-fit to 9:16) and set the spoken text. It's embedded the same way and added as a marker to compare.</div>
+              <div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:8px">${[0, 1, 2, 3, 4].map(i => fr[i]
+            ? `<div style="position:relative"><img src="${fr[i]}" style="width:48px;height:85px;object-fit:cover;border-radius:5px;border:1px solid ${C.border}"/><span data-rawframedel="${i}" style="position:absolute;top:-7px;right:-7px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:10px;cursor:pointer">✕</span><div style="text-align:center;font-size:8px;color:${C.mute}">${i + 1}</div></div>`
+            : `<div data-rawframe="${i}" style="width:48px;height:85px;border:1px dashed ${C.border};border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋<span>frame ${i + 1}</span></div>`).join('')}</div>
+              <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="optional — type the hook's spoken text (drives Text + Together)…" style="width:100%;box-sizing:border-box;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:12px;margin-bottom:8px"/>
+              <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CYAN : C.border};background:${nFrames ? CYAN + '22' : 'transparent'};color:${nFrames ? CYAN : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Place this hook${nFrames ? ` (${nFrames}/5 frames)` : ''}</span>
+            </div>` : '';
         const upLegend = ups.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">my uploads</span>${ups.map((u, i) => `<span data-rawupmark="${i}" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;border:1px solid ${st.rawUpSel === i ? upColor(i) : C.border};background:${upColor(i)}1e;border-radius:6px;padding:2px 7px;font-size:10px;color:${C.text}"><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:${upColor(i)};color:#0f172a;font-size:9px;font-weight:700;text-align:center;line-height:13px">${i + 1}</span>${esc((u.title || 'upload').replace(/\.[^.]+$/, '').slice(0, 22))}${u.silent ? ' 🔇' : ''}<span data-rawupdel="${i}" style="color:${C.mute};margin-left:2px">✕</span></span>`).join('')}</div>` : '';
         const upDetail = (st.rawUpSel != null && ups[st.rawUpSel]) ? (() => {
             const i = st.rawUpSel, U = ups[i], col = upColor(i);
@@ -441,10 +452,10 @@ const JarvisRetention = (function () {
                   ${placed}
                 </div>`;
         })() : '';
-        h += `<input id="rawUpFile" type="file" accept="video/*" multiple style="display:none">`;
+        h += `<input id="rawUpFile" type="file" accept="video/*" multiple style="display:none"><input id="rawFrameFile" type="file" accept="image/*" style="display:none">`;
         h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
-              <div style="font-size:12px;font-weight:700;color:${C.text}">${n.toLocaleString()} hooks · ${chan} channel ${mineBtn} ${upBtn} ${upErr}</div>
-              <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${chan !== 'text' ? pill('voiceover', 'voiceover', mode === 'voiceover', 'data-rawcolor') : ''}${mode === 'cluster' ? `<span style="width:6px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div></div>
+              <div style="font-size:12px;font-weight:700;color:${C.text};display:flex;gap:6px;align-items:center;flex-wrap:wrap">${n.toLocaleString()} hooks · ${chan} ${mineBtn} ${modeToggle} ${st.rawBuildMode ? showBtn : upBtn} ${upErr}</div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${chan !== 'text' ? pill('voiceover', 'voiceover', mode === 'voiceover', 'data-rawcolor') : ''}${mode === 'cluster' ? `<span style="width:6px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div></div>${builder}
             <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">project</span>${PROJS.map(projPill).join('')}</div>
             <div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${supervised ? `<b style="color:${C.accent}">Steered projection</b> — axes rotated toward the target (held-out scored). This one aligns with <b>views r=${proj.cv}</b>, <b>outlier r=${proj.co}</b> (each pill shows v/o; higher = the axes separate that target more — pick the highest for what you're hunting).` : `<b>Raw geometry</b> (no target). Switch to a steered projection to pull views/outliers apart.`} ${mode === 'voiceover' ? `Coloured by <b>voiceover</b>: <span style="color:${C.green}">●</span> has a real voiceover · <span style="color:#475569">●</span> no sound / music (${nsilent.toLocaleString()} silent, excluded from the text channel so junk transcripts can't confound it).` : mode !== 'cluster' ? `Coloured by <b>${mode}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>).` : `Coloured by k-means cluster (k=${k}).`} ${hiMine ? `<b style="color:${GOLD}">★ Your ${nmine} videos are gold</b>; everything else is dimmed.` : `<b style="color:${C.text}">Click any dot</b> to see the exact input.`}</div>${heldline}
             ${upLegend}
@@ -1610,6 +1621,10 @@ const JarvisRetention = (function () {
         const upmk = e.target.closest('[data-rawupmark]'); if (upmk) { const i = +upmk.getAttribute('data-rawupmark'); st.rawUpSel = (st.rawUpSel === i ? null : i); st.rawSel = null; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-rawupclose]')) { st.rawUpSel = null; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-rawupclear]')) { st.rawUploads = []; st.rawUpSel = null; st.rawUpErr = null; rtgUpdateRaw(); return; }
+        const bm = e.target.closest('[data-rawbuildmode]'); if (bm) { st.rawBuildMode = bm.getAttribute('data-rawbuildmode') === '1'; st.rawUpErr = null; rtgUpdateRaw(); return; }
+        const rfr = e.target.closest('[data-rawframe]'); if (rfr) { st.rawFrameSlot = +rfr.getAttribute('data-rawframe'); const fi = window.document.getElementById('rawFrameFile'); if (fi) { fi.value = ''; fi.click(); } return; }
+        const rfd = e.target.closest('[data-rawframedel]'); if (rfd) { st.rawFrames[+rfd.getAttribute('data-rawframedel')] = null; rtgUpdateRaw(); return; }
+        if (e.target.closest('[data-rawplace]')) { rtgPlaceHook(); return; }
         if (e.target.closest('[data-libreload]')) { Promise.all([
             fetch('/api/library/stats').then(r => r.json()).then(j => { LIB = j; }).catch(() => {}),
             fetch('/api/library/videos?limit=150').then(r => r.json()).then(j => { LIBV = j.videos || []; }).catch(() => {})
@@ -1629,11 +1644,13 @@ const JarvisRetention = (function () {
         if (e.target.id === 'rtg-hazA') { st.hazA = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-hazB') { st.hazB = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-seek') { rtgSeek(+e.target.value); return; }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-rawtext')) { st.rawText = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-pf')) { st.pvals = st.pvals || {}; st.pvals[e.target.getAttribute('data-pf')] = +e.target.value; updatePredict(); return; }
         if (e.target.closest('[data-q]')) { st.q = e.target.value; render(); }
     }
     function onChange(e) {
         if (e.target.id === 'rawUpFile') { if (e.target.files && e.target.files.length) rtgRawUpload(e.target.files); return; }
+        if (e.target.id === 'rawFrameFile') { const f = e.target.files && e.target.files[0]; if (f) rtgFrameFile(f, st.rawFrameSlot || 0); return; }
         if (e.target.closest('[data-tracked]')) { st.trackedOnly = e.target.checked; render(); }
     }
     async function rtgRawUpload(files) {
@@ -1657,6 +1674,50 @@ const JarvisRetention = (function () {
         st.rawUploading = false; st.rawUpStage = 0; st.rawUpQueue = null;
         rtgUpdateRaw();
     }
+    // ── build-a-hook from photos: fit each to a 9:16 cell (any image type → JPEG via
+    //    canvas), tile 5 into one montage, embed with user-set text, place on the map ──
+    const FRAME_W = 320, FRAME_H = 569;
+    function rtgFrameFile(file, slot) {
+        const fr = new window.FileReader();
+        fr.onload = () => {
+            const im = new window.Image();
+            im.onload = () => {
+                const c = window.document.createElement('canvas'); c.width = FRAME_W; c.height = FRAME_H;
+                const x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, FRAME_W, FRAME_H);
+                const s = Math.max(FRAME_W / im.width, FRAME_H / im.height), w = im.width * s, hh = im.height * s;  // cover-fit
+                x.drawImage(im, (FRAME_W - w) / 2, (FRAME_H - hh) / 2, w, hh);
+                st.rawFrames[slot] = c.toDataURL('image/jpeg', 0.9); st.rawUpErr = null; rtgUpdateRaw();
+            };
+            im.onerror = () => { st.rawUpErr = 'could not read that image (HEIC may be unsupported — try JPG/PNG)'; rtgUpdateRaw(); };
+            im.src = fr.result;
+        };
+        fr.onerror = () => { st.rawUpErr = 'could not read file'; rtgUpdateRaw(); };
+        fr.readAsDataURL(file);
+    }
+    async function composeFrames(frames) {
+        const c = window.document.createElement('canvas'); c.width = FRAME_W * 5; c.height = FRAME_H;
+        const x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, FRAME_W * 5, FRAME_H);
+        for (let i = 0; i < 5; i++) {
+            const d = frames[i]; if (!d) continue;
+            await new Promise(res => { const im = new window.Image(); im.onload = () => { x.drawImage(im, i * FRAME_W, 0, FRAME_W, FRAME_H); res(); }; im.onerror = res; im.src = d; });
+        }
+        return c.toDataURL('image/jpeg', 0.9);
+    }
+    async function rtgPlaceHook() {
+        if (!(st.rawFrames || []).some(Boolean)) { st.rawUpErr = 'add at least one frame first'; rtgUpdateRaw(); return; }
+        st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; st.rawUpQueue = null; rtgUpdateRaw();
+        const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateRaw(); } }, 1600);
+        try {
+            const montage = await composeFrames(st.rawFrames);
+            const title = (st.rawText && st.rawText.trim() ? st.rawText.trim().slice(0, 40) : 'Built hook ' + (st.rawUploads.length + 1));
+            const r = await fetch('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: st.rawText || '', title }) });
+            const j = await r.json();
+            if (!r.ok || j.error) { st.rawUpErr = j.error || ('HTTP ' + r.status); }
+            else { st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; }
+        } catch (e) { st.rawUpErr = e.message; }
+        window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0;
+        rtgUpdateRaw();
+    }
 
     async function mount(el) {
         root = el;
@@ -1666,7 +1727,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=75'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=76'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');

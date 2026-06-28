@@ -142,13 +142,23 @@ def _run():
     a = sys.argv[1:]
     for i in range(0, len(a) - 1, 2):
         if a[i].startswith('--'): args[a[i][2:]] = a[i + 1]
-    path = args.get('file')
-    if not path or not os.path.exists(path):
-        print(json.dumps({'error': 'no file'})); return
-    inp = hook_inputs(path)
-    if not inp:
-        print(json.dumps({'error': 'could not read this video — ffmpeg failed to decode it even after transcoding'})); return
-    b64, txt, good = inp
+    # --image: a montage image is provided directly (built from photos in the browser)
+    # with explicit --text; no ffmpeg/transcription needed. Otherwise --file is a video.
+    if args.get('image'):
+        img = args['image']
+        if not os.path.exists(img):
+            print(json.dumps({'error': 'no image'})); return
+        b64 = base64.b64encode(open(img, 'rb').read()).decode()
+        txt = (args.get('text') or '').strip()
+        good = bool(txt)                                   # user-set text is used verbatim
+    else:
+        path = args.get('file')
+        if not path or not os.path.exists(path):
+            print(json.dumps({'error': 'no file'})); return
+        inp = hook_inputs(path)
+        if not inp:
+            print(json.dumps({'error': 'could not read this video — ffmpeg failed to decode it even after transcoding'})); return
+        b64, txt, good = inp
     ev = embed([img_part(b64)])
     et = embed([{'text': txt}]) if good else None
     eg = embed([img_part(b64)] + ([{'text': txt}] if good else []))
@@ -156,7 +166,7 @@ def _run():
         'montage': b64,
         'transcript': txt if good else '',
         'silent': (not good),
-        'title': args.get('title', 'My upload'),
+        'title': args.get('title', 'My hook'),
         'channels': {
             'visual': {'neighbors': neighbors('visual', ev)} if ev is not None else None,
             'text': ({'neighbors': neighbors('text', et)} if (good and et is not None) else None),

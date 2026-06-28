@@ -1424,6 +1424,36 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // RAW build-a-hook — a montage (5 frames stitched in the browser) + user-set text.
+    // No ffmpeg/transcription: just embed visual/text/together and locate by neighbours.
+    if (pathname === '/api/raw/embed-montage' && req.method === 'POST') {
+        let body = ''; let size = 0; const MAX = 25 * 1024 * 1024;
+        req.on('data', c => { size += c.length; if (size > MAX) req.destroy(); body += c; });
+        req.on('end', () => {
+            let j; try { j = JSON.parse(body); } catch (e) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'bad json' })); return; }
+            const m = (j.montage || '').toString().replace(/^data:image\/\w+;base64,/, '');
+            if (!m) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'no montage' })); return; }
+            const os = require('os');
+            const tmp = path.join(os.tmpdir(), `rawmon_${Date.now()}_${Math.round(Math.random() * 1e6)}.jpg`);
+            try { fs.writeFileSync(tmp, Buffer.from(m, 'base64')); }
+            catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write failed: ' + e.message })); return; }
+            const script = path.join(__dirname, 'raw_upload.py');
+            const py = spawn(RAW_PYTHON, [script, '--image', tmp, '--text', (j.text || '').toString().slice(0, 2000), '--title', (j.title || 'Built hook').toString().slice(0, 80)], { env: RAW_PY_ENV });
+            let out = '', err = '';
+            py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
+            const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 120000);
+            py.on('close', () => {
+                clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (e) {}
+                const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+                if (!line) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'embedding produced no result — ' + (err.trim().split('\n').pop() || 'no output').slice(-160) })); return; }
+                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(line);
+            });
+            py.on('error', e => { clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (_) {} res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'spawn failed: ' + e.message })); });
+        });
+        req.on('error', () => { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'upload stream error' })); });
+        return;
+    }
+
     // Quant 2 (pure) — score a new hook from raw pixels/audio (DINOv2+VideoMAE+wav2vec2+DSP, no LLM)
     if (pathname === '/api/quant2/predict' && req.method === 'POST') {
         const chunks = []; let size = 0; const MAX = 200 * 1024 * 1024;
