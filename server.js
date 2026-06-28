@@ -1324,6 +1324,23 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Diagnostic (public): reports the interpreter the raw-upload uses and whether
+    // its deps import — so the upload pipeline can be debugged without auth.
+    if (pathname === '/api/raw/upload-health' && req.method === 'GET') {
+        const { execSync } = require('child_process');
+        let deps = 'unknown', detail = '';
+        try {
+            detail = execSync(`"${RAW_PYTHON}" -c "import sys,numpy,boto3;print(sys.executable+' | py'+sys.version.split()[0]+' | numpy'+numpy.__version__+' | boto3'+boto3.__version__)"`, { env: RAW_PY_ENV, timeout: 20000 }).toString().trim();
+            deps = 'ok';
+        } catch (e) { deps = 'FAIL'; detail = String((e.stderr && e.stderr.toString()) || e.message || e).slice(-300); }
+        let ffmpeg = '', ytdlp = '';
+        try { ffmpeg = execSync('command -v ffmpeg', { env: RAW_PY_ENV }).toString().trim(); } catch (e) { ffmpeg = '(missing)'; }
+        try { ytdlp = execSync('command -v yt-dlp', { env: RAW_PY_ENV }).toString().trim(); } catch (e) { ytdlp = '(missing)'; }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ rawPython: RAW_PYTHON, deps, detail, ffmpeg, ytdlp, hasGeminiKey: !!process.env.GEMINI_API_KEY, hasR2: !!process.env.R2_ACCESS_KEY_ID }));
+        return;
+    }
+
     // =========================================
     // AUTH GATE — everything below is access-controlled by role.
     // Public paths (static page/assets, /api/me, shares, /api/v1) pass through.
