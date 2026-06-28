@@ -57,12 +57,32 @@ def embed(parts, tries=5):
             return None
 def img_part(b64): return {'inlineData': {'mimeType': 'image/jpeg', 'data': b64}}
 
-def whisper_text(wav):
-    import whisper
+def gemini_transcribe(wav):
+    """Transcribe via the Gemini API — used where Whisper/torch isn't installed
+    (e.g. the Render box). Returns (text, is_voiceover)."""
     try:
-        res = whisper.load_model('tiny').transcribe(wav, fp16=False)
+        data = base64.b64encode(open(wav, 'rb').read()).decode()
+        url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
+        body = json.dumps({'contents': [{'parts': [
+            {'inlineData': {'mimeType': 'audio/wav', 'data': data}},
+            {'text': 'Transcribe ONLY the spoken words in this short audio, verbatim. If there is no speech (music or ambient noise only), reply with exactly: NO_SPEECH'}]}]}).encode()
+        req = urllib.request.Request(url, data=body, method='POST', headers={'Content-Type': 'application/json', 'x-goog-api-key': KEY})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            j = json.loads(r.read())
+        t = (((j.get('candidates') or [{}])[0].get('content') or {}).get('parts') or [{}])[0].get('text', '').strip()
+        if not t or 'NO_SPEECH' in t.upper(): return '', False
+        return t, coherent(t)
     except Exception:
         return '', False
+
+def whisper_text(wav):
+    """Whisper-tiny where available (matches how the dataset was transcribed);
+    falls back to the Gemini API when Whisper/torch isn't installed."""
+    try:
+        import whisper
+        res = whisper.load_model('tiny').transcribe(wav, fp16=False)
+    except Exception:
+        return gemini_transcribe(wav)
     txt = (res.get('text') or '').strip()
     segs = res.get('segments') or []
     nsp = float(np.mean([sg.get('no_speech_prob', 0.0) for sg in segs])) if segs else 1.0
