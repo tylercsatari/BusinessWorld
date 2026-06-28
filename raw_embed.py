@@ -27,7 +27,7 @@ def env(k):
 KEY = env('GEMINI_API_KEY'); BUCKET = env('R2_BUCKET_NAME') or 'business-world-videos'
 s3 = boto3.client('s3', endpoint_url=f"https://{env('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com",
                   aws_access_key_id=env('R2_ACCESS_KEY_ID'), aws_secret_access_key=env('R2_SECRET_ACCESS_KEY'), region_name='auto')
-DIM, WORKERS, RAW_MAX = 1536, 6, int(os.environ.get('RAW_MAX', '5000'))
+DIM, WORKERS, RAW_MAX = 1536, 6, int(os.environ.get('RAW_MAX', '1000000'))  # default: everything stored
 EMB_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent'
 CHANS = ['visual', 'text', 'together']
 
@@ -103,8 +103,33 @@ for c in CHANS: load_chan(c)
 done = {c: set(store[c]['ids']) for c in CHANS}
 print({c: len(done[c]) for c in CHANS}, flush=True)
 
-todo = [v for v in stored if any(v['videoId'] not in done[c] for c in CHANS)][:RAW_MAX]
-lock = threading.Lock(); cnt = [0]; t0 = time.time()
+# ---- which montages already exist on R2 (bulk list, so we can backfill any
+#      video that got embedded but never had its frame-stitch saved) ----
+def list_montages():
+    have, tok = set(), None
+    while True:
+        kw = {'Bucket': BUCKET, 'Prefix': 'raw/montage/', 'MaxKeys': 1000}
+        if tok: kw['ContinuationToken'] = tok
+        r = s3.list_objects_v2(**kw)
+        for o in r.get('Contents', []):
+            k = o['Key']
+            if k.endswith('.jpg'): have.add(k[len('raw/montage/'):-4])
+        if r.get('IsTruncated'): tok = r.get('NextContinuationToken')
+        else: break
+    return have
+have_montage = list_montages()
+print(f"montages on R2: {len(have_montage)}", flush=True)
+
+# A video is COMPLETE when it has both visual + together embeddings AND a montage
+# on R2. (Text is best-effort — only videos with first-5s speech get a text vector,
+# so it must NOT gate completeness or no-speech videos would reprocess forever.)
+def needs(v):
+    vid = v['videoId']
+    return (vid not in done['visual']) or (vid not in done['together']) or (vid not in have_montage)
+
+todo = [v for v in stored if needs(v)][:RAW_MAX]
+lock = threading.Lock(); cnt = [0]; fails = [0]; t0 = time.time()
+print(f"todo: {len(todo)} of {len(stored)} stored need embedding and/or a montage", flush=True)
 
 
 def heldout(X, views):
@@ -182,10 +207,13 @@ for c in CHANS: build_map(c)   # immediate maps from whatever's already embedded
 
 def work(v):
     vid = v['videoId']
-    if all(vid in done[c] for c in CHANS): return
-    inp = hook_inputs(vid)
-    if not inp: return
+    if not needs(v): return
+    inp = hook_inputs(vid)   # always (re)saves the montage to R2
+    if not inp:
+        with lock: fails[0] += 1
+        return
     b64, txt = inp
+    have_montage.add(vid)    # montage now guaranteed on R2
     embeds = {}
     if vid not in done['visual']: embeds['visual'] = embed([img_part(b64)])
     if txt and vid not in done['text']: embeds['text'] = embed([{'text': txt}])
@@ -200,7 +228,7 @@ def work(v):
         cnt[0] += 1
         if cnt[0] % 100 == 0:
             el = time.time() - t0
-            print(f"  {cnt[0]}/{len(todo)} · {el/60:.0f}m · visual {len(store['visual']['ids'])} text {len(store['text']['ids'])} together {len(store['together']['ids'])}", flush=True)
+            print(f"  {cnt[0]}/{len(todo)} · {el/60:.0f}m · visual {len(store['visual']['ids'])} text {len(store['text']['ids'])} together {len(store['together']['ids'])} · fails {fails[0]}", flush=True)
             for c in CHANS: save_npz(c)
             if cnt[0] % 500 == 0:
                 for c in CHANS: build_map(c)
@@ -209,4 +237,5 @@ def work(v):
 with ThreadPoolExecutor(WORKERS) as ex:
     list(ex.map(work, todo))
 for c in CHANS: save_npz(c); build_map(c)
-print('done', {c: len(store[c]['ids']) for c in CHANS}, flush=True)
+print('done', {c: len(store[c]['ids']) for c in CHANS}, 'fails', fails[0], flush=True)
+print('(re-run to retry any fails — they stay in `todo` until embedded + montaged)', flush=True)
