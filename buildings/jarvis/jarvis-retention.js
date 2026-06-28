@@ -13,7 +13,7 @@ const JarvisRetention = (function () {
     let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6 };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -400,7 +400,7 @@ const JarvisRetention = (function () {
                     const a = (Syy * Sxm - Sxy * Sym) / det, b = (Sxx * Sym - Sxy * Sxm) / det;
                     if (Math.hypot(a, b) > 1e-9) {
                         const t = idxV.map(i => a * px[i] + b * py[i]);
-                        const tmin = Math.min(...t), tmax = Math.max(...t), K = 6;
+                        const tmin = Math.min(...t), tmax = Math.max(...t), K = Math.max(2, Math.min(20, st.rawBandK || 6));
                         const bins = Array.from({ length: K }, () => ({ sum: 0, cnt: 0, gx: 0, gy: 0 }));
                         for (let j = 0; j < idxV.length; j++) {
                             let bi = Math.floor((t[j] - tmin) / ((tmax - tmin) || 1) * K); bi = bi < 0 ? 0 : bi >= K ? K - 1 : bi;
@@ -417,7 +417,7 @@ const JarvisRetention = (function () {
                             const txt = fmt(binary ? avg : Math.pow(10, avg)), w = txt.length * 6.6 + 12;
                             bandOver += `<g style="pointer-events:none"><rect x="${(cx - w / 2).toFixed(1)}" y="${(cy - 9).toFixed(1)}" width="${w.toFixed(1)}" height="16" rx="4" fill="#0f172a" opacity="0.85" stroke="#1e293b"/><text x="${cx.toFixed(1)}" y="${(cy + 2.8).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#e2e8f0">${txt}</text></g>`;
                         }
-                        bandNote = `<b style="color:${C.cyan}">Trend bands ON</b> — dashed lines split the plot ⟂ to the direction <b>${label.replace('avg ', '')}</b> increases; each band shows its <b>${label}</b> (6 equal sections along the trend).`;
+                        bandNote = `<b style="color:${C.cyan}">Trend bands ON</b> — dashed lines split the plot ⟂ to the direction <b>${label.replace('avg ', '')}</b> increases; each band shows its <b>${label}</b> (${K} equal sections along the trend).`;
                     }
                 }
             }
@@ -508,7 +508,7 @@ const JarvisRetention = (function () {
         h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
               <div style="font-size:12px;font-weight:700;color:${C.text};display:flex;gap:6px;align-items:center;flex-wrap:wrap">${n.toLocaleString()} hooks · ${chan} ${mineBtn} ${modeToggle} ${st.rawBuildMode ? showBtn : upBtn} ${upErr}</div>
               <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${chan !== 'text' ? pill('voiceover', 'voiceover', mode === 'voiceover', 'data-rawcolor') : ''}${mode === 'cluster' ? `<span style="width:6px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div></div>${builder}
-            <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">project</span>${PROJS.map(projPill).join('')}<span style="width:8px"></span><span data-rawbands="1" style="cursor:pointer;border:1px solid ${st.rawBands ? C.cyan : C.border};background:${st.rawBands ? C.cyan + '22' : 'transparent'};color:${st.rawBands ? C.cyan : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">📊 trend bands</span></div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">project</span>${PROJS.map(projPill).join('')}<span style="width:8px"></span><span data-rawbands="1" style="cursor:pointer;border:1px solid ${st.rawBands ? C.cyan : C.border};background:${st.rawBands ? C.cyan + '22' : 'transparent'};color:${st.rawBands ? C.cyan : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">📊 trend bands</span>${st.rawBands ? `<span style="font-size:9px;color:${C.mute};margin-left:2px">sections</span>${[4, 6, 8, 12, 16].map(kk => `<span data-rawbandk="${kk}" style="cursor:pointer;border:1px solid ${(st.rawBandK || 6) === kk ? C.cyan : C.border};background:${(st.rawBandK || 6) === kk ? C.cyan + '1e' : 'transparent'};color:${(st.rawBandK || 6) === kk ? C.cyan : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${kk}</span>`).join('')}` : ''}</div>
             ${st.rawBands ? `<div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${bandNote}</div>` : ''}
             <div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${supervised ? `<b style="color:${C.accent}">Steered projection</b> — axes rotated toward the target (held-out scored). This one aligns with <b>views r=${proj.cv}</b>, <b>outlier r=${proj.co}</b> (each pill shows v/o; higher = the axes separate that target more — pick the highest for what you're hunting).` : `<b>Raw geometry</b> (no target). Switch to a steered projection to pull views/outliers apart.`} ${mode === 'voiceover' ? `Coloured by <b>voiceover</b>: <span style="color:${C.green}">●</span> has a real voiceover · <span style="color:#475569">●</span> no sound / music (${nsilent.toLocaleString()} silent, excluded from the text channel so junk transcripts can't confound it).` : mode !== 'cluster' ? `Coloured by <b>${mode}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>).` : `Coloured by k-means cluster (k=${k}).`} ${hiMine ? `<b style="color:${GOLD}">★ Your ${nmine} videos are gold</b>; everything else is dimmed.` : `<b style="color:${C.text}">Click any dot</b> to see the exact input.`}</div>${heldline}
             ${upLegend}
@@ -1665,6 +1665,7 @@ const JarvisRetention = (function () {
         const rk = e.target.closest('[data-rawk]'); if (rk) { st.rawK = rk.getAttribute('data-rawk'); rtgUpdateRaw(); return; }
         const rp = e.target.closest('[data-rawproj]'); if (rp) { st.rawProj = rp.getAttribute('data-rawproj'); rtgUpdateRaw(); return; }
         if (e.target.closest('[data-rawbands]')) { st.rawBands = !st.rawBands; rtgUpdateRaw(); return; }
+        const rbk = e.target.closest('[data-rawbandk]'); if (rbk) { st.rawBandK = +rbk.getAttribute('data-rawbandk'); rtgUpdateRaw(); return; }
         const rch = e.target.closest('[data-rawchan]'); if (rch) { st.rawChan = rch.getAttribute('data-rawchan'); st.rawSel = null; st.rawProj = 'both'; rtgUpdateRaw(); return; }
         const rm = e.target.closest('[data-rawmine]'); if (rm) { st.rawMine = !st.rawMine; rtgUpdateRaw(); return; }
         const rcl = e.target.closest('[data-rawclose]'); if (rcl) { st.rawSel = null; rtgUpdateRaw(); return; }
@@ -1781,7 +1782,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=77'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=78'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
