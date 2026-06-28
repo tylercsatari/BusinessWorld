@@ -180,12 +180,17 @@ def _run():
             nb = neighbors(mod, e, k=13)
             if nb: indicators[f'nov_{mod[:3] if mod != "together" else "tog"}_global'] = round(float(np.mean([1 - x['sim'] for x in nb])), 4)
     except Exception: pass
+    def preview(e):
+        if e is None: return None
+        a = np.asarray(e, float)
+        return [round(float(x), 3) for x in (a[:1536].reshape(48, 32).mean(1) if len(a) >= 1536 else a)]
     out = {
         'montage': b64,
         'transcript': txt if good else '',
         'silent': (not good),
         'title': args.get('title', 'My hook'),
         'indicators': indicators,
+        'emb_preview': {'visual': preview(ev), 'text': preview(et), 'together': preview(eg)},
         'channels': {
             'visual': {'neighbors': neighbors('visual', ev)} if ev is not None else None,
             'text': ({'neighbors': neighbors('text', et)} if (good and et is not None) else None),

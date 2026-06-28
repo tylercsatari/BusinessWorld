@@ -536,37 +536,57 @@ const JarvisRetention = (function () {
             cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, '🖼 5 frames + text')}${!st.rawBuildMode ? `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ Upload video</span>` : ''}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red}">${esc(String(st.rawUpErr).slice(0, 70))}</span>` : ''}</div>${builder}`, 12);
         if (!EXPREG || EXPREG.loading) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">Loading the indicator registry…</div>`);
         if (EXPREG.error || !EXPREG.indicators) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">No indicator registry yet — run <code>indicators.py</code>.</div>`);
+        // scorable = the indicators a NEW hook can actually be scored on (content probes + global novelty)
+        const scorableKind = d => d.kind === 'content' || (d.kind === 'novelty' && d.name.endsWith('_global'));
+        const val = EXPREG.indicators.filter(d => d.validated && scorableKind(d));
         const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0];
-        const val = EXPREG.indicators.filter(d => d.validated);
+        const keyOf = d => d.kind === 'content' ? `${d.name}__${d.target}` : d.name;
+        const TLAB = { keep: 'keep rate (stay to watch)', ret5: 'past 5 seconds', views: 'est. views', gt10M: 'chance >10M views' };
         if (!up) {
             const byT = {}; val.forEach(d => { (byT[d.target] = byT[d.target] || []).push(d); });
-            return head + controls + cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:4px">${val.length} validated indicators ready</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Upload or build a hook above and it lands on each of these. Grouped by what they predict:</div>${(EXPREG.meta.targets || []).map(t => byT[t.name] ? `<div style="margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:${C.accent}">${t.label}</span> <span style="font-size:10px;color:${C.mute}">— ${byT[t.name].map(d => d.name.replace('content_', '').replace('nov_', 'nov ')).join(', ')}</span></div>` : '').join('')}`, 12);
+            return head + controls + cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:4px">${val.length} scorable indicators ready</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Upload or build a hook above and it's scored on each of these, fully traceable. Grouped by what they predict:</div>${(EXPREG.meta.targets || []).map(t => byT[t.name] ? `<div style="margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:${C.accent}">${t.label}</span> <span style="font-size:10px;color:${C.mute}">— ${byT[t.name].map(d => d.name.replace('content_', '').replace('nov_', 'nov ')).join(', ')}</span></div>` : '').join('')}`, 12);
         }
-        const ORDER = ['swipe', 'ret5', 'views', 'gt10M'];
-        const curveSvg = (d, sc) => {
-            const c = d.curve || []; if (c.length < 2) return '';
-            const xs = c.map(b => (b.lo + b.hi) / 2), ys = c.map(b => b.mean);
-            const xmn = Math.min(...xs, sc != null ? sc : Infinity), xmx = Math.max(...xs, sc != null ? sc : -Infinity), ymn = Math.min(...ys), ymx = Math.max(...ys);
-            const W = 220, H = 64, px = 6, X = x => px + (x - xmn) / ((xmx - xmn) || 1) * (W - 2 * px), Y = y => H - 6 - (y - ymn) / ((ymx - ymn) || 1) * (H - 12);
-            const path = c.map((b, i) => (i ? 'L' : 'M') + X(xs[i]).toFixed(1) + ' ' + Y(ys[i]).toFixed(1)).join(' ');
-            let mark = '';
-            if (sc != null) { let bi = c.findIndex(b => sc <= b.hi); if (bi < 0) bi = c.length - 1; mark = `<line x1="${X(sc).toFixed(1)}" y1="2" x2="${X(sc).toFixed(1)}" y2="${H - 2}" stroke="${CY}" stroke-width="1.5"/><circle cx="${X(sc).toFixed(1)}" cy="${Y(ys[bi]).toFixed(1)}" r="3.5" fill="${CY}" stroke="#fff"/>`; }
-            return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:6px"><path d="${path}" fill="none" stroke="${C.accent}" stroke-width="1.6"/>${mark}</svg>`;
+        // ── 1. trace: raw input → embedding ──
+        const embHeat = ch => { const a = up.emb_preview && up.emb_preview[ch]; if (!a) return `<div style="font-size:9px;color:${C.faint}">${ch}: —</div>`; const mn = Math.min(...a), mx = Math.max(...a); return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span style="font-size:9px;color:${C.dim};width:58px">${ch}</span><svg viewBox="0 0 ${a.length * 5} 10" style="height:11px;width:${a.length * 5}px">${a.map((v, i) => `<rect x="${i * 5}" width="4.4" height="10" fill="${rawRamp((v - mn) / ((mx - mn) || 1))}"/>`).join('')}</svg></div>`; };
+        const trace = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:6px">From raw input to score — every number is traceable</div>
+            <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+              <div><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">1 · the 5-frame hook (what gets embedded)</div><img src="data:image/jpeg;base64,${up.montage}" style="width:260px;border-radius:6px;background:#000"/></div>
+              <div style="flex:1;min-width:220px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">2 · transcript</div><div style="font-size:11px;font-style:italic;color:${C.text};background:#0f172a;border-radius:6px;padding:8px;margin-bottom:8px">${up.silent ? '(no voiceover — text channel scores as empty)' : '"' + esc(up.transcript || '') + '"'}</div>
+                <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">3 · Gemini embedding (1536-d, pooled to 48 for display)</div>${embHeat('visual')}${embHeat('text')}${embHeat('together')}</div>
+            </div>
+            <div style="font-size:10px;color:${C.mute};margin-top:7px">4 · each indicator = <b>embedding · (a direction learned toward that metric) + bias → one number</b>, placed on the corpus scatter below.</div>`, 12);
+        // ── 2. big clear outputs (ensemble of content probes) ──
+        const ensFor = tn => { const a = val.filter(d => d.kind === 'content' && d.target === tn).map(d => up.indicators[keyOf(d)]).filter(v => v != null); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; };
+        const K = ensFor('keep'), R = ensFor('ret5'), VW = ensFor('views'), G = ensFor('gt10M');
+        const outBox = (val2, col, lab) => val2 == null ? '' : `<div style="text-align:center"><div style="font-size:27px;font-weight:900;color:${col}">${val2}</div><div style="font-size:10px;color:${C.mute}">${lab}</div></div>`;
+        const outputs = cardc(`<div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:space-around;align-items:center">
+              ${outBox(K != null ? K.toFixed(0) + '%' : null, C.green, 'keep rate · stay to watch')}
+              ${outBox(R != null ? R.toFixed(0) + '%' : null, C.accent, 'past 5 seconds')}
+              ${outBox(VW != null ? fv(Math.pow(10, VW)) : null, C.text, 'estimated views')}
+              ${outBox(G != null ? (1 / (1 + Math.exp(-G)) * 100).toFixed(0) + '%' : null, C.purple, 'chance >10M views')}
+            </div><div style="font-size:9px;color:${C.mute};text-align:center;margin-top:6px">ensemble of the content probes · every indicator's data plotted below</div>`, 14);
+        // ── 3. per-metric: the ACTUAL data scattered + binned trend + your hook ──
+        const scatter = (d, sc) => {
+            const pts = d.pts || [], c = d.curve || []; if (!pts.length) return '';
+            const xs = pts.map(p => p[0]).concat(sc != null ? [sc] : []), ys = pts.map(p => p[1]);
+            const xmn = Math.min(...xs), xmx = Math.max(...xs), ymn = Math.min(...ys), ymx = Math.max(...ys);
+            const W = 250, H = 120, pl = 6, pb = 6, pt = 6, pr = 6, X = x => pl + (x - xmn) / ((xmx - xmn) || 1) * (W - pl - pr), Y = y => H - pb - (y - ymn) / ((ymx - ymn) || 1) * (H - pt - pb);
+            let s = pts.map(p => `<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="1.7" fill="${C.dim}" opacity="0.45"/>`).join('');
+            if (c.length > 1) { const cx = c.map(b => (b.lo + b.hi) / 2), cy = c.map(b => b.mean); s += `<path d="${c.map((b, i) => (i ? 'L' : 'M') + X(cx[i]).toFixed(1) + ' ' + Y(cy[i]).toFixed(1)).join(' ')}" fill="none" stroke="${C.accent}" stroke-width="2.2"/>`; }
+            if (sc != null) { let bi = c.findIndex(b => sc <= b.hi); if (bi < 0) bi = c.length - 1; const cyv = c.length ? c[bi].mean : (ymn + ymx) / 2; s += `<line x1="${X(sc).toFixed(1)}" y1="${pt}" x2="${X(sc).toFixed(1)}" y2="${H - pb}" stroke="${CY}" stroke-width="1.5"/><circle cx="${X(sc).toFixed(1)}" cy="${Y(cyv).toFixed(1)}" r="4" fill="${CY}" stroke="#fff" stroke-width="1.4"/>`; }
+            return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:6px">${s}</svg>`;
         };
         let body = '';
-        ORDER.forEach(tn => {
-            const ds = val.filter(d => d.target === tn); if (!ds.length) return;
+        ['keep', 'ret5', 'views', 'gt10M'].forEach(tn => {
+            const ds = val.filter(d => d.target === tn && up.indicators[keyOf(d)] != null); if (!ds.length) return;
             const tl = (EXPREG.meta.targets.find(t => t.name === tn) || {}).label || tn;
-            const cps = ds.filter(d => d.kind === 'content').map(d => up.indicators[`${d.name}__${tn}`]).filter(v => v != null);
-            const ens = cps.length ? (cps.reduce((a, b) => a + b, 0) / cps.length) : null;
-            const ensTxt = ens == null ? '' : (tn === 'gt10M' ? `${(1 / (1 + Math.exp(-ens)) * 100).toFixed(0)}% chance >10M` : tn === 'swipe' ? `~${ens.toFixed(1)}% swipe-away` : tn === 'ret5' ? `~${ens.toFixed(1)}% stay past 5s` : `≈ ${fv(Math.pow(10, ens))} views`);
-            body += cardc(`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px"><div style="font-size:13px;font-weight:800;color:${C.text}">${tl}</div>${ens != null ? `<div style="font-size:13px;font-weight:800;color:${CY}">${ensTxt}</div>` : ''}</div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">
-                ${ds.map(d => { const sc = up.indicators[d.kind === 'content' ? `${d.name}__${tn}` : d.name]; const eff = d.auc ? `AUC ${d.auc}` : `ρ ${d.spearman >= 0 ? '+' : ''}${d.spearman}`;
-                return `<div><div style="font-size:10px;color:${d.kind === 'content' ? CY : C.purple};font-weight:700">${d.name.replace('content_', '').replace('nov_', 'nov ')} <span style="color:${C.mute};font-weight:400">${eff}</span></div>${curveSvg(d, sc)}<div style="font-size:9px;color:${C.mute}">${sc == null ? 'not scorable yet' : 'your hook ◆ ' + (tn === 'gt10M' ? '' : (tn === 'views' ? fv(Math.pow(10, sc)) : sc.toFixed(1)))}</div></div>`; }).join('')}
+            body += cardc(`<div style="font-size:13px;font-weight:800;color:${C.text};margin-bottom:6px">${tl}</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
+                ${ds.map(d => { const sc = up.indicators[keyOf(d)]; const eff = d.auc ? `AUC ${d.auc}` : `ρ ${d.spearman >= 0 ? '+' : ''}${d.spearman}`; const disp = tn === 'gt10M' ? (1 / (1 + Math.exp(-sc)) * 100).toFixed(0) + '%' : tn === 'views' ? fv(Math.pow(10, sc)) : sc.toFixed(1) + (tn === 'keep' || tn === 'ret5' ? '%' : '');
+                return `<div><div style="font-size:10px;color:${d.kind === 'content' ? CY : C.purple};font-weight:700">${d.name.replace('content_', '').replace('nov_', 'nov ')} <span style="color:${C.mute};font-weight:400">${eff} · n=${d.n}</span></div>${scatter(d, sc)}<div style="font-size:9px;color:${C.mute}">each dot = one corpus hook (x=this indicator, y=${TLAB[tn] || tn}) · <span style="color:${CY}">◆ your hook → ${disp}</span></div></div>`; }).join('')}
                 </div>`, 12);
         });
-        return head + controls + cardc(`<div style="font-size:11px;color:${C.text}"><b>${esc(up.title || 'Your hook')}</b> scored on ${Object.keys(up.indicators).length} indicators. Each curve = how the metric moves with that indicator across the corpus; the <span style="color:${CY}">◆ cyan line</span> is where your hook lands. The big number per group is the content-probe ensemble.</div>`, 12) + body;
+        return head + controls + outputs + trace + body;
     }
     function rtgUpdateFusion() { try { const el = window.document.getElementById('rtg-fusionpanel'); if (el) el.innerHTML = renderFusion(); } catch (e) { } }
     function fuHeat(v) { // -1..1 correlation → blue(neg)…grey…red(pos)
@@ -1936,7 +1956,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=85'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=86'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');

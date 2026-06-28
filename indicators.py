@@ -67,23 +67,26 @@ for j, nm in enumerate(nnames):
         k = npos.get(vid)
         if k is not None: col[i] = nX[k, j]
     NOV[nm] = col
-# owned retention
-ret5 = np.full(N, np.nan); swipe = np.full(N, np.nan)
+# owned retention — KEEP-rate (stayed to watch), not swipe (so higher = better everywhere)
+ret5 = np.full(N, np.nan); keep = np.full(N, np.nan)
 rt = json.loads(open(os.path.join(HERE, 'buildings/jarvis/retention-study/retention_table.json')).read())
 for v in rt.get('videos', []):
     i = idpos.get(str(v.get('id', '')))
     if i is None: continue
     if v.get('ret5_surv') is not None: ret5[i] = float(v['ret5_surv'])
-    if v.get('keep_rate') is not None: swipe[i] = 100 - float(v['keep_rate'])
+    if v.get('keep_rate') is not None: keep[i] = float(v['keep_rate'])
 
 # targets: (name, values, kind, mask, label)
 logv = np.log10(views + 1)
 TARGETS = [
+    ('keep', keep, 'reg', np.isfinite(keep), 'keep-rate · stayed to watch (my 211)'),
+    ('ret5', ret5, 'reg', np.isfinite(ret5), '5-second retention (my 211)'),
     ('views', logv, 'reg', np.ones(N, bool), 'views (all 11k)'),
     ('gt10M', (views > 1e7).astype(float), 'clf', np.ones(N, bool), '>10M-view class (all)'),
-    ('swipe', swipe, 'reg', np.isfinite(swipe), 'swipe-away (my 211) — lower is better'),
-    ('ret5', ret5, 'reg', np.isfinite(ret5), '5s-retention (my 211)'),
 ]
+def sample_pts(x, y, ymeta=None, cap=400):
+    n = len(x); idx = np.arange(n) if n <= cap else RNG.choice(n, cap, replace=False)
+    return [[round(float(x[i]), 4), round(float(y[i]), 4)] for i in idx]
 
 def perm_p(a, b):
     rho = abs(spearmanr(a, b)[0]); pl = [abs(spearmanr(RNG.permutation(a), b)[0]) for _ in range(120)]
@@ -125,11 +128,11 @@ for mk, (M, have) in MOD.items():
         p = perm_p(oof[ok], ym[ok])
         full = LogisticRegression(C=1, max_iter=1000).fit(Xm, ym) if kind == 'clf' else Ridge(alpha=20).fit(Xm, ym)
         weights[f'content_{mk}__{tname}'] = np.concatenate([full.coef_.ravel(), [float(full.intercept_).__float__() if np.ndim(full.intercept_) == 0 else float(full.intercept_[0])]]).astype(np.float32)
-        # graph data on the held-out score
+        # graph data on the held-out score (binned curve + the actual scatter points)
         crv = curve(oof[ok], ym[ok], kind)
         indicators.append({'name': f'content_{mk}', 'kind': 'content', 'modality': mk, 'target': tname, 'target_label': tlab,
                            'spearman': round(rho, 3), 'auc': round(auc, 3) if auc else None, 'p': round(p, 4),
-                           'n': int(ok.sum()), 'curve': crv})
+                           'n': int(ok.sum()), 'curve': crv, 'pts': sample_pts(oof[ok], ym[ok])})
         rows_for_fdr.append(p)
 
 # ---- NOVELTY indicators (single-source values), validated per target ----
@@ -143,7 +146,7 @@ for nm, val in NOV.items():
         p = perm_p(v, t)
         indicators.append({'name': f'nov_{nm}', 'kind': 'novelty', 'modality': nm.split('_')[0], 'target': tname, 'target_label': tlab,
                            'spearman': round(rho, 3), 'auc': round(auc, 3) if auc else None, 'p': round(p, 4),
-                           'n': int(mask.sum()), 'curve': curve(v, t, kind)})
+                           'n': int(mask.sum()), 'curve': curve(v, t, kind), 'pts': sample_pts(v, t)})
         rows_for_fdr.append(p)
 
 # FDR across all (indicator × target) tests + validated flag
