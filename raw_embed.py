@@ -9,7 +9,7 @@ each point's RAW INPUT is inspectable. Per channel: raw/<chan>/embeddings.npz + 
 (projections + HELD-OUT scores: fit on 70%, measured on the 30% it never saw). Resumable per channel.
 Usage: RAW_MAX=5000 python3 raw_embed.py
 """
-import os, sys, json, base64, subprocess, tempfile, shutil, time, io, threading
+import os, sys, json, base64, subprocess, tempfile, shutil, time, io, threading, re
 import numpy as np, boto3, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.cluster import MiniBatchKMeans
@@ -17,6 +17,27 @@ from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.metrics import roc_auc_score
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+
+# ---- coherent-speech gate: many shorts are music/ambient with no voiceover, and
+#      Whisper-tiny HALLUCINATES junk words on them. Those fake transcripts would
+#      pollute the text/together spaces, so we detect "no real voiceover" and treat
+#      such videos as SILENT (no text vector; together = image-only). ----
+ENGWORDS = set()
+try:
+    for _w in open('/usr/share/dict/words'):
+        _w = _w.strip().lower()
+        if _w: ENGWORDS.add(_w)
+except Exception:
+    pass
+def coherent(txt):
+    """True only if the transcript looks like a real, coherent English voiceover."""
+    toks = re.findall(r"[a-z']{2,}", (txt or '').lower())
+    if len(toks) < 2:
+        return False                      # empty or a single token → not a voiceover
+    if not ENGWORDS:
+        return len(toks) >= 3             # no dictionary available → length fallback
+    real = sum(1 for w in toks if w.strip("'") in ENGWORDS)
+    return real >= 2 and real / len(toks) >= 0.5
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 def env(k):
@@ -33,14 +54,22 @@ CHANS = ['visual', 'text', 'together']
 
 _wlock = threading.Lock(); _wmodel = [None]
 def whisper_text(wav):
+    """Returns (transcript, is_real_voiceover). Combines Whisper's own confidence
+    (no_speech_prob / avg_logprob) with the coherent() English check."""
     import whisper
     with _wlock:
         if _wmodel[0] is None:
             _wmodel[0] = whisper.load_model('tiny')
         try:
-            return (_wmodel[0].transcribe(wav, fp16=False).get('text') or '').strip()
+            res = _wmodel[0].transcribe(wav, fp16=False)
         except Exception:
-            return ''
+            return '', False
+    txt = (res.get('text') or '').strip()
+    segs = res.get('segments') or []
+    nsp = float(np.mean([sg.get('no_speech_prob', 0.0) for sg in segs])) if segs else 1.0
+    alp = float(np.mean([sg.get('avg_logprob', -5.0) for sg in segs])) if segs else -5.0
+    good = bool(txt) and nsp < 0.6 and alp > -1.0 and coherent(txt)
+    return txt, good
 
 
 def r2_get(key):
@@ -62,23 +91,35 @@ def embed(parts, tries=6):
 def img_part(b64): return {'inlineData': {'mimeType': 'image/jpeg', 'data': b64}}
 
 
-def hook_inputs(vid):
-    """download → first-5s montage (saved to R2) b64 + first-5s transcript. None on failure."""
+def hook_inputs(vid, src='lib'):
+    """download → first-5s montage (saved to R2) b64 + (transcript, is_voiceover).
+    src='lib' pulls the stored R2 video; src='owned' pulls the user's video from
+    YouTube via yt-dlp. EVERYTHING ELSE (montage tiling, audio, Whisper) is identical,
+    so an owned hook is embedded exactly like a library hook. None on failure."""
     tmp = tempfile.mkdtemp(prefix='raw_')
     try:
         mp4, mon, wav = os.path.join(tmp, 'v.mp4'), os.path.join(tmp, 'm.jpg'), os.path.join(tmp, 'a.wav')
-        s3.download_file(BUCKET, f'library/videos/{vid}.mp4', mp4)
+        if src == 'owned':
+            subprocess.run(['yt-dlp', '--no-playlist', '-q', '--no-warnings', '--merge-output-format', 'mp4',
+                            '-f', 'bv*[height<=720]+ba/b[height<=720]/best', '-o', mp4,
+                            f'https://www.youtube.com/watch?v={vid}'], timeout=240)
+            if not os.path.exists(mp4):
+                for f in os.listdir(tmp):                      # yt-dlp may append an ext
+                    if f.startswith('v.'): mp4 = os.path.join(tmp, f); break
+            if not os.path.exists(mp4): return None
+        else:
+            s3.download_file(BUCKET, f'library/videos/{vid}.mp4', mp4)
         subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-t', '5', '-i', mp4, '-vf', 'fps=1,scale=320:-1,tile=5x1', '-frames:v', '1', mon], timeout=40)
         if not os.path.exists(mon): return None
         montage = open(mon, 'rb').read()
         r2_put(f'raw/montage/{vid}.jpg', montage, 'image/jpeg')
         b64 = base64.b64encode(montage).decode()
-        txt = ''
+        txt, good = '', False
         try:
             subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-t', '5', '-i', mp4, '-vn', '-ar', '16000', '-ac', '1', wav], timeout=40)
-            if os.path.exists(wav): txt = whisper_text(wav)
+            if os.path.exists(wav): txt, good = whisper_text(wav)
         except Exception: pass
-        return b64, txt
+        return b64, txt, good
     except Exception:
         return None
     finally:
@@ -87,18 +128,39 @@ def hook_inputs(vid):
 
 # ---- load library (metadata) ----
 libdb = json.loads(r2_get('library/db.json') or b'{"videos":{}}')
-stored = [v for v in libdb['videos'].values() if v.get('stored')]
+stored = [{'videoId': v['videoId'], 'views': v.get('views'), 'subs': v.get('subs'),
+           'title': v.get('title'), 'outlier': v.get('outlier'), 'src': 'lib', 'mine': False}
+          for v in libdb['videos'].values() if v.get('stored') and v.get('videoId')]
 print(f"library: {len(stored)} stored on R2", flush=True)
 
+# ---- load MY videos (the owned set with retention) — same pipeline, mine=True ----
+OWNED = []
+try:
+    rt = json.loads(open(os.path.join(HERE, 'buildings/jarvis/retention-study/retention_table.json')).read())
+    for v in rt.get('videos', []):
+        if v.get('id'):
+            OWNED.append({'videoId': v['id'], 'views': v.get('views'), 'subs': v.get('subs'),
+                          'title': v.get('title'), 'outlier': v.get('outlier'), 'src': 'owned', 'mine': True})
+except Exception as e:
+    print('owned manifest load failed:', str(e)[:120], flush=True)
+libids = {v['videoId'] for v in stored}
+mineids = {v['videoId'] for v in OWNED}
+stored = [v for v in stored if v['videoId'] not in mineids] + OWNED   # owned wins (mine=True)
+print(f"my videos: {len(OWNED)} owned · total to consider: {len(stored)}", flush=True)
+
 # ---- per-channel stores (migrate old raw/embeddings.npz → visual) ----
-store = {c: {'ids': [], 'vecs': [], 'views': [], 'outlier': [], 'subs': [], 'title': [], 'txt': []} for c in CHANS}
+store = {c: {'ids': [], 'vecs': [], 'views': [], 'outlier': [], 'subs': [], 'title': [], 'txt': [], 'mine': [], 'silent': []} for c in CHANS}
 def load_chan(c):
     buf = r2_get(f'raw/{c}/embeddings.npz') or (r2_get('raw/embeddings.npz') if c == 'visual' else None)
     if not buf: return
     z = np.load(io.BytesIO(buf), allow_pickle=True)
     s = store[c]; s['ids'] = list(z['ids']); s['vecs'] = list(z['vecs'])
     for k in ['views', 'outlier', 'subs', 'title']: s[k] = list(z[k])
-    s['txt'] = list(z['txt']) if 'txt' in z.files else [''] * len(s['ids'])
+    n = len(s['ids'])
+    s['txt'] = list(z['txt']) if 'txt' in z.files else [''] * n
+    base_mine = [bool(x) for x in z['mine']] if 'mine' in z.files else [False] * n
+    s['mine'] = [base_mine[i] or (s['ids'][i] in mineids) for i in range(n)]   # an owned id is always mine, even if it was first seen as a library video
+    s['silent'] = [bool(x) for x in z['silent']] if 'silent' in z.files else [not coherent(t) for t in s['txt']]
 for c in CHANS: load_chan(c)
 done = {c: set(store[c]['ids']) for c in CHANS}
 print({c: len(done[c]) for c in CHANS}, flush=True)
@@ -119,6 +181,36 @@ def list_montages():
     return have
 have_montage = list_montages()
 print(f"montages on R2: {len(have_montage)}", flush=True)
+
+# ---- one-time cleanup of already-embedded data for the no-voiceover gate ----
+def _reembed_imgonly(args):
+    c, i = args
+    vid = store[c]['ids'][i]
+    b = r2_get(f'raw/montage/{vid}.jpg')
+    if not b: return (i, None)
+    return (i, embed([img_part(base64.b64encode(b).decode())]))
+def migrate_clean():
+    # TEXT channel: keep ONLY coherent voiceovers; drop music/hallucinated junk.
+    s = store['text']
+    keep = [i for i, t in enumerate(s['txt']) if coherent(t)]
+    if len(keep) != len(s['ids']):
+        for k in list(s.keys()): s[k] = [s[k][i] for i in keep]
+        print(f"text: pruned {len(keep)} coherent voiceovers (dropped junk)", flush=True)
+    s['silent'] = [False] * len(s['ids'])
+    # VISUAL + TOGETHER keep every video, but flag the silent ones.
+    for c in ['visual', 'together']:
+        store[c]['silent'] = [not coherent(t) for t in store[c]['txt']]
+    # TOGETHER: any hook that fused HALLUCINATED text → re-embed image-only (cheap:
+    # the montage is already on R2, so no re-download), so junk text can't confound it.
+    st = store['together']
+    bad = [i for i, t in enumerate(st['txt']) if t and not coherent(t)]
+    if bad:
+        print(f"together: re-embedding {len(bad)} hooks image-only (had hallucinated text)…", flush=True)
+        with ThreadPoolExecutor(WORKERS) as ex:
+            for i, e in ex.map(_reembed_imgonly, [('together', i) for i in bad]):
+                if e is not None: st['vecs'][i] = e; st['txt'][i] = ''; st['silent'][i] = True
+        print("together: image-only re-embed done", flush=True)
+    for c in CHANS: done[c] = set(store[c]['ids'])
 
 # A video is COMPLETE when it has both visual + together embeddings AND a montage
 # on R2. (Text is best-effort — only videos with first-5s speech get a text vector,
@@ -182,12 +274,15 @@ def build_map(c):
                 except Exception: pass
         clusters = {str(k): MiniBatchKMeans(k, random_state=0, n_init=3, batch_size=1024).fit_predict(Xn).tolist() for k in [6, 10, 16, 24] if len(Xn) >= k}
         auc, r = heldout(X, vv)
+        mine = [bool(x) for x in s.get('mine', [])] or [False] * len(ids)
+        silent = [bool(x) for x in s.get('silent', [])] or [False] * len(ids)
         out = {'n': len(ids), 'channel': c, 'updated': time.time(), 'proj': proj, 'heldout_auc10m': auc, 'heldout_rviews': r,
                'views': [float(x) for x in s['views']], 'outlier': [round(float(x), 1) if x == x else None for x in s['outlier']],
                'subs': [float(x) for x in s['subs']], 'id': list(ids), 'title': [str(t)[:60] for t in s['title']],
-               'txt': [str(t)[:200] for t in s['txt']], 'clusters': clusters}
+               'txt': [str(t)[:200] for t in s['txt']], 'mine': mine, 'silent': silent, 'clusters': clusters,
+               'nmine': int(sum(mine)), 'nsilent': int(sum(silent))}
         r2_put(f'raw/{c}/map.json', json.dumps(out).encode(), 'application/json')
-        print(f"  map[{c}]: n={len(ids)} held-out AUC(>10M)={auc} r(views)={r} · " + ' '.join(f"{k}(v{proj[k]['cv']}/o{proj[k]['co']})" for k in proj), flush=True)
+        print(f"  map[{c}]: n={len(ids)} mine={sum(mine)} silent={sum(silent)} held-out AUC(>10M)={auc} r(views)={r} · " + ' '.join(f"{k}(v{proj[k]['cv']}/o{proj[k]['co']})" for k in proj), flush=True)
     except Exception as e:
         print(f'map[{c}] skipped:', str(e)[:120], flush=True)
 
@@ -196,39 +291,51 @@ def save_npz(c):
     s = store[c]
     if not s['ids']: return
     bio = io.BytesIO()
+    n = len(s['ids'])
+    mine = (s.get('mine') or [False] * n)[:n] + [False] * max(0, n - len(s.get('mine') or []))
+    silent = (s.get('silent') or [False] * n)[:n] + [False] * max(0, n - len(s.get('silent') or []))
     np.savez_compressed(bio, ids=np.array(s['ids'], object), vecs=np.array(s['vecs'], np.float32),
                         views=np.array(s['views'], np.float64), outlier=np.array(s['outlier'], np.float64),
-                        subs=np.array(s['subs'], np.float64), title=np.array(s['title'], object), txt=np.array(s['txt'], object))
+                        subs=np.array(s['subs'], np.float64), title=np.array(s['title'], object), txt=np.array(s['txt'], object),
+                        mine=np.array(mine, bool), silent=np.array(silent, bool))
     r2_put(f'raw/{c}/embeddings.npz', bio.getvalue(), 'application/octet-stream')
 
 
-for c in CHANS: build_map(c)   # immediate maps from whatever's already embedded (visual migrated)
+migrate_clean()                # apply the no-voiceover gate to already-embedded data
+for c in CHANS: save_npz(c)     # persist mine/silent flags + cleaned text/together
+for c in CHANS: build_map(c)    # immediate maps from whatever's already embedded
 
 
 def work(v):
     vid = v['videoId']
     if not needs(v): return
-    inp = hook_inputs(vid)   # always (re)saves the montage to R2
+    inp = hook_inputs(vid, v.get('src', 'lib'))   # always (re)saves the montage to R2
     if not inp:
         with lock: fails[0] += 1
         return
-    b64, txt = inp
+    b64, txt, good = inp     # good = genuine coherent voiceover (else SILENT)
     have_montage.add(vid)    # montage now guaranteed on R2
     embeds = {}
     if vid not in done['visual']: embeds['visual'] = embed([img_part(b64)])
-    if txt and vid not in done['text']: embeds['text'] = embed([{'text': txt}])
-    if vid not in done['together']: embeds['together'] = embed([img_part(b64)] + ([{'text': txt}] if txt else []))
+    if good and vid not in done['text']: embeds['text'] = embed([{'text': txt}])
+    if vid not in done['together']: embeds['together'] = embed([img_part(b64)] + ([{'text': txt}] if good else []))
+    mine = bool(v.get('mine'))
     with lock:
-        meta = (v.get('views') or 0, (v['views'] / v['subs']) if v.get('subs') else float('nan'), v.get('subs') or 0, v.get('title') or '', txt)
+        ov = v.get('outlier')
+        if ov is None and v.get('views') and v.get('subs'): ov = v['views'] / v['subs']
+        meta = (v.get('views') or 0, float(ov) if ov is not None else float('nan'), v.get('subs') or 0, v.get('title') or '')
         for c, e in embeds.items():
             if e is None: continue
             s = store[c]; s['ids'].append(vid); s['vecs'].append(e)
-            s['views'].append(meta[0]); s['outlier'].append(meta[1]); s['subs'].append(meta[2]); s['title'].append(meta[3]); s['txt'].append(meta[4])
+            s['views'].append(meta[0]); s['outlier'].append(meta[1]); s['subs'].append(meta[2]); s['title'].append(meta[3])
+            s['txt'].append(txt if good else '')   # '' when no real voiceover → silent is derivable from txt
+            s['mine'].append(mine); s['silent'].append(False if c == 'text' else (not good))
             done[c].add(vid)
         cnt[0] += 1
         if cnt[0] % 100 == 0:
             el = time.time() - t0
-            print(f"  {cnt[0]}/{len(todo)} · {el/60:.0f}m · visual {len(store['visual']['ids'])} text {len(store['text']['ids'])} together {len(store['together']['ids'])} · fails {fails[0]}", flush=True)
+            nm = sum(store['visual']['mine'])
+            print(f"  {cnt[0]}/{len(todo)} · {el/60:.0f}m · visual {len(store['visual']['ids'])} text {len(store['text']['ids'])} together {len(store['together']['ids'])} · mine {nm} · fails {fails[0]}", flush=True)
             for c in CHANS: save_npz(c)
             if cnt[0] % 500 == 0:
                 for c in CHANS: build_map(c)

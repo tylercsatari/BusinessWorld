@@ -13,7 +13,7 @@ const JarvisRetention = (function () {
     let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -321,21 +321,28 @@ const JarvisRetention = (function () {
         const proj = (pm && PJ[pm]) || { x: R.x || [], y: R.y || [], cv: 0, co: 0 };
         const supervised = pm && !['umap', 'pca'].includes(pm);
         const mode = st.rawColor || 'cluster', k = st.rawK || '10';
+        const MINE = R.mine || [], SILENT = R.silent || [];
+        const hiMine = !!st.rawMine;   // "highlight my videos" toggle
         let colOf;
         if (mode === 'cluster') { const cl = (R.clusters || {})[k] || []; colOf = i => tcol(cl[i] != null ? cl[i] : -1); }
+        else if (mode === 'voiceover') { colOf = i => SILENT[i] ? '#475569' : C.green; }
         else {
             const raw = mode === 'views' ? R.views : mode === 'outlier' ? R.outlier : R.subs;
             const vals = raw.map(x => x == null ? null : Math.log10((+x) + 1));
             const ok = vals.filter(x => x != null && isFinite(x)); const lo = Math.min(...ok), hi = Math.max(...ok);
             colOf = i => vals[i] == null || !isFinite(vals[i]) ? '#334155' : rawRamp((vals[i] - lo) / ((hi - lo) || 1));
         }
+        const GOLD = '#fbbf24';
         const selI = st.rawSel != null ? (R.id || []).indexOf(st.rawSel) : -1;
-        let dots = '';
+        let dots = '', mineDots = '';
         for (let i = 0; i < n; i++) {
-            const tip = `${esc((R.title[i] || '').slice(0, 40))} · ${fv(R.views[i])} views${R.outlier && R.outlier[i] ? ' · ' + R.outlier[i] + '× subs' : ''}`;
-            const sel = i === selI;
-            dots += `<circle data-rawid="${R.id ? R.id[i] : ''}" cx="${X(proj.x[i]).toFixed(1)}" cy="${Yc(proj.y[i]).toFixed(1)}" r="${sel ? 5.5 : 2.4}" fill="${colOf(i)}" opacity="${sel ? 1 : 0.72}" stroke="${sel ? '#fff' : 'none'}" stroke-width="${sel ? 1.5 : 0}" style="cursor:pointer"><title>${tip}</title></circle>`;
+            const tip = `${MINE[i] ? '★ YOUR VIDEO · ' : ''}${esc((R.title[i] || '').slice(0, 40))} · ${fv(R.views[i])} views${SILENT[i] ? ' · no voiceover' : ''}`;
+            const sel = i === selI, mine = hiMine && MINE[i];
+            const op = sel ? 1 : (hiMine && !MINE[i] ? 0.12 : 0.72);
+            const circ = `<circle data-rawid="${R.id ? R.id[i] : ''}" cx="${X(proj.x[i]).toFixed(1)}" cy="${Yc(proj.y[i]).toFixed(1)}" r="${sel ? 5.5 : mine ? 4 : 2.4}" fill="${mine ? GOLD : colOf(i)}" opacity="${op}" stroke="${sel ? '#fff' : mine ? GOLD : 'none'}" stroke-width="${sel ? 1.5 : mine ? 1.2 : 0}" style="cursor:pointer"><title>${tip}</title></circle>`;
+            if (mine) mineDots += circ; else dots += circ;   // draw mine on top
         }
+        dots += mineDots;
         const pill = (id, lab, on, attr) => `<span ${attr}="${id}" style="cursor:pointer;border:1px solid ${on ? C.accent : C.border};background:${on ? C.accent + '1e' : 'transparent'};color:${on ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
         const projPill = ([id, lab]) => `<span data-rawproj="${id}" style="cursor:pointer;border:1px solid ${pm === id ? C.accent : C.border};background:${pm === id ? C.accent + '1e' : 'transparent'};color:${pm === id ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}${PJ[id] && !['umap', 'pca'].includes(id) ? ` <span style="opacity:.65;font-weight:400">v${PJ[id].cv}/o${PJ[id].co}</span>` : ''}</span>`;
         const auc = R.heldout_auc10m, rv = R.heldout_rviews;
@@ -345,6 +352,7 @@ const JarvisRetention = (function () {
             const txt = (R.txt && R.txt[i]) || '';
             const monUrl = `/api/raw/montage/${id}`;
             const meta = [['views', fv(R.views[i])], ['outlier', R.outlier && R.outlier[i] ? R.outlier[i] + '× subs' : '—'], ['subs', R.subs && R.subs[i] != null ? fv(R.subs[i]) : '—']];
+            const isMine = (R.mine || [])[i], isSilent = (R.silent || [])[i];
             const lab = s => `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">${s}</div>`;
             const imgEl = `<img src="${monUrl}" style="width:100%;border-radius:6px;background:#000;margin-bottom:8px;min-height:60px" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'Montage still rendering for this video — the embed run reaches it shortly.',style:'font-size:11px;color:#94a3b8;padding:14px;text-align:center;background:#0f172a;border-radius:6px;margin-bottom:8px'}))"/>`;
             const txtEl = txt ? `<div style="font-size:12px;color:${C.text};font-style:italic;margin-bottom:8px;line-height:1.45;background:${C.bg || '#0f172a'};border-radius:6px;padding:9px 11px">"${esc(txt)}"</div>` : `<div style="font-size:11px;color:${C.dim};margin-bottom:8px">No speech in the first 5s — an empty transcript was embedded.</div>`;
@@ -360,19 +368,22 @@ const JarvisRetention = (function () {
                     ? lab('Exact input embedded — frames + transcript, fused into one vector') + imgEl + txtEl
                     : lab('Exact input embedded — frames only (no speech in first 5s, so nothing text was added)') + imgEl;
             }
-            return `<div style="margin-top:10px;border:1px solid ${C.border};border-radius:10px;padding:12px;background:${C.card2}">
-                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="font-size:12px;font-weight:700;color:${C.text};line-height:1.4">${esc(R.title[i] || '(untitled)')}</div><span data-rawclose="1" style="cursor:pointer;color:${C.dim};font-size:16px;line-height:1;padding:0 4px">×</span></div>
+            return `<div style="margin-top:10px;border:1px solid ${isMine ? '#fbbf24' : C.border};border-radius:10px;padding:12px;background:${C.card2}">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="font-size:12px;font-weight:700;color:${C.text};line-height:1.4">${isMine ? `<span style="color:#fbbf24">★ YOUR VIDEO</span> · ` : ''}${esc(R.title[i] || '(untitled)')}${isSilent ? ` <span style="color:${C.faint};font-weight:400;font-size:10px">· no voiceover</span>` : ''}</div><span data-rawclose="1" style="cursor:pointer;color:${C.dim};font-size:16px;line-height:1;padding:0 4px">×</span></div>
                   ${inputBlock}
                   <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px">${meta.map(([k2, v]) => `<div><div style="font-size:9px;color:${C.mute};text-transform:uppercase">${k2}</div><div style="font-size:13px;font-weight:700;color:${C.text}">${v}</div></div>`).join('')}</div>
                   <a href="https://youtube.com/watch?v=${id}" target="_blank" style="font-size:11px;color:${C.accent};text-decoration:none">▶ Open on YouTube →</a>
                 </div>`;
         })() : '';
         let h = head + tabs;
+        const nmine = R.nmine != null ? R.nmine : MINE.filter(Boolean).length;
+        const nsilent = R.nsilent != null ? R.nsilent : SILENT.filter(Boolean).length;
+        const mineBtn = `<span data-rawmine="1" style="cursor:pointer;border:1px solid ${hiMine ? GOLD : C.border};background:${hiMine ? GOLD + '22' : 'transparent'};color:${hiMine ? GOLD : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">★ My videos${nmine ? ' (' + nmine + ')' : ''}</span>`;
         h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
-              <div style="font-size:12px;font-weight:700;color:${C.text}">${n.toLocaleString()} hooks · ${chan} channel</div>
-              <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${mode === 'cluster' ? `<span style="width:6px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div></div>
+              <div style="font-size:12px;font-weight:700;color:${C.text}">${n.toLocaleString()} hooks · ${chan} channel ${mineBtn}</div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${chan !== 'text' ? pill('voiceover', 'voiceover', mode === 'voiceover', 'data-rawcolor') : ''}${mode === 'cluster' ? `<span style="width:6px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div></div>
             <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">project</span>${PROJS.map(projPill).join('')}</div>
-            <div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${supervised ? `<b style="color:${C.accent}">Steered projection</b> — axes rotated toward the target (held-out scored). This one aligns with <b>views r=${proj.cv}</b>, <b>outlier r=${proj.co}</b> (each pill shows v/o; higher = the axes separate that target more — pick the highest for what you're hunting).` : `<b>Raw geometry</b> (no target). Switch to a steered projection to pull views/outliers apart.`} ${mode !== 'cluster' ? `Coloured by <b>${mode}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>).` : `Coloured by k-means cluster (k=${k}).`} <b style="color:${C.text}">Click any dot</b> to see the exact input.</div>${heldline}
+            <div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${supervised ? `<b style="color:${C.accent}">Steered projection</b> — axes rotated toward the target (held-out scored). This one aligns with <b>views r=${proj.cv}</b>, <b>outlier r=${proj.co}</b> (each pill shows v/o; higher = the axes separate that target more — pick the highest for what you're hunting).` : `<b>Raw geometry</b> (no target). Switch to a steered projection to pull views/outliers apart.`} ${mode === 'voiceover' ? `Coloured by <b>voiceover</b>: <span style="color:${C.green}">●</span> has a real voiceover · <span style="color:#475569">●</span> no sound / music (${nsilent.toLocaleString()} silent, excluded from the text channel so junk transcripts can't confound it).` : mode !== 'cluster' ? `Coloured by <b>${mode}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>).` : `Coloured by k-means cluster (k=${k}).`} ${hiMine ? `<b style="color:${GOLD}">★ Your ${nmine} videos are gold</b>; everything else is dimmed.` : `<b style="color:${C.text}">Click any dot</b> to see the exact input.`}</div>${heldline}
             <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px;margin-top:6px">${dots}</svg>${detail}`, 12);
         return h;
     }
@@ -1526,6 +1537,7 @@ const JarvisRetention = (function () {
         const rk = e.target.closest('[data-rawk]'); if (rk) { st.rawK = rk.getAttribute('data-rawk'); rtgUpdateRaw(); return; }
         const rp = e.target.closest('[data-rawproj]'); if (rp) { st.rawProj = rp.getAttribute('data-rawproj'); rtgUpdateRaw(); return; }
         const rch = e.target.closest('[data-rawchan]'); if (rch) { st.rawChan = rch.getAttribute('data-rawchan'); st.rawSel = null; st.rawProj = 'both'; rtgUpdateRaw(); return; }
+        const rm = e.target.closest('[data-rawmine]'); if (rm) { st.rawMine = !st.rawMine; rtgUpdateRaw(); return; }
         const rcl = e.target.closest('[data-rawclose]'); if (rcl) { st.rawSel = null; rtgUpdateRaw(); return; }
         const rid = e.target.closest('[data-rawid]'); if (rid) { const id = rid.getAttribute('data-rawid'); st.rawSel = (st.rawSel === id || !id) ? null : id; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-libreload]')) { Promise.all([
@@ -1560,7 +1572,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=71'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=72'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
