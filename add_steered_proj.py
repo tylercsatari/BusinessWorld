@@ -66,7 +66,19 @@ for ch in ['visual', 'text', 'together']:
         pls = PLSRegression(2).fit(Xo, yo)
         XY = pls.transform(Vm)                       # (n,2): comp1 ≈ keep axis
         if spearmanr(XY[oi, 0], yo)[0] < 0: XY[:, 0] = -XY[:, 0]   # orient so higher x = higher target
-        mp['proj'][tgt] = {'x': grid(XY[:, 0]), 'y': grid(XY[:, 1]), 'cv': round(cv, 3), 'co': 0.0, 'owned_only_label': True}
+        # EXTRAPOLATE the metric to EVERY video: rank by the model's prediction, then
+        # quantile-map onto the owned (actual) distribution so corpus estimates spread
+        # above AND below your videos, in real metric units (0-100 organised by KEEP).
+        pred_all = pls.predict(Vm).ravel()
+        ranks = np.empty(len(pred_all)); ranks[np.argsort(pred_all)] = np.linspace(0, 1, len(pred_all))
+        yo_sorted = np.sort(yo)
+        est = yo_sorted[np.clip((ranks * (len(yo_sorted) - 1)).round().astype(int), 0, len(yo_sorted) - 1)]
+        actual = np.full(len(mids), np.nan)
+        for i, vid in enumerate(mids):
+            if vid in lab: actual[i] = lab[vid]
+        mp['proj'][tgt] = {'x': grid(XY[:, 0]), 'y': grid(XY[:, 1]), 'cv': round(cv, 3), 'co': 0.0, 'owned_only_label': True,
+                           'est': [round(float(x), 2) for x in est],
+                           'actual': [None if x != x else round(float(x), 2) for x in actual]}
         print(f'  {ch}/{tgt}: held-out align {cv:.3f} (trained on {len(oi)} owned, projected {len(mids)})', flush=True)
     r2_put(f'raw/{ch}/map.json', json.dumps(mp).encode(), 'application/json')
     print(f'  saved raw/{ch}/map.json', flush=True)

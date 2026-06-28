@@ -325,8 +325,18 @@ const JarvisRetention = (function () {
         const mode = st.rawColor || 'cluster', k = st.rawK || '10';
         const MINE = R.mine || [], SILENT = R.silent || [];
         const hiMine = !!st.rawMine;   // "highlight my videos" toggle
-        let colOf;
-        if (mode === 'cluster') { const cl = (R.clusters || {})[k] || []; colOf = i => tcol(cl[i] != null ? cl[i] : -1); }
+        // keep / 5s-retention projections are ORGANISED BY THE METRIC ITSELF: every video
+        // carries an estimated keep% (extrapolated from your 211 — proj.est), and your own
+        // videos carry their ACTUAL keep% (proj.actual). Colour by that, not views/cluster.
+        const ESTP = (pm === 'keep' || pm === 'ret5') && proj.est ? proj.est : null;
+        const ACTP = (pm === 'keep' || pm === 'ret5') && proj.actual ? proj.actual : null;
+        const metLabel = pm === 'keep' ? 'keep-rate' : '5s-retention';
+        let colOf, estLo = 0, estHi = 100;
+        if (ESTP && (mode === 'cluster' || mode === 'metric')) {
+            const ok = ESTP.filter(x => x != null && isFinite(x)); estLo = Math.min(...ok); estHi = Math.max(...ok);
+            colOf = i => { const v = (ACTP && ACTP[i] != null) ? ACTP[i] : ESTP[i]; return v == null || !isFinite(v) ? '#334155' : rawRamp((v - estLo) / ((estHi - estLo) || 1)); };
+        }
+        else if (mode === 'cluster') { const cl = (R.clusters || {})[k] || []; colOf = i => tcol(cl[i] != null ? cl[i] : -1); }
         else if (mode === 'voiceover') { colOf = i => SILENT[i] ? '#475569' : C.green; }
         else {
             const raw = mode === 'views' ? R.views : mode === 'outlier' ? R.outlier : R.subs;
@@ -338,7 +348,8 @@ const JarvisRetention = (function () {
         const selI = st.rawSel != null ? (R.id || []).indexOf(st.rawSel) : -1;
         let dots = '', mineDots = '';
         for (let i = 0; i < n; i++) {
-            const tip = `${MINE[i] ? '★ YOUR VIDEO · ' : ''}${esc((R.title[i] || '').slice(0, 40))} · ${fv(R.views[i])} views${SILENT[i] ? ' · no voiceover' : ''}`;
+            const kpv = ESTP ? ((ACTP && ACTP[i] != null) ? `${ACTP[i].toFixed(0)}% ${metLabel} (actual)` : (ESTP[i] != null ? `~${ESTP[i].toFixed(0)}% ${metLabel} (est.)` : '')) : '';
+            const tip = `${MINE[i] ? '★ YOUR VIDEO · ' : ''}${esc((R.title[i] || '').slice(0, 40))} · ${fv(R.views[i])} views${kpv ? ' · ' + kpv : ''}${SILENT[i] ? ' · no voiceover' : ''}`;
             const sel = i === selI, mine = hiMine && MINE[i];
             const op = sel ? 1 : (hiMine && !MINE[i] ? 0.12 : 0.72);
             const circ = `<circle data-rawid="${R.id ? R.id[i] : ''}" cx="${X(proj.x[i]).toFixed(1)}" cy="${Yc(proj.y[i]).toFixed(1)}" r="${sel ? 5.5 : mine ? 4 : 2.4}" fill="${mine ? GOLD : colOf(i)}" opacity="${op}" stroke="${sel ? '#fff' : mine ? GOLD : 'none'}" stroke-width="${sel ? 1.5 : mine ? 1.2 : 0}" style="cursor:pointer"><title>${tip}</title></circle>`;
@@ -380,8 +391,9 @@ const JarvisRetention = (function () {
         let bandUnder = '', bandOver = '', bandNote = '';
         if (st.rawBands) {
             const V = R.views || [], O = R.outlier || [];
-            let dir, label, binary = false, fmt;
-            if (pm === 'hi10m') { dir = V.map(x => (+x > 1e7 ? 1 : 0)); binary = true; label = '>10M-view share'; fmt = v => Math.round(v * 100) + '%'; }
+            let dir, label, binary = false, fmt, pctLinear = false;
+            if (ESTP) { dir = ESTP.map((e, i) => (ACTP && ACTP[i] != null) ? ACTP[i] : e); pctLinear = true; label = 'avg ' + metLabel; fmt = v => v.toFixed(0) + '%'; }
+            else if (pm === 'hi10m') { dir = V.map(x => (+x > 1e7 ? 1 : 0)); binary = true; label = '>10M-view share'; fmt = v => Math.round(v * 100) + '%'; }
             else if (pm === 'hiout') {
                 const ov = O.map(x => (x == null ? NaN : +x)), sv = ov.filter(x => !isNaN(x)).slice().sort((a, b) => a - b);
                 const thr = sv.length ? sv[Math.floor(sv.length * 0.85)] : Infinity;
@@ -416,7 +428,7 @@ const JarvisRetention = (function () {
                         for (let bi = 0; bi < K; bi++) {
                             const bn = bins[bi]; if (bn.cnt < 3) continue;
                             const cx = X(bn.gx / bn.cnt), cy = Yc(bn.gy / bn.cnt), avg = bn.sum / bn.cnt;
-                            const txt = fmt(binary ? avg : Math.pow(10, avg)), w = txt.length * 6.6 + 12;
+                            const txt = fmt((binary || pctLinear) ? avg : Math.pow(10, avg)), w = txt.length * 6.6 + 12;
                             bandOver += `<g style="pointer-events:none"><rect x="${(cx - w / 2).toFixed(1)}" y="${(cy - 9).toFixed(1)}" width="${w.toFixed(1)}" height="16" rx="4" fill="#0f172a" opacity="0.85" stroke="#1e293b"/><text x="${cx.toFixed(1)}" y="${(cy + 2.8).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#e2e8f0">${txt}</text></g>`;
                         }
                         bandNote = `<b style="color:${C.cyan}">Trend bands ON</b> — dashed lines split the plot ⟂ to the direction <b>${label.replace('avg ', '')}</b> increases; each band shows its <b>${label}</b> (${K} equal sections along the trend).`;
@@ -434,6 +446,7 @@ const JarvisRetention = (function () {
             const txt = (R.txt && R.txt[i]) || '';
             const monUrl = `/api/raw/montage/${id}`;
             const meta = [['views', fv(R.views[i])], ['outlier', R.outlier && R.outlier[i] ? R.outlier[i] + '× subs' : '—'], ['subs', R.subs && R.subs[i] != null ? fv(R.subs[i]) : '—']];
+            if (ESTP) meta.unshift([metLabel, (ACTP && ACTP[i] != null) ? `<span style="color:#fbbf24">${ACTP[i].toFixed(0)}% (yours, actual)</span>` : (ESTP[i] != null ? `~${ESTP[i].toFixed(0)}% (est.)` : '—')]);
             const isMine = (R.mine || [])[i], isSilent = (R.silent || [])[i];
             const lab = s => `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">${s}</div>`;
             const imgEl = `<img src="${monUrl}" style="width:100%;border-radius:6px;background:#000;margin-bottom:8px;min-height:60px" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'Montage still rendering for this video — the embed run reaches it shortly.',style:'font-size:11px;color:#94a3b8;padding:14px;text-align:center;background:#0f172a;border-radius:6px;margin-bottom:8px'}))"/>`;
@@ -512,7 +525,7 @@ const JarvisRetention = (function () {
               <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${chan !== 'text' ? pill('voiceover', 'voiceover', mode === 'voiceover', 'data-rawcolor') : ''}${mode === 'cluster' ? `<span style="width:6px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div></div>${builder}
             <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">project</span>${PROJS.map(projPill).join('')}<span style="width:8px"></span><span data-rawbands="1" style="cursor:pointer;border:1px solid ${st.rawBands ? C.cyan : C.border};background:${st.rawBands ? C.cyan + '22' : 'transparent'};color:${st.rawBands ? C.cyan : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">📊 trend bands</span>${st.rawBands ? `<span style="font-size:9px;color:${C.mute};margin-left:2px">sections</span>${[4, 6, 8, 12, 16].map(kk => `<span data-rawbandk="${kk}" style="cursor:pointer;border:1px solid ${(st.rawBandK || 6) === kk ? C.cyan : C.border};background:${(st.rawBandK || 6) === kk ? C.cyan + '1e' : 'transparent'};color:${(st.rawBandK || 6) === kk ? C.cyan : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${kk}</span>`).join('')}` : ''}</div>
             ${st.rawBands ? `<div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${bandNote}</div>` : ''}
-            <div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${supervised ? `<b style="color:${C.accent}">Steered projection</b> — axes rotated toward the target (held-out scored). This one aligns with <b>views r=${proj.cv}</b>, <b>outlier r=${proj.co}</b> (each pill shows v/o; higher = the axes separate that target more — pick the highest for what you're hunting).` : `<b>Raw geometry</b> (no target). Switch to a steered projection to pull views/outliers apart.`} ${mode === 'voiceover' ? `Coloured by <b>voiceover</b>: <span style="color:${C.green}">●</span> has a real voiceover · <span style="color:#475569">●</span> no sound / music (${nsilent.toLocaleString()} silent, excluded from the text channel so junk transcripts can't confound it).` : mode !== 'cluster' ? `Coloured by <b>${mode}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>).` : `Coloured by k-means cluster (k=${k}).`} ${hiMine ? `<b style="color:${GOLD}">★ Your ${nmine} videos are gold</b>; everything else is dimmed.` : `<b style="color:${C.text}">Click any dot</b> to see the exact input.`}</div>${heldline}
+            <div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${ESTP ? `<b style="color:${C.green}">Steered toward ${metLabel}</b> — the embedding space is rotated by your 211 (the only videos with retention) so an axis tracks ${metLabel}, then <b>every</b> hook gets an <b>estimated ${metLabel}%</b> (extrapolated; held-out align <b>r=${proj.cv}</b>). Your videos show their <b>actual</b> ${metLabel}; corpus videos fall <b>above and below</b> them on the same 0–100% scale.` : supervised ? `<b style="color:${C.accent}">Steered projection</b> — axes rotated toward the target (held-out scored). This one aligns with <b>views r=${proj.cv}</b>, <b>outlier r=${proj.co}</b> (each pill shows v/o; higher = the axes separate that target more — pick the highest for what you're hunting).` : `<b>Raw geometry</b> (no target). Switch to a steered projection to pull views/outliers apart.`} ${ESTP ? `Coloured by <b>${metLabel}</b> (<span style="color:${rawRamp(0)}">${estLo.toFixed(0)}%</span>→<span style="color:${rawRamp(1)}">${estHi.toFixed(0)}%</span>); your videos use actual, the rest estimated.` : mode === 'voiceover' ? `Coloured by <b>voiceover</b>: <span style="color:${C.green}">●</span> has a real voiceover · <span style="color:#475569">●</span> no sound / music (${nsilent.toLocaleString()} silent, excluded from the text channel so junk transcripts can't confound it).` : mode !== 'cluster' ? `Coloured by <b>${mode}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>).` : `Coloured by k-means cluster (k=${k}).`} ${hiMine ? `<b style="color:${GOLD}">★ Your ${nmine} videos are gold</b>; everything else is dimmed.` : `<b style="color:${C.text}">Click any dot</b> to see the exact input.`}</div>${heldline}
             ${upLegend}
             <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px;margin-top:6px">${bandUnder}${dots}${bandOver}</svg>${detail}${upDetail}`, 12);
         return h;
@@ -591,7 +604,8 @@ const JarvisRetention = (function () {
             let colf;
             if (colorMode === 'gt10m') colf = i => (R.views && R.views[i] > 1e7) ? '#f87171' : '#2b3648';
             else if (colorMode === 'novelty') { const nm = idNov(ch), vs = ids.map(id => nm[id]), ok = vs.filter(v => v != null && isFinite(v)), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => vs[i] == null ? '#2b3648' : rawRamp((vs[i] - lo) / ((hi - lo) || 1)); }
-            else if (colorMode === 'axis') { const xs2 = proj.x, lo = Math.min(...xs2), hi = Math.max(...xs2); colf = i => rawRamp((proj.x[i] - lo) / ((hi - lo) || 1)); }
+            else if (colorMode === 'metric' && proj.est) { const e = proj.est, ac = proj.actual, ok = e.filter(v => v != null && isFinite(v)), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => { const v = (ac && ac[i] != null) ? ac[i] : e[i]; return v == null ? '#2b3648' : rawRamp((v - lo) / ((hi - lo) || 1)); }; }
+            else if (colorMode === 'axis' || colorMode === 'metric') { const xs2 = proj.x, lo = Math.min(...xs2), hi = Math.max(...xs2); colf = i => rawRamp((proj.x[i] - lo) / ((hi - lo) || 1)); }
             else if (colorMode === 'owned') colf = i => (R.mine && R.mine[i]) ? '#fbbf24' : '#2b3648';
             else { const v = (R.views || []).map(x => Math.log10((+x || 0) + 1)), ok = v.filter(isFinite), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => rawRamp((v[i] - lo) / ((hi - lo) || 1)); }
             let s = ''; for (let i = 0; i < nP; i++) s += `<circle cx="${X(proj.x[i]).toFixed(1)}" cy="${Y(proj.y[i]).toFixed(1)}" r="1.5" fill="${colf(i)}" opacity="0.55"/>`;
@@ -600,7 +614,7 @@ const JarvisRetention = (function () {
             return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:6px">${s}${mk}</svg>`;
         };
         const projFor = { keep: 'keep', ret5: 'ret5', views: 'views', gt10M: 'hi10m' };
-        const colorFor = { keep: 'axis', ret5: 'axis', views: 'views', gt10M: 'gt10m' };
+        const colorFor = { keep: 'metric', ret5: 'metric', views: 'views', gt10M: 'gt10m' };
         const cardHTML = (d, tn, isNov) => { const ch = chMap[d.modality] || 'visual'; const sc = up.indicators[keyOf(d)]; const pj = isNov ? 'umap' : projFor[tn], cm = isNov ? 'novelty' : colorFor[tn]; const est = calib(d, sc), R = Rof(d), pc = pctOf(d, sc);
             return `<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:10px;color:${isNov ? C.purple : CY};font-weight:700">${d.name.replace('content_', '').replace('nov_', '')} <span style="color:${C.mute};font-weight:400">R=${R.toFixed(2)} · n=${d.n}</span></div>${cluster(ch, pj, cm)}<div style="font-size:9px;color:${C.mute}">embeds <b>${whatEmbedded(ch)}</b> → ${isNov ? 'distance from corpus' : 'toward ' + tn} → <span style="color:${CY}">◆ ${dispV(tn, est) || '—'}${pc != null ? ` · ${(pc * 100).toFixed(0)}th pctile` : ''}</span> · <span style="color:${C.accent}">Raw →</span></div></div>`; };
         const gridOf = arr => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${arr.join('')}</div>`;
@@ -1986,7 +2000,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=91'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=92'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
