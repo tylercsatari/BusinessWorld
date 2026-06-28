@@ -74,3 +74,4 @@ library-crawler.log
 # Raw hook-embedding run log
 raw_embed.log
 fusion_features.npz
+buildings/jarvis/retention-study/principles/novelty_owned_backup.json
