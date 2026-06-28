@@ -565,25 +565,40 @@ const JarvisRetention = (function () {
               ${outBox(VW != null ? fv(Math.pow(10, VW)) : null, C.text, 'estimated views')}
               ${outBox(G != null ? (1 / (1 + Math.exp(-G)) * 100).toFixed(0) + '%' : null, C.purple, 'chance >10M views')}
             </div><div style="font-size:9px;color:${C.mute};text-align:center;margin-top:6px">ensemble of the content probes · every indicator's data plotted below</div>`, 14);
-        // ── 3. per-metric: the ACTUAL data scattered + binned trend + your hook ──
-        const scatter = (d, sc) => {
-            const pts = d.pts || [], c = d.curve || []; if (!pts.length) return '';
-            const xs = pts.map(p => p[0]).concat(sc != null ? [sc] : []), ys = pts.map(p => p[1]);
-            const xmn = Math.min(...xs), xmx = Math.max(...xs), ymn = Math.min(...ys), ymx = Math.max(...ys);
-            const W = 250, H = 120, pl = 6, pb = 6, pt = 6, pr = 6, X = x => pl + (x - xmn) / ((xmx - xmn) || 1) * (W - pl - pr), Y = y => H - pb - (y - ymn) / ((ymx - ymn) || 1) * (H - pt - pb);
-            let s = pts.map(p => `<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="1.7" fill="${C.dim}" opacity="0.45"/>`).join('');
-            if (c.length > 1) { const cx = c.map(b => (b.lo + b.hi) / 2), cy = c.map(b => b.mean); s += `<path d="${c.map((b, i) => (i ? 'L' : 'M') + X(cx[i]).toFixed(1) + ' ' + Y(cy[i]).toFixed(1)).join(' ')}" fill="none" stroke="${C.accent}" stroke-width="2.2"/>`; }
-            if (sc != null) { let bi = c.findIndex(b => sc <= b.hi); if (bi < 0) bi = c.length - 1; const cyv = c.length ? c[bi].mean : (ymn + ymx) / 2; s += `<line x1="${X(sc).toFixed(1)}" y1="${pt}" x2="${X(sc).toFixed(1)}" y2="${H - pb}" stroke="${CY}" stroke-width="1.5"/><circle cx="${X(sc).toFixed(1)}" cy="${Y(cyv).toFixed(1)}" r="4" fill="${CY}" stroke="#fff" stroke-width="1.4"/>`; }
-            return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:6px">${s}</svg>`;
+        // ── 3. per-indicator: the SAME Raw cluster (channel × projection), coloured by
+        //    the target, with YOUR hook placed via its neighbours. Click → opens it in Raw. ──
+        const chMap = { visual: 'visual', text: 'text', together: 'together', vis: 'visual', txt: 'text', tog: 'together' };
+        ['visual', 'text', 'together'].forEach(c => { if (!RAW[c]) { RAW[c] = { loading: 1 }; fetch('/api/raw/map?channel=' + c).then(r => r.json()).then(j => { RAW[c] = j; rtgUpdateExp(); }).catch(() => { RAW[c] = { n: 0 }; rtgUpdateExp(); }); } });
+        const Nmod = { visual: 'visual', text: 'text', together: 'whole' };
+        const idNovCache = {};
+        const idNov = ch => { if (idNovCache[ch]) return idNovCache[ch]; const m = {}; try { const g = N && N.hook && N.hook.global && N.hook.global[Nmod[ch]]; if (g) N.videos.forEach((v, i) => { m[v.id] = g.nov[i]; }); } catch (e) {} return (idNovCache[ch] = m); };
+        const whatEmbedded = ch => ch === 'visual' ? 'the 5 frames (no text)' : ch === 'text' ? 'the transcript text' : 'the 5 frames + transcript';
+        const cluster = (ch, projName, colorMode) => {
+            const R = RAW[ch];
+            if (!R || R.loading) return `<div style="height:150px;display:flex;align-items:center;justify-content:center;background:${C.card2};border-radius:6px;font-size:10px;color:${C.dim}">loading ${ch} cluster…</div>`;
+            const proj = R.proj && R.proj[projName]; if (!proj || !proj.x) return `<div style="height:150px;display:flex;align-items:center;justify-content:center;background:${C.card2};border-radius:6px;font-size:10px;color:${C.faint}">no ${projName} cluster for ${ch}</div>`;
+            const ids = R.id || [], nP = R.n || proj.x.length, S = 1000, W = 250, H = 150, pad = 8, X = g => pad + g / S * (W - 2 * pad), Y = g => pad + (1 - g / S) * (H - 2 * pad);
+            let colf;
+            if (colorMode === 'gt10m') colf = i => (R.views && R.views[i] > 1e7) ? '#f87171' : '#2b3648';
+            else if (colorMode === 'novelty') { const nm = idNov(ch), vs = ids.map(id => nm[id]), ok = vs.filter(v => v != null && isFinite(v)), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => vs[i] == null ? '#2b3648' : rawRamp((vs[i] - lo) / ((hi - lo) || 1)); }
+            else if (colorMode === 'owned') colf = i => (R.mine && R.mine[i]) ? '#fbbf24' : '#2b3648';
+            else { const v = (R.views || []).map(x => Math.log10((+x || 0) + 1)), ok = v.filter(isFinite), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => rawRamp((v[i] - lo) / ((hi - lo) || 1)); }
+            let s = ''; for (let i = 0; i < nP; i++) s += `<circle cx="${X(proj.x[i]).toFixed(1)}" cy="${Y(proj.y[i]).toFixed(1)}" r="1.5" fill="${colf(i)}" opacity="0.55"/>`;
+            const nb = up.channels[ch] && up.channels[ch].neighbors; let mk = '';
+            if (nb) { let sx = 0, sy = 0, sw = 0; for (const nn of nb) { const idx = ids.indexOf(nn.id); if (idx < 0) continue; const w = Math.max(0.001, nn.sim); sx += proj.x[idx] * w; sy += proj.y[idx] * w; sw += w; } if (sw > 0) { const hx = X(sx / sw).toFixed(1), hy = Y(sy / sw).toFixed(1); mk = `<line x1="${hx}" y1="${(+hy - 9)}" x2="${hx}" y2="${(+hy + 9)}" stroke="${CY}" stroke-width="1"/><line x1="${(+hx - 9)}" y1="${hy}" x2="${(+hx + 9)}" y2="${hy}" stroke="${CY}" stroke-width="1"/><circle cx="${hx}" cy="${hy}" r="5" fill="${CY}" stroke="#fff" stroke-width="1.5"/>`; } }
+            return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:6px">${s}${mk}</svg>`;
         };
+        const projFor = { keep: 'umap', ret5: 'umap', views: 'views', gt10M: 'hi10m' };
+        const colorFor = { keep: 'owned', ret5: 'owned', views: 'views', gt10M: 'gt10m' };
         let body = '';
         ['keep', 'ret5', 'views', 'gt10M'].forEach(tn => {
             const ds = val.filter(d => d.target === tn && up.indicators[keyOf(d)] != null); if (!ds.length) return;
             const tl = (EXPREG.meta.targets.find(t => t.name === tn) || {}).label || tn;
-            body += cardc(`<div style="font-size:13px;font-weight:800;color:${C.text};margin-bottom:6px">${tl}</div>
+            body += cardc(`<div style="font-size:13px;font-weight:800;color:${C.text};margin-bottom:2px">${tl}</div>
+                <div style="font-size:9px;color:${C.mute};margin-bottom:7px">The actual ${tn === 'gt10M' ? '>10M-class' : tn} cluster from 🔬 Raw, your hook placed via its nearest neighbours (◆). ${tn === 'keep' || tn === 'ret5' ? 'Gold = your 211 (the only set with retention); the cluster is the corpus UMAP.' : tn === 'gt10M' ? 'Red = videos that passed 10M.' : 'Warm = more views.'} Click a card to open it in Raw.</div>
                 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
-                ${ds.map(d => { const sc = up.indicators[keyOf(d)]; const eff = d.auc ? `AUC ${d.auc}` : `ρ ${d.spearman >= 0 ? '+' : ''}${d.spearman}`; const disp = tn === 'gt10M' ? (1 / (1 + Math.exp(-sc)) * 100).toFixed(0) + '%' : tn === 'views' ? fv(Math.pow(10, sc)) : sc.toFixed(1) + (tn === 'keep' || tn === 'ret5' ? '%' : '');
-                return `<div><div style="font-size:10px;color:${d.kind === 'content' ? CY : C.purple};font-weight:700">${d.name.replace('content_', '').replace('nov_', 'nov ')} <span style="color:${C.mute};font-weight:400">${eff} · n=${d.n}</span></div>${scatter(d, sc)}<div style="font-size:9px;color:${C.mute}">each dot = one corpus hook (x=this indicator, y=${TLAB[tn] || tn}) · <span style="color:${CY}">◆ your hook → ${disp}</span></div></div>`; }).join('')}
+                ${ds.map(d => { const ch = chMap[d.modality] || 'visual'; const sc = up.indicators[keyOf(d)]; const isNov = d.kind === 'novelty'; const pj = isNov ? 'umap' : projFor[tn], cm = isNov ? 'novelty' : colorFor[tn]; const eff = d.auc ? `AUC ${d.auc}` : `ρ ${d.spearman >= 0 ? '+' : ''}${d.spearman}`; const disp = tn === 'gt10M' ? (1 / (1 + Math.exp(-sc)) * 100).toFixed(0) + '% chance' : tn === 'views' ? fv(Math.pow(10, sc)) : sc.toFixed(1) + '%';
+                return `<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:10px;color:${isNov ? C.purple : CY};font-weight:700">${d.name.replace('content_', '').replace('nov_', 'nov ')} <span style="color:${C.mute};font-weight:400">${eff} · n=${d.n}</span></div>${cluster(ch, pj, cm)}<div style="font-size:9px;color:${C.mute}">embeds <b>${whatEmbedded(ch)}</b> → ${isNov ? 'distance from corpus' : 'projected toward ' + tn} → <span style="color:${CY}">◆ ${disp}</span> · <span style="color:${C.accent}">open in Raw →</span></div></div>`; }).join('')}
                 </div>`, 12);
         });
         return head + controls + outputs + trace + body;
@@ -1844,6 +1859,7 @@ const JarvisRetention = (function () {
         const rm = e.target.closest('[data-rawmine]'); if (rm) { st.rawMine = !st.rawMine; rtgUpdateRaw(); return; }
         const rcl = e.target.closest('[data-rawclose]'); if (rcl) { st.rawSel = null; rtgUpdateRaw(); return; }
         const rid = e.target.closest('[data-rawid]'); if (rid) { const id = rid.getAttribute('data-rawid'); st.rawSel = (st.rawSel === id || !id) ? null : id; st.rawUpSel = false; rtgUpdateRaw(); return; }
+        const xpg = e.target.closest('[data-expgo]'); if (xpg) { const [ch, pj] = xpg.getAttribute('data-expgo').split(':'); st.sec = 'raw'; st.rawChan = ch; st.rawProj = pj; st.rawColor = pj === 'hi10m' ? 'views' : 'cluster'; render(); return; }
         if (e.target.closest('[data-rawupload]')) { const fi = window.document.getElementById('rawUpFile'); if (fi) { fi.value = ''; fi.click(); } return; }
         if (e.target.closest('[data-rawupshow]')) { st.rawUpShow = !st.rawUpShow; rtgUpdateRaw(); return; }
         const updel = e.target.closest('[data-rawupdel]'); if (updel) { const i = +updel.getAttribute('data-rawupdel'); st.rawUploads.splice(i, 1); st.rawUpSel = null; rtgUpdateRaw(); return; }
@@ -1956,7 +1972,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=86'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=87'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
