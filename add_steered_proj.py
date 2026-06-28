@@ -65,6 +65,7 @@ for ch in ['visual', 'text', 'together']:
         # fit on ALL owned, project EVERY video (the steered 2D layout)
         pls = PLSRegression(2).fit(Xo, yo)
         XY = pls.transform(Vm)                       # (n,2): comp1 ≈ keep axis
+        if spearmanr(XY[oi, 0], yo)[0] < 0: XY[:, 0] = -XY[:, 0]   # orient so higher x = higher target
         mp['proj'][tgt] = {'x': grid(XY[:, 0]), 'y': grid(XY[:, 1]), 'cv': round(cv, 3), 'co': 0.0, 'owned_only_label': True}
         print(f'  {ch}/{tgt}: held-out align {cv:.3f} (trained on {len(oi)} owned, projected {len(mids)})', flush=True)
     r2_put(f'raw/{ch}/map.json', json.dumps(mp).encode(), 'application/json')

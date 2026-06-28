@@ -556,15 +556,18 @@ const JarvisRetention = (function () {
             </div>
             <div style="font-size:10px;color:${C.mute};margin-top:7px">4 · each indicator = <b>embedding · (a direction learned toward that metric) + bias → one number</b>, placed on the corpus scatter below.</div>`, 12);
         // ── 2. big clear outputs (ensemble of content probes) ──
-        const ensFor = tn => { const a = val.filter(d => d.kind === 'content' && d.target === tn).map(d => up.indicators[keyOf(d)]).filter(v => v != null); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; };
-        const K = ensFor('keep'), R = ensFor('ret5'), VW = ensFor('views'), G = ensFor('gt10M');
-        const outBox = (val2, col, lab) => val2 == null ? '' : `<div style="text-align:center"><div style="font-size:27px;font-weight:900;color:${col}">${val2}</div><div style="font-size:10px;color:${C.mute}">${lab}</div></div>`;
-        const outputs = cardc(`<div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:space-around;align-items:center">
-              ${outBox(K != null ? K.toFixed(0) + '%' : null, C.green, 'keep rate · stay to watch')}
-              ${outBox(R != null ? R.toFixed(0) + '%' : null, C.accent, 'past 5 seconds')}
-              ${outBox(VW != null ? fv(Math.pow(10, VW)) : null, C.text, 'estimated views')}
-              ${outBox(G != null ? (1 / (1 + Math.exp(-G)) * 100).toFixed(0) + '%' : null, C.purple, 'chance >10M views')}
-            </div><div style="font-size:9px;color:${C.mute};text-align:center;margin-top:6px">ensemble of the content probes · every indicator's data plotted below</div>`, 14);
+        // R = held-out strength; calib = read the actual metric off the corpus curve at the
+        // hook's score (the raw probe over-shrinks at n=211, so we CALIBRATE through the curve).
+        const Rof = d => d.auc ? Math.abs(d.auc - 0.5) * 2 : Math.abs(d.spearman || 0);
+        const calib = (d, sc) => { const c = d.curve || []; if (!c.length || sc == null) return null; let bi = c.findIndex(b => sc <= b.hi); if (bi < 0) bi = c.length - 1; if (sc < c[0].lo) bi = 0; return c[bi].mean; };
+        const dispV = (tn, v) => v == null ? null : (tn === 'views' ? fv(Math.pow(10, v)) : tn === 'gt10M' ? (v * 100).toFixed(0) + '%' : v.toFixed(0) + '%');
+        const estFor = (tn, kind) => { const ds = val.filter(d => d.target === tn && d.kind === kind && up.indicators[keyOf(d)] != null); let num = 0, den = 0, parts = []; ds.forEach(d => { const sc = up.indicators[keyOf(d)], c = calib(d, sc); if (c == null) return; const w = Math.pow(Rof(d), 2); num += w * c; den += w; parts.push({ mod: d.modality, R: Rof(d), est: c, sc }); }); return den ? { val: num / den, parts } : null; };
+        const METS = [['keep', 'keep rate', C.green], ['ret5', 'past 5s', C.accent], ['views', 'est. views', C.text], ['gt10M', '% >10M', C.purple]];
+        const srcRow = (kind, klab, kcol) => `<tr><td style="font-size:11px;font-weight:700;color:${kcol};padding:5px 10px 5px 0;white-space:nowrap">${klab}</td>${METS.map(([tn]) => { const e = estFor(tn, kind); return `<td style="text-align:center;padding:5px 12px"><span style="font-size:20px;font-weight:900;color:${e ? C.text : C.faint}">${e ? dispV(tn, e.val) : '—'}</span></td>`; }).join('')}</tr>`;
+        const outputs = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:6px">Predicted outputs — one number for every (source × metric)</div>
+            <table style="border-collapse:collapse"><tr><td></td>${METS.map(([tn, lab, col]) => `<td style="text-align:center;font-size:10px;color:${col};text-transform:uppercase;padding:0 12px">${lab}</td>`).join('')}</tr>
+              ${srcRow('content', 'content (embedding)', CY)}${srcRow('novelty', 'novelty (distance)', C.purple)}</table>
+            <div style="font-size:9px;color:${C.mute};margin-top:7px">Each = the actual metric read off the corpus curve at your hook's score (calibrated; the raw probe over-shrinks at n=211 so the % alone wasn't trustworthy). Content is <b>R²-weighted</b> across modalities — the math is shown per metric below. <b>Content &amp; novelty are independent and never mixed.</b></div>`, 14);
         // ── 3. per-indicator: the SAME Raw cluster (channel × projection), coloured by
         //    the target, with YOUR hook placed via its neighbours. Click → opens it in Raw. ──
         const chMap = { visual: 'visual', text: 'text', together: 'together', vis: 'visual', txt: 'text', tog: 'together' };
@@ -591,18 +594,19 @@ const JarvisRetention = (function () {
         };
         const projFor = { keep: 'keep', ret5: 'ret5', views: 'views', gt10M: 'hi10m' };
         const colorFor = { keep: 'axis', ret5: 'axis', views: 'views', gt10M: 'gt10m' };
-        const cardHTML = (d, tn, isNov) => { const ch = chMap[d.modality] || 'visual'; const sc = up.indicators[keyOf(d)]; const pj = isNov ? 'umap' : projFor[tn], cm = isNov ? 'novelty' : colorFor[tn]; const eff = d.auc ? `AUC ${d.auc}` : `ρ ${d.spearman >= 0 ? '+' : ''}${d.spearman}`; const disp = tn === 'gt10M' ? (1 / (1 + Math.exp(-sc)) * 100).toFixed(0) + '% chance' : tn === 'views' ? fv(Math.pow(10, sc)) : sc.toFixed(1) + '%';
-            return `<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:10px;color:${isNov ? C.purple : CY};font-weight:700">${d.name.replace('content_', '').replace('nov_', '')} <span style="color:${C.mute};font-weight:400">${eff} · n=${d.n}</span></div>${cluster(ch, pj, cm)}<div style="font-size:9px;color:${C.mute}">embeds <b>${whatEmbedded(ch)}</b> → ${isNov ? 'its distance from the corpus' : 'content projected toward ' + tn} → <span style="color:${CY}">◆ ${disp}</span> · <span style="color:${C.accent}">open in Raw →</span></div></div>`; };
-        const gridOf = arr => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">${arr.join('')}</div>`;
+        const cardHTML = (d, tn, isNov) => { const ch = chMap[d.modality] || 'visual'; const sc = up.indicators[keyOf(d)]; const pj = isNov ? 'umap' : projFor[tn], cm = isNov ? 'novelty' : colorFor[tn]; const est = calib(d, sc), R = Rof(d);
+            return `<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:10px;color:${isNov ? C.purple : CY};font-weight:700">${d.name.replace('content_', '').replace('nov_', '')} <span style="color:${C.mute};font-weight:400">R=${R.toFixed(2)} · n=${d.n}</span></div>${cluster(ch, pj, cm)}<div style="font-size:9px;color:${C.mute}">embeds <b>${whatEmbedded(ch)}</b> → ${isNov ? 'distance from corpus' : 'projected toward ' + tn} → <span style="color:${CY}">◆ ${dispV(tn, est) || '—'}</span> · <span style="color:${C.accent}">Raw →</span></div></div>`; };
+        const gridOf = arr => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${arr.join('')}</div>`;
+        const weightLine = (tn) => { const e = estFor(tn, 'content'); if (!e || e.parts.length < 2) return ''; const sumW = e.parts.reduce((a, p) => a + p.R * p.R, 0); return `<div style="font-size:9px;color:${C.mute};margin-top:5px">content estimate = R²-weighted: ${e.parts.map(p => `${p.mod}(R=${p.R.toFixed(2)}, ${dispV(tn, p.est)}) ×${(p.R * p.R / sumW * 100).toFixed(0)}%`).join(' + ')} = <b style="color:${C.text}">${dispV(tn, e.val)}</b></div>`; };
         let body = '';
         ['keep', 'ret5', 'views', 'gt10M'].forEach(tn => {
             const ds = val.filter(d => d.target === tn && up.indicators[keyOf(d)] != null); if (!ds.length) return;
             const tl = (EXPREG.meta.targets.find(t => t.name === tn) || {}).label || tn;
             const content = ds.filter(d => d.kind === 'content'), nov = ds.filter(d => d.kind === 'novelty');
             body += cardc(`<div style="font-size:13px;font-weight:800;color:${C.text};margin-bottom:2px">${tl}</div>
-                <div style="font-size:9px;color:${C.mute};margin-bottom:7px">The same cluster as 🔬 Raw, <b>steered toward ${tn === 'gt10M' ? '>10M' : tn}</b>${tn === 'keep' || tn === 'ret5' ? ' (your 211 trained this axis, projected across all 11k)' : ''}, your hook placed via neighbours (◆). ${tn === 'gt10M' ? 'Red = passed 10M.' : tn === 'views' ? 'Warm = more views.' : 'Warm = higher predicted ' + tn + '.'} Click → open in Raw.</div>
-                ${content.length ? `<div style="font-size:10px;color:${CY};font-weight:700;text-transform:uppercase;margin-bottom:4px">Content — the embedding, steered (this drives the ensemble above)</div>${gridOf(content.map(d => cardHTML(d, tn, false)))}` : ''}
-                ${nov.length ? `<div style="font-size:10px;color:${C.purple};font-weight:700;text-transform:uppercase;margin:11px 0 4px">Novelty — a separate independent axis (NOT mixed into the content ensemble)</div>${gridOf(nov.map(d => cardHTML(d, tn, true)))}` : ''}`, 12);
+                <div style="font-size:9px;color:${C.mute};margin-bottom:7px">The same cluster as 🔬 Raw, <b>steered toward ${tn === 'gt10M' ? '>10M' : tn}</b>${tn === 'keep' || tn === 'ret5' ? ' (your 211 trained this axis, projected across all 11k)' : ''}, your hook placed via neighbours (◆). ${tn === 'gt10M' ? 'Red = passed 10M.' : 'Warm = higher.'} Each card shows R (held-out strength) and the calibrated estimate. Click → Raw.</div>
+                ${content.length ? `<div style="font-size:10px;color:${CY};font-weight:700;text-transform:uppercase;margin-bottom:4px">Content → ${tn}</div>${gridOf(content.map(d => cardHTML(d, tn, false)))}${weightLine(tn)}` : ''}
+                ${nov.length ? `<div style="font-size:10px;color:${C.purple};font-weight:700;text-transform:uppercase;margin:11px 0 4px">Novelty → ${tn} (independent — its own estimate, not mixed in)</div>${gridOf(nov.map(d => cardHTML(d, tn, true)))}` : ''}`, 12);
         });
         return head + controls + outputs + trace + body;
     }
@@ -1975,7 +1979,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=88'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=89'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
