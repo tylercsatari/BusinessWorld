@@ -331,10 +331,28 @@ const JarvisRetention = (function () {
         const ESTP = (pm === 'keep' || pm === 'ret5') && proj.est ? proj.est : null;
         const ACTP = (pm === 'keep' || pm === 'ret5') && proj.actual ? proj.actual : null;
         const metLabel = pm === 'keep' ? 'keep-rate' : '5s-retention';
+        // The metric THIS projection tracks — shared by the trend bands AND (when bands are on)
+        // the dot colour, so the rising trend is visually confirmable instead of arbitrary clusters.
+        // `dir` is the per-point value the bands average; continuous metrics use log so a few
+        // mega-outliers don't dominate; the display un-logs it back to real units.
+        const bandMetric = () => {
+            const V = R.views || [], O = R.outlier || [];
+            if (ESTP) return { dir: ESTP.map((e, i) => (ACTP && ACTP[i] != null) ? ACTP[i] : e), label: metLabel, fmt: v => v.toFixed(0) + '%', binary: false, pctLinear: true };
+            if (pm === 'hi10m') return { dir: V.map(x => (+x > 1e7 ? 1 : 0)), label: '>10M-view share', fmt: v => Math.round(v * 100) + '%', binary: true, pctLinear: false };
+            if (pm === 'hiout') { const ov = O.map(x => (x == null ? NaN : +x)), sv = ov.filter(x => !isNaN(x)).slice().sort((p, q) => p - q), thr = sv.length ? sv[Math.floor(sv.length * 0.85)] : Infinity; return { dir: ov.map(x => (!isNaN(x) && x >= thr) ? 1 : 0), label: 'top-outlier share', fmt: v => Math.round(v * 100) + '%', binary: true, pctLinear: false }; }
+            if (pm === 'outlier') return { dir: O.map(x => (x == null ? NaN : Math.log10(+x + 1))), label: 'outlier', fmt: v => v.toFixed(1) + '×', binary: false, pctLinear: false };
+            return { dir: V.map(x => Math.log10((+x || 0) + 1)), label: 'views', fmt: v => fv(v), binary: false, pctLinear: false };
+        };
+        const BM = st.rawBands ? bandMetric() : null;
         let colOf, estLo = 0, estHi = 100;
         if (ESTP && (mode === 'cluster' || mode === 'metric')) {
             const ok = ESTP.filter(x => x != null && isFinite(x)); estLo = Math.min(...ok); estHi = Math.max(...ok);
             colOf = i => { const v = (ACTP && ACTP[i] != null) ? ACTP[i] : ESTP[i]; return v == null || !isFinite(v) ? '#334155' : rawRamp((v - estLo) / ((estHi - estLo) || 1)); };
+        }
+        else if (BM && mode === 'cluster') {
+            // bands ON → colour by the tracked metric (low→high) so the trend is confirmable; only overrides the arbitrary cluster colouring
+            const ok = BM.dir.filter(x => x != null && isFinite(x)), lo = Math.min(...ok), hi = Math.max(...ok);
+            colOf = i => (BM.dir[i] == null || !isFinite(BM.dir[i])) ? '#334155' : rawRamp((BM.dir[i] - lo) / ((hi - lo) || 1));
         }
         else if (mode === 'cluster') { const cl = (R.clusters || {})[k] || []; colOf = i => tcol(cl[i] != null ? cl[i] : -1); }
         else if (mode === 'voiceover') { colOf = i => SILENT[i] ? '#475569' : C.green; }
@@ -391,18 +409,8 @@ const JarvisRetention = (function () {
         //    sections with dashed dividing lines, and label each band's average. Works
         //    for any view; the metric follows the projection's target. ──
         let bandUnder = '', bandOver = '', bandNote = '';
-        if (st.rawBands) {
-            const V = R.views || [], O = R.outlier || [];
-            let dir, label, binary = false, fmt, pctLinear = false;
-            if (ESTP) { dir = ESTP.map((e, i) => (ACTP && ACTP[i] != null) ? ACTP[i] : e); pctLinear = true; label = 'avg ' + metLabel; fmt = v => v.toFixed(0) + '%'; }
-            else if (pm === 'hi10m') { dir = V.map(x => (+x > 1e7 ? 1 : 0)); binary = true; label = '>10M-view share'; fmt = v => Math.round(v * 100) + '%'; }
-            else if (pm === 'hiout') {
-                const ov = O.map(x => (x == null ? NaN : +x)), sv = ov.filter(x => !isNaN(x)).slice().sort((a, b) => a - b);
-                const thr = sv.length ? sv[Math.floor(sv.length * 0.85)] : Infinity;
-                dir = ov.map(x => (!isNaN(x) && x >= thr) ? 1 : 0); binary = true; label = 'top-outlier share'; fmt = v => Math.round(v * 100) + '%';
-            }
-            else if (pm === 'outlier') { dir = O.map(x => (x == null ? NaN : Math.log10(+x + 1))); label = 'avg outlier'; fmt = v => v.toFixed(1) + '×'; }
-            else { dir = V.map(x => Math.log10((+x || 0) + 1)); label = 'avg views'; fmt = v => fv(v); }
+        if (st.rawBands && BM) {
+            const { dir, label, binary, fmt, pctLinear } = BM;
             const px = proj.x, py = proj.y, idxV = [];
             for (let i = 0; i < n; i++) { if (dir[i] != null && isFinite(dir[i]) && px[i] != null) idxV.push(i); }
             if (idxV.length > 30) {
@@ -421,19 +429,24 @@ const JarvisRetention = (function () {
                 if (Math.abs(det) > 1e-9) { a = (Syy * Sxm - Sxy * Sym) / det; b = (Sxx * Sym - Sxy * Sxm) / det; }
                 if (Math.hypot(a, b) > 1e-12) {
                     const t = idxV.map(i => a * sxOf(i) + b * syOf(i));     // distance along the rise direction (screen units)
-                    const tmin = Math.min(...t), tmax = Math.max(...t), K = Math.max(2, Math.min(20, st.rawBandK || 6));
-                    const bins = Array.from({ length: K }, () => ({ sum: 0, cnt: 0, gx: 0, gy: 0 }));
-                    for (let j = 0; j < idxV.length; j++) {
-                        let bi = Math.floor((t[j] - tmin) / ((tmax - tmin) || 1) * K); bi = bi < 0 ? 0 : bi >= K ? K - 1 : bi;
-                        const i = idxV[j], bn = bins[bi]; bn.sum += dir[i]; bn.cnt++; bn.gx += sxOf(i); bn.gy += syOf(i);
-                    }
+                    const K = Math.max(2, Math.min(20, st.rawBandK || 6));
+                    // EQUAL-COUNT bins: sort by t, split into K groups of ~equal size, so every band
+                    // holds the same number of videos. (Equal-WIDTH bins put almost nothing in the
+                    // sparse corners, so on a heavy-tailed metric the last band spiked to a single
+                    // extreme value — that was the artefact.) Dividers sit at the t between groups.
+                    const ord = idxV.map((_, j) => j).sort((p, q) => t[p] - t[q]);
+                    const M = ord.length, binOf = new Array(M);
+                    ord.forEach((j, rank) => { binOf[j] = Math.min(K - 1, Math.floor(rank / M * K)); });
+                    const bins = Array.from({ length: K }, () => ({ vals: [], gx: 0, gy: 0, cnt: 0 }));
+                    for (let j = 0; j < M; j++) { const i = idxV[j], bn = bins[binOf[j]]; bn.vals.push(dir[i]); bn.gx += sxOf(i); bn.gy += syOf(i); bn.cnt++; }
+                    const bndT = [];                                       // t-value of each divider = midpoint between adjacent groups
+                    for (let bI = 1; bI < K; bI++) { const r = Math.floor(bI / K * M); bndT.push((t[ord[r - 1]] + t[ord[r]]) / 2); }
                     // dividers: clip the screen-space line a·x + b·y = c to the plot rectangle → drawn ⟂ to (a,b)
                     const x0 = pad, x1 = W - pad, y0 = pad, y1 = H - pad;
                     const clip = (A, B, c) => { const p = []; if (Math.abs(B) > 1e-9) { let y = (c - A * x0) / B; if (y >= y0 && y <= y1) p.push([x0, y]); y = (c - A * x1) / B; if (y >= y0 && y <= y1) p.push([x1, y]); } if (Math.abs(A) > 1e-9) { let x = (c - B * y0) / A; if (x >= x0 && x <= x1) p.push([x, y0]); x = (c - B * y1) / A; if (x >= x0 && x <= x1) p.push([x, y1]); } return p.length >= 2 ? [p[0], p[1]] : null; };
-                    for (let bI = 1; bI < K; bI++) {
-                        const seg = clip(a, b, tmin + (tmax - tmin) * bI / K);
-                        if (seg) bandUnder += `<line x1="${seg[0][0].toFixed(1)}" y1="${seg[0][1].toFixed(1)}" x2="${seg[1][0].toFixed(1)}" y2="${seg[1][1].toFixed(1)}" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 5" opacity="0.32"/>`;
-                    }
+                    for (const c of bndT) { const seg = clip(a, b, c); if (seg) bandUnder += `<line x1="${seg[0][0].toFixed(1)}" y1="${seg[0][1].toFixed(1)}" x2="${seg[1][0].toFixed(1)}" y2="${seg[1][1].toFixed(1)}" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 5" opacity="0.32"/>`; }
+                    // per-band value: MEDIAN for continuous metrics (robust to the heavy tail), MEAN for binary/% rates
+                    const stat = bn => { if (binary || pctLinear) return bn.vals.reduce((s, v) => s + v, 0) / bn.cnt; const s = bn.vals.slice().sort((p, q) => p - q), m = s.length; return m % 2 ? s[(m - 1) / 2] : (s[m / 2 - 1] + s[m / 2]) / 2; };
                     // the trend PATH: a polyline through the band centroids (low→high), arrowhead at the high end
                     const cents = [];
                     for (let bi = 0; bi < K; bi++) { const bn = bins[bi]; if (bn.cnt < 3) continue; cents.push([bn.gx / bn.cnt, bn.gy / bn.cnt]); }
@@ -444,11 +457,12 @@ const JarvisRetention = (function () {
                     }
                     for (let bi = 0; bi < K; bi++) {
                         const bn = bins[bi]; if (bn.cnt < 3) continue;
-                        const cx = bn.gx / bn.cnt, cy = bn.gy / bn.cnt, avg = bn.sum / bn.cnt;
-                        const txt = fmt((binary || pctLinear) ? avg : Math.pow(10, avg)), w = txt.length * 6.6 + 12;
+                        const cx = bn.gx / bn.cnt, cy = bn.gy / bn.cnt, v = stat(bn);
+                        const txt = fmt((binary || pctLinear) ? v : Math.pow(10, v)), w = txt.length * 6.6 + 12;
                         bandOver += `<g style="pointer-events:none"><rect x="${(cx - w / 2).toFixed(1)}" y="${(cy - 9).toFixed(1)}" width="${w.toFixed(1)}" height="16" rx="4" fill="#0f172a" opacity="0.85" stroke="#1e293b"/><text x="${cx.toFixed(1)}" y="${(cy + 2.8).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#e2e8f0">${txt}</text></g>`;
                     }
-                    bandNote = `<b style="color:${C.cyan}">Trend bands ON</b> — the cyan <b>path</b> (→ arrow) is the best-fit direction <b>${label.replace('avg ', '')}</b> rises across this map; dashed lines cut it into ${K} bands <b>⟂ to that path</b>, each labelled with its <b>${label}</b> (low→high).`;
+                    const statWord = (binary || pctLinear) ? 'avg' : 'median';
+                    bandNote = `<b style="color:${C.cyan}">Trend bands ON</b> — dots are now coloured by <b>${label}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>); the cyan <b>path</b> (→ arrow) is the best-fit direction it rises; dashed lines cut <b>⟂ to that path</b> into ${K} equal-count bands, each labelled with its <b>${statWord} ${label}</b>.`;
                 }
             }
             if (!bandNote) bandNote = `<b style="color:${C.cyan}">Trend bands</b> — not enough data to fit a trend here.`;
@@ -2017,7 +2031,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=95'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=96'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
