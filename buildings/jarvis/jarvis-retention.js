@@ -318,7 +318,7 @@ const JarvisRetention = (function () {
         const n = R.n, W = 820, H = 520, pad = 16, S = 1000;
         const X = g => pad + g / S * (W - 2 * pad), Yc = g => pad + (1 - g / S) * (H - 2 * pad);
         const PJ = R.proj || {};
-        const PROJS = [['both', '→ views+outlier'], ['views', '→ views'], ['outlier', '→ outlier'], ['hi10m', '>10M class'], ['hiout', 'top-outlier'], ['umap', 'UMAP raw'], ['pca', 'PCA raw']].filter(p => PJ[p[0]]);
+        const PROJS = [['both', '→ views+outlier'], ['views', '→ views'], ['outlier', '→ outlier'], ['hi10m', '>10M class'], ['hiout', 'top-outlier'], ['keep', '→ keep-rate'], ['ret5', '→ 5s-retention'], ['umap', 'UMAP raw'], ['pca', 'PCA raw']].filter(p => PJ[p[0]]);
         let pm = st.rawProj || 'both'; if (!PJ[pm]) pm = PROJS.length ? PROJS[0][0] : null;
         const proj = (pm && PJ[pm]) || { x: R.x || [], y: R.y || [], cv: 0, co: 0 };
         const supervised = pm && !['umap', 'pca'].includes(pm);
@@ -581,6 +581,7 @@ const JarvisRetention = (function () {
             let colf;
             if (colorMode === 'gt10m') colf = i => (R.views && R.views[i] > 1e7) ? '#f87171' : '#2b3648';
             else if (colorMode === 'novelty') { const nm = idNov(ch), vs = ids.map(id => nm[id]), ok = vs.filter(v => v != null && isFinite(v)), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => vs[i] == null ? '#2b3648' : rawRamp((vs[i] - lo) / ((hi - lo) || 1)); }
+            else if (colorMode === 'axis') { const xs2 = proj.x, lo = Math.min(...xs2), hi = Math.max(...xs2); colf = i => rawRamp((proj.x[i] - lo) / ((hi - lo) || 1)); }
             else if (colorMode === 'owned') colf = i => (R.mine && R.mine[i]) ? '#fbbf24' : '#2b3648';
             else { const v = (R.views || []).map(x => Math.log10((+x || 0) + 1)), ok = v.filter(isFinite), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => rawRamp((v[i] - lo) / ((hi - lo) || 1)); }
             let s = ''; for (let i = 0; i < nP; i++) s += `<circle cx="${X(proj.x[i]).toFixed(1)}" cy="${Y(proj.y[i]).toFixed(1)}" r="1.5" fill="${colf(i)}" opacity="0.55"/>`;
@@ -588,18 +589,20 @@ const JarvisRetention = (function () {
             if (nb) { let sx = 0, sy = 0, sw = 0; for (const nn of nb) { const idx = ids.indexOf(nn.id); if (idx < 0) continue; const w = Math.max(0.001, nn.sim); sx += proj.x[idx] * w; sy += proj.y[idx] * w; sw += w; } if (sw > 0) { const hx = X(sx / sw).toFixed(1), hy = Y(sy / sw).toFixed(1); mk = `<line x1="${hx}" y1="${(+hy - 9)}" x2="${hx}" y2="${(+hy + 9)}" stroke="${CY}" stroke-width="1"/><line x1="${(+hx - 9)}" y1="${hy}" x2="${(+hx + 9)}" y2="${hy}" stroke="${CY}" stroke-width="1"/><circle cx="${hx}" cy="${hy}" r="5" fill="${CY}" stroke="#fff" stroke-width="1.5"/>`; } }
             return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:6px">${s}${mk}</svg>`;
         };
-        const projFor = { keep: 'umap', ret5: 'umap', views: 'views', gt10M: 'hi10m' };
-        const colorFor = { keep: 'owned', ret5: 'owned', views: 'views', gt10M: 'gt10m' };
+        const projFor = { keep: 'keep', ret5: 'ret5', views: 'views', gt10M: 'hi10m' };
+        const colorFor = { keep: 'axis', ret5: 'axis', views: 'views', gt10M: 'gt10m' };
+        const cardHTML = (d, tn, isNov) => { const ch = chMap[d.modality] || 'visual'; const sc = up.indicators[keyOf(d)]; const pj = isNov ? 'umap' : projFor[tn], cm = isNov ? 'novelty' : colorFor[tn]; const eff = d.auc ? `AUC ${d.auc}` : `ρ ${d.spearman >= 0 ? '+' : ''}${d.spearman}`; const disp = tn === 'gt10M' ? (1 / (1 + Math.exp(-sc)) * 100).toFixed(0) + '% chance' : tn === 'views' ? fv(Math.pow(10, sc)) : sc.toFixed(1) + '%';
+            return `<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:10px;color:${isNov ? C.purple : CY};font-weight:700">${d.name.replace('content_', '').replace('nov_', '')} <span style="color:${C.mute};font-weight:400">${eff} · n=${d.n}</span></div>${cluster(ch, pj, cm)}<div style="font-size:9px;color:${C.mute}">embeds <b>${whatEmbedded(ch)}</b> → ${isNov ? 'its distance from the corpus' : 'content projected toward ' + tn} → <span style="color:${CY}">◆ ${disp}</span> · <span style="color:${C.accent}">open in Raw →</span></div></div>`; };
+        const gridOf = arr => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">${arr.join('')}</div>`;
         let body = '';
         ['keep', 'ret5', 'views', 'gt10M'].forEach(tn => {
             const ds = val.filter(d => d.target === tn && up.indicators[keyOf(d)] != null); if (!ds.length) return;
             const tl = (EXPREG.meta.targets.find(t => t.name === tn) || {}).label || tn;
+            const content = ds.filter(d => d.kind === 'content'), nov = ds.filter(d => d.kind === 'novelty');
             body += cardc(`<div style="font-size:13px;font-weight:800;color:${C.text};margin-bottom:2px">${tl}</div>
-                <div style="font-size:9px;color:${C.mute};margin-bottom:7px">The actual ${tn === 'gt10M' ? '>10M-class' : tn} cluster from 🔬 Raw, your hook placed via its nearest neighbours (◆). ${tn === 'keep' || tn === 'ret5' ? 'Gold = your 211 (the only set with retention); the cluster is the corpus UMAP.' : tn === 'gt10M' ? 'Red = videos that passed 10M.' : 'Warm = more views.'} Click a card to open it in Raw.</div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
-                ${ds.map(d => { const ch = chMap[d.modality] || 'visual'; const sc = up.indicators[keyOf(d)]; const isNov = d.kind === 'novelty'; const pj = isNov ? 'umap' : projFor[tn], cm = isNov ? 'novelty' : colorFor[tn]; const eff = d.auc ? `AUC ${d.auc}` : `ρ ${d.spearman >= 0 ? '+' : ''}${d.spearman}`; const disp = tn === 'gt10M' ? (1 / (1 + Math.exp(-sc)) * 100).toFixed(0) + '% chance' : tn === 'views' ? fv(Math.pow(10, sc)) : sc.toFixed(1) + '%';
-                return `<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:10px;color:${isNov ? C.purple : CY};font-weight:700">${d.name.replace('content_', '').replace('nov_', 'nov ')} <span style="color:${C.mute};font-weight:400">${eff} · n=${d.n}</span></div>${cluster(ch, pj, cm)}<div style="font-size:9px;color:${C.mute}">embeds <b>${whatEmbedded(ch)}</b> → ${isNov ? 'distance from corpus' : 'projected toward ' + tn} → <span style="color:${CY}">◆ ${disp}</span> · <span style="color:${C.accent}">open in Raw →</span></div></div>`; }).join('')}
-                </div>`, 12);
+                <div style="font-size:9px;color:${C.mute};margin-bottom:7px">The same cluster as 🔬 Raw, <b>steered toward ${tn === 'gt10M' ? '>10M' : tn}</b>${tn === 'keep' || tn === 'ret5' ? ' (your 211 trained this axis, projected across all 11k)' : ''}, your hook placed via neighbours (◆). ${tn === 'gt10M' ? 'Red = passed 10M.' : tn === 'views' ? 'Warm = more views.' : 'Warm = higher predicted ' + tn + '.'} Click → open in Raw.</div>
+                ${content.length ? `<div style="font-size:10px;color:${CY};font-weight:700;text-transform:uppercase;margin-bottom:4px">Content — the embedding, steered (this drives the ensemble above)</div>${gridOf(content.map(d => cardHTML(d, tn, false)))}` : ''}
+                ${nov.length ? `<div style="font-size:10px;color:${C.purple};font-weight:700;text-transform:uppercase;margin:11px 0 4px">Novelty — a separate independent axis (NOT mixed into the content ensemble)</div>${gridOf(nov.map(d => cardHTML(d, tn, true)))}` : ''}`, 12);
         });
         return head + controls + outputs + trace + body;
     }
@@ -1972,7 +1975,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=87'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=88'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
