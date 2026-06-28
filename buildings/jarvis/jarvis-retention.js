@@ -619,24 +619,6 @@ const JarvisRetention = (function () {
         const pctOf = (d, sc) => { const p = d.pts || []; if (!p.length || sc == null) return null; let r = p.filter(x => x[0] <= sc).length / p.length; return (d.spearman || 0) < 0 ? 1 - r : r; };
         const calib = (d, sc) => { const p = d.pts || []; if (!p.length || sc == null) return null; const r = pctOf(d, sc); const acts = p.map(x => x[1]).sort((a, b) => a - b); return acts[Math.max(0, Math.min(acts.length - 1, Math.round(r * (acts.length - 1))))]; };
         const dispV = (tn, v) => v == null ? null : (tn === 'views' ? fv(Math.pow(10, v)) : tn === 'gt10M' ? (v * 100).toFixed(0) + '%' : v.toFixed(0) + '%');
-        const estFor = (tn, kind) => { const ds = val.filter(d => d.target === tn && d.kind === kind && up.indicators[keyOf(d)] != null); let num = 0, den = 0, parts = []; ds.forEach(d => { const sc = up.indicators[keyOf(d)], c = calib(d, sc); if (c == null) return; const w = Math.pow(Rof(d), 2); num += w * c; den += w; parts.push({ mod: d.modality, R: Rof(d), est: c, sc }); }); return den ? { val: num / den, parts } : null; };
-        // dataset-stabilized: read the metric off the OWNED 211's curve at the hook's score
-        const calibOwn = (d, sc) => { const p = d.owned_pts || []; if (p.length < 8 || sc == null) return null; let r = p.filter(x => x[0] <= sc).length / p.length; if ((d.spearman || 0) < 0) r = 1 - r; const a = p.map(x => x[1]).sort((x, y) => x - y); return a[Math.max(0, Math.min(a.length - 1, Math.round(r * (a.length - 1))))]; };
-        const estOwn = tn => { const ds = val.filter(d => d.target === tn && d.kind === 'content' && up.indicators[keyOf(d)] != null && (d.owned_pts || []).length >= 8); let num = 0, den = 0; ds.forEach(d => { const c = calibOwn(d, up.indicators[keyOf(d)]); if (c == null) return; const w = Math.pow(Rof(d), 2); num += w * c; den += w; }); return den ? num / den : null; };
-        const METS = [['keep', 'keep rate', C.green], ['ret5', 'past 5s', C.accent], ['views', 'est. views', C.text], ['gt10M', '% >10M', C.purple]];
-        const srcRow = (klab, kcol, fn) => `<tr><td style="font-size:11px;font-weight:700;color:${kcol};padding:5px 10px 5px 0;white-space:nowrap">${klab}</td>${METS.map(([tn]) => { const v = fn(tn); return `<td style="text-align:center;padding:5px 12px"><span style="font-size:20px;font-weight:900;color:${v != null ? C.text : C.faint}">${v != null ? v : '—'}</span></td>`; }).join('')}</tr>`;
-        // raw embedding → metric = the steered MAP estimate (out.steer): the identical number the
-        // hook's marker shows when you open that graph. novelty → metric = an INDEPENDENT read from
-        // the novelty indicators only. Each cell is its own calculation; the two are never mixed.
-        const rawCell = tn => { const b = steerBest(up, tn); return b ? steerDisp(tn, b.est) : null; };
-        // novelty across ALL its indicators for this target; prefer validated, else fall back to
-        // unvalidated (marked *) so every independent output shows even where the signal is weak.
-        const estNov = (tn, validatedOnly) => { const pool = (validatedOnly ? val : EXPREG.indicators.filter(scorableKind)).filter(d => d.target === tn && d.kind === 'novelty' && up.indicators[keyOf(d)] != null); let num = 0, den = 0; pool.forEach(d => { const cc = calib(d, up.indicators[keyOf(d)]); if (cc == null) return; const w = Math.pow(Rof(d), 2); num += w * cc; den += w; }); return den ? num / den : null; };
-        const novCell = tn => { let v = estNov(tn, true); if (v != null) return dispV(tn, v); v = estNov(tn, false); return v != null ? dispV(tn, v) + `<span style="color:${C.amber}">*</span>` : null; };
-        const outputs = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:6px">Predicted outputs — each computed independently; every number = what the graph shows</div>
-            <table style="border-collapse:collapse"><tr><td></td>${METS.map(([tn, lab, col]) => `<td style="text-align:center;font-size:10px;color:${col};text-transform:uppercase;padding:0 12px">${lab}</td>`).join('')}</tr>
-              ${srcRow('raw embedding', CY, rawCell)}${srcRow('novelty (independent)', C.purple, novCell)}</table>
-            <div style="font-size:9px;color:${C.mute};margin-top:7px"><b style="color:${CY}">raw embedding</b> = the steered map estimate — the <b>identical</b> number on the hook's marker when you open that graph (best of together/text/visual). <b style="color:${C.purple}">novelty</b> = an independent read from the novelty indicators alone, never mixed with content. <span style="color:${C.amber}">*</span> = no <i>validated</i> novelty signal for that metric (5s-retention) — shown for completeness; treat as noise. Every cell is its own calculation.</div>`, 14);
         // ── 3. per-indicator: the SAME Raw cluster (channel × projection), coloured by
         //    the target, with YOUR hook placed via its neighbours. Click → opens it in Raw. ──
         const chMap = { visual: 'visual', text: 'text', together: 'together', vis: 'visual', txt: 'text', tog: 'together' };
@@ -664,25 +646,43 @@ const JarvisRetention = (function () {
         };
         const projFor = { keep: 'keep', ret5: 'ret5', views: 'views', gt10M: 'hi10m' };
         const colorFor = { keep: 'metric', ret5: 'metric', views: 'views', gt10M: 'gt10m' };
-        const cardHTML = (d, tn, isNov) => { const ch = chMap[d.modality] || 'visual'; const sc = up.indicators[keyOf(d)]; const pj = isNov ? 'umap' : projFor[tn], cm = isNov ? 'novelty' : colorFor[tn]; const R = Rof(d);
-            // content card → the steered est (= the marker on the graph it opens); novelty card → its independent calibration
-            let valStr, pc;
-            if (isNov) { valStr = dispV(tn, calib(d, sc)); pc = pctOf(d, sc); }
-            else { const kk = steerOf(up, ch, tn); valStr = kk ? steerDisp(tn, kk.est) : null; pc = kk ? kk.pctile / 100 : null; }
-            return `<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:10px;color:${isNov ? C.purple : CY};font-weight:700">${d.name.replace('content_', '').replace('nov_', '')} <span style="color:${C.mute};font-weight:400">R=${R.toFixed(2)} · n=${d.n}</span></div>${cluster(ch, pj, cm)}<div style="font-size:9px;color:${C.mute}">embeds <b>${whatEmbedded(ch)}</b> → ${isNov ? 'distance from corpus' : 'toward ' + tn} → <span style="color:${CY}">◆ ${valStr || '—'}${pc != null ? ` · ${(pc * 100).toFixed(0)}th pctile` : ''}</span> · <span style="color:${C.accent}">Raw →</span></div></div>`; };
-        const gridOf = arr => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">${arr.join('')}</div>`;
-        const weightLine = (tn) => { const parts = ['together', 'text', 'visual'].map(m => ({ m, k: steerOf(up, m, tn) })).filter(x => x.k); if (parts.length < 2) return ''; const best = steerBest(up, tn); return `<div style="font-size:9px;color:${C.mute};margin-top:5px">raw estimate per modality: ${parts.map(p => `${p.m} <b style="color:${C.text}">${steerDisp(tn, p.k.est)}</b>`).join(' · ')} → headline uses <b style="color:${CY}">${best ? best.mod : '—'}</b> (the most predictive). Each is the steered map number for that channel.</div>`; };
-        let body = '';
-        ['keep', 'ret5', 'views', 'gt10M'].forEach(tn => {
-            const ds = val.filter(d => d.target === tn && up.indicators[keyOf(d)] != null); if (!ds.length) return;
-            const tl = (EXPREG.meta.targets.find(t => t.name === tn) || {}).label || tn;
-            const content = ds.filter(d => d.kind === 'content'), nov = ds.filter(d => d.kind === 'novelty');
-            body += cardc(`<div style="font-size:13px;font-weight:800;color:${C.text};margin-bottom:2px">${tl}</div>
-                <div style="font-size:9px;color:${C.mute};margin-bottom:7px">The same cluster as 🔬 Raw, <b>steered toward ${tn === 'gt10M' ? '>10M' : tn}</b>${tn === 'keep' || tn === 'ret5' ? ' (your 211 trained this axis, projected across all 11k)' : ''}, your hook placed via neighbours (◆). ${tn === 'gt10M' ? 'Red = passed 10M.' : 'Warm = higher.'} Each card shows R (held-out strength) and the calibrated estimate. Click → Raw.</div>
-                ${content.length ? `<div style="font-size:10px;color:${CY};font-weight:700;text-transform:uppercase;margin-bottom:4px">Content → ${tn}</div>${gridOf(content.map(d => cardHTML(d, tn, false)))}${weightLine(tn)}` : ''}
-                ${nov.length ? `<div style="font-size:10px;color:${C.purple};font-weight:700;text-transform:uppercase;margin:11px 0 4px">Novelty → ${tn} (independent — its own estimate, not mixed in)</div>${gridOf(nov.map(d => cardHTML(d, tn, true)))}` : ''}`, 12);
-        });
-        return head + controls + outputs + trace + body;
+        // ── SEVEN independent output boxes: 4 EMBEDDING (steered map estimate + its graph) and
+        //    3 NOVELTY (its OWN calibration curve). Novelty is never in the same box as views/>10M,
+        //    and is shown ONCE per metric (a curve, not a re-clustered map). ──
+        const metShort = tn => ({ keep: 'keep rate', ret5: '5s retention', views: 'views', gt10M: '>10M class' })[tn];
+        const bigNumHTML = (s, sub) => `<div style="font-size:26px;font-weight:900;color:${C.text};line-height:1.1;margin:3px 0">${s}${sub ? ` <span style="font-size:11px;color:${C.mute};font-weight:600">${sub}</span>` : ''}</div>`;
+        // EMBEDDING box — the steered cluster + steered estimate (= the marker on that graph)
+        const embBox = tn => {
+            const b = steerBest(up, tn), ch = b ? b.mod : 'together', pj = projFor[tn], cm = colorFor[tn];
+            const big = b ? steerDisp(tn, b.est) : '—', sub = b ? `${b.pctile.toFixed(0)}th pctile` : '';
+            const mods = ['together', 'text', 'visual'].map(m => ({ m, k: steerOf(up, m, tn) })).filter(x => x.k);
+            return cardc(`<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:11px;color:${CY};font-weight:800;text-transform:uppercase">Embedding → ${metShort(tn)}</div>${bigNumHTML(big, sub)}${cluster(ch, pj, cm)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${mods.length ? mods.map(p => `${p.m} ${steerDisp(tn, p.k.est)}`).join(' · ') : 'embed not ready'} · <span style="color:${C.accent}">open graph →</span></div></div>`, 12);
+        };
+        // NOVELTY box — the strongest novelty indicator's OWN calibration curve (novelty → this metric), hook marked
+        const novCurve = (d, sc) => {
+            const cv = d.curve || []; if (cv.length < 2) return `<div style="height:84px;display:flex;align-items:center;justify-content:center;color:${C.faint};font-size:9px;background:${C.card2};border-radius:6px">no curve</div>`;
+            const Wc = 240, Hc = 84, pd = 16, xs = cv.map(b => (b.lo + b.hi) / 2), ys = cv.map(b => b.mean);
+            const allx = sc != null ? xs.concat([sc]) : xs, xmin = Math.min(...allx), xmax = Math.max(...allx), ymin = Math.min(...ys), ymax = Math.max(...ys);
+            const Xc = v => pd + (v - xmin) / ((xmax - xmin) || 1) * (Wc - 2 * pd), Yc2 = v => Hc - pd - (v - ymin) / ((ymax - ymin) || 1) * (Hc - 2 * pd);
+            const path = cv.map((b, i) => `${i ? 'L' : 'M'}${Xc(xs[i]).toFixed(1)},${Yc2(ys[i]).toFixed(1)}`).join(' ');
+            let hook = ''; if (sc != null) { const est = calib(d, sc), hx = Xc(sc); hook = `<line x1="${hx.toFixed(1)}" y1="${pd}" x2="${hx.toFixed(1)}" y2="${Hc - pd}" stroke="${CY}" stroke-dasharray="3 3" opacity="0.7"/><circle cx="${hx.toFixed(1)}" cy="${Yc2(est != null ? Math.max(ymin, Math.min(ymax, est)) : ys[0]).toFixed(1)}" r="4" fill="${CY}" stroke="#fff" stroke-width="1.5"/>`; }
+            return `<svg viewBox="0 0 ${Wc} ${Hc}" style="width:100%;background:${C.card2};border-radius:6px"><path d="${path}" fill="none" stroke="${C.purple}" stroke-width="2"/>${hook}</svg>`;
+        };
+        const novBox = tn => {
+            const pool = EXPREG.indicators.filter(d => d.kind === 'novelty' && d.target === tn && up.indicators[keyOf(d)] != null);
+            const dv = pool.filter(d => d.validated).sort((a, b) => Rof(b) - Rof(a)), d = dv[0] || pool.slice().sort((a, b) => Rof(b) - Rof(a))[0];
+            if (!d) return cardc(`<div><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML('—', 'no novelty signal')}</div>`, 12);
+            const sc = up.indicators[keyOf(d)], est = calib(d, sc), star = d.validated ? '' : `<span style="color:${C.amber}">*</span>`, pc = pctOf(d, sc);
+            return cardc(`<div><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML((dispV(tn, est) || '—') + star, pc != null ? `${(pc * 100).toFixed(0)}th pctile novel` : '')}${novCurve(d, sc)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${d.name.replace('nov_', '')} (R=${Rof(d).toFixed(2)}) — novelty→${metShort(tn)} curve, your hook ◆</div></div>`, 12);
+        };
+        const gcol = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:12px';
+        const boxes = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">7 independent outputs — 4 embedding, 3 novelty, each its own box</div>
+            <div style="font-size:9px;color:${C.mute};margin-bottom:8px">Every number is the one the graph shows. <b style="color:${CY}">Embedding</b> = the steered map estimate (click → that graph; the marker matches). <b style="color:${C.purple}">Novelty</b> = its OWN calibration, never mixed with views/>10M. <span style="color:${C.amber}">*</span> = unvalidated (5s-retention has no novelty signal — noise).</div>
+            <div style="font-size:10px;color:${CY};font-weight:800;text-transform:uppercase;margin-bottom:5px">Embedding — 4 boxes</div>
+            <div style="${gcol};margin-bottom:12px">${['keep', 'ret5', 'views', 'gt10M'].map(embBox).join('')}</div>
+            <div style="font-size:10px;color:${C.purple};font-weight:800;text-transform:uppercase;margin-bottom:5px">Novelty — 3 boxes (independent)</div>
+            <div style="${gcol}">${['keep', 'ret5', 'views'].map(novBox).join('')}</div>`, 12);
+        return head + controls + trace + boxes;
     }
     function rtgUpdateFusion() { try { const el = window.document.getElementById('rtg-fusionpanel'); if (el) el.innerHTML = renderFusion(); } catch (e) { } }
     function fuHeat(v) { // -1..1 correlation → blue(neg)…grey…red(pos)
@@ -2053,7 +2053,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=98'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=99'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
