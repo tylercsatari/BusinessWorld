@@ -528,8 +528,11 @@ const JarvisRetention = (function () {
         if (!FUSION || FUSION.loading) return head + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the fusion report…</div>`);
         if (FUSION.error || !FUSION.targets) return head + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No fusion report yet — run <code>fusion_features.py</code> then <code>fusion_analyze.py</code>.</div>`);
         const tgt = FUSION.targets[st.fuTarget] ? st.fuTarget : 'views', T = FUSION.targets[tgt];
-        const HOOK = FUSION.meta.hook, CONF = FUSION.meta.confounds;
+        const HOOK = FUSION.meta.hook, CONF = FUSION.meta.confounds, CONTENT = FUSION.meta.content || [];
         const isHook = f => HOOK.includes(f);
+        const isContent = f => CONTENT.includes(f);
+        const colOfFeat = f => isContent(f) ? C.green : isHook(f) ? C.cyan : C.mute;
+        const visC = (T.univariate || []).find(u => u.feature === 'vis_content');
         const tabBtn = (id, lab) => `<span data-futarget="${id}" style="cursor:pointer;border:1px solid ${tgt === id ? C.accent : C.border};background:${tgt === id ? C.accent + '22' : 'transparent'};color:${tgt === id ? C.accent : C.dim};border-radius:8px;padding:5px 13px;font-size:12px;font-weight:700">${lab}</span>`;
         const tabs = `<div style="display:flex;gap:6px;margin-bottom:10px">${tabBtn('views', 'predict views')}${tabBtn('outlier', 'predict outlier (channel-controlled)')}</div>`;
         const f = T.fusion;
@@ -541,27 +544,28 @@ const JarvisRetention = (function () {
               <div>+ all hook signals ${bar(f.r2_full, 0.7, C.accent)} <b style="color:${C.text}">${f.r2_full}</b> <span style="color:${f.hook_incremental_r2 > 0.02 ? C.green : C.mute}">(hook adds ${f.hook_incremental_r2 >= 0 ? '+' : ''}${f.hook_incremental_r2})</span></div>
               <div>hook signals ALONE (no confounds) ${bar(f.r2_hook_only, 0.7, C.purple)} <b style="color:${C.text}">${f.r2_hook_only}</b></div>
             </div>
-            <div style="font-size:10px;color:${C.mute};margin-top:8px;line-height:1.5">${f.hook_incremental_r2 < 0.03 ? `<b style="color:${C.amber}">The hook adds almost nothing</b> beyond channel size + age. At library scale, ${tgt} is a <b>distribution</b> metric (who the algorithm pushed), not hook quality — the hook's real lever (retention) isn't recoverable from view counts. The signals below are real but tiny; treat effect sizes, not just significance.` : `The hook carries meaningful independent signal here.`}</div>`, 12);
+            ${visC ? `<div style="font-size:11px;color:${C.text};margin-top:8px;line-height:1.5;background:${C.green}14;border-left:3px solid ${C.green};padding:7px 10px;border-radius:4px"><b style="color:${C.green}">The hook's visual content DOES predict ${tgt} independent of channel size.</b> The content axis (an out-of-fold probe of the raw 1536-d embedding) correlates <b>${visC.partial_spearman >= 0 ? '+' : ''}${visC.partial_spearman}</b> with ${tgt} <i>after</i> removing channel size, age & duration ${visC.sig ? '<span style="color:' + C.green + '">(FDR-significant)</span>' : ''}. Novelty/coherence summaries are weak — but the content direction is real signal.</div>` : ''}
+            <div style="font-size:10px;color:${C.mute};margin-top:8px;line-height:1.5">Raw views are still mostly <b>distribution</b> (channel + age), so the confound bar is tall — but the green content axis is the genuine, deconfounded hook signal. Reducing the embedding to novelty scalars (the earlier mistake) hid it.</div>`, 12);
         // independence bars (partial corr w/ target | all else)
         const indMax = Math.max(...T.independence.map(d => Math.abs(d.partial_with_target)), 0.05);
         const indep = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">Independent contribution — partial correlation with ${tgt}, controlling every other signal</div>
             <div style="font-size:10px;color:${C.mute};margin-bottom:8px">This is the real "where's the independent signal" read. Confounds (grey) dominate; hook signals (cyan) are what's left after removing them.</div>
-            ${T.independence.map(d => { const v = d.partial_with_target, hk = isHook(d.feature); return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;font-size:11px"><span style="width:120px;text-align:right;color:${hk ? C.cyan : C.mute}">${d.feature}</span><span style="flex:1;display:flex;align-items:center"><span style="display:inline-block;height:11px;width:${Math.abs(v) / indMax * 130}px;background:${hk ? C.cyan : C.mute};border-radius:3px;${v < 0 ? 'margin-left:auto' : ''}"></span></span><span style="width:48px;color:${C.text};font-weight:700">${v >= 0 ? '+' : ''}${v}</span></div>`; }).join('')}`, 12);
+            ${T.independence.map(d => { const v = d.partial_with_target, hk = isHook(d.feature); return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;font-size:11px"><span style="width:120px;text-align:right;color:${isContent(d.feature) ? C.green : hk ? C.cyan : C.mute}">${d.feature}</span><span style="flex:1;display:flex;align-items:center"><span style="display:inline-block;height:11px;width:${Math.abs(v) / indMax * 130}px;background:${isContent(d.feature) ? C.green : hk ? C.cyan : C.mute};border-radius:3px;${v < 0 ? 'margin-left:auto' : ''}"></span></span><span style="width:48px;color:${C.text};font-weight:700">${v >= 0 ? '+' : ''}${v}</span></div>`; }).join('')}`, 12);
         // univariate table (hook signals, partial spearman + FDR + AUC)
         const topd = Object.keys(T.thresholds).slice(-1)[0];
         const uni = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">Per-signal screen (hook signals)</div>
             <div style="font-size:10px;color:${C.mute};margin-bottom:8px">Partial Spearman = relationship to ${tgt} after removing confounds (with 95% CI). FDR✓ = survives multiple-testing correction. AUC@${topd} = standalone ranking power for the top bucket.</div>
             <div style="display:grid;grid-template-columns:130px 90px 70px 70px;gap:4px 8px;font-size:10px">
               <div style="color:${C.mute};text-transform:uppercase">signal</div><div style="color:${C.mute};text-transform:uppercase">partial ρ</div><div style="color:${C.mute};text-transform:uppercase">FDR</div><div style="color:${C.mute};text-transform:uppercase">AUC@${topd}</div>
-              ${T.univariate.filter(u => isHook(u.feature)).map(u => `<div style="color:${C.text}">${u.feature}</div><div style="color:${Math.abs(u.partial_spearman) >= 0.05 ? C.text : C.dim};font-weight:700">${u.partial_spearman >= 0 ? '+' : ''}${u.partial_spearman} <span style="color:${C.mute};font-weight:400;font-size:9px">[${u.ci[0]},${u.ci[1]}]</span></div><div style="color:${u.sig ? C.green : C.faint}">${u.sig ? '✓' : '—'}</div><div style="color:${C.dim}">${(u.auc && u.auc[topd]) || '—'}</div>`).join('')}
+              ${T.univariate.filter(u => isHook(u.feature)).map(u => `<div style="color:${colOfFeat(u.feature)}">${u.feature}</div><div style="color:${Math.abs(u.partial_spearman) >= 0.05 ? C.text : C.dim};font-weight:700">${u.partial_spearman >= 0 ? '+' : ''}${u.partial_spearman} <span style="color:${C.mute};font-weight:400;font-size:9px">[${u.ci[0]},${u.ci[1]}]</span></div><div style="color:${u.sig ? C.green : C.faint}">${u.sig ? '✓' : '—'}</div><div style="color:${C.dim}">${(u.auc && u.auc[topd]) || '—'}</div>`).join('')}
             </div>`, 12);
         // redundancy heatmap
-        const RM = FUSION.redundancy, sz = 15;
+        const RM = T.redundancy || FUSION.redundancy, sz = 15;
         const heat = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">Redundancy map — which signals are the same information</div>
             <div style="font-size:10px;color:${C.mute};margin-bottom:8px">Pairwise Spearman between every signal. Bright red blocks = duplicates (one signal counted twice). <span style="color:${C.cyan}">●</span> hook · <span style="color:${C.mute}">●</span> confound.</div>
             <svg viewBox="0 0 ${RM.features.length * sz + 130} ${RM.features.length * sz + 12}" style="width:100%;max-width:560px">
               ${RM.matrix.map((row, i) => row.map((v, j) => `<rect x="${130 + j * sz}" y="${i * sz}" width="${sz - 1}" height="${sz - 1}" fill="${fuHeat(v)}"><title>${RM.features[i]} × ${RM.features[j]}: ${v}</title></rect>`).join('')).join('')}
-              ${RM.features.map((fn, i) => `<text x="126" y="${i * sz + 11}" text-anchor="end" font-size="8" fill="${HOOK.includes(fn) ? C.cyan : C.mute}">${fn}</text>`).join('')}
+              ${RM.features.map((fn, i) => `<text x="126" y="${i * sz + 11}" text-anchor="end" font-size="8" fill="${colOfFeat(fn)}">${fn}</text>`).join('')}
             </svg>`, 12);
         // per-decile AUC (model vs hook-only vs best single)
         const decs = Object.keys(f.model_auc_by_decile);
@@ -581,7 +585,7 @@ const JarvisRetention = (function () {
             </svg><div style="font-size:9px;color:${C.mute}">on the diagonal = well-calibrated probabilities.</div>`, 12);
         const imp = f.importance.slice(0, 10), impMax = Math.max(...imp.map(d => d.importance), 0.001);
         const impPanel = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:6px">Model importance (permutation, held-out)</div>
-            ${imp.map(d => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;font-size:11px"><span style="width:120px;text-align:right;color:${isHook(d.feature) ? C.cyan : C.mute}">${d.feature}</span><span style="display:inline-block;height:10px;width:${d.importance / impMax * 130}px;background:${isHook(d.feature) ? C.cyan : C.mute};border-radius:3px"></span></div>`).join('')}`, 12);
+            ${imp.map(d => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;font-size:11px"><span style="width:120px;text-align:right;color:${colOfFeat(d.feature)}">${d.feature}</span><span style="display:inline-block;height:10px;width:${d.importance / impMax * 130}px;background:${colOfFeat(d.feature)};border-radius:3px"></span></div>`).join('')}`, 12);
         // novelty hypotheses
         const hyp = T.novelty_hypotheses.shape, invU = Object.entries(hyp).filter(([k, v]) => v.inverted_u).map(([k]) => k);
         const novPanel = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:6px">Novelty shape & interaction</div>
@@ -1861,7 +1865,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=79'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=80'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');

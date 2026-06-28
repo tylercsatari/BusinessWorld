@@ -50,12 +50,31 @@ mine = np.asarray(z['mine'], bool)
 TARGETS = {'views': np.asarray(z['log_views'], float),
            'outlier': np.asarray(z['log_outlier'], float)}
 N, Fn = X.shape
+ids = [str(x) for x in z['ids']]; idpos = {v: i for i, v in enumerate(ids)}
 meta = json.loads((r2_get('raw/fusion/features_meta.json') or b'{}').decode())
 groups = meta.get('feature_groups', {})
 CONF = groups.get('confounds', ['log_subs', 'log_age', 'log_dur', 'silent', 'has_text'])
-HOOK = [n for n in names if n not in CONF]
+
+# ---- raw embeddings → CONTENT-AXIS probes. The earlier mistake was reducing the
+# 1536-d hook to novelty scalars; the predictive signal is the CONTENT DIRECTION.
+# We add an out-of-fold ridge probe per modality (each prediction comes from a model
+# that never saw that row), then treat it as a hook feature. ----
+print('loading raw embeddings for content probes…', flush=True)
+def load_emb(c):
+    zz = np.load(io.BytesIO(r2_get(f'raw/{c}/embeddings.npz')), allow_pickle=True)
+    pos = {str(v): j for j, v in enumerate(zz['ids'])}; V = np.asarray(zz['vecs'], np.float32)
+    V = V / (np.linalg.norm(V, axis=1, keepdims=True) + 1e-9)
+    M = np.full((N, V.shape[1]), np.nan, np.float32); have = np.zeros(N, bool)
+    for vid, j in pos.items():
+        i = idpos.get(vid)
+        if i is not None: M[i] = V[j]; have[i] = True
+    return M, have
+EMB = {'vis_content': load_emb('visual'), 'txt_content': load_emb('text'), 'tog_content': load_emb('together')}
+
+CONTENT = list(EMB.keys())
+HOOK = [n for n in names if n not in CONF] + CONTENT      # content probes are hook signals
 ci = {n: i for i, n in enumerate(names)}
-print(f'N={N} features={Fn} hook={len(HOOK)} confounds={len(CONF)}', flush=True)
+print(f'N={N} base-features={Fn} +content={len(CONTENT)} hook={len(HOOK)} confounds={len(CONF)}', flush=True)
 
 # median-impute a copy for the LINEAR/correlation analyses (HGB uses raw NaN)
 med = np.nanmedian(X, axis=0)
@@ -69,18 +88,30 @@ def bh_fdr(ps):
         run = min(run, ps[o[r]] * m / (r + 1)); out[o[r]] = run
     return out
 
-allcols = HOOK + CONF
-allidx = [ci[n] for n in allcols]; confidx = [ci[c] for c in CONF]
 kf = KFold(5, shuffle=True, random_state=0)
 HGB = dict(max_depth=3, learning_rate=0.06, max_iter=300, l2_regularization=1.0, random_state=0)
-# shared (target-independent) redundancy matrix
-Rmat = np.corrcoef(np.column_stack([rankdata(col(n)) for n in allcols]).T)
+def content_oof(M, have, y, fin):
+    """out-of-fold ridge probe: modality embedding → target. Each row's value comes
+    from a model that never saw it (leakage-safe). NaN where no embedding / no target."""
+    out = np.full(N, np.nan); mask = have & fin; idx = np.where(mask)[0]
+    if len(idx) < 100: return out
+    Mm = M[idx]; ym = y[idx]; pred = np.full(len(idx), np.nan)
+    for tr, te in kf.split(Mm):
+        pred[te] = Ridge(alpha=20).fit(Mm[tr], ym[tr]).predict(Mm[te])
+    out[idx] = pred; return out
 
 def analyze_target(y, label, raw, thr):
     print(f'\n=== target: {label} ===', flush=True)
     fin = np.isfinite(y)
+    # extend the feature set with the CONTENT-AXIS probes (the part I missed before)
+    CPcols = [content_oof(EMB[nm][0], EMB[nm][1], y, fin) for nm in CONTENT]
+    Xl = np.column_stack([X] + CPcols); namesl = names + CONTENT
+    cil = {n: i for i, n in enumerate(namesl)}; medl = np.nanmedian(Xl, axis=0)
+    Xil = np.where(np.isfinite(Xl), Xl, medl)
+    def coll(n): return Xil[:, cil[n]]
+    allcols = HOOK + CONF; allidx = [cil[n] for n in allcols]; confidx = [cil[c] for c in CONF]; ti = len(allcols)
     def resid_on_conf(v):
-        A = np.column_stack([col(c) for c in CONF] + [np.ones(N)])
+        A = np.column_stack([coll(c) for c in CONF] + [np.ones(N)])
         beta, *_ = np.linalg.lstsq(A[fin], v[fin], rcond=None)
         r = np.full(N, np.nan); r[fin] = v[fin] - A[fin] @ beta
         return r
@@ -88,8 +119,8 @@ def analyze_target(y, label, raw, thr):
     # ---- univariate ----
     print('  univariate…', flush=True)
     uni = []
-    for n in HOOK + CONF:
-        v = col(n); m = fin & np.isfinite(v)
+    for n in allcols:
+        v = coll(n); m = fin & np.isfinite(v)
         rho = spearmanr(v[m], y[m])[0]
         perm = [abs(spearmanr(RNG.permutation(v[m]), y[m])[0]) for _ in range(150)]
         p_perm = (1 + np.sum(np.array(perm) >= abs(rho))) / (1 + len(perm))
@@ -105,16 +136,17 @@ def analyze_target(y, label, raw, thr):
             if lab.sum() >= 10 and (len(lab) - lab.sum()) >= 10:
                 try: aucs[nm] = round(float(roc_auc_score(lab, v[m])), 3)
                 except Exception: aucs[nm] = None
-        grp = next((g for g, fs in groups.items() if n in fs), 'other')
+        grp = 'content' if n in CONTENT else next((g for g, fs in groups.items() if n in fs), 'other')
         uni.append({'feature': n, 'group': grp, 'spearman': round(float(rho), 3),
                     'ci': [round(float(lo), 3), round(float(hi2), 3)], 'p_perm': round(float(p_perm), 4),
                     'partial_spearman': round(float(prho), 3), 'auc': aucs, 'coverage': round(float(m.mean()), 3)})
     for u, q in zip(uni, bh_fdr([u['p_perm'] for u in uni])): u['fdr'] = round(float(q), 4); u['sig'] = bool(q < 0.05)
     uni.sort(key=lambda u: -abs(u['partial_spearman']))
-    # ---- independence (partial corr of each feature w/ target | all others) ----
-    print('  independence…', flush=True)
-    aug = np.column_stack([rankdata(col(n)) for n in allcols] + [rankdata(y)])
-    Cc = np.corrcoef(aug.T); ti = len(allcols)
+    # ---- redundancy + independence ----
+    print('  redundancy + independence…', flush=True)
+    Rmat = np.corrcoef(np.column_stack([rankdata(coll(n)) for n in allcols]).T)
+    aug = np.column_stack([rankdata(coll(n)) for n in allcols] + [rankdata(y)])
+    Cc = np.corrcoef(aug.T)
     try:
         P = np.linalg.pinv(Cc)
         indep = [{'feature': allcols[i], 'partial_with_target': round(float(-P[i, ti] / np.sqrt(P[i, i] * P[ti, ti])), 3)} for i in range(ti)]
@@ -122,18 +154,19 @@ def analyze_target(y, label, raw, thr):
     indep.sort(key=lambda d: -abs(d['partial_with_target']))
     # ---- fusion model ----
     print('  fusion model…', flush=True)
-    Xh = X[fin]; yh = y[fin]; rawh = raw[fin]
+    Xh = Xl[fin]; yh = y[fin]; rawh = raw[fin]
     def cv_pred(idx, tgt):
         pred = np.full(len(tgt), np.nan)
         for tr, te in kf.split(Xh):
-            e = HistGradientBoostingRegressor(**HGB).fit(Xh[tr][:, idx], tgt[tr]); pred[te] = e.predict(Xh[te][:, idx])
+            pred[te] = HistGradientBoostingRegressor(**HGB).fit(Xh[tr][:, idx], tgt[tr]).predict(Xh[te][:, idx])
         return pred
     def cv_proba(idx, lab):
         pr = np.full(len(lab), np.nan)
         for tr, te in kf.split(Xh):
-            c = HistGradientBoostingClassifier(**HGB).fit(Xh[tr][:, idx], lab[tr]); pr[te] = c.predict_proba(Xh[te][:, idx])[:, 1]
+            pr[te] = HistGradientBoostingClassifier(**HGB).fit(Xh[tr][:, idx], lab[tr]).predict_proba(Xh[te][:, idx])[:, 1]
         return pr
-    predfull = cv_pred(allidx, yh); predconf = cv_pred(confidx, yh); predhook = cv_pred([ci[n] for n in HOOK], yh)
+    hookidx = [cil[n] for n in HOOK]
+    predfull = cv_pred(allidx, yh); predconf = cv_pred(confidx, yh); predhook = cv_pred(hookidx, yh)
     r2_full = r2_score(yh, predfull); r2_conf = r2_score(yh, predconf); r2_hook = r2_score(yh, predhook)
     sp_full = spearmanr(predfull, yh)[0]
     model_auc, best_single, hook_auc = {}, {}, {}
@@ -141,22 +174,22 @@ def analyze_target(y, label, raw, thr):
         lab = (rawh >= th).astype(int)
         if lab.sum() < 10 or (len(lab) - lab.sum()) < 10: continue
         model_auc[nm] = round(float(roc_auc_score(lab, cv_proba(allidx, lab))), 3)
-        hook_auc[nm] = round(float(roc_auc_score(lab, cv_proba([ci[n] for n in HOOK], lab))), 3)
-        best_single[nm] = round(0.5 + max((abs(roc_auc_score(lab, np.nan_to_num(Xh[:, ci[n]], nan=med[ci[n]])) - 0.5) for n in HOOK), default=0), 3)
+        hook_auc[nm] = round(float(roc_auc_score(lab, cv_proba(hookidx, lab))), 3)
+        best_single[nm] = round(0.5 + max((abs(roc_auc_score(lab, np.nan_to_num(Xh[:, cil[n]], nan=medl[cil[n]])) - 0.5) for n in HOOK), default=0), 3)
     tr = RNG.rand(len(yh)) < 0.7
     hgb = HistGradientBoostingRegressor(**HGB).fit(Xh[tr][:, allidx], yh[tr])
     pi = permutation_importance(hgb, Xh[~tr][:, allidx], yh[~tr], n_repeats=8, random_state=0)
     imp = sorted([{'feature': allcols[i], 'importance': round(float(pi.importances_mean[i]), 4), 'std': round(float(pi.importances_std[i]), 4)} for i in range(ti)], key=lambda d: -d['importance'])
-    topname = list(thr)[-1]; topth = thr[topname]; labtop = (rawh >= topth).astype(int)
+    topname = list(thr)[-1]; labtop = (rawh >= thr[topname]).astype(int)
     probatop = cv_proba(allidx, labtop); order = np.argsort(probatop); cal = []
     for b in range(10):
         s = order[b * len(order) // 10:(b + 1) * len(order) // 10]
         cal.append({'bin': b, 'pred': round(float(probatop[s].mean()), 3), 'actual': round(float(labtop[s].mean()), 3), 'n': int(len(s))})
-    # ---- consensus / lift (on the HOOK-only signal, top decile of target) ----
+    # ---- consensus / lift ----
     print('  consensus…', flush=True)
     import itertools
     topfeat = [d['feature'] for d in indep if d['feature'] in HOOK][:3]
-    def hib(n): v = col(n)[fin]; return v >= np.nanpercentile(v, 75)
+    def hib(n): v = coll(n)[fin]; return v >= np.nanpercentile(v, 75)
     tophit = (rawh >= np.nanpercentile(rawh, 90)).astype(int); base = tophit.mean(); lift = []
     for r in range(1, len(topfeat) + 1):
         for combo in itertools.combinations(topfeat, r):
@@ -167,17 +200,18 @@ def analyze_target(y, label, raw, thr):
     # ---- novelty hypotheses ----
     hyp = {}
     for n in [f for f in HOOK if 'nov' in f or f == 'coherence']:
-        v = col(n); m = fin & np.isfinite(v); vv = (v[m] - v[m].mean()) / (v[m].std() + 1e-9)
+        v = coll(n); m = fin & np.isfinite(v); vv = (v[m] - v[m].mean()) / (v[m].std() + 1e-9)
         A = np.column_stack([vv, vv ** 2, np.ones(m.sum())]); beta, *_ = np.linalg.lstsq(A, y[m], rcond=None)
         hyp[n] = {'linear': round(float(beta[0]), 3), 'quad': round(float(beta[1]), 4), 'inverted_u': bool(beta[1] < 0 and abs(beta[1]) > 0.01), 'r2': round(float(r2_score(y[m], A @ beta)), 3)}
     inter = {}
-    if 'coherence' in ci and 'vis_glob_nov' in ci:
-        cm = fin & np.isfinite(col('coherence')) & np.isfinite(col('vis_glob_nov'))
-        a = col('coherence')[cm] - col('coherence')[cm].mean(); b = col('vis_glob_nov')[cm] - col('vis_glob_nov')[cm].mean()
+    if 'coherence' in cil and 'vis_glob_nov' in cil:
+        cm = fin & np.isfinite(coll('coherence')) & np.isfinite(coll('vis_glob_nov'))
+        a = coll('coherence')[cm] - coll('coherence')[cm].mean(); b = coll('vis_glob_nov')[cm] - coll('vis_glob_nov')[cm].mean()
         beta, *_ = np.linalg.lstsq(np.column_stack([a, b, a * b, np.ones(cm.sum())]), y[cm], rcond=None)
         inter['coherence_x_visnov'] = {'interaction_coef': round(float(beta[2]), 4), 'n': int(cm.sum())}
     print(f'  R²full={r2_full:.3f} conf={r2_conf:.3f} hookOnly={r2_hook:.3f} (hook adds {r2_full-r2_conf:+.3f}) · top-AUC model {model_auc.get(topname)} hook {hook_auc.get(topname)} single {best_single.get(topname)}', flush=True)
     return {'thresholds': {k: float(v) for k, v in thr.items()}, 'univariate': uni, 'independence': indep,
+            'redundancy': {'features': allcols, 'matrix': [[round(float(x), 2) for x in row] for row in Rmat]},
             'fusion': {'r2_full': round(float(r2_full), 3), 'r2_confounds_only': round(float(r2_conf), 3), 'r2_hook_only': round(float(r2_hook), 3),
                        'hook_incremental_r2': round(float(r2_full - r2_conf), 3), 'spearman': round(float(sp_full), 3),
                        'model_auc_by_decile': model_auc, 'hook_auc_by_decile': hook_auc, 'best_single_auc_by_decile': best_single, 'importance': imp, 'calibration': cal},
@@ -192,8 +226,7 @@ results = {'views': analyze_target(TARGETS['views'], 'views', views, thr_views),
 
 report = {
     'meta': {'n': N, 'n_with_text': int(np.isfinite(col('coherence')).sum()), 'n_mine': int(mine.sum()),
-             'features': names, 'hook': HOOK, 'confounds': CONF, 'groups': groups, 'created': meta.get('created', '')},
-    'redundancy': {'features': allcols, 'matrix': [[round(float(x), 2) for x in row] for row in Rmat]},
+             'features': names + CONTENT, 'hook': HOOK, 'confounds': CONF, 'content': CONTENT, 'groups': groups, 'created': meta.get('created', '')},
     'targets': results,
 }
 r2_put('raw/fusion/report.json', json.dumps(report).encode(), 'application/json')
