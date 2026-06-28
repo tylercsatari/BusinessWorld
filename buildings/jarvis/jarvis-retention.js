@@ -13,7 +13,7 @@ const JarvisRetention = (function () {
     let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUpload: null, rawUpShow: true, rawUpSel: false, rawUploading: false, rawUpErr: null, rawUpStage: 0 };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -343,25 +343,33 @@ const JarvisRetention = (function () {
             if (mine) mineDots += circ; else dots += circ;   // draw mine on top
         }
         dots += mineDots;
-        // ── uploaded video: placed at the similarity-weighted centroid of its nearest
-        //    neighbours in THIS channel+projection (the maps store coords, not the
-        //    projection models, so a new hook lands among the hooks it's most like) ──
+        // ── uploaded videos: each placed at the similarity-weighted centroid of its
+        //    nearest neighbours in THIS channel+projection (the maps store coords, not
+        //    the projection models, so a new hook lands among the hooks it's most like).
+        //    Several can be compared at once, each a distinctly-coloured numbered mark. ──
         const CYAN = '#22d3ee';
-        const upCh = st.rawUpload && st.rawUpload.channels ? st.rawUpload.channels[chan] : null;
-        let upXY = null;
-        if (st.rawUpload && st.rawUpShow && upCh && upCh.neighbors) {
+        const UPCOLORS = ['#22d3ee', '#f472b6', '#a3e635', '#fb923c', '#c084fc', '#facc15', '#34d399', '#f87171', '#60a5fa', '#fda4af'];
+        const ups = st.rawUploads || [];
+        const upColor = i => UPCOLORS[i % UPCOLORS.length];
+        const upPos = (u) => {           // centroid of this upload's neighbours in the current channel/proj
+            const uc = u && u.channels ? u.channels[chan] : null;
+            if (!uc || !uc.neighbors) return null;
             let sx = 0, sy = 0, sw = 0, used = 0;
-            for (const nb of upCh.neighbors) {
+            for (const nb of uc.neighbors) {
                 const idx = (R.id || []).indexOf(nb.id); if (idx < 0) continue;
                 const w = Math.max(0.001, nb.sim); sx += proj.x[idx] * w; sy += proj.y[idx] * w; sw += w; used++;
             }
-            if (sw > 0) upXY = { gx: sx / sw, gy: sy / sw, used };
-        }
-        if (upXY) {
-            const ux = X(upXY.gx).toFixed(1), uy = Yc(upXY.gy).toFixed(1);
-            dots += `<line x1="${ux}" y1="${(+uy - 11).toFixed(1)}" x2="${ux}" y2="${(+uy + 11).toFixed(1)}" stroke="${CYAN}" stroke-width="1" opacity="0.6"/>`
-                + `<line x1="${(+ux - 11).toFixed(1)}" y1="${uy}" x2="${(+ux + 11).toFixed(1)}" y2="${uy}" stroke="${CYAN}" stroke-width="1" opacity="0.6"/>`
-                + `<circle data-rawupmark="1" cx="${ux}" cy="${uy}" r="7" fill="${CYAN}" stroke="#fff" stroke-width="2" style="cursor:pointer"><title>⬆ ${esc(st.rawUpload.title || 'My upload')} — your upload, placed among ${upXY.used} nearest hooks</title></circle>`;
+            return sw > 0 ? { gx: sx / sw, gy: sy / sw, used } : null;
+        };
+        if (st.rawUpShow) {
+            ups.forEach((u, i) => {
+                const p = upPos(u); if (!p) return;
+                const col = upColor(i), ux = X(p.gx).toFixed(1), uy = Yc(p.gy).toFixed(1), selU = st.rawUpSel === i;
+                dots += `<line x1="${ux}" y1="${(+uy - 10).toFixed(1)}" x2="${ux}" y2="${(+uy + 10).toFixed(1)}" stroke="${col}" stroke-width="1" opacity="0.55"/>`
+                    + `<line x1="${(+ux - 10).toFixed(1)}" y1="${uy}" x2="${(+ux + 10).toFixed(1)}" y2="${uy}" stroke="${col}" stroke-width="1" opacity="0.55"/>`
+                    + `<circle data-rawupmark="${i}" cx="${ux}" cy="${uy}" r="${selU ? 9 : 7}" fill="${col}" stroke="#fff" stroke-width="${selU ? 3 : 2}" style="cursor:pointer"><title>⬆ #${i + 1} ${esc(u.title || 'upload')} — among ${p.used} nearest hooks</title></circle>`
+                    + `<text x="${ux}" y="${(+uy + 3.5).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="700" fill="#0f172a" style="pointer-events:none">${i + 1}</text>`;
+            });
         }
         const pill = (id, lab, on, attr) => `<span ${attr}="${id}" style="cursor:pointer;border:1px solid ${on ? C.accent : C.border};background:${on ? C.accent + '1e' : 'transparent'};color:${on ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
         const projPill = ([id, lab]) => `<span data-rawproj="${id}" style="cursor:pointer;border:1px solid ${pm === id ? C.accent : C.border};background:${pm === id ? C.accent + '1e' : 'transparent'};color:${pm === id ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}${PJ[id] && !['umap', 'pca'].includes(id) ? ` <span style="opacity:.65;font-weight:400">v${PJ[id].cv}/o${PJ[id].co}</span>` : ''}</span>`;
@@ -399,43 +407,47 @@ const JarvisRetention = (function () {
         const nmine = R.nmine != null ? R.nmine : MINE.filter(Boolean).length;
         const nsilent = R.nsilent != null ? R.nsilent : SILENT.filter(Boolean).length;
         const mineBtn = `<span data-rawmine="1" style="cursor:pointer;border:1px solid ${hiMine ? GOLD : C.border};background:${hiMine ? GOLD + '22' : 'transparent'};color:${hiMine ? GOLD : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">★ My videos${nmine ? ' (' + nmine + ')' : ''}</span>`;
-        const UPSTAGES = ['Uploading video…', 'Extracting the 5 hook frames…', 'Transcribing the audio…', 'Embedding visual · text · together…', 'Placing it among similar hooks…'];
+        const UPSTAGES = ['Uploading…', 'Extracting the 5 hook frames…', 'Transcribing the audio…', 'Embedding visual · text · together…', 'Placing among similar hooks…'];
         const upStage = Math.min(st.rawUpStage || 0, UPSTAGES.length - 1);
         const upPct = Math.min(93, Math.round((upStage + 1) / UPSTAGES.length * 100));
+        const q = st.rawUpQueue;
+        const uploadBtn = `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};background:transparent;color:${C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">⬆ Upload video${ups.length ? 's — add more' : '(s)'}</span>`;
+        const showBtn = ups.length ? `<span data-rawupshow="1" style="cursor:pointer;border:1px solid ${st.rawUpShow ? CYAN : C.border};background:${st.rawUpShow ? CYAN + '22' : 'transparent'};color:${st.rawUpShow ? CYAN : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">⬆ My uploads (${ups.length})</span><span data-rawupclear="1" style="cursor:pointer;color:${C.mute};font-size:10px;margin-left:3px">clear all</span>` : '';
         const upBtn = st.rawUploading
             ? `<span style="display:inline-flex;flex-direction:column;gap:3px;min-width:250px;vertical-align:middle">
-                 <span style="font-size:10px;color:${CYAN};font-weight:700">⏳ ${UPSTAGES[upStage]} <span style="color:${C.mute};font-weight:400">${upPct}%</span></span>
+                 <span style="font-size:10px;color:${CYAN};font-weight:700">⏳ ${q && q.total > 1 ? `(${q.i}/${q.total}) ` : ''}${UPSTAGES[upStage]} <span style="color:${C.mute};font-weight:400">${upPct}%</span></span>
                  <span style="display:block;height:6px;background:${C.border};border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:${upPct}%;background:linear-gradient(90deg,${CYAN},#67e8f9);border-radius:4px;transition:width .5s ease"></span></span>
                </span>`
-            : st.rawUpload
-                ? `<span data-rawupshow="1" style="cursor:pointer;border:1px solid ${st.rawUpShow ? CYAN : C.border};background:${st.rawUpShow ? CYAN + '22' : 'transparent'};color:${st.rawUpShow ? CYAN : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">⬆ My upload</span><span data-rawupclear="1" style="cursor:pointer;color:${C.mute};font-size:10px;margin-left:4px">✕</span>`
-                : `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};background:transparent;color:${C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">⬆ Upload a video</span>`;
+            : `${uploadBtn} ${showBtn}`;
         const upErr = st.rawUpErr ? `<span style="font-size:10px;color:${C.red}">upload failed: ${esc(String(st.rawUpErr).slice(0, 80))}</span>` : '';
-        const upDetail = (st.rawUpSel && st.rawUpload) ? (() => {
-            const U = st.rawUpload;
-            const nbrTitles = (upCh && upCh.neighbors ? upCh.neighbors.slice(0, 4) : []).map(nb => {
+        const upLegend = ups.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">my uploads</span>${ups.map((u, i) => `<span data-rawupmark="${i}" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;border:1px solid ${st.rawUpSel === i ? upColor(i) : C.border};background:${upColor(i)}1e;border-radius:6px;padding:2px 7px;font-size:10px;color:${C.text}"><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:${upColor(i)};color:#0f172a;font-size:9px;font-weight:700;text-align:center;line-height:13px">${i + 1}</span>${esc((u.title || 'upload').replace(/\.[^.]+$/, '').slice(0, 22))}${u.silent ? ' 🔇' : ''}<span data-rawupdel="${i}" style="color:${C.mute};margin-left:2px">✕</span></span>`).join('')}</div>` : '';
+        const upDetail = (st.rawUpSel != null && ups[st.rawUpSel]) ? (() => {
+            const i = st.rawUpSel, U = ups[i], col = upColor(i);
+            const uc = U.channels ? U.channels[chan] : null, pos = upPos(U);
+            const nbrTitles = (uc && uc.neighbors ? uc.neighbors.slice(0, 4) : []).map(nb => {
                 const idx = (R.id || []).indexOf(nb.id);
                 return `<div style="font-size:10px;color:${C.dim};display:flex;justify-content:space-between;gap:8px"><span>${esc((idx >= 0 ? R.title[idx] : nb.id) || nb.id).slice(0, 44)}</span><span style="color:${C.mute}">sim ${nb.sim}</span></div>`;
             }).join('');
-            const placed = upXY
-                ? `<div style="font-size:10px;color:${C.mute};margin-bottom:6px">Placed at the <b style="color:${CYAN}">◆ crosshair</b> — the similarity-weighted centre of its <b>${upXY.used}</b> nearest hooks in the <b>${chan}</b> space. Switch channel/projection to see where it lands there.</div>${nbrTitles ? `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">most similar hooks</div>${nbrTitles}` : ''}`
+            const placed = pos
+                ? `<div style="font-size:10px;color:${C.mute};margin-bottom:6px">Marker <b style="color:${col}">#${i + 1}</b> sits at the similarity-weighted centre of its <b>${pos.used}</b> nearest hooks in the <b>${chan}</b> space. Switch channel/projection to compare where each lands there.</div>${nbrTitles ? `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">most similar hooks</div>${nbrTitles}` : ''}`
                 : (chan === 'text'
-                    ? `<div style="font-size:11px;color:${C.dim};margin-bottom:6px">No real voiceover detected in the first 5s, so your hook isn't placed in the <b>text</b> space (it only holds genuine voiceovers). It still appears in <b>Visual</b> and <b>Together</b>.</div>`
-                    : `<div style="font-size:11px;color:${C.dim};margin-bottom:6px">Couldn't place it in this channel yet.</div>`);
-            return `<div style="margin-top:10px;border:1px solid ${CYAN};border-radius:10px;padding:12px;background:${C.card2}">
-                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="font-size:12px;font-weight:700;color:${C.text};line-height:1.4"><span style="color:${CYAN}">⬆ YOUR UPLOAD</span> · ${esc(U.title || 'My upload')}${U.silent ? ` <span style="color:${C.faint};font-weight:400;font-size:10px">· no voiceover</span>` : ''}</div><span data-rawupclose="1" style="cursor:pointer;color:${C.dim};font-size:16px;line-height:1;padding:0 4px">×</span></div>
+                    ? `<div style="font-size:11px;color:${C.dim};margin-bottom:6px">No real voiceover detected, so it isn't placed in the <b>text</b> space (only genuine voiceovers live here). It still appears in <b>Visual</b> and <b>Together</b>.</div>`
+                    : `<div style="font-size:11px;color:${C.dim};margin-bottom:6px">Couldn't place it in this channel.</div>`);
+            return `<div style="margin-top:10px;border:1px solid ${col};border-radius:10px;padding:12px;background:${C.card2}">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="font-size:12px;font-weight:700;color:${C.text};line-height:1.4"><span style="color:${col}">⬆ #${i + 1}</span> · ${esc(U.title || 'My upload')}${U.silent ? ` <span style="color:${C.faint};font-weight:400;font-size:10px">· no voiceover</span>` : ''}</div><span data-rawupclose="1" style="cursor:pointer;color:${C.dim};font-size:16px;line-height:1;padding:0 4px">×</span></div>
                   <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">exact input embedded — first-5s frames, 1/sec</div>
                   <img src="data:image/jpeg;base64,${U.montage}" style="width:100%;border-radius:6px;background:#000;margin-bottom:8px"/>
                   ${U.silent ? '' : `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:2px">transcript (first 5s)</div><div style="font-size:12px;color:${C.text};font-style:italic;margin-bottom:8px;line-height:1.45;background:#0f172a;border-radius:6px;padding:9px 11px">"${esc(U.transcript || '')}"</div>`}
                   ${placed}
                 </div>`;
         })() : '';
-        h += `<input id="rawUpFile" type="file" accept="video/*" style="display:none">`;
+        h += `<input id="rawUpFile" type="file" accept="video/*" multiple style="display:none">`;
         h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
               <div style="font-size:12px;font-weight:700;color:${C.text}">${n.toLocaleString()} hooks · ${chan} channel ${mineBtn} ${upBtn} ${upErr}</div>
               <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${chan !== 'text' ? pill('voiceover', 'voiceover', mode === 'voiceover', 'data-rawcolor') : ''}${mode === 'cluster' ? `<span style="width:6px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div></div>
             <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">project</span>${PROJS.map(projPill).join('')}</div>
             <div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${supervised ? `<b style="color:${C.accent}">Steered projection</b> — axes rotated toward the target (held-out scored). This one aligns with <b>views r=${proj.cv}</b>, <b>outlier r=${proj.co}</b> (each pill shows v/o; higher = the axes separate that target more — pick the highest for what you're hunting).` : `<b>Raw geometry</b> (no target). Switch to a steered projection to pull views/outliers apart.`} ${mode === 'voiceover' ? `Coloured by <b>voiceover</b>: <span style="color:${C.green}">●</span> has a real voiceover · <span style="color:#475569">●</span> no sound / music (${nsilent.toLocaleString()} silent, excluded from the text channel so junk transcripts can't confound it).` : mode !== 'cluster' ? `Coloured by <b>${mode}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>).` : `Coloured by k-means cluster (k=${k}).`} ${hiMine ? `<b style="color:${GOLD}">★ Your ${nmine} videos are gold</b>; everything else is dimmed.` : `<b style="color:${C.text}">Click any dot</b> to see the exact input.`}</div>${heldline}
+            ${upLegend}
             <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px;margin-top:6px">${dots}</svg>${detail}${upDetail}`, 12);
         return h;
     }
@@ -1592,11 +1604,12 @@ const JarvisRetention = (function () {
         const rm = e.target.closest('[data-rawmine]'); if (rm) { st.rawMine = !st.rawMine; rtgUpdateRaw(); return; }
         const rcl = e.target.closest('[data-rawclose]'); if (rcl) { st.rawSel = null; rtgUpdateRaw(); return; }
         const rid = e.target.closest('[data-rawid]'); if (rid) { const id = rid.getAttribute('data-rawid'); st.rawSel = (st.rawSel === id || !id) ? null : id; st.rawUpSel = false; rtgUpdateRaw(); return; }
-        if (e.target.closest('[data-rawupload]')) { const fi = window.document.getElementById('rawUpFile'); if (fi) fi.click(); return; }
+        if (e.target.closest('[data-rawupload]')) { const fi = window.document.getElementById('rawUpFile'); if (fi) { fi.value = ''; fi.click(); } return; }
         if (e.target.closest('[data-rawupshow]')) { st.rawUpShow = !st.rawUpShow; rtgUpdateRaw(); return; }
-        if (e.target.closest('[data-rawupmark]')) { st.rawUpSel = !st.rawUpSel; st.rawSel = null; rtgUpdateRaw(); return; }
-        if (e.target.closest('[data-rawupclose]')) { st.rawUpSel = false; rtgUpdateRaw(); return; }
-        if (e.target.closest('[data-rawupclear]')) { st.rawUpload = null; st.rawUpSel = false; st.rawUpErr = null; rtgUpdateRaw(); return; }
+        const updel = e.target.closest('[data-rawupdel]'); if (updel) { const i = +updel.getAttribute('data-rawupdel'); st.rawUploads.splice(i, 1); st.rawUpSel = null; rtgUpdateRaw(); return; }
+        const upmk = e.target.closest('[data-rawupmark]'); if (upmk) { const i = +upmk.getAttribute('data-rawupmark'); st.rawUpSel = (st.rawUpSel === i ? null : i); st.rawSel = null; rtgUpdateRaw(); return; }
+        if (e.target.closest('[data-rawupclose]')) { st.rawUpSel = null; rtgUpdateRaw(); return; }
+        if (e.target.closest('[data-rawupclear]')) { st.rawUploads = []; st.rawUpSel = null; st.rawUpErr = null; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-libreload]')) { Promise.all([
             fetch('/api/library/stats').then(r => r.json()).then(j => { LIB = j; }).catch(() => {}),
             fetch('/api/library/videos?limit=150').then(r => r.json()).then(j => { LIBV = j.videos || []; }).catch(() => {})
@@ -1620,21 +1633,28 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-q]')) { st.q = e.target.value; render(); }
     }
     function onChange(e) {
-        if (e.target.id === 'rawUpFile') { const f = e.target.files && e.target.files[0]; if (f) rtgRawUpload(f); return; }
+        if (e.target.id === 'rawUpFile') { if (e.target.files && e.target.files.length) rtgRawUpload(e.target.files); return; }
         if (e.target.closest('[data-tracked]')) { st.trackedOnly = e.target.checked; render(); }
     }
-    async function rtgRawUpload(file) {
-        st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 0; rtgUpdateRaw();
-        const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateRaw(); } }, 2400);
-        try {
-            const ext = (file.name.split('.').pop() || 'mp4').slice(0, 5);
-            const buf = await file.arrayBuffer();
-            const r = await fetch('/api/raw/embed-upload', { method: 'POST', headers: { 'X-Raw-Ext': ext, 'X-Raw-Title': (file.name || 'My upload').slice(0, 80) }, body: buf });
-            const j = await r.json();
-            if (!r.ok || j.error) { st.rawUpErr = j.error || ('HTTP ' + r.status); }
-            else { st.rawUpload = j; st.rawUpShow = true; st.rawUpSel = true; st.rawSel = null; }
-        } catch (e) { st.rawUpErr = e.message; }
-        window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0;
+    async function rtgRawUpload(files) {
+        const list = Array.from(files || []).slice(0, 12);   // cap a batch at 12
+        if (!list.length) return;
+        st.rawUploading = true; st.rawUpErr = null; st.rawUpShow = true; rtgUpdateRaw();
+        for (let n = 0; n < list.length; n++) {
+            const file = list[n];
+            st.rawUpStage = 0; st.rawUpQueue = { i: n + 1, total: list.length }; rtgUpdateRaw();
+            const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateRaw(); } }, 2400);
+            try {
+                const ext = (file.name.split('.').pop() || 'mp4').slice(0, 5);
+                const buf = await file.arrayBuffer();
+                const r = await fetch('/api/raw/embed-upload', { method: 'POST', headers: { 'X-Raw-Ext': ext, 'X-Raw-Title': (file.name || 'My upload').slice(0, 80) }, body: buf });
+                const j = await r.json();
+                if (!r.ok || j.error) { st.rawUpErr = (file.name || '') + ': ' + (j.error || ('HTTP ' + r.status)); }
+                else { st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; }
+            } catch (e) { st.rawUpErr = (file.name || '') + ': ' + e.message; }
+            window.clearInterval(tick);
+        }
+        st.rawUploading = false; st.rawUpStage = 0; st.rawUpQueue = null;
         rtgUpdateRaw();
     }
 
@@ -1646,7 +1666,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=74'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=75'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
