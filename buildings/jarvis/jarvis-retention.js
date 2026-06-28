@@ -406,15 +406,27 @@ const JarvisRetention = (function () {
             const px = proj.x, py = proj.y, idxV = [];
             for (let i = 0; i < n; i++) { if (dir[i] != null && isFinite(dir[i]) && px[i] != null) idxV.push(i); }
             if (idxV.length > 30) {
-                let mx = 0, my = 0, mm = 0;
-                for (const i of idxV) { mx += px[i]; my += py[i]; mm += dir[i]; }
-                mx /= idxV.length; my /= idxV.length; mm /= idxV.length;
-                let Sxx = 0, Syy = 0, Sxy = 0, Sxm = 0, Sym = 0;
-                for (const i of idxV) { const dx = px[i] - mx, dy = py[i] - my, dm = dir[i] - mm; Sxx += dx * dx; Syy += dy * dy; Sxy += dx * dy; Sxm += dx * dm; Sym += dy * dm; }
-                const det = Sxx * Syy - Sxy * Sxy;
-                if (Math.abs(det) > 1e-6) {
-                    const a = (Syy * Sxm - Sxy * Sym) / det, b = (Sxx * Sym - Sxy * Sxm) / det;
-                    if (Math.hypot(a, b) > 1e-9) {
+                let a, b, aligned = false;
+                if (supervised) {
+                    // A STEERED projection already puts the metric on its X axis (that's what
+                    // steering does — held-out cv confirms it). So the bands MUST split ⟂ to X,
+                    // not to a re-fit gradient that curves off-axis. Orient +x = higher metric so
+                    // labels read low→high left→right. Guarantees the bands track THIS group's metric.
+                    let sx = 0, sm = 0; for (const i of idxV) { sx += px[i]; sm += dir[i]; } sx /= idxV.length; sm /= idxV.length;
+                    let sxm = 0; for (const i of idxV) sxm += (px[i] - sx) * (dir[i] - sm);
+                    a = sxm >= 0 ? 1 : -1; b = 0; aligned = true;
+                } else {
+                    // raw UMAP/PCA has no metric axis — empirically fit the metric's 2D gradient.
+                    let mx = 0, my = 0, mm = 0;
+                    for (const i of idxV) { mx += px[i]; my += py[i]; mm += dir[i]; }
+                    mx /= idxV.length; my /= idxV.length; mm /= idxV.length;
+                    let Sxx = 0, Syy = 0, Sxy = 0, Sxm = 0, Sym = 0;
+                    for (const i of idxV) { const dx = px[i] - mx, dy = py[i] - my, dm = dir[i] - mm; Sxx += dx * dx; Syy += dy * dy; Sxy += dx * dy; Sxm += dx * dm; Sym += dy * dm; }
+                    const det = Sxx * Syy - Sxy * Sxy;
+                    if (Math.abs(det) > 1e-6) { a = (Syy * Sxm - Sxy * Sym) / det; b = (Sxx * Sym - Sxy * Sxm) / det; aligned = true; }
+                }
+                if (aligned) {
+                        if (Math.hypot(a, b) > 1e-9) {
                         const t = idxV.map(i => a * px[i] + b * py[i]);
                         const tmin = Math.min(...t), tmax = Math.max(...t), K = Math.max(2, Math.min(20, st.rawBandK || 6));
                         const bins = Array.from({ length: K }, () => ({ sum: 0, cnt: 0, gx: 0, gy: 0 }));
@@ -433,7 +445,7 @@ const JarvisRetention = (function () {
                             const txt = fmt((binary || pctLinear) ? avg : Math.pow(10, avg)), w = txt.length * 6.6 + 12;
                             bandOver += `<g style="pointer-events:none"><rect x="${(cx - w / 2).toFixed(1)}" y="${(cy - 9).toFixed(1)}" width="${w.toFixed(1)}" height="16" rx="4" fill="#0f172a" opacity="0.85" stroke="#1e293b"/><text x="${cx.toFixed(1)}" y="${(cy + 2.8).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#e2e8f0">${txt}</text></g>`;
                         }
-                        bandNote = `<b style="color:${C.cyan}">Trend bands ON</b> — dashed lines split the plot ⟂ to the direction <b>${label.replace('avg ', '')}</b> increases; each band shows its <b>${label}</b> (${K} equal sections along the trend).`;
+                        bandNote = `<b style="color:${C.cyan}">Trend bands ON</b> — dashed lines split the plot ${aligned && supervised ? `⟂ to <b>this projection's steered ${label.replace('avg ', '')} axis</b> (so they always line up with the metric this group tracks)` : `⟂ to the direction <b>${label.replace('avg ', '')}</b> increases`}; each band shows its <b>${label}</b> (${K} equal sections, low→high).`;
                     }
                 }
             }
@@ -2003,7 +2015,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=93'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=94'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
