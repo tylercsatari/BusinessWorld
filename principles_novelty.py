@@ -156,7 +156,7 @@ try:
     for v in rt.get('videos', []):
         i = idpos.get(str(v.get('id', '')))
         if i is None: continue
-        if v.get('ret5_surv') is not None: ret5[i] = float(v['ret5_surv'])
+        if v.get('ret5') is not None: ret5[i] = float(v['ret5'])   # RELATIVE 5s retention (Tyler's tracked metric, ~95-125%)
         if v.get('keep_rate') is not None: keep[i] = float(v['keep_rate'])
 except Exception as e:
     print('retention load failed:', str(e)[:60], flush=True)

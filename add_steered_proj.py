@@ -37,7 +37,7 @@ rt = json.loads(open(os.path.join(HERE, 'buildings/jarvis/retention-study/retent
 KEEP = {}; RET5 = {}
 for v in rt.get('videos', []):
     if v.get('keep_rate') is not None: KEEP[str(v['id'])] = float(v['keep_rate'])
-    if v.get('ret5_surv') is not None: RET5[str(v['id'])] = float(v['ret5_surv'])
+    if v.get('ret5') is not None: RET5[str(v['id'])] = float(v['ret5'])   # RELATIVE 5s retention (Tyler's tracked metric, ~95-125%)
 print(f'owned retention: keep={len(KEEP)} ret5={len(RET5)}', flush=True)
 
 kf = KFold(5, shuffle=True, random_state=0)

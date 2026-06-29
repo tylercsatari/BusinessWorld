@@ -758,7 +758,7 @@ const JarvisRetention = (function () {
         // ── SEVEN independent output boxes: 4 EMBEDDING (steered map estimate + its graph) and
         //    3 NOVELTY (its OWN calibration curve). Novelty is never in the same box as views/>10M,
         //    and is shown ONCE per metric (a curve, not a re-clustered map). ──
-        const metShort = tn => ({ keep: 'keep rate', ret5: '5s retention', views: 'views', gt10M: '>10M class' })[tn];
+        const metShort = tn => ({ keep: 'keep rate', ret5: '5s retention (rel)', views: 'views', gt10M: '>10M class' })[tn];
         const bigNumHTML = (s, sub) => `<div style="font-size:26px;font-weight:900;color:${C.text};line-height:1.1;margin:3px 0">${s}${sub ? ` <span style="font-size:11px;color:${C.mute};font-weight:600">${sub}</span>` : ''}</div>`;
         // EMBEDDING box — the steered cluster + steered estimate (= the marker on that graph)
         const embBox = tn => {
@@ -2169,7 +2169,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=99'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=100'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');

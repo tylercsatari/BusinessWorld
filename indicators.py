@@ -73,14 +73,14 @@ rt = json.loads(open(os.path.join(HERE, 'buildings/jarvis/retention-study/retent
 for v in rt.get('videos', []):
     i = idpos.get(str(v.get('id', '')))
     if i is None: continue
-    if v.get('ret5_surv') is not None: ret5[i] = float(v['ret5_surv'])
+    if v.get('ret5') is not None: ret5[i] = float(v['ret5'])   # RELATIVE 5s retention (what Tyler tracks; ~95-125%, NOT absolute survival)
     if v.get('keep_rate') is not None: keep[i] = float(v['keep_rate'])
 
 # targets: (name, values, kind, mask, label)
 logv = np.log10(views + 1)
 TARGETS = [
     ('keep', keep, 'reg', np.isfinite(keep), 'keep-rate · stayed to watch (my 211)'),
-    ('ret5', ret5, 'reg', np.isfinite(ret5), '5-second retention (my 211)'),
+    ('ret5', ret5, 'reg', np.isfinite(ret5), 'relative 5s retention (my 211, ~95-125%)'),
     ('views', logv, 'reg', np.ones(N, bool), 'views (all 11k)'),
     ('gt10M', (views > 1e7).astype(float), 'clf', np.ones(N, bool), '>10M-view class (all)'),
 ]
