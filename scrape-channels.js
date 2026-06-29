@@ -78,6 +78,7 @@ async function main() {
         await ask(`Switch Chrome to "${ch.name}" via the account menu (top-right), then press Enter…`);
         let ids = ch.videoIds || [];
         if (!ids.length) { console.log('Discovering this channel\'s videos…'); ids = await discoverVideoIds(page); }
+        if (ch.limit) { ids = ids.slice(0, ch.limit); console.log(`(limit ${ch.limit} for a quick test)`); }
         console.log(`${ids.length} videos to scrape for ${ch.name}.`);
         const rows = [];
         for (let i = 0; i < ids.length; i++) {
