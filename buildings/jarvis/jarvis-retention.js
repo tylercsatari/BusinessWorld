@@ -10,10 +10,10 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, FUSION = null, NOV = null, EXPREG = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, FUSION = null, NOV = null, EXPREG = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, guessRun: 'phase0', guessSel: null, guessIter: null };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -572,6 +572,42 @@ const JarvisRetention = (function () {
         return h;
     }
     function rtgUpdateRaw() { try { const el = window.document.getElementById('rtg-rawpanel'); if (el) el.innerHTML = renderRaw(); } catch (e) { } try { const e2 = window.document.getElementById('rtg-exppanel'); if (e2) e2.innerHTML = renderExperiment(); } catch (e) { } }
+    // ── 🎰 Guesses: every hook the model generates, dropped into the SAME map as the library ──
+    function guessEnsure(run) { run = run || 'phase0'; if (GUESSES[run]) return; GUESSES[run] = { loading: 1 }; fetch('/api/hooks/guesses?run=' + run).then(r => r.json()).then(j => { GUESSES[run] = j; rtgUpdateGuesses(); }).catch(() => { GUESSES[run] = { rows: [] }; rtgUpdateGuesses(); }); }
+    function rtgUpdateGuesses() { try { const el = window.document.getElementById('rtg-guesspanel'); if (el) el.innerHTML = renderGuesses(); } catch (e) { } }
+    function renderGuesses() {
+        const run = st.guessRun || 'phase0';
+        const head = h2c('🎰 Guesses — what the model generates', 'Every hook the model dreams up, embedded and dropped into the SAME map as your library (faint grey). Brighter = higher predicted-views percentile. As it trains, watch the bright dots migrate toward the views-high side.');
+        const reload = `<span data-guessreload style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:3px 10px;font-size:11px">↻ refresh</span>`;
+        const G = GUESSES[run], R = RAW.visual;
+        if (!R || R.loading) rawEnsure('visual');
+        if (!G) guessEnsure(run);
+        if (!G || G.loading || !R || R.loading || !R.proj) return head + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading guesses + map…</div>`);
+        const rows = (G.rows || []).filter(r => r.x != null && r.y != null);
+        if (!rows.length) return head + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No guesses yet for ${esc(run)}. ${reload}</div>`);
+        const W = 820, H = 520, pad = 16, Sg = 1000, X = g => pad + g / Sg * (W - 2 * pad), Yc = g => pad + (1 - g / Sg) * (H - 2 * pad);
+        const PJ = (R.proj && (R.proj.views || R.proj.rawviews)) || { x: [], y: [] };
+        const lx = PJ.x || [], ly = PJ.y || [];
+        let bg = '';
+        for (let i = 0; i < lx.length; i++) bg += `<circle cx="${X(lx[i]).toFixed(1)}" cy="${Yc(ly[i]).toFixed(1)}" r="1.5" fill="#334155" opacity="0.3"/>`;
+        const iters = Array.from(new Set(rows.map(r => r.iter == null ? 0 : r.iter))).sort((a, b) => a - b);
+        const maxIt = iters.length ? iters[iters.length - 1] : 0;
+        const curIt = st.guessIter == null ? maxIt : Math.min(st.guessIter, maxIt);
+        const showRows = iters.length > 1 ? rows.filter(r => (r.iter == null ? 0 : r.iter) <= curIt) : rows;
+        const sel = st.guessSel;
+        let gs = '', selDot = '';
+        showRows.forEach(r => { const c = heatCol(r.pctile == null ? 0 : r.pctile), isSel = sel === r.id;
+            const circ = `<circle data-guessid="${esc(r.id)}" cx="${X(r.x).toFixed(1)}" cy="${Yc(r.y).toFixed(1)}" r="${isSel ? 7 : 4.5}" fill="${c}" opacity="${isSel ? 1 : 0.9}" stroke="${isSel ? '#fff' : '#0b1120'}" stroke-width="${isSel ? 1.8 : 0.6}" style="cursor:pointer"><title>${esc((r.brief || '').slice(0, 70) + ' · ' + Math.round((r.pctile || 0) * 100) + 'th pctile')}</title></circle>`;
+            if (isSel) selDot += circ; else gs += circ; });
+        const svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${bg}${gs}${selDot}</svg>`;
+        const P = showRows.map(r => r.pctile || 0).slice().sort((a, b) => a - b);
+        const med = P.length ? P[Math.floor(P.length / 2)] : 0, mx = P.length ? P[P.length - 1] : 0;
+        const stat = `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:${C.mute};margin:7px 2px"><span><b style="color:${C.text}">${showRows.length}</b> guesses</span><span>median <b style="color:${C.accent}">${Math.round(med * 100)}th</b></span><span>best <b style="color:${C.green}">${Math.round(mx * 100)}th</b> pctile</span><span style="color:${C.dim}">run ${esc(run)}</span>${reload}</div>`;
+        const scrub = iters.length > 1 ? `<div style="display:flex;align-items:center;gap:8px;margin:6px 2px"><span style="font-size:10px;color:${C.mute}">iter</span><input data-guessiter type="range" min="${iters[0]}" max="${maxIt}" value="${curIt}" style="flex:1;accent-color:${C.accent};cursor:pointer"><span style="font-size:11px;color:${C.accent};font-weight:700">${curIt}</span></div>` : '';
+        let detail = '';
+        if (sel) { const r = rows.find(x => x.id === sel); if (r) detail = cardc(`<div style="display:flex;gap:14px;flex-wrap:wrap"><img src="/api/hooks/montage/${esc(run)}/${esc(r.id)}" style="width:100%;max-width:540px;border-radius:8px;background:${C.card2}"/><div style="flex:1;min-width:200px"><div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:8px">${esc(r.brief || '')}</div><div style="font-size:11px;color:${C.mute};line-height:1.8">cohesion: <b style="color:${C.dim}">${esc(r.cohesion_mode || '—')}</b><br>predicted views: <b style="color:${C.accent}">${fv(Math.pow(10, r.pred || 0))}</b><br>percentile: <b style="color:${C.green}">${Math.round((r.pctile || 0) * 100)}th</b><br>in-distribution (nn-cos): <b style="color:${C.cyan}">${fmt(r.nn_cos, 3)}</b></div><div style="margin-top:8px"><span data-guessclose style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:3px 10px;font-size:11px">close</span></div></div></div>`, 12); }
+        return head + cardc(`${legendBar('low predicted-views', 'high')}${svg}${scrub}${stat}`, 12) + detail;
+    }
     function rtgUpdateExp() { try { const el = window.document.getElementById('rtg-exppanel'); if (el) el.innerHTML = renderExperiment(); } catch (e) { } }
     function renderExperiment() {
         const head = h2c('🧪 Experiment — score a hook against every validated indicator', 'Upload a video or build one from 5 frames + text. It gets embedded and scored on every independent indicator we have validated — see where it lands on each indicator\'s curve, plus an ensemble read. New indicators appear here automatically as you build them.');
@@ -1889,9 +1925,9 @@ const JarvisRetention = (function () {
 
     function render() {
         if (!root) return;
-        const SECS = [['data', '📋 Data'], ['raw', '🔬 Raw'], ['experiment', '🧪 Experiment'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
+        const SECS = [['data', '📋 Data'], ['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
         const nav = SECS.map(([id, l]) => `<button data-rs="${id}" style="background:${st.sec === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.sec === id ? C.accent : C.border};color:${st.sec === id ? C.accent : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('');
-        const sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
+        const sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
             <div style="font-size:21px;font-weight:900;color:${C.accent};margin-bottom:8px">Retention → Views</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${nav}</div>${sec}</div>`;
@@ -1940,6 +1976,9 @@ const JarvisRetention = (function () {
         const rm = e.target.closest('[data-rawmine]'); if (rm) { st.rawMine = !st.rawMine; rtgUpdateRaw(); return; }
         const rcl = e.target.closest('[data-rawclose]'); if (rcl) { st.rawSel = null; rtgUpdateRaw(); return; }
         const rid = e.target.closest('[data-rawid]'); if (rid) { const id = rid.getAttribute('data-rawid'); st.rawSel = (st.rawSel === id || !id) ? null : id; st.rawUpSel = false; rtgUpdateRaw(); return; }
+        const ggi = e.target.closest('[data-guessid]'); if (ggi) { const id = ggi.getAttribute('data-guessid'); st.guessSel = (st.guessSel === id ? null : id); rtgUpdateGuesses(); return; }
+        if (e.target.closest('[data-guessclose]')) { st.guessSel = null; rtgUpdateGuesses(); return; }
+        if (e.target.closest('[data-guessreload]')) { GUESSES = {}; st.guessSel = null; rtgUpdateGuesses(); return; }
         const xpg = e.target.closest('[data-expgo]'); if (xpg) { const [ch, pj] = xpg.getAttribute('data-expgo').split(':'); st.sec = 'raw'; st.rawChan = ch; st.rawProj = pj; st.rawColor = pj === 'hi10m' ? 'views' : 'cluster'; render(); return; }
         if (e.target.closest('[data-rawupload]')) { const fi = window.document.getElementById('rawUpFile'); if (fi) { fi.value = ''; fi.click(); } return; }
         if (e.target.closest('[data-rawupshow]')) { st.rawUpShow = !st.rawUpShow; rtgUpdateRaw(); return; }

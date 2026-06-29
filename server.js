@@ -3030,6 +3030,29 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500); res.end(); }
         return;
     }
+    // ── 🎰 Guesses: the hook-RL run manifests + generated montages (written by the Lambda trainer) ──
+    if (pathname === '/api/hooks/guesses' && req.method === 'GET') {
+        try {
+            const run = (url.searchParams.get('run') || 'phase0').replace(/[^a-z0-9_]/g, '');
+            let rows = [];
+            try {
+                const buf = await cloud.downloadFromR2(`hooks/runs/${run}/manifest.jsonl`);
+                if (buf) rows = buf.toString('utf8').trim().split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean);
+            } catch (e) {}
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify({ run, rows }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    const hookMon = pathname.match(/^\/api\/hooks\/montage\/([a-z0-9_]{1,24})\/([\w-]{1,32})$/);
+    if (hookMon && req.method === 'GET') {
+        try {
+            const buf = await cloud.downloadFromR2(`hooks/runs/${hookMon[1]}/montages/${hookMon[2]}.jpg`);
+            if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600' }); res.end(buf); }
+            else { res.writeHead(404); res.end(); }
+        } catch (e) { res.writeHead(500); res.end(); }
+        return;
+    }
     if (pathname === '/api/library/videos' && req.method === 'GET') {
         try {
             const limit = Math.min(parseInt(url.searchParams.get('limit')) || 150, 400);
