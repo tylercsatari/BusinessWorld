@@ -1,6 +1,6 @@
 """Core hook-RL engine: render (Replicate FLUX) -> montage -> embed (Gemini) -> score (views axis) -> R2.
 Embedding matches raw_embed.py EXACTLY: 5 frames width-320 tiled 5x1, gemini-embedding-2, 1536-D, visual channel."""
-import os, io, json, time, base64, urllib.request, urllib.error
+import os, io, json, time, base64, random, threading, urllib.request, urllib.error
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np, joblib
@@ -39,10 +39,22 @@ class BillingHalt(Exception):
 
 RENDERS = [0]  # count of successful renders this process (for spend estimate)
 
-def flux_schnell(prompt, tries=4):
+# Global rate limiter: space ALL Replicate calls (across every worker thread) >= MIN_INTERVAL apart,
+# so concurrency never bursts past Replicate's ~10/sec cap. This is the real fix for the 429 storms —
+# the account is funded; the problem was 40 threads firing in the same instant, not low credit.
+_RL_LOCK = threading.Lock(); _RL_LAST = [0.0]
+RL_MIN_INTERVAL = float(os.environ.get("REPL_MIN_INTERVAL", "0.18"))  # ~5.5 req/sec sustained
+def _rl_gate():
+    with _RL_LOCK:
+        wait = RL_MIN_INTERVAL - (time.time() - _RL_LAST[0])
+        if wait > 0: time.sleep(wait)
+        _RL_LAST[0] = time.time()
+
+def flux_schnell(prompt, tries=7):
     body = json.dumps({"input": {"prompt": prompt, "aspect_ratio": "9:16", "output_format": "jpg", "num_outputs": 1}}).encode()
     for a in range(tries):
         try:
+            _rl_gate()
             req = urllib.request.Request("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions",
                 data=body, headers={"Authorization": "Bearer " + REPL, "Content-Type": "application/json", "Prefer": "wait"})
             r = json.loads(urllib.request.urlopen(req, timeout=120).read())
@@ -53,15 +65,15 @@ def flux_schnell(prompt, tries=4):
                 RENDERS[0] += 1
                 return img
         except urllib.error.HTTPError as e:
-            if e.code == 402:                       # payment required -> stop now
+            if e.code == 402:                       # genuine payment-required -> stop the run
                 raise BillingHalt("Replicate 402 Payment Required")
-            if e.code == 429 and a == tries - 1:    # persistent rate/quota -> stop
-                raise BillingHalt("Replicate 429 after %d tries" % tries)
-            if a < tries - 1: time.sleep(2 * (a + 1)); continue
+            # 429 = transient burst/rate cap on a FUNDED account: back off with jitter and retry,
+            # never halt. Worst case the frame returns None and its candidate is dropped.
+            if a < tries - 1: time.sleep(min(20, 1.5 * (a + 1)) + random.uniform(0, 1.5)); continue
         except BillingHalt:
             raise
         except Exception:
-            if a < tries - 1: time.sleep(2 * (a + 1)); continue
+            if a < tries - 1: time.sleep(min(20, 1.5 * (a + 1)) + random.uniform(0, 1.5)); continue
     return None
 
 def render_frames(prompts, max_workers=5):
