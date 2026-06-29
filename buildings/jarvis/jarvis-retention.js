@@ -309,11 +309,11 @@ const JarvisRetention = (function () {
     // ── ONE global hook-scoring source: an upload's number on the map IS out.steer (computed
     //    server-side, identical to how the map scores every video). The graph marker AND the
     //    Experiment grid both read it through these — change the maths once, both follow. ──
-    const STEER_KEY = { views: 'views', rawviews: 'views', outlier: 'outlier', hi10m: 'gt10M', keep: 'keep', ret5: 'ret5' };
+    const STEER_KEY = { views: 'views', rawviews: 'views', realviews: 'realviews', outlier: 'outlier', hi10m: 'gt10M', keep: 'keep', ret5: 'ret5' };
     function steerOf(up, mod, tn) { const s = up && up.steer; const k = s && s[`${mod}_${tn}`]; return k || null; }   // {est,pctile,kind}
     function steerBest(up, tn) { for (const m of ['together', 'text', 'visual']) { const k = steerOf(up, m, tn); if (k) return { mod: m, ...k }; } return null; }
-    function steerDisp(tn, v) { if (v == null) return null; return tn === 'views' ? fv(+v) : tn === 'outlier' ? (+v).toFixed(1) + '×' : tn === 'gt10M' ? (+v * 100).toFixed(0) + '%' : (+v).toFixed(0) + '%'; }
-    function steerLabel(tn) { return tn === 'views' ? 'est. views' : tn === 'outlier' ? 'est. outlier' : tn === 'gt10M' ? 'chance >10M' : tn === 'keep' ? 'est. keep-rate' : 'est. past-5s'; }
+    function steerDisp(tn, v) { if (v == null) return null; return (tn === 'views' || tn === 'realviews') ? fv(+v) : tn === 'outlier' ? (+v).toFixed(1) + '×' : tn === 'gt10M' ? (+v * 100).toFixed(0) + '%' : (+v).toFixed(0) + '%'; }
+    function steerLabel(tn) { return tn === 'realviews' ? 'est. views (your scale)' : tn === 'views' ? 'est. views (library scale)' : tn === 'outlier' ? 'est. outlier' : tn === 'gt10M' ? 'chance >10M' : tn === 'keep' ? 'est. keep-rate' : 'est. past-5s'; }
     function renderRaw() {
         const chan = st.rawChan || 'visual';
         const chanPill = (id, lab) => `<span data-rawchan="${id}" style="cursor:pointer;border:1px solid ${chan === id ? C.purple : C.border};background:${chan === id ? C.purple + '22' : 'transparent'};color:${chan === id ? C.purple : C.dim};border-radius:8px;padding:5px 13px;font-size:12px;font-weight:700">${lab}</span>`;
@@ -326,7 +326,7 @@ const JarvisRetention = (function () {
         const n = R.n, W = 820, H = 520, pad = 16, S = 1000;
         const X = g => pad + g / S * (W - 2 * pad), Yc = g => pad + (1 - g / S) * (H - 2 * pad);
         const PJ = R.proj || {};
-        const PROJS = [['both', '→ views+outlier'], ['views', '→ views (log)'], ['rawviews', '→ views (raw)'], ['outlier', '→ outlier'], ['hi10m', '>10M class'], ['hiout', 'top-outlier'], ['keep', '→ keep-rate'], ['ret5', '→ 5s-retention'], ['umap', 'UMAP raw'], ['pca', 'PCA raw']].filter(p => PJ[p[0]]);
+        const PROJS = [['both', '→ views+outlier'], ['views', '→ views (log)'], ['rawviews', '→ views (raw)'], ['realviews', '→ realistic views'], ['outlier', '→ outlier'], ['hi10m', '>10M class'], ['hiout', 'top-outlier'], ['keep', '→ keep-rate'], ['ret5', '→ 5s-retention'], ['umap', 'UMAP raw'], ['pca', 'PCA raw']].filter(p => PJ[p[0]]);
         let pm = st.rawProj || 'both'; if (!PJ[pm]) pm = PROJS.length ? PROJS[0][0] : null;
         const proj = (pm && PJ[pm]) || { x: R.x || [], y: R.y || [], cv: 0, co: 0 };
         const supervised = pm && !['umap', 'pca'].includes(pm);
@@ -349,6 +349,7 @@ const JarvisRetention = (function () {
             if (pm === 'hi10m') return { dir: V.map(x => (+x > 1e7 ? 1 : 0)), label: '>10M-view share', fmt: v => Math.round(v * 100) + '%', binary: true, pctLinear: false };
             if (pm === 'hiout') { const ov = O.map(x => (x == null ? NaN : +x)), sv = ov.filter(x => !isNaN(x)).slice().sort((p, q) => p - q), thr = sv.length ? sv[Math.floor(sv.length * 0.85)] : Infinity; return { dir: ov.map(x => (!isNaN(x) && x >= thr) ? 1 : 0), label: 'top-outlier share', fmt: v => Math.round(v * 100) + '%', binary: true, pctLinear: false }; }
             if (pm === 'outlier') return { dir: O.map(x => (x == null ? NaN : Math.log10(+x + 1))), label: 'outlier', fmt: v => v.toFixed(1) + '×', binary: false, pctLinear: false };
+            if (pm === 'realviews' && proj.est) return { dir: proj.est.map(x => Math.log10((+x || 0) + 1)), label: 'realistic views (your scale)', fmt: v => fv(v), binary: false, pctLinear: false };
             return { dir: V.map(x => Math.log10((+x || 0) + 1)), label: 'views', fmt: v => fv(v), binary: false, pctLinear: false };
         };
         const BM = st.rawBands ? bandMetric() : null;
@@ -363,6 +364,10 @@ const JarvisRetention = (function () {
         else if (ESTP && (mode === 'cluster' || mode === 'metric')) {
             const ok = ESTP.filter(x => x != null && isFinite(x)); estLo = Math.min(...ok); estHi = Math.max(...ok);
             colOf = i => { const v = (ACTP && ACTP[i] != null) ? ACTP[i] : ESTP[i]; return v == null || !isFinite(v) ? '#334155' : rawRamp((v - estLo) / ((estHi - estLo) || 1)); };
+        }
+        else if (pm === 'realviews' && proj.est && (mode === 'cluster' || mode === 'metric')) {
+            const e = proj.est.map(x => Math.log10((+x || 0) + 1)), ok = e.filter(isFinite); estLo = Math.min(...ok); estHi = Math.max(...ok);
+            colOf = i => isFinite(e[i]) ? rawRamp((e[i] - estLo) / ((estHi - estLo) || 1)) : '#334155';
         }
         else if (mode === 'cluster') { const cl = (R.clusters || {})[k] || []; colOf = i => tcol(cl[i] != null ? cl[i] : -1); }
         else if (mode === 'voiceover') { colOf = i => SILENT[i] ? '#475569' : C.green; }
@@ -744,6 +749,7 @@ const JarvisRetention = (function () {
             let colf;
             if (colorMode === 'gt10m') colf = i => (R.views && R.views[i] > 1e7) ? '#f87171' : '#2b3648';
             else if (colorMode === 'novelty') { const nm = idNov(ch), vs = ids.map(id => nm[id]), ok = vs.filter(v => v != null && isFinite(v)), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => vs[i] == null ? '#2b3648' : rawRamp((vs[i] - lo) / ((hi - lo) || 1)); }
+            else if (colorMode === 'metric' && proj.est && proj.predscope) { const e = proj.est.map(x => Math.log10((+x || 0) + 1)), ok = e.filter(isFinite), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => isFinite(e[i]) ? rawRamp((e[i] - lo) / ((hi - lo) || 1)) : '#2b3648'; }
             else if (colorMode === 'metric' && proj.est) { const e = proj.est, ac = proj.actual, ok = e.filter(v => v != null && isFinite(v)), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => { const v = (ac && ac[i] != null) ? ac[i] : e[i]; return v == null ? '#2b3648' : rawRamp((v - lo) / ((hi - lo) || 1)); }; }
             else if (colorMode === 'axis' || colorMode === 'metric') { const xs2 = proj.x, lo = Math.min(...xs2), hi = Math.max(...xs2); colf = i => rawRamp((proj.x[i] - lo) / ((hi - lo) || 1)); }
             else if (colorMode === 'owned') colf = i => (R.mine && R.mine[i]) ? '#fbbf24' : '#2b3648';
@@ -760,8 +766,18 @@ const JarvisRetention = (function () {
         //    and is shown ONCE per metric (a curve, not a re-clustered map). ──
         const metShort = tn => ({ keep: 'keep rate', ret5: '5s retention (rel)', views: 'views', gt10M: '>10M class' })[tn];
         const bigNumHTML = (s, sub) => `<div style="font-size:26px;font-weight:900;color:${C.text};line-height:1.1;margin:3px 0">${s}${sub ? ` <span style="font-size:11px;color:${C.mute};font-weight:600">${sub}</span>` : ''}</div>`;
-        // EMBEDDING box — the steered cluster + steered estimate (= the marker on that graph)
+        // EMBEDDING box — the steered cluster + steered estimate (= the marker on that graph).
+        // VIEWS is special: it shows the PREDICT-SCOPE realistic estimate (embedding→retention→your
+        // 211's views model) so the number lands on YOUR scale, with the raw library-scale as a sub.
         const embBox = tn => {
+            if (tn === 'views') {
+                const rb = steerBest(up, 'realviews'), vb = steerBest(up, 'views');
+                const ch = rb ? rb.mod : (vb ? vb.mod : 'together');
+                const havePj = RAW[ch] && RAW[ch].proj && RAW[ch].proj.realviews;
+                const big = rb ? steerDisp('realviews', rb.est) : (vb ? steerDisp('views', vb.est) : '—');
+                const durTxt = rb && rb.dur_s ? `${rb.dur_s}s video` : 'median duration';
+                return cardc(`<div data-expgo="${ch}:${havePj ? 'realviews' : 'views'}" style="cursor:pointer"><div style="font-size:11px;color:${CY};font-weight:800;text-transform:uppercase">Embedding → views <span style="color:${C.green}">(your scale)</span></div>${bigNumHTML(big, rb ? `via retention→views · ${durTxt}` : '')}${cluster(ch, havePj ? 'realviews' : 'views', havePj ? 'metric' : 'views')}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">predict-scope: your hook's keep/5s-ret → your 211's view model. ${vb ? `library-scale raw: <b>${steerDisp('views', vb.est)}</b>` : ''} · <span style="color:${C.accent}">open graph →</span></div></div>`, 12);
+            }
             const b = steerBest(up, tn), ch = b ? b.mod : 'together', pj = projFor[tn], cm = colorFor[tn];
             const big = b ? steerDisp(tn, b.est) : '—', sub = b ? `${b.pctile.toFixed(0)}th pctile` : '';
             const mods = ['together', 'text', 'visual'].map(m => ({ m, k: steerOf(up, m, tn) })).filter(x => x.k);
@@ -2169,7 +2185,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=100'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=101'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');

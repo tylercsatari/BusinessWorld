@@ -34,11 +34,25 @@ def grid(a):
 
 # owned retention
 rt = json.loads(open(os.path.join(HERE, 'buildings/jarvis/retention-study/retention_table.json')).read())
-KEEP = {}; RET5 = {}
+KEEP = {}; RET5 = {}; DURO = {}; VIEWSO = {}
 for v in rt.get('videos', []):
     if v.get('keep_rate') is not None: KEEP[str(v['id'])] = float(v['keep_rate'])
     if v.get('ret5') is not None: RET5[str(v['id'])] = float(v['ret5'])   # RELATIVE 5s retention (Tyler's tracked metric, ~95-125%)
+    if v.get('duration_s') is not None: DURO[str(v['id'])] = float(v['duration_s'])
+    if v.get('views') is not None: VIEWSO[str(v['id'])] = float(v['views'])
 print(f'owned retention: keep={len(KEEP)} ret5={len(RET5)}', flush=True)
+
+# PREDICT-SCOPE: the 211's OWN retention→views relationship (their real view scale, not the
+# library's inflated one). log10(views) ~ keep + ret5 + log_dur. We later feed the steered
+# keep/ret5 ESTIMATES (from the embedding) through this to get realistic, channel-scaled views.
+ps_ids = [k for k in KEEP if k in RET5 and k in DURO and k in VIEWSO]
+Xs = np.array([[KEEP[k], RET5[k], np.log10(DURO[k] + 1)] for k in ps_ids])
+ys = np.array([np.log10(VIEWSO[k] + 1) for k in ps_ids])
+PS = np.linalg.lstsq(np.c_[Xs, np.ones(len(Xs))], ys, rcond=None)[0]   # [c_keep, c_ret5, c_logdur, intercept]
+DUR_MED = float(np.median(list(DURO.values())))
+print(f'predict-scope on {len(ps_ids)} owned: logV = {PS[0]:.3f}·keep + {PS[1]:.3f}·ret5 + {PS[2]:.3f}·logdur + {PS[3]:.2f} (dur median {DUR_MED:.0f}s)', flush=True)
+db = json.loads((r2_get('library/db.json') or b'{"videos":{}}'))
+LIBDUR = {str(v.get('videoId', '')): float(v['durationSec']) for v in db.get('videos', {}).values() if v.get('durationSec')}
 
 kf = KFold(5, shuffle=True, random_state=0)
 STEER = {}   # per-(channel,target) linear predictor + quantile map, so an UPLOAD can be scored identically
@@ -137,8 +151,22 @@ for ch in ['visual', 'text', 'together']:
         if spearmanr(XYv[:, 0], vmap)[0] < 0: XYv[:, 0] = -XYv[:, 0]
         mp['proj']['rawviews'] = {'x': grid(XYv[:, 0]), 'y': grid(XYv[:, 1]), 'cv': round(cvv, 3), 'co': round(ch10, 3)}
         print(f'  {ch}/rawviews: held-out r(self) {cvv:.3f} r(>10M) {ch10:.3f}', flush=True)
+    # REALISTIC VIEWS (predict-scope): feed each video's STEERED keep/ret5 estimate + its real
+    # duration through the 211's retention→views model → views on YOUR channel's scale, not the
+    # library's. Reuses the views 2D layout; est is the transformed (realistic) view count.
+    if 'keep' in mp['proj'] and 'ret5' in mp['proj'] and 'views' in mp['proj']:
+        ke = np.array(mp['proj']['keep']['est'], float)
+        re = np.array(mp['proj']['ret5']['est'], float)
+        ld = np.array([np.log10(LIBDUR.get(vid, DUR_MED) + 1) for vid in mids])
+        rv = np.power(10.0, PS[0] * ke + PS[1] * re + PS[2] * ld + PS[3])
+        mp['proj']['realviews'] = {'x': mp['proj']['views']['x'], 'y': mp['proj']['views']['y'],
+                                   'cv': mp['proj']['views'].get('cv', 0), 'co': 0.0,
+                                   'est': [round(float(x)) for x in rv], 'predscope': True}
+        print(f'  {ch}/realviews: predict-scope applied → median {np.median(rv):,.0f} (vs raw library median {np.median(vmap[vmap>0]):,.0f})', flush=True)
     r2_put(f'raw/{ch}/map.json', json.dumps(mp).encode(), 'application/json')
     print(f'  saved raw/{ch}/map.json', flush=True)
+STEER['PSCOPE'] = PS.astype(np.float32)              # [c_keep, c_ret5, c_logdur, intercept] — retention→views on Tyler's scale
+STEER['PSCOPE_durmed'] = np.float32(DUR_MED)         # fallback duration for an upload with no known length
 bio = io.BytesIO(); np.savez_compressed(bio, **STEER)
 r2_put('raw/steer_models.npz', bio.getvalue(), 'application/octet-stream')
 print('done — keep/ret5 + rawviews projections added; raw/steer_models.npz saved for upload scoring', flush=True)

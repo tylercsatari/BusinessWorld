@@ -144,6 +144,7 @@ def _run():
         if a[i].startswith('--'): args[a[i][2:]] = a[i + 1]
     # --image: a montage image is provided directly (built from photos in the browser)
     # with explicit --text; no ffmpeg/transcription needed. Otherwise --file is a video.
+    dur_s = None                                           # full-video duration → predict-scope realistic views
     if args.get('image'):
         img = args['image']
         if not os.path.exists(img):
@@ -159,6 +160,11 @@ def _run():
         if not inp:
             print(json.dumps({'error': 'could not read this video — ffmpeg failed to decode it even after transcoding'})); return
         b64, txt, good = inp
+        try:
+            r = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path],
+                               capture_output=True, text=True, timeout=20)
+            dur_s = float(r.stdout.strip()) if r.stdout.strip() else None
+        except Exception: dur_s = None
     ev = embed([img_part(b64)])
     et = embed([{'text': txt}]) if good else None
     eg = embed([img_part(b64)] + ([{'text': txt}] if good else []))
@@ -227,6 +233,15 @@ def _run():
                         ysort = SM[f'{mod}_{tgt}_ysort']; yv = float(ysort[int(round(rank * (len(ysort) - 1)))])
                         est = float(10 ** yv) if kind in ('logcount', 'logx') else yv
                     steer[f'{mod}_{tgt}'] = {'est': round(est, 4) if est < 100 else round(est), 'pctile': round(rank * 100, 1), 'kind': kind}
+            # REALISTIC VIEWS (predict-scope): feed the steered keep/ret5 ests + this video's real
+            # duration through the 211's retention→views model → views on Tyler's channel scale.
+            if 'PSCOPE' in keys:
+                PS = SM['PSCOPE']; ld = float(np.log10((dur_s if dur_s and dur_s > 0 else float(SM['PSCOPE_durmed'])) + 1))
+                for mod in ('visual', 'text', 'together'):
+                    kk = steer.get(f'{mod}_keep'); rr = steer.get(f'{mod}_ret5')
+                    if kk and rr:
+                        rv = float(10 ** (PS[0] * kk['est'] + PS[1] * rr['est'] + PS[2] * ld + PS[3]))
+                        steer[f'{mod}_realviews'] = {'est': round(rv), 'pctile': None, 'kind': 'realviews', 'dur_s': round(dur_s) if dur_s else None}
     except Exception: pass
     def preview(e):
         if e is None: return None
