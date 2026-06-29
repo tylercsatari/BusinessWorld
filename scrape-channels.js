@@ -133,6 +133,14 @@ async function main() {
         if (ch.limit) { ids = ids.slice(0, ch.limit); console.log(`(limit ${ch.limit} for a quick test)`); }
         console.log(`${ids.length} videos to scrape for ${ch.name}.`);
         const rows = [];
+        const save = async (final) => {
+            const out = { meta: { n: rows.length, channel: ch.name, channel_id: ch.id, scraped_at: new Date().toISOString() }, videos: rows };
+            fs.writeFileSync(path.join(RET_DIR, `${ch.id}.json`), JSON.stringify(out));
+            await r2put(`retention/${ch.id}.json`, out);
+            await registerChannel(ch.id, ch.name, rows.length);
+            if (final) console.log(`Saved retention/${ch.id}.json (${rows.length} videos) → local + R2.`);
+            else console.log(`  …progress saved (${rows.length}/${ids.length}) → local + R2`);
+        };
         for (let i = 0; i < ids.length; i++) {
             process.stdout.write(`  [${i + 1}/${ids.length}] ${ids[i]} … `);
             try {
@@ -142,12 +150,9 @@ async function main() {
                 rows.push(toRow(ids[i], Object.assign({}, d, ret), meta));
                 console.log(`ok (keep ${d.stayedToWatch}% · ret5 ${ret.ret5 != null ? ret.ret5 : '—'} · curve ${ret.curve ? ret.curve.length + 'pts' : 'NONE'} · ${meta.views != null ? meta.views.toLocaleString() + ' views' : 'no meta'})`);
             } catch (e) { console.log('failed:', e.message.slice(0, 60)); }
+            if (rows.length && (i + 1) % 20 === 0) await save(false);      // checkpoint every 20 so a long run can't lose everything
         }
-        const out = { meta: { n: rows.length, channel: ch.name, channel_id: ch.id, scraped_at: new Date().toISOString() }, videos: rows };
-        fs.writeFileSync(path.join(RET_DIR, `${ch.id}.json`), JSON.stringify(out));
-        await r2put(`retention/${ch.id}.json`, out);
-        await registerChannel(ch.id, ch.name, rows.length);
-        console.log(`Saved retention/${ch.id}.json (${rows.length} videos) → local + R2.`);
+        await save(true);
     }
     await context.close();
     console.log('\nDone. The new channels now appear as tabs in BusinessWorld → Retention→Views.');
