@@ -1324,7 +1324,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=112').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=113').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2202,7 +2202,7 @@ const JarvisRetention = (function () {
         st.channel = id;
         // Main (your 211) = the committed static file; every other channel = R2 via the API.
         const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=112')
+            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=113')
             : fetch('/api/retention/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
         try {
             if (id === 'all') {
@@ -2218,29 +2218,45 @@ const JarvisRetention = (function () {
     }
     function render() {
         if (!root) return;
-        const SECS = [['data', '📋 Data'], ['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
-        const nav = SECS.map(([id, l]) => `<button data-rs="${id}" style="background:${st.sec === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.sec === id ? C.accent : C.border};color:${st.sec === id ? C.accent : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('');
-        // CHANNEL tab bar — your data + each permissioned channel + 'All pooled'. Carried horizontally.
+        // TWO GROUPS so it's clear what the channel selector affects:
+        //  • PER-CHANNEL  — analyses of the selected account's own videos (scoped by the channel bar)
+        //  • CORPUS       — built on ALL videos (your 211 + the 11k library); account-independent
+        const PERCHAN = [['data', '📋 Data'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict']];
+        const CORPUS = [['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
+        const SECLBL = Object.fromEntries([...PERCHAN, ...CORPUS]);
+        const isPer = PERCHAN.some(([id]) => id === st.sec);
+        const btn = ([id, l]) => `<button data-rs="${id}" style="background:${st.sec === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.sec === id ? C.accent : C.border};color:${st.sec === id ? C.accent : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`;
+        const active = st.channel || (CHANS && CHANS.active) || 'tyler';
+        const activeChan = CHANS && CHANS.channels.find(c => c.id === active);
+        const chName = active === 'all' ? 'All pooled' : (activeChan ? activeChan.name : 'Main');
+        const isMain = active === 'tyler';
+        // CHANNEL tab bar — only meaningful for the per-channel group
         const chBar = (() => {
             if (!CHANS || !CHANS.channels) return '';
-            const active = st.channel || CHANS.active || (CHANS.channels[0] || {}).id;
             const tab = (id, name, n) => `<button data-chan="${id}" style="background:${active === id ? C.green + '22' : 'transparent'};border:1px solid ${active === id ? C.green : C.border};color:${active === id ? C.green : C.dim};border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer">${name}${n != null ? ` <span style="opacity:.6;font-size:10px">${n}</span>` : ''}</button>`;
             const tabs = CHANS.channels.map(c => tab(c.id, c.name, c.n)).join('');
             const total = CHANS.channels.reduce((s, c) => s + (c.n || 0), 0);
             const pooled = CHANS.channels.length > 1 ? tab('all', 'All pooled', total) : '';
-            const add = `<button data-chanadd="1" style="background:transparent;border:1px dashed ${C.border};color:${C.mute};border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer">＋ add channel</button>`;
-            const help = st.channelHelp ? `<div style="font-size:10px;color:${C.mute};margin-top:6px;line-height:1.6;background:${C.card2};border-radius:8px;padding:9px 12px;max-width:760px">
-                <b style="color:${C.text}">Add another channel's data (you must have permission):</b><br>
-                1. The owner grants your Google account access — Studio → <b>Settings → Permissions → Invite</b> (Manager or Editor) — or it's a brand account you manage.<br>
-                2. Run <code style="color:${C.cyan}">node scrape-channels.js</code> from the project. It opens real Chrome; when it pauses, use the <b>account menu (top-right) → switch to the target channel</b>, then press Enter in the terminal. It lists that channel's Shorts and scrapes the retention curve + swipe-away + views for each, exactly like your 211.<br>
-                3. It writes <code>retention/&lt;channel&gt;.json</code> and registers it in <code>channels.json</code> — the new tab appears here automatically. <b>All pooled</b> merges every channel into one bigger dataset (more n = better models).</div>` : '';
-            return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap"><span style="font-size:10px;color:${C.mute};text-transform:uppercase;letter-spacing:.3px">channel</span>${tabs}${pooled}${add}</div>${help}`;
+            const add = `<button data-chanadd="1" style="background:transparent;border:1px dashed ${C.border};color:${C.mute};border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer">＋ add</button>`;
+            const help = st.channelHelp ? `<div style="font-size:10px;color:${C.mute};margin-top:6px;line-height:1.6;background:${C.card2};border-radius:8px;padding:9px 12px;max-width:760px"><b style="color:${C.text}">Add another channel (you must have Studio Viewer access):</b> run <code style="color:${C.cyan}">node scrape-channels.js</code>, switch to the channel when it pauses, and it scrapes the full retention curve + swipe + views and uploads to R2 — the tab appears here. <b>All pooled</b> merges every channel for a bigger dataset.</div>` : '';
+            return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:7px;flex-wrap:wrap"><span style="font-size:10px;color:${C.green};text-transform:uppercase;letter-spacing:.3px;font-weight:800">channel</span>${tabs}${pooled}${add}<span style="font-size:9px;color:${C.faint};margin-left:2px">— scopes the “this channel” sections below</span></div>${help}`;
         })();
-        const sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
+        // analyzed badge: how much of this channel actually has data
+        const nKeep = (DATA && DATA.videos) ? DATA.videos.filter(v => v.keep_rate != null).length : 0;
+        const nCurve = (DATA && DATA.videos) ? DATA.videos.filter(v => v.curve && v.curve.length).length : 0;
+        const badge = `<span style="font-size:10px;color:${C.mute};background:${C.card2};border-radius:6px;padding:3px 10px;margin-left:4px"><b style="color:${C.green}">${chName}</b> · ${nKeep} w/ retention · <b style="color:${nCurve === nKeep && nKeep ? C.green : C.amber}">${nCurve}</b> w/ full curve</span>`;
+        // gate: the analysis views (not Data) are only computed for Main so far
+        let sec;
+        if (isPer && st.sec !== 'data' && !isMain) {
+            sec = cardc(`<div style="padding:26px;text-align:center"><div style="font-size:14px;font-weight:800;color:${C.text};margin-bottom:6px">${SECLBL[st.sec]} — not computed for ${chName} yet</div><div style="font-size:11px;color:${C.mute};line-height:1.7;max-width:580px;margin:0 auto">This is a <b>per-channel</b> analysis; the pipeline has only been run for <b>Main</b> so far. <b>${chName}</b> has <b style="color:${C.green}">${nKeep}</b> videos with retention data — open <b>📋 Data</b> to see them. The Views / Shape / Drivers / Duration / Predict models for this account get built when its analysis is run (it takes time to process per account).</div></div>`, 16);
+        } else {
+            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
+        }
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
             <div style="font-size:21px;font-weight:900;color:${C.accent};margin-bottom:8px">Retention → Views</div>
             ${chBar}
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${nav}</div>${sec}</div>`;
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><span style="font-size:9px;color:${C.green};text-transform:uppercase;font-weight:800;letter-spacing:.3px">📊 this channel</span>${PERCHAN.map(btn).join('')}${isPer ? badge : ''}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px"><span style="font-size:9px;color:${C.purple};text-transform:uppercase;font-weight:800;letter-spacing:.3px">🌐 corpus · all videos</span>${CORPUS.map(btn).join('')}<span style="font-size:9px;color:${C.faint}">— not affected by the channel selector</span></div>${sec}</div>`;
         try { rtgAfterRender(); } catch (e) { }
     }
 
@@ -2413,7 +2429,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=112'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=113'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     CHANS = await fetch('/api/retention/channels').then(r => r.json()).catch(() => null);
