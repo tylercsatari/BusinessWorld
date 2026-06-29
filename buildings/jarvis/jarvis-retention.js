@@ -594,7 +594,7 @@ const JarvisRetention = (function () {
         if (!R || R.loading) rawEnsure('visual');
         if (!G) guessEnsure(run);
         const PROJS = R && R.proj ? [['keep', '→ keep-rate'], ['ret5', '→ 5s-ret'], ['hi10m', '>10M class'], ['views', '→ views'], ['outlier', '→ outlier'], ['both', 'views+outlier'], ['hiout', 'top-outlier'], ['umap', 'UMAP'], ['pca', 'PCA']].filter(p => R.proj[p[0]]) : [];
-        let proj = st.guessProj || (run.indexOf('keep') === 0 ? 'keep' : 'hi10m'); if (R && R.proj && !R.proj[proj]) proj = PROJS.length ? PROJS[0][0] : 'views';
+        let proj = st.guessProj || ((run.indexOf('keep') === 0 || run.indexOf('grpo') === 0) ? 'keep' : 'hi10m'); if (R && R.proj && !R.proj[proj]) proj = PROJS.length ? PROJS[0][0] : 'views';
         const pPill = ([id, lab]) => `<span data-guessproj="${id}" style="cursor:pointer;border:1px solid ${proj === id ? C.accent : C.border};background:${proj === id ? C.accent + '1e' : 'transparent'};color:${proj === id ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
         const bandPill = `<span data-guessbands style="cursor:pointer;border:1px solid ${bands ? C.cyan : C.border};background:${bands ? C.cyan + '22' : 'transparent'};color:${bands ? C.cyan : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">📊 trend bands</span>`;
         const resPills = bands ? `<span style="font-size:9px;color:${C.mute};margin-left:2px">sections</span>` + [4, 6, 8, 12, 16].map(kk => `<span data-guessbandk="${kk}" style="cursor:pointer;border:1px solid ${(st.guessBandK || 6) === kk ? C.cyan : C.border};background:${(st.guessBandK || 6) === kk ? C.cyan + '1e' : 'transparent'};color:${(st.guessBandK || 6) === kk ? C.cyan : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${kk}</span>`).join('') : '';
@@ -667,6 +667,39 @@ const JarvisRetention = (function () {
     }
     function guessDetail(run, r) {
         const frames = (r.frames || []).map((f, i) => `<div style="display:flex;gap:8px;margin-bottom:5px"><span style="color:${C.accent};font-weight:800;flex-shrink:0">${i + 1}</span><span style="font-size:11px;color:${C.dim};line-height:1.45">${esc(f)}</span></div>`).join('');
+        const isG = run.indexOf('grpo') === 0 || r.reasoning != null;
+        if (isG) {
+            const lab = s => `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;letter-spacing:.04em;margin:10px 0 4px">${s}</div>`;
+            const bgc = C.bg || '#0f172a';
+            const advCol = (r.advantage || 0) > 0 ? C.green : ((r.advantage || 0) < 0 ? '#ef4444' : C.mute);
+            const relBad = r.relevance != null && r.relevance < 0.45;
+            const sibs = ((GUESSES[run] && GUESSES[run].rows) || []).filter(x => x.input_id === r.input_id).sort((a, b) => (b.pctile || 0) - (a.pctile || 0));
+            const sibStrip = sibs.map(x => `<div data-guessid="${x.id}" style="cursor:pointer;flex-shrink:0;width:74px;border:2px solid ${x.id === r.id ? C.accent : 'transparent'};border-radius:6px;overflow:hidden"><img src="/api/hooks/montage/${esc(run)}/${esc(x.id)}" style="width:100%;display:block" loading="lazy"/><div style="font-size:9px;text-align:center;color:${heatCol(x.pctile || 0)};font-weight:800">${Math.round((x.pctile || 0) * 100)}%</div></div>`).join('');
+            return cardc(`<div style="display:flex;gap:16px;flex-wrap:wrap">
+              <div style="flex:1;min-width:300px">
+                ${lab('INPUT — the video idea (no niche, no priors given)')}
+                <div style="font-size:13px;color:${C.text};background:${bgc};border-radius:6px;padding:9px 11px;line-height:1.5;font-weight:700">${esc(r.premise || r.brief || '')}</div>
+                ${lab('OUTPUT — this idea\'s 5 frames · cohesion: ' + esc(r.cohesion_mode || '—'))}
+                <img src="/api/hooks/montage/${esc(run)}/${esc(r.id)}" style="width:100%;border-radius:8px;background:#000;min-height:60px;margin-bottom:6px" onerror="this.style.display='none'"/>
+                <div style="background:${bgc};border-radius:6px;padding:10px 11px">${frames || '—'}</div>
+                ${lab('REASONING — the model\'s own thinking before it chose these frames')}
+                <div style="font-size:11px;color:${C.dim};background:${bgc};border-radius:6px;padding:10px 11px;line-height:1.55;white-space:pre-wrap;max-height:260px;overflow:auto">${esc(r.reasoning || '(no trace)')}</div>
+              </div>
+              <div style="flex:1;min-width:230px">
+                ${lab('SCORE — keep-rate, gated by relevance, ranked within this input')}
+                <div style="font-size:12px;color:${C.mute};line-height:2.05">
+                  keep-rate percentile: <b style="color:${heatCol(r.pctile || 0)}">${Math.round((r.pctile || 0) * 100)}th</b><br>
+                  relevance to input: <b style="color:${relBad ? '#ef4444' : C.text}">${r.relevance != null ? fmt(r.relevance, 2) : '—'}</b> <span style="font-size:9px;color:${C.faint || C.mute}">(on-topic ≥0.45; below = penalised)</span><br>
+                  advantage vs its group: <b style="color:${advCol}">${(r.advantage || 0) > 0 ? '+' : ''}${fmt(r.advantage, 2)}</b> <span style="font-size:9px;color:${C.faint || C.mute}">(beats the model's other tries at this idea)</span><br>
+                  reward: <b style="color:${C.text}">${fmt(r.reward, 2)}</b><br>
+                  in-distribution (nn-cos): <b style="color:${C.cyan}">${fmt(r.nn_cos, 3)}</b><br>
+                  what's literally shown: <span style="color:${C.dim};font-style:italic">${esc(r.caption || '—')}</span>
+                </div>
+                ${lab('ALL ' + sibs.length + ' IDEAS IT GENERATED FOR THIS INPUT (click to compare)')}
+                <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px">${sibStrip}</div>
+                <div style="margin-top:12px"><span data-guessclose style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 11px;font-size:11px">close</span></div>
+              </div></div>`, 12);
+        }
         const lab = s => `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;letter-spacing:.04em;margin:10px 0 4px">${s}</div>`;
         const bgc = C.bg || '#0f172a';
         return cardc(`<div style="display:flex;gap:16px;flex-wrap:wrap">

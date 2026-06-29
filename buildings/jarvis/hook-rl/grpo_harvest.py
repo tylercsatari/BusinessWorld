@@ -16,7 +16,7 @@ G = int(os.environ.get("G", "8"))                 # attempts per input (the GRPO
 IMG_BUDGET = int(os.environ.get("IMG_BUDGET", "8000"))
 IDEABANK = os.environ.get("IDEABANK", "") or "/home/ubuntu/hookrl/data/ideabank_big.jsonl"
 RUNDIR = "/home/ubuntu/hookrl/runs/%s" % RUN; os.makedirs(RUNDIR, exist_ok=True)
-TRAIN = RUNDIR + "/grpo_data.jsonl"; INDEX = RUNDIR + "/index.jsonl"
+TRAIN = RUNDIR + "/grpo_data.jsonl"; INDEX = RUNDIR + "/index.jsonl"; MANIF = RUNDIR + "/manifest.jsonl"
 
 # Minimal task framing ONLY — no creative priors (no "close-up", niche, tease, "scroll-stopping").
 # The model must reason its own way to what holds attention; the reward teaches it.
@@ -85,6 +85,11 @@ for i in ideas:
     k = pkey(i.get("premise", ""))
     if k and k not in seen: seen.add(k); uniq.append(i)
 ideas = uniq
+# seed local index+manifest from R2 so a restart resumes and ACCUMULATES (never overwrites prior rows)
+for local, key in [(INDEX, "hooks/grpo/%s/index.jsonl" % RUN), (MANIF, "hooks/grpo/%s/manifest.jsonl" % RUN)]:
+    if not os.path.exists(local):
+        try: open(local, "wb").write(H.s3.get_object(Bucket=H.BUCKET, Key=key)["Body"].read())
+        except Exception: pass
 done = set()
 if os.path.exists(INDEX):
     for l in open(INDEX):
@@ -121,6 +126,15 @@ for ii, idea in enumerate(ideas):
             with open(TRAIN, "a") as f:
                 f.write(json.dumps({"input_id": iid, "brief": brief, "reasoning": s["reasoning"],
                     "cohesion_mode": s["cohesion_mode"], "frames": s["frames"], "advantage": round(adv, 4)}) + "\n")
+        # map-compatible manifest row (one per attempt) so EVERY output is a dot on the Guesses map,
+        # placed by nbr like any guess, coloured by keep, with its input + reasoning on click.
+        with open(MANIF, "a") as f:
+            f.write(json.dumps({"id": "%s_%d" % (iid, k), "input_id": iid, "k": k, "premise": premise,
+                "brief": brief, "x": s["x"], "y": s["y"], "nbr": s["nbr"], "pctile": round(s["keep_pctile"], 4),
+                "keep_pred": s["keep_pctile"], "nn_cos": round(s["nn_cos"], 4),
+                "relevance": round(s["relevance"], 4) if s["relevance"] is not None else None,
+                "advantage": round(adv, 4), "reward": round(s["reward"], 4), "cohesion_mode": s["cohesion_mode"],
+                "reasoning": s["reasoning"][:1800], "caption": s["caption"], "frames": s["frames"]}) + "\n")
     grp = {"input_id": iid, "premise": premise, "niche_hint": idea.get("niche", ""), "group_mean": round(base, 4),
            "best_reward": round(scored[0]["reward"], 4), "best_keep": round(scored[0]["keep_pctile"], 4),
            "spread": round(float(rewards.max() - rewards.min()), 4), "n": len(scored), "attempts": attempts_out}
@@ -130,6 +144,7 @@ for ii, idea in enumerate(ideas):
         f.write(json.dumps({"input_id": iid, "premise": premise, "best_keep": grp["best_keep"],
             "best_reward": grp["best_reward"], "group_mean": grp["group_mean"], "spread": grp["spread"], "n": grp["n"]}) + "\n")
     H.s3.upload_file(INDEX, H.BUCKET, "hooks/grpo/%s/index.jsonl" % RUN)
+    H.s3.upload_file(MANIF, H.BUCKET, "hooks/grpo/%s/manifest.jsonl" % RUN)
     print("[%s] %s n=%d best_keep=%.0f%% best_rew=%.2f mean=%.2f spread=%.2f imgs=%d $%.2f" % (
         RUN, iid, len(scored), grp["best_keep"]*100, grp["best_reward"], base, grp["spread"], H.RENDERS[0], H.RENDERS[0]*0.003), flush=True)
 print("=== GRPO_HARVEST_DONE ===", flush=True)
