@@ -63,6 +63,31 @@ async function fetchMeta(metaPage, videoId) {
     } catch (e) { return {}; }
 }
 
+// parse the retention curve out of a Studio get_screen payload → same fields as the 211:
+//   curve = retentionValues/100 (relative-retention ratios) · ret5 = relative retention at 5s
+//   · avg_retention = avgPercentageWatched×100. (Verified to the decimal against the 211.)
+function parseRetention(body, videoId) {
+    const idx = body.indexOf('"retentionValues"');
+    if (idx < 0) return {};
+    const lb = body.indexOf('[', idx), rb = body.indexOf(']', lb);
+    let arr; try { arr = JSON.parse(body.slice(lb, rb + 1)); } catch (e) { return {}; }
+    if (!Array.isArray(arr) || !arr.length) return {};
+    const dur = +((body.match(/"videoDurationMs"\s*:\s*"?([0-9]+)"?/) || [])[1]) || null;
+    const apw = (body.match(/"avgPercentageWatched"\s*:\s*([0-9.]+)/) || [])[1];
+    const at5 = (a, d) => { const pos = (5000 / d) * (a.length - 1), lo = Math.max(0, Math.floor(pos)), hi = Math.min(a.length - 1, Math.ceil(pos)), f = pos - lo; return a[lo] + (a[hi] - a[lo]) * f; };
+    return { curve: arr.map(v => +(v / 100).toFixed(4)), ret5: dur ? +at5(arr, dur).toFixed(1) : null, avg_retention: apw ? +(+apw * 100).toFixed(2) : null };
+}
+
+// load the video's analytics so the get_screen payload (with the retention curve) fires, capture it
+async function scrapeRetention(page, videoId) {
+    let body = null;
+    const h = async (resp) => { const u = resp.url(); if (u.includes('youtubei') && u.includes('get_screen')) { try { const b = await resp.text(); if (b.includes('retentionValues')) body = b; } catch (e) {} } };
+    page.on('response', h);
+    for (const tab of ['tab-overview', 'tab-engagement']) { if (body) break; await page.goto(`https://studio.youtube.com/video/${videoId}/analytics/${tab}`, { waitUntil: 'networkidle', timeout: 30000 }).catch(() => {}); await page.waitForTimeout(2500); }
+    page.off('response', h);
+    return body ? parseRetention(body, videoId) : {};
+}
+
 // map one scraped video to the retention_table.json row format (same fields as the 211)
 function toRow(videoId, d, meta) {
     return Object.assign({ id: videoId, url: `https://youtube.com/watch?v=${videoId}`, scraped_at: new Date().toISOString() }, meta || {}, d, {
@@ -105,20 +130,13 @@ async function main() {
         const rows = [];
         for (let i = 0; i < ids.length; i++) {
             process.stdout.write(`  [${i + 1}/${ids.length}] ${ids[i]} … `);
-            try { const d = await scraper.scrapeOneVideo(page, ids[i]); const meta = await fetchMeta(metaPage, ids[i]); rows.push(toRow(ids[i], d, meta)); console.log(`ok (keep ${d.stayedToWatch}% · ${meta.views != null ? meta.views.toLocaleString() + ' views' : 'no meta'})`); }
-            catch (e) { console.log('failed:', e.message.slice(0, 60)); }
-            // FIRST video only: capture the Studio analytics payloads (BROAD filter — the data
-            // comes via get_screen/creator endpoints, not URLs containing "analytics") by
-            // explicitly loading the engagement + overview tabs so the retention graph fetches.
-            if (i === 0) {
-                const cap = [];
-                const h = async (resp) => { const u = resp.url(); if (u.includes('youtubei') && /get_screen|creator|analytics|explore|insights/.test(u)) { try { const b = await resp.text(); if (b && b.length > 300) cap.push({ url: u.slice(0, 200), len: b.length, body: b.slice(0, 500000) }); } catch (e) {} } };
-                page.on('response', h);
-                for (const tab of ['tab-engagement', 'tab-overview']) { await page.goto(`https://studio.youtube.com/video/${ids[0]}/analytics/${tab}`, { waitUntil: 'networkidle', timeout: 30000 }).catch(() => {}); await page.waitForTimeout(3000); }
-                page.off('response', h);
-                fs.writeFileSync(path.join(__dirname, `analytics-debug-${ch.id}.json`), JSON.stringify(cap));
-                console.log(`  ↳ captured ${cap.length} analytics payloads → analytics-debug-${ch.id}.json (send me this)`);
-            }
+            try {
+                const d = await scraper.scrapeOneVideo(page, ids[i]);      // keep / swipe
+                const ret = await scrapeRetention(page, ids[i]);           // curve / ret5 / avg_retention
+                const meta = await fetchMeta(metaPage, ids[i]);            // views / title / duration
+                rows.push(toRow(ids[i], Object.assign({}, d, ret), meta));
+                console.log(`ok (keep ${d.stayedToWatch}% · ret5 ${ret.ret5 != null ? ret.ret5 : '—'} · curve ${ret.curve ? ret.curve.length + 'pts' : 'NONE'} · ${meta.views != null ? meta.views.toLocaleString() + ' views' : 'no meta'})`);
+            } catch (e) { console.log('failed:', e.message.slice(0, 60)); }
         }
         const out = { meta: { n: rows.length, channel: ch.name, channel_id: ch.id, scraped_at: new Date().toISOString() }, videos: rows };
         fs.writeFileSync(path.join(RET_DIR, `${ch.id}.json`), JSON.stringify(out));
