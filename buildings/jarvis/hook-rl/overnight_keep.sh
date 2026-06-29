@@ -1,11 +1,13 @@
 #!/bin/bash
 # DPO loop on the KEEP-RATE axis: harvest best/worst pairs -> DPO -> repeat, until 8h or pairs dry.
+set -o pipefail   # so a dpo.py crash isn't masked by the grep it's piped through
 cd /home/ubuntu/hookrl
 V="venv/bin/python"
 log(){ echo "[$(date +%H:%M:%S)] $*"; }
 DEADLINE=$(( $(date +%s) + 8*3600 ))
-PREV=/home/ubuntu/hookrl/models/qwen3-30b-a3b   # round 1 collects pairs from the BASE model
-N=1; STRIKES=0
+# Round 1 was already harvested (59 pairs) + DPO'd manually -> dpomerged_r1. Resume from round 2.
+PREV=/home/ubuntu/hookrl/models/dpomerged_r1
+N=2; STRIKES=0
 while true; do
   if [ $(date +%s) -ge $DEADLINE ]; then log "8h deadline"; break; fi
   BEFORE=$(wc -l < runs/keep$N/pairs.jsonl 2>/dev/null || echo 0)

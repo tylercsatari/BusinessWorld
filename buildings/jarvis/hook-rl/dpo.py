@@ -47,8 +47,8 @@ lora = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05, bias="none", task_type
                   target_modules=["q_proj", "k_proj", "v_proj", "o_proj"])
 cfg = DPOConfig(output_dir=OUT, per_device_train_batch_size=1, gradient_accumulation_steps=16,
                 num_train_epochs=1, learning_rate=5e-6, bf16=True, beta=0.1,
-                max_length=1280, max_prompt_length=420, logging_steps=5, save_strategy="no",
-                gradient_checkpointing=False, report_to=[])
+                max_length=1280, logging_steps=5, save_strategy="no",
+                gradient_checkpointing=False, report_to=[])  # trl 1.7.0 DPOConfig dropped max_prompt_length
 trainer = DPOTrainer(model=model, args=cfg, train_dataset=ds, processing_class=tok, peft_config=lora)
 trainer.train()
 trainer.model.save_pretrained(OUT); tok.save_pretrained(OUT)
