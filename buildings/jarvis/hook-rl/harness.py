@@ -89,17 +89,38 @@ def real_vecs():
         V = np.asarray(d["vecs"], dtype="float32")
         _REAL[0] = V / (np.linalg.norm(V, axis=1, keepdims=True) + 1e-8)
     return _REAL[0]
-_MAP = [None]; _ROWXY = [None]; _NIDS = [None]
+_MAP = [None]; _ROWXY = [None]; _NIDS = [None]; _KEEP = [None]; _KXY = [None]; _KEEPSORT = [None]
 def _load_map():
     if _MAP[0] is None:
         M = json.loads(s3.get_object(Bucket=BUCKET, Key="raw/visual/map.json")["Body"].read())
-        ids = M["id"]; vx = M["proj"]["views"]["x"]; vy = M["proj"]["views"]["y"]
-        id2xy = {ids[i]: (vx[i], vy[i]) for i in range(len(ids))}
+        ids = M["id"]; P = M["proj"]
+        id2xy = {ids[i]: (P["views"]["x"][i], P["views"]["y"][i]) for i in range(len(ids))}
+        ke = P["keep"]["est"]; id2keep = {ids[i]: ke[i] for i in range(len(ids))}
+        id2kxy = {ids[i]: (P["keep"]["x"][i], P["keep"]["y"][i]) for i in range(len(ids))}
         d = np.load(HERE + "/data/visual_embeddings.npz", allow_pickle=True)
         nids = [str(x) for x in d["ids"]]
         _NIDS[0] = nids
         _ROWXY[0] = np.array([id2xy.get(nids[i], (np.nan, np.nan)) for i in range(len(nids))], float)
+        _KEEP[0] = np.array([id2keep.get(nids[i], np.nan) for i in range(len(nids))], float)
+        _KXY[0] = np.array([id2kxy.get(nids[i], (np.nan, np.nan)) for i in range(len(nids))], float)
+        _KEEPSORT[0] = np.sort(_KEEP[0][~np.isnan(_KEEP[0])])
         _MAP[0] = True
+
+def score_keep(emb):
+    """Reward axis = KEEP-RATE (causal). Score a montage by the sim-weighted keep-estimate of its
+    12 nearest library hooks (the extrapolated 11k keep labels), as percentile. Plus nn_cos density."""
+    en = emb / (np.linalg.norm(emb) + 1e-8)
+    sims = real_vecs() @ en
+    _load_map()
+    order = np.argsort(sims); top = order[-12:][::-1]
+    nbr = [[_NIDS[0][i], round(float(sims[i]), 4)] for i in top]
+    w = np.maximum(0.001, sims[top]); ke = _KEEP[0][top]; good = ~np.isnan(ke)
+    keep_pred = float(np.sum(ke[good] * w[good]) / (np.sum(w[good]) + 1e-9))
+    keep_pctile = float((_KEEPSORT[0] < keep_pred).mean())
+    kxy = _KXY[0][order[-12:]]; g2 = ~np.isnan(kxy[:, 0])
+    return {"keep_pred": round(keep_pred, 2), "keep_pctile": round(keep_pctile, 4),
+            "nn_cos": float(sims.max()), "x": round(float(np.mean(kxy[g2, 0])), 1),
+            "y": round(float(np.mean(kxy[g2, 1])), 1), "nbr": nbr}
 
 def score(emb):
     ax = axis()
@@ -125,3 +146,18 @@ def render_score_hook(prompts):
     emb = embed_image(mont)
     if emb is None: return frames, mont, None
     return frames, mont, score(emb)
+
+def render_score_keep(prompts):
+    frames = render_frames(prompts)
+    if any(f is None for f in frames): return None, None, None
+    mont = build_montage(frames)
+    emb = embed_image(mont)
+    if emb is None: return frames, mont, None
+    return frames, mont, score_keep(emb)
+
+DENSITY_FLOOR = 0.72  # real-real nn_cos p10; below this a montage is off the real-hook manifold
+def reward_of(sc):
+    """Density-guarded keep reward: keep-axis percentile minus an off-manifold penalty so the
+    model can't game the axis by leaving the real-hook embedding manifold."""
+    pen = max(0.0, DENSITY_FLOOR - sc["nn_cos"])
+    return sc["keep_pctile"] - 1.5 * pen
