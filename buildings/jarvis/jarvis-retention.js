@@ -10,10 +10,10 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, NQ = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, NQ = null, NQF = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0 };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0 };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -1244,6 +1244,45 @@ const JarvisRetention = (function () {
             </table>
             <div style="font-size:10px;color:${C.mute};margin-top:8px;line-height:1.5"><b style="color:${C.text}">Read it:</b> visual novelty is negative to views (familiar wins distribution); but <b style="color:${C.green}">combinatorial novelty strongly cuts swipe-away (−0.25)</b> — unusual combinations keep people. Each row is an independent candidate indicator.</div>`, 12);
     }
+    // 🔬 QUANTIFY — pick a quantification method × modality, RECOLOUR the actual corpus map by that
+    // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
+    // Every colouring here is the SAME definition the correlation panels measure (one source).
+    function renderNovQuantify() {
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=108').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
+        if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
+        const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
+        if (!RAW[ch]) rawEnsure(ch);
+        const F = NQF.field[mod], M = F.methods[meth] || F.methods.mode;
+        const modPill = m => `<span data-nqmod="${m}" style="cursor:pointer;border:1px solid ${mod === m ? C.purple : C.border};background:${mod === m ? C.purple + '22' : 'transparent'};color:${mod === m ? C.purple : C.dim};border-radius:7px;padding:4px 12px;font-size:12px;font-weight:700">${m}</span>`;
+        const methPill = mt => { const mm = F.methods[mt], r = mm.keep_r; return `<span data-nqmeth="${mt}" title="${esc(mm.formula)}" style="cursor:pointer;border:1px solid ${meth === mt ? C.cyan : C.border};background:${meth === mt ? C.cyan + '22' : 'transparent'};color:${meth === mt ? C.cyan : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;white-space:nowrap">${mt} <span style="color:${r > 0.15 ? C.green : C.mute};font-weight:400">${r != null ? (r >= 0 ? '+' : '') + r.toFixed(2) : ''}</span></span>`; };
+        const R = RAW[ch];
+        let mapSvg = `<div style="height:340px;display:flex;align-items:center;justify-content:center;background:${C.card2};border-radius:8px;color:${C.dim};font-size:11px">loading ${ch} map…</div>`;
+        if (R && !R.loading && R.proj && R.proj.umap) {
+            const proj = R.proj.umap, n = R.n || proj.x.length, W = 520, H = 340, pad = 14, S = 1000, X = g => pad + g / S * (W - 2 * pad), Y = g => pad + (1 - g / S) * (H - 2 * pad);
+            const nov = M.nov, okv = nov.filter(x => x != null && isFinite(x)), lo = Math.min(...okv), hi = Math.max(...okv), mine = R.mine || [], title = R.title || [], views = R.views || [];
+            let dots = '', mineDots = '';
+            for (let i = 0; i < n; i++) {
+                const v = nov[i], col = (v == null || !isFinite(v)) ? '#334155' : rawRamp((v - lo) / ((hi - lo) || 1)), m2 = st.novMine && mine[i];
+                const c = `<circle cx="${X(proj.x[i]).toFixed(1)}" cy="${Y(proj.y[i]).toFixed(1)}" r="${m2 ? 3.4 : 1.8}" fill="${m2 ? '#fbbf24' : col}" opacity="${st.novMine ? (mine[i] ? 1 : 0.1) : 0.6}"${m2 ? ' stroke="#fff" stroke-width="0.8"' : ''}><title>${esc((title[i] || '').slice(0, 40))} · novelty ${v != null ? v.toFixed(3) : '—'} · ${fv(views[i])} views</title></circle>`;
+                if (m2) mineDots += c; else dots += c;
+            }
+            mapSvg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px">${dots}${mineDots}</svg>`;
+        }
+        const fmtr = r => r == null ? '—' : `<b style="color:${r > 0.15 ? C.green : r < -0.05 ? '#60a5fa' : C.dim}">${r >= 0 ? '+' : ''}${r.toFixed(3)}</b>`;
+        // method comparison table for this modality (all methods, keep + ret5 ρ)
+        const meths = NQF.methods || Object.keys(F.methods);
+        const rows = meths.map(mt => { const mm = F.methods[mt]; const sel = mt === meth; return `<tr data-nqmeth="${mt}" style="cursor:pointer;background:${sel ? C.cyan + '15' : 'transparent'}"><td style="padding:3px 8px 3px 4px;color:${sel ? C.cyan : C.text};font-weight:${sel ? 700 : 400};white-space:nowrap">${mt}</td><td style="text-align:center;padding:3px 8px">${fmtr(mm.keep_r)}</td><td style="text-align:center;padding:3px 8px">${fmtr(mm.ret5_r)}</td><td style="color:${C.mute};font-size:9px;padding:3px 6px;line-height:1.3">${esc(mm.formula)}</td></tr>`; }).join('');
+        return cardc(`<div style="font-size:13px;font-weight:800;color:${C.text};margin-bottom:2px">🔬 Quantify novelty — recolour the map by any definition, see its influence</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:8px">The quantification IS the variable. Pick a modality and a method → the ${ch} corpus map below recolours by that exact per-video novelty (<span style="color:${rawRamp(0)}">typical</span>→<span style="color:${rawRamp(1)}">novel</span>), and its held-out ρ to keep / 5s-ret is shown. Same definitions the correlation panels measure — one source of truth.</div>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:7px;flex-wrap:wrap"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">modality</span>${['visual', 'text', 'whole'].map(modPill).join('')}<span style="width:8px"></span><span data-novmine="1" style="cursor:pointer;border:1px solid ${st.novMine ? '#fbbf24' : C.border};background:${st.novMine ? '#fbbf2422' : 'transparent'};color:${st.novMine ? '#fbbf24' : C.dim};border-radius:7px;padding:4px 11px;font-size:11px;font-weight:700">★ my videos</span></div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">${meths.map(methPill).join('')}</div>
+            <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:14px;align-items:start">
+              <div>${mapSvg}<div style="font-size:10px;color:${C.mute};margin-top:5px"><b style="color:${C.cyan}">${mod} · ${meth}</b> — ${esc(M.formula)}</div>
+                <div style="display:flex;gap:16px;margin-top:6px"><div><div style="font-size:9px;color:${C.mute};text-transform:uppercase">held-out → keep</div><div style="font-size:20px;font-weight:900">${fmtr(M.keep_r)}</div></div><div><div style="font-size:9px;color:${C.mute};text-transform:uppercase">held-out → 5s-ret</div><div style="font-size:20px;font-weight:900">${fmtr(M.ret5_r)}</div></div></div></div>
+              <div><div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">all ${meths.length} methods · ${mod}</div><table style="border-collapse:collapse;font-size:10px;width:100%"><tr><td style="color:${C.mute};font-size:9px">method</td><td style="color:${C.green};font-size:9px;text-align:center">keep</td><td style="color:${C.accent};font-size:9px;text-align:center">5s-ret</td><td style="color:${C.mute};font-size:9px">formula</td></tr>${rows}</table></div>
+            </div>`, 12);
+    }
     // VALIDATED novelty→retention experiment (novelty_experiment.py): held-out 70/30, consistent
     // definitions, swipe=−keep, views excluded. The rigorous "does novelty actually work" answer.
     function novValidPanel() {
@@ -2040,7 +2079,7 @@ const JarvisRetention = (function () {
         h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${ppill('novelty', '✦ Novelty', pr === 'novelty')}${ppill('rtg', '⛓ RTG', pr === 'rtg')}<span style="border:1px dashed ${C.border2};color:${C.faint};border-radius:8px;padding:5px 12px;font-size:12px">coherence · soon</span></div>`;
         if (pr === 'rtg') return h + renderRTG();
         if (!N) { h += cardc(`<div style="padding:30px;text-align:center;color:${C.dim}">Building novelty geometry… <div style="font-size:11px;color:${C.mute};margin-top:6px">Run the <code>principles/</code> pipeline to generate <code>novelty.json</code>.</div></div>`); return h; }
-        const MS = [['global', 'A Global'], ['niche', 'B Niche'], ['temporal', 'C Temporal'], ['combo', 'D Combinatorial'], ['coherent', 'E Coherent'], ['correlations', '📊 Correlations'], ['interactions', '🔗 Interactions'], ['ledger', '📋 Ledger']];
+        const MS = [['quantify', '🔬 Quantify'], ['global', 'A Global'], ['niche', 'B Niche'], ['temporal', 'C Temporal'], ['combo', 'D Combinatorial'], ['coherent', 'E Coherent'], ['correlations', '📊 Correlations'], ['interactions', '🔗 Interactions'], ['ledger', '📋 Ledger']];
         const resBtn = (id, l) => `<button data-novres="${id}" style="background:${st.novRes === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.novRes === id ? C.accent : C.border};color:${st.novRes === id ? C.accent : C.dim};border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">${l}</button>`;
         const mineCount = (N.videos || []).filter(v => v.mine).length;
         const mineBtn = mineCount ? `<span data-novmine="1" style="cursor:pointer;border:1px solid ${st.novMine ? '#fbbf24' : C.border};background:${st.novMine ? '#fbbf2422' : 'transparent'};color:${st.novMine ? '#fbbf24' : C.dim};border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700">★ My videos (${mineCount})</span>` : '';
@@ -2052,7 +2091,7 @@ const JarvisRetention = (function () {
         h += novValidPanel();
         h += novQuantPanel();
         if (st.novSel != null && N.videos[st.novSel]) h += renderHookDetail(st.novSel);
-        h += ({ global: renderNovGlobal, niche: renderNovNiche, temporal: renderNovTemporal, combo: renderNovCombo, coherent: renderNovCoherent, correlations: renderNovCorrelations, interactions: renderNovInteractions, ledger: renderNovLedger }[st.nov] || renderNovGlobal)();
+        h += ({ quantify: renderNovQuantify, global: renderNovGlobal, niche: renderNovNiche, temporal: renderNovTemporal, combo: renderNovCombo, coherent: renderNovCoherent, correlations: renderNovCorrelations, interactions: renderNovInteractions, ledger: renderNovLedger }[st.nov] || renderNovGlobal)();
         return h;
     }
 
@@ -2086,6 +2125,8 @@ const JarvisRetention = (function () {
         const cff = e.target.closest('[data-cf]'); if (cff && !e.target.closest('a')) { st.cfSel = cff.getAttribute('data-cf'); render(); return; }
         if (e.target.closest('[data-novmine]')) { st.novMine = !st.novMine; render(); return; }
         const nv = e.target.closest('[data-nov]'); if (nv) { st.nov = nv.getAttribute('data-nov'); render(); return; }
+        const nqm = e.target.closest('[data-nqmod]'); if (nqm) { st.nqMod = nqm.getAttribute('data-nqmod'); render(); return; }
+        const nqt = e.target.closest('[data-nqmeth]'); if (nqt) { st.nqMeth = nqt.getAttribute('data-nqmeth'); render(); return; }
         const pp = e.target.closest('[data-principle]'); if (pp) { st.principle = pp.getAttribute('data-principle'); render(); return; }
         const rg = e.target.closest('[data-rtg]'); if (rg) { st.rtgSel = +rg.getAttribute('data-rtg'); render(); return; }
         if (e.target.closest('[data-rtgclose]')) { st.rtgSel = null; render(); return; }
@@ -2229,7 +2270,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=107'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=108'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
