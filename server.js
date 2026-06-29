@@ -3093,6 +3093,18 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         res.end(JSON.stringify({ runs: out }));
         return;
     }
+    if (pathname === '/api/hooks/generate' && req.method === 'POST') {
+        try {
+            const body = JSON.parse((await readBody(req)) || '{}');
+            const premise = String(body.premise || '').trim().slice(0, 400);
+            if (!premise) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'premise required' })); return; }
+            const rid = 'req' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+            await cloud.uploadToR2(`hooks/grpo/requests/${rid}.json`, Buffer.from(JSON.stringify({ premise, ts: Date.now() })), 'application/json');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ rid, premise }));   // poll /api/hooks/grpo/group/demo/<rid> for the result
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
     if (pathname === '/api/hooks/grpo/index' && req.method === 'GET') {
         try {
             const run = (url.searchParams.get('run') || 'grpo1').replace(/[^a-z0-9_]/g, '');
