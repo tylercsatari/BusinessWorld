@@ -225,11 +225,12 @@ const VideoService = (() => {
             if (video && video.sourceIdeaId) {
                 const idea = NotesService.getById(video.sourceIdeaId);
                 if (idea) {
+                    // Mirror EVERY shared field to the linked Library idea so the two
+                    // records never diverge. `script` was historically missing here —
+                    // that's why workshop/library scripts went out of sync.
+                    const SHARED = ['name', 'hook', 'context', 'script', 'project'];
                     const syncChanges = {};
-                    if (changes.name !== undefined) syncChanges.name = changes.name;
-                    if (changes.hook !== undefined) syncChanges.hook = changes.hook;
-                    if (changes.context !== undefined) syncChanges.context = changes.context;
-                    if (changes.project !== undefined) syncChanges.project = changes.project;
+                    for (const f of SHARED) { if (changes[f] !== undefined) syncChanges[f] = changes[f]; }
                     if (Object.keys(syncChanges).length > 0) {
                         NotesService.update(idea.id, syncChanges).catch(() => {});
                     }

@@ -3463,7 +3463,9 @@ const LibraryUI = (() => {
             // Bidirectional sync: if this idea has a linked video, update it too
             const linkedVideo = VideoService.getByIdeaId(selectedNote.id);
             if (linkedVideo) {
-                VideoService.update(linkedVideo.id, { name: newName, hook: newHook, context: newContext, project: newProject }).catch(() => {});
+                // Mirror ALL shared fields (script included) so the workshop video and
+                // this idea stay identical — editing either place updates the other.
+                VideoService.update(linkedVideo.id, { name: newName, hook: newHook, context: newContext, script: newScript, project: newProject }).catch(() => {});
             }
             setSaveStatus('Saved');
         } catch (e) { setSaveStatus('Save failed'); noteDirty = true; }

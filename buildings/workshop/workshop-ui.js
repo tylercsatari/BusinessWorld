@@ -2793,7 +2793,9 @@ const WorkshopUI = (() => {
         if (window.EggRenderer) {
             window.EggRenderer.initInlineScriptEditor('workshop-inline-script', {
                 get: () => (VideoService.getById(v.id) || v).script || '',
-                save: async (text) => { await VideoService.update(v.id, { script: text }); }
+                // saveWithIdeaSync (not plain update) so the script also lands on the
+                // linked Library idea — keeps workshop & library scripts identical.
+                save: async (text) => { await VideoService.saveWithIdeaSync(v.id, { script: text }); }
             });
         }
         // Re-apply read gating now that the (synchronously-populated) script editor
