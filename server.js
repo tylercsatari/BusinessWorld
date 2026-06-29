@@ -3031,6 +3031,16 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
     // ── 🎰 Guesses: the hook-RL run manifests + generated montages (written by the Lambda trainer) ──
+    if (pathname === '/api/hooks/runs' && req.method === 'GET') {
+        const cands = ['phase0', 'phase1', 'phase2', 'phase3', 'phase4', 'phase5'];
+        const out = [];
+        for (const r of cands) {
+            try { const buf = await cloud.downloadFromR2(`hooks/runs/${r}/manifest.jsonl`); if (buf && buf.length) out.push(r); } catch (e) {}
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(JSON.stringify({ runs: out }));
+        return;
+    }
     if (pathname === '/api/hooks/guesses' && req.method === 'GET') {
         try {
             const run = (url.searchParams.get('run') || 'phase0').replace(/[^a-z0-9_]/g, '');

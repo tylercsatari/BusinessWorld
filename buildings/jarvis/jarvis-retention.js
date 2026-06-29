@@ -10,10 +10,10 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, FUSION = null, NOV = null, EXPREG = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, FUSION = null, NOV = null, EXPREG = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, guessRun: 'phase1', guessSel: null, guessIter: null, guessMetric: 'views', guessBands: false };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: 'hi10m', guessBands: false };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -578,30 +578,37 @@ const JarvisRetention = (function () {
     function renderGuesses() {
         const run = st.guessRun || 'phase1', metric = st.guessMetric || 'views', bands = !!st.guessBands;
         const head = h2c('🎰 Guesses — what the model generates', 'Every hook the model dreams up, embedded into the SAME map as your 11k library. Library dots are coloured by the real metric; white-ringed dots are the model\'s guesses (coloured by predicted-views percentile). As it trains, the rings climb toward the high-views region.');
-        const gp = (id, lab, on, attr) => `<span ${attr}="${id}" style="cursor:pointer;border:1px solid ${on ? C.accent : C.border};background:${on ? C.accent + '1e' : 'transparent'};color:${on ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
         const rp = (id) => `<span data-guessrun="${id}" style="cursor:pointer;border:1px solid ${run === id ? C.purple : C.border};background:${run === id ? C.purple + '22' : 'transparent'};color:${run === id ? C.purple : C.dim};border-radius:8px;padding:4px 12px;font-size:12px;font-weight:700">${id}</span>`;
-        const controls = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px;align-items:center">${rp('phase0')}${rp('phase1')}<span style="width:8px"></span><span style="font-size:10px;color:${C.mute}">colour 11k by:</span>${gp('views', 'log-views', metric === 'views', 'data-guessmetric')}${gp('10m', '>10M class', metric === '10m', 'data-guessmetric')}${gp('outlier', 'outlier ×subs', metric === 'outlier', 'data-guessmetric')}<span style="width:6px"></span>${gp('bands', 'trend bands', bands, 'data-guessbands')}</div>`;
+        if (GUESSRUNS == null) { GUESSRUNS = []; fetch('/api/hooks/runs').then(r => r.json()).then(j => { GUESSRUNS = (j.runs && j.runs.length) ? j.runs : ['phase0', 'phase1']; rtgUpdateGuesses(); }).catch(() => { GUESSRUNS = ['phase0', 'phase1']; }); }
+        const runList = (GUESSRUNS && GUESSRUNS.length) ? GUESSRUNS : ['phase0', 'phase1'];
         const G = GUESSES[run], R = RAW.visual;
         if (!R || R.loading) rawEnsure('visual');
         if (!G) guessEnsure(run);
+        const PROJS = R && R.proj ? [['hi10m', '>10M class'], ['views', '→ views'], ['outlier', '→ outlier'], ['both', 'views+outlier'], ['hiout', 'top-outlier'], ['umap', 'UMAP'], ['pca', 'PCA']].filter(p => R.proj[p[0]]) : [];
+        let proj = st.guessProj || 'hi10m'; if (R && R.proj && !R.proj[proj]) proj = PROJS.length ? PROJS[0][0] : 'views';
+        const pPill = ([id, lab]) => `<span data-guessproj="${id}" style="cursor:pointer;border:1px solid ${proj === id ? C.accent : C.border};background:${proj === id ? C.accent + '1e' : 'transparent'};color:${proj === id ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
+        const bandPill = `<span data-guessbands style="cursor:pointer;border:1px solid ${bands ? C.accent : C.border};background:${bands ? C.accent + '1e' : 'transparent'};color:${bands ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">trend bands</span>`;
+        const controls = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px;align-items:center">${runList.map(rp).join('')}<span style="width:8px"></span><span style="font-size:10px;color:${C.mute}">projection:</span>${PROJS.map(pPill).join('')}<span style="width:6px"></span>${bandPill}</div>`;
         if (!G || G.loading || !R || R.loading || !R.proj) return head + controls + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading guesses + 11k library map…</div>`);
-        const rows = (G.rows || []).filter(r => r.x != null && r.y != null);
+        const rows = (G.rows || []);
         if (!rows.length) return head + controls + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No guesses yet for ${esc(run)} — they stream in as the harvest runs. <span data-guessreload style="cursor:pointer;text-decoration:underline">↻ refresh</span></div>`);
         const W = 820, H = 520, pad = 16, Sg = 1000, X = g => pad + g / Sg * (W - 2 * pad), Yc = g => pad + (1 - g / Sg) * (H - 2 * pad);
-        const PJ = R.proj.views || R.proj.rawviews || { x: [], y: [] };
-        const lx = PJ.x || [], ly = PJ.y || [], LV = R.views || [], LO = R.outlier || [];
-        const logv = v => Math.log10((+v || 0) + 1);
-        let dir, lo = 0, hi = 1, colOf, legLo, legHi;
-        if (metric === '10m') { dir = LV.map(v => (+v > 1e7 ? 1 : 0)); colOf = i => heatCol(dir[i]); legLo = '<10M views'; legHi = '>10M views'; }
-        else if (metric === 'outlier') { const vals = LO.map(o => o == null ? null : logv(o)); const ok = vals.filter(x => x != null && isFinite(x)); lo = Math.min(...ok); hi = Math.max(...ok); dir = vals; colOf = i => (vals[i] == null || !isFinite(vals[i])) ? '#334155' : heatCol((vals[i] - lo) / ((hi - lo) || 1)); legLo = 'low'; legHi = 'high outlier'; }
-        else { const vals = LV.map(logv); const ok = vals.filter(x => isFinite(x)); lo = Math.min(...ok); hi = Math.max(...ok); dir = vals; colOf = i => !isFinite(vals[i]) ? '#334155' : heatCol((vals[i] - lo) / ((hi - lo) || 1)); legLo = 'low views'; legHi = 'high views'; }
+        const P = R.proj[proj] || { x: [], y: [] }, px = P.x || [], py = P.y || [];
+        const LV = R.views || [], LO = R.outlier || [], logv = v => Math.log10((+v || 0) + 1);
+        let dir, colOf, legLo, legHi;
+        if (proj === 'hi10m') { dir = LV.map(v => +v > 1e7 ? 1 : 0); colOf = i => heatCol(dir[i]); legLo = '<10M views'; legHi = '>10M views'; }
+        else if (proj === 'hiout') { const ov = LO.map(o => o == null ? NaN : +o), sv = ov.filter(x => !isNaN(x)).slice().sort((a, b) => a - b), thr = sv.length ? sv[Math.floor(sv.length * 0.85)] : Infinity; dir = ov.map(x => (!isNaN(x) && x >= thr) ? 1 : 0); colOf = i => heatCol(dir[i]); legLo = 'rest'; legHi = 'top-outlier'; }
+        else if (proj === 'outlier') { const vals = LO.map(o => o == null ? null : logv(o)), ok = vals.filter(x => x != null && isFinite(x)), lo = Math.min(...ok), hi = Math.max(...ok); dir = vals; colOf = i => (vals[i] == null || !isFinite(vals[i])) ? '#334155' : heatCol((vals[i] - lo) / ((hi - lo) || 1)); legLo = 'low'; legHi = 'high outlier'; }
+        else { const vals = LV.map(logv), ok = vals.filter(x => isFinite(x)), lo = Math.min(...ok), hi = Math.max(...ok); dir = vals; colOf = i => !isFinite(vals[i]) ? '#334155' : heatCol((vals[i] - lo) / ((hi - lo) || 1)); legLo = 'low views'; legHi = 'high views'; }
         let bg = '';
-        for (let i = 0; i < lx.length; i++) { if (lx[i] == null) continue; bg += `<circle cx="${X(lx[i]).toFixed(1)}" cy="${Yc(ly[i]).toFixed(1)}" r="2" fill="${colOf(i)}" opacity="0.6"/>`; }
+        for (let i = 0; i < px.length; i++) { if (px[i] == null) continue; bg += `<circle cx="${X(px[i]).toFixed(1)}" cy="${Yc(py[i]).toFixed(1)}" r="2" fill="${colOf(i)}" opacity="0.6"/>`; }
+        const RID = R.id || [], idIndex = {}; for (let i = 0; i < RID.length; i++) idIndex[RID[i]] = i;
+        const placeG = g => { if (g.nbr && g.nbr.length) { let sx = 0, sy = 0, sw = 0; for (const nb of g.nbr) { const idx = idIndex[nb[0]]; if (idx == null || px[idx] == null) continue; const w = Math.max(0.001, nb[1]); sx += px[idx] * w; sy += py[idx] * w; sw += w; } if (sw > 0) return [sx / sw, sy / sw]; } return (proj === 'views' && g.x != null) ? [g.x, g.y] : null; };
         let bandLines = '', bandLabels = '';
         if (bands) {
-            const idxV = []; for (let i = 0; i < lx.length; i++) if (dir[i] != null && isFinite(dir[i]) && lx[i] != null) idxV.push(i);
+            const idxV = []; for (let i = 0; i < px.length; i++) if (dir[i] != null && isFinite(dir[i]) && px[i] != null) idxV.push(i);
             if (idxV.length > 30) {
-                const sx = i => X(lx[i]), sy = i => Yc(ly[i]);
+                const sx = i => X(px[i]), sy = i => Yc(py[i]);
                 let mx = 0, my = 0, mm = 0; for (const i of idxV) { mx += sx(i); my += sy(i); mm += dir[i]; } mx /= idxV.length; my /= idxV.length; mm /= idxV.length;
                 let Sxx = 0, Syy = 0, Sxy = 0, Sxm = 0, Sym = 0;
                 for (const i of idxV) { const dx = sx(i) - mx, dy = sy(i) - my, dm = dir[i] - mm; Sxx += dx * dx; Syy += dy * dy; Sxy += dx * dy; Sxm += dx * dm; Sym += dy * dm; }
@@ -619,8 +626,9 @@ const JarvisRetention = (function () {
                     const cents = []; for (let bi = 0; bi < K; bi++) { const bn = bins[bi]; if (bn.cnt >= 3) cents.push([bn.gx / bn.cnt, bn.gy / bn.cnt]); }
                     if (cents.length >= 2) bandLines += `<polyline points="${cents.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}" fill="none" stroke="${C.cyan}" stroke-width="2" opacity="0.75"/>`;
                     const med = arr => { const s = arr.slice().sort((p, q) => p - q), m = s.length; return m % 2 ? s[(m - 1) / 2] : (s[m / 2 - 1] + s[m / 2]) / 2; };
+                    const isBin = (proj === 'hi10m' || proj === 'hiout');
                     for (let bi = 0; bi < K; bi++) { const bn = bins[bi]; if (bn.cnt < 3) continue; const cx = bn.gx / bn.cnt, cy = bn.gy / bn.cnt;
-                        const txt = metric === '10m' ? Math.round(bn.vals.reduce((s, x) => s + x, 0) / bn.cnt * 100) + '% >10M' : metric === 'outlier' ? Math.pow(10, med(bn.vals)).toFixed(1) + '×' : fv(Math.pow(10, med(bn.vals)));
+                        const txt = isBin ? Math.round(bn.vals.reduce((s, x) => s + x, 0) / bn.cnt * 100) + '%' : proj === 'outlier' ? Math.pow(10, med(bn.vals)).toFixed(1) + '×' : fv(Math.pow(10, med(bn.vals)));
                         const w = txt.length * 6.6 + 12;
                         bandLabels += `<g style="pointer-events:none"><rect x="${(cx - w / 2).toFixed(1)}" y="${(cy - 9).toFixed(1)}" width="${w.toFixed(1)}" height="16" rx="4" fill="#0f172a" opacity="0.88" stroke="#1e293b"/><text x="${cx.toFixed(1)}" y="${(cy + 2.8).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#e2e8f0">${txt}</text></g>`;
                     }
@@ -628,14 +636,14 @@ const JarvisRetention = (function () {
             }
         }
         const sel = st.guessSel;
-        let gsd = '', selDot = '';
-        rows.forEach(r => { const isSel = sel === r.id, c = heatCol(r.pctile == null ? 0 : r.pctile);
-            const circ = `<circle data-guessid="${esc(r.id)}" cx="${X(r.x).toFixed(1)}" cy="${Yc(r.y).toFixed(1)}" r="${isSel ? 7.5 : 4.6}" fill="${c}" opacity="1" stroke="#fff" stroke-width="${isSel ? 2.4 : 1.2}" style="cursor:pointer"><title>${esc((r.brief || '').slice(0, 70) + ' · ' + Math.round((r.pctile || 0) * 100) + 'th pctile')}</title></circle>`;
+        let gsd = '', selDot = '', placed = 0;
+        rows.forEach(r => { const pos = placeG(r); if (!pos) return; placed++; const isSel = sel === r.id, c = heatCol(r.pctile == null ? 0 : r.pctile);
+            const circ = `<circle data-guessid="${esc(r.id)}" cx="${X(pos[0]).toFixed(1)}" cy="${Yc(pos[1]).toFixed(1)}" r="${isSel ? 7.5 : 4.6}" fill="${c}" opacity="1" stroke="#fff" stroke-width="${isSel ? 2.4 : 1.2}" style="cursor:pointer"><title>${esc((r.brief || '').slice(0, 70) + ' · ' + Math.round((r.pctile || 0) * 100) + 'th pctile')}</title></circle>`;
             if (isSel) selDot += circ; else gsd += circ; });
         const svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${bg}${bandLines}${gsd}${selDot}${bandLabels}</svg>`;
-        const rvHeld = R.heldout_rviews != null ? ` · library views-axis held-out r=${(+R.heldout_rviews).toFixed(2)}` : '';
-        const scaleLab = `<div style="font-size:10px;color:${C.mute};margin-top:5px;line-height:1.5"><b style="color:${C.dim}">Layout</b>: the views projection — each guess sits at the centroid of its 12 nearest library hooks. <b style="color:${C.dim}">Colour</b>: 11k library by <b style="color:${C.accent}">${metric === '10m' ? '>10M view class' : metric === 'outlier' ? 'outlier (views÷subs)' : 'log views'}</b>; guesses (white ring) by predicted-views percentile${rvHeld}.</div>`;
-        const P = rows.map(r => r.pctile || 0).slice().sort((a, b) => a - b), med2 = P.length ? P[Math.floor(P.length / 2)] : 0, mx2 = P.length ? P[P.length - 1] : 0;
+        const pjLabel = (PROJS.find(p => p[0] === proj) || [proj, proj])[1];
+        const scaleLab = `<div style="font-size:10px;color:${C.mute};margin-top:5px;line-height:1.5"><b style="color:${C.dim}">Layout</b>: the <b style="color:${C.accent}">${pjLabel}</b> projection — the IDENTICAL embedding & coordinates shown in 🔬 Raw. Library coloured by that metric; each guess placed at the centroid of its 12 nearest library hooks (same method as a Raw upload), coloured by predicted-views percentile. ${placed}/${rows.length} placed${placed < rows.length ? ' (others awaiting neighbour backfill)' : ''}.</div>`;
+        const PC = rows.map(r => r.pctile || 0).slice().sort((a, b) => a - b), med2 = PC.length ? PC[Math.floor(PC.length / 2)] : 0, mx2 = PC.length ? PC[PC.length - 1] : 0;
         const stat = `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:${C.mute};margin:7px 2px"><span><b style="color:${C.text}">${rows.length}</b> guesses</span><span>median <b style="color:${C.accent}">${Math.round(med2 * 100)}th</b></span><span>best <b style="color:${C.green}">${Math.round(mx2 * 100)}th</b> pctile</span><span style="color:${C.dim}">run ${esc(run)}</span><span data-guessreload style="cursor:pointer;color:${C.dim};text-decoration:underline">↻ refresh</span></div>`;
         let detail = '';
         if (sel) { const r = rows.find(x => x.id === sel); if (r) detail = guessDetail(run, r); }
@@ -2039,7 +2047,7 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-guessclose]')) { st.guessSel = null; rtgUpdateGuesses(); return; }
         if (e.target.closest('[data-guessreload]')) { GUESSES = {}; st.guessSel = null; rtgUpdateGuesses(); return; }
         const grun = e.target.closest('[data-guessrun]'); if (grun) { st.guessRun = grun.getAttribute('data-guessrun'); st.guessSel = null; rtgUpdateGuesses(); return; }
-        const gmet = e.target.closest('[data-guessmetric]'); if (gmet) { st.guessMetric = gmet.getAttribute('data-guessmetric'); rtgUpdateGuesses(); return; }
+        const gpj = e.target.closest('[data-guessproj]'); if (gpj) { st.guessProj = gpj.getAttribute('data-guessproj'); rtgUpdateGuesses(); return; }
         if (e.target.closest('[data-guessbands]')) { st.guessBands = !st.guessBands; rtgUpdateGuesses(); return; }
         const xpg = e.target.closest('[data-expgo]'); if (xpg) { const [ch, pj] = xpg.getAttribute('data-expgo').split(':'); st.sec = 'raw'; st.rawChan = ch; st.rawProj = pj; st.rawColor = pj === 'hi10m' ? 'views' : 'cluster'; render(); return; }
         if (e.target.closest('[data-rawupload]')) { const fi = window.document.getElementById('rawUpFile'); if (fi) { fi.value = ''; fi.click(); } return; }
