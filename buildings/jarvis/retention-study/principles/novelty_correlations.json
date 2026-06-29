@@ -1,0 +1,150 @@
+{
+ "n": 211,
+ "splits": 50,
+ "holdout": 0.3,
+ "univariate": [
+  {
+   "metric": "vis_global",
+   "modality": "visual",
+   "type": "global",
+   "keep_r": 0.002,
+   "keep_p": 0.983,
+   "ret5_r": 0.097,
+   "ret5_p": 0.15,
+   "sig": false
+  },
+  {
+   "metric": "vis_niche",
+   "modality": "visual",
+   "type": "niche",
+   "keep_r": -0.03,
+   "keep_p": 0.651,
+   "ret5_r": 0.089,
+   "ret5_p": 0.219,
+   "sig": false
+  },
+  {
+   "metric": "vis_temporal",
+   "modality": "visual",
+   "type": "temporal",
+   "keep_r": -0.124,
+   "keep_p": 0.066,
+   "ret5_r": 0.018,
+   "ret5_p": 0.804,
+   "sig": false
+  },
+  {
+   "metric": "vis_combinatorial",
+   "modality": "visual",
+   "type": "combinatorial",
+   "keep_r": -0.029,
+   "keep_p": 0.674,
+   "ret5_r": 0.094,
+   "ret5_p": 0.179,
+   "sig": false
+  },
+  {
+   "metric": "txt_global",
+   "modality": "text",
+   "type": "global",
+   "keep_r": 0.135,
+   "keep_p": 0.06,
+   "ret5_r": 0.051,
+   "ret5_p": 0.498,
+   "sig": false
+  },
+  {
+   "metric": "txt_niche",
+   "modality": "text",
+   "type": "niche",
+   "keep_r": 0.218,
+   "keep_p": 0.003,
+   "ret5_r": 0.114,
+   "ret5_p": 0.103,
+   "sig": true
+  },
+  {
+   "metric": "txt_temporal",
+   "modality": "text",
+   "type": "temporal",
+   "keep_r": 0.275,
+   "keep_p": 0.007,
+   "ret5_r": 0.216,
+   "ret5_p": 0.007,
+   "sig": true
+  },
+  {
+   "metric": "txt_combinatorial",
+   "modality": "text",
+   "type": "combinatorial",
+   "keep_r": 0.254,
+   "keep_p": 0.003,
+   "ret5_r": 0.178,
+   "ret5_p": 0.007,
+   "sig": true
+  },
+  {
+   "metric": "tog_global",
+   "modality": "whole",
+   "type": "global",
+   "keep_r": 0.134,
+   "keep_p": 0.053,
+   "ret5_r": 0.127,
+   "ret5_p": 0.086,
+   "sig": false
+  },
+  {
+   "metric": "tog_niche",
+   "modality": "whole",
+   "type": "niche",
+   "keep_r": 0.211,
+   "keep_p": 0.003,
+   "ret5_r": 0.165,
+   "ret5_p": 0.017,
+   "sig": true
+  },
+  {
+   "metric": "tog_temporal",
+   "modality": "whole",
+   "type": "temporal",
+   "keep_r": 0.159,
+   "keep_p": 0.023,
+   "ret5_r": 0.122,
+   "ret5_p": 0.076,
+   "sig": true
+  },
+  {
+   "metric": "tog_combinatorial",
+   "modality": "whole",
+   "type": "combinatorial",
+   "keep_r": 0.252,
+   "keep_p": 0.003,
+   "ret5_r": 0.193,
+   "ret5_p": 0.013,
+   "sig": true
+  },
+  {
+   "metric": "coherence",
+   "modality": "cross-modal",
+   "type": "coherence",
+   "keep_r": 0.137,
+   "keep_p": 0.05,
+   "ret5_r": 0.188,
+   "ret5_p": 0.017,
+   "sig": true
+  }
+ ],
+ "multivariate": {
+  "keep": {
+   "r": 0.277,
+   "std": 0.083,
+   "pos_frac": 1.0
+  },
+  "ret5": {
+   "r": 0.225,
+   "std": 0.084,
+   "pos_frac": 1.0
+  }
+ },
+ "note": "Novelty = distance from the 11k corpus. Swipe = 100 - keep (mirror). Views excluded (confounded). Script/text novelty (temporal, combinatorial) drives retention; visual novelty does not."
+}

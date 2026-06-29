@@ -10,7 +10,7 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, FUSION = null, NOV = null, EXPREG = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: 'hi10m', guessBands: false, guessBandK: 6 };
@@ -1243,6 +1243,24 @@ const JarvisRetention = (function () {
             </table>
             <div style="font-size:10px;color:${C.mute};margin-top:8px;line-height:1.5"><b style="color:${C.text}">Read it:</b> visual novelty is negative to views (familiar wins distribution); but <b style="color:${C.green}">combinatorial novelty strongly cuts swipe-away (−0.25)</b> — unusual combinations keep people. Each row is an independent candidate indicator.</div>`, 12);
     }
+    // VALIDATED novelty→retention experiment (novelty_experiment.py): held-out 70/30, consistent
+    // definitions, swipe=−keep, views excluded. The rigorous "does novelty actually work" answer.
+    function novValidPanel() {
+        const E = NCEXP; if (!E || !E.multivariate) return '';
+        const mk = E.multivariate.keep, mr = E.multivariate.ret5;
+        const uni = (E.univariate || []).slice().sort((a, b) => b.keep_r - a.keep_r);
+        const modCol = m => m === 'visual' ? '#94a3b8' : m === 'text' ? C.cyan : m === 'whole' ? C.purple : C.amber;
+        const cell = (v, p) => `<td style="text-align:center;background:${fuHeat(v * 2.8)};color:${Math.abs(v) >= 0.15 ? '#fff' : C.dim};font-size:10px;font-weight:${p < 0.05 ? 700 : 400};padding:4px 7px">${v >= 0 ? '+' : ''}${v.toFixed(2)}${p < 0.05 ? '<sup>*</sup>' : ''}</td>`;
+        const card = (lab, m) => `<div style="background:${C.card2};border-radius:8px;padding:8px 14px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase">novelty → ${lab}</div><div style="font-size:22px;font-weight:900;color:${m.r > 0 ? C.green : C.dim}">held-out ρ ${m.r >= 0 ? '+' : ''}${m.r}</div><div style="font-size:9px;color:${C.mute}">± ${m.std} · ${(m.pos_frac * 100).toFixed(0)}% of splits positive</div></div>`;
+        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">Does novelty predict RETENTION? — validated, held-out (70/30 × ${E.splits})</div>
+            <div style="display:flex;gap:14px;margin:6px 0 10px;flex-wrap:wrap">${card('keep-rate', mk)}${card('5s retention', mr)}</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:6px">All 13 novelty metrics → ridge, fit on 70% of your 211, scored on the held-out 30%, repeated ${E.splits}×. Both robustly positive → <b style="color:${C.green}">novelty genuinely keeps people watching</b>. Swipe-away = −keep (mirror); views excluded (confounded).</div>
+            <table style="border-collapse:separate;border-spacing:2px;font-size:10px;width:100%">
+              <tr><td></td><td style="color:${C.mute};text-transform:uppercase;text-align:center;font-size:9px">keep ρ</td><td style="color:${C.mute};text-transform:uppercase;text-align:center;font-size:9px">5s-ret ρ</td></tr>
+              ${uni.map(u => `<tr><td style="color:${C.text};white-space:nowrap;padding-right:8px"><b style="color:${modCol(u.modality)}">${u.modality}</b> ${u.type}</td>${cell(u.keep_r, u.keep_p)}${cell(u.ret5_r, u.ret5_p)}</tr>`).join('')}
+            </table>
+            <div style="font-size:10px;color:${C.mute};margin-top:8px;line-height:1.5"><b style="color:${C.text}">The finding:</b> it's <b style="color:${C.cyan}">script / text novelty</b> (temporal = unlike recent uploads, combinatorial = unusual combination of features) that drives retention. <b style="color:#94a3b8">Visual novelty does NOT predict keep</b> (≈0). So "be novel" means novel in <b>what you say</b>, not just how it looks. <sup>*</sup> = perm-p &lt; 0.05.</div>`, 12);
+    }
     // resolution-aware maps. hook → one point per video; second → one point per video-second.
     function resMaps(colorHook, colorSec, legend, hookExtra) {
         if (st.novRes === 'second') {
@@ -2009,6 +2027,7 @@ const JarvisRetention = (function () {
             <div style="display:flex;gap:6px;flex-wrap:wrap">${MS.map(([id, l]) => `<button data-nov="${id}" style="background:${st.nov === id ? C.purple + '22' : 'transparent'};border:1px solid ${st.nov === id ? C.purple : C.border};color:${st.nov === id ? C.purple : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>
             <div style="margin-left:auto;display:flex;gap:8px;align-items:center">${mineBtn}${st.nov !== 'combo' && st.nov !== 'ledger' ? `<span style="font-size:10px;color:${C.mute};text-transform:uppercase">resolution</span>${resBtn('hook', 'Whole hook')}${resBtn('second', 'Per second')}` : ''}</div></div>`;
         h += `<div style="font-size:11px;color:${C.mute};margin-bottom:10px">${N.meta.n.toLocaleString()} hooks · corpus ${(N.meta.corpus || N.meta.n).toLocaleString()} · ${mineCount} of them yours (merged in). <b>Click any point for its full data; ★ to highlight your videos.</b></div>`;
+        h += novValidPanel();
         h += novCorrPanel();
         if (st.novSel != null && N.videos[st.novSel]) h += renderHookDetail(st.novSel);
         h += ({ global: renderNovGlobal, niche: renderNovNiche, temporal: renderNovTemporal, combo: renderNovCombo, coherent: renderNovCoherent, correlations: renderNovCorrelations, interactions: renderNovInteractions, ledger: renderNovLedger }[st.nov] || renderNovGlobal)();
@@ -2188,12 +2207,13 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=103'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=104'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
                     S = await loadJSON(base + 'retention_study.json').catch(() => null);
                     N = await loadJSON(base + 'principles/novelty.json').catch(() => null);
+                    NCEXP = await loadJSON(base + 'principles/novelty_correlations.json').catch(() => null);
                     CR = await loadJSON(base + 'principles/correlations.json').catch(() => null);
                     INT = await loadJSON(base + 'principles/interactions.json').catch(() => null);
                     CF = await loadJSON(base + 'principles/confounds.json').catch(() => null);
