@@ -105,13 +105,20 @@ async function main() {
         const rows = [];
         for (let i = 0; i < ids.length; i++) {
             process.stdout.write(`  [${i + 1}/${ids.length}] ${ids[i]} … `);
-            // on the FIRST video only, capture the raw Studio analytics responses so we can find
-            // and parse the retention-curve timeseries (it's in the youtubei analytics payload).
-            let cap = null, capH = null;
-            if (i === 0) { cap = []; capH = async (resp) => { const u = resp.url(); if (u.includes('youtubei') && u.includes('analytics')) { try { cap.push({ url: u.slice(0, 160), body: (await resp.text()).slice(0, 300000) }); } catch (e) {} } }; page.on('response', capH); }
             try { const d = await scraper.scrapeOneVideo(page, ids[i]); const meta = await fetchMeta(metaPage, ids[i]); rows.push(toRow(ids[i], d, meta)); console.log(`ok (keep ${d.stayedToWatch}% · ${meta.views != null ? meta.views.toLocaleString() + ' views' : 'no meta'})`); }
             catch (e) { console.log('failed:', e.message.slice(0, 60)); }
-            if (i === 0) { page.off('response', capH); fs.writeFileSync(path.join(__dirname, `analytics-debug-${ch.id}.json`), JSON.stringify(cap)); console.log(`  ↳ saved ${cap.length} analytics responses → analytics-debug-${ch.id}.json (send me this to wire the retention curve)`); }
+            // FIRST video only: capture the Studio analytics payloads (BROAD filter — the data
+            // comes via get_screen/creator endpoints, not URLs containing "analytics") by
+            // explicitly loading the engagement + overview tabs so the retention graph fetches.
+            if (i === 0) {
+                const cap = [];
+                const h = async (resp) => { const u = resp.url(); if (u.includes('youtubei') && /get_screen|creator|analytics|explore|insights/.test(u)) { try { const b = await resp.text(); if (b && b.length > 300) cap.push({ url: u.slice(0, 200), len: b.length, body: b.slice(0, 500000) }); } catch (e) {} } };
+                page.on('response', h);
+                for (const tab of ['tab-engagement', 'tab-overview']) { await page.goto(`https://studio.youtube.com/video/${ids[0]}/analytics/${tab}`, { waitUntil: 'networkidle', timeout: 30000 }).catch(() => {}); await page.waitForTimeout(3000); }
+                page.off('response', h);
+                fs.writeFileSync(path.join(__dirname, `analytics-debug-${ch.id}.json`), JSON.stringify(cap));
+                console.log(`  ↳ captured ${cap.length} analytics payloads → analytics-debug-${ch.id}.json (send me this)`);
+            }
         }
         const out = { meta: { n: rows.length, channel: ch.name, channel_id: ch.id, scraped_at: new Date().toISOString() }, videos: rows };
         fs.writeFileSync(path.join(RET_DIR, `${ch.id}.json`), JSON.stringify(out));
