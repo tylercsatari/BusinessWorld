@@ -3021,6 +3021,24 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    // multi-channel retention: index + per-channel tables, stored in R2 (private; other
+    // creators' analytics never go to git). Main (211) stays the committed static file.
+    if (pathname === '/api/retention/channels' && req.method === 'GET') {
+        let cj = null;
+        try { const buf = await cloud.downloadFromR2('retention/channels.json'); if (buf) cj = JSON.parse(buf.toString('utf8')); } catch (e) {}
+        if (!cj) cj = { active: 'tyler', channels: [{ id: 'tyler', name: 'Main', table: 'retention_table.json', n: 211, owner: true }] };
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(JSON.stringify(cj));
+        return;
+    }
+    if (pathname === '/api/retention/table' && req.method === 'GET') {
+        const id = (url.searchParams.get('id') || '').replace(/[^a-z0-9_-]/gi, '');
+        let t = null;
+        try { const buf = await cloud.downloadFromR2(`retention/${id}.json`); if (buf) t = JSON.parse(buf.toString('utf8')); } catch (e) {}
+        res.writeHead(t ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(JSON.stringify(t || { error: 'not found', videos: [] }));
+        return;
+    }
     const rawMon = pathname.match(/^\/api\/raw\/montage\/([\w-]{6,16})$/);
     if (rawMon && req.method === 'GET') {
         try {

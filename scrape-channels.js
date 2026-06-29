@@ -20,6 +20,8 @@ const path = require('path');
 const readline = require('readline');
 const { chromium } = require('playwright');
 const scraper = require('./swipe-scraper');
+let cloud = null; try { require('dotenv').config(); cloud = require('./cloud-storage'); if (cloud.initR2) cloud.initR2(); } catch (e) { console.warn('cloud-storage unavailable — R2 upload skipped'); }
+async function r2put(key, obj) { if (!cloud || !cloud.uploadToR2) return; try { await cloud.uploadToR2(key, Buffer.from(JSON.stringify(obj)), 'application/json'); console.log(`  [R2] uploaded ${key}`); } catch (e) { console.warn(`  [R2] upload failed ${key}:`, e.message); } }
 
 const STUDY = path.join(__dirname, 'buildings/jarvis/retention-study');
 const RET_DIR = path.join(STUDY, 'retention');
@@ -96,14 +98,17 @@ function toRow(videoId, d, meta) {
     });
 }
 
-function registerChannel(id, name, n) {
+async function registerChannel(id, name, n) {
     let cj = { active: 'tyler', channels: [] };
     try { cj = JSON.parse(fs.readFileSync(CHANNELS_JSON, 'utf8')); } catch (e) {}
+    // always keep Main (the 211) as the first, static-loaded channel
+    if (!cj.channels.some(c => c.id === 'tyler')) cj.channels.unshift({ id: 'tyler', name: 'Main', table: 'retention_table.json', n: 211, owner: true });
     const ix = cj.channels.findIndex(c => c.id === id);
     const entry = { id, name, table: `retention/${id}.json`, n, scraped: new Date().toISOString() };
     if (ix >= 0) cj.channels[ix] = Object.assign(cj.channels[ix], entry); else cj.channels.push(entry);
     fs.writeFileSync(CHANNELS_JSON, JSON.stringify(cj, null, 2));
-    console.log(`[channels] registered ${id} (${n} videos) → channels.json`);
+    await r2put('retention/channels.json', cj);     // R2 = source of truth for the deployed app
+    console.log(`[channels] registered ${id} (${n} videos) → channels.json + R2`);
 }
 
 async function main() {
@@ -140,8 +145,9 @@ async function main() {
         }
         const out = { meta: { n: rows.length, channel: ch.name, channel_id: ch.id, scraped_at: new Date().toISOString() }, videos: rows };
         fs.writeFileSync(path.join(RET_DIR, `${ch.id}.json`), JSON.stringify(out));
-        registerChannel(ch.id, ch.name, rows.length);
-        console.log(`Saved retention/${ch.id}.json (${rows.length} videos).`);
+        await r2put(`retention/${ch.id}.json`, out);
+        await registerChannel(ch.id, ch.name, rows.length);
+        console.log(`Saved retention/${ch.id}.json (${rows.length} videos) → local + R2.`);
     }
     await context.close();
     console.log('\nDone. The new channels now appear as tabs in BusinessWorld → Retention→Views.');
