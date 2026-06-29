@@ -78,3 +78,4 @@ buildings/jarvis/retention-study/principles/novelty_owned_backup.json
 scrape-channels.config.json
 buildings/jarvis/retention-study/retention/
 analytics-debug-*.json
+buildings/jarvis/retention-study/channels.json
