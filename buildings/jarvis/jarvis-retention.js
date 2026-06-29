@@ -1248,7 +1248,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=108').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=109').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -1267,8 +1267,33 @@ const JarvisRetention = (function () {
                 const c = `<circle cx="${X(proj.x[i]).toFixed(1)}" cy="${Y(proj.y[i]).toFixed(1)}" r="${m2 ? 3.4 : 1.8}" fill="${m2 ? '#fbbf24' : col}" opacity="${st.novMine ? (mine[i] ? 1 : 0.1) : 0.6}"${m2 ? ' stroke="#fff" stroke-width="0.8"' : ''}><title>${esc((title[i] || '').slice(0, 40))} · novelty ${v != null ? v.toFixed(3) : '—'} · ${fv(views[i])} views</title></circle>`;
                 if (m2) mineDots += c; else dots += c;
             }
-            mapSvg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px">${dots}${mineDots}</svg>`;
+            // VISUALISE THE DEFINITION on the map: draw what novelty is measured FROM —
+            // mean=the single centre · mode=the densest exemplar · niche=the K theme centroids.
+            let refSvg = '';
+            if (M.ref && M.ref.pts) {
+                const k = M.ref.kind;
+                M.ref.pts.forEach(p => { const x = X(p[0]).toFixed(1), y = Y(p[1]).toFixed(1);
+                    if (k === 'centroids') refSvg += `<circle cx="${x}" cy="${y}" r="4" fill="none" stroke="#fff" stroke-width="1.4"/><circle cx="${x}" cy="${y}" r="1.4" fill="#fff"/>`;
+                    else refSvg += `<line x1="${(+x - 11)}" y1="${y}" x2="${(+x + 11)}" y2="${y}" stroke="#fff" stroke-width="1.3"/><line x1="${x}" y1="${(+y - 11)}" x2="${x}" y2="${(+y + 11)}" stroke="#fff" stroke-width="1.3"/><circle cx="${x}" cy="${y}" r="7" fill="none" stroke="#fff" stroke-width="2"/><circle cx="${x}" cy="${y}" r="2.5" fill="#fff"/>`;
+                });
+                const lab = k === 'centroids' ? `○ = the ${M.ref.pts.length} theme centroids` : k === 'exemplar' ? '✛ = the densest exemplar (most typical hook)' : '✛ = the corpus centre';
+                refSvg += `<text x="14" y="${H - 8}" font-size="10" fill="#fff" font-weight="700">${lab} — novelty = distance from ${k === 'centroids' ? 'the nearest' : 'this'}</text>`;
+            }
+            mapSvg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px">${dots}${mineDots}${refSvg}</svg>`;
         }
+        // schematic of WHAT each method measures (fixed illustration of the geometry)
+        const diagram = mt => {
+            const cat = mt.indexOf('knn') === 0 ? 'knn' : mt.indexOf('niche') === 0 ? 'niche' : mt.indexOf('pcaresid') === 0 ? 'pca' : mt === 'maha' ? 'maha' : 'centre';
+            const W2 = 170, H2 = 100, dot = (x, y, c, r) => `<circle cx="${x}" cy="${y}" r="${r || 2}" fill="${c || '#64748b'}"/>`;
+            const cloud = [[45, 52], [58, 42], [62, 60], [72, 49], [50, 66], [76, 60], [54, 53], [66, 40], [82, 55], [48, 46], [60, 70], [70, 67], [55, 60], [68, 55]];
+            let b = cloud.map(p => dot(p[0], p[1])).join('');
+            if (cat === 'centre') { b += `<line x1="60" y1="55" x2="135" y2="28" stroke="${C.cyan}" stroke-width="1.3" stroke-dasharray="3 2"/>` + dot(135, 28, C.cyan, 3) + `<circle cx="60" cy="55" r="6.5" fill="none" stroke="#fff" stroke-width="1.6"/><circle cx="60" cy="55" r="2.4" fill="#fff"/><text x="60" y="40" text-anchor="middle" font-size="8" fill="#fff">${mt === 'mode' ? 'densest' : 'centre'}</text><text x="135" y="20" text-anchor="middle" font-size="8" fill="${C.cyan}">novel</text>`; }
+            else if (cat === 'knn') { const k = mt.replace('knn', ''); b += dot(132, 32, C.cyan, 3); [[114, 42], [120, 25], [108, 34], [126, 46]].forEach(q => b += `<line x1="132" y1="32" x2="${q[0]}" y2="${q[1]}" stroke="${C.cyan}" stroke-width="1" stroke-dasharray="2 2"/>` + dot(q[0], q[1], '#fff', 2.4)); b += `<text x="120" y="62" text-anchor="middle" font-size="8" fill="${C.cyan}">mean dist to ${k} nearest</text>`; }
+            else if (cat === 'niche') { [[52, 50], [74, 60], [62, 44]].forEach(c => b += `<circle cx="${c[0]}" cy="${c[1]}" r="5.5" fill="none" stroke="#fbbf24" stroke-width="1.5"/>`); b += dot(138, 30, C.cyan, 3) + `<line x1="138" y1="30" x2="74" y2="60" stroke="${C.cyan}" stroke-width="1.2" stroke-dasharray="3 2"/><text x="62" y="16" text-anchor="middle" font-size="8" fill="#fbbf24">${mt.replace('niche', '')} theme centres</text>`; }
+            else if (cat === 'maha') { b += `<ellipse cx="62" cy="55" rx="30" ry="13" fill="none" stroke="#fff" stroke-width="1.2" opacity="0.7" transform="rotate(18 62 55)"/>` + dot(135, 28, C.cyan, 3) + `<line x1="62" y1="55" x2="135" y2="28" stroke="${C.cyan}" stroke-width="1.2" stroke-dasharray="3 2"/><text x="62" y="84" text-anchor="middle" font-size="8" fill="#fff">covariance shell</text>`; }
+            else { b = `<line x1="28" y1="78" x2="140" y2="32" stroke="#fff" stroke-width="1.5" opacity="0.7"/>`; [[46, 70], [64, 62], [88, 52], [112, 42]].forEach(p => b += dot(p[0], p[1])); b += dot(96, 22, C.cyan, 3) + `<line x1="96" y1="22" x2="92" y2="50" stroke="${C.cyan}" stroke-width="1.4" stroke-dasharray="2 2"/>` + dot(92, 50, '#fff', 2.4) + `<text x="140" y="28" text-anchor="end" font-size="8" fill="#fff">typical subspace</text><text x="99" y="20" font-size="8" fill="${C.cyan}">residual</text>`; }
+            return `<svg viewBox="0 0 ${W2} ${H2}" style="width:100%;max-width:220px;background:${C.card2};border-radius:6px">${b}</svg>`;
+        };
         const fmtr = r => r == null ? '—' : `<b style="color:${r > 0.15 ? C.green : r < -0.05 ? '#60a5fa' : C.dim}">${r >= 0 ? '+' : ''}${r.toFixed(3)}</b>`;
         // method comparison table for this modality (all methods, keep + ret5 ρ)
         const meths = NQF.methods || Object.keys(F.methods);
@@ -1280,7 +1305,8 @@ const JarvisRetention = (function () {
             <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:14px;align-items:start">
               <div>${mapSvg}<div style="font-size:10px;color:${C.mute};margin-top:5px"><b style="color:${C.cyan}">${mod} · ${meth}</b> — ${esc(M.formula)}</div>
                 <div style="display:flex;gap:16px;margin-top:6px"><div><div style="font-size:9px;color:${C.mute};text-transform:uppercase">held-out → keep</div><div style="font-size:20px;font-weight:900">${fmtr(M.keep_r)}</div></div><div><div style="font-size:9px;color:${C.mute};text-transform:uppercase">held-out → 5s-ret</div><div style="font-size:20px;font-weight:900">${fmtr(M.ret5_r)}</div></div></div></div>
-              <div><div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">all ${meths.length} methods · ${mod}</div><table style="border-collapse:collapse;font-size:10px;width:100%"><tr><td style="color:${C.mute};font-size:9px">method</td><td style="color:${C.green};font-size:9px;text-align:center">keep</td><td style="color:${C.accent};font-size:9px;text-align:center">5s-ret</td><td style="color:${C.mute};font-size:9px">formula</td></tr>${rows}</table></div>
+              <div><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">what "${meth}" measures</div>${diagram(meth)}<div style="font-size:9px;color:${C.faint};margin:3px 0 9px;line-height:1.4">${esc(M.formula)}</div>
+                <div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">all ${meths.length} methods · ${mod}</div><table style="border-collapse:collapse;font-size:10px;width:100%"><tr><td style="color:${C.mute};font-size:9px">method</td><td style="color:${C.green};font-size:9px;text-align:center">keep</td><td style="color:${C.accent};font-size:9px;text-align:center">5s-ret</td><td style="color:${C.mute};font-size:9px">formula</td></tr>${rows}</table></div>
             </div>`, 12);
     }
     // VALIDATED novelty→retention experiment (novelty_experiment.py): held-out 70/30, consistent
@@ -2270,7 +2296,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=108'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=109'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
