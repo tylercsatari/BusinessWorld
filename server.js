@@ -3032,7 +3032,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     // ── 🎰 Guesses: the hook-RL run manifests + generated montages (written by the Lambda trainer) ──
     if (pathname === '/api/hooks/runs' && req.method === 'GET') {
-        const cands = Array.from({ length: 31 }, (_, i) => 'phase' + i);
+        const cands = [].concat(Array.from({ length: 31 }, (_, i) => 'phase' + i), Array.from({ length: 21 }, (_, i) => 'keep' + i));
         const out = [];
         for (const r of cands) {
             try { const buf = await cloud.downloadFromR2(`hooks/runs/${r}/manifest.jsonl`); if (buf && buf.length) out.push(r); } catch (e) {}
