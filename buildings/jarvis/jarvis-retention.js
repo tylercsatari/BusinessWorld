@@ -10,10 +10,10 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0 };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -686,6 +686,78 @@ const JarvisRetention = (function () {
             </div>
             <div style="margin-top:12px"><span data-guessclose style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 11px;font-size:11px">close</span></div>
           </div></div>`, 12);
+    }
+    // ── 🧠 GRPO: the multiple ideas the model generates per input, ranked by within-input advantage ──
+    function rtgUpdateGrpo() { try { const el = window.document.getElementById('rtg-grpopanel'); if (el) el.innerHTML = renderGrpo(); } catch (e) { } }
+    function grpoEnsureRuns() {
+        if (GRPORUNS != null) return;
+        GRPORUNS = [];
+        fetch('/api/hooks/grpo/runs').then(r => r.json()).then(j => {
+            GRPORUNS = (j.runs && j.runs.length) ? j.runs : [];
+            if (GRPORUNS.length && !st.grpoRun) st.grpoRun = GRPORUNS[GRPORUNS.length - 1];
+            rtgUpdateGrpo();
+        }).catch(() => { GRPORUNS = []; });
+    }
+    function grpoEnsureIndex(run) {
+        if (!run || GRPOIDX[run]) return;
+        GRPOIDX[run] = { loading: 1 };
+        fetch('/api/hooks/grpo/index?run=' + run).then(r => r.json()).then(j => { GRPOIDX[run] = j; rtgUpdateGrpo(); }).catch(() => { GRPOIDX[run] = { rows: [] }; rtgUpdateGrpo(); });
+    }
+    function grpoEnsureGroup(run, id) {
+        const k = run + '/' + id;
+        if (GRPOGRP[k]) return;
+        GRPOGRP[k] = { loading: 1 };
+        fetch('/api/hooks/grpo/group/' + run + '/' + id).then(r => r.json()).then(j => { GRPOGRP[k] = j; rtgUpdateGrpo(); }).catch(() => { GRPOGRP[k] = { error: 1 }; rtgUpdateGrpo(); });
+    }
+    function grpoDetail(run, id) {
+        grpoEnsureGroup(run, id);
+        const g = GRPOGRP[run + '/' + id];
+        if (!g || g.loading) return `<div style="color:${C.mute};padding:16px">loading ideas…</div>`;
+        if (g.error || !g.attempts) return `<div style="color:${C.mute};padding:16px">could not load this group.</div>`;
+        const cards = g.attempts.map(a => {
+            const advCol = a.advantage > 0 ? C.green : (a.advantage < 0 ? '#ef4444' : C.mute);
+            const relBad = a.relevance != null && a.relevance < 0.45;
+            const reasoning = a.reasoning ? `<details style="margin-top:6px"><summary style="font-size:10px;color:${C.cyan};cursor:pointer">reasoning</summary><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:4px;white-space:pre-wrap;max-height:220px;overflow:auto">${esc(a.reasoning)}</div></details>` : '';
+            return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:8px;background:${C.card2}">
+              <img src="/api/hooks/grpo/montage/${run}/${id}_${a.k}" style="width:100%;border-radius:6px;display:block" loading="lazy">
+              <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">
+                <span>keep <b style="color:${heatCol(a.keep_pctile || 0)}">${Math.round((a.keep_pctile || 0) * 100)}%</b></span>
+                <span>rel <b style="color:${relBad ? '#ef4444' : C.text}">${a.relevance != null ? a.relevance.toFixed(2) : '—'}</b></span>
+                <span>reward <b style="color:${C.text}">${(a.reward || 0).toFixed(2)}</b></span>
+                <span>adv <b style="color:${advCol}">${a.advantage > 0 ? '+' : ''}${(a.advantage || 0).toFixed(2)}</b></span>
+                <span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span>
+              </div>
+              <div style="font-size:10px;color:${C.mute};margin-top:4px;font-style:italic">${esc(a.caption || '')}</div>
+              ${reasoning}</div>`;
+        }).join('');
+        return `<div style="margin-bottom:8px"><div style="font-size:13px;color:${C.text};font-weight:800">${esc(g.premise || id)}</div>
+          <div style="font-size:10px;color:${C.mute}">group mean reward ${(g.group_mean || 0).toFixed(2)} · best ${(g.best_reward || 0).toFixed(2)} · ${g.n} ideas · winner ringed</div></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">${cards}</div>`;
+    }
+    function renderGrpo() {
+        const head = h2c('🧠 GRPO — the ideas it generates per input', 'For each input the model reasons and proposes several hooks. Each is rendered, scored on the keep-rate axis, gated by relevance to the input, and ranked by advantage vs the group\'s OWN mean — so it learns what beats its other attempts at the same idea, with no niche or label anywhere.');
+        grpoEnsureRuns();
+        if (GRPORUNS == null || !GRPORUNS.length) return head + `<div style="color:${C.mute};padding:20px">No GRPO runs yet — input-groups appear here as the run produces them.</div>`;
+        const runPills = GRPORUNS.map(r => `<button data-grporun="${r}" style="background:${st.grpoRun === r ? C.accent + '22' : 'transparent'};border:1px solid ${st.grpoRun === r ? C.accent : C.border};color:${st.grpoRun === r ? C.accent : C.dim};border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">${r}</button>`).join('');
+        const run = st.grpoRun || GRPORUNS[GRPORUNS.length - 1];
+        grpoEnsureIndex(run);
+        const idx = GRPOIDX[run];
+        let body;
+        if (!idx || idx.loading) body = `<div style="color:${C.mute};padding:16px">loading…</div>`;
+        else {
+            const rows = (idx.rows || []).slice().sort((a, b) => (b.best_keep || 0) - (a.best_keep || 0));
+            const list = rows.map(r => {
+                const sel = st.grpoSel === r.input_id;
+                return `<div data-grpoinput="${r.input_id}" style="cursor:pointer;border:1px solid ${sel ? C.accent : C.border};background:${sel ? C.accent + '15' : C.card2};border-radius:8px;padding:8px 10px;margin-bottom:6px">
+                  <div style="font-size:12px;color:${C.text};font-weight:700;line-height:1.3">${esc(r.premise || r.input_id)}</div>
+                  <div style="font-size:10px;color:${C.mute};margin-top:3px">best keep <b style="color:${heatCol(r.best_keep || 0)}">${Math.round((r.best_keep || 0) * 100)}%</b> · ${r.n} ideas · spread ${(r.spread || 0).toFixed(2)}</div></div>`;
+            }).join('');
+            const detail = st.grpoSel ? grpoDetail(run, st.grpoSel) : `<div style="color:${C.mute};padding:16px">Pick an input on the left to see the ideas the model generated for it, ranked by advantage.</div>`;
+            body = `<div style="font-size:11px;color:${C.mute};margin-bottom:8px">${rows.length} inputs in ${run}</div><div style="display:grid;grid-template-columns:310px 1fr;gap:14px">
+              <div style="max-height:660px;overflow:auto">${list || `<div style="color:${C.mute}">no groups yet</div>`}</div>
+              <div>${detail}</div></div>`;
+        }
+        return head + `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${runPills}</div>` + body;
     }
     function rtgUpdateExp() { try { const el = window.document.getElementById('rtg-exppanel'); if (el) el.innerHTML = renderExperiment(); } catch (e) { } }
     function renderExperiment() {
@@ -2140,7 +2212,7 @@ const JarvisRetention = (function () {
     }
     function render() {
         if (!root) return;
-        const SECS = [['data', '📋 Data'], ['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
+        const SECS = [['data', '📋 Data'], ['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['grpo', '🧠 GRPO'], ['experiment', '🧪 Experiment'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
         const nav = SECS.map(([id, l]) => `<button data-rs="${id}" style="background:${st.sec === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.sec === id ? C.accent : C.border};color:${st.sec === id ? C.accent : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('');
         // CHANNEL tab bar — your data + each permissioned channel + 'All pooled'. Carried horizontally.
         const chBar = (() => {
@@ -2158,7 +2230,7 @@ const JarvisRetention = (function () {
                 3. It writes <code>retention/&lt;channel&gt;.json</code> and registers it in <code>channels.json</code> — the new tab appears here automatically. <b>All pooled</b> merges every channel into one bigger dataset (more n = better models).</div>` : '';
             return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap"><span style="font-size:10px;color:${C.mute};text-transform:uppercase;letter-spacing:.3px">channel</span>${tabs}${pooled}${add}</div>${help}`;
         })();
-        const sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
+        const sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'grpo' ? `<div id="rtg-grpopanel">${renderGrpo()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
             <div style="font-size:21px;font-weight:900;color:${C.accent};margin-bottom:8px">Retention → Views</div>
             ${chBar}
@@ -2215,6 +2287,8 @@ const JarvisRetention = (function () {
         const ggi = e.target.closest('[data-guessid]'); if (ggi) { const id = ggi.getAttribute('data-guessid'); st.guessSel = (st.guessSel === id ? null : id); rtgUpdateGuesses(); return; }
         if (e.target.closest('[data-guessclose]')) { st.guessSel = null; rtgUpdateGuesses(); return; }
         if (e.target.closest('[data-guessreload]')) { GUESSES = {}; st.guessSel = null; rtgUpdateGuesses(); return; }
+        const grpoRunBtn = e.target.closest('[data-grporun]'); if (grpoRunBtn) { st.grpoRun = grpoRunBtn.getAttribute('data-grporun'); st.grpoSel = null; rtgUpdateGrpo(); return; }
+        const grpoInpBtn = e.target.closest('[data-grpoinput]'); if (grpoInpBtn) { st.grpoSel = grpoInpBtn.getAttribute('data-grpoinput'); rtgUpdateGrpo(); return; }
         const grun = e.target.closest('[data-guessrun]'); if (grun) { st.guessRun = grun.getAttribute('data-guessrun'); st.guessSel = null; st.guessProj = null; rtgUpdateGuesses(); return; }
         const gpj = e.target.closest('[data-guessproj]'); if (gpj) { st.guessProj = gpj.getAttribute('data-guessproj'); rtgUpdateGuesses(); return; }
         if (e.target.closest('[data-guessbands]')) { st.guessBands = !st.guessBands; rtgUpdateGuesses(); return; }

@@ -3063,6 +3063,43 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500); res.end(); }
         return;
     }
+    // GRPO: per-input groups (the multiple ideas the model generated for each input)
+    if (pathname === '/api/hooks/grpo/runs' && req.method === 'GET') {
+        const cands = Array.from({ length: 21 }, (_, i) => 'grpo' + (i + 1));
+        const out = [];
+        for (const r of cands) { try { const b = await cloud.downloadFromR2(`hooks/grpo/${r}/index.jsonl`); if (b && b.length) out.push(r); } catch (e) {} }
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(JSON.stringify({ runs: out }));
+        return;
+    }
+    if (pathname === '/api/hooks/grpo/index' && req.method === 'GET') {
+        try {
+            const run = (url.searchParams.get('run') || 'grpo1').replace(/[^a-z0-9_]/g, '');
+            let rows = [];
+            try { const b = await cloud.downloadFromR2(`hooks/grpo/${run}/index.jsonl`); if (b) rows = b.toString('utf8').trim().split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean); } catch (e) {}
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify({ run, rows }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    const grpoGrp = pathname.match(/^\/api\/hooks\/grpo\/group\/([a-z0-9_]{1,24})\/([\w-]{1,32})$/);
+    if (grpoGrp && req.method === 'GET') {
+        try {
+            const b = await cloud.downloadFromR2(`hooks/grpo/${grpoGrp[1]}/groups/${grpoGrp[2]}.json`);
+            res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(b ? b.toString('utf8') : JSON.stringify({ error: 'not found' }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    const grpoMon = pathname.match(/^\/api\/hooks\/grpo\/montage\/([a-z0-9_]{1,24})\/([\w-]{1,40})$/);
+    if (grpoMon && req.method === 'GET') {
+        try {
+            const buf = await cloud.downloadFromR2(`hooks/grpo/${grpoMon[1]}/montages/${grpoMon[2]}.jpg`);
+            if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600' }); res.end(buf); }
+            else { res.writeHead(404); res.end(); }
+        } catch (e) { res.writeHead(500); res.end(); }
+        return;
+    }
     if (pathname === '/api/library/videos' && req.method === 'GET') {
         try {
             const limit = Math.min(parseInt(url.searchParams.get('limit')) || 150, 400);
