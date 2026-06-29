@@ -1284,12 +1284,12 @@ const JarvisRetention = (function () {
     // resolution-aware maps. hook → one point per video; second → one point per video-second.
     function resMaps(colorHook, colorSec, legend, hookExtra) {
         if (st.novRes === 'second') {
-            const S = N.second, mods = [['whole', 'Whole / sec', 'CLIP image + spoken & on-screen text'], ['concept', 'Concept / sec', 'MiniLM of spoken + on-screen text'], ['visual', 'Visual / sec', 'DINOv2 of the frame (no text)'], ['text', 'Text / sec', 'on-screen caption text only']];
+            const S = N.second, mods = [['whole', 'Whole / sec', 'Gemini together (frames + transcript)'], ['visual', 'Visual / sec', 'Gemini visual (frames, no text)'], ['text', 'Text / sec', 'Gemini text (transcript)']];
             const trajFor = mod => { if (st.novSel == null) return null; const rows = []; for (let i = 0; i < S.owner.length; i++) if (S.owner[i] === st.novSel) rows.push(i); rows.sort((a, b) => S.sec[a] - S.sec[b]); return rows.map(i => S.proj[mod][i]); };
             const mk = ([mod, label, sub]) => mapCard(label, sub, latentMap(S.proj[mod], { color: i => colorSec(mod, i), pick: i => S.owner[i], sel: st.novSel, traj: trajFor(mod), mine: novMineFn(), r: i => (st.novSel != null && S.owner[i] === st.novSel) ? 5 : 2.3, op: () => 0.62, tip: i => novTip(S.owner[i], 'second ' + S.sec[i]) }), legend);
             return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${mods.map(mk).join('')}<div style="font-size:11px;color:${C.mute};align-self:center;padding:10px">Each point is <b>one second</b> (${S.owner.length} total). Select a hook → its 5 seconds are <b>connected 0→4</b> with numbers, so you can read the path its hook takes through latent space (does it stay put or travel?).</div></div>`;
         }
-        const H = N.hook, mods = [['whole', 'Whole hook', 'CLIP image + spoken & on-screen text'], ['concept', 'Concept', 'MiniLM of spoken + on-screen text'], ['visual', 'Visual', 'DINOv2 frames, pooled (no text)'], ['text', 'On-screen text', 'MiniLM of caption/overlay text only']];
+        const H = N.hook, mods = [['whole', 'Whole hook', 'Gemini together (frames + transcript)'], ['visual', 'Visual', 'Gemini visual (frames, no text)'], ['text', 'Text', 'Gemini text (transcript)']];
         const mk = ([mod, label, sub]) => mapCard(label, sub, latentMap(H.proj[mod], { color: i => colorHook(mod, i), sel: st.novSel, mine: novMineFn(), tip: i => novTip(i) }), legend);
         return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${mods.map(mk).join('')}${hookExtra || `<div style="font-size:11px;color:${C.mute};align-self:center;padding:10px">Each point is a <b>whole hook</b>. Switch to <b>per-second</b> (top right) to see the same geometry at granular resolution.</div>`}</div>`;
     }
@@ -1322,9 +1322,9 @@ const JarvisRetention = (function () {
                 <img src="${hookFrame(v.id, p.sec)}" loading="lazy" onerror="this.style.display='none'" style="width:44px;height:78px;object-fit:cover;border-radius:5px;border:1px solid ${C.border2};flex-shrink:0"/>
                 <div style="flex:1;min-width:0">
                     <div style="display:flex;gap:8px;align-items:center;margin-bottom:5px"><span style="background:${C.accent}22;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:1px 8px;font-size:11px;font-weight:800;flex-shrink:0">sec ${p.sec}</span>
-                        <div style="display:flex;gap:9px;flex:1">${miniBar('whole', p.nov_pct.whole, heatCol(p.nov_pct.whole))}${miniBar('concept', p.nov_pct.concept, heatCol(p.nov_pct.concept))}${miniBar('visual', p.nov_pct.visual, heatCol(p.nov_pct.visual))}${miniBar('text', p.nov_pct.text, heatCol(p.nov_pct.text))}</div></div>
+                        <div style="display:flex;gap:9px;flex:1">${miniBar('whole', p.nov_pct.whole, heatCol(p.nov_pct.whole))}${miniBar('visual', p.nov_pct.visual, heatCol(p.nov_pct.visual))}${miniBar('text', p.nov_pct.text, heatCol(p.nov_pct.text))}</div></div>
                     <div style="font-size:10px;color:${C.mute};margin-bottom:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                        <span>niche</span><span title="whole" style="color:${nc4(p.niche.whole)};font-weight:700">●${p.niche.whole}</span><span title="concept" style="color:${nc4(p.niche.concept)};font-weight:700">●${p.niche.concept}</span><span title="visual" style="color:${nc4(p.niche.visual)};font-weight:700">●${p.niche.visual}</span><span title="text" style="color:${nc4(p.niche.text)};font-weight:700">●${p.niche.text}</span>
+                        <span>niche</span><span title="whole" style="color:${nc4(p.niche.whole)};font-weight:700">●${p.niche.whole}</span><span title="visual" style="color:${nc4(p.niche.visual)};font-weight:700">●${p.niche.visual}</span><span title="text" style="color:${nc4(p.niche.text)};font-weight:700">●${p.niche.text}</span>
                         <span>· temporal ${p.temporal == null ? '—' : p.temporal}</span><span>· coherence ${p.coh} (${Math.round(p.coh_pct * 100)}th)</span><span>· ${(p.objects || []).length} obj</span></div>
                     ${p.onscreen ? `<div style="font-size:11px;color:${C.yellow};margin-bottom:1px">⌶ "${esc(p.onscreen)}"</div>` : ''}
                     ${p.desc ? `<div style="font-size:11px;color:${C.dim};line-height:1.45"><span style="color:${C.faint}">⚠ </span>${esc(p.desc)}</div>` : ''}
@@ -1348,11 +1348,11 @@ const JarvisRetention = (function () {
                 <div style="flex:1;min-width:240px"><div style="font-size:10px;color:${C.yellow};margin-bottom:4px">⌶ ON-SCREEN TEXT — OCR (captions/overlays)</div>
                     <div style="font-size:12px;color:${onscreen ? C.text : C.mute};line-height:1.5;background:${C.card2};border:1px solid ${onscreen ? C.yellow + '55' : C.border};border-radius:8px;padding:8px 10px">${onscreen ? esc(onscreen) : '(no on-screen text detected)'}</div></div></div>
             <div style="display:flex;gap:18px;flex-wrap:wrap;border-top:1px solid ${C.border};padding-top:12px;margin-bottom:8px">
-                ${col2('A · Global novelty', ['whole', 'concept', 'visual', 'text'].map(m => bar(m, fmtv(g[m].nov[i], 3) + ' · ' + Math.round(g[m].pct[i] * 100) + 'th pct', g[m].pct[i], heatCol(g[m].pct[i]))).join(''))}
-                ${col2('B · Niche', ['whole', 'concept', 'visual', 'text'].map(m => `<div style="margin-bottom:7px;font-size:11px;color:${C.dim}">${m}: ${chip('cluster ' + nz[m].labels[i], NPAL[nz[m].labels[i] % NPAL.length])} <span style="color:${C.mute}">· dist ${fmtv(nz[m].dist_to_centre[i], 3)}</span></div>`).join(''))}
+                ${col2('A · Global novelty', ['whole', 'visual', 'text'].map(m => bar(m, fmtv(g[m].nov[i], 3) + ' · ' + Math.round(g[m].pct[i] * 100) + 'th pct', g[m].pct[i], heatCol(g[m].pct[i]))).join(''))}
+                ${col2('B · Niche', ['whole', 'visual', 'text'].map(m => `<div style="margin-bottom:7px;font-size:11px;color:${C.dim}">${m}: ${chip('cluster ' + nz[m].labels[i], NPAL[nz[m].labels[i] % NPAL.length])} <span style="color:${C.mute}">· dist ${fmtv(nz[m].dist_to_centre[i], 3)}</span></div>`).join(''))}
                 ${col2('C · Temporal', bar('novelty vs ±45d', H.temporal.nov[i] == null ? 'no neighbours' : fmtv(H.temporal.nov[i], 3), rankPct(H.temporal.nov, i), C.green) + `<div style="font-size:10px;color:${C.mute}">distance from hooks posted within 45 days</div>`)}
                 ${col2('E · Coherent', bar('novelty', fmtv(ch.novelty[i], 3), ch.nov_pct[i], heatCol(ch.nov_pct[i])) + bar('coherence (vis↔words)', fmtv(ch.coherence[i], 3), ch.coh_pct[i], C.cyan) + `<div style="font-size:10px;color:${C.mute}">quadrant: <b style="color:${ch.nov_pct[i] > .5 && ch.coh_pct[i] > .5 ? C.green : C.dim}">${(ch.nov_pct[i] > .5 ? 'novel' : 'familiar') + ' + ' + (ch.coh_pct[i] > .5 ? 'coherent' : 'incoherent')} → ${ch.nov_pct[i] > .5 ? (ch.coh_pct[i] > .5 ? 'curiosity' : 'confusion') : (ch.coh_pct[i] > .5 ? 'familiar' : 'boring')}</b></div>`)}
-                ${col2('Scene spread + coords', bar('scene spread (visual cuts)', fmtv(H.scene.spread[i], 3), rankPct(H.scene.spread, i), C.orange) + `<div style="font-size:10px;color:${C.mute};line-height:1.7">2D position · whole ${coord('whole')} · concept ${coord('concept')} · visual ${coord('visual')} · text ${coord('text')}</div>`)}
+                ${col2('Scene spread + coords', bar('scene spread (visual cuts)', fmtv(H.scene.spread[i], 3), rankPct(H.scene.spread, i), C.orange) + `<div style="font-size:10px;color:${C.mute};line-height:1.7">2D position · whole ${coord('whole')} · visual ${coord('visual')} · text ${coord('text')}</div>`)}
             </div>
             <div style="border-top:1px solid ${C.border};padding-top:10px">
                 <div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:2px;text-transform:uppercase;letter-spacing:.3px">⧗ Second-by-second — each second analysed like the whole hook</div>
@@ -1392,11 +1392,11 @@ const JarvisRetention = (function () {
     }
     function renderNovCoherent() {
         const ch = N.hook.coherent;
-        let h = h2c('E · Coherent novelty — novelty × coherence (the curiosity quadrant)', 'X = novelty (distance from corpus). Y = coherence = cos(CLIP image, CLIP text) — do the visuals match the words. Novel + coherent = curiosity; novel + incoherent = confusion.');
+        let h = h2c('E · Coherent novelty — novelty × coherence (the curiosity quadrant)', 'X = novelty (distance from corpus). Y = coherence = cos(Gemini visual, Gemini text) — do the visuals match the words. Novel + coherent = curiosity; novel + incoherent = confusion.');
         h += cardc(`<div style="display:grid;grid-template-columns:3fr 2fr;gap:12px">
             <div>${quadPlot(ch.nov_pct, ch.coh_pct, { color: i => heatCol(N.videos[i].lv ? (N.videos[i].lv - 4.5) / 4 : 0.5), sel: st.novSel, tip: i => novTip(i, 'coh ' + ch.coherence[i]) })}<div style="font-size:10px;color:${C.mute};margin-top:4px">point colour = views (brighter = more) · click to open its data</div></div>
             <div>${mapCard('Per-second coherence', 'each second coloured by visual↔word match', latentMap(N.second.proj.whole, { color: i => heatCol(N.second.coh_pct[i]), pick: i => N.second.owner[i], sel: st.novSel, r: i => (st.novSel != null && N.second.owner[i] === st.novSel) ? 5 : 2.4, op: () => 0.62, tip: i => novTip(N.second.owner[i], 'sec ' + N.second.sec[i] + ' coh ' + N.second.coherence[i]) }), legendBar('mismatch', 'coherent'))}</div></div>`);
-        h += note('<b>Valuable novelty = distance × understandability.</b> Coherence is a defined CLIP cosine, not a human judgement. Once views are overlaid, the curiosity quadrant should be where winners concentrate.', C.green);
+        h += note('<b>Valuable novelty = distance × understandability.</b> Coherence is a defined Gemini cosine, not a human judgement. Once views are overlaid, the curiosity quadrant should be where winners concentrate.', C.green);
         return h;
     }
     function renderNovLedger() {
@@ -1405,13 +1405,13 @@ const JarvisRetention = (function () {
         h += cardc((N.ledger || []).map(L => `<div style="display:flex;gap:10px;padding:8px 0;border-top:1px solid ${C.border}">
             <div style="width:150px;flex-shrink:0"><div style="font-size:12px;font-weight:700;color:${C.text}">${esc(L.metric)}</div><span style="display:inline-block;margin-top:3px;background:${(tcol[L.type] || C.mute)}22;border:1px solid ${tcol[L.type] || C.mute};color:${tcol[L.type] || C.mute};border-radius:5px;padding:0 6px;font-size:9px;font-weight:800;text-transform:uppercase">${esc(L.type)}</span></div>
             <div style="flex:1;font-size:11px;color:${C.dim};line-height:1.5">${esc(L.def)}</div></div>`).join(''));
-        h += note('<b>geometry</b> = pure distance/clustering on vectors · <b>encoder</b> = a fixed pretrained net, identical for all videos · <b>model-metric</b> = a defined scalar (e.g. CLIP cosine) · <b>defined</b> = an explicit formula (MMR keyphrase) · <b>detection</b> = OWLv2 box+score · <b style="color:' + C.red + '">interpreted</b> = LLM prose, shown as context only, never fed into a score.', C.dim);
+        h += note('<b>geometry</b> = pure distance/clustering on the Gemini vectors · <b>encoder</b> = Gemini embedding, identical for all videos · <b>model-metric</b> = a defined scalar (e.g. Gemini cosine coherence) · <b>defined</b> = an explicit formula (PCA residual) · <b style="color:' + C.red + '">interpreted</b> = LLM prose, shown as context only, never fed into a score.', C.dim);
         return h;
     }
     // ── Correlations: every novelty feature vs the indicators + views ──
     // Human-readable definition for any feature name (parsed from its naming grammar).
     function featDef(name) {
-        const MOD = { whole: 'whole-hook (CLIP image + spoken & on-screen text)', concept: 'concept (MiniLM of the spoken + on-screen script)', visual: 'visual (DINOv2 of the frames)', text: 'on-screen text (OCR captions/overlays)' };
+        const MOD = { whole: 'whole-hook (Gemini: frames + transcript)', visual: 'visual (Gemini frames, no text)', text: 'text (Gemini transcript)' };
         const md = m => MOD[m] || m; let x;
         if (x = name.match(/^global_nov_(\w+)$/)) return `Global novelty of the whole hook in the ${md(x[1])} space — mean cosine distance to its 8 nearest hooks. Higher = more unlike the rest of the corpus.`;
         if (x = name.match(/^nov_s(\d)_(\w+)$/)) return `Novelty of second ${x[1]} on its own, ${md(x[2])} space (how far that second sits from other hooks' second ${x[1]}).`;
@@ -1426,7 +1426,7 @@ const JarvisRetention = (function () {
         if (x = name.match(/^traj_len_(\w+)$/)) return `Total length of the path the hook traces through the 2D ${md(x[1])} map over its 5 seconds — high = the content moves around a lot.`;
         if (x = name.match(/^traj_disp_(\w+)$/)) return `Straight-line distance from second 0 to second 4 in the 2D ${md(x[1])} map — the net drift of the hook.`;
         if (x = name.match(/^traj_maxstep_(\w+)$/)) return `The largest single second-to-second jump in the 2D ${md(x[1])} map — the biggest cut/change inside the hook.`;
-        if (name === 'coherence_hook') return `Hook coherence — cosine between the visuals (CLIP image) and the words (spoken + on-screen). High = the visuals match what's being said.`;
+        if (name === 'coherence_hook') return `Hook coherence — cosine between the Gemini visual vector and the Gemini text vector. High = the visuals match what's being said.`;
         if (x = name.match(/^coh_s(\d)$/)) return `Coherence at second ${x[1]} — do that second's visuals match its words.`;
         if (name === 'coh_avg') return `Average coherence across the 5 seconds.`;
         if (name === 'coh_std') return `How much coherence varies across the seconds.`;
@@ -2046,10 +2046,10 @@ const JarvisRetention = (function () {
         h += `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
             <div style="display:flex;gap:6px;flex-wrap:wrap">${MS.map(([id, l]) => `<button data-nov="${id}" style="background:${st.nov === id ? C.purple + '22' : 'transparent'};border:1px solid ${st.nov === id ? C.purple : C.border};color:${st.nov === id ? C.purple : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>
             <div style="margin-left:auto;display:flex;gap:8px;align-items:center">${mineBtn}${st.nov !== 'combo' && st.nov !== 'ledger' ? `<span style="font-size:10px;color:${C.mute};text-transform:uppercase">resolution</span>${resBtn('hook', 'Whole hook')}${resBtn('second', 'Per second')}` : ''}</div></div>`;
-        h += `<div style="font-size:11px;color:${C.mute};margin-bottom:10px">${N.meta.n.toLocaleString()} hooks · corpus ${(N.meta.corpus || N.meta.n).toLocaleString()} · ${mineCount} of them yours (merged in). <b>Click any point for its full data; ★ to highlight your videos.</b></div>`;
+        h += `<div style="font-size:11px;color:${C.mute};margin-bottom:10px">${N.meta.n.toLocaleString()} hooks · corpus ${(N.meta.corpus || N.meta.n).toLocaleString()} · ${mineCount} of them yours (merged in). <b>Click any point for its full data; ★ to highlight your videos.</b></div>
+            <div style="font-size:9.5px;color:${C.faint};margin-bottom:8px;line-height:1.5">Consistency: every novelty here = distance-from-corpus on the <b>same Gemini embeddings</b> (visual = frames · text = transcript · whole = both fused). Maps use one fixed parameterisation (8-NN · K=8); the correlation panels above sweep k. All correlation numbers are <b>held-out (70/30)</b> from one source — the divergent legacy panel was removed.</div>`;
         h += novValidPanel();
         h += novQuantPanel();
-        h += novCorrPanel();
         if (st.novSel != null && N.videos[st.novSel]) h += renderHookDetail(st.novSel);
         h += ({ global: renderNovGlobal, niche: renderNovNiche, temporal: renderNovTemporal, combo: renderNovCombo, coherent: renderNovCoherent, correlations: renderNovCorrelations, interactions: renderNovInteractions, ledger: renderNovLedger }[st.nov] || renderNovGlobal)();
         return h;
@@ -2228,7 +2228,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=106'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=107'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
