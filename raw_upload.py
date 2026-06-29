@@ -65,7 +65,8 @@ def gemini_transcribe(wav):
         url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent'
         body = json.dumps({'contents': [{'parts': [
             {'inlineData': {'mimeType': 'audio/wav', 'data': data}},
-            {'text': 'Transcribe ONLY the spoken words in this short audio, verbatim. If there is no speech (music or ambient noise only), reply with exactly: NO_SPEECH'}]}]}).encode()
+            {'text': 'Transcribe ONLY the spoken words in this short audio, verbatim. If there is no speech (music or ambient noise only), reply with exactly: NO_SPEECH'}]}],
+            'generationConfig': {'temperature': 0, 'topP': 1, 'topK': 1}}).encode()   # greedy → deterministic transcript (text/together stay stable on re-upload)
         req = urllib.request.Request(url, data=body, method='POST', headers={'Content-Type': 'application/json', 'x-goog-api-key': KEY})
         with urllib.request.urlopen(req, timeout=60) as r:
             j = json.loads(r.read())

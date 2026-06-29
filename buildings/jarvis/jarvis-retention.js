@@ -759,29 +759,32 @@ const JarvisRetention = (function () {
             if (nb) { let sx = 0, sy = 0, sw = 0; for (const nn of nb) { const idx = ids.indexOf(nn.id); if (idx < 0) continue; const w = Math.max(0.001, nn.sim); sx += proj.x[idx] * w; sy += proj.y[idx] * w; sw += w; } if (sw > 0) { const hx = X(sx / sw).toFixed(1), hy = Y(sy / sw).toFixed(1); mk = `<line x1="${hx}" y1="${(+hy - 9)}" x2="${hx}" y2="${(+hy + 9)}" stroke="${CY}" stroke-width="1"/><line x1="${(+hx - 9)}" y1="${hy}" x2="${(+hx + 9)}" y2="${hy}" stroke="${CY}" stroke-width="1"/><circle cx="${hx}" cy="${hy}" r="5" fill="${CY}" stroke="#fff" stroke-width="1.5"/>`; } }
             return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:6px">${s}${mk}</svg>`;
         };
-        const projFor = { keep: 'keep', ret5: 'ret5', views: 'views', gt10M: 'hi10m' };
-        const colorFor = { keep: 'metric', ret5: 'metric', views: 'views', gt10M: 'gt10m' };
+        const projFor = { keep: 'keep', ret5: 'ret5', views: 'views', realviews: 'realviews', gt10M: 'hi10m' };
+        const colorFor = { keep: 'metric', ret5: 'metric', views: 'views', realviews: 'metric', gt10M: 'gt10m' };
         // ── SEVEN independent output boxes: 4 EMBEDDING (steered map estimate + its graph) and
         //    3 NOVELTY (its OWN calibration curve). Novelty is never in the same box as views/>10M,
         //    and is shown ONCE per metric (a curve, not a re-clustered map). ──
-        const metShort = tn => ({ keep: 'keep rate', ret5: '5s retention (rel)', views: 'views', gt10M: '>10M class' })[tn];
+        const metShort = tn => ({ keep: 'keep rate', ret5: '5s retention (rel)', views: 'views (library)', realviews: 'views (your scale)', gt10M: '>10M class' })[tn];
         const bigNumHTML = (s, sub) => `<div style="font-size:26px;font-weight:900;color:${C.text};line-height:1.1;margin:3px 0">${s}${sub ? ` <span style="font-size:11px;color:${C.mute};font-weight:600">${sub}</span>` : ''}</div>`;
         // EMBEDDING box — the steered cluster + steered estimate (= the marker on that graph).
-        // VIEWS is special: it shows the PREDICT-SCOPE realistic estimate (embedding→retention→your
-        // 211's views model) so the number lands on YOUR scale, with the raw library-scale as a sub.
+        // Two view boxes: 'views' = RAW library-scale (10k–1B distribution); 'realviews' = predict-scope
+        // (embedding→retention→your 211's view model) on YOUR channel scale. Both steered, both shown.
         const embBox = tn => {
-            if (tn === 'views') {
-                const rb = steerBest(up, 'realviews'), vb = steerBest(up, 'views');
-                const ch = rb ? rb.mod : (vb ? vb.mod : 'together');
-                const havePj = RAW[ch] && RAW[ch].proj && RAW[ch].proj.realviews;
-                const big = rb ? steerDisp('realviews', rb.est) : (vb ? steerDisp('views', vb.est) : '—');
-                const durTxt = rb && rb.dur_s ? (rb.dur_assumed ? `assumed ${rb.dur_s}s (5-frame, no real duration)` : `${rb.dur_s}s video`) : 'median duration';
-                return cardc(`<div data-expgo="${ch}:${havePj ? 'realviews' : 'views'}" style="cursor:pointer"><div style="font-size:11px;color:${CY};font-weight:800;text-transform:uppercase">Embedding → views <span style="color:${C.green}">(your scale)</span></div>${bigNumHTML(big, rb ? `via retention→views · ${durTxt}` : '')}${cluster(ch, havePj ? 'realviews' : 'views', havePj ? 'metric' : 'views')}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">predict-scope: your hook's keep/5s-ret → your 211's view model. ${vb ? `library-scale raw: <b>${steerDisp('views', vb.est)}</b>` : ''} · <span style="color:${C.accent}">open graph →</span></div></div>`, 12);
-            }
             const b = steerBest(up, tn), ch = b ? b.mod : 'together', pj = projFor[tn], cm = colorFor[tn];
-            const big = b ? steerDisp(tn, b.est) : '—', sub = b ? `${b.pctile.toFixed(0)}th pctile` : '';
-            const mods = ['together', 'text', 'visual'].map(m => ({ m, k: steerOf(up, m, tn) })).filter(x => x.k);
-            return cardc(`<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:11px;color:${CY};font-weight:800;text-transform:uppercase">Embedding → ${metShort(tn)}</div>${bigNumHTML(big, sub)}${cluster(ch, pj, cm)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${mods.length ? mods.map(p => `${p.m} ${steerDisp(tn, p.k.est)}`).join(' · ') : 'embed not ready'} · <span style="color:${C.accent}">open graph →</span></div></div>`, 12);
+            const big = b ? steerDisp(tn, b.est) : '—';
+            let sub = '', foot;
+            if (tn === 'realviews') {
+                const durTxt = b && b.dur_s ? (b.dur_assumed ? `assumed ${b.dur_s}s` : `${b.dur_s}s video`) : 'median dur';
+                sub = b ? durTxt : '';
+                const vb = steerBest(up, 'views');
+                foot = `keep+5s-ret+duration → your 211's view model${vb ? ` · library raw: <b>${steerDisp('views', vb.est)}</b>` : ''}`;
+            } else {
+                sub = b && b.pctile != null ? `${b.pctile.toFixed(0)}th pctile` : '';
+                const mods = ['together', 'text', 'visual'].map(m => ({ m, k: steerOf(up, m, tn) })).filter(x => x.k);
+                foot = mods.length ? mods.map(p => `${p.m} ${steerDisp(tn, p.k.est)}`).join(' · ') : 'embed not ready';
+            }
+            const tag = tn === 'realviews' ? ` <span style="color:${C.green}">(your scale)</span>` : tn === 'views' ? ` <span style="color:${C.mute}">(library)</span>` : '';
+            return cardc(`<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:11px;color:${CY};font-weight:800;text-transform:uppercase">Embedding → ${metShort(tn).replace(' (library)', '').replace(' (your scale)', '')}${tag}</div>${bigNumHTML(big, sub)}${cluster(ch, pj, cm)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${foot} · <span style="color:${C.accent}">open graph →</span></div></div>`, 12);
         };
         // NOVELTY box — the strongest novelty indicator's OWN calibration curve (novelty → this metric), hook marked
         const novCurve = (d, sc) => {
@@ -801,10 +804,10 @@ const JarvisRetention = (function () {
             return cardc(`<div><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML((dispV(tn, est) || '—') + star, pc != null ? `${(pc * 100).toFixed(0)}th pctile novel` : '')}${novCurve(d, sc)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${d.name.replace('nov_', '')} (R=${Rof(d).toFixed(2)}) — novelty→${metShort(tn)} curve, your hook ◆</div></div>`, 12);
         };
         const gcol = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:12px';
-        const boxes = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">7 independent outputs — 4 embedding, 3 novelty, each its own box</div>
+        const boxes = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">8 independent outputs — 5 embedding, 3 novelty, each its own box</div>
             <div style="font-size:9px;color:${C.mute};margin-bottom:8px">Every number is the one the graph shows. <b style="color:${CY}">Embedding</b> = the steered map estimate (click → that graph; the marker matches). <b style="color:${C.purple}">Novelty</b> = its OWN calibration, never mixed with views/>10M. <span style="color:${C.amber}">*</span> = unvalidated (5s-retention has no novelty signal — noise).</div>
-            <div style="font-size:10px;color:${CY};font-weight:800;text-transform:uppercase;margin-bottom:5px">Embedding — 4 boxes</div>
-            <div style="${gcol};margin-bottom:12px">${['keep', 'ret5', 'views', 'gt10M'].map(embBox).join('')}</div>
+            <div style="font-size:10px;color:${CY};font-weight:800;text-transform:uppercase;margin-bottom:5px">Embedding — 5 boxes (views in BOTH library &amp; your scale)</div>
+            <div style="${gcol};margin-bottom:12px">${['keep', 'ret5', 'views', 'realviews', 'gt10M'].map(embBox).join('')}</div>
             <div style="font-size:10px;color:${C.purple};font-weight:800;text-transform:uppercase;margin-bottom:5px">Novelty — 3 boxes (independent)</div>
             <div style="${gcol}">${['keep', 'ret5', 'views'].map(novBox).join('')}</div>`, 12);
         return head + controls + trace + boxes;
@@ -2185,7 +2188,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=102'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=103'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
