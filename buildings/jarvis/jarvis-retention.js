@@ -10,7 +10,7 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, NQ = null, NQF = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0 };
@@ -1248,7 +1248,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=109').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=110').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2121,13 +2121,47 @@ const JarvisRetention = (function () {
         return h;
     }
 
+    // switch the active channel → reload its retention table into DATA (or merge all → pooled)
+    async function loadChannel(id) {
+        st.channel = id;
+        const base = './buildings/jarvis/retention-study/';
+        const get = url => fetch(url + (url.includes('?') ? '&' : '?') + 'v=110').then(r => r.json());
+        try {
+            if (id === 'all') {
+                const tabs = await Promise.all(CHANS.channels.map(c => get(base + (c.table || ('retention/' + c.id + '.json'))).catch(() => null)));
+                const vids = []; tabs.forEach((t, i) => { if (t && t.videos) t.videos.forEach(v => vids.push(Object.assign({ _chan: CHANS.channels[i].id }, v))); });
+                DATA = { meta: { n: vids.length, pooled: true }, videos: vids };
+            } else {
+                const c = CHANS.channels.find(x => x.id === id) || CHANS.channels[0];
+                DATA = await get(base + (c.table || ('retention/' + id + '.json')));
+            }
+        } catch (e) { console.warn('[channel] load failed', e); }
+        render();
+    }
     function render() {
         if (!root) return;
         const SECS = [['data', '📋 Data'], ['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
         const nav = SECS.map(([id, l]) => `<button data-rs="${id}" style="background:${st.sec === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.sec === id ? C.accent : C.border};color:${st.sec === id ? C.accent : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('');
+        // CHANNEL tab bar — your data + each permissioned channel + 'All pooled'. Carried horizontally.
+        const chBar = (() => {
+            if (!CHANS || !CHANS.channels) return '';
+            const active = st.channel || CHANS.active || (CHANS.channels[0] || {}).id;
+            const tab = (id, name, n) => `<button data-chan="${id}" style="background:${active === id ? C.green + '22' : 'transparent'};border:1px solid ${active === id ? C.green : C.border};color:${active === id ? C.green : C.dim};border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer">${name}${n != null ? ` <span style="opacity:.6;font-size:10px">${n}</span>` : ''}</button>`;
+            const tabs = CHANS.channels.map(c => tab(c.id, c.name, c.n)).join('');
+            const total = CHANS.channels.reduce((s, c) => s + (c.n || 0), 0);
+            const pooled = CHANS.channels.length > 1 ? tab('all', 'All pooled', total) : '';
+            const add = `<button data-chanadd="1" style="background:transparent;border:1px dashed ${C.border};color:${C.mute};border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer">＋ add channel</button>`;
+            const help = st.channelHelp ? `<div style="font-size:10px;color:${C.mute};margin-top:6px;line-height:1.6;background:${C.card2};border-radius:8px;padding:9px 12px;max-width:760px">
+                <b style="color:${C.text}">Add another channel's data (you must have permission):</b><br>
+                1. The owner grants your Google account access — Studio → <b>Settings → Permissions → Invite</b> (Manager or Editor) — or it's a brand account you manage.<br>
+                2. Run <code style="color:${C.cyan}">node scrape-channels.js</code> from the project. It opens real Chrome; when it pauses, use the <b>account menu (top-right) → switch to the target channel</b>, then press Enter in the terminal. It lists that channel's Shorts and scrapes the retention curve + swipe-away + views for each, exactly like your 211.<br>
+                3. It writes <code>retention/&lt;channel&gt;.json</code> and registers it in <code>channels.json</code> — the new tab appears here automatically. <b>All pooled</b> merges every channel into one bigger dataset (more n = better models).</div>` : '';
+            return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap"><span style="font-size:10px;color:${C.mute};text-transform:uppercase;letter-spacing:.3px">channel</span>${tabs}${pooled}${add}</div>${help}`;
+        })();
         const sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
             <div style="font-size:21px;font-weight:900;color:${C.accent};margin-bottom:8px">Retention → Views</div>
+            ${chBar}
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${nav}</div>${sec}</div>`;
         try { rtgAfterRender(); } catch (e) { }
     }
@@ -2151,6 +2185,8 @@ const JarvisRetention = (function () {
         const cff = e.target.closest('[data-cf]'); if (cff && !e.target.closest('a')) { st.cfSel = cff.getAttribute('data-cf'); render(); return; }
         if (e.target.closest('[data-novmine]')) { st.novMine = !st.novMine; render(); return; }
         const nv = e.target.closest('[data-nov]'); if (nv) { st.nov = nv.getAttribute('data-nov'); render(); return; }
+        const chBtn = e.target.closest('[data-chan]'); if (chBtn) { loadChannel(chBtn.getAttribute('data-chan')); return; }
+        if (e.target.closest('[data-chanadd]')) { st.channelHelp = !st.channelHelp; render(); return; }
         const nqm = e.target.closest('[data-nqmod]'); if (nqm) { st.nqMod = nqm.getAttribute('data-nqmod'); render(); return; }
         const nqt = e.target.closest('[data-nqmeth]'); if (nqt) { st.nqMeth = nqt.getAttribute('data-nqmeth'); render(); return; }
         const pp = e.target.closest('[data-principle]'); if (pp) { st.principle = pp.getAttribute('data-principle'); render(); return; }
@@ -2296,9 +2332,10 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=109'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=110'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
+                    CHANS = await loadJSON(base + 'channels.json').catch(() => null);
                     DATA = await loadJSON(base + 'retention_table.json');
                     S = await loadJSON(base + 'retention_study.json').catch(() => null);
                     N = await loadJSON(base + 'principles/novelty.json').catch(() => null);

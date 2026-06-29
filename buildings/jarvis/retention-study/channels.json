@@ -1,0 +1,6 @@
+{
+  "active": "tyler",
+  "channels": [
+    { "id": "tyler", "name": "Tyler Satari", "table": "retention_table.json", "n": 211, "owner": true }
+  ]
+}

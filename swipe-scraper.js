@@ -336,4 +336,4 @@ function findSwipeInText(text) {
     return null;
 }
 
-module.exports = { hasSession, getStatus, scrapeAll };
+module.exports = { hasSession, getStatus, scrapeAll, scrapeOneVideo, SESSION_DIR };
