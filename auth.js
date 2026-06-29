@@ -147,6 +147,7 @@ function isPublic(pathname, method) {
     if (pathname === '/api/me' || pathname === '/api/auth/config') return true;
     if (pathname.startsWith('/api/v1/')) return true;     // read-only public API (its own key)
     if (pathname.startsWith('/api/raw/montage/')) return true; // hook frame-stitches from public YT videos; no data, lets <img> load without a token
+    if (pathname.startsWith('/api/hooks/montage/')) return true; // generated hook montages (no data), lets <img> load without a token
     if (pathname.startsWith('/share/')) return true;       // public share pages
     if (pathname === '/api/youtube/callback') return true; // external OAuth redirect (no token possible)
     if (!pathname.startsWith('/api/')) {
