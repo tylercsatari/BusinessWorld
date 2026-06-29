@@ -30,9 +30,16 @@ const ask = (q) => new Promise(res => { const rl = readline.createInterface({ in
 
 // pull every video id off the current channel's Studio content (Shorts) listing
 async function discoverVideoIds(page) {
-    await page.goto('https://studio.youtube.com/channel/UC/videos/short', { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
-    // Studio rewrites UC→the active channel; if it didn't, fall back to the default content tab
-    if (!page.url().includes('/videos')) await page.goto('https://studio.youtube.com', { waitUntil: 'domcontentloaded' }).catch(() => {});
+    // read the ACTIVE channel id (Studio puts it in the URL once a channel is selected), then
+    // open that channel's Shorts content listing.
+    await page.goto('https://studio.youtube.com', { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(3000);
+    const m = page.url().match(/channel\/(UC[\w-]+)/);
+    const chId = m ? m[1] : null;
+    console.log(chId ? `  active channel: ${chId}` : '  (could not read active channel id — scraping whatever content page loads)');
+    const url = chId ? `https://studio.youtube.com/channel/${chId}/videos/short` : 'https://studio.youtube.com';
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(2500);
     const ids = new Set();
     for (let scroll = 0; scroll < 40; scroll++) {
         const batch = await page.evaluate(() => Array.from(document.querySelectorAll('a[href*="/video/"]')).map(a => (a.getAttribute('href').match(/\/video\/([\w-]{6,})/) || [])[1]).filter(Boolean));
@@ -43,9 +50,22 @@ async function discoverVideoIds(page) {
     return [...ids];
 }
 
+// public video metadata (views/title/duration/date) via a SECOND tab in the same logged-in
+// browser — cookied, so no consent wall, and it leaves the Studio channel context untouched.
+async function fetchMeta(metaPage, videoId) {
+    try {
+        await metaPage.goto(`https://www.youtube.com/watch?v=${videoId}`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+        await metaPage.waitForTimeout(400);
+        return await metaPage.evaluate(() => {
+            const r = window.ytInitialPlayerResponse || {}; const vd = r.videoDetails || {}, mf = (r.microformat || {}).playerMicroformatRenderer || {};
+            return { title: vd.title || null, views: parseInt(vd.viewCount) || null, duration_s: parseInt(vd.lengthSeconds) || null, published: mf.publishDate || mf.uploadDate || null };
+        });
+    } catch (e) { return {}; }
+}
+
 // map one scraped video to the retention_table.json row format (same fields as the 211)
-function toRow(videoId, d) {
-    return Object.assign({ id: videoId, url: `https://youtube.com/watch?v=${videoId}`, scraped_at: new Date().toISOString() }, d, {
+function toRow(videoId, d, meta) {
+    return Object.assign({ id: videoId, url: `https://youtube.com/watch?v=${videoId}`, scraped_at: new Date().toISOString() }, meta || {}, d, {
         keep_rate: d.keep_rate != null ? d.keep_rate : d.stayedToWatch,
         swiped: d.swiped != null ? d.swiped : d.swipedAway,
     });
@@ -70,6 +90,8 @@ async function main() {
     fs.mkdirSync(RET_DIR, { recursive: true });
     const context = await chromium.launchPersistentContext(scraper.SESSION_DIR, { headless: false, channel: 'chrome', viewport: { width: 1280, height: 900 } });
     const page = context.pages()[0] || await context.newPage();
+    const metaPage = await context.newPage();   // separate tab for public metadata (keeps Studio context)
+    await page.bringToFront();
     await page.goto('https://studio.youtube.com', { waitUntil: 'domcontentloaded' });
     await ask('\nMake sure you are LOGGED IN to YouTube Studio in the Chrome window, then press Enter…');
 
@@ -83,8 +105,13 @@ async function main() {
         const rows = [];
         for (let i = 0; i < ids.length; i++) {
             process.stdout.write(`  [${i + 1}/${ids.length}] ${ids[i]} … `);
-            try { const d = await scraper.scrapeOneVideo(page, ids[i]); rows.push(toRow(ids[i], d)); console.log('ok'); }
+            // on the FIRST video only, capture the raw Studio analytics responses so we can find
+            // and parse the retention-curve timeseries (it's in the youtubei analytics payload).
+            let cap = null, capH = null;
+            if (i === 0) { cap = []; capH = async (resp) => { const u = resp.url(); if (u.includes('youtubei') && u.includes('analytics')) { try { cap.push({ url: u.slice(0, 160), body: (await resp.text()).slice(0, 300000) }); } catch (e) {} } }; page.on('response', capH); }
+            try { const d = await scraper.scrapeOneVideo(page, ids[i]); const meta = await fetchMeta(metaPage, ids[i]); rows.push(toRow(ids[i], d, meta)); console.log(`ok (keep ${d.stayedToWatch}% · ${meta.views != null ? meta.views.toLocaleString() + ' views' : 'no meta'})`); }
             catch (e) { console.log('failed:', e.message.slice(0, 60)); }
+            if (i === 0) { page.off('response', capH); fs.writeFileSync(path.join(__dirname, `analytics-debug-${ch.id}.json`), JSON.stringify(cap)); console.log(`  ↳ saved ${cap.length} analytics responses → analytics-debug-${ch.id}.json (send me this to wire the retention curve)`); }
         }
         const out = { meta: { n: rows.length, channel: ch.name, channel_id: ch.id, scraped_at: new Date().toISOString() }, videos: rows };
         fs.writeFileSync(path.join(RET_DIR, `${ch.id}.json`), JSON.stringify(out));
