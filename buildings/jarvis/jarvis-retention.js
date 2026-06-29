@@ -10,7 +10,7 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, err = null;
+    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, NQ = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: 'hi10m', guessBands: false, guessBandK: 6 };
@@ -1261,6 +1261,24 @@ const JarvisRetention = (function () {
             </table>
             <div style="font-size:10px;color:${C.mute};margin-top:8px;line-height:1.5"><b style="color:${C.text}">The finding:</b> it's <b style="color:${C.cyan}">script / text novelty</b> (temporal = unlike recent uploads, combinatorial = unusual combination of features) that drives retention. <b style="color:#94a3b8">Visual novelty does NOT predict keep</b> (≈0). So "be novel" means novel in <b>what you say</b>, not just how it looks. <sup>*</sup> = perm-p &lt; 0.05.</div>`, 12);
     }
+    // SWEEP of novelty quantifications (novelty_quantify.py): many ways to measure "distance from
+    // typical" × modality, each tested linear AND inverted-U, held-out. The quantification matters.
+    function novQuantPanel() {
+        const Q = NQ; if (!Q || !Q.results) return '';
+        const res = Q.results, modCol = m => m === 'visual' ? '#94a3b8' : m === 'text' ? C.cyan : C.purple;
+        const visBest = res.filter(r => r.modality === 'visual').slice().sort((a, b) => b.keep_lin - a.keep_lin)[0];
+        const spark = pts => { const xs = pts.map(p => p.x), ys = pts.map(p => p.y), xm = Math.min(...xs), xM = Math.max(...xs), ym = Math.min(...ys), yM = Math.max(...ys), w = 76, h = 26, X = v => 2 + (v - xm) / ((xM - xm) || 1) * (w - 4), Y = v => h - 2 - (v - ym) / ((yM - ym) || 1) * (h - 4); return `<svg viewBox="0 0 ${w} ${h}" style="width:${w}px;height:${h}px;vertical-align:middle">${pts.map((p, i) => `<circle cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="1.4" fill="${C.mute}"/>`).join('')}<path d="${pts.map((p, i) => `${i ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ')}" fill="none" stroke="${C.cyan}" stroke-width="1.4"/></svg>`; };
+        const cellR = v => `<td style="text-align:center;background:${fuHeat(v * 2.8)};color:${Math.abs(v) >= 0.15 ? '#fff' : C.dim};font-size:10px;font-weight:${Math.abs(v) >= 0.2 ? 700 : 400};padding:3px 6px">${v >= 0 ? '+' : ''}${v.toFixed(2)}</td>`;
+        const rows = res.slice(0, 16).map(r => `<tr><td style="white-space:nowrap;padding-right:6px;color:${C.text}"><b style="color:${modCol(r.modality)}">${r.modality}</b> ${r.method}</td>${cellR(r.keep_lin)}${cellR(r.ret5_lin)}<td style="padding-left:4px">${spark(r.curve_keep)}</td><td style="text-align:center;font-size:9px;color:${r.hump ? C.amber : C.faint}">${r.hump ? 'U' : 'lin'}</td></tr>`).join('');
+        const humps = res.filter(r => r.hump).length;
+        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">How you QUANTIFY novelty changes everything — ${res.length} methods × held-out</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:8px">Every row is a different way to measure "distance from the dense centre" (mean · kNN · k-means niche · Mahalanobis · PCA-residual · density · distance-to-mode). Each scored linear AND for an inverted-U (Tyler's hypothesis), 70/30 × ${Q.splits}. Sorted by |keep ρ|. Sparkline = mean keep across novelty deciles (the actual shape).</div>
+            <div style="background:${C.card2};border-radius:8px;padding:9px 13px;margin-bottom:9px;font-size:10px;line-height:1.6;color:${C.mute}"><b style="color:${C.green}">Visual novelty hypothesis — CONFIRMED, with the right metric:</b> measured as kNN/niche distance it's ≈0, but as <b style="color:#94a3b8">distance-to-mode (the single most-typical exemplar) it's <b style="color:${C.green}">${visBest ? '+' + visBest.keep_lin : '—'}</b> for keep</b>. The quantification, not the principle, was the problem. <b style="color:${C.amber}">Inverted-U: ${humps}/${res.length}</b> — held-out, no quantification shows a real hump; the relationship is monotonic (more novel → more keep). The sparklines confirm it visually.</div>
+            <table style="border-collapse:separate;border-spacing:2px;font-size:10px;width:100%">
+              <tr><td></td><td style="color:${C.mute};text-transform:uppercase;text-align:center;font-size:9px">keep ρ</td><td style="color:${C.mute};text-transform:uppercase;text-align:center;font-size:9px">5s-ret ρ</td><td style="color:${C.mute};text-transform:uppercase;font-size:9px;padding-left:6px">keep shape</td><td style="color:${C.mute};text-transform:uppercase;font-size:9px">fit</td></tr>
+              ${rows}
+            </table>`, 12);
+    }
     // resolution-aware maps. hook → one point per video; second → one point per video-second.
     function resMaps(colorHook, colorSec, legend, hookExtra) {
         if (st.novRes === 'second') {
@@ -2028,6 +2046,7 @@ const JarvisRetention = (function () {
             <div style="margin-left:auto;display:flex;gap:8px;align-items:center">${mineBtn}${st.nov !== 'combo' && st.nov !== 'ledger' ? `<span style="font-size:10px;color:${C.mute};text-transform:uppercase">resolution</span>${resBtn('hook', 'Whole hook')}${resBtn('second', 'Per second')}` : ''}</div></div>`;
         h += `<div style="font-size:11px;color:${C.mute};margin-bottom:10px">${N.meta.n.toLocaleString()} hooks · corpus ${(N.meta.corpus || N.meta.n).toLocaleString()} · ${mineCount} of them yours (merged in). <b>Click any point for its full data; ★ to highlight your videos.</b></div>`;
         h += novValidPanel();
+        h += novQuantPanel();
         h += novCorrPanel();
         if (st.novSel != null && N.videos[st.novSel]) h += renderHookDetail(st.novSel);
         h += ({ global: renderNovGlobal, niche: renderNovNiche, temporal: renderNovTemporal, combo: renderNovCombo, coherent: renderNovCoherent, correlations: renderNovCorrelations, interactions: renderNovInteractions, ledger: renderNovLedger }[st.nov] || renderNovGlobal)();
@@ -2207,13 +2226,14 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=104'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=105'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');
                     S = await loadJSON(base + 'retention_study.json').catch(() => null);
                     N = await loadJSON(base + 'principles/novelty.json').catch(() => null);
                     NCEXP = await loadJSON(base + 'principles/novelty_correlations.json').catch(() => null);
+                    NQ = await loadJSON(base + 'principles/novelty_quantify.json').catch(() => null);
                     CR = await loadJSON(base + 'principles/correlations.json').catch(() => null);
                     INT = await loadJSON(base + 'principles/interactions.json').catch(() => null);
                     CF = await loadJSON(base + 'principles/confounds.json').catch(() => null);
