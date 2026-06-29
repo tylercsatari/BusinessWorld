@@ -25,7 +25,7 @@ for pf in glob.glob("/home/ubuntu/hookrl/runs/keep*/pairs.jsonl"):
         try:
             p = json.loads(l)
             if p.get("chosen") and p.get("rejected") and p["chosen"] != p["rejected"] \
-               and (p.get("chosen_reward", 0) - p.get("rejected_reward", 0)) >= 0.08:
+               and (p.get("chosen_reward", 0) - p.get("rejected_reward", 0)) >= 0.15:  # stronger: clearer prefs only
                 pairs.append(p)
         except Exception: pass
 print("DPO round %s on %d preference pairs (margin>=0.08)" % (ROUND, len(pairs)), flush=True)
@@ -46,7 +46,7 @@ model.gradient_checkpointing_enable(); model.enable_input_require_grads()
 lora = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05, bias="none", task_type="CAUSAL_LM",
                   target_modules=["q_proj", "k_proj", "v_proj", "o_proj"])
 cfg = DPOConfig(output_dir=OUT, per_device_train_batch_size=1, gradient_accumulation_steps=16,
-                num_train_epochs=1, learning_rate=5e-6, bf16=True, beta=0.1,
+                num_train_epochs=3, learning_rate=1.2e-5, bf16=True, beta=0.1,  # stronger: 3 epochs, higher LR (round-1 gentle config didn't move the policy)
                 max_length=1280, logging_steps=5, save_strategy="no",
                 gradient_checkpointing=False, report_to=[])  # trl 1.7.0 DPOConfig dropped max_prompt_length
 trainer = DPOTrainer(model=model, args=cfg, train_dataset=ds, processing_class=tok, peft_config=lora)
