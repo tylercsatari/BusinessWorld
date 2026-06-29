@@ -775,7 +775,7 @@ const JarvisRetention = (function () {
                 const ch = rb ? rb.mod : (vb ? vb.mod : 'together');
                 const havePj = RAW[ch] && RAW[ch].proj && RAW[ch].proj.realviews;
                 const big = rb ? steerDisp('realviews', rb.est) : (vb ? steerDisp('views', vb.est) : '—');
-                const durTxt = rb && rb.dur_s ? `${rb.dur_s}s video` : 'median duration';
+                const durTxt = rb && rb.dur_s ? (rb.dur_assumed ? `assumed ${rb.dur_s}s (5-frame, no real duration)` : `${rb.dur_s}s video`) : 'median duration';
                 return cardc(`<div data-expgo="${ch}:${havePj ? 'realviews' : 'views'}" style="cursor:pointer"><div style="font-size:11px;color:${CY};font-weight:800;text-transform:uppercase">Embedding → views <span style="color:${C.green}">(your scale)</span></div>${bigNumHTML(big, rb ? `via retention→views · ${durTxt}` : '')}${cluster(ch, havePj ? 'realviews' : 'views', havePj ? 'metric' : 'views')}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">predict-scope: your hook's keep/5s-ret → your 211's view model. ${vb ? `library-scale raw: <b>${steerDisp('views', vb.est)}</b>` : ''} · <span style="color:${C.accent}">open graph →</span></div></div>`, 12);
             }
             const b = steerBest(up, tn), ch = b ? b.mod : 'together', pj = projFor[tn], cm = colorFor[tn];
@@ -2185,7 +2185,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=101'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=102'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     DATA = await loadJSON(base + 'retention_table.json');

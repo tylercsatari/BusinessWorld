@@ -236,12 +236,16 @@ def _run():
             # REALISTIC VIEWS (predict-scope): feed the steered keep/ret5 ests + this video's real
             # duration through the 211's retention→views model → views on Tyler's channel scale.
             if 'PSCOPE' in keys:
-                PS = SM['PSCOPE']; ld = float(np.log10((dur_s if dur_s and dur_s > 0 else float(SM['PSCOPE_durmed'])) + 1))
+                # video upload → its real (ffprobed) duration; 5-frame build → no duration, so
+                # assume a generic 30s short. keep + ret5 + log_dur all feed the predict-scope.
+                have_dur = bool(dur_s and dur_s > 0)
+                dv = dur_s if have_dur else 30.0
+                PS = SM['PSCOPE']; ld = float(np.log10(dv + 1))
                 for mod in ('visual', 'text', 'together'):
                     kk = steer.get(f'{mod}_keep'); rr = steer.get(f'{mod}_ret5')
                     if kk and rr:
                         rv = float(10 ** (PS[0] * kk['est'] + PS[1] * rr['est'] + PS[2] * ld + PS[3]))
-                        steer[f'{mod}_realviews'] = {'est': round(rv), 'pctile': None, 'kind': 'realviews', 'dur_s': round(dur_s) if dur_s else None}
+                        steer[f'{mod}_realviews'] = {'est': round(rv), 'pctile': None, 'kind': 'realviews', 'dur_s': round(dv), 'dur_assumed': not have_dur}
     except Exception: pass
     def preview(e):
         if e is None: return None
