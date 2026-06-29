@@ -158,11 +158,21 @@ for ch in ['visual', 'text', 'together']:
         ke = np.array(mp['proj']['keep']['est'], float)
         re = np.array(mp['proj']['ret5']['est'], float)
         ld = np.array([np.log10(LIBDUR.get(vid, DUR_MED) + 1) for vid in mids])
-        rv = np.power(10.0, PS[0] * ke + PS[1] * re + PS[2] * ld + PS[3])
-        mp['proj']['realviews'] = {'x': mp['proj']['views']['x'], 'y': mp['proj']['views']['y'],
-                                   'cv': mp['proj']['views'].get('cv', 0), 'co': 0.0,
+        rvlog = PS[0] * ke + PS[1] * re + PS[2] * ld + PS[3]
+        rv = np.power(10.0, rvlog)
+        # STEER the embedding toward realistic-views so the 2D layout has a clean high→low trend
+        # (own projection, NOT the library-views layout). The embedding captures the keep+ret5
+        # part; duration is metadata it can't see, so it adds scatter — same as every other steer.
+        mask = np.abs(Vm).sum(1) > 1e-6
+        Vmk = Vm[mask]; rvk = rvlog[mask]
+        oofr = np.full(int(mask.sum()), np.nan)
+        for tr, te in kf.split(Vmk): oofr[te] = PLSRegression(1).fit(Vmk[tr], rvk[tr]).predict(Vmk[te]).ravel()
+        cvr = abs(float(spearmanr(oofr, rvk)[0]))
+        XYr = PLSRegression(2).fit(Vmk, rvk).transform(Vm)
+        if spearmanr(XYr[mask, 0], rvk)[0] < 0: XYr[:, 0] = -XYr[:, 0]
+        mp['proj']['realviews'] = {'x': grid(XYr[:, 0]), 'y': grid(XYr[:, 1]), 'cv': round(cvr, 3), 'co': 0.0,
                                    'est': [round(float(x)) for x in rv], 'predscope': True}
-        print(f'  {ch}/realviews: predict-scope applied → median {np.median(rv):,.0f} (vs raw library median {np.median(vmap[vmap>0]):,.0f})', flush=True)
+        print(f'  {ch}/realviews: STEERED (held-out r={cvr:.3f}) · median {np.median(rv):,.0f} (vs raw library median {np.median(vmap[vmap>0]):,.0f})', flush=True)
     r2_put(f'raw/{ch}/map.json', json.dumps(mp).encode(), 'application/json')
     print(f'  saved raw/{ch}/map.json', flush=True)
 STEER['PSCOPE'] = PS.astype(np.float32)              # [c_keep, c_ret5, c_logdur, intercept] — retention→views on Tyler's scale
