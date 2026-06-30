@@ -39,6 +39,7 @@ tok = AutoTokenizer.from_pretrained(MODEL)
 if tok.pad_token is None: tok.pad_token = tok.eos_token
 tok.padding_side = "left"
 model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, device_map="cuda"); model.eval()
+model.config.output_router_logits = False  # SFT-merged Qwen3-MoE bakes this True -> aux-loss shape crash at generate; off for inference
 print("model ready", flush=True)
 
 def gen_group(brief, n=G, temp=1.05):

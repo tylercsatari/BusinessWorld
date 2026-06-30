@@ -6,8 +6,9 @@ cd /home/ubuntu/hookrl
 V="venv/bin/python"
 log(){ echo "[$(date +%H:%M:%S)] $*"; }
 DEADLINE=$(( $(date +%s) + 8*3600 ))
-PREV=/home/ubuntu/hookrl/models/qwen3-30b-a3b
-N=1; STRIKES=0
+# round 1 already harvested (76 groups) + RAFT-updated -> grpomerged_r1. Resume at round 2 with it.
+PREV=/home/ubuntu/hookrl/models/grpomerged_r1
+N=2; STRIKES=0
 while true; do
   [ $(date +%s) -ge $DEADLINE ] && { log "8h deadline"; break; }
   BEFORE=$(wc -l < runs/grpo$N/index.jsonl 2>/dev/null || echo 0)

@@ -55,6 +55,7 @@ trainer.model.save_pretrained(OUT); tok.save_pretrained(OUT)
 for f in glob.glob(OUT + "/*"):
     if os.path.isfile(f): H.s3.upload_file(f, H.BUCKET, "hooks/models/grpo_r%s/%s" % (ROUND, os.path.basename(f)))
 merged = trainer.model.merge_and_unload()
+merged.config.output_router_logits = False  # keep the saved merged model usable for generation (MoE aux-loss off)
 MERGED = "/home/ubuntu/hookrl/models/grpomerged_r%s" % ROUND
 merged.save_pretrained(MERGED, safe_serialization=True); tok.save_pretrained(MERGED)
 print("=== GRPO_UPDATE_DONE round %s -> merged %s ===" % (ROUND, MERGED), flush=True)
