@@ -3072,7 +3072,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if (pathname === '/api/hooks/guesses' && req.method === 'GET') {
         try {
             const run = (url.searchParams.get('run') || 'phase0').replace(/[^a-z0-9_]/g, '');
-            const isGrpo = run.indexOf('grpo') === 0;
+            const isGrpo = run.indexOf('grpo') === 0 || run.indexOf('discover') === 0;  // discover runs live under hooks/grpo/ too
             let rows = [];
             try {
                 const buf = await cloud.downloadFromR2(isGrpo ? `hooks/grpo/${run}/manifest.jsonl` : `hooks/runs/${run}/manifest.jsonl`);
@@ -3086,7 +3086,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const hookMon = pathname.match(/^\/api\/hooks\/montage\/([a-z0-9_]{1,24})\/([\w-]{1,40})$/);
     if (hookMon && req.method === 'GET') {
         try {
-            const base = hookMon[1].indexOf('grpo') === 0 ? `hooks/grpo/${hookMon[1]}/montages` : `hooks/runs/${hookMon[1]}/montages`;
+            const base = (hookMon[1].indexOf('grpo') === 0 || hookMon[1].indexOf('discover') === 0) ? `hooks/grpo/${hookMon[1]}/montages` : `hooks/runs/${hookMon[1]}/montages`;
             const buf = await cloud.downloadFromR2(`${base}/${hookMon[2]}.jpg`);
             if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600' }); res.end(buf); }
             else { res.writeHead(404); res.end(); }
