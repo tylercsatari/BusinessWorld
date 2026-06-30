@@ -8835,10 +8835,24 @@ async function fetchT(url, opts, ms) {  // fetch with a hard timeout so nothing 
 async function hookModelGenerate(premise, invent, count) {
     const url = process.env.HOOK_MODEL_URL, token = process.env.HOOK_MODEL_TOKEN;
     if (!url) throw new Error('fine-tuned model endpoint not configured (set HOOK_MODEL_URL) — refusing to fall back');
-    const r = await fetchT(url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+    // Modal hands off long calls (cold start / generation > ~150s) via a 303 to a
+    // ?__modal_function_call_id=… URL. POST, then GET-poll that URL through repeated
+    // 303s until the result is ready. We run in the background queue, so minutes is fine.
+    const deadline = Date.now() + 9 * 60 * 1000;   // up to 9 min (covers 57GB cold start)
+    let r = await fetchT(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, redirect: 'manual',
         body: JSON.stringify({ premise, invent, count, token })
-    }, 300000);  // generous: covers Modal cold start (GPU spin-up) on the first click
+    }, 165000);
+    let hops = 0;
+    while ((r.status === 303 || r.status === 302 || r.status === 307) && Date.now() < deadline && hops < 60) {
+        const loc = r.headers.get('location');
+        if (!loc) break;
+        const next = loc.startsWith('http') ? loc : new URL(loc, url).href;
+        await new Promise(res => setTimeout(res, 1500));   // gentle pacing between long-poll hops
+        r = await fetchT(next, { method: 'GET', redirect: 'manual' }, 165000);
+        hops++;
+    }
+    if (r.status !== 200) throw new Error('model endpoint http ' + r.status + (Date.now() >= deadline ? ' (timed out waiting for GPU)' : ''));
     const j = await r.json().catch(() => null);
     if (!j) throw new Error('model returned no JSON (status ' + r.status + ')');
     if (j.error) throw new Error('model: ' + j.error);

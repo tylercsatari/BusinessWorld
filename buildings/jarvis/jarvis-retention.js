@@ -802,9 +802,9 @@ const JarvisRetention = (function () {
         fetch('/api/hooks/demo/status/' + rid).then(r => r.json()).then(s => { st.expGenStage = (s && s.stage) || 'queued'; if (st.expGenBusy) rtgUpdateExp(); }).catch(() => {});
         fetch('/api/hooks/grpo/group/demo/' + rid).then(r => r.json()).then(j => {
             if (j && j.attempts && j.attempts.length) { EXPDEMO[rid] = j; st.expGenBusy = false; st.expGenStage = 'done'; rtgUpdateExp(); }
-            else if (tries < 90) { setTimeout(() => expDemoPoll(rid, tries + 1), 4000); }
+            else if (tries < 150) { setTimeout(() => expDemoPoll(rid, tries + 1), 4000); }
             else { EXPDEMO[rid] = { error: 'timed out waiting for the fine-tuned model to spin up — try again in a moment' }; st.expGenBusy = false; rtgUpdateExp(); }
-        }).catch(() => { if (tries < 90) setTimeout(() => expDemoPoll(rid, tries + 1), 4000); });
+        }).catch(() => { if (tries < 150) setTimeout(() => expDemoPoll(rid, tries + 1), 4000); });
     }
     function expGenSubmit() {
         const inp = window.document.getElementById('exp-gen-input');
