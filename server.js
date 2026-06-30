@@ -3064,6 +3064,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             try { const buf = await cloud.downloadFromR2(`hooks/runs/${r}/manifest.jsonl`); if (buf && buf.length) out.push(r); } catch (e) {}
         }
         for (let i = 1; i <= 21; i++) { const r = 'grpo' + i; try { const buf = await cloud.downloadFromR2(`hooks/grpo/${r}/manifest.jsonl`); if (buf && buf.length) out.push(r); } catch (e) {} }
+        for (let i = 1; i <= 21; i++) { const r = 'discover' + i; try { const buf = await cloud.downloadFromR2(`hooks/grpo/${r}/manifest.jsonl`); if (buf && buf.length) out.push(r); } catch (e) {} }
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
         res.end(JSON.stringify({ runs: out }));
         return;
@@ -3106,11 +3107,20 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const body = JSON.parse((await readBody(req)) || '{}');
             const premise = String(body.premise || '').trim().slice(0, 400);
             if (!premise) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'premise required' })); return; }
+            const count = Math.max(1, Math.min(parseInt(body.count) || 4, 8));
             const rid = 'req' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-            await cloud.uploadToR2(`hooks/grpo/requests/${rid}.json`, Buffer.from(JSON.stringify({ premise, ts: Date.now() })), 'application/json');
+            await cloud.uploadToR2(`hooks/grpo/requests/${rid}.json`, Buffer.from(JSON.stringify({ premise, count, ts: Date.now() })), 'application/json');
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ rid, premise }));   // poll /api/hooks/grpo/group/demo/<rid> for the result
+            res.end(JSON.stringify({ rid, premise, count }));   // poll status + group/demo/<rid> for the result
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    const demoStat = pathname.match(/^\/api\/hooks\/demo\/status\/([\w-]{1,40})$/);
+    if (demoStat && req.method === 'GET') {
+        let st = { stage: 'queued' };
+        try { const b = await cloud.downloadFromR2(`hooks/grpo/demo/status/${demoStat[1]}.json`); if (b) st = JSON.parse(b.toString('utf8')); } catch (e) {}
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(JSON.stringify(st));
         return;
     }
     if (pathname === '/api/hooks/grpo/index' && req.method === 'GET') {

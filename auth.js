@@ -149,6 +149,7 @@ function isPublic(pathname, method) {
     if (pathname.startsWith('/api/raw/montage/')) return true; // hook frame-stitches from public YT videos; no data, lets <img> load without a token
     if (pathname.startsWith('/api/hooks/montage/')) return true; // generated hook montages (no data), lets <img> load without a token
     if (pathname.startsWith('/api/hooks/grpo/montage/')) return true; // GRPO per-input attempt montages, lets <img> load without a token
+    if (pathname.startsWith('/api/hooks/demo/status/')) return true; // demo generation progress (no data), pollable without a token
     if (pathname.startsWith('/share/')) return true;       // public share pages
     if (pathname === '/api/youtube/callback') return true; // external OAuth redirect (no token possible)
     if (!pathname.startsWith('/api/')) {

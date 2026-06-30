@@ -13,7 +13,7 @@ const JarvisRetention = (function () {
     let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -799,50 +799,50 @@ const JarvisRetention = (function () {
     function rtgUpdateExp() { try { const el = window.document.getElementById('rtg-exppanel'); if (el) el.innerHTML = renderExperiment(); } catch (e) { } }
     function expDemoPoll(rid, tries) {
         tries = tries || 0;
+        fetch('/api/hooks/demo/status/' + rid).then(r => r.json()).then(s => { st.expGenStage = (s && s.stage) || 'queued'; if (st.expGenBusy) rtgUpdateExp(); }).catch(() => {});
         fetch('/api/hooks/grpo/group/demo/' + rid).then(r => r.json()).then(j => {
-            if (j && j.attempts && j.attempts.length) { EXPDEMO[rid] = j; st.expGenBusy = false; rtgUpdateExp(); }
-            else if (tries < 60) { setTimeout(() => expDemoPoll(rid, tries + 1), 5000); }
-            else { EXPDEMO[rid] = { error: 'timed out — the trainer may be between rounds; try again' }; st.expGenBusy = false; rtgUpdateExp(); }
-        }).catch(() => { if (tries < 60) setTimeout(() => expDemoPoll(rid, tries + 1), 5000); });
+            if (j && j.attempts && j.attempts.length) { EXPDEMO[rid] = j; st.expGenBusy = false; st.expGenStage = 'done'; rtgUpdateExp(); }
+            else if (tries < 90) { setTimeout(() => expDemoPoll(rid, tries + 1), 4000); }
+            else { EXPDEMO[rid] = { error: 'timed out — is the model running on Lambda? (the demo is served by the live box)' }; st.expGenBusy = false; rtgUpdateExp(); }
+        }).catch(() => { if (tries < 90) setTimeout(() => expDemoPoll(rid, tries + 1), 4000); });
     }
     function expGenSubmit() {
         const inp = window.document.getElementById('exp-gen-input');
         const prem = inp ? inp.value.trim() : (st.expGenPrem || '');
         if (!prem) return;
-        st.expGenPrem = prem; st.expGenBusy = true; st.expGenRid = null;
-        fetch('/api/hooks/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem }) })
+        st.expGenPrem = prem; st.expGenBusy = true; st.expGenRid = null; st.expGenStage = 'queued';
+        fetch('/api/hooks/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, count: st.expGenN || 4 }) })
             .then(r => r.json()).then(j => { if (j.rid) { st.expGenRid = j.rid; rtgUpdateExp(); expDemoPoll(j.rid); } else { st.expGenBusy = false; rtgUpdateExp(); } })
             .catch(() => { st.expGenBusy = false; rtgUpdateExp(); });
         rtgUpdateExp();
     }
     function expGenPanel() {
-        const bg = C.bg || '#0f172a';
+        const bg = C.bg || '#0f172a', n = st.expGenN || 4;
+        const STAGES = { queued: 'queued — waiting for the live model…', reasoning: 'reasoning up the hooks…', rendering: 'rendering + scoring frames…', done: 'done' };
         let result = '';
         if (st.expGenRid) {
             const g = EXPDEMO[st.expGenRid];
-            if (st.expGenBusy && !g) result = `<div style="margin-top:12px;font-size:12px;color:${C.cyan}">⏳ the trained model is reasoning up 8 hooks, rendering + scoring each — ~1–2 min (it's interleaved with training)…</div>`;
+            if (st.expGenBusy && !g) result = `<div style="margin-top:12px;font-size:12px;color:${C.cyan}">⏳ ${esc(STAGES[st.expGenStage] || 'working…')} <span style="color:${C.mute}">(served by the live training box; ~1–2 min)</span></div>`;
             else if (g && g.error) result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">${esc(g.error)}</div>`;
             else if (g && g.attempts) {
                 const cards = g.attempts.map(a => {
-                    const advCol = a.advantage > 0 ? C.green : (a.advantage < 0 ? '#ef4444' : C.mute);
                     const reasoning = a.reasoning ? `<details style="margin-top:6px"><summary style="font-size:10px;color:${C.cyan};cursor:pointer">reasoning</summary><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:4px;white-space:pre-wrap;max-height:220px;overflow:auto">${esc(a.reasoning)}</div></details>` : '';
                     return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:8px;background:${C.card2}">
                       <img src="/api/hooks/grpo/montage/demo/${st.expGenRid}_${a.k}" style="width:100%;border-radius:6px;display:block" loading="lazy">
                       <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">
                         <span>keep <b style="color:${heatCol(a.keep_pctile || 0)}">${Math.round((a.keep_pctile || 0) * 100)}%</b></span>
-                        <span>rel <b style="color:${a.relevance != null && a.relevance < 0.45 ? '#ef4444' : C.text}">${a.relevance != null ? a.relevance.toFixed(2) : '—'}</b></span>
-                        <span>adv <b style="color:${advCol}">${a.advantage > 0 ? '+' : ''}${(a.advantage || 0).toFixed(2)}</b></span>
-                        <span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>
-                      <div style="font-size:10px;color:${C.mute};margin-top:4px;font-style:italic">${esc(a.caption || '')}</div>${reasoning}</div>`;
+                        <span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${reasoning}</div>`;
                 }).join('');
-                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${C.mute};margin-bottom:6px">${g.n} hooks generated for "${esc(g.premise)}" by ${esc(g.model || 'the model')} · best keep <b style="color:${heatCol(g.best_keep || 0)}">${Math.round((g.best_keep || 0) * 100)}%</b> · ranked by within-input advantage</div>
+                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${C.mute};margin-bottom:6px">${g.n} hook${g.n > 1 ? 's' : ''} for "${esc(g.premise)}" by ${esc(g.model || 'the model')} · best keep <b style="color:${heatCol(g.best_keep || 0)}">${Math.round((g.best_keep || 0) * 100)}%</b> · ranked by keep-rate</div>
                   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:10px">${cards}</div></div>`;
             }
         }
+        const nPill = k => `<span data-expgenn="${k}" style="cursor:pointer;border:1px solid ${n === k ? C.accent : C.border};background:${n === k ? C.accent + '22' : 'transparent'};color:${n === k ? C.accent : C.dim};border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700">${k}</span>`;
         return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate hooks from an idea <span style="font-size:10px;color:${C.mute};font-weight:600">— the live GRPO-trained model reasons up 8 hooks for ANY idea, renders + scores them on keep-rate (relevance-gated). No niche, no priors.</span></div>
-          <div style="display:flex;gap:8px;margin-top:9px">
-            <input id="exp-gen-input" value="${esc(st.expGenPrem || '')}" placeholder="any video idea — e.g. promote a fountain pen, a car review, a cooking short…" style="flex:1;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px"/>
+          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate hooks from an idea <span style="font-size:10px;color:${C.mute};font-weight:600">— the model reasons up hooks for ANY idea, renders + scores each on keep-rate.</span></div>
+          <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
+            <input id="exp-gen-input" value="${esc(st.expGenPrem || '')}" placeholder="any video idea — e.g. promote a fountain pen, a car review, a cooking short…" style="flex:1;min-width:240px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px"/>
+            <span style="font-size:10px;color:${C.mute}">outputs</span>${[1, 2, 4, 6, 8].map(nPill).join('')}
             <span data-expgen style="cursor:${st.expGenBusy ? 'default' : 'pointer'};background:${st.expGenBusy ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800;display:inline-flex;align-items:center">${st.expGenBusy ? '⏳ working…' : 'Generate'}</span>
           </div>${result}</div>`;
     }
@@ -2457,6 +2457,7 @@ const JarvisRetention = (function () {
         const ggi = e.target.closest('[data-guessid]'); if (ggi) { const id = ggi.getAttribute('data-guessid'); st.guessSel = (st.guessSel === id ? null : id); rtgUpdateGuesses(); return; }
         if (e.target.closest('[data-guessclose]')) { st.guessSel = null; rtgUpdateGuesses(); return; }
         if (e.target.closest('[data-guessreload]')) { GUESSES = {}; st.guessSel = null; rtgUpdateGuesses(); return; }
+        const egn = e.target.closest('[data-expgenn]'); if (egn) { st.expGenN = +egn.getAttribute('data-expgenn'); rtgUpdateExp(); return; }
         if (e.target.closest('[data-expgen]')) { if (!st.expGenBusy) expGenSubmit(); return; }
         const gvBtn = e.target.closest('[data-guessview]'); if (gvBtn) { st.guessView = gvBtn.getAttribute('data-guessview'); rtgUpdateGuesses(); return; }
         const grpoRunBtn = e.target.closest('[data-grporun]'); if (grpoRunBtn) { st.grpoRun = grpoRunBtn.getAttribute('data-grporun'); st.grpoSel = null; rtgUpdateGrpo(); return; }
