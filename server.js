@@ -3118,8 +3118,36 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    // PLAN cross-frame continuity from the raw descriptions alone (no prompt engineering, no user dial).
+    // An LLM reads every frame, resolves which concrete visual entities (a person, place, object, style)
+    // recur across frames, and returns — per frame — exactly which OTHER frames to use as reference
+    // images, plus a generation order so an entity is created before it's reused. Unrelated frames get
+    // no refs and come out independent. The image prompt stays the user's verbatim description.
+    if (pathname === '/api/frames/plan' && req.method === 'POST') {
+        try {
+            const body = (await readBody(req)) || {};
+            const descs = (Array.isArray(body.descriptions) ? body.descriptions : []).slice(0, 5).map(d => String(d || '').trim());
+            const idxs = descs.map((d, i) => d ? i : -1).filter(i => i >= 0);
+            const fallback = { order: idxs, frames: idxs.map(i => ({ i, refs: [], shared: [] })) };
+            if (idxs.length < 2) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(fallback)); return; }
+            const sys = `You are a storyboard CONTINUITY PLANNER. You receive an ordered list of frame descriptions for a short video. Identify the concrete VISUAL ENTITIES in each frame — specific people/characters, distinctive objects, locations/backgrounds, and any explicitly shared style/lighting — and resolve references across frames (pronouns like "she/he/they", definite references like "the kitchen", "that car", "the same man", "her dog"). For each frame, determine which OTHER frames depict the SAME entity, so an image model can be conditioned on those frames as visual references and keep that entity consistent. A frame that shares no concrete entity with any other has NO references and is generated independently. Different frames are the default — only link frames that genuinely share an entity. Never invent shared entities.
+Return ONLY JSON: {"order":[frame indices, a permutation of all given indices, ordered so any frame that first establishes a shared entity comes BEFORE the frames that reuse it],"frames":[{"i":<index>,"refs":[indices of OTHER frames to use as references for this frame],"shared":["short label per carried-in entity, e.g. 'the woman','the kitchen'"]}]}`;
+            const usr = 'Frames:\n' + descs.map((d, i) => `[${i}] ${d || '(empty)'}`).join('\n');
+            let plan = null;
+            try { plan = await hookLlmJson([{ role: 'system', content: sys }, { role: 'user', content: usr }]); } catch (e) {}
+            if (!plan || !Array.isArray(plan.frames)) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(fallback)); return; }
+            // sanitize against the model: keep only valid present indices, ensure full order, drop self/invalid refs
+            let order = (Array.isArray(plan.order) ? plan.order : []).filter(i => idxs.includes(i));
+            idxs.forEach(i => { if (!order.includes(i)) order.push(i); });
+            const byI = {}; plan.frames.forEach(f => { if (f && idxs.includes(f.i)) byI[f.i] = { i: f.i, refs: [...new Set((Array.isArray(f.refs) ? f.refs : []).filter(r => idxs.includes(r) && r !== f.i))], shared: (Array.isArray(f.shared) ? f.shared : []).map(s => String(s).slice(0, 40)).slice(0, 8) }; });
+            const frames = idxs.map(i => byI[i] || { i, refs: [], shared: [] });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ order, frames }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
     // Generate ONE photorealistic storyboard frame (Experiment tab). The client calls this per frame,
-    // chaining prior frames in `refs` (data-uris) for character/scene consistency. Returns a data-uri.
+    // passing the planner-selected reference frames in `refs` (data-uris). Prompt = verbatim description.
     if (pathname === '/api/frames/gen' && req.method === 'POST') {
         try {
             const body = (await readBody(req)) || {};

@@ -13,7 +13,7 @@ const JarvisRetention = (function () {
     let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenCont: 'locked', rawGenBusy: false, rawGenStage: '', rawGenErr: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -811,24 +811,27 @@ const JarvisRetention = (function () {
         return head + `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${runPills}</div>` + body;
     }
     function rtgUpdateExp() { try { const el = window.document.getElementById('rtg-exppanel'); if (el) el.innerHTML = renderExperiment(); } catch (e) { } }
-    // ── Describe → generate the 5 frames with a photorealistic, reference-conditioned model ──
-    // Continuity dial decides how much each frame reuses the prior one(s) as a reference image:
-    //   locked   → same character + scene + background (refs = frame 1 + previous frame)
-    //   character→ same character, new scenes (refs = frame 1 only)
-    //   free     → each frame independent (no refs)
+    // ── Describe → generate the 5 frames (photorealistic, reference-conditioned) ──
+    // UNIFIED architecture: you just describe each frame in plain language. A planner LLM reads ALL the
+    // descriptions and infers which frames share a concrete visual entity (a person, place, object,
+    // style) by resolving references ("she", "the kitchen", "the same man") — no dial, no "keep the
+    // same person as frame 1", and the image prompt is your description VERBATIM. Each frame is then
+    // generated conditioned on exactly the frames the planner linked it to (any subset, any direction),
+    // so consistency emerges only where your descriptions actually share something; unrelated frames
+    // come out independent. Generation order is the planner's (an entity is created before it's reused).
     const GEN_MODELS = [['flux-2-pro', 'FLUX.2 pro', '~$0.04'], ['seedream-4', 'Seedream 4', '$0.03'], ['nano-banana', 'Nano-Banana', '~$0.04'], ['nano-banana-pro', 'NB Pro', '~$0.15']];
-    const GEN_CONT = [['locked', '🔒 Locked', 'same character + scene + background as the previous frame'], ['character', '👤 Character', 'same character, new scenes'], ['free', '🎲 Free', 'each frame independent']];
     function genFramesPanel() {
-        const descs = st.rawFrameDesc || ['', '', '', '', ''], CY = C.cyan, frames = st.rawFrames || [];
+        const descs = st.rawFrameDesc || ['', '', '', '', ''], CY = C.cyan, frames = st.rawFrames || [], plan = st.rawGenPlan;
         const mPill = ([id, lab, pr]) => `<span data-genmodel="${id}" title="${id}" style="cursor:pointer;border:1px solid ${st.rawGenModel === id ? CY : C.border};background:${st.rawGenModel === id ? CY + '22' : 'transparent'};color:${st.rawGenModel === id ? CY : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${lab} <span style="opacity:.6;font-weight:400">${pr}</span></span>`;
-        const cPill = ([id, lab, desc]) => `<span data-gencont="${id}" title="${desc}" style="cursor:pointer;border:1px solid ${(st.rawGenCont || 'locked') === id ? C.green : C.border};background:${(st.rawGenCont || 'locked') === id ? C.green + '22' : 'transparent'};color:${(st.rawGenCont || 'locked') === id ? C.green : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${lab}</span>`;
+        const linkOf = i => { const f = plan && (plan.frames || []).find(x => x.i === i); return (f && f.refs && f.refs.length) ? `<span style="color:${C.green};font-weight:700">↳ ${f.refs.map(r => r + 1).join(',')}${f.shared && f.shared.length ? ` <span style="opacity:.7;font-weight:400">(${f.shared.map(esc).join(', ')})</span>` : ''}</span>` : (f ? `<span style="color:${C.faint}">independent</span>` : ''); };
         const rows = [0, 1, 2, 3, 4].map(i => `<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px">
             <span style="width:14px;font-size:11px;font-weight:800;color:${frames[i] ? C.green : C.mute}">${frames[i] ? '✓' : i + 1}</span>
-            <input data-framedesc="${i}" type="text" value="${esc(descs[i] || '')}" placeholder="frame ${i + 1} — describe the shot…" style="flex:1;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:11px"/></div>`).join('');
+            <input data-framedesc="${i}" type="text" value="${esc(descs[i] || '')}" placeholder="frame ${i + 1} — describe the shot in plain language…" style="flex:1;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:11px"/>
+            <span style="font-size:9px;width:130px">${linkOf(i)}</span></div>`).join('');
         const any = (descs || []).some(d => (d || '').trim());
         return `<div style="border:1px solid ${C.border};border-radius:10px;padding:10px;margin-top:8px;background:${C.card2}">
-            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Describe each frame → AI generates photorealistic shots into the slots above. <b>Continuity</b> sets how much the next frame reuses the previous one's character/scene (passed as a reference image), from locked to independent — set it per your storyboard.</div>
-            <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">continuity</span>${GEN_CONT.map(cPill).join('')}<span style="width:6px"></span><span style="font-size:9px;color:${C.mute};text-transform:uppercase">model</span>${GEN_MODELS.map(mPill).join('')}</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Describe each frame in plain language — nothing else. The planner reads all five and <b>automatically detects which frames share a character, place or object</b> (resolving "she", "the kitchen", "the same man"…) and conditions those frames on each other. No dials, no "same as frame 1" — just describe. Frames that share nothing come out independent. <span style="color:${C.green}">↳ N</span> = this frame is conditioned on frame N.</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">model</span>${GEN_MODELS.map(mPill).join('')}</div>
             ${rows}
             <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
                 <span data-gengo="1" style="cursor:${any && !st.rawGenBusy ? 'pointer' : 'not-allowed'};border:1px solid ${any && !st.rawGenBusy ? C.accent : C.border};background:${any && !st.rawGenBusy ? C.accent + '22' : 'transparent'};color:${any && !st.rawGenBusy ? C.accent : C.faint};border-radius:6px;padding:5px 14px;font-size:11px;font-weight:800">${st.rawGenBusy ? '⏳ Generating…' : '✨ Generate frames'}</span>
@@ -840,22 +843,27 @@ const JarvisRetention = (function () {
         const descs = st.rawFrameDesc || ['', '', '', '', ''];
         const idx = [0, 1, 2, 3, 4].filter(i => (descs[i] || '').trim());
         if (!idx.length) { st.rawGenErr = 'Describe at least one frame first.'; rtgUpdateExp(); return; }
-        st.rawGenBusy = true; st.rawGenErr = null; rtgUpdateExp();
-        const cont = st.rawGenCont || 'locked', model = st.rawGenModel || 'flux-2-pro';
+        st.rawGenBusy = true; st.rawGenErr = null; st.rawGenPlan = null; rtgUpdateExp();
+        const model = st.rawGenModel || 'flux-2-pro';
         const frames = (st.rawFrames || [null, null, null, null, null]).slice();
+        const J = { 'Content-Type': 'application/json' };
         try {
-            for (let n = 0; n < idx.length; n++) {
-                const i = idx[n];
-                st.rawGenStage = `frame ${i + 1} (${n + 1}/${idx.length})…`; rtgUpdateExp();
-                let refIdx = cont === 'locked' ? [0, i - 1] : cont === 'character' ? [0] : [];
-                refIdx = [...new Set(refIdx)].filter(k => k >= 0 && k < i && frames[k]);   // only earlier, already-generated frames
-                const refs = refIdx.map(k => frames[k]);
-                const tail = cont === 'locked' ? ' Keep the SAME character(s), wardrobe, lighting and background as the reference image(s); change only what this line describes. Photorealistic, anatomically correct hands.'
-                    : cont === 'character' ? ' Keep the SAME character(s) and wardrobe as the reference image; new setting per this line. Photorealistic, anatomically correct hands.'
-                    : ' Photorealistic, anatomically correct hands.';
-                const j = await fetch('/api/frames/gen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, prompt: descs[i].trim() + tail, refs }) }).then(r => r.json());
+            // 1) the planner infers the cross-frame reference graph from the raw descriptions
+            st.rawGenStage = 'reading your descriptions…'; rtgUpdateExp();
+            let plan = await fetch('/api/frames/plan', { method: 'POST', headers: J, body: JSON.stringify({ descriptions: descs }) }).then(r => r.json()).catch(() => null);
+            if (!plan || plan.error || !Array.isArray(plan.order)) plan = { order: idx.slice(), frames: idx.map(i => ({ i, refs: [], shared: [] })) };
+            st.rawGenPlan = plan; rtgUpdateExp();   // show the inferred links live
+            const refsOf = i => { const f = (plan.frames || []).find(x => x.i === i); return (f && f.refs) || []; };
+            const order = plan.order.filter(i => idx.includes(i)); idx.forEach(i => { if (!order.includes(i)) order.push(i); });
+            const done = new Set();
+            // 2) generate in the planner's order; condition each frame ONLY on already-generated linked frames
+            for (let n = 0; n < order.length; n++) {
+                const i = order[n];
+                st.rawGenStage = `generating frame ${i + 1} (${n + 1}/${order.length})…`; rtgUpdateExp();
+                const refs = refsOf(i).filter(r => done.has(r) && frames[r]).map(r => frames[r]);
+                const j = await fetch('/api/frames/gen', { method: 'POST', headers: J, body: JSON.stringify({ model, prompt: descs[i].trim(), refs }) }).then(r => r.json());   // prompt = VERBATIM
                 if (!j || j.error) throw new Error((j && j.error) || 'generation failed');
-                frames[i] = j.image; st.rawFrames = frames.slice(); rtgUpdateExp();   // show each frame as it lands
+                frames[i] = j.image; done.add(i); st.rawFrames = frames.slice(); rtgUpdateExp();
             }
             st.rawGenStage = '';
         } catch (e) { st.rawGenErr = String((e && e.message) || e).slice(0, 160); }
@@ -1584,7 +1592,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=124').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=125').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2462,7 +2470,7 @@ const JarvisRetention = (function () {
         st.channel = id;
         // Main (your 211) = the committed static file; every other channel = R2 via the API.
         const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=124')
+            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=125')
             : fetch('/api/retention/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
         try {
             if (id === 'all') {
@@ -2573,7 +2581,6 @@ const JarvisRetention = (function () {
         const rk = e.target.closest('[data-rawk]'); if (rk) { st.rawK = rk.getAttribute('data-rawk'); rtgUpdateRaw(); return; }
         const rp = e.target.closest('[data-rawproj]'); if (rp) { st.rawProj = rp.getAttribute('data-rawproj'); rtgUpdateRaw(); return; }
         const gm = e.target.closest('[data-genmodel]'); if (gm) { st.rawGenModel = gm.getAttribute('data-genmodel'); rtgUpdateExp(); return; }
-        const gc = e.target.closest('[data-gencont]'); if (gc) { st.rawGenCont = gc.getAttribute('data-gencont'); rtgUpdateExp(); return; }
         if (e.target.closest('[data-gengo]')) { genFrames(); return; }
         const fut = e.target.closest('[data-futarget]'); if (fut) { st.fuTarget = fut.getAttribute('data-futarget'); rtgUpdateFusion(); return; }
         if (e.target.closest('[data-rawbands]')) { st.rawBands = !st.rawBands; rtgUpdateRaw(); return; }
