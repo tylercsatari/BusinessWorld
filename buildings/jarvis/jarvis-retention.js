@@ -869,7 +869,7 @@ const JarvisRetention = (function () {
                 let srcIdx = relation === 'edit' ? (f.edit_of != null ? [f.edit_of] : []) : relation === 'compose' ? (f.compose_from || []) : [];
                 srcIdx = srcIdx.filter(s => done.has(s) && frames[s]);                 // only sources that actually exist yet
                 if (relation === 'edit' && !srcIdx.length) relation = 'new';            // source missing → fall back to fresh
-                if (relation === 'compose' && srcIdx.length < 2) relation = srcIdx.length === 1 ? 'edit' : 'new';
+                if (relation === 'compose' && !srcIdx.length) relation = 'new';         // COMPOSE keeps a single reference (new scene, reused entity)
                 const refs = srcIdx.map(s => frames[s]);
                 st.rawGenStage = `${relation === 'edit' ? 'editing' : relation === 'compose' ? 'composing' : 'generating'} frame ${i + 1} (${n + 1}/${order.length})…`; rtgUpdateExp();
                 const j = await fetch('/api/frames/gen', { method: 'POST', headers: J, body: JSON.stringify({ model, prompt: (f.prompt || descs[i]).trim(), refs, relation }) }).then(r => r.json());
@@ -1610,7 +1610,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=126').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=127').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2488,7 +2488,7 @@ const JarvisRetention = (function () {
         st.channel = id;
         // Main (your 211) = the committed static file; every other channel = R2 via the API.
         const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=126')
+            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=127')
             : fetch('/api/retention/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
         try {
             if (id === 'all') {

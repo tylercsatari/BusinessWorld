@@ -3195,12 +3195,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const fb = { order: idxs, frames: idxs.map(i => ({ i, relation: 'new', edit_of: null, compose_from: [], prompt: descs[i], operation: 'create' })) };
             if (idxs.length < 2) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(fb)); return; }
             const sys = `You are the DIRECTOR of a short photographic storyboard (ordered frames). Maintain an internal WORLD STATE of every entity (people, objects, locations) and how its appearance/state evolves as the story progresses. For EACH frame, decide the single best way to render it relative to the others:
-- NEW: a fresh scene — no prior frame's actual pixels are needed.
-- EDIT: a TRANSFORMATION of exactly ONE prior frame's actual image — the SAME content, changed per the description. Use EDIT whenever the frame shows something already shown, but altered: a state change ("now glowing", "the messy desk"), the same subject doing the next action ("then drawing with it"), an object added/removed, a relight, or a camera move on the same scene. This is the common case in a sequence.
-- COMPOSE: a NEW scene that must contain entities established in TWO OR MORE prior frames (carry a character/object from earlier frames into a different setting).
-Resolve every reference ("it","the picture","the same man","with it") against the world state. Write each frame's prompt using the USER'S OWN WORDS, replacing ONLY pronouns/elisions with the concrete noun they refer to — DO NOT add style, mood, lighting, camera, quality or any detail the user did not write. For EDIT frames phrase the prompt as a short edit INSTRUCTION on the source image ("make the drawing on the canvas glow"). Default to EDIT for continuations; use NEW only when the frame truly introduces unrelated content.
+- NEW: entirely new content — no prior frame is reused.
+- EDIT: the SAME shot as exactly ONE prior frame, with a small LOCALIZED change — an object changes state/color/lighting, or one element is added/removed, while the framing, camera and MOST of the image stay identical. Use ONLY when most pixels are unchanged ("now glowing", "the lamp is now on", "the cup is now empty"). It is rendered by editing that exact image, so it must NOT change the camera, location or composition.
+- COMPOSE: a NEW shot/scene (different framing, camera, action or background) that REUSES one or more characters/objects from prior frames so they stay visually consistent. Use this whenever an entity carries into a new ACTION or new SETTING ("putting the pen onto a canvas", "now she is drawing with it", "the same man, now in a car"). List the source frame(s) it reuses in compose_from.
+Resolve every reference ("it","the picture","the same man","with it") against the world state. Write each frame's prompt using the USER'S OWN WORDS, replacing ONLY pronouns/elisions with the concrete noun they refer to — DO NOT add style, mood, lighting, camera, quality or any detail the user did not write. For EDIT frames phrase the prompt as a short edit INSTRUCTION ("make the drawing glow"). Default to COMPOSE when an entity carries into a new action/shot; use EDIT ONLY when the shot itself barely changes (a state/lighting tweak), and NEW only for unrelated content.
 Return ONLY JSON: {"order":[frame indices — a permutation of the given indices, ordered so any frame used as an EDIT or COMPOSE source comes BEFORE the frame that uses it],"frames":[{"i":<index>,"relation":"NEW|EDIT|COMPOSE","edit_of":<source index or null>,"compose_from":[<indices>],"prompt":"<resolved, faithful prompt/instruction>","operation":"create|add_object|remove_object|alter_state|relight|reposition|restyle|background"}]}
-Rules: EDIT has exactly one edit_of that appears earlier in order; COMPOSE has ≥2 compose_from; NEW has neither. Never invent entities or details. Keep prompts faithful to the user's wording.`;
+Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose_from (earlier in order); NEW has neither. Never invent entities or details. Keep prompts faithful to the user's wording.`;
             const usr = 'Frames (in intended order):\n' + descs.map((d, i) => `[${i}] ${d || '(empty)'}`).join('\n');
             let plan = null;
             try { plan = await hookLlmJson([{ role: 'system', content: sys }, { role: 'user', content: usr }]); } catch (e) {}
@@ -3211,9 +3211,8 @@ Rules: EDIT has exactly one edit_of that appears earlier in order; COMPOSE has �
                 let rel = String(f.relation || 'NEW').toLowerCase(); if (!['new', 'edit', 'compose'].includes(rel)) rel = 'new';
                 let edit_of = (rel === 'edit' && idxs.includes(f.edit_of) && f.edit_of !== f.i) ? f.edit_of : null;
                 let compose_from = rel === 'compose' ? [...new Set((Array.isArray(f.compose_from) ? f.compose_from : []).filter(r => idxs.includes(r) && r !== f.i))] : [];
-                if (rel === 'edit' && edit_of == null) rel = 'new';
-                if (rel === 'compose' && compose_from.length < 2) rel = compose_from.length === 1 ? 'edit' : 'new';
-                if (rel === 'edit' && edit_of == null && compose_from.length) { edit_of = compose_from[0]; }
+                if (rel === 'edit' && edit_of == null) rel = compose_from.length ? 'compose' : 'new';
+                if (rel === 'compose' && !compose_from.length) rel = 'new';
                 byI[f.i] = { i: f.i, relation: rel, edit_of: rel === 'edit' ? edit_of : null, compose_from: rel === 'compose' ? compose_from : [], prompt: String(f.prompt || descs[f.i] || '').slice(0, 700) || descs[f.i], operation: String(f.operation || 'create').slice(0, 24) };
             });
             const frames = idxs.map(i => byI[i] || { i, relation: 'new', edit_of: null, compose_from: [], prompt: descs[i], operation: 'create' });
