@@ -108,7 +108,7 @@ def build_merged(force: bool = False):
 
 
 @app.cls(image=serve_image, gpu="H100", volumes={"/merged": merged_vol},
-         secrets=[modal.Secret.from_name("hook-r2")], scaledown_window=120, timeout=600, max_containers=1)
+         secrets=[modal.Secret.from_name("hook-r2")], scaledown_window=300, timeout=600, max_containers=1)
 class Model:
     @modal.enter()
     def load(self):
@@ -116,7 +116,7 @@ class Model:
         if not (os.path.isdir(MERGED_DIR) and os.listdir(MERGED_DIR)):
             raise RuntimeError("merged model missing — run `modal run …::build_merged` first")
         self.llm = LLM(model=MERGED_DIR, max_model_len=6144, gpu_memory_utilization=0.90,
-                       dtype="bfloat16", trust_remote_code=True)
+                       dtype="bfloat16", trust_remote_code=True, enforce_eager=True)
         self.SamplingParams = SamplingParams
         print("vLLM (merged idea_r5) ready on GPU", flush=True)
 

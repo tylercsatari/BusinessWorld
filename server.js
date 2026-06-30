@@ -8889,16 +8889,20 @@ async function hookModelGenerate(premise, invent, count) {
     // If Modal handed off (call > ~150s), grab the call-id poll URL ONCE and re-GET that
     // SAME url until done. Do NOT chase each 303's Location — a while-running 303 can point
     // back at the POST-only base url, and GET-ing that returns 405.
-    let pollUrl = null;
-    if (r.status === 303 || r.status === 302 || r.status === 307) {
-        const loc = r.headers.get('location');
-        pollUrl = loc ? (loc.startsWith('http') ? loc : new URL(loc, url).href) : null;
-    }
+    const callIdUrl = (resp) => {            // a redirect we should poll = one carrying a call id
+        if (![303, 302, 307].includes(resp.status)) return null;
+        const loc = resp.headers.get('location');
+        if (!loc || !loc.includes('__modal_function_call_id')) return null;   // ignore base-url redirects (POST-only → 405)
+        return loc.startsWith('http') ? loc : new URL(loc, url).href;
+    };
+    let pollUrl = callIdUrl(r);
     let hops = 0;
-    while (pollUrl && r.status !== 200 && Date.now() < deadline && hops < 80) {
+    while (pollUrl && r.status !== 200 && Date.now() < deadline && hops < 90) {
         await new Promise(res => setTimeout(res, 1500));   // gentle pacing between long-poll hops
         r = await fetchT(pollUrl, { method: 'GET', redirect: 'manual' }, 165000);
         hops++;
+        const refreshed = callIdUrl(r);     // Modal may hand back a refreshed call-id URL while still running
+        if (refreshed) pollUrl = refreshed;
     }
     if (r.status !== 200) throw new Error('model endpoint http ' + r.status + (Date.now() >= deadline ? ' (timed out waiting for GPU)' : ''));
     const j = await r.json().catch(() => null);
