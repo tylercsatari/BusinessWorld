@@ -326,12 +326,22 @@ const JarvisRetention = (function () {
         const n = R.n, W = 820, H = 520, pad = 16, S = 1000;
         const X = g => pad + g / S * (W - 2 * pad), Yc = g => pad + (1 - g / S) * (H - 2 * pad);
         const PJ = R.proj || {};
-        const PROJS = [['both', '→ views+outlier'], ['views', '→ views (log)'], ['rawviews', '→ views (raw)'], ['realviews', '→ realistic views'], ['outlier', '→ outlier'], ['hi10m', '>10M class'], ['hiout', 'top-outlier'], ['keep', '→ keep-rate'], ['ret5', '→ 5s-retention'], ['umap', 'UMAP raw'], ['pca', 'PCA raw']].filter(p => PJ[p[0]]);
-        let pm = st.rawProj || 'both'; if (!PJ[pm]) pm = PROJS.length ? PROJS[0][0] : null;
-        const proj = (pm && PJ[pm]) || { x: R.x || [], y: R.y || [], cv: 0, co: 0 };
+        // The channel-driven projections (keep / 5s-ret / realistic-views) are fit PER ACCOUNT — the
+        // selected account scopes them to its own data; views/outlier/etc. stay shared (library-driven).
+        const ACCT = st.channel || (CHANS && CHANS.active) || 'tyler';
+        const ACCT_NM = ACCT === 'all' ? 'All pooled' : ((CHANS && (CHANS.channels.find(c => c.id === ACCT) || {}).name) || 'Main');
+        const accKey = key => (['keep', 'ret5', 'realviews'].includes(key) && PJ[key + '__' + ACCT]) ? key + '__' + ACCT : key;
+        const accHas = key => ['keep', 'ret5', 'realviews'].includes(key) && !!PJ[key + '__' + ACCT];
+        const PROJS = [['both', '→ views+outlier'], ['views', '→ views (log)'], ['rawviews', '→ views (raw)'], ['realviews', '→ realistic views'], ['outlier', '→ outlier'], ['hi10m', '>10M class'], ['hiout', 'top-outlier'], ['keep', '→ keep-rate'], ['ret5', '→ 5s-retention'], ['umap', 'UMAP raw'], ['pca', 'PCA raw']].filter(p => PJ[accKey(p[0])]);
+        let pm = st.rawProj || 'both'; if (!PJ[accKey(pm)]) pm = PROJS.length ? PROJS[0][0] : null;
+        const proj = (pm && PJ[accKey(pm)]) || { x: R.x || [], y: R.y || [], cv: 0, co: 0 };
+        const isAcctProj = ['keep', 'ret5', 'realviews'].includes(pm);   // this projection is account-specific
         const supervised = pm && !['umap', 'pca'].includes(pm);
         const mode = st.rawColor || 'cluster', k = st.rawK || '10';
-        const MINE = R.mine || [], SILENT = R.silent || [];
+        // "mine" highlight follows the selected account (owner tags); 'all' = every account's videos.
+        const OWNER = R.owner || [];
+        const MINE = OWNER.length ? (ACCT === 'all' ? OWNER.map(o => !!o) : OWNER.map(o => o === ACCT)) : (R.mine || []);
+        const SILENT = R.silent || [];
         const hiMine = !!st.rawMine;   // "highlight my videos" toggle
         // keep / 5s-retention projections are ORGANISED BY THE METRIC ITSELF: every video
         // carries an estimated keep% (extrapolated from your 211 — proj.est), and your own
@@ -483,7 +493,7 @@ const JarvisRetention = (function () {
             if (!bandNote) bandNote = `<b style="color:${C.cyan}">Trend bands</b> — not enough data to fit a trend here.`;
         }
         const pill = (id, lab, on, attr) => `<span ${attr}="${id}" style="cursor:pointer;border:1px solid ${on ? C.accent : C.border};background:${on ? C.accent + '1e' : 'transparent'};color:${on ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
-        const projPill = ([id, lab]) => `<span data-rawproj="${id}" style="cursor:pointer;border:1px solid ${pm === id ? C.accent : C.border};background:${pm === id ? C.accent + '1e' : 'transparent'};color:${pm === id ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}${PJ[id] && !['umap', 'pca'].includes(id) ? ` <span style="opacity:.65;font-weight:400">v${PJ[id].cv}/o${PJ[id].co}</span>` : ''}</span>`;
+        const projPill = ([id, lab]) => { const pj = PJ[accKey(id)], acc = ['keep', 'ret5', 'realviews'].includes(id); return `<span data-rawproj="${id}" style="cursor:pointer;border:1px solid ${pm === id ? C.accent : C.border};background:${pm === id ? C.accent + '1e' : 'transparent'};color:${pm === id ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}${acc ? ` <span style="opacity:.55;font-weight:800;color:${C.green}">·${ACCT_NM}</span>` : ''}${pj && !['umap', 'pca'].includes(id) ? ` <span style="opacity:.65;font-weight:400">v${pj.cv}/o${pj.co}</span>` : ''}</span>`; };
         const auc = R.heldout_auc10m, rv = R.heldout_rviews;
         const heldline = (auc != null || rv != null) ? `<div style="font-size:10px;color:${C.mute};margin-top:5px;line-height:1.5"><b style="color:${C.accent}">Held-out test</b> (fit on 70%, scored on the 30% it never saw)${auc != null ? ` — predicting <b>>10M views</b>: AUC <b style="color:${auc >= 0.7 ? C.green : auc >= 0.6 ? C.amber : C.dim}">${(+auc).toFixed(3)}</b> (0.5 = chance)` : ''}${rv != null ? ` · log-views correlation r=<b>${(+rv).toFixed(3)}</b>` : ''}. This is the honest, non-overfit signal.</div>` : '';
         const detail = st.rawSel != null && selI >= 0 ? (() => {
@@ -570,6 +580,7 @@ const JarvisRetention = (function () {
               <div style="font-size:12px;font-weight:700;color:${C.text};display:flex;gap:6px;align-items:center;flex-wrap:wrap">${n.toLocaleString()} hooks · ${chan} ${mineBtn} ${modeToggle} ${st.rawBuildMode ? showBtn : upBtn} ${upErr}</div>
               <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${chan !== 'text' ? pill('voiceover', 'voiceover', mode === 'voiceover', 'data-rawcolor') : ''}${mode === 'cluster' ? `<span style="width:6px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div></div>${builder}
             <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">project</span>${PROJS.map(projPill).join('')}<span style="width:8px"></span><span data-rawbands="1" style="cursor:pointer;border:1px solid ${st.rawBands ? C.cyan : C.border};background:${st.rawBands ? C.cyan + '22' : 'transparent'};color:${st.rawBands ? C.cyan : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">📊 trend bands</span>${st.rawBands ? `<span style="font-size:9px;color:${C.mute};margin-left:2px">sections</span>${[4, 6, 8, 12, 16].map(kk => `<span data-rawbandk="${kk}" style="cursor:pointer;border:1px solid ${(st.rawBandK || 6) === kk ? C.cyan : C.border};background:${(st.rawBandK || 6) === kk ? C.cyan + '1e' : 'transparent'};color:${(st.rawBandK || 6) === kk ? C.cyan : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${kk}</span>`).join('')}` : ''}</div>
+            ${isAcctProj ? (() => { const ml = { keep: 'keep-rate', ret5: '5-sec retention', realviews: 'realistic views' }[pm]; return `<div style="font-size:10px;margin-bottom:6px;line-height:1.55;background:${accHas(pm) ? C.green : C.amber}14;border-left:3px solid ${accHas(pm) ? C.green : C.amber};padding:6px 10px;border-radius:4px">${accHas(pm) ? `<b style="color:${C.green}">${esc(ml)} · scoped to ${esc(ACCT_NM)}</b> — fit on ${esc(ACCT_NM)}'s own videos and projected across all ${(R.n || 0).toLocaleString()} hooks${pm === 'realviews' ? ' through the same duration-deconfounded equation as ⑤ Predict' : ''}. Switch accounts in the channel bar to see how the same hooks re-score per account.` : `<b style="color:${C.amber}">${esc(ACCT_NM)} has too few videos</b> (needs ≥40) for its own ${esc(ml)} projection — showing <b>Main</b>'s as a fallback. Pick Account 2 / Account 3 / All pooled for an account-specific view.`}</div>`; })() : ''}
             ${st.rawBands ? `<div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${bandNote}</div>` : ''}
             <div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${ESTP ? `<b style="color:${C.green}">Steered toward ${metLabel}</b> — the embedding space is rotated by your 211 (the only videos with retention) so an axis tracks ${metLabel}, then <b>every</b> hook gets an <b>estimated ${metLabel}%</b> (extrapolated; held-out align <b>r=${proj.cv}</b>). Your videos show their <b>actual</b> ${metLabel}; corpus videos fall <b>above and below</b> them on the same 0–100% scale.` : supervised ? `<b style="color:${C.accent}">Steered projection</b> — axes rotated toward the target (held-out scored). This one aligns with <b>views r=${proj.cv}</b>, <b>outlier r=${proj.co}</b> (each pill shows v/o; higher = the axes separate that target more — pick the highest for what you're hunting).` : `<b>Raw geometry</b> (no target). Switch to a steered projection to pull views/outliers apart.`} ${ESTP ? `Coloured by <b>${metLabel}</b> (<span style="color:${rawRamp(0)}">${estLo.toFixed(0)}%</span>→<span style="color:${rawRamp(1)}">${estHi.toFixed(0)}%</span>); your videos use actual, the rest estimated.` : mode === 'voiceover' ? `Coloured by <b>voiceover</b>: <span style="color:${C.green}">●</span> has a real voiceover · <span style="color:#475569">●</span> no sound / music (${nsilent.toLocaleString()} silent, excluded from the text channel so junk transcripts can't confound it).` : mode !== 'cluster' ? `Coloured by <b>${mode}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>).` : `Coloured by k-means cluster (k=${k}).`} ${hiMine ? `<b style="color:${GOLD}">★ Your ${nmine} videos are gold</b>; everything else is dimmed.` : `<b style="color:${C.text}">Click any dot</b> to see the exact input.`}</div>${heldline}
             ${upLegend}
@@ -585,7 +596,10 @@ const JarvisRetention = (function () {
         const gview = st.guessView || 'map';
         const vToggle = `<div style="display:flex;gap:6px;margin-bottom:12px">` +
             [['map', '🗺 Map'], ['grpo', '🧠 Ideas per input']].map(([id, lab]) => `<span data-guessview="${id}" style="cursor:pointer;border:1px solid ${gview === id ? C.accent : C.border};background:${gview === id ? C.accent + '1e' : 'transparent'};color:${gview === id ? C.accent : C.dim};border-radius:7px;padding:4px 11px;font-size:12px;font-weight:700">${lab}</span>`).join('') + `</div>`;
-        const head = h2c('🎰 Guesses — what the model generates', 'Every hook the model dreams up, embedded into the SAME map as your 11k library. Library dots are coloured by the real metric; white-ringed dots are the model\'s guesses (coloured by predicted-views percentile). As it trains, the rings climb toward the high-views region.') + vToggle;
+        const gACCT = st.channel || (CHANS && CHANS.active) || 'tyler';
+        const gACCT_NM = gACCT === 'all' ? 'All pooled' : ((CHANS && (CHANS.channels.find(c => c.id === gACCT) || {}).name) || 'Main');
+        const guessNote = gACCT !== 'tyler' ? note(`<b style="color:${C.amber}">Guesses are Main-only so far.</b> The model that dreams up hooks was trained on <b>Main</b>'s reward signal — there are <b>no model guesses for ${esc(gACCT_NM)}</b> yet (that needs re-training the hook model on this account's keep/retention). The map + percentiles below are still Main's. Account 1/2/3 now have embeddings + per-account projections (see 🔬 Raw), so per-account guesses are the next step.`, C.amber) : '';
+        const head = h2c('🎰 Guesses — what the model generates', 'Every hook the model dreams up, embedded into the SAME map as your 11k library. Library dots are coloured by the real metric; white-ringed dots are the model\'s guesses (coloured by predicted-views percentile). As it trains, the rings climb toward the high-views region.') + guessNote + vToggle;
         if (gview === 'grpo') return head + renderGrpo();
         const rp = (id) => `<span data-guessrun="${id}" style="cursor:pointer;border:1px solid ${run === id ? C.purple : C.border};background:${run === id ? C.purple + '22' : 'transparent'};color:${run === id ? C.purple : C.dim};border-radius:8px;padding:4px 12px;font-size:12px;font-weight:700">${id}</span>`;
         if (GUESSRUNS == null) { GUESSRUNS = []; fetch('/api/hooks/runs').then(r => r.json()).then(j => { GUESSRUNS = (j.runs && j.runs.length) ? j.runs : ['phase0', 'phase1']; if (GUESSRUNS.length && !st.guessRunSet) { st.guessRun = GUESSRUNS[GUESSRUNS.length - 1]; st.guessProj = null; st.guessRunSet = 1; } rtgUpdateGuesses(); }).catch(() => { GUESSRUNS = ['phase0', 'phase1']; }); }
@@ -1520,7 +1534,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=122').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=123').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2398,7 +2412,7 @@ const JarvisRetention = (function () {
         st.channel = id;
         // Main (your 211) = the committed static file; every other channel = R2 via the API.
         const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=122')
+            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=123')
             : fetch('/api/retention/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
         try {
             if (id === 'all') {
