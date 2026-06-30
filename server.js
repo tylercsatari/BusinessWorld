@@ -3104,7 +3104,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     if (pathname === '/api/hooks/generate' && req.method === 'POST') {
         try {
-            const body = JSON.parse((await readBody(req)) || '{}');
+            const body = (await readBody(req)) || {};
             const premise = String(body.premise || '').trim().slice(0, 400);
             const invent = !!body.invent || !premise;
             if (!premise && !invent) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'premise required' })); return; }
