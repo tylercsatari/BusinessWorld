@@ -124,7 +124,7 @@ class Model:
         if self.tok.pad_token is None:
             self.tok.pad_token = self.tok.eos_token
         self.tok.padding_side = "left"
-        model = AutoModelForCausalLM.from_pretrained(base_dir, dtype=torch.bfloat16, device_map="cuda")
+        model = AutoModelForCausalLM.from_pretrained(base_dir, torch_dtype=torch.bfloat16, device_map="cuda")
         model = PeftModel.from_pretrained(model, adapter_dir)
         model.config.output_router_logits = False   # MoE: required for generation
         model.eval()
