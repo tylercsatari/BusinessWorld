@@ -58,7 +58,7 @@ image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
         "torch==2.5.1", "transformers==4.51.3", "peft==0.13.2", "accelerate==1.1.1",
-        "boto3==1.35.0", "huggingface_hub==0.26.2", "fastapi[standard]==0.115.5",
+        "boto3==1.35.0", "huggingface_hub==0.30.2", "fastapi[standard]==0.115.5",
     )
 )
 app = modal.App(APP)
