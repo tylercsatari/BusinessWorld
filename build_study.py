@@ -149,7 +149,7 @@ for r in range(1, 5):
     for combo in combinations(['keep', 'retention', 'ret5', 'log_dur'], r): subsets['+'.join(combo)] = fit_subset(combo)
 
 study = {
-    'meta': {'n': n, 'target': 'views', 'metric': 'log10', 'caveat': f'{cid}: {n} videos' + (' — small sample, treat cross-validated numbers as rough' if n < 40 else '')},
+    'meta': {'n': n, 'target': 'views', 'metric': 'log10', 'sources': T.get('meta', {}).get('sources'), 'caveat': f'{cid}: {n} videos' + (' — small sample, treat cross-validated numbers as rough' if n < 40 else '')},
     'scatter': scatter, 'curve_mean': [round(x, 4) for x in mean_curve],
     'Q1': {'lenses': {'keep': {'spearman': sp(keep), 'pearson_log': pe(keep)}, 'retention': {'spearman': sp(ret), 'pearson_log': pe(ret)}, 'keep_vs_retention': round(float(spearmanr(keep, ret)[0]), 3)},
            'bins': {'views_by_keep': binmed(keep, lv, min(5, max(2, n // 4)), 'keep', '%'), 'views_by_retention': binmed(ret, lv, min(5, max(2, n // 4)), 'ret', '%')},

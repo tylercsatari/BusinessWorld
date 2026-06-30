@@ -1520,7 +1520,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=121').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=122').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2398,7 +2398,7 @@ const JarvisRetention = (function () {
         st.channel = id;
         // Main (your 211) = the committed static file; every other channel = R2 via the API.
         const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=121')
+            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=122')
             : fetch('/api/retention/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
         try {
             if (id === 'all') {
@@ -2412,8 +2412,7 @@ const JarvisRetention = (function () {
             // swap the analysis study to match the channel: Main = committed study; others = R2
             // (built by build_study.py); pooled = none yet → its analysis tabs gate.
             if (id === 'tyler') S = S_MAIN;
-            else if (id === 'all') S = null;
-            else { S = await fetch('/api/retention/study?id=' + encodeURIComponent(id)).then(r => r.ok ? r.json() : null).catch(() => null); if (S && S.error) S = null; }
+            else { S = await fetch('/api/retention/study?id=' + encodeURIComponent(id)).then(r => r.ok ? r.json() : null).catch(() => null); if (S && S.error) S = null; }   // 'all' → study_all.json (pooled)
         } catch (e) { console.warn('[channel] load failed', e); }
         render();
     }
@@ -2446,6 +2445,14 @@ const JarvisRetention = (function () {
         const nKeep = (DATA && DATA.videos) ? DATA.videos.filter(v => v.keep_rate != null).length : 0;
         const nCurve = (DATA && DATA.videos) ? DATA.videos.filter(v => v.curve && v.curve.length).length : 0;
         const badge = `<span style="font-size:10px;color:${C.mute};background:${C.card2};border-radius:6px;padding:3px 10px;margin-left:4px"><b style="color:${C.green}">${chName}</b> · ${nKeep} w/ retention · <b style="color:${nCurve === nKeep && nKeep ? C.green : C.amber}">${nCurve}</b> w/ full curve</span>`;
+        // Pooled view: list exactly which accounts are baked into the pooled study (so you can track as
+        // you add more). Reads S.meta.sources (what was actually pooled); flags any channel added since.
+        const pooledNote = (active === 'all' && S && S.meta && S.meta.sources) ? (() => {
+            const srcs = S.meta.sources, inStudy = new Set(srcs.map(s => s.id));
+            const missing = ((CHANS && CHANS.channels) || []).filter(c => !inStudy.has(c.id));
+            const total = srcs.reduce((a, s) => a + (s.n || 0), 0);
+            return `<div style="font-size:10px;color:${C.mute};margin:7px 0 0;background:${C.card2};border-radius:8px;padding:8px 12px;max-width:780px;line-height:1.7"><b style="color:${C.green}">🔗 Pooled from ${srcs.length} account${srcs.length > 1 ? 's' : ''}:</b> ${srcs.map(s => `${esc(s.name)} <span style="opacity:.55">${s.n}</span>`).join(' &nbsp;·&nbsp; ')} &nbsp;=&nbsp; <b style="color:${C.text}">${total} videos</b>.${missing.length ? ` <span style="color:${C.amber}">⚠ ${missing.map(c => esc(c.name)).join(', ')} added since — rerun <code style="color:${C.cyan}">node pool_all.js && python3 build_study.py all</code> to fold ${missing.length > 1 ? 'them' : 'it'} in.</span>` : ` <span style="color:${C.faint}">Add an account, then rerun <code>node pool_all.js && python3 build_study.py all</code> to refresh.</span>`}</div>`;
+        })() : '';
         // gate: the analysis views (not Data) are only computed for Main so far
         let sec;
         if (isPer && st.sec !== 'data' && !S) {
@@ -2456,7 +2463,7 @@ const JarvisRetention = (function () {
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
             <div style="font-size:21px;font-weight:900;color:${C.accent};margin-bottom:8px">Retention → Views</div>
             ${chBar}
-            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><span style="font-size:9px;color:${C.green};text-transform:uppercase;font-weight:800;letter-spacing:.3px">📊 this channel</span>${PERCHAN.map(btn).join('')}${isPer ? badge : ''}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><span style="font-size:9px;color:${C.green};text-transform:uppercase;font-weight:800;letter-spacing:.3px">📊 this channel</span>${PERCHAN.map(btn).join('')}${isPer ? badge : ''}</div>${pooledNote}
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px"><span style="font-size:9px;color:${C.purple};text-transform:uppercase;font-weight:800;letter-spacing:.3px">🌐 corpus · all videos</span>${CORPUS.map(btn).join('')}<span style="font-size:9px;color:${C.faint}">— not affected by the channel selector</span></div>${sec}</div>`;
         try { rtgAfterRender(); } catch (e) { }
     }
