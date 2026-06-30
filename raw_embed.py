@@ -105,10 +105,12 @@ def hook_inputs(vid, src='lib'):
         mp4, mon, wav = os.path.join(tmp, 'v.mp4'), os.path.join(tmp, 'm.jpg'), os.path.join(tmp, 'a.wav')
         if src == 'owned':
             if OWNED_JITTER: time.sleep(random.uniform(0, OWNED_JITTER))   # gentle pacing so concurrent pulls don't burst → bot wall
-            ck = os.environ.get('RAW_COOKIES_BROWSER')                     # e.g. 'chrome' — authenticated pulls bypass the bot wall
+            ck = os.environ.get('RAW_COOKIES_BROWSER')                     # e.g. 'chrome' (Chrome MUST be quit, else cookies rotate-invalid)
+            ckf = os.environ.get('RAW_COOKIES')                            # path to a cookies.txt export — authenticated, doesn't rotate
             cmd = ['yt-dlp', '--no-playlist', '-q', '--no-warnings', '--merge-output-format', 'mp4',
                    '-f', 'bv*[height<=720]+ba/b[height<=720]/best', '-o', mp4]
-            if ck: cmd += ['--cookies-from-browser', ck]
+            if ckf: cmd += ['--cookies', ckf]
+            elif ck: cmd += ['--cookies-from-browser', ck]
             subprocess.run(cmd + [f'https://www.youtube.com/watch?v={vid}'], timeout=240)
             if not os.path.exists(mp4):
                 for f in os.listdir(tmp):                      # yt-dlp may append an ext
@@ -249,7 +251,9 @@ def needs(v):
     return (vid not in done['visual']) or (vid not in done['together']) or (vid not in have_montage)
 
 todo = [v for v in stored if needs(v)]
-todo.sort(key=lambda v: not v.get('mine'))   # OWNED (account) videos FIRST — the priority; the library backlog embeds after
+if os.environ.get('RAW_OWNED_ONLY') == '1':
+    todo = [v for v in todo if v.get('mine')]   # gentle account-only grind (skip the big library backlog)
+todo.sort(key=lambda v: not v.get('mine'))      # OWNED (account) videos FIRST — the priority; the library backlog embeds after
 todo = todo[:RAW_MAX]
 lock = threading.Lock(); cnt = [0]; fails = [0]; t0 = time.time()
 print(f"todo: {len(todo)} of {len(stored)} stored need embedding and/or a montage", flush=True)
