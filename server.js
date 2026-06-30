@@ -8857,20 +8857,24 @@ async function hookRenderFrame(prompt) {
 }
 async function hookProcessRequest(rid, premise, count, invent) {
     const stat = (o) => cloud.uploadToR2(`hooks/grpo/demo/status/${rid}.json`, Buffer.from(JSON.stringify(o)), 'application/json').catch(() => {});
-    await stat({ stage: 'reasoning', premise: premise || '(inventing an idea…)' });
     const attempts = [];
-    for (let k = 0; k < count; k++) {
-        let spec; try { spec = await hookGenIdea(premise, invent); } catch (e) { continue; }
-        await stat({ stage: 'rendering', premise: spec.premise, n: count, done: k });
-        const imgs = [];
-        for (let i = 0; i < 5; i++) {
-            try { const buf = await hookRenderFrame(spec.frames[i]); const id = `${rid}_${k}_${i}`; await cloud.uploadToR2(`hooks/grpo/demo/montages/${id}.jpg`, buf, 'image/jpeg'); imgs.push(id); }
-            catch (e) { imgs.push(null); }
+    let err = '';
+    try {
+        await stat({ stage: 'reasoning', premise: premise || '(inventing an idea…)' });
+        for (let k = 0; k < count; k++) {
+            let spec; try { spec = await hookGenIdea(premise, invent); } catch (e) { err = 'idea: ' + e.message; continue; }
+            await stat({ stage: 'rendering', premise: spec.premise, n: count, done: k });
+            const imgs = [];
+            for (let i = 0; i < 5; i++) {
+                try { const buf = await hookRenderFrame(spec.frames[i]); const id = `${rid}_${k}_${i}`; await cloud.uploadToR2(`hooks/grpo/demo/montages/${id}.jpg`, buf, 'image/jpeg'); imgs.push(id); }
+                catch (e) { err = 'render: ' + e.message; imgs.push(null); }
+            }
+            attempts.push({ k, premise: spec.premise, frames: spec.frames, frame_imgs: imgs, reasoning: '', caption: spec.premise, cohesion_mode: '' });
         }
-        attempts.push({ k, premise: spec.premise, frames: spec.frames, frame_imgs: imgs, reasoning: '', caption: spec.premise, cohesion_mode: '' });
-    }
-    await cloud.uploadToR2(`hooks/grpo/demo/groups/${rid}.json`, Buffer.from(JSON.stringify({ input_id: rid, premise: premise || '💡 invented', n: attempts.length, attempts, model: 'gemini-3.5-flash + flux', hosted: true })), 'application/json');
-    await stat({ stage: 'done' });
+    } catch (e) { err = err || e.message; }
+    // ALWAYS write a terminal result so the UI can never spin forever.
+    await cloud.uploadToR2(`hooks/grpo/demo/groups/${rid}.json`, Buffer.from(JSON.stringify({ input_id: rid, premise: premise || '💡 invented', n: attempts.length, attempts, error: attempts.length ? '' : err, model: 'gemini-3.5-flash + flux', hosted: true })), 'application/json').catch(() => {});
+    await stat({ stage: 'done', error: attempts.length ? '' : err });
 }
 let _hookBusy = false;
 async function hookDemoQueue() {
