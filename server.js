@@ -8824,29 +8824,36 @@ function renderShareWorkshopPage(videos, assigneeFilter, projectFilter, ideasByI
 }
 
 // ── Persistent "Generate hook" worker: Gemini invents idea+hook, Replicate renders frames. No GPU. ──
+async function fetchT(url, opts, ms) {  // fetch with a hard timeout so nothing can deadlock the worker
+    const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms);
+    try { return await fetch(url, { ...opts, signal: ac.signal }); } finally { clearTimeout(t); }
+}
 async function hookGenIdea(premise, invent) {
     const GK = process.env.GEMINI_API_KEY;
+    if (!GK) throw new Error('GEMINI_API_KEY missing on server');
     const sys = invent
         ? 'You are a viral YouTube Shorts director. Invent ONE surprising, specific video idea, then write its opening as 5 distinct photographic frame descriptions (one per second). Return ONLY JSON: {"premise":"the specific idea in one sentence","frames":["second 1","second 2","second 3","second 4","second 5"]}. Frames concrete, photorealistic, vertical 9:16, no on-screen text. Invent real specific content, do not echo this template.'
         : 'You are a viral YouTube Shorts director. For the given video idea, write its strongest scroll-stopping opening as 5 distinct photographic frame descriptions (one per second). Return ONLY JSON: {"premise":"restate the idea","frames":["second 1","second 2","second 3","second 4","second 5"]}. Frames concrete, photorealistic, vertical 9:16, no on-screen text.';
     const user = invent ? 'Invent one now. Make it genuinely surprising.' : ('Video idea: ' + premise);
-    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent',
+    const r = await fetchT('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent',
         { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GK },
-          body: JSON.stringify({ contents: [{ parts: [{ text: sys + '\n\n' + user }] }], generationConfig: { temperature: 1.15, responseMimeType: 'application/json' } }) });
+          body: JSON.stringify({ contents: [{ parts: [{ text: sys + '\n\n' + user }] }], generationConfig: { temperature: 1.15, responseMimeType: 'application/json' } }) }, 45000);
     const j = await r.json();
-    const txt = j.candidates[0].content.parts[0].text;
+    const txt = j && j.candidates && j.candidates[0] && j.candidates[0].content.parts[0].text;
+    if (!txt) throw new Error('gemini empty: ' + JSON.stringify(j).slice(0, 120));
     const spec = JSON.parse(txt.match(/\{[\s\S]*\}/)[0]);
     if (!Array.isArray(spec.frames) || spec.frames.length !== 5) throw new Error('bad frames');
-    return { premise: (spec.premise || premise || '').trim(), frames: spec.frames };
+    return { premise: (spec.premise || premise || '').trim(), frames: spec.frames.map(f => String(f)) };
 }
 async function hookRenderFrame(prompt) {
-    const r = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions',
+    if (!process.env.REPLICATE_API_TOKEN) throw new Error('REPLICATE_API_TOKEN missing on server');
+    const r = await fetchT('https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions',
         { method: 'POST', headers: { 'Authorization': 'Bearer ' + process.env.REPLICATE_API_TOKEN, 'Content-Type': 'application/json', 'Prefer': 'wait' },
-          body: JSON.stringify({ input: { prompt, aspect_ratio: '9:16', output_format: 'jpg', num_outputs: 1 } }) });
+          body: JSON.stringify({ input: { prompt, aspect_ratio: '9:16', output_format: 'jpg', num_outputs: 1 } }) }, 90000);
     const j = await r.json();
     let out = j.output; if (Array.isArray(out)) out = out[0];
-    if (!out) throw new Error('no render output');
-    return Buffer.from(await (await fetch(out)).arrayBuffer());
+    if (!out) throw new Error('no render output: ' + JSON.stringify(j).slice(0, 100));
+    return Buffer.from(await (await fetchT(out, {}, 45000)).arrayBuffer());
 }
 async function hookProcessRequest(rid, premise, count, invent) {
     const stat = (o) => cloud.uploadToR2(`hooks/grpo/demo/status/${rid}.json`, Buffer.from(JSON.stringify(o)), 'application/json').catch(() => {});
