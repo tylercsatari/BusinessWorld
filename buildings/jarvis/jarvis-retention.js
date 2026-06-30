@@ -803,7 +803,7 @@ const JarvisRetention = (function () {
         fetch('/api/hooks/grpo/group/demo/' + rid).then(r => r.json()).then(j => {
             if (j && j.attempts && j.attempts.length) { EXPDEMO[rid] = j; st.expGenBusy = false; st.expGenStage = 'done'; rtgUpdateExp(); }
             else if (tries < 90) { setTimeout(() => expDemoPoll(rid, tries + 1), 4000); }
-            else { EXPDEMO[rid] = { error: 'timed out — is the model running on Lambda? (the demo is served by the live box)' }; st.expGenBusy = false; rtgUpdateExp(); }
+            else { EXPDEMO[rid] = { error: 'timed out waiting for the fine-tuned model to spin up — try again in a moment' }; st.expGenBusy = false; rtgUpdateExp(); }
         }).catch(() => { if (tries < 90) setTimeout(() => expDemoPoll(rid, tries + 1), 4000); });
     }
     function expGenSubmit() {
@@ -817,11 +817,11 @@ const JarvisRetention = (function () {
     }
     function expGenPanel() {
         const bg = C.bg || '#0f172a', n = st.expGenN || 4;
-        const STAGES = { queued: 'queued — waiting for the live model…', reasoning: 'reasoning up the hooks…', rendering: 'rendering + scoring frames…', done: 'done' };
+        const STAGES = { queued: 'queued — spinning up the fine-tuned model…', reasoning: 'the fine-tuned model is thinking…', rendering: 'rendering frames…', done: 'done' };
         let result = '';
         if (st.expGenRid) {
             const g = EXPDEMO[st.expGenRid];
-            if (st.expGenBusy && !g) result = `<div style="margin-top:12px;font-size:12px;color:${C.cyan}">⏳ ${esc(STAGES[st.expGenStage] || 'working…')} <span style="color:${C.mute}">(inventing the idea, then rendering 5 frames · ~1 min)</span></div>`;
+            if (st.expGenBusy && !g) result = `<div style="margin-top:12px;font-size:12px;color:${C.cyan}">⏳ ${esc(STAGES[st.expGenStage] || 'working…')} <span style="color:${C.mute}">(your fine-tuned model invents the idea, then Flux renders the frames · first click ~1-2 min while the GPU spins up, faster after)</span></div>`;
             else if (g && g.error) result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">${esc(g.error)}</div>`;
             else if (g && g.attempts && g.attempts.length) {
                 const cards = g.attempts.map(a => {

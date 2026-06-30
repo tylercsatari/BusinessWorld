@@ -8823,27 +8823,29 @@ function renderShareWorkshopPage(videos, assigneeFilter, projectFilter, ideasByI
     return renderSharePage('Workshop — BusinessWorld', bodyHtml);
 }
 
-// ── Persistent "Generate hook" worker: Gemini invents idea+hook, Replicate renders frames. No GPU. ──
+// ── Persistent "Generate hook" worker: the fine-tuned idea_r5 model (serverless on Modal)
+//    invents idea+frames, Replicate Flux renders them. No 24/7 GPU; no fallback model. ──
 async function fetchT(url, opts, ms) {  // fetch with a hard timeout so nothing can deadlock the worker
     const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms);
     try { return await fetch(url, { ...opts, signal: ac.signal }); } finally { clearTimeout(t); }
 }
-async function hookGenIdea(premise, invent) {
-    const GK = process.env.GEMINI_API_KEY;
-    if (!GK) throw new Error('GEMINI_API_KEY missing on server');
-    const sys = invent
-        ? 'You are a viral YouTube Shorts director. Invent ONE surprising, specific video idea, then write its opening as 5 distinct photographic frame descriptions (one per second). Return ONLY JSON: {"premise":"the specific idea in one sentence","frames":["second 1","second 2","second 3","second 4","second 5"]}. Frames concrete, photorealistic, vertical 9:16, no on-screen text. Invent real specific content, do not echo this template.'
-        : 'You are a viral YouTube Shorts director. For the given video idea, write its strongest scroll-stopping opening as 5 distinct photographic frame descriptions (one per second). Return ONLY JSON: {"premise":"restate the idea","frames":["second 1","second 2","second 3","second 4","second 5"]}. Frames concrete, photorealistic, vertical 9:16, no on-screen text.';
-    const user = invent ? 'Invent one now. Make it genuinely surprising.' : ('Video idea: ' + premise);
-    const r = await fetchT('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent',
-        { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GK },
-          body: JSON.stringify({ contents: [{ parts: [{ text: sys + '\n\n' + user }] }], generationConfig: { temperature: 1.15, responseMimeType: 'application/json' } }) }, 45000);
-    const j = await r.json();
-    const txt = j && j.candidates && j.candidates[0] && j.candidates[0].content.parts[0].text;
-    if (!txt) throw new Error('gemini empty: ' + JSON.stringify(j).slice(0, 120));
-    const spec = JSON.parse(txt.match(/\{[\s\S]*\}/)[0]);
-    if (!Array.isArray(spec.frames) || spec.frames.length !== 5) throw new Error('bad frames');
-    return { premise: (spec.premise || premise || '').trim(), frames: spec.frames.map(f => String(f)) };
+// Idea generation runs ONLY on Tyler's fine-tuned model (idea_r5), hosted serverless
+// on Modal (pay-per-use, scale-to-zero). NO Gemini, NO fallback — if the endpoint is
+// unset/unreachable the request errors clearly. See modal_idea_server.py.
+async function hookModelGenerate(premise, invent, count) {
+    const url = process.env.HOOK_MODEL_URL, token = process.env.HOOK_MODEL_TOKEN;
+    if (!url) throw new Error('fine-tuned model endpoint not configured (set HOOK_MODEL_URL) — refusing to fall back');
+    const r = await fetchT(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ premise, invent, count, token })
+    }, 300000);  // generous: covers Modal cold start (GPU spin-up) on the first click
+    const j = await r.json().catch(() => null);
+    if (!j) throw new Error('model returned no JSON (status ' + r.status + ')');
+    if (j.error) throw new Error('model: ' + j.error);
+    const specs = (j.attempts || []).filter(s => s && Array.isArray(s.frames) && s.frames.length === 5)
+        .map(s => ({ premise: (s.premise || premise || '').trim(), frames: s.frames.map(f => String(f)), cohesion_mode: s.cohesion_mode || '', reasoning: s.reasoning || '' }));
+    if (!specs.length) throw new Error('model produced no valid 5-frame ideas');
+    return specs;
 }
 async function hookRenderFrame(prompt) {
     if (!process.env.REPLICATE_API_TOKEN) throw new Error('REPLICATE_API_TOKEN missing on server');
@@ -8860,20 +8862,25 @@ async function hookProcessRequest(rid, premise, count, invent) {
     const attempts = [];
     let err = '';
     try {
-        await stat({ stage: 'reasoning', premise: premise || '(inventing an idea…)' });
-        for (let k = 0; k < count; k++) {
-            let spec; try { spec = await hookGenIdea(premise, invent); } catch (e) { err = 'idea: ' + e.message; continue; }
-            await stat({ stage: 'rendering', premise: spec.premise, n: count, done: k });
+        // 1) the fine-tuned model invents idea(s)+frames in ONE batched call (covers GPU cold start)
+        await stat({ stage: 'reasoning', premise: premise || '(the fine-tuned model is thinking…)' });
+        let specs;
+        try { specs = await hookModelGenerate(premise, invent, count); }
+        catch (e) { err = 'idea: ' + e.message; specs = []; }
+        // 2) render each idea's 5 frames with Flux (Replicate, pay-per-use)
+        for (let k = 0; k < specs.length; k++) {
+            const spec = specs[k];
+            await stat({ stage: 'rendering', premise: spec.premise, n: specs.length, done: k });
             const imgs = [];
             for (let i = 0; i < 5; i++) {
                 try { const buf = await hookRenderFrame(spec.frames[i]); const id = `${rid}_${k}_${i}`; await cloud.uploadToR2(`hooks/grpo/demo/montages/${id}.jpg`, buf, 'image/jpeg'); imgs.push(id); }
                 catch (e) { err = 'render: ' + e.message; imgs.push(null); }
             }
-            attempts.push({ k, premise: spec.premise, frames: spec.frames, frame_imgs: imgs, reasoning: '', caption: spec.premise, cohesion_mode: '' });
+            attempts.push({ k, premise: spec.premise, frames: spec.frames, frame_imgs: imgs, reasoning: spec.reasoning || '', caption: spec.premise, cohesion_mode: spec.cohesion_mode || '' });
         }
     } catch (e) { err = err || e.message; }
     // ALWAYS write a terminal result so the UI can never spin forever.
-    await cloud.uploadToR2(`hooks/grpo/demo/groups/${rid}.json`, Buffer.from(JSON.stringify({ input_id: rid, premise: premise || '💡 invented', n: attempts.length, attempts, error: attempts.length ? '' : err, model: 'gemini-3.5-flash + flux', hosted: true })), 'application/json').catch(() => {});
+    await cloud.uploadToR2(`hooks/grpo/demo/groups/${rid}.json`, Buffer.from(JSON.stringify({ input_id: rid, premise: premise || '💡 invented', n: attempts.length, attempts, error: attempts.length ? '' : err, model: 'idea_r5 (fine-tuned) + flux', hosted: true })), 'application/json').catch(() => {});
     await stat({ stage: 'done', error: attempts.length ? '' : err });
 }
 let _hookBusy = false;
