@@ -1423,17 +1423,24 @@ const JarvisRetention = (function () {
                 <span style="width:90px;text-align:right;font-size:11px;color:${C.accent}">CV R² ${fmtv(p.cv, 3)}</span>
                 <span style="width:60px;text-align:right;font-size:11px;color:${p.delta > 0.005 ? C.green : p.delta < -0.005 ? C.orange : C.mute};font-weight:700">${sgn(p.delta, 3)}</span></div>`).join('')}`);
     }
+    // Every feature subset, fit LIVE with the same non-negative fitter (olsFit) + fold scheme the
+    // predictor uses — so this menu's accuracy/range and its ranking are exactly what you get when you
+    // click a row, on every channel. (Precomputed OLS subsets used to over-rank models whose extra
+    // watch-through coef went negative — e.g. on Account 3 keep+ret+ret5+dur looked best at 0.59 under
+    // OLS but is really 0.58 under the constrained fit, and some OLS range bands were off by ×7.)
     function predComparison() {
-        const P = S.predictor; if (!P.subsets) return '';
-        const P10 = e => Math.pow(10, e), ck = curKey();
-        const rows = Object.entries(P.subsets).map(([k, m]) => ({ k, m, rng: P10(1.2816 * m.resid_sd_log10) })).sort((a, b) => b.m.cv_r2 - a.m.cv_r2);
-        const lab = f => P.feat_meta[f].label;
+        const P = S.predictor, data = pdata(); if (!data.length) return '';
+        const P10 = e => Math.pow(10, e), ck = curKey(), lab = f => P.feat_meta[f].label;
+        const order = FEAT_ORDER().filter(f => P.feat_meta[f]);
+        const combos = []; for (let mask = 1; mask < (1 << order.length); mask++) { const s = []; order.forEach((f, i) => { if (mask & (1 << i)) s.push(f); }); combos.push(s); }
+        const rows = combos.map(features => { const terms = termsFor(features, []), fit = olsFit(data, terms);
+            return { k: features.join('+'), features, cv_r2: cvR2(data, terms), rng: P10(1.2816 * fit.residSd) }; }).sort((a, b) => b.cv_r2 - a.cv_r2);
         return cardc(`<div style="font-weight:700;color:${C.text};margin-bottom:4px">Every model compared — accuracy vs range</div>
-            <div style="font-size:11px;color:${C.mute};margin-bottom:8px">CV R² = out-of-sample accuracy (higher = better). Range = ×/÷ band on the prediction (lower = tighter). Click a row to load that model.</div>
+            <div style="font-size:11px;color:${C.mute};margin-bottom:8px">CV R² = out-of-sample accuracy (higher = better). Range = ×/÷ band on the prediction (lower = tighter). Fit live with the same non-negative model you'd load — so the ranking is real. Click a row to load that model.</div>
             <div style="display:flex;gap:8px;font-size:9px;color:${C.mute};text-transform:uppercase;padding:0 6px 3px"><span style="flex:1">inputs → log views</span><span style="width:80px;text-align:right">CV R²</span><span style="width:80px;text-align:right">range</span></div>
-            ${rows.map(({ k, m, rng }) => { const on = k === ck; return `<div data-predset="${k}" style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;border-radius:5px;background:${on ? C.card2 : 'transparent'};border:1px solid ${on ? C.accent : 'transparent'}">
-                <span style="flex:1;font-size:11px;color:${on ? C.text : C.dim}">${m.features.map(lab).join(' + ')}</span>
-                <span style="width:80px;text-align:right;font-size:11px;color:${C.accent};font-weight:700">${fmtv(m.cv_r2, 2)}</span>
+            ${rows.map(({ k, features, cv_r2, rng }) => { const on = k === ck; return `<div data-predset="${k}" style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;border-radius:5px;background:${on ? C.card2 : 'transparent'};border:1px solid ${on ? C.accent : 'transparent'}">
+                <span style="flex:1;font-size:11px;color:${on ? C.text : C.dim}">${features.map(lab).join(' + ')}</span>
+                <span style="width:80px;text-align:right;font-size:11px;color:${C.accent};font-weight:700">${fmtv(cv_r2, 2)}</span>
                 <span style="width:80px;text-align:right;font-size:11px;color:${C.orange}">×/÷ ${fmtv(rng, 1)}</span></div>`; }).join('')}`);
     }
     function renderPredict() {
@@ -1497,7 +1504,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=119').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=120').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2375,7 +2382,7 @@ const JarvisRetention = (function () {
         st.channel = id;
         // Main (your 211) = the committed static file; every other channel = R2 via the API.
         const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=119')
+            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=120')
             : fetch('/api/retention/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
         try {
             if (id === 'all') {
