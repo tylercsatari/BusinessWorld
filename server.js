@@ -3123,31 +3123,52 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // recur across frames, and returns — per frame — exactly which OTHER frames to use as reference
     // images, plus a generation order so an entity is created before it's reused. Unrelated frames get
     // no refs and come out independent. The image prompt stays the user's verbatim description.
+    // DIRECTOR — reads the whole storyboard, maintains a world-state, and decides HOW to render each
+    // frame relative to the others (CANVAS/StoryState pattern). The key move vs naive reference-
+    // conditioning: a frame that TRANSFORMS a prior frame's content ("now glowing", "then she picks it
+    // up") is typed EDIT and later rendered by editing that exact image — not regenerated from scratch.
+    //   relation: NEW (fresh scene) · EDIT (transform ONE prior frame) · COMPOSE (carry entities from ≥2)
+    // prompt is the user's wording with ONLY pronouns/elisions resolved (no style/detail injection).
     if (pathname === '/api/frames/plan' && req.method === 'POST') {
         try {
             const body = (await readBody(req)) || {};
             const descs = (Array.isArray(body.descriptions) ? body.descriptions : []).slice(0, 5).map(d => String(d || '').trim());
             const idxs = descs.map((d, i) => d ? i : -1).filter(i => i >= 0);
-            const fallback = { order: idxs, frames: idxs.map(i => ({ i, refs: [], shared: [] })) };
-            if (idxs.length < 2) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(fallback)); return; }
-            const sys = `You are a storyboard CONTINUITY PLANNER. You receive an ordered list of frame descriptions for a short video. Identify the concrete VISUAL ENTITIES in each frame — specific people/characters, distinctive objects, locations/backgrounds, and any explicitly shared style/lighting — and resolve references across frames (pronouns like "she/he/they", definite references like "the kitchen", "that car", "the same man", "her dog"). For each frame, determine which OTHER frames depict the SAME entity, so an image model can be conditioned on those frames as visual references and keep that entity consistent. A frame that shares no concrete entity with any other has NO references and is generated independently. Different frames are the default — only link frames that genuinely share an entity. Never invent shared entities.
-Return ONLY JSON: {"order":[frame indices, a permutation of all given indices, ordered so any frame that first establishes a shared entity comes BEFORE the frames that reuse it],"frames":[{"i":<index>,"refs":[indices of OTHER frames to use as references for this frame],"shared":["short label per carried-in entity, e.g. 'the woman','the kitchen'"]}]}`;
-            const usr = 'Frames:\n' + descs.map((d, i) => `[${i}] ${d || '(empty)'}`).join('\n');
+            const fb = { order: idxs, frames: idxs.map(i => ({ i, relation: 'new', edit_of: null, compose_from: [], prompt: descs[i], operation: 'create' })) };
+            if (idxs.length < 2) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(fb)); return; }
+            const sys = `You are the DIRECTOR of a short photographic storyboard (ordered frames). Maintain an internal WORLD STATE of every entity (people, objects, locations) and how its appearance/state evolves as the story progresses. For EACH frame, decide the single best way to render it relative to the others:
+- NEW: a fresh scene — no prior frame's actual pixels are needed.
+- EDIT: a TRANSFORMATION of exactly ONE prior frame's actual image — the SAME content, changed per the description. Use EDIT whenever the frame shows something already shown, but altered: a state change ("now glowing", "the messy desk"), the same subject doing the next action ("then drawing with it"), an object added/removed, a relight, or a camera move on the same scene. This is the common case in a sequence.
+- COMPOSE: a NEW scene that must contain entities established in TWO OR MORE prior frames (carry a character/object from earlier frames into a different setting).
+Resolve every reference ("it","the picture","the same man","with it") against the world state. Write each frame's prompt using the USER'S OWN WORDS, replacing ONLY pronouns/elisions with the concrete noun they refer to — DO NOT add style, mood, lighting, camera, quality or any detail the user did not write. For EDIT frames phrase the prompt as a short edit INSTRUCTION on the source image ("make the drawing on the canvas glow"). Default to EDIT for continuations; use NEW only when the frame truly introduces unrelated content.
+Return ONLY JSON: {"order":[frame indices — a permutation of the given indices, ordered so any frame used as an EDIT or COMPOSE source comes BEFORE the frame that uses it],"frames":[{"i":<index>,"relation":"NEW|EDIT|COMPOSE","edit_of":<source index or null>,"compose_from":[<indices>],"prompt":"<resolved, faithful prompt/instruction>","operation":"create|add_object|remove_object|alter_state|relight|reposition|restyle|background"}]}
+Rules: EDIT has exactly one edit_of that appears earlier in order; COMPOSE has ≥2 compose_from; NEW has neither. Never invent entities or details. Keep prompts faithful to the user's wording.`;
+            const usr = 'Frames (in intended order):\n' + descs.map((d, i) => `[${i}] ${d || '(empty)'}`).join('\n');
             let plan = null;
             try { plan = await hookLlmJson([{ role: 'system', content: sys }, { role: 'user', content: usr }]); } catch (e) {}
-            if (!plan || !Array.isArray(plan.frames)) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(fallback)); return; }
-            // sanitize against the model: keep only valid present indices, ensure full order, drop self/invalid refs
+            if (!plan || !Array.isArray(plan.frames)) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(fb)); return; }
+            const byI = {};
+            plan.frames.forEach(f => {
+                if (!f || !idxs.includes(f.i)) return;
+                let rel = String(f.relation || 'NEW').toLowerCase(); if (!['new', 'edit', 'compose'].includes(rel)) rel = 'new';
+                let edit_of = (rel === 'edit' && idxs.includes(f.edit_of) && f.edit_of !== f.i) ? f.edit_of : null;
+                let compose_from = rel === 'compose' ? [...new Set((Array.isArray(f.compose_from) ? f.compose_from : []).filter(r => idxs.includes(r) && r !== f.i))] : [];
+                if (rel === 'edit' && edit_of == null) rel = 'new';
+                if (rel === 'compose' && compose_from.length < 2) rel = compose_from.length === 1 ? 'edit' : 'new';
+                if (rel === 'edit' && edit_of == null && compose_from.length) { edit_of = compose_from[0]; }
+                byI[f.i] = { i: f.i, relation: rel, edit_of: rel === 'edit' ? edit_of : null, compose_from: rel === 'compose' ? compose_from : [], prompt: String(f.prompt || descs[f.i] || '').slice(0, 700) || descs[f.i], operation: String(f.operation || 'create').slice(0, 24) };
+            });
+            const frames = idxs.map(i => byI[i] || { i, relation: 'new', edit_of: null, compose_from: [], prompt: descs[i], operation: 'create' });
+            // order so every source is generated before its dependent (topological; fall back to given order)
             let order = (Array.isArray(plan.order) ? plan.order : []).filter(i => idxs.includes(i));
             idxs.forEach(i => { if (!order.includes(i)) order.push(i); });
-            const byI = {}; plan.frames.forEach(f => { if (f && idxs.includes(f.i)) byI[f.i] = { i: f.i, refs: [...new Set((Array.isArray(f.refs) ? f.refs : []).filter(r => idxs.includes(r) && r !== f.i))], shared: (Array.isArray(f.shared) ? f.shared : []).map(s => String(s).slice(0, 40)).slice(0, 8) }; });
-            const frames = idxs.map(i => byI[i] || { i, refs: [], shared: [] });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ order, frames }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
-    // Generate ONE photorealistic storyboard frame (Experiment tab). The client calls this per frame,
-    // passing the planner-selected reference frames in `refs` (data-uris). Prompt = verbatim description.
+    // Render ONE frame. relation routes the model: edit → Kontext (transforms refs[0]'s actual pixels);
+    // compose → multi-reference model; new → text-to-image. refs are data-uris of the source frame(s).
     if (pathname === '/api/frames/gen' && req.method === 'POST') {
         try {
             const body = (await readBody(req)) || {};
@@ -3155,9 +3176,10 @@ Return ONLY JSON: {"order":[frame indices, a permutation of all given indices, o
             if (!prompt) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'prompt required' })); return; }
             const model = STORY_MODELS[body.model] ? body.model : 'flux-2-pro';
             const refs = Array.isArray(body.refs) ? body.refs.filter(x => typeof x === 'string' && x.startsWith('data:image')).slice(0, 8) : [];
-            const image = await genStoryFrame(model, prompt, refs);
+            const relation = ['new', 'edit', 'compose'].includes(body.relation) ? body.relation : (refs.length ? 'compose' : 'new');
+            const image = await genStoryFrame(model, prompt, refs, relation);
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ image, model }));
+            res.end(JSON.stringify({ image, model, relation }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
@@ -8916,12 +8938,16 @@ async function hookModelGenerate(premise, invent, count) {
 // ── Storyboard frame generation (Experiment tab) — photorealistic, reference-conditioned ──
 // One model call per frame; prior frames are passed as REFERENCE images so a character/scene can
 // stay consistent across the 5 frames (or not). Models verified on Replicate as of 2026-06-30.
+// Field names are NOT uniform across models — verified from Replicate schema dumps:
+//   flux-2-pro → input_images (PLURAL array) · seedream/nano → image_input (array) · kontext → input_image (SINGULAR)
 const STORY_MODELS = {
-    'flux-2-pro':      { slug: 'black-forest-labs/flux-2-pro', refs: 'numbered', max: 8 },   // ~$0.03-0.04/img · 2026 photoreal leader
-    'seedream-4':      { slug: 'bytedance/seedream-4',         refs: 'array',    max: 10 },  // $0.03/img · native 4K
-    'nano-banana':     { slug: 'google/nano-banana',          refs: 'array',    max: 6 },   // ~$0.039/img · consistency specialist
-    'nano-banana-pro': { slug: 'google/nano-banana-pro',      refs: 'array',    max: 14 },  // ~$0.13-0.24/img · best-in-class
+    'flux-2-pro':       { slug: 'black-forest-labs/flux-2-pro',       field: 'input_images', arr: true,  max: 8 },   // ~$0.04 · photoreal leader
+    'seedream-4':       { slug: 'bytedance/seedream-4',               field: 'image_input',  arr: true,  max: 10 },  // $0.03 · native 4K
+    'nano-banana':      { slug: 'google/nano-banana',                field: 'image_input',  arr: true,  max: 6 },   // ~$0.04 · consistency
+    'nano-banana-pro':  { slug: 'google/nano-banana-pro',            field: 'image_input',  arr: true,  max: 14 },  // ~$0.15 · best-in-class
+    'flux-kontext-pro': { slug: 'black-forest-labs/flux-kontext-pro', field: 'input_image',  arr: false, max: 1 },   // $0.04 · instruction EDIT of ONE image (preserves the rest)
 };
+const STORY_EDITOR = 'flux-kontext-pro';   // EDIT beats always use the edit specialist — it transforms the ACTUAL prior frame
 async function replicateRun(slug, input, timeoutMs = 180000) {
     const tok = process.env.REPLICATE_API_TOKEN; if (!tok) throw new Error('REPLICATE_API_TOKEN missing on server');
     const auth = { Authorization: 'Bearer ' + tok };
@@ -8940,13 +8966,17 @@ async function replicateRun(slug, input, timeoutMs = 180000) {
     if (!out) throw new Error('no image output');
     return out;   // a URL or data-uri
 }
-async function genStoryFrame(modelKey, prompt, refs) {
-    const M = STORY_MODELS[modelKey] || STORY_MODELS['flux-2-pro'];
-    refs = (refs || []).filter(Boolean).slice(0, M.max);
-    const input = { prompt, aspect_ratio: '9:16' };
-    if (M.slug.startsWith('black-forest-labs/flux-2')) { input.output_format = 'jpg'; refs.forEach((rf, i) => input[i === 0 ? 'input_image' : `input_image_${i + 1}`] = rf); }
-    else if (M.slug.startsWith('bytedance/seedream')) { if (refs.length) input.image_input = refs; }
-    else { input.output_format = 'jpg'; if (refs.length) input.image_input = refs; }   // google/nano-banana*
+// relation: 'new' (text-to-image) · 'edit' (TRANSFORM one prior frame's actual pixels via Kontext) ·
+// 'compose' (carry entities from ≥2 prior frames into a new scene via a multi-reference model).
+async function genStoryFrame(modelKey, prompt, refs, relation) {
+    refs = (refs || []).filter(Boolean);
+    const key = (relation === 'edit') ? STORY_EDITOR : (STORY_MODELS[modelKey] ? modelKey : 'flux-2-pro');
+    const M = STORY_MODELS[key];
+    const input = { prompt };
+    const isKontext = M.slug.includes('kontext');
+    if (!isKontext) input.aspect_ratio = '9:16';                         // EDIT inherits the source frame's geometry
+    if (M.slug.includes('flux') || M.slug.includes('nano')) input.output_format = 'jpg';
+    if (refs.length) input[M.field] = M.arr ? refs.slice(0, M.max) : refs[0];
     const out = await replicateRun(M.slug, input);
     const buf = Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
     return 'data:image/jpeg;base64,' + buf.toString('base64');

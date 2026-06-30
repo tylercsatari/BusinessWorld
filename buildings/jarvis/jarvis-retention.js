@@ -823,14 +823,20 @@ const JarvisRetention = (function () {
     function genFramesPanel() {
         const descs = st.rawFrameDesc || ['', '', '', '', ''], CY = C.cyan, frames = st.rawFrames || [], plan = st.rawGenPlan;
         const mPill = ([id, lab, pr]) => `<span data-genmodel="${id}" title="${id}" style="cursor:pointer;border:1px solid ${st.rawGenModel === id ? CY : C.border};background:${st.rawGenModel === id ? CY + '22' : 'transparent'};color:${st.rawGenModel === id ? CY : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${lab} <span style="opacity:.6;font-weight:400">${pr}</span></span>`;
-        const linkOf = i => { const f = plan && (plan.frames || []).find(x => x.i === i); return (f && f.refs && f.refs.length) ? `<span style="color:${C.green};font-weight:700">↳ ${f.refs.map(r => r + 1).join(',')}${f.shared && f.shared.length ? ` <span style="opacity:.7;font-weight:400">(${f.shared.map(esc).join(', ')})</span>` : ''}</span>` : (f ? `<span style="color:${C.faint}">independent</span>` : ''); };
+        const REL = { new: ['NEW', C.dim], edit: ['EDIT', C.green], compose: ['COMPOSE', C.purple] };
+        const linkOf = i => {
+            const f = plan && (plan.frames || []).find(x => x.i === i); if (!f) return '';
+            const r = REL[f.relation] || REL.new, src = f.relation === 'edit' ? `← ${f.edit_of + 1}` : f.relation === 'compose' ? `← ${(f.compose_from || []).map(x => x + 1).join(',')}` : '';
+            const pr = f.prompt && f.prompt !== descs[i] ? `<span style="opacity:.65;font-weight:400" title="${esc(f.prompt)}"> · ${esc(f.prompt.slice(0, 42))}${f.prompt.length > 42 ? '…' : ''}</span>` : '';
+            return `<span style="color:${r[1]};font-weight:800">${r[0]}${src ? ' ' + src : ''}</span>${pr}`;
+        };
         const rows = [0, 1, 2, 3, 4].map(i => `<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px">
             <span style="width:14px;font-size:11px;font-weight:800;color:${frames[i] ? C.green : C.mute}">${frames[i] ? '✓' : i + 1}</span>
             <input data-framedesc="${i}" type="text" value="${esc(descs[i] || '')}" placeholder="frame ${i + 1} — describe the shot in plain language…" style="flex:1;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:11px"/>
-            <span style="font-size:9px;width:130px">${linkOf(i)}</span></div>`).join('');
+            <span style="font-size:9px;flex:0 0 220px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${linkOf(i)}</span></div>`).join('');
         const any = (descs || []).some(d => (d || '').trim());
         return `<div style="border:1px solid ${C.border};border-radius:10px;padding:10px;margin-top:8px;background:${C.card2}">
-            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Describe each frame in plain language — nothing else. The planner reads all five and <b>automatically detects which frames share a character, place or object</b> (resolving "she", "the kitchen", "the same man"…) and conditions those frames on each other. No dials, no "same as frame 1" — just describe. Frames that share nothing come out independent. <span style="color:${C.green}">↳ N</span> = this frame is conditioned on frame N.</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Describe each frame in plain language — nothing else. A <b>director</b> reads the whole storyboard and decides per frame whether it's a <b style="color:${C.dim}">NEW</b> scene, an <b style="color:${C.green}">EDIT</b> of a prior frame's actual image (e.g. "now glowing" transforms the real picture, not a lookalike), or a <b style="color:${C.purple}">COMPOSE</b> of entities from several frames — resolving "it/she/the picture" itself. No dials, no "same as frame 1"; your words reach the model with only pronouns resolved. EDIT frames use an image-editing model so the actual content carries forward.</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">model</span>${GEN_MODELS.map(mPill).join('')}</div>
             ${rows}
             <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
@@ -848,20 +854,25 @@ const JarvisRetention = (function () {
         const frames = (st.rawFrames || [null, null, null, null, null]).slice();
         const J = { 'Content-Type': 'application/json' };
         try {
-            // 1) the planner infers the cross-frame reference graph from the raw descriptions
-            st.rawGenStage = 'reading your descriptions…'; rtgUpdateExp();
+            // 1) the director reads the whole storyboard → per-frame relation (new/edit/compose) + resolved prompt
+            st.rawGenStage = 'directing the storyboard…'; rtgUpdateExp();
             let plan = await fetch('/api/frames/plan', { method: 'POST', headers: J, body: JSON.stringify({ descriptions: descs }) }).then(r => r.json()).catch(() => null);
-            if (!plan || plan.error || !Array.isArray(plan.order)) plan = { order: idx.slice(), frames: idx.map(i => ({ i, refs: [], shared: [] })) };
-            st.rawGenPlan = plan; rtgUpdateExp();   // show the inferred links live
-            const refsOf = i => { const f = (plan.frames || []).find(x => x.i === i); return (f && f.refs) || []; };
+            if (!plan || plan.error || !Array.isArray(plan.order)) plan = { order: idx.slice(), frames: idx.map(i => ({ i, relation: 'new', edit_of: null, compose_from: [], prompt: descs[i] })) };
+            st.rawGenPlan = plan; rtgUpdateExp();   // show the director's plan live
+            const planOf = i => (plan.frames || []).find(x => x.i === i) || { i, relation: 'new', edit_of: null, compose_from: [], prompt: descs[i] };
             const order = plan.order.filter(i => idx.includes(i)); idx.forEach(i => { if (!order.includes(i)) order.push(i); });
             const done = new Set();
-            // 2) generate in the planner's order; condition each frame ONLY on already-generated linked frames
+            // 2) generate in the director's order; route each frame by relation, using ALREADY-generated source frames
             for (let n = 0; n < order.length; n++) {
-                const i = order[n];
-                st.rawGenStage = `generating frame ${i + 1} (${n + 1}/${order.length})…`; rtgUpdateExp();
-                const refs = refsOf(i).filter(r => done.has(r) && frames[r]).map(r => frames[r]);
-                const j = await fetch('/api/frames/gen', { method: 'POST', headers: J, body: JSON.stringify({ model, prompt: descs[i].trim(), refs }) }).then(r => r.json());   // prompt = VERBATIM
+                const i = order[n], f = planOf(i);
+                let relation = f.relation || 'new';
+                let srcIdx = relation === 'edit' ? (f.edit_of != null ? [f.edit_of] : []) : relation === 'compose' ? (f.compose_from || []) : [];
+                srcIdx = srcIdx.filter(s => done.has(s) && frames[s]);                 // only sources that actually exist yet
+                if (relation === 'edit' && !srcIdx.length) relation = 'new';            // source missing → fall back to fresh
+                if (relation === 'compose' && srcIdx.length < 2) relation = srcIdx.length === 1 ? 'edit' : 'new';
+                const refs = srcIdx.map(s => frames[s]);
+                st.rawGenStage = `${relation === 'edit' ? 'editing' : relation === 'compose' ? 'composing' : 'generating'} frame ${i + 1} (${n + 1}/${order.length})…`; rtgUpdateExp();
+                const j = await fetch('/api/frames/gen', { method: 'POST', headers: J, body: JSON.stringify({ model, prompt: (f.prompt || descs[i]).trim(), refs, relation }) }).then(r => r.json());
                 if (!j || j.error) throw new Error((j && j.error) || 'generation failed');
                 frames[i] = j.image; done.add(i); st.rawFrames = frames.slice(); rtgUpdateExp();
             }
@@ -1592,7 +1603,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=125').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=126').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2470,7 +2481,7 @@ const JarvisRetention = (function () {
         st.channel = id;
         // Main (your 211) = the committed static file; every other channel = R2 via the API.
         const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=125')
+            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=126')
             : fetch('/api/retention/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
         try {
             if (id === 'all') {
