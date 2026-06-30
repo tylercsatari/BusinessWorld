@@ -10,7 +10,7 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, err = null;
+    let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false };
@@ -1406,7 +1406,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=113').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=114').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2284,7 +2284,7 @@ const JarvisRetention = (function () {
         st.channel = id;
         // Main (your 211) = the committed static file; every other channel = R2 via the API.
         const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=113')
+            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=114')
             : fetch('/api/retention/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
         try {
             if (id === 'all') {
@@ -2295,6 +2295,11 @@ const JarvisRetention = (function () {
                 const c = CHANS.channels.find(x => x.id === id) || CHANS.channels[0];
                 DATA = await fetchTable(c);
             }
+            // swap the analysis study to match the channel: Main = committed study; others = R2
+            // (built by build_study.py); pooled = none yet → its analysis tabs gate.
+            if (id === 'tyler') S = S_MAIN;
+            else if (id === 'all') S = null;
+            else { S = await fetch('/api/retention/study?id=' + encodeURIComponent(id)).then(r => r.ok ? r.json() : null).catch(() => null); if (S && S.error) S = null; }
         } catch (e) { console.warn('[channel] load failed', e); }
         render();
     }
@@ -2329,8 +2334,8 @@ const JarvisRetention = (function () {
         const badge = `<span style="font-size:10px;color:${C.mute};background:${C.card2};border-radius:6px;padding:3px 10px;margin-left:4px"><b style="color:${C.green}">${chName}</b> · ${nKeep} w/ retention · <b style="color:${nCurve === nKeep && nKeep ? C.green : C.amber}">${nCurve}</b> w/ full curve</span>`;
         // gate: the analysis views (not Data) are only computed for Main so far
         let sec;
-        if (isPer && st.sec !== 'data' && !isMain) {
-            sec = cardc(`<div style="padding:26px;text-align:center"><div style="font-size:14px;font-weight:800;color:${C.text};margin-bottom:6px">${SECLBL[st.sec]} — not computed for ${chName} yet</div><div style="font-size:11px;color:${C.mute};line-height:1.7;max-width:580px;margin:0 auto">This is a <b>per-channel</b> analysis; the pipeline has only been run for <b>Main</b> so far. <b>${chName}</b> has <b style="color:${C.green}">${nKeep}</b> videos with retention data — open <b>📋 Data</b> to see them. The Views / Shape / Drivers / Duration / Predict models for this account get built when its analysis is run (it takes time to process per account).</div></div>`, 16);
+        if (isPer && st.sec !== 'data' && !S) {
+            sec = cardc(`<div style="padding:26px;text-align:center"><div style="font-size:14px;font-weight:800;color:${C.text};margin-bottom:6px">${SECLBL[st.sec]} — not computed for ${chName} yet</div><div style="font-size:11px;color:${C.mute};line-height:1.7;max-width:580px;margin:0 auto">${active === 'all' ? 'Pooled analysis isn\'t built yet — switch to a single channel.' : `This per-channel analysis hasn't been run for <b>${chName}</b>. It has <b style="color:${C.green}">${nKeep}</b> videos with retention — open <b>📋 Data</b>, or run <code>build_study.py ${active}</code>.`}</div></div>`, 16);
         } else {
             sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         }
@@ -2512,12 +2517,12 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=113'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=114'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     CHANS = await fetch('/api/retention/channels').then(r => r.json()).catch(() => null);
                     DATA = await loadJSON(base + 'retention_table.json');
-                    S = await loadJSON(base + 'retention_study.json').catch(() => null);
+                    S = await loadJSON(base + 'retention_study.json').catch(() => null); S_MAIN = S;
                     N = await loadJSON(base + 'principles/novelty.json').catch(() => null);
                     NCEXP = await loadJSON(base + 'principles/novelty_correlations.json').catch(() => null);
                     NQ = await loadJSON(base + 'principles/novelty_quantify.json').catch(() => null);

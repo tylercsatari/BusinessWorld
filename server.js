@@ -3039,6 +3039,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         res.end(JSON.stringify(t || { error: 'not found', videos: [] }));
         return;
     }
+    if (pathname === '/api/retention/study' && req.method === 'GET') {
+        const id = (url.searchParams.get('id') || '').replace(/[^a-z0-9_-]/gi, '');
+        let stu = null;
+        try { const buf = await cloud.downloadFromR2(`retention/study_${id}.json`); if (buf) stu = JSON.parse(buf.toString('utf8')); } catch (e) {}
+        res.writeHead(stu ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(JSON.stringify(stu || { error: 'no study' }));
+        return;
+    }
     const rawMon = pathname.match(/^\/api\/raw\/montage\/([\w-]{6,16})$/);
     if (rawMon && req.method === 'GET') {
         try {
