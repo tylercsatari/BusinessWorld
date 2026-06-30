@@ -45,15 +45,17 @@ def r2_get(key):
     try: return s3.get_object(Bucket=BUCKET, Key=key)['Body'].read()
     except Exception: return None
 
-def embed(parts, tries=5):
+def embed(parts, tries=3):
+    # bounded so 3 sequential embeds can't blow past the server's 240s kill (was 5×60s=300s PER call,
+    # which intermittently hung the whole upload when Gemini was slow). 3×30s = 90s worst case per embed.
     body = json.dumps({'content': {'parts': parts}, 'outputDimensionality': DIM}).encode()
     for a in range(tries):
         try:
             req = urllib.request.Request(EMB_URL, data=body, method='POST', headers={'Content-Type': 'application/json', 'x-goog-api-key': KEY})
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with urllib.request.urlopen(req, timeout=30) as r:
                 return np.array(json.loads(r.read())['embedding']['values'], np.float32)
         except Exception:
-            if a < tries - 1: time.sleep(1.2 * (a + 1)); continue
+            if a < tries - 1: time.sleep(1.0 * (a + 1)); continue
             return None
 def img_part(b64): return {'inlineData': {'mimeType': 'image/jpeg', 'data': b64}}
 
@@ -126,17 +128,31 @@ def hook_inputs(src):
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+# Load each channel's embeddings ONCE per request (neighbors() is called ~6× otherwise — once per
+# channel for novelty, again for placement — and each call re-downloaded the full ~72MB npz from R2
+# AND made a second normalized copy. That repeated download + memory churn intermittently OOM-killed
+# or timed-out the scorer on the 2 GB box → "stuck on scoring", no error. Cache + normalize in place.
+_EMB = {}
+def _load_emb(c):
+    if c not in _EMB:
+        buf = r2_get(f'raw/{c}/embeddings.npz')
+        if buf is None: _EMB[c] = (None, None)
+        else:
+            z = np.load(io.BytesIO(buf), allow_pickle=True)
+            V = np.array(z['vecs'], np.float32)                       # own copy, then normalize IN PLACE (no V+Vn doubling)
+            V /= (np.linalg.norm(V, axis=1, keepdims=True) + 1e-9)
+            _EMB[c] = (V, [str(x) for x in z['ids']]); del z, buf
+    return _EMB[c]
 def neighbors(c, vec, k=12):
-    buf = r2_get(f'raw/{c}/embeddings.npz')
-    if buf is None: return None
-    z = np.load(io.BytesIO(buf), allow_pickle=True)
-    V = np.asarray(z['vecs'], np.float32); ids = z['ids']
-    if len(V) == 0: return []
-    Vn = V / (np.linalg.norm(V, axis=1, keepdims=True) + 1e-9)
+    Vn, ids = _load_emb(c)
+    if Vn is None: return None
+    if len(Vn) == 0: return []
     q = vec / (np.linalg.norm(vec) + 1e-9)
     sims = Vn @ q
-    top = np.argsort(-sims)[:k]
-    return [{'id': str(ids[i]), 'sim': round(float(sims[i]), 4)} for i in top]
+    kk = min(k, len(sims))
+    part = np.argpartition(-sims, kk - 1)[:kk]                        # top-k without a full O(n log n) sort
+    top = part[np.argsort(-sims[part])]
+    return [{'id': ids[i], 'sim': round(float(sims[i]), 4)} for i in top]
 
 def _run():
     args = {}
