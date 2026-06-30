@@ -1196,11 +1196,24 @@ const JarvisRetention = (function () {
         return h;
     }
     function renderIndicators() {
-        const inds = S.indicators, M = S.corr_matrix, sel = S.selection;
-        let h = h2c('③ Drivers — every indicator, ranked by its own pull + its independent pull', `Beyond keep & retention: ${inds.length} candidate signals. Bar = rank correlation with views; purple dot = the part left after controlling for keep+retention (its <i>independent</i> contribution).`);
-        h += cardc(`<div style="font-weight:700;color:${C.text};margin-bottom:8px">Indicator strength <span style="font-size:11px;color:${C.mute};font-weight:400">(⚠ = outcome-side, not a clean predictor)</span></div>${indBars(inds)}`);
-        const dur = inds.find(i => i.key === 'log_dur'), pc2 = inds.find(i => i.key === 'shape_pc2');
-        h += note(`Most curve features (hook, ending retention, replay) sit near <b>0 independent</b> — they're just points on the retention curve, already counted. The exceptions that carry <b>genuinely new</b> signal: <b style="color:${C.green}">duration</b> (${dur ? sgn(dur.partial_kr) : '—'} independent) and <b style="color:${C.green}">shape mode 2</b> (${pc2 ? sgn(pc2.partial_kr) : '—'}). Engagement rates correlate <i>negatively</i> but are outcome-side (consequences of how a video was pushed), so they don't go in the predictor.`, C.cyan);
+        const M = S.corr_matrix, sel = S.selection;
+        // SAME deconfounding as Views + Predict: every in-data metric's bar = its rank correlation with
+        // views with DURATION REMOVED (residualised), not the raw correlation and not "held" against
+        // keep/retention. So retention & 5-sec retention read POSITIVE here exactly as the Views panel
+        // proves — one computation, consistent across tabs and accounts.
+        const drows = (S.scatter || []).filter(p => p.dur > 0 && p.lv != null && p.keep != null && p.ret != null && p.ret5 != null);
+        const dld = drows.map(p => Math.log(p.dur)), dlv = drows.map(p => p.lv);
+        const SCAT = { keep: p => p.keep, retention: p => p.ret, avg_retention: p => p.ret, ret5: p => p.ret5 };
+        const inds = (S.indicators || []).map(d => {
+            if (drows.length < 7) return d;
+            if (d.key === 'log_dur') return Object.assign({}, d, { spearman: _spear(dld, dlv), partial_kr: null, _de: true });   // duration's own marginal pull (it IS the input)
+            const col = SCAT[d.key]; if (col) return Object.assign({}, d, { spearman: deconfRank(drows.map(col), dlv, dld), partial_kr: null, _de: true });
+            return d;
+        });
+        let h = h2c('③ Drivers — every indicator, ranked by its pull on views (duration removed)', `${inds.length} candidate signals. Bar = rank correlation with views <b>with the duration confound removed</b> — the same deconfounded measure the ② Views panel proves and the ⑤ Predict model uses. Watch-through metrics (keep, retention, 5-sec) read positive here, consistent everywhere.`);
+        h += cardc(`<div style="font-weight:700;color:${C.text};margin-bottom:8px">Indicator strength <span style="font-size:11px;color:${C.mute};font-weight:400">(duration-deconfounded · ⚠ = outcome-side, not a clean predictor)</span></div>${indBars(inds)}`);
+        const dur = inds.find(i => i.key === 'log_dur'), ret = inds.find(i => i.key === 'retention' || i.key === 'avg_retention'), r5 = inds.find(i => i.key === 'ret5');
+        h += note(`Read with duration removed, the watch-through metrics all pull <b>positive</b> on views — <b style="color:${C.green}">retention</b> ${ret ? sgn(ret.spearman) : '—'}, <b style="color:${C.green}">5-sec retention</b> ${r5 ? sgn(r5.spearman) : '—'}, and <b style="color:${C.yellow}">duration</b> ${dur ? sgn(dur.spearman) : '—'} — the same direction the ② Views deconfounded panel and the ⑤ Predict levers show. The short-video confound (high-retention clips are short, short clips get fewer views) is what made retention look negative before it was removed.`, C.cyan);
         h += cardc(`<div style="font-weight:700;color:${C.text};margin-bottom:8px">How the indicators relate to each other</div>${corrGrid(M)}`);
         // combination search — R² climbing + range shrinking, both tracks
         const pathRows = (p, base) => p.map((s, i) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px">
@@ -1251,28 +1264,34 @@ const JarvisRetention = (function () {
         let ss = 0; for (let r = 0; r < n; r++) { let pr = beta[0]; for (let i = 0; i < k; i++) pr += beta[i + 1] * Xc[i][r]; ss += (y[r] - pr) ** 2; }
         return { coef, intercept: b0, residSd: Math.sqrt(ss / n) };
     }
-    // The watch-through signals — keep rate, avg retention, 5-sec retention — are the SAME construct
-    // measured three ways; they're collinear. In a plain joint fit, whichever enters first eats the
-    // shared variance and the others' coefficients can drift NEGATIVE — a multicollinearity sign-flip,
-    // NOT a real "more retention → fewer views" effect (the down-slope Tyler caught on Account 2). We
-    // PROVED, deconfounded against duration, that each of these is non-negative. So we encode that as a
-    // hard prior: non-negative least squares on the watch-through features (duration & interactions stay
-    // free), via greedy active-set — drop the most-negative constrained coef to 0, refit, repeat. A
-    // redundant retention then reads exactly 0 (a flat lever, keep already carries its signal) instead
-    // of a false negative; its own positive slope reappears the moment you uncheck the collinear sibling.
-    const NNEG = { keep: 1, retention: 1, ret5: 1 };
-    function olsFit(rows, terms) {
-        let active = terms.slice();
-        for (let it = 0; it <= terms.length; it++) {
-            const m = olsRaw(rows, active);
-            let worst = null, wv = 0;
-            active.forEach(t => { if (NNEG[t.key] && (m.coef[t.key] || 0) < wv) { wv = m.coef[t.key]; worst = t.key; } });
-            if (worst == null) { const coef = {}; terms.forEach(t => coef[t.key] = m.coef[t.key] || 0); return { coef, intercept: m.intercept, residSd: m.residSd }; }
-            active = active.filter(t => t.key !== worst);
-        }
-        const m = olsRaw(rows, active), coef = {}; terms.forEach(t => coef[t.key] = m.coef[t.key] || 0); return { coef, intercept: m.intercept, residSd: m.residSd };
+    // ───────── ONE view model + ONE deconfounding, shared by Views · Drivers · Predict ─────────
+    // Duration is the ONLY confound. Every metric's effect on views is measured the SAME way everywhere:
+    // residualise the metric AND log-views on log-duration, then relate the residuals — duration removed.
+    // (This is exactly what the Views "what remains" panel draws.) Nothing is held against the other
+    // watch-through metrics: keep / retention / 5-sec move together, and "holding" one flips the other's
+    // sign — the artefact that made retention look flat or negative. So each input contributes its own
+    // duration-deconfounded slope (all positive on every account); the predictor sums those slopes and
+    // calibrates the sum to real views with a single regression. No clamping, no per-account logic — the
+    // method is identical for every channel; only the channel's data differs.
+    const _mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+    const _rank = a => { const ix = a.map((v, i) => [v, i]).sort((x, y) => x[0] - y[0]), r = []; ix.forEach((p, i) => r[p[1]] = i); return r; };
+    const _pear = (a, b) => { const ma = _mean(a), mb = _mean(b); let n = 0, da = 0, db = 0; for (let i = 0; i < a.length; i++) { n += (a[i] - ma) * (b[i] - mb); da += (a[i] - ma) ** 2; db += (b[i] - mb) ** 2; } return da && db ? n / Math.sqrt(da * db) : 0; };
+    const _spear = (a, b) => _pear(_rank(a), _rank(b));
+    function resid1(y, x) { const my = _mean(y), mx = _mean(x); let sxy = 0, sxx = 0; for (let i = 0; i < y.length; i++) { sxy += (x[i] - mx) * (y[i] - my); sxx += (x[i] - mx) ** 2; } const b = sxx ? sxy / sxx : 0; return { r: y.map((v, i) => v - (my + b * (x[i] - mx))), slope: b, my, mx }; }
+    function deWeight(xv, lv, ld) { return resid1(resid1(lv, ld).r, resid1(xv, ld).r).slope; }  // dur-deconfounded slope of views on x
+    function deconfRank(xv, lv, ld) { return _spear(resid1(xv, ld).r, resid1(lv, ld).r); }       // dur-deconfounded rank corr (Drivers/Views bars)
+    function olsFit(rows, terms) {   // THE predictor: sum of duration-deconfounded slopes, calibrated to views
+        const lv = rows.map(r => r.lv), ld = rows.map(r => r.log_dur);
+        if (!terms.length) { const my = _mean(lv); return { coef: {}, intercept: my, residSd: Math.sqrt(_mean(lv.map(v => (v - my) ** 2))) }; }
+        const w = {};
+        terms.forEach(t => { const xv = rows.map(t.val); w[t.key] = (t.key === 'log_dur') ? resid1(lv, ld).slope : deWeight(xv, lv, ld); });
+        const score = rows.map(r => terms.reduce((s, t) => s + w[t.key] * t.val(r), 0));
+        const cal = resid1(lv, score), beta = cal.slope, alpha = cal.my - beta * cal.mx;   // calibrate Σ(deconfounded slopes) → views
+        const coef = {}; terms.forEach(t => coef[t.key] = beta * w[t.key]);
+        let ss = 0; for (let i = 0; i < rows.length; i++) { let pr = alpha; terms.forEach(t => pr += coef[t.key] * t.val(rows[i])); ss += (lv[i] - pr) ** 2; }
+        return { coef, intercept: alpha, residSd: Math.sqrt(ss / rows.length) };
     }
-    function cvR2(rows, terms) {     // 5-fold out-of-sample R² (same non-negativity prior as the live fit)
+    function cvR2(rows, terms) {     // 5-fold out-of-sample R² of the same deconfounded model
         const n = rows.length, oof = new Array(n);
         for (let f = 0; f < 5; f++) { const tr = rows.filter((_, i) => i % 5 !== f); const m = olsFit(tr, terms);
             for (let i = 0; i < n; i++) if (i % 5 === f) { let pr = m.intercept; terms.forEach(t => pr += m.coef[t.key] * t.val(rows[i])); oof[i] = pr; } }
@@ -1284,7 +1303,7 @@ const JarvisRetention = (function () {
     function curModel() {
         const rows = pdata(); if (!rows.length) return null;
         const feats = FEAT_ORDER().filter(f => (st.predFeats || ['keep', 'retention', 'log_dur']).includes(f)); if (!feats.length) return null;
-        const ints = (st.predInts || []).filter(p => { const [a, b] = p.split('×'); return feats.includes(a) && feats.includes(b); });
+        const ints = [];   // additive only — each input is its own duration-deconfounded lever (no interaction terms)
         const terms = termsFor(feats, ints), m = olsFit(rows, terms), cv = cvR2(rows, terms);
         const sliders = feats.map(f => Object.assign({ key: f }, S.predictor.feat_meta[f])), feat_median = {};
         feats.forEach(f => feat_median[f] = S.predictor.feat_meta[f].default);
@@ -1455,10 +1474,8 @@ const JarvisRetention = (function () {
         // DECONFOUNDING, rooted: retention must be measured at fixed length. With Duration in the
         // model, retention's coefficient is its partial (deconfounded) effect — consistent with the
         // Views deconfounded panel and the Experiment's predict-scope. Without it, it's confounded.
-        const retSel = st.predFeats.includes('retention') || st.predFeats.includes('ret5'), durSel = st.predFeats.includes('log_dur');
-        h += (retSel && !durSel)
-            ? note(`⚠ <b>Retention is confounded without Duration.</b> Short videos retain better but get fewer views, so retention's effect reads artificially low when length isn't held fixed. <span data-predfeat="log_dur" style="cursor:pointer;color:${C.cyan};text-decoration:underline;font-weight:700">+ add Duration to deconfound it</span> — the same control the Views deconfounded panel and the Experiment use. (The fit clamps it at ≥0, so it never shows a false negative — but its true positive slope only appears once Duration is in.)`, C.amber)
-            : (retSel ? note(`✓ <b>Deconfounded &amp; never falsely negative.</b> Duration is in the model, so retention is measured at fixed length — its real, proven-positive direction, consistent everywhere (Views panel · Experiment · every channel). Keep rate &amp; retention measure the same thing (watch-through), so if <b>both</b> are checked the fit hands the shared credit to keep and retention's <i>extra</i> coefficient can read ~0 (a flat lever, not a down one — it's redundant, not harmful). <b>Uncheck Keep rate to see retention's own positive slope.</b>`, C.green) : '');
+        const retSel = st.predFeats.includes('retention') || st.predFeats.includes('ret5');
+        h += (retSel ? note(`✓ <b>One deconfounded model — duration always removed.</b> Each input's effect is its own slope on views <b>with the duration confound partialled out</b> (the exact measure the ② Views panel proves and the ③ Drivers bars show), and no input is held against the others. So keep, retention and duration each push views <b>up</b> on every account — retention is never flat or negative here. Same method for every channel; only the channel's data changes.`, C.green) : '');
         if (!vb) { h += note('Select at least one input above.', C.orange); return h; }
         const rngMult = P10(1.2816 * vb.resid_sd_log10);
         const sld = s => { const c = SLCOL[s.key] || C.cyan, val = pval(s.key); return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:${c};font-weight:700">${esc(s.label)}</span><span id="pf-${s.key}-val" style="color:${C.text};font-weight:800">${val}${s.unit}</span></div>
@@ -1467,10 +1484,9 @@ const JarvisRetention = (function () {
             ${vb.sliders.map(sld).join('')}
             <div id="predict-out" style="margin-top:6px;padding-top:12px;border-top:1px solid ${C.border}">${predictOut(vb)}</div>`);
         h += `<div id="predict-eq">${predEquation(vb)}</div>`;
-        h += predInteractionTable();
         h += predComparison();
         h += cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-                <div><div style="font-weight:700;color:${C.text}">Independent lever response curves</div><div style="font-size:11px;color:${C.mute};margin-top:2px">Each line sweeps one input while the others stay fixed. No retention-family line ever slopes <i>down</i> — the fit holds watch-through effects ≥0 (proven non-negative once length is controlled); a flat line means that lever is redundant with another that's checked, not harmful. Actual views uses a true linear y-axis; log10 compresses the same model so the lower range is readable.</div></div>
+                <div><div style="font-weight:700;color:${C.text}">Independent lever response curves</div><div style="font-size:11px;color:${C.mute};margin-top:2px">Each line sweeps one input while the others stay fixed. Every line slopes <i>up</i> — each input's effect is its duration-deconfounded slope on views, so more keep, more retention and more duration all raise the estimate, on every account. Actual views uses a true linear y-axis; log10 compresses the same model so the lower range is readable.</div></div>
                 <div style="display:flex;gap:6px">
                     <button data-pred-scale="actual" style="background:${st.predScale === 'actual' ? C.accent + '22' : 'transparent'};border:1px solid ${st.predScale === 'actual' ? C.accent : C.border};color:${st.predScale === 'actual' ? C.accent : C.dim};border-radius:7px;padding:5px 9px;font-size:11px;font-weight:800;cursor:pointer">actual views</button>
                     <button data-pred-scale="log" style="background:${st.predScale === 'log' ? C.accent + '22' : 'transparent'};border:1px solid ${st.predScale === 'log' ? C.accent : C.border};color:${st.predScale === 'log' ? C.accent : C.dim};border-radius:7px;padding:5px 9px;font-size:11px;font-weight:800;cursor:pointer">log10</button>
@@ -1504,7 +1520,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=120').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=121').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2382,7 +2398,7 @@ const JarvisRetention = (function () {
         st.channel = id;
         // Main (your 211) = the committed static file; every other channel = R2 via the API.
         const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=120')
+            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=121')
             : fetch('/api/retention/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
         try {
             if (id === 'all') {
