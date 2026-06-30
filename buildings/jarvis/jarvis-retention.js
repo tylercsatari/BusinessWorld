@@ -10,7 +10,7 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, err = null;
+    let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false };
@@ -1089,11 +1089,56 @@ const JarvisRetention = (function () {
                 <table style="width:100%;border-collapse:collapse;min-width:680px"><thead><tr style="background:${C.card2};border-bottom:1px solid ${C.border2}">${head}</tr></thead><tbody>${body}</tbody></table></div>`;
     }
 
+    // raw vs DECONFOUNDED correlations from a channel's per-video scatter. Spearman (rank → robust
+    // to leverage); "dec" = partial controlling for duration (the confound Tyler spotted: high-
+    // retention videos are short, short videos get fewer views → fake-negative retention).
+    function deconStats(scatter) {
+        const pts = (scatter || []).filter(p => p.dur > 0 && p.ret != null && p.lv != null && p.keep != null && p.ret5 != null);
+        if (pts.length < 8) return null;
+        const col = k => pts.map(p => k === 'log_dur' ? Math.log10(p.dur) : k === 'retention' ? p.ret : p[k]);
+        const lv = pts.map(p => p.lv), rankOf = a => { const ix = a.map((v, i) => [v, i]).sort((x, y) => x[0] - y[0]), r = []; ix.forEach((p, i) => r[p[1]] = i); return r; };
+        const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+        const pear = (a, b) => { const ma = mean(a), mb = mean(b); let n = 0, da = 0, db = 0; for (let i = 0; i < a.length; i++) { n += (a[i] - ma) * (b[i] - mb); da += (a[i] - ma) ** 2; db += (b[i] - mb) ** 2; } return da && db ? n / Math.sqrt(da * db) : 0; };
+        const spear = (a, b) => pear(rankOf(a), rankOf(b));
+        const resid = (y, x) => { const mx = mean(x), my = mean(y); let sxy = 0, sxx = 0; for (let i = 0; i < x.length; i++) { sxy += (x[i] - mx) * (y[i] - my); sxx += (x[i] - mx) ** 2; } const b = sxx ? sxy / sxx : 0; return y.map((v, i) => v - (my + b * (x[i] - mx))); };
+        const partial = (a, b, ctrls) => { let ra = a.slice(), rb = b.slice(); ctrls.forEach(c => { ra = resid(ra, c); rb = resid(rb, c); }); return spear(ra, rb); };
+        const ldur = col('log_dur'), out = { n: pts.length };
+        ['keep', 'retention', 'ret5'].forEach(k => { const a = col(k); out[k] = { raw: spear(a, lv), dec: partial(a, lv, [ldur]) }; });
+        out.log_dur = { raw: spear(ldur, lv), dec: partial(ldur, lv, [col('keep'), col('retention')]) };
+        out._resid = { ret: resid(col('retention'), ldur), lv: resid(lv, ldur) };
+        return out;
+    }
+    function confoundPanel() {
+        const cur = deconStats(S && S.scatter); if (!cur) return '';
+        const chName = (CHANS && (CHANS.channels.find(c => c.id === (st.channel || 'tyler')) || {}).name) || 'Main';
+        if (CHDECON === null && CHANS && CHANS.channels) {
+            CHDECON = { loading: 1 };
+            Promise.all(CHANS.channels.map(async c => { let st2 = (c.owner || c.id === 'tyler') ? S_MAIN : await fetch('/api/retention/study?id=' + encodeURIComponent(c.id)).then(r => r.ok ? r.json() : null).catch(() => null); const d = st2 && st2.scatter ? deconStats(st2.scatter) : null; return d ? { id: c.id, name: c.name, d } : null; })).then(rs => { CHDECON = rs.filter(Boolean); try { render(); } catch (e) {} });
+        }
+        const DR = [['keep', 'Keep', C.cyan], ['retention', 'Retention', C.green], ['ret5', '5-sec ret', C.purple], ['log_dur', 'Duration', C.yellow]];
+        const cell = o => { if (!o) return `<td style="text-align:center;color:${C.faint}">—</td>`; const flip = (o.raw < 0) !== (o.dec < 0) && Math.abs(o.raw) > 0.08 && Math.abs(o.dec) > 0.08; const sg = v => (v >= 0 ? '+' : '') + v.toFixed(2); return `<td style="text-align:center;padding:3px 8px;${flip ? 'background:' + C.amber + '22;border-radius:5px' : ''}"><span style="color:${o.raw < 0 ? '#60a5fa' : C.dim};font-size:10px">${sg(o.raw)}</span> <span style="color:${C.mute}">→</span> <span style="color:${o.dec >= 0.15 ? C.green : o.dec < -0.05 ? '#60a5fa' : C.text};font-weight:700">${sg(o.dec)}</span>${flip ? ' ⚑' : ''}</td>`; };
+        const xrows = (CHDECON && CHDECON.length) ? CHDECON.map(c => `<tr><td style="color:${C.text};white-space:nowrap;padding-right:8px;font-weight:700">${esc(c.name)} <span style="color:${C.mute};font-weight:400;font-size:9px">n=${c.d.n}</span></td>${DR.map(([k]) => cell(c.d[k])).join('')}</tr>`).join('') : `<tr><td colspan="5" style="color:${C.mute};font-size:10px;padding:6px">computing across channels…</td></tr>`;
+        const rr = cur._resid, W = 300, H = 150, pad = 16, xs = rr.ret, ys = rr.lv;
+        const xmin = Math.min(...xs), xmax = Math.max(...xs), ymin = Math.min(...ys), ymax = Math.max(...ys);
+        const X = v => pad + (v - xmin) / ((xmax - xmin) || 1) * (W - 2 * pad), Y = v => H - pad - (v - ymin) / ((ymax - ymin) || 1) * (H - 2 * pad);
+        const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length; let sxy = 0, sxx = 0; for (let i = 0; i < xs.length; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; } const b = sxx ? sxy / sxx : 0;
+        const dots = xs.map((x, i) => `<circle cx="${X(x).toFixed(1)}" cy="${Y(ys[i]).toFixed(1)}" r="2.2" fill="${C.green}" opacity="0.55"/>`).join('');
+        const line = `<line x1="${X(xmin).toFixed(1)}" y1="${Y(my + b * (xmin - mx)).toFixed(1)}" x2="${X(xmax).toFixed(1)}" y2="${Y(my + b * (xmax - mx)).toFixed(1)}" stroke="${C.green}" stroke-width="1.6" stroke-dasharray="4 3"/>`;
+        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">Deconfounded — raw vs controlling for duration</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:8px">Spearman (rank → robust to outliers/leverage). <b>raw → deconfounded</b> per channel; deconfounded = partial controlling for duration (for the Duration row, controls keep+retention). <span style="background:${C.amber}22;padding:0 4px;border-radius:4px">⚑ sign flips</span> once duration is removed = a pure confound.</div>
+            <table style="border-collapse:separate;border-spacing:2px;font-size:10px;width:100%;margin-bottom:10px"><tr><td></td>${DR.map(([, l, c]) => `<td style="color:${c};text-transform:uppercase;text-align:center;font-size:9px;font-weight:700">${l}</td>`).join('')}</tr>${xrows}</table>
+            <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+              <div><div style="font-size:10px;color:${C.green};font-weight:700;margin-bottom:2px">${esc(chName)} · retention → views, duration removed</div><svg viewBox="0 0 ${W} ${H}" style="width:${W}px;max-width:100%;background:${C.card2};border-radius:6px">${dots}${line}</svg></div>
+              <div style="flex:1;min-width:200px;font-size:10px;color:${C.mute};line-height:1.6">Each dot is a video with its <b>duration effect subtracted</b> from both axes — the dashed line is the <b>true</b> retention→views relationship: <b style="color:${cur.retention.dec >= 0 ? C.green : '#60a5fa'}">${(cur.retention.dec >= 0 ? '+' : '') + cur.retention.dec.toFixed(2)}</b> vs the misleading raw <b style="color:${cur.retention.raw < 0 ? '#60a5fa' : C.dim}">${(cur.retention.raw >= 0 ? '+' : '') + cur.retention.raw.toFixed(2)}</b>. ${(cur.retention.raw < 0) !== (cur.retention.dec < 0) ? 'The raw sign was <b>backwards</b> — duration was the whole story.' : 'Duration ' + (Math.abs(cur.retention.dec) > Math.abs(cur.retention.raw) ? 'was <b>hiding</b> a stronger effect.' : 'shifts it modestly.')}</div>
+            </div>`, 12);
+    }
     function renderQ1() {
         const Q = S.Q1, cv = Q.cv_r2;
         let h = h2c('Q1 — How much do Keep rate & Retention move views?', `On your ${S.meta.n} videos. Three lenses: rank correlation, the actual view magnitudes by bin, and cross-validated variance explained.`);
         h += cardc(`<div style="font-weight:700;color:${C.text};margin-bottom:6px">Rank correlation with views (Spearman)</div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap">${statc('Keep rate', sgn(Q.lenses.keep.spearman), Q.lenses.keep.spearman > 0.4 ? C.green : C.cyan)}${statc('Retention', sgn(Q.lenses.retention.spearman), C.green)}${statc('Keep↔Retention', sgn(Q.lenses.keep_vs_retention), C.mute)}</div>`);
+            <div style="display:flex;gap:10px;flex-wrap:wrap">${statc('Keep rate', sgn(Q.lenses.keep.spearman), Q.lenses.keep.spearman > 0.4 ? C.green : C.cyan)}${statc('Retention', sgn(Q.lenses.retention.spearman), C.green)}${statc('Keep↔Retention', sgn(Q.lenses.keep_vs_retention), C.mute)}</div>
+            <div style="font-size:10px;color:${C.amber};margin-top:6px">⚠ These are <b>raw</b> correlations — retention can read negative purely because high-retention videos are short. The deconfounded view below shows the real relationship.</div>`);
+        h += confoundPanel();
         h += cardc(`<div style="font-weight:700;color:${C.text};margin-bottom:4px">The raw cloud — every dot is one of your videos (click it to open on YouTube)</div>
             <div style="font-size:11px;color:${C.mute};margin-bottom:8px">Each modelled toward log views. Dashed line = trend; spread around it is what that metric <i>doesn't</i> explain. Axis shows the actual range of each.</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -1406,7 +1451,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=114').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=115').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2284,7 +2329,7 @@ const JarvisRetention = (function () {
         st.channel = id;
         // Main (your 211) = the committed static file; every other channel = R2 via the API.
         const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=114')
+            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=115')
             : fetch('/api/retention/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
         try {
             if (id === 'all') {
@@ -2517,7 +2562,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=114'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=115'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     CHANS = await fetch('/api/retention/channels').then(r => r.json()).catch(() => null);
