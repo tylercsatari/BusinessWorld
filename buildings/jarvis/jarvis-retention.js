@@ -1105,7 +1105,8 @@ const JarvisRetention = (function () {
         const ldur = col('log_dur'), out = { n: pts.length };
         ['keep', 'retention', 'ret5'].forEach(k => { const a = col(k); out[k] = { raw: spear(a, lv), dec: partial(a, lv, [ldur]) }; });
         out.log_dur = { raw: spear(ldur, lv), dec: partial(ldur, lv, [col('keep'), col('retention')]) };
-        out._resid = { ret: resid(col('retention'), ldur), lv: resid(lv, ldur) };
+        out._raw = { ret: col('retention'), lv: lv, ldur: ldur, dur: pts.map(p => p.dur) };
+        out._resid = { ret: resid(col('retention'), ldur), lv: resid(lv, ldur), retFitBy: (() => { const a = col('retention'); const mx = ldur.reduce((s, v) => s + v, 0) / ldur.length, my = a.reduce((s, v) => s + v, 0) / a.length; let sxy = 0, sxx = 0; for (let i = 0; i < a.length; i++) { sxy += (ldur[i] - mx) * (a[i] - my); sxx += (ldur[i] - mx) ** 2; } const b = sxx ? sxy / sxx : 0; return { b, mx, my }; })(), lvFitBy: (() => { const a = lv; const mx = ldur.reduce((s, v) => s + v, 0) / ldur.length, my = a.reduce((s, v) => s + v, 0) / a.length; let sxy = 0, sxx = 0; for (let i = 0; i < a.length; i++) { sxy += (ldur[i] - mx) * (a[i] - my); sxx += (ldur[i] - mx) ** 2; } const b = sxx ? sxy / sxx : 0; return { b, mx, my }; })() };
         return out;
     }
     function confoundPanel() {
@@ -1118,27 +1119,34 @@ const JarvisRetention = (function () {
         const DR = [['keep', 'Keep', C.cyan], ['retention', 'Retention', C.green], ['ret5', '5-sec ret', C.purple], ['log_dur', 'Duration', C.yellow]];
         const cell = o => { if (!o) return `<td style="text-align:center;color:${C.faint}">—</td>`; const flip = (o.raw < 0) !== (o.dec < 0) && Math.abs(o.raw) > 0.08 && Math.abs(o.dec) > 0.08; const sg = v => (v >= 0 ? '+' : '') + v.toFixed(2); return `<td style="text-align:center;padding:3px 8px;${flip ? 'background:' + C.amber + '22;border-radius:5px' : ''}"><span style="color:${o.raw < 0 ? '#60a5fa' : C.dim};font-size:10px">${sg(o.raw)}</span> <span style="color:${C.mute}">→</span> <span style="color:${o.dec >= 0.15 ? C.green : o.dec < -0.05 ? '#60a5fa' : C.text};font-weight:700">${sg(o.dec)}</span>${flip ? ' ⚑' : ''}</td>`; };
         const xrows = (CHDECON && CHDECON.length) ? CHDECON.map(c => `<tr><td style="color:${C.text};white-space:nowrap;padding-right:8px;font-weight:700">${esc(c.name)} <span style="color:${C.mute};font-weight:400;font-size:9px">n=${c.d.n}</span></td>${DR.map(([k]) => cell(c.d[k])).join('')}</tr>`).join('') : `<tr><td colspan="5" style="color:${C.mute};font-size:10px;padding:6px">computing across channels…</td></tr>`;
-        const rr = cur._resid, W = 300, H = 150, pad = 16, xs = rr.ret, ys = rr.lv;
-        const xmin = Math.min(...xs), xmax = Math.max(...xs), ymin = Math.min(...ys), ymax = Math.max(...ys);
-        const X = v => pad + (v - xmin) / ((xmax - xmin) || 1) * (W - 2 * pad), Y = v => H - pad - (v - ymin) / ((ymax - ymin) || 1) * (H - 2 * pad);
-        const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length; let sxy = 0, sxx = 0; for (let i = 0; i < xs.length; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; } const b = sxx ? sxy / sxx : 0;
-        const dots = xs.map((x, i) => `<circle cx="${X(x).toFixed(1)}" cy="${Y(ys[i]).toFixed(1)}" r="2.2" fill="${C.green}" opacity="0.55"/>`).join('');
-        const line = `<line x1="${X(xmin).toFixed(1)}" y1="${Y(my + b * (xmin - mx)).toFixed(1)}" x2="${X(xmax).toFixed(1)}" y2="${Y(my + b * (xmax - mx)).toFixed(1)}" stroke="${C.green}" stroke-width="1.6" stroke-dasharray="4 3"/>`;
+        // ── the actual mechanism, visualised: HOW duration is removed (residualisation) ──
+        const rr = cur._raw, res = cur._resid, mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+        const mini = (xs, ys, title, xlab, opt) => { opt = opt || {}; const Wm = 200, Hm = 120, pd = 16;
+            const xmn = Math.min(...xs), xmx = Math.max(...xs), ymn = Math.min(...ys), ymx = Math.max(...ys);
+            const X = v => pd + (v - xmn) / ((xmx - xmn) || 1) * (Wm - 2 * pd), Y = v => Hm - pd - (v - ymn) / ((ymx - ymn) || 1) * (Hm - 2 * pd);
+            let dots = ''; for (let i = 0; i < xs.length; i++) dots += `<circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(ys[i]).toFixed(1)}" r="2" fill="${opt.color ? opt.color(i) : C.green}" opacity="0.6"/>`;
+            let line = ''; if (opt.fit !== false) { const f = opt.fitBy || (() => { const mx = mean(xs), my = mean(ys); let sxy = 0, sxx = 0; for (let i = 0; i < xs.length; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; } return { b: sxx ? sxy / sxx : 0, mx, my }; })(); line = `<line x1="${X(xmn).toFixed(1)}" y1="${Y(f.my + f.b * (xmn - f.mx)).toFixed(1)}" x2="${X(xmx).toFixed(1)}" y2="${Y(f.my + f.b * (xmx - f.mx)).toFixed(1)}" stroke="${opt.lineColor || '#fff'}" stroke-width="1.6" stroke-dasharray="4 3"/>`; }
+            return `<div style="text-align:center"><div style="font-size:9px;color:${C.text};font-weight:700;height:24px;line-height:1.15">${title}</div><svg viewBox="0 0 ${Wm} ${Hm}" style="width:100%;background:${C.card2};border-radius:6px">${dots}${line}</svg><div style="font-size:8px;color:${C.faint};margin-top:1px">${xlab}</div></div>`; };
+        const dmn = Math.min(...rr.ldur), dmx = Math.max(...rr.ldur), durCol = i => rawRamp((rr.ldur[i] - dmn) / ((dmx - dmn) || 1));
+        const pipeline = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:6px">
+            ${mini(rr.ret, rr.lv, '① RAW: retention → views<br><span style="color:' + C.faint + ';font-weight:400">colour = duration</span>', 'retention %', { color: durCol, fit: false })}
+            ${mini(rr.dur, rr.ret, '② fit retention ~ duration<br><span style="color:' + C.yellow + ';font-weight:400">subtract this line</span>', 'duration (s)', { lineColor: C.yellow })}
+            ${mini(rr.dur, rr.lv, '③ fit views ~ duration<br><span style="color:' + C.yellow + ';font-weight:400">subtract this line</span>', 'duration (s)', { lineColor: C.yellow })}
+            ${mini(res.ret, res.lv, '④ what\\'s LEFT = true link<br><span style="color:' + C.green + ';font-weight:400">duration removed</span>', 'retention (residual)', { color: () => C.green, lineColor: C.green })}</div>`;
         return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">Deconfounded — raw vs controlling for duration</div>
-            <div style="font-size:10px;color:${C.mute};margin-bottom:8px">Spearman (rank → robust to outliers/leverage). <b>raw → deconfounded</b> per channel; deconfounded = partial controlling for duration (for the Duration row, controls keep+retention). <span style="background:${C.amber}22;padding:0 4px;border-radius:4px">⚑ sign flips</span> once duration is removed = a pure confound.</div>
-            <table style="border-collapse:separate;border-spacing:2px;font-size:10px;width:100%;margin-bottom:10px"><tr><td></td>${DR.map(([, l, c]) => `<td style="color:${c};text-transform:uppercase;text-align:center;font-size:9px;font-weight:700">${l}</td>`).join('')}</tr>${xrows}</table>
-            <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
-              <div><div style="font-size:10px;color:${C.green};font-weight:700;margin-bottom:2px">${esc(chName)} · retention → views, duration removed</div><svg viewBox="0 0 ${W} ${H}" style="width:${W}px;max-width:100%;background:${C.card2};border-radius:6px">${dots}${line}</svg></div>
-              <div style="flex:1;min-width:200px;font-size:10px;color:${C.mute};line-height:1.6">Each dot is a video with its <b>duration effect subtracted</b> from both axes — the dashed line is the <b>true</b> retention→views relationship: <b style="color:${cur.retention.dec >= 0 ? C.green : '#60a5fa'}">${(cur.retention.dec >= 0 ? '+' : '') + cur.retention.dec.toFixed(2)}</b> vs the misleading raw <b style="color:${cur.retention.raw < 0 ? '#60a5fa' : C.dim}">${(cur.retention.raw >= 0 ? '+' : '') + cur.retention.raw.toFixed(2)}</b>. ${(cur.retention.raw < 0) !== (cur.retention.dec < 0) ? 'The raw sign was <b>backwards</b> — duration was the whole story.' : 'Duration ' + (Math.abs(cur.retention.dec) > Math.abs(cur.retention.raw) ? 'was <b>hiding</b> a stronger effect.' : 'shifts it modestly.')}</div>
-            </div>`, 12);
+            <div style="font-size:10px;color:${C.mute};margin-bottom:8px">Spearman (rank → robust to outliers/leverage). <b>raw → deconfounded</b> per channel; ⚑ <span style="background:${C.amber}22;padding:0 4px;border-radius:4px">sign flips</span> once duration is removed = a pure confound.</div>
+            <table style="border-collapse:separate;border-spacing:2px;font-size:10px;width:100%;margin-bottom:12px"><tr><td></td>${DR.map(([, l, c]) => `<td style="color:${c};text-transform:uppercase;text-align:center;font-size:9px;font-weight:700">${l}</td>`).join('')}</tr>${xrows}</table>
+            <div style="font-size:11px;font-weight:700;color:${C.text};margin-bottom:2px">How "duration removed" actually works — ${esc(chName)}</div>
+            <div style="font-size:9.5px;color:${C.mute};margin-bottom:2px;line-height:1.5">In ① short videos (<span style="color:${rawRamp(0)}">cool</span>) cluster at high-retention/low-views — that's the confound. We fit duration→retention ② and duration→views ③ (the yellow lines = the part duration alone explains), <b>subtract</b> both, and what survives ④ is the relationship with duration gone.</div>
+            ${pipeline}
+            <div style="font-size:10px;color:${C.mute};margin-top:8px;line-height:1.6">Result: retention→views goes from a misleading raw <b style="color:${cur.retention.raw < 0 ? '#60a5fa' : C.dim}">${(cur.retention.raw >= 0 ? '+' : '') + cur.retention.raw.toFixed(2)}</b> to the true <b style="color:${cur.retention.dec >= 0 ? C.green : '#60a5fa'}">${(cur.retention.dec >= 0 ? '+' : '') + cur.retention.dec.toFixed(2)}</b> in ④. ${(cur.retention.raw < 0) !== (cur.retention.dec < 0) ? 'The raw sign was <b>backwards</b> — duration was the whole story.' : 'Duration ' + (Math.abs(cur.retention.dec) > Math.abs(cur.retention.raw) ? 'was <b>hiding</b> a stronger effect.' : 'shifts it modestly.')} This is the partial the predictor uses when Duration is in the model.</div>`, 12);
     }
     function renderQ1() {
         const Q = S.Q1, cv = Q.cv_r2;
         let h = h2c('Q1 — How much do Keep rate & Retention move views?', `On your ${S.meta.n} videos. Three lenses: rank correlation, the actual view magnitudes by bin, and cross-validated variance explained.`);
         h += cardc(`<div style="font-weight:700;color:${C.text};margin-bottom:6px">Rank correlation with views (Spearman)</div>
             <div style="display:flex;gap:10px;flex-wrap:wrap">${statc('Keep rate', sgn(Q.lenses.keep.spearman), Q.lenses.keep.spearman > 0.4 ? C.green : C.cyan)}${statc('Retention', sgn(Q.lenses.retention.spearman), C.green)}${statc('Keep↔Retention', sgn(Q.lenses.keep_vs_retention), C.mute)}</div>
-            <div style="font-size:10px;color:${C.amber};margin-top:6px">⚠ These are <b>raw</b> correlations — retention can read negative purely because high-retention videos are short. The deconfounded view below shows the real relationship.</div>`);
-        h += confoundPanel();
+            <div style="font-size:10px;color:${C.amber};margin-top:6px">⚠ These are <b>raw</b> correlations — retention can read negative purely because high-retention videos are short. The <b>deconfounded</b> view at the bottom of this tab shows the real relationship.</div>`);
         h += cardc(`<div style="font-weight:700;color:${C.text};margin-bottom:4px">The raw cloud — every dot is one of your videos (click it to open on YouTube)</div>
             <div style="font-size:11px;color:${C.mute};margin-bottom:8px">Each modelled toward log views. Dashed line = trend; spread around it is what that metric <i>doesn't</i> explain. Axis shows the actual range of each.</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -1160,6 +1168,7 @@ const JarvisRetention = (function () {
         h += cardc(`<div style="display:flex;gap:10px;flex-wrap:wrap">${statc('infer keep from retention', 'R² ' + fmtv(Q3.keep_from_retention_cv_r2, 2), Q3.keep_from_retention_cv_r2 > 0.3 ? C.orange : C.red)}${statc('residual', '±' + fmtv(Q3.keep_resid_sd_pct, 0) + '%', C.orange)}${statc('keep adds for views', sgn(Q3.keep_adds_for_views, 3), Q3.keep_adds_for_views > 0.05 ? C.green : C.mute)}</div>`);
         h += cardc(`<div style="font-weight:700;color:${C.text};margin-bottom:4px">Retention → Keep rate (each dot a video)</div><div style="font-size:11px;color:${C.mute};margin-bottom:8px">If keep were just retention in disguise these would sit on a tight line. They're related but distinct — so both earn their place.</div>${scatter('ret', 'retention %', C.purple, { yk: 'keep', ylog: false, ylabel: 'keep rate %' })}`);
         h += note(`Keep rate is <b>partly</b> predictable from retention (R² ${fmtv(Q3.keep_from_retention_cv_r2, 2)}, ±${fmtv(Q3.keep_resid_sd_pct, 0)}%) — but <b>not redundant</b>: it adds ${sgn(Q3.keep_adds_for_views, 3)} for views beyond retention. Keep both.`, C.purple);
+        h += confoundPanel();
         return h;
     }
     function renderQ2() {
@@ -1458,7 +1467,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=116').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=117').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2336,7 +2345,7 @@ const JarvisRetention = (function () {
         st.channel = id;
         // Main (your 211) = the committed static file; every other channel = R2 via the API.
         const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=116')
+            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=117')
             : fetch('/api/retention/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
         try {
             if (id === 'all') {
@@ -2569,7 +2578,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=116'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=117'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     CHANS = await fetch('/api/retention/channels').then(r => r.json()).catch(() => null);
