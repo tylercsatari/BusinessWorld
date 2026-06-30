@@ -27,7 +27,7 @@ for pf in glob.glob("/home/ubuntu/hookrl/runs/discover*/raft_data.jsonl"):
     for l in open(pf):
         try:
             r = json.loads(l)
-            if r.get("premise") and r.get("frames") and r.get("keep", 0) >= 0.70: rows.append(r)
+            if r.get("premise") and r.get("frames") and r.get("keep", 0) >= 0.82: rows.append(r)  # train on the better half -> lifts the average
         except Exception: pass
 print("IDEA RAFT round %s on %d accepted ideas" % (ROUND, len(rows)), flush=True)
 
