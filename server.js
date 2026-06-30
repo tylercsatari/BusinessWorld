@@ -3021,6 +3021,64 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    // ── Saved hooks: generated ideas / scored hooks the user wants to keep (R2 raw/saved-hooks/) ──
+    if (pathname === '/api/raw/hook-save' && req.method === 'POST') {
+        try {
+            const body = (await readBody(req)) || {};
+            const id = 'hk' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+            // montage (base64 data-URL) is stored as a separate jpeg so the list stays light
+            let hasMontage = false;
+            if (typeof body.montage === 'string' && body.montage.indexOf('base64,') >= 0) {
+                try { await cloud.uploadToR2(`raw/saved-hooks/${id}.jpg`, Buffer.from(body.montage.split('base64,').pop(), 'base64'), 'image/jpeg'); hasMontage = true; } catch (e) {}
+            }
+            const rec = {
+                id, savedAt: Date.now(),
+                kind: body.kind === 'scored' ? 'scored' : 'idea',
+                source: String(body.source || '').slice(0, 20),
+                title: String(body.title || 'Saved hook').slice(0, 140),
+                text: String(body.text || '').slice(0, 2000),
+                frames: Array.isArray(body.frames) ? body.frames.slice(0, 5).map(f => String(f).slice(0, 600)) : [],
+                frame_imgs: Array.isArray(body.frame_imgs) ? body.frame_imgs.slice(0, 5).map(String) : [],
+                cohesion_mode: String(body.cohesion_mode || '').slice(0, 40),
+                hasMontage,
+                indicators: (body.indicators && typeof body.indicators === 'object') ? body.indicators : null,
+                steer: (body.steer && typeof body.steer === 'object') ? body.steer : null
+            };
+            await cloud.uploadToR2(`raw/saved-hooks/${id}.json`, Buffer.from(JSON.stringify(rec)), 'application/json');
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, id }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    if (pathname === '/api/raw/saved-hooks' && req.method === 'GET') {
+        try {
+            let keys = []; try { keys = (await cloud.listR2Keys('raw/saved-hooks/')) || []; } catch (e) {}
+            keys = keys.filter(k => k.endsWith('.json'));
+            const hooks = [];
+            for (const k of keys) { try { const b = await cloud.downloadFromR2(k); if (b) hooks.push(JSON.parse(b.toString('utf8'))); } catch (e) {} }
+            hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify({ hooks }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    if (pathname === '/api/raw/hook-delete' && req.method === 'POST') {
+        try {
+            const body = (await readBody(req)) || {};
+            const id = String(body.id || '').replace(/[^a-z0-9]/gi, '');
+            if (id) { await cloud.deleteFromR2(`raw/saved-hooks/${id}.json`).catch(() => {}); await cloud.deleteFromR2(`raw/saved-hooks/${id}.jpg`).catch(() => {}); }
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    const savedMon = pathname.match(/^\/api\/raw\/saved-montage\/([a-z0-9]{1,32})$/);
+    if (savedMon && req.method === 'GET') {
+        try {
+            const buf = await cloud.downloadFromR2(`raw/saved-hooks/${savedMon[1]}.jpg`);
+            if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600' }); res.end(buf); }
+            else { res.writeHead(404); res.end(); }
+        } catch (e) { res.writeHead(500); res.end(); }
+        return;
+    }
     // multi-channel retention: index + per-channel tables, stored in R2 (private; other
     // creators' analytics never go to git). Main (211) stays the committed static file.
     if (pathname === '/api/retention/channels' && req.method === 'GET') {

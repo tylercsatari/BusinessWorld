@@ -10,7 +10,7 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, err = null;
+    let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null };
@@ -914,10 +914,14 @@ const JarvisRetention = (function () {
                         : `<img src="/api/hooks/grpo/montage/demo/${st.expGenRid}_${a.k}" style="width:100%;border-radius:6px;display:block" loading="lazy">`;
                     const keepBadge = a.keep_pctile != null ? `<span>keep <b style="color:${heatCol(a.keep_pctile || 0)}">${Math.round((a.keep_pctile || 0) * 100)}%</b></span>` : '';
                     const frameText = (a.frames && a.frames.length) ? `<details style="margin-top:5px"><summary style="font-size:10px;color:${C.cyan};cursor:pointer">the 5 frames</summary><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:4px">${a.frames.map((f, i) => `<div><b style="color:${C.accent}">${i + 1}.</b> ${esc(f)}</div>`).join('')}</div></details>` : '';
+                    const actions = (a.frame_imgs && a.frame_imgs.filter(Boolean).length) ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+                        <span data-genscore="${a.k}" style="cursor:${st.rawUploading ? 'default' : 'pointer'};border:1px solid ${C.cyan};background:${C.cyan}22;color:${C.cyan};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">${st.genScoringK === a.k ? '⏳ scoring…' : '◆ Score this hook'}</span>
+                        <span data-gensave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">💾 Save idea</span>
+                      </div>` : '';
                     return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:9px;background:${C.card2}">
                       <div style="font-size:12px;color:${C.text};font-weight:700;line-height:1.35;margin-bottom:6px">${esc(a.premise || a.caption || '')}</div>
                       ${frameStrip}
-                      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">${keepBadge}<span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${frameText}</div>`;
+                      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">${keepBadge}<span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${frameText}${actions}</div>`;
                 }).join('');
                 result = `<div style="margin-top:10px"><div style="font-size:11px;color:${C.mute};margin-bottom:8px">${g.n} hook${g.n > 1 ? 's' : ''}${g.premise && g.premise !== '💡 invented' ? ` for "${esc(g.premise)}"` : ' invented'} · ${esc(g.model || 'model')}</div>
                   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">${cards}</div></div>`;
@@ -935,6 +939,7 @@ const JarvisRetention = (function () {
     function renderExperiment() {
         const head = h2c('🧪 Experiment — score a hook against every validated indicator', 'Upload a video or build one from 5 frames + text. It gets embedded and scored on every independent indicator we have validated — see where it lands on each indicator\'s curve, plus an ensemble read. New indicators appear here automatically as you build them.') + expGenPanel();
         if (EXPREG === null) { EXPREG = { loading: 1 }; fetch('/api/indicators/registry').then(r => r.json()).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(() => { EXPREG = { error: 1 }; rtgUpdateExp(); }); }
+        if (SAVED === null) { SAVED = { loading: 1 }; fetch('/api/raw/saved-hooks').then(r => r.json()).then(j => { SAVED = j; rtgUpdateExp(); }).catch(() => { SAVED = { hooks: [] }; rtgUpdateExp(); }); }
         const CY = '#22d3ee';
         const fr = st.rawFrames || [null, null, null, null, null], nFrames = fr.filter(Boolean).length;
         const modePill = (m, lab) => `<span data-rawbuildmode="${m}" style="cursor:pointer;border:1px solid ${(!!st.rawBuildMode === !!m) ? CY : C.border};background:${(!!st.rawBuildMode === !!m) ? CY + '22' : 'transparent'};color:${(!!st.rawBuildMode === !!m) ? CY : C.dim};border-radius:${m ? '0 6px 6px 0' : '6px 0 0 6px'};padding:4px 10px;font-size:11px;font-weight:700">${lab}</span>`;
@@ -957,11 +962,13 @@ const JarvisRetention = (function () {
         const TLAB = { keep: 'keep rate (stay to watch)', ret5: 'past 5 seconds', views: 'est. views', gt10M: 'chance >10M views' };
         if (!up) {
             const byT = {}; val.forEach(d => { (byT[d.target] = byT[d.target] || []).push(d); });
-            return head + controls + cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:4px">${val.length} scorable indicators ready</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Upload or build a hook above and it's scored on each of these, fully traceable. Grouped by what they predict:</div>${(EXPREG.meta.targets || []).map(t => byT[t.name] ? `<div style="margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:${C.accent}">${t.label}</span> <span style="font-size:10px;color:${C.mute}">— ${byT[t.name].map(d => d.name.replace('content_', '').replace('nov_', 'nov ')).join(', ')}</span></div>` : '').join('')}`, 12);
+            return head + controls + cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:4px">${val.length} scorable indicators ready</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Generate a hook above (or upload/build one) and it's scored on each of these, fully traceable. Grouped by what they predict:</div>${(EXPREG.meta.targets || []).map(t => byT[t.name] ? `<div style="margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:${C.accent}">${t.label}</span> <span style="font-size:10px;color:${C.mute}">— ${byT[t.name].map(d => d.name.replace('content_', '').replace('nov_', 'nov ')).join(', ')}</span></div>` : '').join('')}`, 12) + savedStrip();
         }
         // ── 1. trace: raw input → embedding ──
         const embHeat = ch => { const a = up.emb_preview && up.emb_preview[ch]; if (!a) return `<div style="font-size:9px;color:${C.faint}">${ch}: —</div>`; const mn = Math.min(...a), mx = Math.max(...a); return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span style="font-size:9px;color:${C.dim};width:58px">${ch}</span><svg viewBox="0 0 ${a.length * 5} 10" style="height:11px;width:${a.length * 5}px">${a.map((v, i) => `<rect x="${i * 5}" width="4.4" height="10" fill="${rawRamp((v - mn) / ((mx - mn) || 1))}"/>`).join('')}</svg></div>`; };
-        const trace = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:6px">From raw input to score — every number is traceable</div>
+        const trace = cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px">
+              <span style="font-size:12px;font-weight:800;color:${C.text}">From raw input to score — every number is traceable</span>
+              <span data-savescored style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${st.savedFlash ? '✅ saved' : '💾 Save this hook'}</span></div>
             <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
               <div><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">1 · the 5-frame hook (what gets embedded)</div><img src="data:image/jpeg;base64,${up.montage}" style="width:260px;border-radius:6px;background:#000"/></div>
               <div style="flex:1;min-width:220px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">2 · transcript</div><div style="font-size:11px;font-style:italic;color:${C.text};background:#0f172a;border-radius:6px;padding:8px;margin-bottom:8px">${up.silent ? '(no voiceover — text channel scores as empty)' : '"' + esc(up.transcript || '') + '"'}</div>
@@ -1055,7 +1062,7 @@ const JarvisRetention = (function () {
             <div style="${gcol};margin-bottom:12px">${['keep', 'ret5', 'views', 'realviews', 'gt10M'].map(embBox).join('')}</div>
             <div style="font-size:10px;color:${C.purple};font-weight:800;text-transform:uppercase;margin-bottom:5px">Novelty — 3 boxes (independent)</div>
             <div style="${gcol}">${['keep', 'ret5', 'views'].map(novBox).join('')}</div>`, 12);
-        return head + controls + trace + boxes;
+        return head + controls + trace + boxes + savedStrip();
     }
     function rtgUpdateFusion() { try { const el = window.document.getElementById('rtg-fusionpanel'); if (el) el.innerHTML = renderFusion(); } catch (e) { } }
     function fuHeat(v) { // -1..1 correlation → blue(neg)…grey…red(pos)
@@ -2605,6 +2612,10 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-guessreload]')) { GUESSES = {}; st.guessSel = null; rtgUpdateGuesses(); return; }
         const egn = e.target.closest('[data-expgenn]'); if (egn) { st.expGenN = +egn.getAttribute('data-expgenn'); rtgUpdateExp(); return; }
         if (e.target.closest('[data-expgen]')) { if (!st.expGenBusy) expGenSubmit(); return; }
+        const gsc = e.target.closest('[data-genscore]'); if (gsc) { if (!st.rawUploading) { const k = +gsc.getAttribute('data-genscore'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) scoreGenerated(k, a.frame_imgs || [], a.premise || a.caption || ''); } return; }
+        const gsv = e.target.closest('[data-gensave]'); if (gsv) { const k = +gsv.getAttribute('data-gensave'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) saveHook({ kind: 'idea', source: 'generated', title: (a.premise || a.caption || 'idea').slice(0, 80), text: a.premise || a.caption || '', frames: a.frames || [], frame_imgs: a.frame_imgs || [], cohesion_mode: a.cohesion_mode || '' }); return; }
+        if (e.target.closest('[data-savescored]')) { const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0]; if (up) saveHook({ kind: 'scored', source: up.source || 'scored', title: up.title || (up.transcript || 'Scored hook').slice(0, 60), text: up.transcript || '', montage: up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : ''), frames: up.genFrames || [], frame_imgs: up.genFrameImgs || [], indicators: up.indicators || null, steer: up.steer || null }); return; }
+        const sdel = e.target.closest('[data-savedel]'); if (sdel) { deleteSaved(sdel.getAttribute('data-savedel')); return; }
         const gvBtn = e.target.closest('[data-guessview]'); if (gvBtn) { st.guessView = gvBtn.getAttribute('data-guessview'); rtgUpdateGuesses(); return; }
         const grpoRunBtn = e.target.closest('[data-grporun]'); if (grpoRunBtn) { st.grpoRun = grpoRunBtn.getAttribute('data-grporun'); st.grpoSel = null; rtgUpdateGrpo(); return; }
         const grpoInpBtn = e.target.closest('[data-grpoinput]'); if (grpoInpBtn) { st.grpoSel = grpoInpBtn.getAttribute('data-grpoinput'); rtgUpdateGrpo(); return; }
@@ -2716,6 +2727,59 @@ const JarvisRetention = (function () {
         } catch (e) { st.rawUpErr = e.message; }
         window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0;
         rtgUpdateRaw();
+    }
+    // Fetch an image URL → data-URL (so a generated R2 frame can be composed + embedded).
+    async function urlToDataUrl(u) {
+        const r = await fetch(u); if (!r.ok) throw new Error('frame ' + r.status);
+        const b = await r.blob();
+        return await new Promise((res, rej) => { const fr = new window.FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(b); });
+    }
+    // Score a GENERATED hook through the SAME embed+score pipeline as a built/uploaded hook,
+    // so it lands in the same indicator + embedded-space display.
+    async function scoreGenerated(k, fids, text) {
+        st.genScoringK = k; st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; rtgUpdateExp();
+        const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1600);
+        try {
+            const dataUrls = [];
+            for (const f of (fids || [])) dataUrls.push(f ? await urlToDataUrl('/api/hooks/grpo/montage/demo/' + f) : null);
+            const montage = await composeFrames(dataUrls);
+            const r = await fetch('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: text || '', title: (text || 'Generated hook').slice(0, 40) }) });
+            const j = await r.json();
+            if (!r.ok || j.error) { st.rawUpErr = j.error || ('HTTP ' + r.status); }
+            else {
+                const g = EXPDEMO[st.expGenRid], a = g && g.attempts && g.attempts.find(x => x.k === k);
+                j.source = 'generated'; j.genFrameImgs = fids; j.genFrames = (a && a.frames) || []; j.montageDataUrl = montage;
+                st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+            }
+        } catch (e) { st.rawUpErr = e.message; }
+        window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0; st.genScoringK = null; rtgUpdateExp();
+    }
+    async function saveHook(payload) {
+        try {
+            const r = await fetch('/api/raw/hook-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const j = await r.json();
+            if (j.ok) { st.savedFlash = j.id; SAVED = null; rtgUpdateExp(); window.setTimeout(() => { if (st.savedFlash === j.id) { st.savedFlash = null; rtgUpdateExp(); } }, 2500); }
+            else { st.rawUpErr = j.error || 'save failed'; rtgUpdateExp(); }
+        } catch (e) { st.rawUpErr = e.message; rtgUpdateExp(); }
+    }
+    async function deleteSaved(id) {
+        try { await fetch('/api/raw/hook-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); SAVED = null; rtgUpdateExp(); } catch (e) {}
+    }
+    function savedStrip() {
+        if (!SAVED || SAVED.loading || !(SAVED.hooks || []).length) return '';
+        const hooks = SAVED.hooks;
+        const card = h => {
+            const thumb = h.hasMontage ? `/api/raw/saved-montage/${h.id}` : (h.frame_imgs && h.frame_imgs[0] ? `/api/hooks/grpo/montage/demo/${h.frame_imgs[0]}` : '');
+            const kp = h.steer && (h.steer.visual_keep || h.steer.together_keep || h.steer.text_keep);
+            const badge = (kp && kp.pctile != null) ? `<span style="font-size:9px;font-weight:700;color:${heatCol((kp.pctile || 0) / 100)}">keep ${Math.round(kp.pctile)}%ile</span>` : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'scored' : 'idea'}</span>`;
+            return `<div style="border:1px solid ${C.border};border-radius:8px;padding:7px;background:${C.card2};width:152px;position:relative">
+              <span data-savedel="${h.id}" title="delete" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer">✕</span>
+              ${thumb ? `<img src="${thumb}" style="width:100%;border-radius:5px;display:block;margin-bottom:5px;background:#000" loading="lazy"/>` : ''}
+              <div style="font-size:10px;color:${C.text};font-weight:700;line-height:1.3;max-height:39px;overflow:hidden">${esc((h.title || '').slice(0, 75))}</div>
+              <div style="margin-top:3px">${badge}</div></div>`;
+        };
+        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💾 Saved hooks <span style="font-size:10px;color:${C.mute};font-weight:600">— ${hooks.length}</span></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">${hooks.map(card).join('')}</div>`, 12);
     }
 
     async function mount(el) {
