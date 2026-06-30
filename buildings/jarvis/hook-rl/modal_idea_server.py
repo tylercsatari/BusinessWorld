@@ -56,8 +56,7 @@ def _download_base():
 # rebuilds only the last cheap layer — it does NOT re-download the 57GB model.
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install("huggingface_hub==0.30.2", "hf_transfer==0.1.8")
-    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
+    .pip_install("huggingface_hub==0.30.2", "hf_xet")   # hf_xet: this repo is Xet-backed
     .run_function(_download_base)   # cached unless BASE or hub version changes
     .pip_install(
         "torch==2.5.1", "transformers==4.51.3", "peft==0.16.0", "accelerate==1.1.1",
