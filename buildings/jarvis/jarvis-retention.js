@@ -809,9 +809,8 @@ const JarvisRetention = (function () {
     function expGenSubmit() {
         const inp = window.document.getElementById('exp-gen-input');
         const prem = inp ? inp.value.trim() : (st.expGenPrem || '');
-        if (!prem) return;
         st.expGenPrem = prem; st.expGenBusy = true; st.expGenRid = null; st.expGenStage = 'queued';
-        fetch('/api/hooks/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, count: st.expGenN || 4 }) })
+        fetch('/api/hooks/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, count: st.expGenN || 4, invent: !prem }) })
             .then(r => r.json()).then(j => { if (j.rid) { st.expGenRid = j.rid; rtgUpdateExp(); expDemoPoll(j.rid); } else { st.expGenBusy = false; rtgUpdateExp(); } })
             .catch(() => { st.expGenBusy = false; rtgUpdateExp(); });
         rtgUpdateExp();
@@ -841,7 +840,7 @@ const JarvisRetention = (function () {
         return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
           <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate hooks from an idea <span style="font-size:10px;color:${C.mute};font-weight:600">— the model reasons up hooks for ANY idea, renders + scores each on keep-rate.</span></div>
           <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
-            <input id="exp-gen-input" value="${esc(st.expGenPrem || '')}" placeholder="any video idea — e.g. promote a fountain pen, a car review, a cooking short…" style="flex:1;min-width:240px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px"/>
+            <input id="exp-gen-input" value="${esc(st.expGenPrem || '')}" placeholder="type a video idea — or leave blank and the model invents one…" style="flex:1;min-width:240px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px"/>
             <span style="font-size:10px;color:${C.mute}">outputs</span>${[1, 2, 4, 6, 8].map(nPill).join('')}
             <span data-expgen style="cursor:${st.expGenBusy ? 'default' : 'pointer'};background:${st.expGenBusy ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800;display:inline-flex;align-items:center">${st.expGenBusy ? '⏳ working…' : 'Generate'}</span>
           </div>${result}</div>`;
@@ -1105,8 +1104,7 @@ const JarvisRetention = (function () {
         const ldur = col('log_dur'), out = { n: pts.length };
         ['keep', 'retention', 'ret5'].forEach(k => { const a = col(k); out[k] = { raw: spear(a, lv), dec: partial(a, lv, [ldur]) }; });
         out.log_dur = { raw: spear(ldur, lv), dec: partial(ldur, lv, [col('keep'), col('retention')]) };
-        out._raw = { ret: col('retention'), lv: lv, ldur: ldur, dur: pts.map(p => p.dur) };
-        out._resid = { ret: resid(col('retention'), ldur), lv: resid(lv, ldur), retFitBy: (() => { const a = col('retention'); const mx = ldur.reduce((s, v) => s + v, 0) / ldur.length, my = a.reduce((s, v) => s + v, 0) / a.length; let sxy = 0, sxx = 0; for (let i = 0; i < a.length; i++) { sxy += (ldur[i] - mx) * (a[i] - my); sxx += (ldur[i] - mx) ** 2; } const b = sxx ? sxy / sxx : 0; return { b, mx, my }; })(), lvFitBy: (() => { const a = lv; const mx = ldur.reduce((s, v) => s + v, 0) / ldur.length, my = a.reduce((s, v) => s + v, 0) / a.length; let sxy = 0, sxx = 0; for (let i = 0; i < a.length; i++) { sxy += (ldur[i] - mx) * (a[i] - my); sxx += (ldur[i] - mx) ** 2; } const b = sxx ? sxy / sxx : 0; return { b, mx, my }; })() };
+        out._raw = { keep: col('keep'), retention: col('retention'), ret5: col('ret5'), lv: lv, ldur: ldur, dur: pts.map(p => p.dur), residOn: (a) => resid(a, ldur) };
         return out;
     }
     function confoundPanel() {
@@ -1119,27 +1117,34 @@ const JarvisRetention = (function () {
         const DR = [['keep', 'Keep', C.cyan], ['retention', 'Retention', C.green], ['ret5', '5-sec ret', C.purple], ['log_dur', 'Duration', C.yellow]];
         const cell = o => { if (!o) return `<td style="text-align:center;color:${C.faint}">—</td>`; const flip = (o.raw < 0) !== (o.dec < 0) && Math.abs(o.raw) > 0.08 && Math.abs(o.dec) > 0.08; const sg = v => (v >= 0 ? '+' : '') + v.toFixed(2); return `<td style="text-align:center;padding:3px 8px;${flip ? 'background:' + C.amber + '22;border-radius:5px' : ''}"><span style="color:${o.raw < 0 ? '#60a5fa' : C.dim};font-size:10px">${sg(o.raw)}</span> <span style="color:${C.mute}">→</span> <span style="color:${o.dec >= 0.15 ? C.green : o.dec < -0.05 ? '#60a5fa' : C.text};font-weight:700">${sg(o.dec)}</span>${flip ? ' ⚑' : ''}</td>`; };
         const xrows = (CHDECON && CHDECON.length) ? CHDECON.map(c => `<tr><td style="color:${C.text};white-space:nowrap;padding-right:8px;font-weight:700">${esc(c.name)} <span style="color:${C.mute};font-weight:400;font-size:9px">n=${c.d.n}</span></td>${DR.map(([k]) => cell(c.d[k])).join('')}</tr>`).join('') : `<tr><td colspan="5" style="color:${C.mute};font-size:10px;padding:6px">computing across channels…</td></tr>`;
-        // ── the actual mechanism, visualised: HOW duration is removed (residualisation) ──
-        const rr = cur._raw, res = cur._resid, mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+        // ── the actual mechanism, visualised for ANY metric: HOW duration is removed ──
+        const rr = cur._raw, mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+        const METR = { keep: ['Keep rate', C.cyan], retention: ['Avg retention', C.green], ret5: ['5-sec retention', C.purple] };
+        const isConf = o => o && (((o.raw < 0) !== (o.dec < 0) && Math.abs(o.raw) > 0.08 && Math.abs(o.dec) > 0.08) || Math.abs(o.raw - o.dec) > 0.13);
+        const m = (st.deconMetric && METR[st.deconMetric]) ? st.deconMetric : 'retention', mLab = METR[m][0], mCol = METR[m][1], o = cur[m];
+        const mPills = Object.keys(METR).map(k => `<span data-deconmetric="${k}" style="cursor:pointer;border:1px solid ${m === k ? METR[k][1] : C.border};background:${m === k ? METR[k][1] + '22' : 'transparent'};color:${m === k ? METR[k][1] : C.dim};border-radius:7px;padding:4px 11px;font-size:11px;font-weight:700">${METR[k][0]} ${isConf(cur[k]) ? '<span style="color:' + C.amber + '" title="confounded by duration">⚑</span>' : '<span style="color:' + C.green + '" title="clean">✓</span>'}</span>`).join('');
         const mini = (xs, ys, title, xlab, opt) => { opt = opt || {}; const Wm = 200, Hm = 120, pd = 16;
             const xmn = Math.min(...xs), xmx = Math.max(...xs), ymn = Math.min(...ys), ymx = Math.max(...ys);
             const X = v => pd + (v - xmn) / ((xmx - xmn) || 1) * (Wm - 2 * pd), Y = v => Hm - pd - (v - ymn) / ((ymx - ymn) || 1) * (Hm - 2 * pd);
             let dots = ''; for (let i = 0; i < xs.length; i++) dots += `<circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(ys[i]).toFixed(1)}" r="2" fill="${opt.color ? opt.color(i) : C.green}" opacity="0.6"/>`;
-            let line = ''; if (opt.fit !== false) { const f = opt.fitBy || (() => { const mx = mean(xs), my = mean(ys); let sxy = 0, sxx = 0; for (let i = 0; i < xs.length; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; } return { b: sxx ? sxy / sxx : 0, mx, my }; })(); line = `<line x1="${X(xmn).toFixed(1)}" y1="${Y(f.my + f.b * (xmn - f.mx)).toFixed(1)}" x2="${X(xmx).toFixed(1)}" y2="${Y(f.my + f.b * (xmx - f.mx)).toFixed(1)}" stroke="${opt.lineColor || '#fff'}" stroke-width="1.6" stroke-dasharray="4 3"/>`; }
+            let line = ''; if (opt.fit !== false) { const mx = mean(xs), my = mean(ys); let sxy = 0, sxx = 0; for (let i = 0; i < xs.length; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; } const b = sxx ? sxy / sxx : 0; line = `<line x1="${X(xmn).toFixed(1)}" y1="${Y(my + b * (xmn - mx)).toFixed(1)}" x2="${X(xmx).toFixed(1)}" y2="${Y(my + b * (xmx - mx)).toFixed(1)}" stroke="${opt.lineColor || '#fff'}" stroke-width="1.6" stroke-dasharray="4 3"/>`; }
             return `<div style="text-align:center"><div style="font-size:9px;color:${C.text};font-weight:700;height:24px;line-height:1.15">${title}</div><svg viewBox="0 0 ${Wm} ${Hm}" style="width:100%;background:${C.card2};border-radius:6px">${dots}${line}</svg><div style="font-size:8px;color:${C.faint};margin-top:1px">${xlab}</div></div>`; };
-        const dmn = Math.min(...rr.ldur), dmx = Math.max(...rr.ldur), durCol = i => rawRamp((rr.ldur[i] - dmn) / ((dmx - dmn) || 1));
+        const mArr = rr[m], mResid = rr.residOn(mArr), lvResid = rr.residOn(rr.lv);
+        const dmn = Math.min(...rr.ldur), dmx = Math.max(...rr.ldur), durCol = i => rawRamp((rr.ldur[i] - dmn) / ((dmx - dmn) || 1)), low = mLab.toLowerCase();
         const pipeline = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:6px">
-            ${mini(rr.ret, rr.lv, '① RAW: retention → views<br><span style="color:' + C.faint + ';font-weight:400">colour = duration</span>', 'retention %', { color: durCol, fit: false })}
-            ${mini(rr.dur, rr.ret, '② fit retention ~ duration<br><span style="color:' + C.yellow + ';font-weight:400">subtract this line</span>', 'duration (s)', { lineColor: C.yellow })}
+            ${mini(mArr, rr.lv, '① RAW: ' + low + ' → views<br><span style="color:' + C.faint + ';font-weight:400">colour = duration</span>', low + ' (colour=duration)', { color: durCol, fit: false })}
+            ${mini(rr.dur, mArr, '② fit ' + low + ' ~ duration<br><span style="color:' + C.yellow + ';font-weight:400">subtract this line</span>', 'duration (s)', { lineColor: C.yellow })}
             ${mini(rr.dur, rr.lv, '③ fit views ~ duration<br><span style="color:' + C.yellow + ';font-weight:400">subtract this line</span>', 'duration (s)', { lineColor: C.yellow })}
-            ${mini(res.ret, res.lv, '④ what remains = true link<br><span style="color:' + C.green + ';font-weight:400">duration removed</span>', 'retention (residual)', { color: () => C.green, lineColor: C.green })}</div>`;
+            ${mini(mResid, lvResid, '④ what remains = true link<br><span style="color:' + mCol + ';font-weight:400">duration removed</span>', low + ' (residual)', { color: () => mCol, lineColor: mCol })}</div>`;
+        const verb = (o.raw < 0) !== (o.dec < 0) && Math.abs(o.raw) > 0.05 ? 'The raw sign was <b>backwards</b> — duration was the whole story.' : Math.abs(o.dec) > Math.abs(o.raw) + 0.08 ? 'Duration was <b>hiding</b> a stronger effect.' : Math.abs(o.raw - o.dec) < 0.08 ? 'Barely changes — this metric is <b>clean</b> (not confounded by duration).' : 'Duration shifts it modestly.';
         return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">Deconfounded — raw vs controlling for duration</div>
-            <div style="font-size:10px;color:${C.mute};margin-bottom:8px">Spearman (rank → robust to outliers/leverage). <b>raw → deconfounded</b> per channel; ⚑ <span style="background:${C.amber}22;padding:0 4px;border-radius:4px">sign flips</span> once duration is removed = a pure confound.</div>
+            <div style="font-size:10px;color:${C.mute};margin-bottom:8px">Spearman (rank → robust to outliers/leverage). <b>raw → deconfounded</b> per channel; ⚑ <span style="background:${C.amber}22;padding:0 4px;border-radius:4px">sign flips / big change</span> once duration is removed = a confound; ✓ = clean.</div>
             <table style="border-collapse:separate;border-spacing:2px;font-size:10px;width:100%;margin-bottom:12px"><tr><td></td>${DR.map(([, l, c]) => `<td style="color:${c};text-transform:uppercase;text-align:center;font-size:9px;font-weight:700">${l}</td>`).join('')}</tr>${xrows}</table>
-            <div style="font-size:11px;font-weight:700;color:${C.text};margin-bottom:2px">How "duration removed" actually works — ${esc(chName)}</div>
-            <div style="font-size:9.5px;color:${C.mute};margin-bottom:2px;line-height:1.5">In ① short videos (<span style="color:${rawRamp(0)}">cool</span>) cluster at high-retention/low-views — that's the confound. We fit duration→retention ② and duration→views ③ (the yellow lines = the part duration alone explains), <b>subtract</b> both, and what survives ④ is the relationship with duration gone.</div>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap"><span style="font-size:10px;color:${C.mute};text-transform:uppercase;font-weight:700">visualise:</span>${mPills}</div>
+            <div style="font-size:11px;font-weight:700;color:${C.text};margin-bottom:2px">How "duration removed" works — ${esc(chName)} · ${mLab}</div>
+            <div style="font-size:9.5px;color:${C.mute};margin-bottom:2px;line-height:1.5">① ${low} → views, dots <b>coloured by duration</b> (<span style="color:${rawRamp(0)}">short</span>→<span style="color:${rawRamp(1)}">long</span>). We fit ${low}~duration ② and views~duration ③ (yellow = the part duration alone explains), <b>subtract</b> both, and ④ is what survives — ${low} vs views with duration gone.</div>
             ${pipeline}
-            <div style="font-size:10px;color:${C.mute};margin-top:8px;line-height:1.6">Result: retention→views goes from a misleading raw <b style="color:${cur.retention.raw < 0 ? '#60a5fa' : C.dim}">${(cur.retention.raw >= 0 ? '+' : '') + cur.retention.raw.toFixed(2)}</b> to the true <b style="color:${cur.retention.dec >= 0 ? C.green : '#60a5fa'}">${(cur.retention.dec >= 0 ? '+' : '') + cur.retention.dec.toFixed(2)}</b> in ④. ${(cur.retention.raw < 0) !== (cur.retention.dec < 0) ? 'The raw sign was <b>backwards</b> — duration was the whole story.' : 'Duration ' + (Math.abs(cur.retention.dec) > Math.abs(cur.retention.raw) ? 'was <b>hiding</b> a stronger effect.' : 'shifts it modestly.')} This is the partial the predictor uses when Duration is in the model.</div>`, 12);
+            <div style="font-size:10px;color:${C.mute};margin-top:8px;line-height:1.6">${mLab}→views: raw <b style="color:${o.raw < 0 ? '#60a5fa' : C.dim}">${(o.raw >= 0 ? '+' : '') + o.raw.toFixed(2)}</b> → deconfounded <b style="color:${o.dec >= 0.15 ? C.green : o.dec < -0.05 ? '#60a5fa' : C.text}">${(o.dec >= 0 ? '+' : '') + o.dec.toFixed(2)}</b> in ④. ${verb} The predictor uses this partial whenever Duration is in the model.</div>`, 12);
     }
     function renderQ1() {
         const Q = S.Q1, cv = Q.cv_r2;
@@ -2429,6 +2434,7 @@ const JarvisRetention = (function () {
         const nv = e.target.closest('[data-nov]'); if (nv) { st.nov = nv.getAttribute('data-nov'); render(); return; }
         const chBtn = e.target.closest('[data-chan]'); if (chBtn) { loadChannel(chBtn.getAttribute('data-chan')); return; }
         if (e.target.closest('[data-chanadd]')) { st.channelHelp = !st.channelHelp; render(); return; }
+        const dcm = e.target.closest('[data-deconmetric]'); if (dcm) { st.deconMetric = dcm.getAttribute('data-deconmetric'); render(); return; }
         const nqm = e.target.closest('[data-nqmod]'); if (nqm) { st.nqMod = nqm.getAttribute('data-nqmod'); render(); return; }
         const nqt = e.target.closest('[data-nqmeth]'); if (nqt) { st.nqMeth = nqt.getAttribute('data-nqmeth'); render(); return; }
         const pp = e.target.closest('[data-principle]'); if (pp) { st.principle = pp.getAttribute('data-principle'); render(); return; }

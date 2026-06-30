@@ -3106,10 +3106,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         try {
             const body = JSON.parse((await readBody(req)) || '{}');
             const premise = String(body.premise || '').trim().slice(0, 400);
-            if (!premise) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'premise required' })); return; }
+            const invent = !!body.invent || !premise;
+            if (!premise && !invent) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'premise required' })); return; }
             const count = Math.max(1, Math.min(parseInt(body.count) || 4, 8));
             const rid = 'req' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-            await cloud.uploadToR2(`hooks/grpo/requests/${rid}.json`, Buffer.from(JSON.stringify({ premise, count, ts: Date.now() })), 'application/json');
+            await cloud.uploadToR2(`hooks/grpo/requests/${rid}.json`, Buffer.from(JSON.stringify({ premise, count, invent, ts: Date.now() })), 'application/json');
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ rid, premise, count }));   // poll status + group/demo/<rid> for the result
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }

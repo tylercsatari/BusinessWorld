@@ -94,11 +94,16 @@ def serve_requests():
             try: req = json.loads(H.s3.get_object(Bucket=H.BUCKET, Key=key)["Body"].read())
             except Exception: req = {}
             prem = (req.get("premise") or "").strip(); n = max(1, min(int(req.get("count", 4)), 8))
+            invent = bool(req.get("invent")) or not prem
             H.s3.delete_object(Bucket=H.BUCKET, Key=key)
-            if not prem: continue
-            print("[demo] %s x%d: %s" % (rid, n, prem[:50]), flush=True)
-            _stat(rid, stage="reasoning", premise=prem)
-            specs = gen_hooks_for(prem, n)
+            print("[demo] %s x%d invent=%s: %s" % (rid, n, invent, prem[:50]), flush=True)
+            _stat(rid, stage="reasoning", premise=prem or "(inventing an idea…)")
+            if invent:
+                invented = gen(n)                       # model dreams up idea+hook
+                specs = [{"cohesion_mode": c["cohesion_mode"], "frames": c["frames"], "reasoning": c["reasoning"], "premise": c["premise"]} for c in invented]
+                prem = prem or "💡 invented by the model"
+            else:
+                specs = gen_hooks_for(prem, n)
             _stat(rid, stage="rendering", premise=prem, n=len(specs))
             with ThreadPoolExecutor(max_workers=8) as ex:
                 sc = [r for r in ex.map(score, specs) if r]
@@ -108,7 +113,7 @@ def serve_requests():
                 H.s3.put_object(Bucket=H.BUCKET, Key=mk, Body=s["mont"], ContentType="image/jpeg")
                 att.append({"k": k, "reasoning": s["reasoning"][:2000], "cohesion_mode": s["cohesion_mode"], "frames": s["frames"],
                     "montage_key": mk, "keep_pctile": round(s["keep_pctile"], 4), "relevance": None, "nn_cos": round(s["nn_cos"], 4),
-                    "reward": round(s["keep_pctile"], 4), "advantage": 0, "caption": prem, "x": s["x"], "y": s["y"], "nbr": s["nbr"]})
+                    "reward": round(s["keep_pctile"], 4), "advantage": 0, "caption": s.get("premise", prem), "x": s["x"], "y": s["y"], "nbr": s["nbr"]})
             H.s3.put_object(Bucket=H.BUCKET, Key="hooks/grpo/demo/groups/%s.json" % rid, Body=json.dumps({
                 "input_id": rid, "premise": prem, "n": len(att), "best_keep": att[0]["keep_pctile"] if att else 0,
                 "group_mean": 0, "best_reward": 0, "spread": 0, "model": os.path.basename(MODEL.rstrip("/")), "attempts": att}).encode(),
