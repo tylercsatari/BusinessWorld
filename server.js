@@ -8881,18 +8881,23 @@ async function hookModelGenerate(premise, invent, count) {
     // Modal hands off long calls (cold start / generation > ~150s) via a 303 to a
     // ?__modal_function_call_id=… URL. POST, then GET-poll that URL through repeated
     // 303s until the result is ready. We run in the background queue, so minutes is fine.
-    const deadline = Date.now() + 9 * 60 * 1000;   // up to 9 min (covers 57GB cold start)
+    const deadline = Date.now() + 9 * 60 * 1000;   // up to 9 min (covers cold start)
     let r = await fetchT(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, redirect: 'manual',
         body: JSON.stringify({ premise, invent, count, token })
     }, 165000);
-    let hops = 0;
-    while ((r.status === 303 || r.status === 302 || r.status === 307) && Date.now() < deadline && hops < 60) {
+    // If Modal handed off (call > ~150s), grab the call-id poll URL ONCE and re-GET that
+    // SAME url until done. Do NOT chase each 303's Location — a while-running 303 can point
+    // back at the POST-only base url, and GET-ing that returns 405.
+    let pollUrl = null;
+    if (r.status === 303 || r.status === 302 || r.status === 307) {
         const loc = r.headers.get('location');
-        if (!loc) break;
-        const next = loc.startsWith('http') ? loc : new URL(loc, url).href;
+        pollUrl = loc ? (loc.startsWith('http') ? loc : new URL(loc, url).href) : null;
+    }
+    let hops = 0;
+    while (pollUrl && r.status !== 200 && Date.now() < deadline && hops < 80) {
         await new Promise(res => setTimeout(res, 1500));   // gentle pacing between long-poll hops
-        r = await fetchT(next, { method: 'GET', redirect: 'manual' }, 165000);
+        r = await fetchT(pollUrl, { method: 'GET', redirect: 'manual' }, 165000);
         hops++;
     }
     if (r.status !== 200) throw new Error('model endpoint http ' + r.status + (Date.now() >= deadline ? ' (timed out waiting for GPU)' : ''));
