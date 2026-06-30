@@ -3109,6 +3109,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const invent = !!body.invent || !premise;
             if (!premise && !invent) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'premise required' })); return; }
             const count = Math.max(1, Math.min(parseInt(body.count) || 4, 8));
+            // rate guard (endpoint is public): cap the pending queue so it can't be spammed into render costs
+            try { const pend = (await cloud.listR2Keys('hooks/grpo/requests/')) || []; if (pend.filter(k => k.endsWith('.json')).length >= 6) { res.writeHead(429, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'busy — a few generations are already queued, try again in a moment' })); return; } } catch (e) {}
             const rid = 'req' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
             await cloud.uploadToR2(`hooks/grpo/requests/${rid}.json`, Buffer.from(JSON.stringify({ premise, count, invent, ts: Date.now() })), 'application/json');
             res.writeHead(200, { 'Content-Type': 'application/json' });
