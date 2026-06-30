@@ -5,9 +5,10 @@
 const StorageService = (() => {
     let boxes = [];
     let items = [];
-    // Data source: R2 by default (fast, the new stuff); "Old Version" reads Airtable.
-    let DataLayer = (typeof StorageR2 !== 'undefined') ? StorageR2 : StorageAirtable;
-    let _source = (typeof StorageR2 !== 'undefined') ? 'r2' : 'airtable';
+    // Storage is R2-ONLY — the new version is the single source of truth. The legacy
+    // Airtable path has been retired, so nothing ever reads or writes the old data.
+    let DataLayer = StorageR2;
+    let _source = 'r2';
 
     // --- Box resolution (fuzzy matching with number word ↔ digit normalization) ---
     function findBoxByName(name) {
@@ -73,6 +74,19 @@ const StorageService = (() => {
         return item || null;
     }
 
+    // Direct search over the live R2 items (canonical match + substring both ways).
+    // This is the authoritative source so recall never depends on the vector index.
+    function localSearchR2(name) {
+        const q = (name || '').toLowerCase().trim();
+        if (!q) return [];
+        const canon = StorageCanonicalize.normalizeToSingular(name);
+        return items.filter(i => {
+            const iName = (i.name || '').toLowerCase();
+            const iCanon = StorageCanonicalize.normalizeToSingular(i.name);
+            return iCanon === canon || iName.includes(q) || q.includes(iName);
+        });
+    }
+
     return {
         getBoxes() { return boxes; },
         getItems() { return items; },
@@ -85,10 +99,11 @@ const StorageService = (() => {
 
         getSource() { return _source; },
 
-        // Switch between the new R2 store and the legacy Airtable ("Old Version").
-        async setSource(src) {
-            _source = (src === 'airtable') ? 'airtable' : 'r2';
-            DataLayer = (_source === 'airtable') ? StorageAirtable : StorageR2;
+        // Retired: storage is R2-only now. Kept as a no-op (always R2) so any old
+        // caller can't route reads/writes back to the legacy Airtable data.
+        async setSource() {
+            _source = 'r2';
+            DataLayer = StorageR2;
             return this.sync();
         },
 
@@ -278,39 +293,40 @@ const StorageService = (() => {
          * Returns { results, suggestions }
          */
         async findItem(name) {
+            // Answers must reflect ONLY the new R2 data. The vector index is used purely
+            // to rank/recall; every hit is then reconciled against the live R2 items, and
+            // anything that isn't a current R2 record is dropped — so a question never
+            // surfaces old/stale data that only exists in the legacy index.
+            const byId = new Map();
+            const add = (storeItem, score) => {
+                if (!storeItem) return;
+                const prev = byId.get(storeItem.id);
+                if (prev && prev.score >= score) return;
+                byId.set(storeItem.id, {
+                    name: storeItem.name,
+                    quantity: storeItem.quantity,
+                    box: getBoxName(storeItem),
+                    score
+                });
+            };
+            // 1) Semantic recall — keep only matches that resolve to a real R2 item.
             try {
-                // Get all matches above threshold
                 const allMatches = await StorageEmbeddings.findAllAboveThreshold(name, 10);
-                if (allMatches.length > 0) {
-                    const results = allMatches.map(m => {
-                        const storeItem = resolveSemanticToStoreItem(m);
-                        return {
-                            name: storeItem ? storeItem.name : m.name,
-                            quantity: storeItem ? storeItem.quantity : '?',
-                            box: m.boxName || (storeItem ? getBoxName(storeItem) : '?'),
-                            score: m.score
-                        };
-                    });
-                    return { results, suggestions: [] };
-                }
+                for (const m of allMatches) add(resolveSemanticToStoreItem(m), m.score);
+            } catch (e) { /* vector search is optional; the R2 search below still answers */ }
+            // 2) Always also search the R2 items directly, so recall doesn't depend on
+            //    the index being in sync.
+            for (const it of localSearchR2(name)) add(it, 1.0);
 
-                // Below threshold — show suggestions
-                const { suggestions } = await StorageEmbeddings.findBestMatch(name);
-                return { results: [], suggestions };
-            } catch (e) {
-                // Fallback to text search
-                const n = name.toLowerCase();
-                const textMatches = items.filter(i => i.name.toLowerCase().includes(n));
-                return {
-                    results: textMatches.map(m => ({
-                        name: m.name,
-                        quantity: m.quantity,
-                        box: getBoxName(m),
-                        score: 1.0
-                    })),
-                    suggestions: []
-                };
-            }
+            const results = [...byId.values()].sort((a, b) => b.score - a.score);
+            if (results.length) return { results, suggestions: [] };
+
+            // Nothing in R2 — suggest near-name R2 items only (no legacy index data).
+            const q = (name || '').toLowerCase().slice(0, 3);
+            const suggestions = q
+                ? items.map(i => i.name).filter(n => n.toLowerCase().includes(q)).slice(0, 5)
+                : [];
+            return { results: [], suggestions };
         },
 
         /**

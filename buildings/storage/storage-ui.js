@@ -117,7 +117,6 @@ const StorageUI = (() => {
                         <button onclick="StorageUI.onRemoveBox()">- Remove Box</button>
                         <button class="sync-btn" onclick="StorageUI.onSync()">Sync</button>
                         <button class="sync-btn" onclick="StorageUI.onToggleHistory()">History</button>
-                        <button class="sync-btn" id="storage-source-btn" onclick="StorageUI.onToggleSource()" title="The new storage lives on R2 (fast). Old Version pulls your previous Airtable data.">Old Version</button>
                     </div>
                     <div class="storage-boxes-grid" id="storage-boxes-grid">
                         <div class="storage-loading"><div class="storage-spinner"></div></div>
@@ -1044,27 +1043,16 @@ const StorageUI = (() => {
                 await StorageService.sync();
                 renderBoxes();
                 updateStats();
-                addChatMsg(StorageService.getSource() === 'airtable' ? 'Synced with the old (Airtable) version.' : 'Synced.', 'system');
+                addChatMsg('Synced.', 'system');
             } catch (e) {
                 addChatMsg(`Sync error: ${e.message}`, 'error');
             }
         },
 
-        // Toggle between the new R2 store and the legacy Airtable data.
-        async onToggleSource() {
-            const next = StorageService.getSource() === 'r2' ? 'airtable' : 'r2';
-            const grid = document.getElementById('storage-boxes-grid');
-            if (grid) grid.innerHTML = '<div class="storage-loading"><div class="storage-spinner"></div></div>';
-            addChatMsg(next === 'airtable' ? 'Loading your OLD storage (Airtable)…' : 'Back to the new storage (R2)…', 'system');
-            try {
-                await StorageService.setSource(next);
-                renderBoxes();
-                updateStats();
-                const btn = document.getElementById('storage-source-btn');
-                if (btn) btn.textContent = next === 'airtable' ? 'New Version' : 'Old Version';
-            } catch (e) {
-                addChatMsg(`Could not switch version: ${e.message}`, 'error');
-            }
+        // Retired: storage is R2-only now. Kept as a harmless stub in case any cached
+        // page still calls it — it never switches back to the old Airtable data.
+        onToggleSource() {
+            addChatMsg('Storage now uses the new R2 version only.', 'system');
         },
 
         onToggleHistory() {
