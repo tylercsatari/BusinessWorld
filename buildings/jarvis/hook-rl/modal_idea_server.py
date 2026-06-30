@@ -5,34 +5,23 @@ Pay-per-use, scale-to-zero: the GPU spins up on a request, generates, and spins
 back to zero after `scaledown_window`. You are billed only for the seconds it runs
 — never for idle time. NO Gemini, no fallback: this IS the fine-tune.
 
-It loads base Qwen3-30B-A3B + the idea_r5 LoRA (from R2) and reproduces the EXACT
-generation used in training (idea_train.py): same SYS / HOOK_SYS prompts,
+Loads base Qwen3-30B-A3B (baked into the image at build time → no runtime download,
+no partial-download races) + the idea_r5 LoRA (pulled tiny from R2), and reproduces
+the EXACT generation used in training (idea_train.py): same SYS / HOOK_SYS prompts,
 enable_thinking, temperatures, and JSON parse.
 
 ────────────────────────────────────────────────────────────────────────────
-ONE-TIME SETUP (you run these locally; I wrote all the code):
+DEPLOY (you already created the `hook-r2` secret):
 
-  pip install modal
-  modal token new                      # opens browser, links your Modal account
+  modal deploy buildings/jarvis/hook-rl/modal_idea_server.py
 
-  # R2 creds + a shared auth token, as a Modal secret named "hook-r2".
-  # Pick any long random string for HOOK_MODEL_TOKEN — you'll paste the same one
-  # into Render env later so only our server can call this endpoint.
-  modal secret create hook-r2 \
-      R2_ACCOUNT_ID=xxx \
-      R2_ACCESS_KEY_ID=xxx \
-      R2_SECRET_ACCESS_KEY=xxx \
-      R2_BUCKET_NAME=business-world-videos \
-      HOOK_MODEL_TOKEN=<pick-a-long-random-string>
+  The build downloads the 57GB base ONCE into the image (slow once, ~minutes).
+  After that, cold start just loads image→GPU (~1-2 min) and warm calls are fast.
+  Endpoint URL:  https://tylercsatari--hook-idea-model-model-generate.modal.run
 
-  modal deploy modal_idea_server.py    # prints a URL like
-                                        #   https://<you>--hook-idea-model-generate.modal.run
-  # First call downloads the 57GB base into a cached Volume (slow once, ~minutes);
-  # after that, cold start is ~30-60s and warm calls are fast.
-
-Then tell me the URL + the token and I'll wire them into Render:
-  HOOK_MODEL_URL   = the printed .modal.run URL
-  HOOK_MODEL_TOKEN = the same random string
+Calls that exceed Modal's ~150s sync window return HTTP 303 with a
+`?__modal_function_call_id=…` Location — GET that URL to fetch the result (our
+server does this automatically). Env HOOK_MODEL_URL / HOOK_MODEL_TOKEN on Render.
 ────────────────────────────────────────────────────────────────────────────
 """
 import os, re, json, modal
@@ -40,7 +29,8 @@ import os, re, json, modal
 APP = "hook-idea-model"
 BASE = "Qwen/Qwen3-30B-A3B"          # open base; idea_r5 is a LoRA on top of this
 ADAPTER_KEY = os.environ.get("ADAPTER", "idea_r5")   # which R2 LoRA round to serve
-CACHE = "/cache"
+BASE_DIR = "/models/base"            # baked into the image at build time
+ADAPTER_DIR = "/tmp/adapter"         # pulled from R2 at cold start (tiny)
 
 # Same prompts the model was trained with (idea_train.py). Do not change — the
 # fine-tune learned to answer THESE exact system messages.
@@ -54,15 +44,22 @@ HOOK_SYS = ("Design the opening 5 seconds of this short video as 5 still frames 
             '{"cohesion_mode":"same_scene|progression|multi_shot|reveal|contrast","frames":["photographic prompt", x5]}. '
             "Each frame: concrete, photorealistic, vertical 9:16, no on-screen text.")
 
+
+def _download_base():
+    """Runs at IMAGE BUILD time: bake the full base snapshot into the image layer."""
+    from huggingface_hub import snapshot_download
+    snapshot_download(BASE, local_dir=BASE_DIR)
+
+
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
         "torch==2.5.1", "transformers==4.51.3", "peft==0.13.2", "accelerate==1.1.1",
         "boto3==1.35.0", "huggingface_hub==0.30.2", "fastapi[standard]==0.115.5",
     )
+    .run_function(_download_base)   # full, complete download once at build → no runtime races
 )
 app = modal.App(APP)
-vol = modal.Volume.from_name("hook-model-cache", create_if_missing=True)
 
 
 def _split(txt):
@@ -81,9 +78,8 @@ def _split(txt):
 @app.cls(
     gpu="H100",
     image=image,
-    volumes={CACHE: vol},
     secrets=[modal.Secret.from_name("hook-r2")],
-    scaledown_window=120,   # spin down 2 min after the last call → no idle billing
+    scaledown_window=300,   # stay warm 5 min after the last call (fast repeat clicks), then → zero
     timeout=600,
     max_containers=1,       # one GPU is plenty; caps spend
 )
@@ -91,21 +87,11 @@ class Model:
     @modal.enter()
     def load(self):
         import torch, boto3
-        from huggingface_hub import snapshot_download
         from transformers import AutoTokenizer, AutoModelForCausalLM
         from peft import PeftModel
 
-        base_dir = os.path.join(CACHE, "base")
-        adapter_dir = os.path.join(CACHE, ADAPTER_KEY)
-
-        # 1) base weights → cached in the Volume (downloaded once, ever)
-        if not os.path.isdir(base_dir) or not os.listdir(base_dir):
-            print("downloading base", BASE, "→ volume (one-time)…", flush=True)
-            snapshot_download(BASE, local_dir=base_dir, ignore_patterns=["*.pt", "*.bin.index.json.tmp"])
-            vol.commit()
-
-        # 2) idea_r5 LoRA adapter ← R2 (tiny; refresh each cold start so swaps take effect)
-        os.makedirs(adapter_dir, exist_ok=True)
+        # idea_r5 LoRA adapter ← R2 (tiny; pulled fresh each cold start so swaps take effect)
+        os.makedirs(ADAPTER_DIR, exist_ok=True)
         s3 = boto3.client(
             "s3",
             endpoint_url="https://%s.r2.cloudflarestorage.com" % os.environ["R2_ACCOUNT_ID"],
@@ -117,15 +103,15 @@ class Model:
         for obj in s3.list_objects_v2(Bucket=bucket, Prefix="hooks/models/%s/" % ADAPTER_KEY).get("Contents", []):
             name = obj["Key"].split("/")[-1]
             if name:
-                s3.download_file(bucket, obj["Key"], os.path.join(adapter_dir, name))
+                s3.download_file(bucket, obj["Key"], os.path.join(ADAPTER_DIR, name))
         print("adapter", ADAPTER_KEY, "ready", flush=True)
 
-        self.tok = AutoTokenizer.from_pretrained(base_dir)
+        self.tok = AutoTokenizer.from_pretrained(BASE_DIR)
         if self.tok.pad_token is None:
             self.tok.pad_token = self.tok.eos_token
         self.tok.padding_side = "left"
-        model = AutoModelForCausalLM.from_pretrained(base_dir, torch_dtype=torch.bfloat16, device_map="cuda")
-        model = PeftModel.from_pretrained(model, adapter_dir)
+        model = AutoModelForCausalLM.from_pretrained(BASE_DIR, torch_dtype=torch.bfloat16, device_map="cuda")
+        model = PeftModel.from_pretrained(model, ADAPTER_DIR)
         model.config.output_router_logits = False   # MoE: required for generation
         model.eval()
         self.model = model
