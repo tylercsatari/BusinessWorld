@@ -105,9 +105,12 @@ def hook_inputs(vid, src='lib'):
         mp4, mon, wav = os.path.join(tmp, 'v.mp4'), os.path.join(tmp, 'm.jpg'), os.path.join(tmp, 'a.wav')
         if src == 'owned':
             if OWNED_JITTER: time.sleep(random.uniform(0, OWNED_JITTER))   # gentle pacing so concurrent pulls don't burst → bot wall
-            ck = os.environ.get('RAW_COOKIES_BROWSER')                     # e.g. 'chrome' (Chrome MUST be quit, else cookies rotate-invalid)
-            ckf = os.environ.get('RAW_COOKIES')                            # path to a cookies.txt export — authenticated, doesn't rotate
+            # The DEFAULT 'web' player client is bot-walled ("confirm you're not a bot"); these
+            # alternate clients are NOT — they download cookielessly even when the IP is flagged.
+            pc = os.environ.get('RAW_PLAYER_CLIENT', 'web_safari,mweb,tv_embedded,web_embedded')
+            ck = os.environ.get('RAW_COOKIES_BROWSER'); ckf = os.environ.get('RAW_COOKIES')
             cmd = ['yt-dlp', '--no-playlist', '-q', '--no-warnings', '--merge-output-format', 'mp4',
+                   '--extractor-args', f'youtube:player_client={pc}',
                    '-f', 'bv*[height<=720]+ba/b[height<=720]/best', '-o', mp4]
             if ckf: cmd += ['--cookies', ckf]
             elif ck: cmd += ['--cookies-from-browser', ck]
