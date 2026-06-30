@@ -48,7 +48,11 @@ def env(k):
 KEY = env('GEMINI_API_KEY'); BUCKET = env('R2_BUCKET_NAME') or 'business-world-videos'
 s3 = boto3.client('s3', endpoint_url=f"https://{env('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com",
                   aws_access_key_id=env('R2_ACCESS_KEY_ID'), aws_secret_access_key=env('R2_SECRET_ACCESS_KEY'), region_name='auto')
-DIM, WORKERS, RAW_MAX = 1536, 6, int(os.environ.get('RAW_MAX', '1000000'))  # default: everything stored
+import random
+DIM = 1536
+WORKERS = int(os.environ.get('RAW_WORKERS', '6'))      # lower (e.g. 2) for owned/YouTube downloads to avoid bot-detection bursts
+RAW_MAX = int(os.environ.get('RAW_MAX', '1000000'))    # default: everything stored
+OWNED_JITTER = float(os.environ.get('RAW_OWNED_JITTER', '0'))   # seconds of random pre-download sleep on YouTube pulls (gentle pacing)
 EMB_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent'
 CHANS = ['visual', 'text', 'together']
 
@@ -100,9 +104,12 @@ def hook_inputs(vid, src='lib'):
     try:
         mp4, mon, wav = os.path.join(tmp, 'v.mp4'), os.path.join(tmp, 'm.jpg'), os.path.join(tmp, 'a.wav')
         if src == 'owned':
-            subprocess.run(['yt-dlp', '--no-playlist', '-q', '--no-warnings', '--merge-output-format', 'mp4',
-                            '-f', 'bv*[height<=720]+ba/b[height<=720]/best', '-o', mp4,
-                            f'https://www.youtube.com/watch?v={vid}'], timeout=240)
+            if OWNED_JITTER: time.sleep(random.uniform(0, OWNED_JITTER))   # gentle pacing so concurrent pulls don't burst → bot wall
+            ck = os.environ.get('RAW_COOKIES_BROWSER')                     # e.g. 'chrome' — authenticated pulls bypass the bot wall
+            cmd = ['yt-dlp', '--no-playlist', '-q', '--no-warnings', '--merge-output-format', 'mp4',
+                   '-f', 'bv*[height<=720]+ba/b[height<=720]/best', '-o', mp4]
+            if ck: cmd += ['--cookies-from-browser', ck]
+            subprocess.run(cmd + [f'https://www.youtube.com/watch?v={vid}'], timeout=240)
             if not os.path.exists(mp4):
                 for f in os.listdir(tmp):                      # yt-dlp may append an ext
                     if f.startswith('v.'): mp4 = os.path.join(tmp, f); break
@@ -133,20 +140,38 @@ stored = [{'videoId': v['videoId'], 'views': v.get('views'), 'subs': v.get('subs
           for v in libdb['videos'].values() if v.get('stored') and v.get('videoId')]
 print(f"library: {len(stored)} stored on R2", flush=True)
 
-# ---- load MY videos (the owned set with retention) — same pipeline, mine=True ----
+# ---- load OWNED videos from EVERY account (channels.json) — same pipeline, mine=True, tagged with
+#      the owning account so steered keep/ret5/realviews can later be refit per account. Main = the
+#      committed retention_table.json; every other account = R2 retention/<id>.json. ----
 OWNED = []
 try:
-    rt = json.loads(open(os.path.join(HERE, 'buildings/jarvis/retention-study/retention_table.json')).read())
+    _ch = json.loads((r2_get('retention/channels.json') or b'{"channels":[]}')).get('channels', [])
+except Exception:
+    _ch = []
+if not any(c.get('id') == 'tyler' for c in _ch):
+    _ch = [{'id': 'tyler', 'owner': True, 'name': 'Main'}] + _ch
+seen_owned = set()
+for c in _ch:
+    cid = c.get('id')
+    try:
+        if c.get('owner') or cid == 'tyler':
+            rt = json.loads(open(os.path.join(HERE, 'buildings/jarvis/retention-study/retention_table.json')).read())
+        else:
+            rt = json.loads(r2_get(f'retention/{cid}.json') or b'{"videos":[]}')
+    except Exception as e:
+        print(f'owned[{cid}] load failed:', str(e)[:100], flush=True); continue
+    nadd = 0
     for v in rt.get('videos', []):
-        if v.get('id'):
-            OWNED.append({'videoId': v['id'], 'views': v.get('views'), 'subs': v.get('subs'),
-                          'title': v.get('title'), 'outlier': v.get('outlier'), 'src': 'owned', 'mine': True})
-except Exception as e:
-    print('owned manifest load failed:', str(e)[:120], flush=True)
-libids = {v['videoId'] for v in stored}
+        vid = v.get('id') or v.get('videoId')
+        if not vid or vid in seen_owned: continue
+        seen_owned.add(vid)
+        OWNED.append({'videoId': vid, 'views': v.get('views'), 'subs': v.get('subs'),
+                      'title': v.get('title'), 'outlier': v.get('outlier'), 'src': 'owned', 'mine': True, 'owner': cid})
+        nadd += 1
+    print(f'  owned[{cid}]: {nadd} videos', flush=True)
 mineids = {v['videoId'] for v in OWNED}
 stored = [v for v in stored if v['videoId'] not in mineids] + OWNED   # owned wins (mine=True)
-print(f"my videos: {len(OWNED)} owned · total to consider: {len(stored)}", flush=True)
+print(f"owned: {len(OWNED)} across {len(_ch)} accounts · total to consider: {len(stored)}", flush=True)
 
 # ---- per-channel stores (migrate old raw/embeddings.npz → visual) ----
 store = {c: {'ids': [], 'vecs': [], 'views': [], 'outlier': [], 'subs': [], 'title': [], 'txt': [], 'mine': [], 'silent': []} for c in CHANS}
@@ -223,7 +248,9 @@ def needs(v):
     vid = v['videoId']
     return (vid not in done['visual']) or (vid not in done['together']) or (vid not in have_montage)
 
-todo = [v for v in stored if needs(v)][:RAW_MAX]
+todo = [v for v in stored if needs(v)]
+todo.sort(key=lambda v: not v.get('mine'))   # OWNED (account) videos FIRST — the priority; the library backlog embeds after
+todo = todo[:RAW_MAX]
 lock = threading.Lock(); cnt = [0]; fails = [0]; t0 = time.time()
 print(f"todo: {len(todo)} of {len(stored)} stored need embedding and/or a montage", flush=True)
 
