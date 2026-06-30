@@ -936,7 +936,7 @@ const JarvisRetention = (function () {
                 const durTxt = b && b.dur_s ? (b.dur_assumed ? `assumed ${b.dur_s}s` : `${b.dur_s}s video`) : 'median dur';
                 sub = b ? durTxt : '';
                 const vb = steerBest(up, 'views');
-                foot = `keep+5s-ret+duration → your 211's view model${vb ? ` · library raw: <b>${steerDisp('views', vb.est)}</b>` : ''}`;
+                foot = `keep+5s-ret+<b>duration</b> → your 211's view model <span style="color:${C.green}">(retention deconfounded — held at fixed length)</span>${vb ? ` · library raw: <b>${steerDisp('views', vb.est)}</b>` : ''}`;
             } else {
                 sub = b && b.pctile != null ? `${b.pctile.toFixed(0)}th pctile` : '';
                 const mods = ['together', 'text', 'visual'].map(m => ({ m, k: steerOf(up, m, tn) })).filter(x => x.k);
@@ -1406,6 +1406,13 @@ const JarvisRetention = (function () {
         const intChips = (st.predInts || []).filter(p => { const [a, b] = p.split('×'); return st.predFeats.includes(a) && st.predFeats.includes(b); });
         let h = h2c('⑤ Predict — expected views, your choice of levers', `Model log-views from the inputs + interactions you check; the equation re-fits live by least squares on ${S.meta.n} videos. The math is written out below.`);
         h += cardc(`<div style="font-size:11px;color:${C.mute};margin-bottom:6px">Model views from these inputs:</div><div style="display:flex;gap:6px;flex-wrap:wrap">${chk}</div>${intChips.length ? `<div style="font-size:11px;color:${C.mute};margin:8px 0 4px">+ interactions: ${intChips.map(p => { const [a, b] = p.split('×'); return `<span style="color:${C.purple};font-weight:700">${esc(P.feat_meta[a].label)}×${esc(P.feat_meta[b].label)}</span>`; }).join(', ')}</div>` : ''}`);
+        // DECONFOUNDING, rooted: retention must be measured at fixed length. With Duration in the
+        // model, retention's coefficient is its partial (deconfounded) effect — consistent with the
+        // Views deconfounded panel and the Experiment's predict-scope. Without it, it's confounded.
+        const retSel = st.predFeats.includes('retention') || st.predFeats.includes('ret5'), durSel = st.predFeats.includes('log_dur');
+        h += (retSel && !durSel)
+            ? note(`⚠ <b>Retention is confounded without Duration.</b> Short videos retain better but get fewer views, so retention's coefficient reads artificially low (even negative) when length isn't held fixed. <span data-predfeat="log_dur" style="cursor:pointer;color:${C.cyan};text-decoration:underline;font-weight:700">+ add Duration to deconfound it</span> — this is the same control the Views deconfounded panel and the Experiment use.`, C.amber)
+            : (retSel ? note(`✓ <b>Deconfounded:</b> Duration is in the model, so retention is measured at fixed length — its real effect, consistent everywhere (Views panel · Experiment view-estimate · every channel).`, C.green) : '');
         if (!vb) { h += note('Select at least one input above.', C.orange); return h; }
         const rngMult = P10(1.2816 * vb.resid_sd_log10);
         const sld = s => { const c = SLCOL[s.key] || C.cyan, val = pval(s.key); return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:${c};font-weight:700">${esc(s.label)}</span><span id="pf-${s.key}-val" style="color:${C.text};font-weight:800">${val}${s.unit}</span></div>
@@ -1451,7 +1458,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=115').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=116').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2329,7 +2336,7 @@ const JarvisRetention = (function () {
         st.channel = id;
         // Main (your 211) = the committed static file; every other channel = R2 via the API.
         const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=115')
+            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=116')
             : fetch('/api/retention/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
         try {
             if (id === 'all') {
@@ -2562,7 +2569,7 @@ const JarvisRetention = (function () {
             const base = './buildings/jarvis/retention-study/';
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
-            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=115'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=116'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
             for (let tries = 1; !DATA; tries++) {
                 try {
                     CHANS = await fetch('/api/retention/channels').then(r => r.json()).catch(() => null);
