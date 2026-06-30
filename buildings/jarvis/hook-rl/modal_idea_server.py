@@ -51,7 +51,9 @@ image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install("huggingface_hub==0.30.2", "hf_xet")
     .run_function(_download_base)
-    .pip_install("vllm==0.9.2", "boto3==1.35.0", "fastapi[standard]==0.115.5")
+    # transformers pinned <4.54 — newer ones register 'aimv2', which vllm 0.9.2 also
+    # registers → "already used" import crash. 4.53.x is what vllm 0.9.2 targets.
+    .pip_install("vllm==0.9.2", "transformers==4.53.2", "boto3==1.35.0", "fastapi[standard]==0.115.5")
 )
 app = modal.App(APP)
 
