@@ -1251,9 +1251,30 @@ const JarvisRetention = (function () {
         let ss = 0; for (let r = 0; r < n; r++) { let pr = beta[0]; for (let i = 0; i < k; i++) pr += beta[i + 1] * Xc[i][r]; ss += (y[r] - pr) ** 2; }
         return { coef, intercept: b0, residSd: Math.sqrt(ss / n) };
     }
-    function cvR2(rows, terms) {     // 5-fold out-of-sample R²
+    // The watch-through signals — keep rate, avg retention, 5-sec retention — are the SAME construct
+    // measured three ways; they're collinear. In a plain joint fit, whichever enters first eats the
+    // shared variance and the others' coefficients can drift NEGATIVE — a multicollinearity sign-flip,
+    // NOT a real "more retention → fewer views" effect (the down-slope Tyler caught on Account 2). We
+    // PROVED, deconfounded against duration, that each of these is non-negative. So we encode that as a
+    // hard prior: non-negative least squares on the watch-through features (duration & interactions stay
+    // free), via greedy active-set — drop the most-negative constrained coef to 0, refit, repeat. A
+    // redundant retention then reads exactly 0 (a flat lever, keep already carries its signal) instead
+    // of a false negative; its own positive slope reappears the moment you uncheck the collinear sibling.
+    const NNEG = { keep: 1, retention: 1, ret5: 1 };
+    function olsFit(rows, terms) {
+        let active = terms.slice();
+        for (let it = 0; it <= terms.length; it++) {
+            const m = olsRaw(rows, active);
+            let worst = null, wv = 0;
+            active.forEach(t => { if (NNEG[t.key] && (m.coef[t.key] || 0) < wv) { wv = m.coef[t.key]; worst = t.key; } });
+            if (worst == null) { const coef = {}; terms.forEach(t => coef[t.key] = m.coef[t.key] || 0); return { coef, intercept: m.intercept, residSd: m.residSd }; }
+            active = active.filter(t => t.key !== worst);
+        }
+        const m = olsRaw(rows, active), coef = {}; terms.forEach(t => coef[t.key] = m.coef[t.key] || 0); return { coef, intercept: m.intercept, residSd: m.residSd };
+    }
+    function cvR2(rows, terms) {     // 5-fold out-of-sample R² (same non-negativity prior as the live fit)
         const n = rows.length, oof = new Array(n);
-        for (let f = 0; f < 5; f++) { const tr = rows.filter((_, i) => i % 5 !== f); const m = olsRaw(tr, terms);
+        for (let f = 0; f < 5; f++) { const tr = rows.filter((_, i) => i % 5 !== f); const m = olsFit(tr, terms);
             for (let i = 0; i < n; i++) if (i % 5 === f) { let pr = m.intercept; terms.forEach(t => pr += m.coef[t.key] * t.val(rows[i])); oof[i] = pr; } }
         const y = rows.map(r => r.lv), yb = y.reduce((a, b) => a + b, 0) / n; let ssr = 0, sst = 0;
         for (let i = 0; i < n; i++) { ssr += (y[i] - oof[i]) ** 2; sst += (y[i] - yb) ** 2; }
@@ -1264,7 +1285,7 @@ const JarvisRetention = (function () {
         const rows = pdata(); if (!rows.length) return null;
         const feats = FEAT_ORDER().filter(f => (st.predFeats || ['keep', 'retention', 'log_dur']).includes(f)); if (!feats.length) return null;
         const ints = (st.predInts || []).filter(p => { const [a, b] = p.split('×'); return feats.includes(a) && feats.includes(b); });
-        const terms = termsFor(feats, ints), m = olsRaw(rows, terms), cv = cvR2(rows, terms);
+        const terms = termsFor(feats, ints), m = olsFit(rows, terms), cv = cvR2(rows, terms);
         const sliders = feats.map(f => Object.assign({ key: f }, S.predictor.feat_meta[f])), feat_median = {};
         feats.forEach(f => feat_median[f] = S.predictor.feat_meta[f].default);
         return { feats, ints, terms, coef: m.coef, intercept: m.intercept, resid_sd_log10: m.residSd, cv_r2: cv, sliders, feat_median, labels: feats.map(f => S.predictor.feat_meta[f].label) };
@@ -1429,8 +1450,8 @@ const JarvisRetention = (function () {
         // Views deconfounded panel and the Experiment's predict-scope. Without it, it's confounded.
         const retSel = st.predFeats.includes('retention') || st.predFeats.includes('ret5'), durSel = st.predFeats.includes('log_dur');
         h += (retSel && !durSel)
-            ? note(`⚠ <b>Retention is confounded without Duration.</b> Short videos retain better but get fewer views, so retention's coefficient reads artificially low (even negative) when length isn't held fixed. <span data-predfeat="log_dur" style="cursor:pointer;color:${C.cyan};text-decoration:underline;font-weight:700">+ add Duration to deconfound it</span> — this is the same control the Views deconfounded panel and the Experiment use.`, C.amber)
-            : (retSel ? note(`✓ <b>Deconfounded:</b> Duration is in the model, so retention is measured at fixed length — its real effect, consistent everywhere (Views panel · Experiment view-estimate · every channel).`, C.green) : '');
+            ? note(`⚠ <b>Retention is confounded without Duration.</b> Short videos retain better but get fewer views, so retention's effect reads artificially low when length isn't held fixed. <span data-predfeat="log_dur" style="cursor:pointer;color:${C.cyan};text-decoration:underline;font-weight:700">+ add Duration to deconfound it</span> — the same control the Views deconfounded panel and the Experiment use. (The fit clamps it at ≥0, so it never shows a false negative — but its true positive slope only appears once Duration is in.)`, C.amber)
+            : (retSel ? note(`✓ <b>Deconfounded &amp; never falsely negative.</b> Duration is in the model, so retention is measured at fixed length — its real, proven-positive direction, consistent everywhere (Views panel · Experiment · every channel). Keep rate &amp; retention measure the same thing (watch-through), so if <b>both</b> are checked the fit hands the shared credit to keep and retention's <i>extra</i> coefficient can read ~0 (a flat lever, not a down one — it's redundant, not harmful). <b>Uncheck Keep rate to see retention's own positive slope.</b>`, C.green) : '');
         if (!vb) { h += note('Select at least one input above.', C.orange); return h; }
         const rngMult = P10(1.2816 * vb.resid_sd_log10);
         const sld = s => { const c = SLCOL[s.key] || C.cyan, val = pval(s.key); return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:${c};font-weight:700">${esc(s.label)}</span><span id="pf-${s.key}-val" style="color:${C.text};font-weight:800">${val}${s.unit}</span></div>
@@ -1442,7 +1463,7 @@ const JarvisRetention = (function () {
         h += predInteractionTable();
         h += predComparison();
         h += cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-                <div><div style="font-weight:700;color:${C.text}">Independent lever response curves</div><div style="font-size:11px;color:${C.mute};margin-top:2px">Each line sweeps one input while the others stay fixed. Actual views uses a true linear y-axis; log10 compresses the same model so the lower range is readable.</div></div>
+                <div><div style="font-weight:700;color:${C.text}">Independent lever response curves</div><div style="font-size:11px;color:${C.mute};margin-top:2px">Each line sweeps one input while the others stay fixed. No retention-family line ever slopes <i>down</i> — the fit holds watch-through effects ≥0 (proven non-negative once length is controlled); a flat line means that lever is redundant with another that's checked, not harmful. Actual views uses a true linear y-axis; log10 compresses the same model so the lower range is readable.</div></div>
                 <div style="display:flex;gap:6px">
                     <button data-pred-scale="actual" style="background:${st.predScale === 'actual' ? C.accent + '22' : 'transparent'};border:1px solid ${st.predScale === 'actual' ? C.accent : C.border};color:${st.predScale === 'actual' ? C.accent : C.dim};border-radius:7px;padding:5px 9px;font-size:11px;font-weight:800;cursor:pointer">actual views</button>
                     <button data-pred-scale="log" style="background:${st.predScale === 'log' ? C.accent + '22' : 'transparent'};border:1px solid ${st.predScale === 'log' ? C.accent : C.border};color:${st.predScale === 'log' ? C.accent : C.dim};border-radius:7px;padding:5px 9px;font-size:11px;font-weight:800;cursor:pointer">log10</button>
@@ -1476,7 +1497,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=118').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=119').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2354,7 +2375,7 @@ const JarvisRetention = (function () {
         st.channel = id;
         // Main (your 211) = the committed static file; every other channel = R2 via the API.
         const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=118')
+            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=119')
             : fetch('/api/retention/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
         try {
             if (id === 'all') {
