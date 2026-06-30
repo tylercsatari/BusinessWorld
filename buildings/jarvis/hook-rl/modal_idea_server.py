@@ -115,13 +115,13 @@ class Model:
         from vllm import LLM, SamplingParams
         if not (os.path.isdir(MERGED_DIR) and os.listdir(MERGED_DIR)):
             raise RuntimeError("merged model missing — run `modal run …::build_merged` first")
-        self.llm = LLM(model=MERGED_DIR, max_model_len=4096, gpu_memory_utilization=0.90,
+        self.llm = LLM(model=MERGED_DIR, max_model_len=6144, gpu_memory_utilization=0.90,
                        dtype="bfloat16", trust_remote_code=True)
         self.SamplingParams = SamplingParams
         print("vLLM (merged idea_r5) ready on GPU", flush=True)
 
     def _run(self, sys_msg, user_msg, n, temp):
-        sp = self.SamplingParams(temperature=temp, top_p=0.95, max_tokens=2048, n=n)
+        sp = self.SamplingParams(temperature=temp, top_p=0.95, max_tokens=4096, n=n)
         outs = self.llm.chat(
             [{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}],
             sampling_params=sp, chat_template_kwargs={"enable_thinking": True},
