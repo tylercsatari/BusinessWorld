@@ -9,16 +9,22 @@ PLIST="$HOME/Library/LaunchAgents/com.businessworld.library-crawler.plist"
 launchctl unload "$PLIST" 2>/dev/null; pkill -f library-crawler.js 2>/dev/null   # pause crawler
 echo "supervisor: crawler paused; starting gentle account embed $(date)" >> raw_embed.log
 
-COOK=""; [ -f raw-cookies.txt ] && COOK="raw-cookies.txt"
-for pass in $(seq 1 40); do
-  # count account videos still needing embedding (the run prints "todo: N of ...")
-  RAW_OWNED_ONLY=1 RAW_WORKERS=$([ -n "$COOK" ] && echo 4 || echo 1) RAW_OWNED_JITTER=$([ -n "$COOK" ] && echo 1 || echo 6) \
-    RAW_COOKIES="$COOK" python3 raw_embed.py >> raw_embed.log 2>&1
+# Cookieless pulls are bot-walled on this IP right now and PROBING SUSTAINS THE FLAG, so without a
+# cookies.txt we only do a tiny probe (a few videos) then sleep LONG — minimal load, doesn't sustain
+# the flag, and occasionally tests whether it has cleared. The instant a raw-cookies.txt export appears
+# we switch to authenticated full-speed (4 workers, no cap) — that bypasses the wall entirely.
+for pass in $(seq 1 200); do
+  if [ -f raw-cookies.txt ]; then
+    RAW_OWNED_ONLY=1 RAW_WORKERS=4 RAW_OWNED_JITTER=1 RAW_COOKIES=raw-cookies.txt python3 raw_embed.py >> raw_embed.log 2>&1
+    NAP=30
+  else
+    RAW_OWNED_ONLY=1 RAW_WORKERS=1 RAW_OWNED_JITTER=4 RAW_MAX=5 python3 raw_embed.py >> raw_embed.log 2>&1
+    NAP=1800   # 30-min quiet window so the IP flag can decay (gentle hedge while waiting for cookies.txt)
+  fi
   REMAIN=$(grep -E "^todo: [0-9]+ of" raw_embed.log | tail -1 | sed -E 's/^todo: ([0-9]+) of.*/\1/')
-  echo "supervisor: pass $pass done, ~$REMAIN account videos still pending $(date)" >> raw_embed.log
+  echo "supervisor: pass $pass done, ~$REMAIN account videos pending, cookies=$([ -f raw-cookies.txt ] && echo yes || echo no) $(date)" >> raw_embed.log
   [ "$REMAIN" = "0" ] && break
-  [ -f raw-cookies.txt ] && [ -z "$COOK" ] && COOK="raw-cookies.txt"   # pick up a cookies.txt dropped mid-run
-  sleep 300   # let the IP flag decay between passes
+  sleep "$NAP"
 done
 
 echo "supervisor: account embed finished — resuming crawler $(date)" >> raw_embed.log
