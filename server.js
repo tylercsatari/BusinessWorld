@@ -8821,6 +8821,69 @@ function renderShareWorkshopPage(videos, assigneeFilter, projectFilter, ideasByI
     return renderSharePage('Workshop — BusinessWorld', bodyHtml);
 }
 
+// ── Persistent "Generate hook" worker: Gemini invents idea+hook, Replicate renders frames. No GPU. ──
+async function hookGenIdea(premise, invent) {
+    const GK = process.env.GEMINI_API_KEY;
+    const sys = invent
+        ? 'You are a viral YouTube Shorts director. Invent ONE surprising, specific video idea, then write its opening as 5 distinct photographic frame descriptions (one per second). Return ONLY JSON: {"premise":"the specific idea in one sentence","frames":["second 1","second 2","second 3","second 4","second 5"]}. Frames concrete, photorealistic, vertical 9:16, no on-screen text. Invent real specific content, do not echo this template.'
+        : 'You are a viral YouTube Shorts director. For the given video idea, write its strongest scroll-stopping opening as 5 distinct photographic frame descriptions (one per second). Return ONLY JSON: {"premise":"restate the idea","frames":["second 1","second 2","second 3","second 4","second 5"]}. Frames concrete, photorealistic, vertical 9:16, no on-screen text.';
+    const user = invent ? 'Invent one now. Make it genuinely surprising.' : ('Video idea: ' + premise);
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent',
+        { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GK },
+          body: JSON.stringify({ contents: [{ parts: [{ text: sys + '\n\n' + user }] }], generationConfig: { temperature: 1.15, responseMimeType: 'application/json' } }) });
+    const j = await r.json();
+    const txt = j.candidates[0].content.parts[0].text;
+    const spec = JSON.parse(txt.match(/\{[\s\S]*\}/)[0]);
+    if (!Array.isArray(spec.frames) || spec.frames.length !== 5) throw new Error('bad frames');
+    return { premise: (spec.premise || premise || '').trim(), frames: spec.frames };
+}
+async function hookRenderFrame(prompt) {
+    const r = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions',
+        { method: 'POST', headers: { 'Authorization': 'Bearer ' + process.env.REPLICATE_API_TOKEN, 'Content-Type': 'application/json', 'Prefer': 'wait' },
+          body: JSON.stringify({ input: { prompt, aspect_ratio: '9:16', output_format: 'jpg', num_outputs: 1 } }) });
+    const j = await r.json();
+    let out = j.output; if (Array.isArray(out)) out = out[0];
+    if (!out) throw new Error('no render output');
+    return Buffer.from(await (await fetch(out)).arrayBuffer());
+}
+async function hookProcessRequest(rid, premise, count, invent) {
+    const stat = (o) => cloud.uploadToR2(`hooks/grpo/demo/status/${rid}.json`, Buffer.from(JSON.stringify(o)), 'application/json').catch(() => {});
+    await stat({ stage: 'reasoning', premise: premise || '(inventing an idea…)' });
+    const attempts = [];
+    for (let k = 0; k < count; k++) {
+        let spec; try { spec = await hookGenIdea(premise, invent); } catch (e) { continue; }
+        await stat({ stage: 'rendering', premise: spec.premise, n: count, done: k });
+        const imgs = [];
+        for (let i = 0; i < 5; i++) {
+            try { const buf = await hookRenderFrame(spec.frames[i]); const id = `${rid}_${k}_${i}`; await cloud.uploadToR2(`hooks/grpo/demo/montages/${id}.jpg`, buf, 'image/jpeg'); imgs.push(id); }
+            catch (e) { imgs.push(null); }
+        }
+        attempts.push({ k, premise: spec.premise, frames: spec.frames, frame_imgs: imgs, reasoning: '', caption: spec.premise, cohesion_mode: '' });
+    }
+    await cloud.uploadToR2(`hooks/grpo/demo/groups/${rid}.json`, Buffer.from(JSON.stringify({ input_id: rid, premise: premise || '💡 invented', n: attempts.length, attempts, model: 'gemini-3.5-flash + flux', hosted: true })), 'application/json');
+    await stat({ stage: 'done' });
+}
+let _hookBusy = false;
+async function hookDemoQueue() {
+    if (_hookBusy || !cloud.isR2Ready()) return;
+    let keys; try { keys = (await cloud.listR2Keys('hooks/grpo/requests/')) || []; } catch (e) { return; }
+    keys = keys.filter(k => k.endsWith('.json'));
+    if (!keys.length) return;
+    _hookBusy = true;
+    try {
+        for (const key of keys) {
+            const rid = key.split('/').pop().replace('.json', '');
+            let req = {}; try { req = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) {}
+            await cloud.deleteFromR2(key).catch(() => {});
+            const premise = String(req.premise || '').trim();
+            const count = Math.max(1, Math.min(parseInt(req.count) || 4, 8));
+            const invent = !!req.invent || !premise;
+            try { await hookProcessRequest(rid, premise, count, invent); } catch (e) { console.warn('hook demo err:', e.message); }
+        }
+    } finally { _hookBusy = false; }
+}
+setInterval(() => { hookDemoQueue().catch(() => {}); }, 4000);
+
 // Initialize R2 cloud storage before accepting requests
 cloud.initR2();
 

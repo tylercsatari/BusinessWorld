@@ -821,24 +821,28 @@ const JarvisRetention = (function () {
         let result = '';
         if (st.expGenRid) {
             const g = EXPDEMO[st.expGenRid];
-            if (st.expGenBusy && !g) result = `<div style="margin-top:12px;font-size:12px;color:${C.cyan}">⏳ ${esc(STAGES[st.expGenStage] || 'working…')} <span style="color:${C.mute}">(served by the live training box; ~1–2 min)</span></div>`;
+            if (st.expGenBusy && !g) result = `<div style="margin-top:12px;font-size:12px;color:${C.cyan}">⏳ ${esc(STAGES[st.expGenStage] || 'working…')} <span style="color:${C.mute}">(inventing the idea, then rendering 5 frames · ~1 min)</span></div>`;
             else if (g && g.error) result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">${esc(g.error)}</div>`;
-            else if (g && g.attempts) {
+            else if (g && g.attempts && g.attempts.length) {
                 const cards = g.attempts.map(a => {
-                    const reasoning = a.reasoning ? `<details style="margin-top:6px"><summary style="font-size:10px;color:${C.cyan};cursor:pointer">reasoning</summary><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:4px;white-space:pre-wrap;max-height:220px;overflow:auto">${esc(a.reasoning)}</div></details>` : '';
-                    return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:8px;background:${C.card2}">
-                      <img src="/api/hooks/grpo/montage/demo/${st.expGenRid}_${a.k}" style="width:100%;border-radius:6px;display:block" loading="lazy">
-                      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">
-                        <span>keep <b style="color:${heatCol(a.keep_pctile || 0)}">${Math.round((a.keep_pctile || 0) * 100)}%</b></span>
-                        <span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${reasoning}</div>`;
+                    // hosted result: 5 separate frame images; legacy box result: one montage + keep%
+                    const frameStrip = (a.frame_imgs && a.frame_imgs.length)
+                        ? `<div style="display:flex;gap:3px">${a.frame_imgs.map((fid, i) => fid ? `<div style="flex:1;position:relative"><img src="/api/hooks/grpo/montage/demo/${esc(fid)}" style="width:100%;border-radius:4px;display:block" loading="lazy"><span style="position:absolute;top:2px;left:3px;font-size:8px;color:#fff;background:rgba(0,0,0,.55);border-radius:3px;padding:0 3px">${i + 1}</span></div>` : `<div style="flex:1;aspect-ratio:9/16;background:${C.bg};border-radius:4px"></div>`).join('')}</div>`
+                        : `<img src="/api/hooks/grpo/montage/demo/${st.expGenRid}_${a.k}" style="width:100%;border-radius:6px;display:block" loading="lazy">`;
+                    const keepBadge = a.keep_pctile != null ? `<span>keep <b style="color:${heatCol(a.keep_pctile || 0)}">${Math.round((a.keep_pctile || 0) * 100)}%</b></span>` : '';
+                    const frameText = (a.frames && a.frames.length) ? `<details style="margin-top:5px"><summary style="font-size:10px;color:${C.cyan};cursor:pointer">the 5 frames</summary><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:4px">${a.frames.map((f, i) => `<div><b style="color:${C.accent}">${i + 1}.</b> ${esc(f)}</div>`).join('')}</div></details>` : '';
+                    return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:9px;background:${C.card2}">
+                      <div style="font-size:12px;color:${C.text};font-weight:700;line-height:1.35;margin-bottom:6px">${esc(a.premise || a.caption || '')}</div>
+                      ${frameStrip}
+                      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">${keepBadge}<span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${frameText}</div>`;
                 }).join('');
-                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${C.mute};margin-bottom:6px">${g.n} hook${g.n > 1 ? 's' : ''} for "${esc(g.premise)}" by ${esc(g.model || 'the model')} · best keep <b style="color:${heatCol(g.best_keep || 0)}">${Math.round((g.best_keep || 0) * 100)}%</b> · ranked by keep-rate</div>
-                  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:10px">${cards}</div></div>`;
-            }
+                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${C.mute};margin-bottom:8px">${g.n} hook${g.n > 1 ? 's' : ''}${g.premise && g.premise !== '💡 invented' ? ` for "${esc(g.premise)}"` : ' invented'} · ${esc(g.model || 'model')}</div>
+                  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">${cards}</div></div>`;
+            } else if (g && g.attempts) { result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">generation came back empty — try again.</div>`; }
         }
         const nPill = k => `<span data-expgenn="${k}" style="cursor:pointer;border:1px solid ${n === k ? C.accent : C.border};background:${n === k ? C.accent + '22' : 'transparent'};color:${n === k ? C.accent : C.dim};border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700">${k}</span>`;
         return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate hooks from an idea <span style="font-size:10px;color:${C.mute};font-weight:600">— the model reasons up hooks for ANY idea, renders + scores each on keep-rate.</span></div>
+          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate an entire hook <span style="font-size:10px;color:${C.mute};font-weight:600">— type an idea (or leave blank to invent one); it writes the idea + a 5-frame opening and renders it. Always on, no GPU.</span></div>
           <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
             <input id="exp-gen-input" value="${esc(st.expGenPrem || '')}" placeholder="type a video idea — or leave blank and the model invents one…" style="flex:1;min-width:240px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px"/>
             <span style="font-size:10px;color:${C.mute}">outputs</span>${[1, 2, 4, 6, 8].map(nPill).join('')}
