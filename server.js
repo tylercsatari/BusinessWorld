@@ -3118,6 +3118,21 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    // Generate ONE photorealistic storyboard frame (Experiment tab). The client calls this per frame,
+    // chaining prior frames in `refs` (data-uris) for character/scene consistency. Returns a data-uri.
+    if (pathname === '/api/frames/gen' && req.method === 'POST') {
+        try {
+            const body = (await readBody(req)) || {};
+            const prompt = String(body.prompt || '').trim().slice(0, 1800);
+            if (!prompt) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'prompt required' })); return; }
+            const model = STORY_MODELS[body.model] ? body.model : 'flux-2-pro';
+            const refs = Array.isArray(body.refs) ? body.refs.filter(x => typeof x === 'string' && x.startsWith('data:image')).slice(0, 8) : [];
+            const image = await genStoryFrame(model, prompt, refs);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ image, model }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
     const demoStat = pathname.match(/^\/api\/hooks\/demo\/status\/([\w-]{1,40})$/);
     if (demoStat && req.method === 'GET') {
         let st = { stage: 'queued' };
@@ -8860,6 +8875,44 @@ async function hookModelGenerate(premise, invent, count) {
         .map(s => ({ premise: (s.premise || premise || '').trim(), frames: s.frames.map(f => String(f)), cohesion_mode: s.cohesion_mode || '', reasoning: s.reasoning || '' }));
     if (!specs.length) throw new Error('model produced no valid 5-frame ideas');
     return specs;
+}
+// ── Storyboard frame generation (Experiment tab) — photorealistic, reference-conditioned ──
+// One model call per frame; prior frames are passed as REFERENCE images so a character/scene can
+// stay consistent across the 5 frames (or not). Models verified on Replicate as of 2026-06-30.
+const STORY_MODELS = {
+    'flux-2-pro':      { slug: 'black-forest-labs/flux-2-pro', refs: 'numbered', max: 8 },   // ~$0.03-0.04/img · 2026 photoreal leader
+    'seedream-4':      { slug: 'bytedance/seedream-4',         refs: 'array',    max: 10 },  // $0.03/img · native 4K
+    'nano-banana':     { slug: 'google/nano-banana',          refs: 'array',    max: 6 },   // ~$0.039/img · consistency specialist
+    'nano-banana-pro': { slug: 'google/nano-banana-pro',      refs: 'array',    max: 14 },  // ~$0.13-0.24/img · best-in-class
+};
+async function replicateRun(slug, input, timeoutMs = 180000) {
+    const tok = process.env.REPLICATE_API_TOKEN; if (!tok) throw new Error('REPLICATE_API_TOKEN missing on server');
+    const auth = { Authorization: 'Bearer ' + tok };
+    const r = await fetchT(`https://api.replicate.com/v1/models/${slug}/predictions`,
+        { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json', Prefer: 'wait' }, body: JSON.stringify({ input }) }, 120000);
+    let j = await r.json().catch(() => null);
+    if (!j) throw new Error('replicate returned no JSON (http ' + r.status + ')');
+    const deadline = Date.now() + timeoutMs;
+    while (j && (j.status === 'starting' || j.status === 'processing') && j.urls && j.urls.get && Date.now() < deadline) {
+        await new Promise(s => setTimeout(s, 1500));
+        j = await (await fetchT(j.urls.get, { headers: auth }, 20000)).json().catch(() => j);
+    }
+    if (!j || j.error) throw new Error('replicate: ' + ((j && j.error) ? (typeof j.error === 'string' ? j.error : JSON.stringify(j.error)) : 'no result'));
+    if (j.status && j.status !== 'succeeded') throw new Error('replicate ' + j.status + (j.logs ? ' — ' + String(j.logs).slice(-140) : ''));
+    let out = j.output; if (Array.isArray(out)) out = out[0];
+    if (!out) throw new Error('no image output');
+    return out;   // a URL or data-uri
+}
+async function genStoryFrame(modelKey, prompt, refs) {
+    const M = STORY_MODELS[modelKey] || STORY_MODELS['flux-2-pro'];
+    refs = (refs || []).filter(Boolean).slice(0, M.max);
+    const input = { prompt, aspect_ratio: '9:16' };
+    if (M.slug.startsWith('black-forest-labs/flux-2')) { input.output_format = 'jpg'; refs.forEach((rf, i) => input[i === 0 ? 'input_image' : `input_image_${i + 1}`] = rf); }
+    else if (M.slug.startsWith('bytedance/seedream')) { if (refs.length) input.image_input = refs; }
+    else { input.output_format = 'jpg'; if (refs.length) input.image_input = refs; }   // google/nano-banana*
+    const out = await replicateRun(M.slug, input);
+    const buf = Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
+    return 'data:image/jpeg;base64,' + buf.toString('base64');
 }
 async function hookRenderFrame(prompt) {
     if (!process.env.REPLICATE_API_TOKEN) throw new Error('REPLICATE_API_TOKEN missing on server');
