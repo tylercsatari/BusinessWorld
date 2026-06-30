@@ -4856,6 +4856,11 @@ const LibraryUI = (() => {
 
     function previewInvoice(invoiceId) {
         if (!invoiceId) return;
+        // An <iframe src> can't carry the Authorization header the fetch-wrapper adds,
+        // so the auth gate would 401 it ("Sign in required") inside the preview. The
+        // gate also accepts the token as an ?access_token= query param — use that.
+        const tok = (typeof window.getAuthToken === 'function' && window.getAuthToken()) || '';
+        const tokQ = tok ? `?access_token=${encodeURIComponent(tok)}` : '';
         // Create popup overlay with iframe
         const overlay = document.createElement('div');
         overlay.className = 'sponsor-invoice-overlay';
@@ -4868,7 +4873,7 @@ const LibraryUI = (() => {
                         <button class="sponsor-invoice-popup-close" title="Close">&times;</button>
                     </div>
                 </div>
-                <iframe class="sponsor-invoice-iframe" src="/api/invoices/${encodeURIComponent(invoiceId)}/download"></iframe>
+                <iframe class="sponsor-invoice-iframe" src="/api/invoices/${encodeURIComponent(invoiceId)}/download${tokQ}"></iframe>
             </div>
         `;
         (container || document.body).appendChild(overlay);

@@ -100,7 +100,10 @@ function routeBuilding(pathname) {
     if (/^\/api\/dropbox\//.test(pathname) || /^\/api\/workshop\//.test(pathname)) return 'Workshop';
     if (/^\/api\/data\/(ideas|notes|todos|calendar|sponsors|sponsorvideos)/.test(pathname) || /^\/api\/ideas\//.test(pathname)) return 'Library';
     if (/^\/api\/(finance|plaid)\//.test(pathname)) return 'Finance';
-    if (/^\/api\/data\/invoices/.test(pathname) || /^\/api\/invoices\//.test(pathname)) return 'Money Pit';
+    // Invoices are created/viewed from Library → Sponsors, so they're gated with the
+    // Library building (and the sponsors section, below) — anyone who can use Sponsors
+    // can make & see invoices, instead of needing a separate building grant.
+    if (/^\/api\/data\/invoices/.test(pathname) || /^\/api\/invoices\//.test(pathname)) return 'Library';
     if (/^\/api\/jarvis\//.test(pathname) || /^\/api\/tribe\//.test(pathname)) return 'Jarvis';
     if (/^\/api\/(gemini|videolab)\//.test(pathname)) return 'Video Lab';
     if (/^\/api\/(openai|kimi)\//.test(pathname)) return 'shared';      // AI used across buildings
@@ -113,6 +116,7 @@ function routeSection(pathname) {
     if (/^\/api\/data\/todos/.test(pathname)) return ['Library', 'todo'];
     if (/^\/api\/data\/calendar/.test(pathname)) return ['Library', 'calendar'];
     if (/^\/api\/data\/(sponsors|sponsorvideos)/.test(pathname)) return ['Library', 'sponsors'];
+    if (/^\/api\/data\/invoices/.test(pathname) || /^\/api\/invoices\//.test(pathname)) return ['Library', 'sponsors'];
     if (/^\/api\/data\/ideas/.test(pathname) || /^\/api\/ideas\//.test(pathname)) return ['Library', 'notes'];
     if (/^\/api\/data\/notes/.test(pathname)) return ['Library', 'freenotes'];
     // Workshop is the pipeline now (no Orders tab); its data is building-level +
