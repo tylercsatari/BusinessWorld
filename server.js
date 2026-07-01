@@ -8223,12 +8223,14 @@ Respond ONLY as valid JSON (no markdown):
     if (pathname === '/api/tribe/mesh' && req.method === 'GET') {
         try {
             const meshPath = path.join(DIR, 'buildings', 'jarvis', 'tribe-analysis', 'fsaverage5_mesh.json');
-            if (!fs.existsSync(meshPath)) {
+            let buf = null;
+            if (fs.existsSync(meshPath)) buf = fs.readFileSync(meshPath);                       // local (your Mac)
+            else if (cloud.isR2Ready()) { try { buf = await cloud.downloadFromR2('tribe-analysis/fsaverage5_mesh.json'); } catch (e) {} }  // deploy → R2 (2.8MB, cached by the browser)
+            if (!buf) {
                 res.writeHead(404, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'fsaverage5_mesh.json not found' }));
                 return;
             }
-            const buf = fs.readFileSync(meshPath);
             res.writeHead(200, {
                 'Content-Type': 'application/json',
                 'Cache-Control': 'public, max-age=86400',
