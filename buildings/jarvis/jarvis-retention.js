@@ -883,17 +883,27 @@ const JarvisRetention = (function () {
     }
     function expDemoPoll(rid, tries) {
         tries = tries || 0;
-        fetch('/api/hooks/demo/status/' + rid).then(r => r.json()).then(s => { st.expGenStage = (s && s.stage) || 'queued'; if (st.expGenBusy) rtgUpdateExp(); }).catch(() => {});
+        st.expGenT0 = st.expGenT0 || Date.now();
+        fetch('/api/hooks/demo/status/' + rid).then(r => r.json()).then(s => { st.expGenStage = (s && s.stage) || 'queued'; st.expGenStatErr = (s && s.error) || null; if (st.expGenBusy) rtgUpdateExp(); }).catch(() => {});
         fetch('/api/hooks/grpo/group/demo/' + rid).then(r => r.json()).then(j => {
             if (j && j.attempts && j.attempts.length) { EXPDEMO[rid] = j; st.expGenBusy = false; st.expGenStage = 'done'; rtgUpdateExp(); const a0 = j.attempts[0]; if (a0 && a0.frame_imgs && a0.frame_imgs.filter(Boolean).length) scoreGenerated(0, a0.frame_imgs, a0.premise || a0.caption || ''); }
+            else if (j && (j.error || (j.n === 0 && j.attempts))) { EXPDEMO[rid] = { error: prettyGenErr(j.error) }; st.expGenBusy = false; rtgUpdateExp(); }   // the model reported a real error — surface it, don't wait
             else if (tries < 150) { setTimeout(() => expDemoPoll(rid, tries + 1), 4000); }
-            else { EXPDEMO[rid] = { error: 'timed out waiting for the fine-tuned model to spin up — try again in a moment' }; st.expGenBusy = false; rtgUpdateExp(); }
+            else { EXPDEMO[rid] = { error: 'Timed out. The model may be scaling up — try again in a moment.' }; st.expGenBusy = false; rtgUpdateExp(); }
         }).catch(() => { if (tries < 150) setTimeout(() => expDemoPoll(rid, tries + 1), 4000); });
+    }
+    function prettyGenErr(err) {
+        const e = String(err || '').toLowerCase();
+        if (e.indexOf('spend limit') >= 0 || e.indexOf('billing') >= 0) return '⚠ Your Modal usage cap was hit — raise the spend limit in your Modal dashboard (Settings → Usage & Billing), then generation will work again.';
+        if (e.indexOf('not configured') >= 0) return 'The fine-tuned model endpoint isn\'t configured (HOOK_MODEL_URL).';
+        if (e.indexOf('429') >= 0) return '⚠ Rate-limited / usage cap hit on the model host — check your Modal spend limit.';
+        return err ? ('Generation failed: ' + err) : 'Generation came back empty — try again.';
     }
     function expGenSubmit() {
         const inp = window.document.getElementById('exp-gen-input');
         const prem = inp ? inp.value.trim() : (st.expGenPrem || '');
-        st.expGenPrem = prem; st.expGenBusy = true; st.expGenRid = null; st.expGenStage = 'queued';
+        st.expGenPrem = prem; st.expGenBusy = true; st.expGenRid = null; st.expGenStage = 'queued'; st.expGenT0 = Date.now(); st.expGenStatErr = null;
+        window.clearInterval(st._genTick); st._genTick = window.setInterval(() => { if (st.expGenBusy) rtgUpdateExp(); else window.clearInterval(st._genTick); }, 1000);   // live elapsed timer
         fetch('/api/hooks/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, count: st.expGenN || 4, invent: !prem }) })
             .then(r => r.json()).then(j => { if (j.rid) { st.expGenRid = j.rid; rtgUpdateExp(); expDemoPoll(j.rid); } else { st.expGenBusy = false; rtgUpdateExp(); } })
             .catch(() => { st.expGenBusy = false; rtgUpdateExp(); });
@@ -905,7 +915,20 @@ const JarvisRetention = (function () {
         let result = '';
         if (st.expGenRid) {
             const g = EXPDEMO[st.expGenRid];
-            if (st.expGenBusy && !g) result = `<div style="margin-top:12px;font-size:12px;color:${C.cyan}">⏳ ${esc(STAGES[st.expGenStage] || 'working…')} <span style="color:${C.mute}">(your fine-tuned model invents the idea, then Flux renders the frames · first click ~1-2 min while the GPU spins up, faster after)</span></div>`;
+            if (st.expGenBusy && !g) {
+                const el = st.expGenT0 ? Math.round((Date.now() - st.expGenT0) / 1000) : 0;
+                const elapsed = el >= 60 ? `${Math.floor(el / 60)}m ${el % 60}s` : `${el}s`;
+                const order = ['queued', 'reasoning', 'rendering'], si = Math.max(0, order.indexOf(st.expGenStage));
+                const steps = [['spin up the GPU'], ['invent the idea + 5 frames'], ['render the frames']];
+                const stepHtml = steps.map(([lab], i) => { const dn = i < si, ac = i === si, col = dn ? C.green : ac ? C.cyan : C.mute; return `<span style="color:${col};font-weight:${ac ? 800 : 600}">${dn ? '✓' : ac ? '⏳' : '○'} ${lab}</span>`; }).join(`<span style="color:${C.mute}"> → </span>`);
+                const longHint = (el > 180 || (st.expGenStatErr && /spend|billing|429/i.test(st.expGenStatErr))) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px;line-height:1.5">Taking longer than usual. Either the GPU is cold-starting, or your <b>Modal usage cap</b> is reached — check Modal → Settings → Usage & Billing and raise the spend limit.</div>` : '';
+                result = `<div style="margin-top:12px;padding:11px 13px;background:${C.card2};border:1px solid ${C.cyan}44;border-radius:10px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+                      <span style="font-size:12px;font-weight:800;color:${C.cyan}">✨ Generating your hook…</span>
+                      <span style="font-size:11px;color:${C.mute};font-variant-numeric:tabular-nums">${elapsed} elapsed</span></div>
+                    <div style="font-size:11px;line-height:1.7">${stepHtml}</div>
+                    <div style="font-size:10px;color:${C.mute};margin-top:6px">First click of a session spins up the GPU (~2–3 min); after that ~10 s. It keeps working even if you look away.</div>${longHint}</div>`;
+            }
             else if (g && g.error) result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">${esc(g.error)}</div>`;
             else if (g && g.attempts && g.attempts.length) {
                 const cards = g.attempts.map(a => {

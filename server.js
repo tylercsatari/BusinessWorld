@@ -9032,7 +9032,11 @@ async function hookModelGenerate(premise, invent, count) {
         const refreshed = callIdUrl(r);     // Modal may hand back a refreshed call-id URL while still running
         if (refreshed) pollUrl = refreshed;
     }
-    if (r.status !== 200) throw new Error('model endpoint http ' + r.status + (Date.now() >= deadline ? ' (timed out waiting for GPU)' : ''));
+    if (r.status !== 200) {
+        let body = ''; try { body = (await r.text()).slice(0, 160); } catch (e) {}
+        // surface the real reason (e.g. Modal "spend limit reached") instead of a bare status
+        throw new Error('http ' + r.status + (body ? ': ' + body : '') + (Date.now() >= deadline ? ' (timed out waiting for GPU)' : ''));
+    }
     const j = await r.json().catch(() => null);
     if (!j) throw new Error('model returned no JSON (status ' + r.status + ')');
     if (j.error) throw new Error('model: ' + j.error);
