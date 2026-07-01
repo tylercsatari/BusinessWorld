@@ -128,29 +128,45 @@ def hook_inputs(src):
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-import gc
-# Compute a channel's nearest-hook list ONCE per request, then FREE the ~72MB embeddings IMMEDIATELY,
-# caching only the tiny result (novelty + placement both reuse it). The old code re-downloaded the
-# full npz ~6×/upload AND (my first fix) held all three channels resident at once — either way it
-# OOM-killed the scorer on the 2GB box → "Scoring indicators" forever. Now peak = ONE channel.
+import gc, tempfile
+# The scorer was taking 310s on the deploy (>240s kill → error) vs 26s locally: re-downloading three
+# ~72MB embedding files from R2 every upload and holding them in RAM swap-thrashed the tight box.
+# Fix: keep a normalized copy on local disk (validated by the R2 ETag so it's never stale), memory-map
+# it, and compute similarities in CHUNKS so a matmul never pulls the whole 72MB into RAM. First upload
+# after a deploy warms the cache; every one after skips the download entirely. Result cached per request.
+_CDIR = tempfile.gettempdir()
 _NBR = {}
+def _norm_emb(c):
+    npy = os.path.join(_CDIR, f'rawemb_{c}.npy'); meta = os.path.join(_CDIR, f'rawemb_{c}.meta.json')
+    etag = None
+    try: etag = s3.head_object(Bucket=BUCKET, Key=f'raw/{c}/embeddings.npz').get('ETag')
+    except Exception: pass
+    if etag and os.path.exists(npy) and os.path.exists(meta):
+        try:
+            m = json.load(open(meta))
+            if m.get('etag') == etag: return np.load(npy, mmap_mode='r'), m['ids']
+        except Exception: pass
+    buf = r2_get(f'raw/{c}/embeddings.npz')
+    if buf is None: return None, None
+    z = np.load(io.BytesIO(buf), allow_pickle=True)
+    V = np.array(z['vecs'], np.float32); ids = [str(x) for x in z['ids']]; del z, buf
+    if len(V): V /= (np.linalg.norm(V, axis=1, keepdims=True) + 1e-9)
+    try: np.save(npy, V); json.dump({'etag': etag, 'ids': ids}, open(meta, 'w'))
+    except Exception: pass
+    return V, ids
 def neighbors(c, vec, k=12):
     if c not in _NBR:
-        buf = r2_get(f'raw/{c}/embeddings.npz')
-        if buf is None:
-            _NBR[c] = None
+        V, ids = _norm_emb(c)
+        if V is None: _NBR[c] = None
+        elif len(V) == 0: _NBR[c] = []
         else:
-            z = np.load(io.BytesIO(buf), allow_pickle=True)
-            V = np.array(z['vecs'], np.float32); ids = [str(x) for x in z['ids']]; del z, buf
-            if len(V) == 0:
-                _NBR[c] = []
-            else:
-                V /= (np.linalg.norm(V, axis=1, keepdims=True) + 1e-9)
-                q = vec / (np.linalg.norm(vec) + 1e-9)
-                sims = V @ q; del V; gc.collect()                    # free the big array right away
-                kk = min(13, len(sims))                              # cache top-13 (max k any caller uses)
-                part = np.argpartition(-sims, kk - 1)[:kk]
-                _NBR[c] = [{'id': ids[i], 'sim': round(float(sims[i]), 4)} for i in part[np.argsort(-sims[part])]]
+            q = (np.asarray(vec, np.float32) / (np.linalg.norm(vec) + 1e-9))
+            n = len(V); sims = np.empty(n, np.float32)
+            for i in range(0, n, 4096): sims[i:i + 4096] = np.asarray(V[i:i + 4096]) @ q   # chunked over the mmap → low RAM
+            del V; gc.collect()
+            kk = min(13, n)
+            part = np.argpartition(-sims, kk - 1)[:kk]
+            _NBR[c] = [{'id': ids[i], 'sim': round(float(sims[i]), 4)} for i in part[np.argsort(-sims[part])]]
     r = _NBR[c]
     return r if r is None else r[:k]
 
