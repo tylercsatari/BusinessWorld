@@ -2847,16 +2847,23 @@ const JarvisRetention = (function () {
     // scoring a hook in Experiments. Then scroll up to that read-out.
     async function openSaved(id) {
         st.savedSel = id; st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; rtgUpdateExp();
-        const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1200);
         try {
             const rec = await fetch('/api/raw/saved-hook/' + id).then(r => r.json()).catch(() => ({}));
             const montage = await urlToDataUrl('/api/raw/saved-montage/' + id);
-            const r = await fetch('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: rec.text || rec.title || '', title: (rec.title || 'Saved hook').slice(0, 40) }) });
-            const j = await r.json();
-            if (!r.ok || j.error) { st.rawUpErr = j.error || ('HTTP ' + r.status); }
-            else { j.source = 'saved'; j.savedId = id; j.genFrames = rec.frames || []; j.montageDataUrl = montage; st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; }
+            if (rec && rec.emb_preview && rec.channels) {
+                // INSTANT: full embeddings already stored — build the up-object directly, no re-embed
+                st.rawUploads.push({ montage: montage.split('base64,').pop(), transcript: rec.transcript || rec.text || '', silent: rec.silent, title: rec.title, indicators: rec.indicators, steer: rec.steer, emb_preview: rec.emb_preview, channels: rec.channels, source: 'saved', savedId: id, genFrames: rec.frames || [], montageDataUrl: montage });
+                st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+            } else {
+                // fallback while the storage pass is still running: re-score once
+                const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1200);
+                const r = await fetch('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: rec.text || rec.title || '', title: (rec.title || 'Saved hook').slice(0, 40) }) });
+                const j = await r.json(); window.clearInterval(tick);
+                if (!r.ok || j.error) st.rawUpErr = j.error || ('HTTP ' + r.status);
+                else { j.source = 'saved'; j.savedId = id; j.genFrames = rec.frames || []; j.montageDataUrl = montage; st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; }
+            }
         } catch (e) { st.rawUpErr = e.message; }
-        window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0; rtgUpdateExp();
+        st.rawUploading = false; st.rawUpStage = 0; rtgUpdateExp();
         window.setTimeout(() => { const el = window.document.getElementById('exp-scoreout'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
     }
     function savedDetail() {
@@ -2870,13 +2877,14 @@ const JarvisRetention = (function () {
         const all = SAVED.hooks;
         const F = st.savedFilt || (st.savedFilt = {});
         // filter on any combination of metrics; sort by the chosen sort metric (default keep)
-        const METRICS = [['keep', 'keep-rate %ile', 100, ''], ['ret5', 'past-5s %ile', 100, ''], ['views', 'est. views ≥', 50, 'M'], ['gt10M', 'chance >10M', 100, '%'], ['outlier', 'outlier %ile', 100, '']];
+        const METRICS = [['keep', 'keep-rate %ile', 100, ''], ['ret5', 'past-5s %ile', 100, ''], ['views', 'embed views ≥', 50, 'M'], ['sviews', 'scaled views ≥', 50, 'M'], ['gt10M', 'chance >10M', 100, '%'], ['outlier', 'outlier %ile', 100, '']];
         const thr = k => F[k] || 0;
         const pass = h => {
             const m = h.m || {};
             if (thr('keep') && !(m.keep >= thr('keep'))) return false;
             if (thr('ret5') && !(m.ret5 >= thr('ret5'))) return false;
             if (thr('views') && !(m.views >= thr('views') * 1e6)) return false;
+            if (thr('sviews') && !((m.sviews || 0) >= thr('sviews') * 1e6)) return false;
             if (thr('gt10M') && !((m.gt10M || 0) * 100 >= thr('gt10M'))) return false;
             if (thr('outlier') && !(m.outlier >= thr('outlier'))) return false;
             return true;

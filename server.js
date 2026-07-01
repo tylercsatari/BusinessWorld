@@ -3063,8 +3063,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 let idx = { hooks: [] };
                 try { const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
                 if (!Array.isArray(idx.hooks)) idx.hooks = [];
-                const kp = rec.steer && (rec.steer.together_keep || rec.steer.visual_keep);
-                idx.hooks.push({ id, title: rec.title, kind: rec.kind, hasMontage, savedAt: rec.savedAt, keep: kp ? kp.pctile : null });
+                const g = t => (rec.steer && (rec.steer['together_' + t] || rec.steer['visual_' + t])) || {};
+                idx.hooks.push({ id, title: rec.title, kind: rec.kind, hasMontage, savedAt: rec.savedAt, keep: g('keep').pctile, m: { keep: g('keep').pctile, keep_est: g('keep').est, ret5: g('ret5').pctile, views: g('views').est, sviews: g('realviews').est, gt10M: g('gt10M').est, outlier: g('outlier').pctile } });
                 await cloud.uploadToR2('raw/saved-hooks/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
             } catch (e) {}
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, id }));
