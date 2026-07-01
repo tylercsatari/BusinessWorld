@@ -944,7 +944,8 @@ const JarvisRetention = (function () {
         const fr = st.rawFrames || [null, null, null, null, null], nFrames = fr.filter(Boolean).length;
         const modePill = (m, lab) => `<span data-rawbuildmode="${m}" style="cursor:pointer;border:1px solid ${(!!st.rawBuildMode === !!m) ? CY : C.border};background:${(!!st.rawBuildMode === !!m) ? CY + '22' : 'transparent'};color:${(!!st.rawBuildMode === !!m) ? CY : C.dim};border-radius:${m ? '0 6px 6px 0' : '6px 0 0 6px'};padding:4px 10px;font-size:11px;font-weight:700">${lab}</span>`;
         const UPSTAGES = ['Uploading…', 'Extracting 5 frames…', 'Transcribing…', 'Embedding…', 'Scoring indicators…'];
-        const prog = st.rawUploading ? `<span style="display:inline-flex;flex-direction:column;gap:3px;min-width:230px"><span style="font-size:10px;color:${CY};font-weight:700">⏳ ${UPSTAGES[Math.min(st.rawUpStage || 0, 4)]}</span><span style="height:6px;background:${C.border};border-radius:4px;overflow:hidden;display:block"><span style="display:block;height:100%;width:${Math.min(93, ((st.rawUpStage || 0) + 1) / 5 * 100)}%;background:${CY};border-radius:4px;transition:width .5s"></span></span></span>` : '';
+        const upLabel = (st.rawUpQueue && st.rawUpQueue.trimming) ? 'Trimming to first 6s…' : UPSTAGES[Math.min(st.rawUpStage || 0, 4)];
+        const prog = st.rawUploading ? `<span style="display:inline-flex;flex-direction:column;gap:3px;min-width:230px"><span style="font-size:10px;color:${CY};font-weight:700">⏳ ${upLabel}</span><span style="height:6px;background:${C.border};border-radius:4px;overflow:hidden;display:block"><span style="display:block;height:100%;width:${Math.min(93, ((st.rawUpStage || 0) + 1) / 5 * 100)}%;background:${CY};border-radius:4px;transition:width .5s"></span></span></span>` : '';
         const builder = st.rawBuildMode ? `<div style="margin-top:8px;display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">${[0, 1, 2, 3, 4].map(i => fr[i]
             ? `<div style="position:relative"><img src="${fr[i]}" style="width:42px;height:75px;object-fit:cover;border-radius:5px;border:1px solid ${C.border}"/><span data-rawframedel="${i}" style="position:absolute;top:-7px;right:-7px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:15px;height:15px;line-height:13px;text-align:center;font-size:9px;cursor:pointer">✕</span></div>`
             : `<div data-rawframe="${i}" style="width:42px;height:75px;border:1px dashed ${C.border};border-radius:5px;display:flex;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋${i + 1}</div>`).join('')}
@@ -1610,7 +1611,7 @@ const JarvisRetention = (function () {
     // exact per-video novelty (novelty_field.py), and see its held-out influence on keep / 5s-ret.
     // Every colouring here is the SAME definition the correlation panels measure (one source).
     function renderNovQuantify() {
-        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=129').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
+        if (NQF === null) { NQF = { loading: 1 }; fetch('./buildings/jarvis/retention-study/principles/novelty_field.json?v=130').then(r => r.json()).then(j => { NQF = j; render(); }).catch(() => { NQF = { error: 1 }; render(); }); }
         if (!NQF || NQF.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading the novelty field… (2.4MB — every quantification, per video)</div>`);
         if (NQF.error || !NQF.field) return cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No novelty field yet — run <code>novelty_field.py</code>.</div>`);
         const mod = st.nqMod, meth = st.nqMeth, ch = { visual: 'visual', text: 'text', whole: 'together' }[mod];
@@ -2488,7 +2489,7 @@ const JarvisRetention = (function () {
         st.channel = id;
         // Main (your 211) = the committed static file; every other channel = R2 via the API.
         const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=129')
+            ? fetch('./buildings/jarvis/retention-study/' + (c.table || 'retention_table.json') + '?v=130')
             : fetch('/api/retention/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
         try {
             if (id === 'all') {
@@ -2663,6 +2664,37 @@ const JarvisRetention = (function () {
         if (e.target.id === 'rawFrameFile') { const f = e.target.files && e.target.files[0]; if (f) rtgFrameFile(f, st.rawFrameSlot || 0); return; }
         if (e.target.closest('[data-tracked]')) { st.trackedOnly = e.target.checked; render(); }
     }
+    // Only the first 5s of a video is ever scored, so for anything but a tiny file we record the
+    // first ~6s CLIENT-SIDE into a small webm and upload THAT — a ~1MB clip instead of a 300MB video.
+    // This is why big uploads "worked before but not now": they never reached the server (Render's
+    // edge drops the huge body). Returns a Blob, or null to fall back to uploading the whole file.
+    function extractFirstSeconds(file, seconds) {
+        return new Promise((resolve) => {
+            let settled = false; const done = v => { if (!settled) { settled = true; resolve(v); } };
+            let video; try { video = window.document.createElement('video'); } catch (e) { return done(null); }
+            const url = URL.createObjectURL(file);
+            const cleanup = () => { try { URL.revokeObjectURL(url); } catch (e) {} try { video.pause(); video.src = ''; } catch (e) {} };
+            video.muted = false; video.volume = 0; video.playsInline = true; video.preload = 'auto';
+            video.onerror = () => { cleanup(); done(null); };
+            const guard = window.setTimeout(() => { cleanup(); done(null); }, (seconds + 12) * 1000);   // never hang the UI
+            video.onloadedmetadata = () => {
+                if (!video.duration || video.duration <= seconds + 0.6) { window.clearTimeout(guard); cleanup(); return done(null); }  // already short → upload as-is
+                let stream;
+                try { stream = video.captureStream ? video.captureStream() : (video.mozCaptureStream ? video.mozCaptureStream() : null); } catch (e) { stream = null; }
+                if (!stream || !window.MediaRecorder) { window.clearTimeout(guard); cleanup(); return done(null); }
+                const mimes = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm', 'video/mp4'];
+                const mime = mimes.find(m => { try { return window.MediaRecorder.isTypeSupported(m); } catch (e) { return false; } }) || '';
+                let rec; try { rec = new window.MediaRecorder(stream, mime ? { mimeType: mime } : {}); } catch (e) { window.clearTimeout(guard); cleanup(); return done(null); }
+                const chunks = [];
+                rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+                rec.onerror = () => { window.clearTimeout(guard); cleanup(); done(null); };
+                rec.onstop = () => { window.clearTimeout(guard); cleanup(); const b = new Blob(chunks, { type: (mime || 'video/webm').split(';')[0] }); done(b.size > 2000 ? b : null); };
+                video.play().then(() => { rec.start(); window.setTimeout(() => { try { rec.stop(); } catch (e) {} }, seconds * 1000); })
+                    .catch(() => { window.clearTimeout(guard); cleanup(); done(null); });
+            };
+            video.src = url;
+        });
+    }
     async function rtgRawUpload(files) {
         const list = Array.from(files || []).slice(0, 12);   // cap a batch at 12
         if (!list.length) return;
@@ -2672,10 +2704,20 @@ const JarvisRetention = (function () {
             st.rawUpStage = 0; st.rawUpQueue = { i: n + 1, total: list.length }; rtgUpdateRaw();
             const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateRaw(); } }, 2400);
             try {
-                const ext = (file.name.split('.').pop() || 'mp4').slice(0, 5).toLowerCase();
-                if (file.size > 1024 * 1024 * 1024) { st.rawUpErr = (file.name || '') + ': too large (' + Math.round(file.size / 1e6) + 'MB, max 1GB) — trim to the first ~10s'; window.clearInterval(tick); continue; }
+                let blob = file, ext = (file.name.split('.').pop() || 'mp4').slice(0, 5).toLowerCase();
+                // Bigger than ~25MB → trim to the first ~6s in the browser and upload that tiny clip
+                // (only the first 5s is scored). Small files upload directly. Falls back to the full
+                // file if the browser can't record (older browsers) — with a friendly note if huge.
+                if (file.size > 25 * 1024 * 1024) {
+                    st.rawUpErr = null; st.rawUpStage = 0; st.rawUpQueue = { i: n + 1, total: list.length, trimming: true }; rtgUpdateRaw();
+                    let clip = null; try { clip = await extractFirstSeconds(file, 6); } catch (e) { clip = null; }
+                    if (clip && clip.size > 2000) { blob = clip; ext = 'webm'; }
+                    else if (file.size > 200 * 1024 * 1024) { st.rawUpErr = (file.name || '') + ': ' + Math.round(file.size / 1e6) + 'MB is too big to upload whole and your browser couldn\'t auto-trim it — please trim the clip to its first ~10 seconds and re-upload'; window.clearInterval(tick); continue; }
+                }
+                if (blob.size > 1024 * 1024 * 1024) { st.rawUpErr = (file.name || '') + ': too large (' + Math.round(blob.size / 1e6) + 'MB)'; window.clearInterval(tick); continue; }
                 const safeTitle = (file.name || 'My upload').replace(/[^\x20-\x7E]/g, '').slice(0, 80);   // headers must be ASCII
-                const r = await fetch('/api/raw/embed-upload', { method: 'POST', headers: { 'X-Raw-Ext': ext, 'X-Raw-Title': safeTitle }, body: file });   // send the File (streams; no giant ArrayBuffer in RAM)
+                st.rawUpStage = 1; rtgUpdateRaw();
+                const r = await fetch('/api/raw/embed-upload', { method: 'POST', headers: { 'X-Raw-Ext': ext, 'X-Raw-Title': safeTitle }, body: blob });   // tiny clip (or small file) — streams
                 const raw = await r.text();
                 let j = null; try { j = JSON.parse(raw); } catch (e) { }
                 if (!j) { st.rawUpErr = (file.name || '') + ': server returned ' + r.status + ((r.status >= 500 || raw.trim().startsWith('<')) ? ' — the server is redeploying or busy; wait ~30s and try again' : ' (non-JSON)'); }
