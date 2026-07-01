@@ -32,6 +32,11 @@ class Predictor(BasePredictor):
     def setup(self):
         import boto3
         from boto3.s3.transfer import TransferConfig
+        # Replicate has no deployment env-var injection; R2 read creds are baked into the private
+        # image via /src/r2creds.json (created on the build box, never committed to git).
+        if not os.environ.get("R2_ACCOUNT_ID") and os.path.exists("/src/r2creds.json"):
+            for k, v in json.load(open("/src/r2creds.json")).items():
+                os.environ[k] = v
         merged = "/src/merged"
         os.makedirs(merged, exist_ok=True)
         s3 = boto3.client("s3", endpoint_url="https://%s.r2.cloudflarestorage.com" % os.environ["R2_ACCOUNT_ID"],

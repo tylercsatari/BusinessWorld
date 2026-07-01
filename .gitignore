@@ -79,3 +79,6 @@ scrape-channels.config.json
 buildings/jarvis/retention-study/retention/
 analytics-debug-*.json
 buildings/jarvis/retention-study/channels.json
+
+buildings/jarvis/hook-rl/cog-idea/r2creds.json
+buildings/jarvis/hook-rl/cog-idea/merged/
