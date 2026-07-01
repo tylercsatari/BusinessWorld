@@ -4,5 +4,6 @@ build:
   python_version: "3.11"
   python_packages:
     - "vllm==0.9.2"
-    - "transformers==4.53.2"
+  run:
+    - "pip install --upgrade transformers==4.53.2"
 predict: "predict.py:Predictor"
