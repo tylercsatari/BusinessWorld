@@ -8390,39 +8390,21 @@ Respond ONLY as valid JSON (no markdown):
 
     if (pathname === '/api/tribe/available' && req.method === 'GET') {
         try {
-            const dir = path.join(DIR, 'buildings', 'jarvis', 'tribe-analysis');
-            const out = [];
-            if (fs.existsSync(dir)) {
-                // Skip .images.json, fsaverage5_mesh.json, and non-analysis files
-                const SKIP_PATTERNS = ['images', 'fsaverage5_mesh', 'fsaverage5_regions'];
-                for (const f of fs.readdirSync(dir)) {
-                    if (!f.endsWith('.json')) continue;
-                    const videoId = f.slice(0, -5);
-                    // Skip protected/non-analysis files
-                    if (SKIP_PATTERNS.some(p => videoId === p || videoId.endsWith('.' + p) || videoId.endsWith('_' + p))) continue;
-                    // Also skip if videoId contains a dot (e.g. IvVJ9RUPcaw.images)
-                    if (videoId.includes('.')) continue;
-                    try {
-                        const data = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
-                        // Must be a real analysis: needs n_timesteps and engagement_score
-                        if (!data.n_timesteps || !data.engagement_score) continue;
-                        out.push({
-                            videoId,
-                            analyzed_at: data.analyzed_at || null,
-                            duration_s: data.duration_s || 0,
-                            engagement_score: data.engagement_score || 0,
-                            max_activation_second: data.max_activation_second || 0,
-                            n_timesteps: data.n_timesteps || 0,
-                        });
-                    } catch {}
-                }
+            // RAM-bounded + works on the deploy: read the tiny prebuilt index (tribe-analysis/_index.json),
+            // NOT 210 × (15-89MB) analysis files (that scan OOMed the 2GB box AND was empty on the deploy,
+            // where the files live only in R2). Rebuild the index: node buildings/jarvis/build-tribe-index.js
+            let completed = [];
+            try { const b = await cloud.downloadFromR2('tribe-analysis/_index.json'); if (b) completed = (JSON.parse(b.toString('utf8')).videos) || []; } catch (e) {}
+            if (!completed.length) {   // local-dev fallback: the local index file
+                try { const lf = path.join(DIR, 'buildings', 'jarvis', 'tribe-analysis', '_index.json'); if (fs.existsSync(lf)) completed = (JSON.parse(fs.readFileSync(lf, 'utf8')).videos) || []; } catch (e) {}
             }
-            // Also surface in-flight jobs so the UI can show progress.
             const inflight = Object.values(_tribeJobs)
                 .filter(j => j.status === 'running' || j.status === 'queued')
                 .map(j => ({ videoId: j.videoId, status: j.status, startedAt: j.startedAt }));
+            // fold any just-finished jobs not yet in the index so the UI sees them immediately
+            for (const j of Object.values(_tribeJobs)) if (j.status === 'done' && !completed.some(c => c.videoId === j.videoId)) completed.unshift({ videoId: j.videoId, analyzed_at: null, duration_s: 0, engagement_score: 0, max_activation_second: 0, n_timesteps: 0 });
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ completed: out, inflight }));
+            res.end(JSON.stringify({ completed, inflight }));
         } catch (e) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: e.message }));
