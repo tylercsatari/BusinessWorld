@@ -128,31 +128,31 @@ def hook_inputs(src):
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-# Load each channel's embeddings ONCE per request (neighbors() is called ~6× otherwise — once per
-# channel for novelty, again for placement — and each call re-downloaded the full ~72MB npz from R2
-# AND made a second normalized copy. That repeated download + memory churn intermittently OOM-killed
-# or timed-out the scorer on the 2 GB box → "stuck on scoring", no error. Cache + normalize in place.
-_EMB = {}
-def _load_emb(c):
-    if c not in _EMB:
+import gc
+# Compute a channel's nearest-hook list ONCE per request, then FREE the ~72MB embeddings IMMEDIATELY,
+# caching only the tiny result (novelty + placement both reuse it). The old code re-downloaded the
+# full npz ~6×/upload AND (my first fix) held all three channels resident at once — either way it
+# OOM-killed the scorer on the 2GB box → "Scoring indicators" forever. Now peak = ONE channel.
+_NBR = {}
+def neighbors(c, vec, k=12):
+    if c not in _NBR:
         buf = r2_get(f'raw/{c}/embeddings.npz')
-        if buf is None: _EMB[c] = (None, None)
+        if buf is None:
+            _NBR[c] = None
         else:
             z = np.load(io.BytesIO(buf), allow_pickle=True)
-            V = np.array(z['vecs'], np.float32)                       # own copy, then normalize IN PLACE (no V+Vn doubling)
-            V /= (np.linalg.norm(V, axis=1, keepdims=True) + 1e-9)
-            _EMB[c] = (V, [str(x) for x in z['ids']]); del z, buf
-    return _EMB[c]
-def neighbors(c, vec, k=12):
-    Vn, ids = _load_emb(c)
-    if Vn is None: return None
-    if len(Vn) == 0: return []
-    q = vec / (np.linalg.norm(vec) + 1e-9)
-    sims = Vn @ q
-    kk = min(k, len(sims))
-    part = np.argpartition(-sims, kk - 1)[:kk]                        # top-k without a full O(n log n) sort
-    top = part[np.argsort(-sims[part])]
-    return [{'id': ids[i], 'sim': round(float(sims[i]), 4)} for i in top]
+            V = np.array(z['vecs'], np.float32); ids = [str(x) for x in z['ids']]; del z, buf
+            if len(V) == 0:
+                _NBR[c] = []
+            else:
+                V /= (np.linalg.norm(V, axis=1, keepdims=True) + 1e-9)
+                q = vec / (np.linalg.norm(vec) + 1e-9)
+                sims = V @ q; del V; gc.collect()                    # free the big array right away
+                kk = min(13, len(sims))                              # cache top-13 (max k any caller uses)
+                part = np.argpartition(-sims, kk - 1)[:kk]
+                _NBR[c] = [{'id': ids[i], 'sim': round(float(sims[i]), 4)} for i in part[np.argsort(-sims[part])]]
+    r = _NBR[c]
+    return r if r is None else r[:k]
 
 def _run():
     args = {}
