@@ -805,7 +805,9 @@ const WorkshopUI = (() => {
             list = list.filter(v => (v.name || '').toLowerCase().includes(q) || (v.hook || '').toLowerCase().includes(q));
         }
         if (fType) list = list.filter(v => v.videoType === fType);
-        if (fProject) list = list.filter(v => (v.projectIds || []).includes(fProject));
+        // Project filter keys off the Channel Project NAME (v.project) — that's the
+        // project a video actually carries (v.projectIds is legacy/unused).
+        if (fProject) list = list.filter(v => (v.project || '') === fProject);
         if (fSponsor) list = list.filter(v => v.sponsorId === fSponsor);
         // "Show only this person's work": match any assigned worker (multiple allowed),
         // falling back to the legacy assignedToList membership.
@@ -823,6 +825,15 @@ const WorkshopUI = (() => {
         return orderByChain(byDeadline);
     }
 
+    // The project filter is a NAME (Channel Project on videos). Components/orders/
+    // inventory link to a pipeline-project RECORD by id, so bridge name → id when a
+    // matching pipeline project exists.
+    function filterProjectId() {
+        if (!fProject) return null;
+        const p = SVC().projects.getAll().find(x => (x.name || '') === fProject);
+        return p ? p.id : null;
+    }
+
     function filteredComponents() {
         let list = SVC().components.getAll().filter(c => c.status !== 'done');
         // PERSONAL VIEW: a non-owner sees ONLY components assigned to them.
@@ -831,7 +842,7 @@ const WorkshopUI = (() => {
         // they have access to — same scoping as videos.
         try { if (isStageScoped()) list = list.filter(c => { const sid = componentStageId(c); return sid && stageVisible(sid); }); }
         catch (e) { console.warn('Workshop: component scoping skipped', e); }
-        if (fProject) list = list.filter(c => c.projectId === fProject);
+        if (fProject) { const pid = filterProjectId(); list = list.filter(c => pid && c.projectId === pid); }
         if (fSearch) { const q = fSearch.toLowerCase(); list = list.filter(c => (c.name || '').toLowerCase().includes(q)); }
         // "By account" filter — show only this person's components/tasks (or unassigned).
         if (fAssignee === 'none') list = list.filter(c => itemWorkers(c).length === 0);
@@ -842,8 +853,9 @@ const WorkshopUI = (() => {
     function filteredOrders() {
         let list = SVC().orders.getAll().filter(o => o.status !== 'received');
         if (fProject) {
-            const projVideoIds = new Set(pipelineVideos().filter(v => (v.projectIds || []).includes(fProject)).map(v => v.id));
-            list = list.filter(o => o.projectId === fProject || (o.videoId && projVideoIds.has(o.videoId)));
+            const pid = filterProjectId();
+            const projVideoIds = new Set(pipelineVideos().filter(v => (v.project || '') === fProject).map(v => v.id));
+            list = list.filter(o => (pid && o.projectId === pid) || (o.videoId && projVideoIds.has(o.videoId)));
         }
         if (fSearch) { const q = fSearch.toLowerCase(); list = list.filter(o => (o.name || '').toLowerCase().includes(q)); }
         return list;
@@ -851,7 +863,7 @@ const WorkshopUI = (() => {
 
     function filteredInventory() {
         let list = SVC().inventory.getAll();
-        if (fProject) list = list.filter(i => i.projectId === fProject);
+        if (fProject) { const pid = filterProjectId(); list = list.filter(i => pid && i.projectId === pid); }
         if (fSearch) { const q = fSearch.toLowerCase(); list = list.filter(i => (i.name || '').toLowerCase().includes(q)); }
         return list;
     }
@@ -934,7 +946,14 @@ const WorkshopUI = (() => {
 
     function pipelineFilterBarHtml() {
         const all = pipelineVideos();
-        const projects = SVC().projects.getAll().filter(p => p.status !== 'archived');
+        // Project options = every project name in play: the Channel Projects videos use
+        // (v.project / Dropbox folders) + the pipeline-project records. Keyed by name so
+        // one filter spans videos AND components/orders/inventory.
+        const projectNames = [...new Set([
+            ...dropboxProjects,
+            ...SVC().projects.getAll().filter(p => p.status !== 'archived').map(p => p.name),
+            ...all.map(v => v.project)
+        ].filter(Boolean))].sort((a, b) => a.localeCompare(b));
         const sponsors = [...new Set(all.map(v => v.sponsorId).filter(Boolean))].map(id => SVC().sponsors.getById(id)).filter(Boolean);
         const allC = filteredComponents();
         const legendCounts = {
@@ -955,7 +974,7 @@ const WorkshopUI = (() => {
                     </button>`).join('')}
             </div>
             <input type="text" class="wsp-search" id="wsp-f-search" placeholder="Search everything…" value="${escAttr(fSearch)}">
-            ${projects.length ? `<select id="wsp-f-project"><option value="">All projects</option>${projects.map(p => `<option value="${p.id}" ${fProject === p.id ? 'selected' : ''}>🛠️ ${escHtml(p.name)}</option>`).join('')}</select>` : ''}
+            ${projectNames.length ? `<select id="wsp-f-project"><option value="">All projects</option>${projectNames.map(n => `<option value="${escAttr(n)}" ${fProject === n ? 'selected' : ''}>🛠️ ${escHtml(n)}</option>`).join('')}</select>` : ''}
             ${sponsors.length ? `<select id="wsp-f-sponsor"><option value="">All sponsors</option>${sponsors.map(s => `<option value="${s.id}" ${fSponsor === s.id ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}</select>` : ''}
             ${isOwnerUser() && allRosterPeople().length ? `<select id="wsp-f-assignee" title="Show everything assigned to one person across all nodes"><option value="">👥 All people</option>${allRosterPeople().map(p => `<option value="${escAttr(p.name)}" ${fAssignee === p.name ? 'selected' : ''}>${escHtml(p.name)}</option>`).join('')}<option value="none" ${fAssignee === 'none' ? 'selected' : ''}>— Unassigned —</option></select>` : ''}
             <div class="wsp-flag-btns">
