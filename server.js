@@ -3138,6 +3138,16 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         res.end(JSON.stringify(t || { error: 'not found', videos: [] }));
         return;
     }
+    // Tribe-V2 first-5s brain metrics ↔ tracked metrics, precomputed by build-tribe-corr.js.
+    // R2 (retention/tribe-corr.json) with local fallback — bounded ~6MB single object.
+    if (pathname === '/api/retention/tribe-corr' && req.method === 'GET') {
+        let buf = null;
+        try { buf = await cloud.downloadFromR2('retention/tribe-corr.json'); } catch (e) {}
+        if (!buf) { try { const lp = path.join(DIR, 'buildings', 'jarvis', 'retention-study', 'tribe-corr.json'); if (fs.existsSync(lp)) buf = fs.readFileSync(lp); } catch (e) {} }
+        res.writeHead(buf ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(buf || JSON.stringify({ error: 'not built — run node buildings/jarvis/build-tribe-corr.js', n: 0, rows: [] }));
+        return;
+    }
     if (pathname === '/api/retention/study' && req.method === 'GET') {
         const id = (url.searchParams.get('id') || '').replace(/[^a-z0-9_-]/gi, '');
         let stu = null;

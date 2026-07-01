@@ -10,10 +10,10 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, err = null;
+    let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'realviews', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -2004,6 +2004,123 @@ const JarvisRetention = (function () {
         h += note('“Synergy” = R²(both) − (r²a + r²b): positive means the two carry <i>different</i> slices of the target so stacking them pays off; negative means they overlap. This is what tells you which signals to combine in a predictor vs which are duplicates. Modest values are expected — these are subtle content signals, not the dominant keep/retention/duration levers.', C.purple);
         return h;
     }
+    // ══════════════════════════════════════════════════════════════════════════════
+    // 🧠 TRIBE INFLUENCE — every first-5s Tribe-V2 brain signal vs every tracked metric.
+    // Data = build-tribe-corr.js → /api/retention/tribe-corr (Main channel: the 206 analyzed
+    // videos are the owner's own). Two resolutions: MEAN/linear (Pearson per indicator×feature)
+    // and SHAPE (per-video first-5s curve co-movement brain↔retention).
+    // ══════════════════════════════════════════════════════════════════════════════
+    const TRIBE_TARGETS = [['realviews', 'realviews (deconf.)'], ['keep', 'keep rate'], ['ret5', 'past-5s ret'], ['avgRetention', 'avg retention'], ['views', 'views'], ['logviews', 'log views'], ['avgViewDuration', 'avg view dur'], ['avgPercentViewed', 'avg % viewed'], ['swipedAwayRate', 'swipe-away'], ['retentionVariation', 'ret variation'], ['likes', 'likes'], ['comments', 'comments'], ['subsGained', 'subs gained']];
+    const TRIBE_FEATS = [['mean', 'mean'], ['slope', 'slope (trend)'], ['peak', 'peak'], ['argmax', 'peak-second'], ['delta', 'Δ (end−start)']];
+    const TRIBE_FAMS = [['all', 'all'], ['global', 'global engage'], ['regions', '10 regions'], ['networks', '8 networks'], ['destrieux', '75 Destrieux'], ['hcp', '181 HCP']];
+    function tribeFam(id) { const p = id.split('.')[0]; return (p === 'eng' || p === 'ms') ? 'global' : p === 'reg' ? 'regions' : p === 'net' ? 'networks' : p === 'dx' ? 'destrieux' : 'hcp'; }
+    function tribeLabel(id) { const [p, ...rest] = id.split('.'); const n = rest.join('.'); const pre = { eng: 'engage', ms: 'multiscale', reg: 'region', net: 'network', dx: 'destrieux', hcp: 'HCP' }[p] || p; return `${pre} · ${n.replace(/_window$/, '').replace(/^component_/, 'comp ')}`; }
+    function tribeEnsure() { if (TRIBE) return; TRIBE = { loading: 1 }; fetch('/api/retention/tribe-corr').then(r => r.json()).then(j => { TRIBE = j || { n: 0 }; rtgUpdateTribe(); }).catch(() => { TRIBE = { n: 0 }; rtgUpdateTribe(); }); }
+    function rtgUpdateTribe() { try { const el = window.document.getElementById('rtg-tribepanel'); if (el) el.innerHTML = renderTribeInfluence(); } catch (e) { } }
+    // Pearson + a normal-approx two-sided p from (r,n)
+    function tribePears(xs, ys) { const n = xs.length; if (n < 6) return null; const mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n; let sxy = 0, sx = 0, sy = 0; for (let i = 0; i < n; i++) { const dx = xs[i] - mx, dy = ys[i] - my; sxy += dx * dy; sx += dx * dx; sy += dy * dy; } return (sx && sy) ? sxy / Math.sqrt(sx * sy) : null; }
+    function tribeNcdf(z) { const t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2); let p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; }
+    function tribeP(r, n) { if (r == null || n < 4 || Math.abs(r) >= 1) return 1; const t = Math.abs(r) * Math.sqrt((n - 2) / (1 - r * r)); return 2 * (1 - tribeNcdf(t)); }
+    // xy pairs for indicator id·feat vs target
+    function tribeXY(id, feat, target) { const xs = [], ys = [], rr = []; for (const r of TRIBE.rows) { const x = r.tribe[id] && r.tribe[id][feat], y = r.metrics[target]; if (x != null && y != null && isFinite(x) && isFinite(y)) { xs.push(x); ys.push(y); rr.push(r); } } return { xs, ys, rr }; }
+    function tribeRank(target, feat, group) { const out = []; for (const id of TRIBE.indicatorIds) { if (group !== 'all' && tribeFam(id) !== group) continue; const { xs, ys } = tribeXY(id, feat, target); const r = tribePears(xs, ys); if (r != null) out.push({ id, r, n: xs.length, p: tribeP(r, xs.length) }); } out.sort((a, b) => Math.abs(b.r) - Math.abs(a.r)); return out; }
+    function tribeMeanShape(id) { const R = TRIBE.rows.filter(r => r.shapes && r.shapes[id]); if (!R.length) return null; const L = R[0].shapes[id].length, s = new Array(L).fill(0), c = new Array(L).fill(0); for (const r of R) r.shapes[id].forEach((v, i) => { if (v != null && isFinite(v)) { s[i] += v; c[i]++; } }); return s.map((v, i) => c[i] ? v / c[i] : 0); }
+    const tribeNorm = a => { if (!a || !a.length) return a; const mn = Math.min(...a), mx = Math.max(...a); return a.map(v => (v - mn) / (mx - mn || 1)); };
+    function tribeSpark(vals, color, w, h) { w = w || 120; h = h || 34; if (!vals || vals.length < 2) return ''; const nv = tribeNorm(vals), n = nv.length, X = i => 3 + i / (n - 1) * (w - 6), Y = v => h - 3 - v * (h - 6); let d = nv.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' '); return `<svg viewBox="0 0 ${w} ${h}" style="width:${w}px;height:${h}px"><path d="${d}" fill="none" stroke="${color}" stroke-width="1.6"/></svg>`; }
+    // resample an array to k points (linear over its span)
+    function tribeResample(a, k) { if (!a || a.length < 2) return null; const n = a.length, out = []; for (let i = 0; i < k; i++) { const t = i / (k - 1) * (n - 1), lo = Math.floor(t), hi = Math.min(n - 1, lo + 1), f = t - lo; out.push(a[lo] + (a[hi] - a[lo]) * f); } return out; }
+    function tribeScatter(id, feat, target) {
+        const { xs, ys, rr } = tribeXY(id, feat, target); if (xs.length < 3) return `<div style="color:${C.mute};padding:10px">too few points</div>`;
+        const w = 520, h = 230, pl = 46, pr = 12, pt = 12, pb = 30;
+        const xmin = Math.min(...xs), xmax = Math.max(...xs), ymin = Math.min(...ys), ymax = Math.max(...ys);
+        const X = x => pl + (x - xmin) / (xmax - xmin || 1) * (w - pl - pr), Y = y => h - pb - (y - ymin) / (ymax - ymin || 1) * (h - pt - pb);
+        const nn = xs.length, sx = xs.reduce((a, b) => a + b, 0), sy = ys.reduce((a, b) => a + b, 0), sxx = xs.reduce((a, b) => a + b * b, 0), sxy = xs.reduce((a, b, i) => a + b * ys[i], 0);
+        const sl = (nn * sxy - sx * sy) / (nn * sxx - sx * sx || 1), ic = (sy - sl * sx) / nn;
+        let s = `<line x1="${pl}" y1="${h - pb}" x2="${w - pr}" y2="${h - pb}" stroke="${C.border2}"/><line x1="${pl}" y1="${pt}" x2="${pl}" y2="${h - pb}" stroke="${C.border2}"/>`;
+        s += `<line x1="${X(xmin)}" y1="${Y(sl * xmin + ic)}" x2="${X(xmax)}" y2="${Y(sl * xmax + ic)}" stroke="${C.accent}" stroke-width="2" opacity="0.5" stroke-dasharray="5 3"/>`;
+        rr.forEach((r, i) => { s += `<a href="https://youtu.be/${esc(r.id)}" target="_blank"><circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(ys[i]).toFixed(1)}" r="3" fill="${C.cyan}" opacity="0.6"><title>${esc(r.title)} · ${fmt(xs[i], 3)} → ${fmt(ys[i], 1)}</title></circle></a>`; });
+        const tf = vv => !isFinite(vv) ? '' : Math.abs(vv) >= 1000 ? fv(vv) : Math.abs(vv) >= 1 ? vv.toFixed(1) : vv.toFixed(3);
+        [xmin, (xmin + xmax) / 2, xmax].forEach((xt, k) => { const xx = X(xt); s += `<text x="${xx.toFixed(1)}" y="${h - pb + 11}" text-anchor="${k === 0 ? 'start' : k === 2 ? 'end' : 'middle'}" fill="${C.mute}" font-size="8">${tf(xt)}</text>`; });
+        [ymin, (ymin + ymax) / 2, ymax].forEach(yt => { const yy = Y(yt); s += `<text x="${pl - 5}" y="${(yy + 3).toFixed(1)}" text-anchor="end" fill="${C.mute}" font-size="8">${tf(yt)}</text>`; });
+        s += `<text x="${(pl + w - pr) / 2}" y="${h - 2}" text-anchor="middle" fill="${C.dim}" font-size="10">${esc(tribeLabel(id))} · ${feat} →</text><text x="9" y="${(pt + h - pb) / 2}" fill="${C.dim}" font-size="10" transform="rotate(-90 9 ${(pt + h - pb) / 2})">${esc(target)} →</text>`;
+        return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${s}</svg>`;
+    }
+    // multi-line overlay (each series already 0..1 normalized), k points on 0..5s
+    function tribeOverlay(series, w, h) {
+        w = w || 460; h = h || 150; const pl = 8, pr = 8, pt = 10, pb = 18;
+        const X = (i, n) => pl + i / (n - 1) * (w - pl - pr), Y = v => h - pb - v * (h - pt - pb);
+        let s = '';
+        for (const ser of series) { const v = ser.vals, n = v.length; s += `<path d="${v.map((y, i) => (i ? 'L' : 'M') + X(i, n).toFixed(1) + ' ' + Y(y).toFixed(1)).join(' ')}" fill="none" stroke="${ser.color}" stroke-width="2.2"/>`; }
+        s += `<text x="${pl}" y="${h - 4}" fill="${C.mute}" font-size="8">0s</text><text x="${w - pr}" y="${h - 4}" text-anchor="end" fill="${C.mute}" font-size="8">5s (stimulus)</text>`;
+        const leg = series.map((ser, i) => `<text x="${pl + 4}" y="${pt + 10 + i * 12}" fill="${ser.color}" font-size="9" font-weight="700">— ${esc(ser.label)}</text>`).join('');
+        return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${s}${leg}</svg>`;
+    }
+    function renderTribeInfluence() {
+        const head = h2c('🧠 Tribe Influence — first-5s brain signals × every tracked metric', 'The TRIBE-v2 brain model watched each video; every per-second signal is sliced to the first 5 seconds of content (HRF-aligned) and correlated against every metric we track. MEAN/linear = one number per signal (Pearson). SHAPE = the first-5s curve itself (higher resolution).');
+        if (!TRIBE) { tribeEnsure(); return head + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading Tribe correlations…</div>`); }
+        if (TRIBE.loading) return head + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading Tribe correlations…</div>`);
+        if (!TRIBE.n) return head + cardc(`<div style="padding:24px;color:${C.dim}">Not built yet — run <code style="color:${C.cyan}">node buildings/jarvis/build-tribe-corr.js</code> (needs the local tribe-analysis + video_data).</div>`);
+        const target = st.tribeTarget, feat = st.tribeFeat, group = st.tribeGroup, R = TRIBE.rows;
+        const fam = TRIBE.families || {};
+        let h = head;
+        // account/scope note
+        h += `<div style="font-size:11px;color:${C.mute};background:${C.card2};border-radius:8px;padding:9px 12px;margin-bottom:10px;line-height:1.6">The ${TRIBE.n} brain-analyzed videos are the <b style="color:${C.green}">Main</b> channel (owner's own). Accounts 1–3 have no Tribe analyses, so this map is Main-only. Indicators: <b style="color:${C.text}">${TRIBE.indicatorIds.length}</b> brain signals (${fam.global || 0} global · ${fam.regions || 0} regions · ${fam.networks || 0} networks · ${fam.destrieux || 0} Destrieux · ${fam.hcp || 0} HCP), each reduced to ${TRIBE_FEATS.length} first-5s features.</div>`;
+        // controls: target · feature · family
+        const tcount = t => R.filter(r => r.metrics[t] != null).length;
+        h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">influence on</span>${TRIBE_TARGETS.map(([k, l]) => { const n = tcount(k); return `<button data-tribetgt="${k}" style="background:${target === k ? C.accent + '22' : 'transparent'};border:1px solid ${target === k ? C.accent : C.border};color:${target === k ? C.accent : C.dim};border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer">${l} <span style="opacity:.5;font-size:9px">${n}</span></button>`; }).join('')}</div>`;
+        h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">first-5s feature</span>${TRIBE_FEATS.map(([k, l]) => `<button data-tribefeat="${k}" style="background:${feat === k ? C.cyan + '22' : 'transparent'};border:1px solid ${feat === k ? C.cyan : C.border};color:${feat === k ? C.cyan : C.mute};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>`;
+        h += `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">family</span>${TRIBE_FAMS.map(([k, l]) => `<button data-tribegrp="${k}" style="background:${group === k ? C.purple + '22' : 'transparent'};border:1px solid ${group === k ? C.purple : C.border};color:${group === k ? C.purple : C.mute};border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>`;
+        // ── SHAPE card: mean first-5s brain-engagement curve vs mean retention curve + within-video shape corr ──
+        (() => {
+            const engShape = tribeMeanShape('eng.activation');
+            let retMeans = null, shapeCorrs = [];
+            const retRows = R.filter(r => r.metrics._ret5curve && r.metrics._ret5curve.length >= 3 && r.shapes && r.shapes['eng.activation']);
+            if (retRows.length) {
+                const L = 5; const acc = new Array(L).fill(0), cnt = new Array(L).fill(0);
+                for (const r of retRows) { const rc = tribeResample(r.metrics._ret5curve, L); rc.forEach((v, i) => { acc[i] += v; cnt[i]++; }); const bc = tribeResample(r.shapes['eng.activation'], L), sc = tribePears(bc, rc); if (sc != null) shapeCorrs.push(sc); }
+                retMeans = acc.map((v, i) => v / cnt[i]);
+            }
+            if (engShape) {
+                const series = [{ label: 'brain engagement', color: C.accent, vals: tribeNorm(tribeResample(engShape, 5)) }];
+                if (retMeans) series.push({ label: 'retention', color: C.green, vals: tribeNorm(retMeans) });
+                const mShape = shapeCorrs.length ? shapeCorrs.reduce((a, b) => a + b, 0) / shapeCorrs.length : null;
+                h += cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">📐 Shape (higher resolution)</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Mean first-5s <b style="color:${C.accent}">brain-engagement</b> curve vs mean <b style="color:${C.green}">retention</b> curve (both normalized). Per-video shape correlation = do they rise/fall together within the first 5s.</div>${tribeOverlay(series)}${mShape != null ? `<div style="margin-top:6px">${statc('mean within-video shape r', sgn(mShape), mShape > 0 ? C.green : C.orange)}${statc('videos', shapeCorrs.length, C.cyan)}</div>` : ''}`);
+            }
+        })();
+        // ── selected-indicator drill ──
+        if (st.tribeSel && TRIBE.rows[0].tribe[st.tribeSel]) {
+            const id = st.tribeSel; const { xs } = tribeXY(id, feat, target); const r = tribePears(tribeXY(id, feat, target).xs, tribeXY(id, feat, target).ys);
+            const statsAll = TRIBE_TARGETS.map(([k, l]) => { const q = tribeXY(id, feat, k); const rr = tribePears(q.xs, q.ys); return rr == null ? '' : statc(l, sgn(rr) + (tribeP(rr, q.xs.length) < 0.05 ? ' ✓' : ''), tribeP(rr, q.xs.length) < 0.05 ? (rr >= 0 ? C.green : C.orange) : C.mute); }).join('');
+            const shape = tribeMeanShape(id);
+            h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="font-size:13px;font-weight:800;color:${C.text}">${esc(tribeLabel(id))} <span style="color:${C.mute};font-size:11px">· ${feat} · ${tribeFam(id)}</span></div><button data-tribeclose style="background:transparent;border:1px solid ${C.border2};color:${C.dim};border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer">✕</button></div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${statsAll}</div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start"><div style="flex:1;min-width:300px">${tribeScatter(id, feat, target)}<div style="font-size:10px;color:${C.mute};margin-top:3px">${feat} of ${esc(tribeLabel(id))} vs ${esc(target)} · dashed = trend · click a point → the video</div></div>${shape ? `<div style="flex:0 0 150px"><div style="font-size:10px;color:${C.mute};margin-bottom:3px">mean first-5s shape</div>${tribeSpark(shape, C.accent, 150, 60)}</div>` : ''}</div>`);
+        }
+        // ── ranked influence list (every indicator by |r|) ──
+        const ranked = tribeRank(target, feat, group);
+        const nInd = ranked.length, bonf = 0.05 / Math.max(1, nInd);
+        const mid = 250, half = 120;
+        const bars = ranked.slice(0, 80).map(({ id, r, n, p }) => {
+            const sig = p < bonf ? '★★' : p < 0.01 ? '★' : p < 0.05 ? '•' : '';
+            const col = r >= 0 ? C.green : C.orange, len = Math.abs(r) * half, on = st.tribeSel === id;
+            return `<div data-tribesel="${esc(id)}" style="display:flex;align-items:center;gap:8px;padding:2px 4px;cursor:pointer;border-radius:5px;background:${on ? C.card2 : 'transparent'}">
+                <div style="width:158px;flex-shrink:0;font-size:11px;color:${p < 0.05 ? C.text : C.mute};text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(tribeLabel(id))}">${esc(tribeLabel(id))}</div>
+                <div style="position:relative;flex:1;height:13px"><div style="position:absolute;left:${mid - 4}px;top:0;width:1px;height:13px;background:${C.border2}"></div>
+                    <div style="position:absolute;left:${r >= 0 ? mid : mid - len}px;top:2px;width:${Math.max(1, len)}px;height:9px;border-radius:2px;background:${col};opacity:${p < 0.05 ? 0.95 : 0.4}"></div>
+                    <div style="position:absolute;left:${r >= 0 ? mid + len + 4 : mid - len - 34}px;top:0;font-size:10px;color:${C.text};font-weight:700">${sgn(r)} <span style="color:${sig ? C.yellow : C.faint}">${sig}</span></div></div></div>`;
+        }).join('');
+        const tlabel = (TRIBE_TARGETS.find(t => t[0] === target) || [, target])[1];
+        h += note(`<b>Significance:</b> • p&lt;0.05 · ★ p&lt;0.01 · ★★ Bonferroni (p&lt;${bonf.toExponential(1)}, ${nInd} tests). <b style="color:${C.green}">green +</b> / <b style="color:${C.orange}">orange −</b>. n varies by target (see counts above). These are first-5s brain signals — correlation, not proven cause. Click any row for its scatter + shape.`, C.dim);
+        h += cardc(`<div style="font-size:11px;color:${C.mute};margin-bottom:6px">${nInd} indicators · <b style="color:${C.cyan}">${feat}</b> · sorted by |r| vs <b style="color:${C.accent}">${esc(tlabel)}</b>${nInd > 80 ? ` · showing top 80` : ''}</div>${bars}`);
+        // ── small-multiples: mean first-5s shape of every signal in an interpretable family ──
+        if (['global', 'regions', 'networks'].includes(group)) {
+            const withShape = TRIBE.indicatorIds.filter(id => tribeFam(id) === group && TRIBE.rows.some(r => r.shapes && r.shapes[id]));
+            const rmap = Object.fromEntries(ranked.map(x => [x.id, x]));
+            const cards = withShape.map(id => { const sh = tribeMeanShape(id), rr = rmap[id]; return `<div data-tribesel="${esc(id)}" style="cursor:pointer;background:${st.tribeSel === id ? C.card2 : 'transparent'};border:1px solid ${C.border};border-radius:8px;padding:6px 8px;text-align:center"><div style="font-size:9px;color:${C.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(tribeLabel(id))}">${esc(tribeLabel(id))}</div>${tribeSpark(sh, rr && rr.r >= 0 ? C.green : C.orange)}<div style="font-size:9px;color:${rr && rr.p < 0.05 ? C.text : C.faint};font-weight:700">r ${rr ? sgn(rr.r) : '—'}</div></div>`; }).join('');
+            h += cardc(`<div style="font-size:11px;color:${C.mute};margin-bottom:8px">📈 Mean first-5s shape of every ${group} signal (color = sign of r vs ${esc(tlabel)}). Click one for detail.</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">${cards}</div>`);
+        }
+        return h;
+    }
     // ── Confound falsification audit: does any metadata actually move retention/swipe? ──
     function confDef(name) {
         const D = { post_day_of_week: 'Day of week posted (0=Mon). External timing.',
@@ -2562,7 +2679,7 @@ const JarvisRetention = (function () {
         //  • PER-CHANNEL  — analyses of the selected account's own videos (scoped by the channel bar)
         //  • CORPUS       — built on ALL videos (your 211 + the 11k library); account-independent
         const PERCHAN = [['data', '📋 Data'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict']];
-        const CORPUS = [['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
+        const CORPUS = [['raw', '🔬 Raw'], ['tribe', '🧠 Tribe'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
         const SECLBL = Object.fromEntries([...PERCHAN, ...CORPUS]);
         const isPer = PERCHAN.some(([id]) => id === st.sec);
         const btn = ([id, l]) => `<button data-rs="${id}" style="background:${st.sec === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.sec === id ? C.accent : C.border};color:${st.sec === id ? C.accent : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`;
@@ -2598,7 +2715,7 @@ const JarvisRetention = (function () {
         if (isPer && st.sec !== 'data' && !S) {
             sec = cardc(`<div style="padding:26px;text-align:center"><div style="font-size:14px;font-weight:800;color:${C.text};margin-bottom:6px">${SECLBL[st.sec]} — not computed for ${chName} yet</div><div style="font-size:11px;color:${C.mute};line-height:1.7;max-width:580px;margin:0 auto">${active === 'all' ? 'Pooled analysis isn\'t built yet — switch to a single channel.' : `This per-channel analysis hasn't been run for <b>${chName}</b>. It has <b style="color:${C.green}">${nKeep}</b> videos with retention — open <b>📋 Data</b>, or run <code>build_study.py ${active}</code>.`}</div></div>`, 16);
         } else {
-            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
+            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         }
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
             <div style="font-size:21px;font-weight:900;color:${C.accent};margin-bottom:8px">Retention → Views</div>
@@ -2614,6 +2731,11 @@ const JarvisRetention = (function () {
         const pset = e.target.closest('[data-predset]'); if (pset) { st.predFeats = pset.getAttribute('data-predset').split('+'); render(); return; }
         const pint = e.target.closest('[data-predint]'); if (pint) { const k = pint.getAttribute('data-predint'); st.predInts = (st.predInts || []); st.predInts = st.predInts.includes(k) ? st.predInts.filter(x => x !== k) : st.predInts.concat([k]); render(); return; }
         const ns = e.target.closest('[data-rs]'); if (ns) { st.sec = ns.getAttribute('data-rs'); render(); return; }
+        const tbt = e.target.closest('[data-tribetgt]'); if (tbt) { st.tribeTarget = tbt.getAttribute('data-tribetgt'); rtgUpdateTribe(); return; }
+        const tbf = e.target.closest('[data-tribefeat]'); if (tbf) { st.tribeFeat = tbf.getAttribute('data-tribefeat'); rtgUpdateTribe(); return; }
+        const tbg = e.target.closest('[data-tribegrp]'); if (tbg) { st.tribeGroup = tbg.getAttribute('data-tribegrp'); rtgUpdateTribe(); return; }
+        if (e.target.closest('[data-tribeclose]')) { st.tribeSel = null; rtgUpdateTribe(); return; }
+        const tbs = e.target.closest('[data-tribesel]'); if (tbs && !e.target.closest('a')) { st.tribeSel = tbs.getAttribute('data-tribesel'); rtgUpdateTribe(); return; }
         const nr = e.target.closest('[data-novres]'); if (nr) { st.novRes = nr.getAttribute('data-novres'); render(); return; }
         const ct = e.target.closest('[data-cortgt]'); if (ct) { st.corTarget = ct.getAttribute('data-cortgt'); render(); return; }
         const cg = e.target.closest('[data-corgrp]'); if (cg) { st.corGroup = cg.getAttribute('data-corgrp'); render(); return; }
