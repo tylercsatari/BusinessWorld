@@ -9010,46 +9010,31 @@ async function fetchT(url, opts, ms) {  // fetch with a hard timeout so nothing 
     const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms);
     try { return await fetch(url, { ...opts, signal: ac.signal }); } finally { clearTimeout(t); }
 }
-// Idea generation runs ONLY on Tyler's fine-tuned model (idea_r5), hosted serverless
-// on Modal (pay-per-use, scale-to-zero). NO Gemini, NO fallback — if the endpoint is
-// unset/unreachable the request errors clearly. See modal_idea_server.py.
+// Idea generation runs ONLY on Tyler's fine-tuned model (idea_r7), hosted on REPLICATE
+// (own account, no spend cap; scales to zero). NO Gemini, NO fallback — if the deployment
+// is unset/unreachable the request errors clearly. See cog-idea/predict.py.
 async function hookModelGenerate(premise, invent, count) {
-    const url = process.env.HOOK_MODEL_URL, token = process.env.HOOK_MODEL_TOKEN;
-    if (!url) throw new Error('fine-tuned model endpoint not configured (set HOOK_MODEL_URL) — refusing to fall back');
-    // Modal hands off long calls (cold start / generation > ~150s) via a 303 to a
-    // ?__modal_function_call_id=… URL. POST, then GET-poll that URL through repeated
-    // 303s until the result is ready. We run in the background queue, so minutes is fine.
-    const deadline = Date.now() + 9 * 60 * 1000;   // up to 9 min (covers cold start)
-    let r = await fetchT(url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, redirect: 'manual',
-        body: JSON.stringify({ premise, invent, count, token })
-    }, 165000);
-    // If Modal handed off (call > ~150s), grab the call-id poll URL ONCE and re-GET that
-    // SAME url until done. Do NOT chase each 303's Location — a while-running 303 can point
-    // back at the POST-only base url, and GET-ing that returns 405.
-    const callIdUrl = (resp) => {            // a redirect we should poll = one carrying a call id
-        if (![303, 302, 307].includes(resp.status)) return null;
-        const loc = resp.headers.get('location');
-        if (!loc || !loc.includes('__modal_function_call_id')) return null;   // ignore base-url redirects (POST-only → 405)
-        return loc.startsWith('http') ? loc : new URL(loc, url).href;
-    };
-    let pollUrl = callIdUrl(r);
-    let hops = 0;
-    while (pollUrl && r.status !== 200 && Date.now() < deadline && hops < 90) {
-        await new Promise(res => setTimeout(res, 1500));   // gentle pacing between long-poll hops
-        r = await fetchT(pollUrl, { method: 'GET', redirect: 'manual' }, 165000);
-        hops++;
-        const refreshed = callIdUrl(r);     // Modal may hand back a refreshed call-id URL while still running
-        if (refreshed) pollUrl = refreshed;
+    const token = process.env.REPLICATE_API_TOKEN, dep = process.env.REPLICATE_IDEA_DEPLOYMENT;
+    if (!token || !dep) throw new Error('fine-tuned model endpoint not configured (set REPLICATE_IDEA_DEPLOYMENT) — refusing to fall back');
+    // Replicate deployment: create a prediction, then poll it until terminal. Cold start (GPU
+    // spin-up + model load) can take a few minutes; we run in the background queue, so that's fine.
+    const deadline = Date.now() + 9 * 60 * 1000;
+    const cr = await fetchT('https://api.replicate.com/v1/deployments/' + dep + '/predictions', {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: { premise: premise || '', invent: !!invent || !premise, count } })
+    }, 60000);
+    let p = await cr.json().catch(() => null);
+    if (!p || cr.status >= 400 || !p.id) throw new Error('replicate create http ' + cr.status + ': ' + String((p && (p.detail || p.title)) || '').slice(0, 140));
+    const getUrl = (p.urls && p.urls.get) || ('https://api.replicate.com/v1/predictions/' + p.id);
+    while (['starting', 'processing'].includes(p.status) && Date.now() < deadline) {
+        await new Promise(res => setTimeout(res, 2500));
+        const g = await fetchT(getUrl, { headers: { 'Authorization': 'Bearer ' + token } }, 30000);
+        p = await g.json().catch(() => p);
     }
-    if (r.status !== 200) {
-        let body = ''; try { body = (await r.text()).slice(0, 160); } catch (e) {}
-        // surface the real reason (e.g. Modal "spend limit reached") instead of a bare status
-        throw new Error('http ' + r.status + (body ? ': ' + body : '') + (Date.now() >= deadline ? ' (timed out waiting for GPU)' : ''));
-    }
-    const j = await r.json().catch(() => null);
-    if (!j) throw new Error('model returned no JSON (status ' + r.status + ')');
-    if (j.error) throw new Error('model: ' + j.error);
+    if (p.status !== 'succeeded') throw new Error('replicate ' + p.status + (p.error ? ': ' + String(p.error).slice(0, 140) : (Date.now() >= deadline ? ' (timed out waiting for GPU)' : '')));
+    let out = p.output;                              // predict.py returns a JSON string {model, attempts}
+    if (typeof out === 'string') { try { out = JSON.parse(out); } catch (e) {} }
+    const j = out || {};
     const specs = (j.attempts || []).filter(s => s && Array.isArray(s.frames) && s.frames.length === 5)
         .map(s => ({ premise: (s.premise || premise || '').trim(), frames: s.frames.map(f => String(f)), cohesion_mode: s.cohesion_mode || '', reasoning: s.reasoning || '' }));
     if (!specs.length) throw new Error('model produced no valid 5-frame ideas');
