@@ -1,0 +1,30 @@
+{
+  "note": "Tyler's expert-prior seed hooks for the idea_r7 overnight run. High-stakes / novel-object / visual-peril openings believed to go viral when made properly. Used to (a) bootstrap the RAFT training set after render+score, and (b) as novelty anchors so generated ideas stay semantically distant from these AND each other.",
+  "seeds": [
+    "Holding up a car while someone is trapped underneath",
+    "Lighting a fuse to some type of device (novelty on the device)",
+    "A giant switch to pull (novelty on the switch)",
+    "A giant button to press (novelty on the button)",
+    "A large speeding object like a car or train moving towards you",
+    "A bat or some type of weapon being swung at your head (novelty on the helmet or weapon)",
+    "Hanging from a really high place",
+    "Dropping an object from a really high place",
+    "Loading and shooting some type of launcher (novelty on the launcher, and the implication of what gets launched)",
+    "Slow-mo cutting through something with a sword",
+    "A large balloon overhead getting popped in slow mo",
+    "Activating a bear trap, then walking towards another bear trap (trap using credibility for something to survive it)",
+    "Opening up a large box (novelty on the box)",
+    "Being blindfolded in some environment like a volcano or bungee jump (novelty on the environment)",
+    "Holding a dangerous-appearing item wearing safety glasses and putting it into a beaker",
+    "Removing something from a really tall tower",
+    "Hanging from a rope while slowly fraying it with a knife",
+    "A large linear gear-rate mechanical switch",
+    "A massive piñata",
+    "Pulling a random thing out of a jar/bin",
+    "Having a massive thing falling over as if it's about to land on top of me",
+    "A wheel of some sort to spin until it lands on something (or some continuous motion with an expected outcome)",
+    "A music box exploding open with a bunch of papers shooting out, and grabbing a piece out of the air in slow motion",
+    "Sitting in a chair with a bowl on my head while getting it filled up with water (bonus: a heart-rate graphic on screen also serving as visual segmentation)",
+    "Blindfolded while an object is travelling towards my head and catching it out of the air"
+  ]
+}
