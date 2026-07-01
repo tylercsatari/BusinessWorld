@@ -30,25 +30,11 @@ def _split(txt):
 
 class Predictor(BasePredictor):
     def setup(self):
-        import boto3
-        from boto3.s3.transfer import TransferConfig
-        # Replicate has no deployment env-var injection; R2 read creds are baked into the private
-        # image via /src/r2creds.json (created on the build box, never committed to git).
-        if not os.environ.get("R2_ACCOUNT_ID") and os.path.exists("/src/r2creds.json"):
-            for k, v in json.load(open("/src/r2creds.json")).items():
-                os.environ[k] = v
-        merged = "/src/merged"
-        os.makedirs(merged, exist_ok=True)
-        s3 = boto3.client("s3", endpoint_url="https://%s.r2.cloudflarestorage.com" % os.environ["R2_ACCOUNT_ID"],
-                          aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"], aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"], region_name="auto")
-        b = os.environ["R2_BUCKET_NAME"]
-        cfg = TransferConfig(max_concurrency=16, multipart_chunksize=64 * 1024 * 1024)
-        for o in s3.list_objects_v2(Bucket=b, Prefix="hooks/models/ideamerged_r7/").get("Contents", []):
-            n = o["Key"].split("/")[-1]
-            if n:
-                s3.download_file(b, o["Key"], os.path.join(merged, n), Config=cfg)
+        # The merged model is baked into the image at /model — downloaded shard-by-shard at BUILD
+        # time (one docker layer each; a single 61GB layer won't push to the registry). No cold-start
+        # download → fast, reliable boot on scale-from-zero.
         from vllm import LLM, SamplingParams
-        self.llm = LLM(model=merged, max_model_len=6144, gpu_memory_utilization=0.90,
+        self.llm = LLM(model="/model", max_model_len=6144, gpu_memory_utilization=0.90,
                        dtype="bfloat16", trust_remote_code=True, enforce_eager=True)
         self.SamplingParams = SamplingParams
 
