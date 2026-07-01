@@ -21,6 +21,17 @@ function readHead(fp) {
     finally { fs.closeSync(fd); }
 }
 
+// Human-readable title for a videoId, from the local private analytics (video_data/{id}/analysis.json).
+// Baked into the index so the Brain-tab list shows names on the deploy (where video_data/ is absent).
+const VDATA = path.join(DIR, '..', '..', '..', 'video_data');   // repo-root/video_data
+function titleFor(id) {
+    try {
+        const p = path.join(VDATA, id, 'analysis.json');
+        if (!fs.existsSync(p)) return null;
+        return JSON.parse(fs.readFileSync(p, 'utf8'))?.metadata?.title || null;
+    } catch (e) { return null; }
+}
+
 (async () => {
     const files = fs.readdirSync(DIR).filter(f => f.endsWith('.json') && !f.includes('.images') && !f.startsWith('_') && !f.includes('fsaverage') && !f.slice(0, -5).includes('.'));
     const index = [];
@@ -30,8 +41,10 @@ function readHead(fp) {
             const n_timesteps = numOf(head, 'n_timesteps');
             const engagement_score = numOf(head, 'engagement_score');
             if (!n_timesteps || engagement_score == null) continue;   // not a real analysis
+            const videoId = f.slice(0, -5);
             index.push({
-                videoId: f.slice(0, -5),
+                videoId,
+                title: titleFor(videoId),
                 analyzed_at: strOf(head, 'analyzed_at'),
                 duration_s: numOf(head, 'duration_s') || 0,
                 engagement_score,

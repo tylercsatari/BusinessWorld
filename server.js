@@ -8468,6 +8468,18 @@ Respond ONLY as valid JSON (no markdown):
         const videoId = tribeVideoMatch[1];
         const videoPath = path.join(DIR, 'video_data', videoId, 'video.mp4');
         if (!fs.existsSync(videoPath)) {
+            // deploy: the video file is local-only → redirect to a presigned R2 URL
+            // (tribe-analysis/video/:id.mp4, uploaded by build-tribe-videos-to-r2.js). R2 serves it
+            // with byte-range support for seeking; zero streaming load on the box.
+            if (cloud.isR2Ready()) {
+                try {
+                    const key = `tribe-analysis/video/${videoId}.mp4`;
+                    if (await cloud.existsInR2(key)) {
+                        const signed = await cloud.getR2SignedUrl(key, 3600);
+                        res.writeHead(302, { Location: signed }); res.end(); return;
+                    }
+                } catch (e) {}
+            }
             res.writeHead(404); res.end('Not found'); return;
         }
         const stat = fs.statSync(videoPath);

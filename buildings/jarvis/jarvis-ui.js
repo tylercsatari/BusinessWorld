@@ -7955,9 +7955,11 @@ const JarvisUI = (() => {
                             const isSel = brainSelectedVideoId === c.videoId;
                             const score = (c.engagement_score || 0).toFixed(3);
                             const dur = c.duration_s ? `${Math.round(c.duration_s)}s` : '';
+                            // name: prefer the title baked into the index (works on the deploy), then pen-videos, then the raw id
+                            const name = c.title || (v ? v.name : c.videoId);
                             return `<div class="jarvis-brain-row" data-vid="${escapeHtml(c.videoId)}" style="padding:8px;margin-bottom:4px;border-radius:4px;cursor:pointer;background:${isSel ? '#1e293b' : 'transparent'};border:1px solid ${isSel ? '#7c3aed' : 'transparent'};display:flex;align-items:center;gap:6px">
                                 <div style="flex:1;min-width:0">
-                                    <div style="font-size:12px;color:#e2e8f0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(v ? v.name : c.videoId)}</div>
+                                    <div style="font-size:12px;color:#e2e8f0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
                                     <div style="font-size:10px;color:#94a3b8;margin-top:2px">engagement ${score} · ${dur}</div>
                                 </div>
                                 <button class="brain-delete-btn" data-vid="${escapeHtml(c.videoId)}" style="color:#ef4444;background:none;border:none;cursor:pointer;font-size:11px;padding:2px 6px" title="Delete analysis">🗑</button>
@@ -9093,6 +9095,14 @@ const JarvisUI = (() => {
         </div>`;
     }
 
+    // Media (<video>/<img>) can't carry the fetch wrapper's Authorization header, so stamp the
+    // Supabase token as ?access_token= (the server gate accepts it). Lets owner-gated media load.
+    function tribeMediaUrl(p) {
+        let tok = '';
+        try { tok = (typeof window.getAuthToken === 'function' && window.getAuthToken()) || ''; } catch (e) {}
+        return p + (tok ? (p.includes('?') ? '&' : '?') + 'access_token=' + encodeURIComponent(tok) : '');
+    }
+
     function renderBrainVideoPlayer(videoId, durationSec, brainSec) {
         if (!videoId) return '';
         const stimSec = Math.max(0, (brainSec || 0) - 5.0);
@@ -9107,7 +9117,7 @@ const JarvisUI = (() => {
             </div>
           </div>
           <video id="brain-video-player"
-            src="/api/tribe/video/${encodeURIComponent(videoId)}"
+            src="${tribeMediaUrl('/api/tribe/video/' + encodeURIComponent(videoId))}"
             style="width:100%;max-height:280px;display:block;background:#000"
             preload="metadata"
             playsinline
