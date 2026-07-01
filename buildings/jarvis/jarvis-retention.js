@@ -10,7 +10,7 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, err = null;
+    let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null };
@@ -2641,6 +2641,8 @@ const JarvisRetention = (function () {
         const gsv = e.target.closest('[data-gensave]'); if (gsv) { const k = +gsv.getAttribute('data-gensave'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) saveHook({ kind: 'idea', source: 'generated', title: (a.premise || a.caption || 'idea').slice(0, 80), text: a.premise || a.caption || '', frames: a.frames || [], frame_imgs: a.frame_imgs || [], cohesion_mode: a.cohesion_mode || '' }); return; }
         if (e.target.closest('[data-savescored]')) { const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0]; if (up) saveHook({ kind: 'scored', source: up.source || 'scored', title: up.title || (up.transcript || 'Scored hook').slice(0, 60), text: up.transcript || '', montage: up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : ''), frames: up.genFrames || [], frame_imgs: up.genFrameImgs || [], indicators: up.indicators || null, steer: up.steer || null }); return; }
         const sdel = e.target.closest('[data-savedel]'); if (sdel) { deleteSaved(sdel.getAttribute('data-savedel')); return; }
+        if (e.target.closest('[data-savedclose]')) { st.savedSel = null; rtgUpdateExp(); return; }
+        const sopen = e.target.closest('[data-savedopen]'); if (sopen) { openSaved(sopen.getAttribute('data-savedopen')); return; }
         const gvBtn = e.target.closest('[data-guessview]'); if (gvBtn) { st.guessView = gvBtn.getAttribute('data-guessview'); rtgUpdateGuesses(); return; }
         const grpoRunBtn = e.target.closest('[data-grporun]'); if (grpoRunBtn) { st.grpoRun = grpoRunBtn.getAttribute('data-grporun'); st.grpoSel = null; rtgUpdateGrpo(); return; }
         const grpoInpBtn = e.target.closest('[data-grpoinput]'); if (grpoInpBtn) { st.grpoSel = grpoInpBtn.getAttribute('data-grpoinput'); rtgUpdateGrpo(); return; }
@@ -2837,6 +2839,36 @@ const JarvisRetention = (function () {
     async function deleteSaved(id) {
         try { await fetch('/api/raw/hook-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); SAVED = null; rtgUpdateExp(); } catch (e) {}
     }
+    function openSaved(id) {
+        st.savedSel = id;
+        if (!SAVEDDETAIL[id]) { SAVEDDETAIL[id] = { loading: 1 }; fetch('/api/raw/saved-hook/' + id).then(r => r.json()).then(j => { SAVEDDETAIL[id] = j; rtgUpdateExp(); }).catch(() => { SAVEDDETAIL[id] = { error: 1 }; rtgUpdateExp(); }); }
+        rtgUpdateExp();
+    }
+    function savedDetail() {
+        const id = st.savedSel; if (!id) return '';
+        const d = SAVEDDETAIL[id];
+        const inner = (!d || d.loading) ? `<div style="padding:20px;color:${C.dim};font-size:12px">loading…</div>`
+            : d.error ? `<div style="padding:20px;color:#ef4444;font-size:12px">couldn't load this hook</div>`
+            : (() => {
+                const kp = (d.steer && (d.steer.together_keep || d.steer.visual_keep)) || {};
+                const vp = (d.steer && (d.steer.together_views || d.steer.visual_views)) || {};
+                const frames = d.frames || [];
+                return `<div style="display:flex;gap:16px;flex-wrap:wrap">
+                    <img src="/api/raw/saved-montage/${esc(id)}" style="width:340px;max-width:100%;border-radius:8px;background:#000"/>
+                    <div style="flex:1;min-width:240px">
+                      <div style="font-size:14px;font-weight:800;color:${C.text};line-height:1.35;margin-bottom:8px">${esc(d.title || d.text || '')}</div>
+                      <div style="display:flex;gap:14px;margin-bottom:10px;font-size:12px">
+                        <span>keep <b style="color:${heatCol((kp.pctile || 0) / 100)}">${kp.est != null ? Math.round(kp.est) + '%' : '—'}</b> <span style="color:${C.mute}">(${Math.round(kp.pctile || 0)}%ile)</span></span>
+                        <span>est. views <b style="color:${C.accent}">${vp.est != null ? (vp.est >= 1e6 ? (vp.est / 1e6).toFixed(1) + 'M' : Math.round(vp.est / 1e3) + 'K') : '—'}</b></span>
+                      </div>
+                      <div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">the 5 frames</div>
+                      <div style="font-size:11px;color:${C.dim};line-height:1.6">${frames.map((f, i) => `<div><b style="color:${C.accent}">${i + 1}.</b> ${esc(f)}</div>`).join('')}</div>
+                    </div></div>`;
+            })();
+        return `<div style="background:${C.card};border:1px solid ${C.accent}66;border-radius:12px;padding:14px;margin-bottom:12px;position:relative">
+            <span data-savedclose style="position:absolute;top:10px;right:12px;cursor:pointer;color:${C.dim};font-size:16px;font-weight:700">✕</span>
+            ${inner}</div>`;
+    }
     function savedStrip() {
         if (!SAVED || SAVED.loading || !(SAVED.hooks || []).length) return '';
         const hooks = SAVED.hooks;
@@ -2845,13 +2877,15 @@ const JarvisRetention = (function () {
             const kp = h.steer && (h.steer.visual_keep || h.steer.together_keep || h.steer.text_keep);
             const kpct = (h.keep != null) ? h.keep : (kp && kp.pctile != null ? kp.pctile : null);
             const badge = (kpct != null) ? `<span style="font-size:9px;font-weight:700;color:${heatCol((kpct || 0) / 100)}">keep ${Math.round(kpct)}%ile</span>` : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'scored' : 'idea'}</span>`;
-            return `<div style="border:1px solid ${C.border};border-radius:8px;padding:7px;background:${C.card2};width:152px;position:relative">
-              <span data-savedel="${h.id}" title="delete" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer">✕</span>
+            const sel = st.savedSel === h.id;
+            return `<div data-savedopen="${h.id}" style="border:1px solid ${sel ? C.accent : C.border};border-radius:8px;padding:7px;background:${C.card2};width:152px;position:relative;cursor:pointer">
+              <span data-savedel="${h.id}" title="delete" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer;z-index:2">✕</span>
               ${thumb ? `<img src="${thumb}" style="width:100%;border-radius:5px;display:block;margin-bottom:5px;background:#000" loading="lazy"/>` : ''}
               <div style="font-size:10px;color:${C.text};font-weight:700;line-height:1.3;max-height:39px;overflow:hidden">${esc((h.title || '').slice(0, 75))}</div>
               <div style="margin-top:3px">${badge}</div></div>`;
         };
-        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💾 Saved hooks <span style="font-size:10px;color:${C.mute};font-weight:600">— ${hooks.length}</span></div>
+        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💾 Saved hooks <span style="font-size:10px;color:${C.mute};font-weight:600">— ${hooks.length} above your keep/views threshold · click any to open</span></div>
+          ${savedDetail()}
           <div style="display:flex;gap:10px;flex-wrap:wrap">${hooks.map(card).join('')}</div>`, 12);
     }
 

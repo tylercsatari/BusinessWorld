@@ -3111,6 +3111,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500); res.end(); }
         return;
     }
+    const savedOne = pathname.match(/^\/api\/raw\/saved-hook\/([a-z0-9]{1,32})$/);
+    if (savedOne && req.method === 'GET') {
+        try {
+            const b = await cloud.downloadFromR2(`raw/saved-hooks/${savedOne[1]}.json`);
+            res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(b ? b.toString('utf8') : JSON.stringify({ error: 'not found' }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
     // multi-channel retention: index + per-channel tables, stored in R2 (private; other
     // creators' analytics never go to git). Main (211) stays the committed static file.
     if (pathname === '/api/retention/channels' && req.method === 'GET') {
