@@ -269,9 +269,11 @@ def save_hook(premise, spec, montage_bytes, sc, kept, keep, views):
     gid = 'h%05d' % idx; hid = '%s_0' % gid
     s3.put_object(Bucket=BUCKET, Key='hooks/grpo/%s/montages/%s.jpg' % (RUN, hid), Body=montage_bytes, ContentType='image/jpeg')
     steer = sc.get('steer') or {}
-    x, y = place_xy((sc.get('channels', {}).get('visual') or {}).get('neighbors'))
+    nbrs = (sc.get('channels', {}).get('visual') or {}).get('neighbors') or []
+    nbr = [[n.get('id'), n.get('sim')] for n in nbrs if n.get('id')]   # Guesses tab places hooks via nbr
+    x, y = place_xy(nbrs)
     pct = ((steer.get('together_keep') or steer.get('visual_keep') or {}).get('pctile') or 0) / 100.0
-    row = {'id': hid, 'input_id': gid, 'k': 0, 'premise': premise, 'brief': premise, 'x': x, 'y': y,
+    row = {'id': hid, 'input_id': gid, 'k': 0, 'premise': premise, 'brief': premise, 'x': x, 'y': y, 'nbr': nbr,
            'pctile': pct, 'keep_pred': keep, 'views_pred': views, 'kept': kept,
            'cohesion_mode': spec.get('cohesion_mode', ''), 'frames': spec.get('frames', []),
            'reasoning': spec.get('reasoning', '')[:800], 'caption': premise}
@@ -347,7 +349,8 @@ def main():
     ap.add_argument('--seeds', action='store_true')
     ap.add_argument('--invent', action='store_true')
     ap.add_argument('--limit', type=int, default=0)
-    ap.add_argument('--max-gen', type=int, default=1700)     # budget cap (~$0.20/hook → ~$340)
+    ap.add_argument('--max-gen', type=int, default=1700)     # per-run cap
+    ap.add_argument('--target-abs', type=int, default=0)     # ABSOLUTE manifest size to stop at (survives restarts); 0=use max-gen
     ap.add_argument('--workers', type=int, default=12)
     a = ap.parse_args()
     load_manifest()
@@ -363,10 +366,26 @@ def main():
         flush_manifest()
         print('SEEDS DONE — kept %d / gen %d' % (_state['kept'], _state['gen']), flush=True)
     if a.invent:
+        # seed novelty memory with already-harvested premises so a RESUME stays globally unique
+        prev = []
+        for line in _manifest:
+            try:
+                p = json.loads(line).get('premise')
+                if p: prev.append(p)
+            except Exception: pass
+        if prev:
+            def _safe_emb(p):
+                try: return embed_text(p)
+                except Exception: return None
+            with ThreadPoolExecutor(max_workers=12) as ex:
+                embs = list(ex.map(_safe_emb, prev))
+            _state['accepted'].extend([e for e in embs if e is not None])
+            print('seeded novelty with %d prior premises' % len(_state['accepted']), flush=True)
         def worker():
             while True:
                 with _lock:
-                    if _state['gen'] >= a.max_gen: return
+                    done = (_state['idx'] >= a.target_abs) if a.target_abs else (_state['gen'] >= a.max_gen)
+                    if done: return
                 spec = next_spec()
                 if not spec: continue
                 prem = spec.get('premise')

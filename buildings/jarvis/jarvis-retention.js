@@ -2843,7 +2843,8 @@ const JarvisRetention = (function () {
         const card = h => {
             const thumb = h.hasMontage ? `/api/raw/saved-montage/${h.id}` : (h.frame_imgs && h.frame_imgs[0] ? `/api/hooks/grpo/montage/demo/${h.frame_imgs[0]}` : '');
             const kp = h.steer && (h.steer.visual_keep || h.steer.together_keep || h.steer.text_keep);
-            const badge = (kp && kp.pctile != null) ? `<span style="font-size:9px;font-weight:700;color:${heatCol((kp.pctile || 0) / 100)}">keep ${Math.round(kp.pctile)}%ile</span>` : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'scored' : 'idea'}</span>`;
+            const kpct = (h.keep != null) ? h.keep : (kp && kp.pctile != null ? kp.pctile : null);
+            const badge = (kpct != null) ? `<span style="font-size:9px;font-weight:700;color:${heatCol((kpct || 0) / 100)}">keep ${Math.round(kpct)}%ile</span>` : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'scored' : 'idea'}</span>`;
             return `<div style="border:1px solid ${C.border};border-radius:8px;padding:7px;background:${C.card2};width:152px;position:relative">
               <span data-savedel="${h.id}" title="delete" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer">✕</span>
               ${thumb ? `<img src="${thumb}" style="width:100%;border-radius:5px;display:block;margin-bottom:5px;background:#000" loading="lazy"/>` : ''}

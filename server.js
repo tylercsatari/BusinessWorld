@@ -3058,19 +3058,38 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 steer: (body.steer && typeof body.steer === 'object') ? body.steer : null
             };
             await cloud.uploadToR2(`raw/saved-hooks/${id}.json`, Buffer.from(JSON.stringify(rec)), 'application/json');
+            // keep the fast index in sync (compact record) so the Saved bank shows it immediately
+            try {
+                let idx = { hooks: [] };
+                try { const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
+                if (!Array.isArray(idx.hooks)) idx.hooks = [];
+                const kp = rec.steer && (rec.steer.together_keep || rec.steer.visual_keep);
+                idx.hooks.push({ id, title: rec.title, kind: rec.kind, hasMontage, savedAt: rec.savedAt, keep: kp ? kp.pctile : null });
+                await cloud.uploadToR2('raw/saved-hooks/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
+            } catch (e) {}
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, id }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
     if (pathname === '/api/raw/saved-hooks' && req.method === 'GET') {
         try {
+            // Fast path: a prebuilt compact index (one object) — scales to thousands of saved hooks.
+            let idx = null;
+            try { const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
+            if (idx && Array.isArray(idx.hooks)) {
+                idx.hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+                res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+                res.end(JSON.stringify({ hooks: idx.hooks, indexed: true }));
+                return;
+            }
+            // Fallback (no index yet): only the most-recent ~80 records so we never time out on a big bank.
             let keys = []; try { keys = (await cloud.listR2Keys('raw/saved-hooks/')) || []; } catch (e) {}
-            keys = keys.filter(k => k.endsWith('.json'));
+            keys = keys.filter(k => k.endsWith('.json')).sort().reverse().slice(0, 80);
             const hooks = [];
             for (const k of keys) { try { const b = await cloud.downloadFromR2(k); if (b) hooks.push(JSON.parse(b.toString('utf8'))); } catch (e) {} }
             hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify({ hooks }));
+            res.end(JSON.stringify({ hooks, indexed: false }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
