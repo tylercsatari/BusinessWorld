@@ -887,7 +887,9 @@ const JarvisRetention = (function () {
         fetch('/api/hooks/demo/status/' + rid).then(r => r.json()).then(s => { st.expGenStage = (s && s.stage) || 'queued'; st.expGenStatErr = (s && s.error) || null; if (st.expGenBusy) rtgUpdateExp(); }).catch(() => {});
         fetch('/api/hooks/grpo/group/demo/' + rid).then(r => r.json()).then(j => {
             if (j && j.attempts && j.attempts.length) { EXPDEMO[rid] = j; st.expGenBusy = false; st.expGenStage = 'done'; rtgUpdateExp(); const a0 = j.attempts[0]; if (a0 && a0.frame_imgs && a0.frame_imgs.filter(Boolean).length) scoreGenerated(0, a0.frame_imgs, a0.premise || a0.caption || ''); }
-            else if (j && (j.error || (j.n === 0 && j.attempts))) { EXPDEMO[rid] = { error: prettyGenErr(j.error) }; st.expGenBusy = false; rtgUpdateExp(); }   // the model reported a real error — surface it, don't wait
+            // a REAL terminal result the worker WROTE (has input_id) that failed → surface it. NOT the
+            // endpoint's "not found" placeholder (which just means the result isn't ready yet — keep polling).
+            else if (j && j.input_id && (j.error || (j.n === 0 && Array.isArray(j.attempts)))) { EXPDEMO[rid] = { error: prettyGenErr(j.error || 'came back empty') }; st.expGenBusy = false; rtgUpdateExp(); }
             else if (tries < 150) { setTimeout(() => expDemoPoll(rid, tries + 1), 4000); }
             else { EXPDEMO[rid] = { error: 'Timed out. The model may be scaling up — try again in a moment.' }; st.expGenBusy = false; rtgUpdateExp(); }
         }).catch(() => { if (tries < 150) setTimeout(() => expDemoPoll(rid, tries + 1), 4000); });
