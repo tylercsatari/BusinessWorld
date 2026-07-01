@@ -178,6 +178,9 @@ def _run():
     # --image: a montage image is provided directly (built from photos in the browser)
     # with explicit --text; no ffmpeg/transcription needed. Otherwise --file is a video.
     dur_s = None                                           # full-video duration → predict-scope realistic views
+    try:                                                   # the client may send the REAL full length (it trims the upload to 6s)
+        if args.get('duration'): dur_s = float(args['duration'])
+    except Exception: dur_s = None
     if args.get('image'):
         img = args['image']
         if not os.path.exists(img):
@@ -193,11 +196,12 @@ def _run():
         if not inp:
             print(json.dumps({'error': 'could not read this video — ffmpeg failed to decode it even after transcoding'})); return
         b64, txt, good = inp
-        try:
-            r = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path],
-                               capture_output=True, text=True, timeout=20)
-            dur_s = float(r.stdout.strip()) if r.stdout.strip() else None
-        except Exception: dur_s = None
+        if dur_s is None:                                  # only ffprobe if the client didn't send the real duration (else we'd read the 6s clip)
+            try:
+                r = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path],
+                                   capture_output=True, text=True, timeout=20)
+                dur_s = float(r.stdout.strip()) if r.stdout.strip() else None
+            except Exception: dur_s = None
     ev = embed([img_part(b64)])
     et = embed([{'text': txt}]) if good else None
     eg = embed([img_part(b64)] + ([{'text': txt}] if good else []))

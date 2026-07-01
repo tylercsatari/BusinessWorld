@@ -1399,6 +1399,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/raw/embed-upload' && req.method === 'POST') {
         const ext = (req.headers['x-raw-ext'] || 'mp4').replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'mp4';
         const title = (req.headers['x-raw-title'] || 'My upload').toString().slice(0, 80);
+        const durH = parseFloat(req.headers['x-raw-duration']);   // real full-video length (client trims to 6s but sends this so realviews isn't skewed)
         const os = require('os');
         const tmp = path.join(os.tmpdir(), `rawup_${Date.now()}_${Math.round(Math.random() * 1e6)}.${ext}`);
         const MAX = 1024 * 1024 * 1024;   // 1 GB — STREAMED to disk (never buffered in RAM), so big phone videos don't OOM
@@ -1418,7 +1419,9 @@ const server = http.createServer(async (req, res) => {
             if (size === 0) return fail(400, 'empty upload');
             ws.end(() => {
                 const script = path.join(__dirname, 'raw_upload.py');
-                const py = spawn(RAW_PYTHON, [script, '--file', tmp, '--title', title], { env: RAW_PY_ENV });
+                const pyArgs = [script, '--file', tmp, '--title', title];
+                if (durH > 0 && isFinite(durH)) pyArgs.push('--duration', String(Math.round(durH)));
+                const py = spawn(RAW_PYTHON, pyArgs, { env: RAW_PY_ENV });
                 let out = '', err = '';
                 py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
                 const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 240000);
