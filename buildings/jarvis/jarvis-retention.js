@@ -2103,6 +2103,20 @@ const JarvisRetention = (function () {
         const legend = Object.keys(TRIBE_FAMCOL).map((f, i) => `<g transform="translate(${pad + i * 130},${H - 8})"><circle cx="5" cy="-4" r="5" fill="${TRIBE_FAMCOL[f]}"/><text x="15" y="0" fill="${C.dim}" font-size="10">${f}</text></g>`).join('');
         return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${dots}${legend}</svg>`;
     }
+    // compact, TARGET-RESPONSIVE shape panel (lives inside the 📈 shapes view, not always-on):
+    // mean first-5s brain-engagement curve for high- vs low-target videos + retention, capped width.
+    function tribeShapePanel(target) {
+        const R = TRIBE.rows.filter(r => r.metrics[target] != null && r.shapes && r.shapes['eng.activation']);
+        if (R.length < 8) return '';
+        const sorted = R.map(r => r.metrics[target]).slice().sort((a, b) => a - b), med = sorted[Math.floor(sorted.length / 2)];
+        const meanShape = rows => { const L = 5, acc = new Array(L).fill(0), cnt = new Array(L).fill(0); for (const r of rows) { const s = tribeResample(r.shapes['eng.activation'], L); s.forEach((v, i) => { acc[i] += v; cnt[i]++; }); } return acc.map((v, i) => cnt[i] ? v / cnt[i] : 0); };
+        const hi = R.filter(r => r.metrics[target] >= med), lo = R.filter(r => r.metrics[target] < med);
+        const series = [{ label: 'high-' + target + ' brain', color: C.green, vals: tribeNorm(meanShape(hi)) }, { label: 'low-' + target + ' brain', color: C.orange, vals: tribeNorm(meanShape(lo)) }];
+        const retRows = R.filter(r => r.metrics._ret5curve && r.metrics._ret5curve.length >= 3); let mShape = null;
+        if (retRows.length) { const corrs = [], L = 5, acc = new Array(L).fill(0), cnt = new Array(L).fill(0); for (const r of retRows) { const rc = tribeResample(r.metrics._ret5curve, L); rc.forEach((v, i) => { acc[i] += v; cnt[i]++; }); const sc = tribePears(tribeResample(r.shapes['eng.activation'], L), rc); if (sc != null) corrs.push(sc); } series.push({ label: 'retention', color: C.cyan, vals: tribeNorm(acc.map((v, i) => v / cnt[i])) }); mShape = corrs.length ? corrs.reduce((a, b) => a + b, 0) / corrs.length : null; }
+        const tl = (TRIBE_TARGETS.find(t => t[0] === target) || [, target])[1];
+        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">📐 First-5s brain-engagement shape — high vs low ${esc(tl)}</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Mean opening-5s brain curve for the top vs bottom half by ${esc(tl)} (median split, n=${hi.length}/${lo.length}), plus mean retention. If the lines diverge, winners have a different opening brain-response shape.</div><div style="max-width:460px">${tribeOverlay(series, 460, 140)}</div>${mShape != null ? `<div style="margin-top:6px">${statc('mean within-video brain↔retention shape r', sgn(mShape), mShape > 0 ? C.green : C.orange)}</div>` : ''}`);
+    }
     function renderTribeInfluence() {
         const head = h2c('🧠 Tribe Influence — first-5s brain signals × every tracked metric', 'The TRIBE-v2 brain model watched each video; every per-second signal is sliced to the first 5 seconds of content (HRF-aligned) and correlated against every metric we track. MEAN/linear = one number per signal (Pearson). SHAPE = the first-5s curve itself (higher resolution).');
         if (!TRIBE) { tribeEnsure(); return head + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading Tribe correlations…</div>`); }
@@ -2118,23 +2132,6 @@ const JarvisRetention = (function () {
         h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">influence on</span>${TRIBE_TARGETS.map(([k, l]) => { const n = tcount(k); return `<button data-tribetgt="${k}" style="background:${target === k ? C.accent + '22' : 'transparent'};border:1px solid ${target === k ? C.accent : C.border};color:${target === k ? C.accent : C.dim};border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer">${l} <span style="opacity:.5;font-size:9px">${n}</span></button>`; }).join('')}</div>`;
         h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">first-5s feature</span>${TRIBE_FEATS.map(([k, l]) => `<button data-tribefeat="${k}" style="background:${feat === k ? C.cyan + '22' : 'transparent'};border:1px solid ${feat === k ? C.cyan : C.border};color:${feat === k ? C.cyan : C.mute};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>`;
         h += `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">family</span>${TRIBE_FAMS.map(([k, l]) => `<button data-tribegrp="${k}" style="background:${group === k ? C.purple + '22' : 'transparent'};border:1px solid ${group === k ? C.purple : C.border};color:${group === k ? C.purple : C.mute};border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>`;
-        // ── SHAPE card: mean first-5s brain-engagement curve vs mean retention curve + within-video shape corr ──
-        (() => {
-            const engShape = tribeMeanShape('eng.activation');
-            let retMeans = null, shapeCorrs = [];
-            const retRows = R.filter(r => r.metrics._ret5curve && r.metrics._ret5curve.length >= 3 && r.shapes && r.shapes['eng.activation']);
-            if (retRows.length) {
-                const L = 5; const acc = new Array(L).fill(0), cnt = new Array(L).fill(0);
-                for (const r of retRows) { const rc = tribeResample(r.metrics._ret5curve, L); rc.forEach((v, i) => { acc[i] += v; cnt[i]++; }); const bc = tribeResample(r.shapes['eng.activation'], L), sc = tribePears(bc, rc); if (sc != null) shapeCorrs.push(sc); }
-                retMeans = acc.map((v, i) => v / cnt[i]);
-            }
-            if (engShape) {
-                const series = [{ label: 'brain engagement', color: C.accent, vals: tribeNorm(tribeResample(engShape, 5)) }];
-                if (retMeans) series.push({ label: 'retention', color: C.green, vals: tribeNorm(retMeans) });
-                const mShape = shapeCorrs.length ? shapeCorrs.reduce((a, b) => a + b, 0) / shapeCorrs.length : null;
-                h += cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">📐 Shape (higher resolution)</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Mean first-5s <b style="color:${C.accent}">brain-engagement</b> curve vs mean <b style="color:${C.green}">retention</b> curve (both normalized). Per-video shape correlation = do they rise/fall together within the first 5s.</div>${tribeOverlay(series)}${mShape != null ? `<div style="margin-top:6px">${statc('mean within-video shape r', sgn(mShape), mShape > 0 ? C.green : C.orange)}${statc('videos', shapeCorrs.length, C.cyan)}</div>` : ''}`);
-            }
-        })();
         // ── selected-indicator drill ──
         if (st.tribeSel && TRIBE.rows[0].tribe[st.tribeSel]) {
             const id = st.tribeSel; const { xs } = tribeXY(id, feat, target); const r = tribePears(tribeXY(id, feat, target).xs, tribeXY(id, feat, target).ys);
@@ -2155,6 +2152,7 @@ const JarvisRetention = (function () {
             h += note(`<b>2D indicator map</b> — every brain signal projected by its correlation profile across all metrics (PCA, like the Raw clustering). Signals that influence metrics the same way sit together. Colour = family, size + opacity = |r| vs <b style="color:${C.accent}">${esc(tlabel)}</b>. Click a dot for its scatter.`, C.dim);
             h += cardc(tribeMap(feat, target));
         } else if (st.tribeView === 'shapes') {
+            h += tribeShapePanel(target);
             const ranked = tribeRank(target, feat, group), rmap = Object.fromEntries(ranked.map(x => [x.id, x]));
             const withShape = TRIBE.indicatorIds.filter(id => (group === 'all' || tribeFam(id) === group) && TRIBE.rows.some(r => r.shapes && r.shapes[id]));
             h += note(`Mean first-5s <b>shape</b> of every signal that carries a curve (${withShape.length} of ${TRIBE.indicatorIds.length} — global/region/network; Destrieux & HCP are scalar-only, see the heatmap). Colour = sign of r vs ${esc(tlabel)}. Click one for detail.`, C.dim);
