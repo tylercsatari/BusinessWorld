@@ -8303,6 +8303,14 @@ Respond ONLY as valid JSON (no markdown):
                 const videoId = m[1];
                 const analysisPath = path.join(DIR, 'video_data', videoId, 'analysis.json');
                 if (!fs.existsSync(analysisPath)) {
+                    // deploy: video_data/ is local-only → serve the R2 companion built by build-tribe-video-data.js
+                    let comp = null;
+                    if (cloud.isR2Ready()) { try { const b = await cloud.downloadFromR2(`tribe-analysis/video-data/${videoId}.json`); if (b) comp = JSON.parse(b.toString('utf8')); } catch (e) {} }
+                    if (comp) {
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ videoId, title: comp.title || null, durationSec: comp.durationSec || 0, avgViewDuration: comp.avgViewDuration || null, avgPercentViewed: comp.avgPercentViewed || null, retentionCurve: comp.retentionCurve || [] }));
+                        return;
+                    }
                     res.writeHead(404, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ error: 'analysis.json not found' }));
                     return;
@@ -8422,8 +8430,12 @@ Respond ONLY as valid JSON (no markdown):
             const videoId = tribeTranscriptMatch[1];
             const analysisPath = path.join(DIR, 'video_data', videoId, 'analysis.json');
             if (!fs.existsSync(analysisPath)) {
-                res.writeHead(404, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'analysis.json not found', words: [], fullText: '' }));
+                // deploy: serve transcript from the R2 companion (build-tribe-video-data.js)
+                let comp = null;
+                if (cloud.isR2Ready()) { try { const b = await cloud.downloadFromR2(`tribe-analysis/video-data/${videoId}.json`); if (b) comp = JSON.parse(b.toString('utf8')); } catch (e) {} }
+                const tr2 = (comp && comp.transcript) || {};
+                res.writeHead(comp ? 200 : 404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ videoId, words: Array.isArray(tr2.words) ? tr2.words : [], fullText: tr2.fullText || '', ...(comp ? {} : { error: 'analysis.json not found' }) }));
                 return;
             }
             const a = JSON.parse(fs.readFileSync(analysisPath, 'utf8'));
