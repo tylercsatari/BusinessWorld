@@ -1087,7 +1087,7 @@ const JarvisRetention = (function () {
             <div style="${gcol};margin-bottom:12px">${['keep', 'ret5', 'views', 'realviews', 'gt10M'].map(embBox).join('')}</div>
             <div style="font-size:10px;color:${C.purple};font-weight:800;text-transform:uppercase;margin-bottom:5px">Novelty — 3 boxes (independent)</div>
             <div style="${gcol}">${['keep', 'ret5', 'views'].map(novBox).join('')}</div>`, 12);
-        return head + controls + trace + boxes + savedStrip();
+        return head + controls + '<div id="exp-scoreout"></div>' + trace + boxes + savedStrip();
     }
     function rtgUpdateFusion() { try { const el = window.document.getElementById('rtg-fusionpanel'); if (el) el.innerHTML = renderFusion(); } catch (e) { } }
     function fuHeat(v) { // -1..1 correlation → blue(neg)…grey…red(pos)
@@ -2642,6 +2642,8 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-savescored]')) { const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0]; if (up) saveHook({ kind: 'scored', source: up.source || 'scored', title: up.title || (up.transcript || 'Scored hook').slice(0, 60), text: up.transcript || '', montage: up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : ''), frames: up.genFrames || [], frame_imgs: up.genFrameImgs || [], indicators: up.indicators || null, steer: up.steer || null }); return; }
         const sdel = e.target.closest('[data-savedel]'); if (sdel) { deleteSaved(sdel.getAttribute('data-savedel')); return; }
         if (e.target.closest('[data-savedclose]')) { st.savedSel = null; rtgUpdateExp(); return; }
+        const ssort = e.target.closest('[data-savedsort]'); if (ssort) { st.savedSort = ssort.getAttribute('data-savedsort'); rtgUpdateExp(); return; }
+        if (e.target.closest('[data-savedfiltclear]')) { st.savedFilt = {}; rtgUpdateExp(); return; }
         const sopen = e.target.closest('[data-savedopen]'); if (sopen) { openSaved(sopen.getAttribute('data-savedopen')); return; }
         const gvBtn = e.target.closest('[data-guessview]'); if (gvBtn) { st.guessView = gvBtn.getAttribute('data-guessview'); rtgUpdateGuesses(); return; }
         const grpoRunBtn = e.target.closest('[data-grporun]'); if (grpoRunBtn) { st.grpoRun = grpoRunBtn.getAttribute('data-grporun'); st.grpoSel = null; rtgUpdateGrpo(); return; }
@@ -2680,6 +2682,7 @@ const JarvisRetention = (function () {
         if (e.target.id === 'rtg-hazA') { st.hazA = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-hazB') { st.hazB = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-seek') { rtgSeek(+e.target.value); return; }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-savedfilt')) { const k = e.target.getAttribute('data-savedfilt'); st.savedFilt = st.savedFilt || {}; st.savedFilt[k] = +e.target.value; window.clearTimeout(st._sfT); st._sfT = window.setTimeout(rtgUpdateExp, 130); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-rawtext')) { st.rawText = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-framedesc')) { const i = +e.target.getAttribute('data-framedesc'); st.rawFrameDesc = (st.rawFrameDesc || ['', '', '', '', '']).slice(); st.rawFrameDesc[i] = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-pf')) { st.pvals = st.pvals || {}; st.pvals[e.target.getAttribute('data-pf')] = +e.target.value; updatePredict(); return; }
@@ -2839,39 +2842,52 @@ const JarvisRetention = (function () {
     async function deleteSaved(id) {
         try { await fetch('/api/raw/hook-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); SAVED = null; rtgUpdateExp(); } catch (e) {}
     }
-    function openSaved(id) {
-        st.savedSel = id;
-        if (!SAVEDDETAIL[id]) { SAVEDDETAIL[id] = { loading: 1 }; fetch('/api/raw/saved-hook/' + id).then(r => r.json()).then(j => { SAVEDDETAIL[id] = j; rtgUpdateExp(); }).catch(() => { SAVEDDETAIL[id] = { error: 1 }; rtgUpdateExp(); }); }
-        rtgUpdateExp();
+    // Clicking a saved hook re-runs its montage through the SAME embed-montage scorer → it lands in
+    // the standard score display (trace + every indicator + embedded-space placement), identical to
+    // scoring a hook in Experiments. Then scroll up to that read-out.
+    async function openSaved(id) {
+        st.savedSel = id; st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; rtgUpdateExp();
+        const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1200);
+        try {
+            const rec = await fetch('/api/raw/saved-hook/' + id).then(r => r.json()).catch(() => ({}));
+            const montage = await urlToDataUrl('/api/raw/saved-montage/' + id);
+            const r = await fetch('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: rec.text || rec.title || '', title: (rec.title || 'Saved hook').slice(0, 40) }) });
+            const j = await r.json();
+            if (!r.ok || j.error) { st.rawUpErr = j.error || ('HTTP ' + r.status); }
+            else { j.source = 'saved'; j.savedId = id; j.genFrames = rec.frames || []; j.montageDataUrl = montage; st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; }
+        } catch (e) { st.rawUpErr = e.message; }
+        window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0; rtgUpdateExp();
+        window.setTimeout(() => { const el = window.document.getElementById('exp-scoreout'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
     }
     function savedDetail() {
-        const id = st.savedSel; if (!id) return '';
-        const d = SAVEDDETAIL[id];
-        const inner = (!d || d.loading) ? `<div style="padding:20px;color:${C.dim};font-size:12px">loading…</div>`
-            : d.error ? `<div style="padding:20px;color:#ef4444;font-size:12px">couldn't load this hook</div>`
-            : (() => {
-                const kp = (d.steer && (d.steer.together_keep || d.steer.visual_keep)) || {};
-                const vp = (d.steer && (d.steer.together_views || d.steer.visual_views)) || {};
-                const frames = d.frames || [];
-                return `<div style="display:flex;gap:16px;flex-wrap:wrap">
-                    <img src="/api/raw/saved-montage/${esc(id)}" style="width:340px;max-width:100%;border-radius:8px;background:#000"/>
-                    <div style="flex:1;min-width:240px">
-                      <div style="font-size:14px;font-weight:800;color:${C.text};line-height:1.35;margin-bottom:8px">${esc(d.title || d.text || '')}</div>
-                      <div style="display:flex;gap:14px;margin-bottom:10px;font-size:12px">
-                        <span>keep <b style="color:${heatCol((kp.pctile || 0) / 100)}">${kp.est != null ? Math.round(kp.est) + '%' : '—'}</b> <span style="color:${C.mute}">(${Math.round(kp.pctile || 0)}%ile)</span></span>
-                        <span>est. views <b style="color:${C.accent}">${vp.est != null ? (vp.est >= 1e6 ? (vp.est / 1e6).toFixed(1) + 'M' : Math.round(vp.est / 1e3) + 'K') : '—'}</b></span>
-                      </div>
-                      <div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">the 5 frames</div>
-                      <div style="font-size:11px;color:${C.dim};line-height:1.6">${frames.map((f, i) => `<div><b style="color:${C.accent}">${i + 1}.</b> ${esc(f)}</div>`).join('')}</div>
-                    </div></div>`;
-            })();
-        return `<div style="background:${C.card};border:1px solid ${C.accent}66;border-radius:12px;padding:14px;margin-bottom:12px;position:relative">
-            <span data-savedclose style="position:absolute;top:10px;right:12px;cursor:pointer;color:${C.dim};font-size:16px;font-weight:700">✕</span>
-            ${inner}</div>`;
+        if (!st.savedSel) return '';
+        const msg = st.rawUploading ? '⏳ scoring this hook — the full embedding read-out will appear above ↑'
+            : '✓ Scored — the full embedding read-out (every indicator + embedded-space placement) is shown above ↑';
+        return `<div style="background:${C.accent}14;border:1px solid ${C.accent}55;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:${C.accent};display:flex;justify-content:space-between;align-items:center"><span>${msg}</span><span data-savedclose style="cursor:pointer;color:${C.dim};font-weight:700">✕</span></div>`;
     }
     function savedStrip() {
         if (!SAVED || SAVED.loading || !(SAVED.hooks || []).length) return '';
-        const hooks = SAVED.hooks;
+        const all = SAVED.hooks;
+        const F = st.savedFilt || (st.savedFilt = {});
+        // filter on any combination of metrics; sort by the chosen sort metric (default keep)
+        const METRICS = [['keep', 'keep-rate %ile', 100, ''], ['ret5', 'past-5s %ile', 100, ''], ['views', 'est. views ≥', 50, 'M'], ['gt10M', 'chance >10M', 100, '%'], ['outlier', 'outlier %ile', 100, '']];
+        const thr = k => F[k] || 0;
+        const pass = h => {
+            const m = h.m || {};
+            if (thr('keep') && !(m.keep >= thr('keep'))) return false;
+            if (thr('ret5') && !(m.ret5 >= thr('ret5'))) return false;
+            if (thr('views') && !(m.views >= thr('views') * 1e6)) return false;
+            if (thr('gt10M') && !((m.gt10M || 0) * 100 >= thr('gt10M'))) return false;
+            if (thr('outlier') && !(m.outlier >= thr('outlier'))) return false;
+            return true;
+        };
+        const sortK = st.savedSort || 'keep';
+        const hooks = all.filter(pass).sort((a, b) => ((b.m || {})[sortK] || 0) - ((a.m || {})[sortK] || 0));
+        const CAP = 150;
+        const fbar = METRICS.map(([k, lab, mx, u]) => `<div style="display:flex;flex-direction:column;gap:1px;min-width:118px">
+            <span style="font-size:9px;color:${C.mute}">${lab} ≥ <b style="color:${thr(k) ? C.accent : C.dim}">${thr(k)}${u}</b></span>
+            <input type="range" min="0" max="${mx}" value="${thr(k)}" data-savedfilt="${k}" style="width:118px;accent-color:${C.accent}"/></div>`).join('');
+        const sortSel = METRICS.map(([k, lab]) => `<span data-savedsort="${k}" style="cursor:pointer;font-size:9px;border:1px solid ${sortK === k ? C.accent : C.border};background:${sortK === k ? C.accent + '22' : 'transparent'};color:${sortK === k ? C.accent : C.dim};border-radius:5px;padding:2px 6px">${k}</span>`).join('');
         const card = h => {
             const thumb = h.hasMontage ? `/api/raw/saved-montage/${h.id}` : (h.frame_imgs && h.frame_imgs[0] ? `/api/hooks/grpo/montage/demo/${h.frame_imgs[0]}` : '');
             const kp = h.steer && (h.steer.visual_keep || h.steer.together_keep || h.steer.text_keep);
@@ -2884,9 +2900,16 @@ const JarvisRetention = (function () {
               <div style="font-size:10px;color:${C.text};font-weight:700;line-height:1.3;max-height:39px;overflow:hidden">${esc((h.title || '').slice(0, 75))}</div>
               <div style="margin-top:3px">${badge}</div></div>`;
         };
-        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💾 Saved hooks <span style="font-size:10px;color:${C.mute};font-weight:600">— ${hooks.length} above your keep/views threshold · click any to open</span></div>
+        const shown = hooks.slice(0, CAP);
+        const anyFilt = METRICS.some(([k]) => thr(k));
+        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💾 Saved hooks <span style="font-size:10px;color:${C.mute};font-weight:600">— ${all.length} above your keep/views threshold${anyFilt ? ` · <b style="color:${C.accent}">${hooks.length} match your filter</b>` : ''} · click any for the full read-out</span></div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;padding:8px;background:${C.card2};border-radius:8px">
+            <span style="font-size:9px;color:${C.mute};align-self:center">filter ≥</span>${fbar}
+            ${anyFilt ? `<span data-savedfiltclear style="cursor:pointer;font-size:9px;color:${C.dim};text-decoration:underline;align-self:center">clear</span>` : ''}
+            <span style="width:10px"></span><span style="font-size:9px;color:${C.mute};align-self:center">sort by</span>${sortSel}</div>
           ${savedDetail()}
-          <div style="display:flex;gap:10px;flex-wrap:wrap">${hooks.map(card).join('')}</div>`, 12);
+          <div style="display:flex;gap:10px;flex-wrap:wrap">${shown.map(card).join('')}</div>
+          ${hooks.length > CAP ? `<div style="font-size:10px;color:${C.mute};margin-top:8px">showing top ${CAP} of ${hooks.length} — tighten the filter to narrow down</div>` : ''}`, 12);
     }
 
     async function mount(el) {
