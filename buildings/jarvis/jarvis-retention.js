@@ -879,12 +879,13 @@ const JarvisRetention = (function () {
             st.rawGenStage = '';
         } catch (e) { st.rawGenErr = String((e && e.message) || e).slice(0, 160); }
         st.rawGenBusy = false; st.rawGenStage = ''; rtgUpdateExp();
+        if (!st.rawGenErr && (st.rawFrames || []).some(Boolean)) rtgPlaceHook();   // auto-embed + score the generated frames → same output as every other path
     }
     function expDemoPoll(rid, tries) {
         tries = tries || 0;
         fetch('/api/hooks/demo/status/' + rid).then(r => r.json()).then(s => { st.expGenStage = (s && s.stage) || 'queued'; if (st.expGenBusy) rtgUpdateExp(); }).catch(() => {});
         fetch('/api/hooks/grpo/group/demo/' + rid).then(r => r.json()).then(j => {
-            if (j && j.attempts && j.attempts.length) { EXPDEMO[rid] = j; st.expGenBusy = false; st.expGenStage = 'done'; rtgUpdateExp(); }
+            if (j && j.attempts && j.attempts.length) { EXPDEMO[rid] = j; st.expGenBusy = false; st.expGenStage = 'done'; rtgUpdateExp(); const a0 = j.attempts[0]; if (a0 && a0.frame_imgs && a0.frame_imgs.filter(Boolean).length) scoreGenerated(0, a0.frame_imgs, a0.premise || a0.caption || ''); }
             else if (tries < 150) { setTimeout(() => expDemoPoll(rid, tries + 1), 4000); }
             else { EXPDEMO[rid] = { error: 'timed out waiting for the fine-tuned model to spin up — try again in a moment' }; st.expGenBusy = false; rtgUpdateExp(); }
         }).catch(() => { if (tries < 150) setTimeout(() => expDemoPoll(rid, tries + 1), 4000); });
@@ -936,8 +937,31 @@ const JarvisRetention = (function () {
             <span data-expgen style="cursor:${st.expGenBusy ? 'default' : 'pointer'};background:${st.expGenBusy ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800;display:inline-flex;align-items:center">${st.expGenBusy ? '⏳ working…' : 'Generate'}</span>
           </div>${result}</div>`;
     }
+    // ── ONE unified progress stepper for EVERY path (generate / render / upload / build → embed → score).
+    //    Shown live under the header whenever anything is running, so you always see where it's at. ──
+    function pipelineProgress() {
+        let phase = -1, sub = '', cold = false;
+        if (st.expGenBusy) {
+            const M = { queued: 'spinning up the fine-tuned model…', reasoning: 'the model is inventing the idea + its 5 frames…', rendering: 'rendering the 5 frames…', done: 'done' };
+            phase = 0; sub = M[st.expGenStage] || 'working…'; cold = (st.expGenStage === 'queued' || st.expGenStage === 'reasoning');
+        } else if (st.rawGenBusy) {
+            phase = 0; sub = st.rawGenStage || 'generating the 5 frames…';
+        } else if (st.rawUploading) {
+            const s = Math.min(st.rawUpStage || 0, 4), vid = !!(st.rawUpQueue && st.rawUpQueue.total);
+            if (vid) { phase = s <= 2 ? 0 : (s === 3 ? 1 : 2); sub = ['uploading the video…', 'extracting the 5 hook frames…', 'transcribing the audio…', 'embedding (visual · text · together)…', 'placing among similar hooks…'][s]; }
+            else { phase = s <= 1 ? 1 : (s === 2 ? 1 : 2); sub = ['', 'embedding the 5 frames (visual · text · together)…', 'embedding…', 'scoring every validated indicator…', 'placing it in the embedded map…'][s] || 'embedding…'; }
+        } else return '';
+        const STEPS = ['Create the 5 frames', 'Embed', 'Score & place'];
+        const dots = STEPS.map((s, i) => {
+            const done = i < phase, act = i === phase, col = done ? C.green : act ? C.cyan : C.mute, icon = done ? '✓' : act ? '⏳' : (i + 1);
+            return `<div style="display:flex;align-items:center;gap:6px"><span style="width:20px;height:20px;border-radius:50%;border:2px solid ${col};color:${col};display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800">${icon}</span><span style="font-size:11px;font-weight:${act ? 800 : 600};color:${col}">${s}</span></div>${i < STEPS.length - 1 ? `<span style="flex:1;height:2px;background:${i < phase ? C.green : C.border};min-width:16px;border-radius:2px"></span>` : ''}`;
+        }).join('');
+        return `<div style="background:${C.card};border:1px solid ${C.cyan}66;border-radius:12px;padding:12px 14px;margin-bottom:14px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${dots}</div>
+            <div style="font-size:11px;color:${C.cyan};margin-top:8px;font-weight:600">⏳ ${esc(sub)}${cold ? ` <span style="color:${C.mute};font-weight:400">· first run this session spins up the GPU (~2 min), then it's fast</span>` : ''}</div></div>`;
+    }
     function renderExperiment() {
-        const head = h2c('🧪 Experiment — score a hook against every validated indicator', 'Upload a video or build one from 5 frames + text. It gets embedded and scored on every independent indicator we have validated — see where it lands on each indicator\'s curve, plus an ensemble read. New indicators appear here automatically as you build them.') + expGenPanel();
+        const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds the hook and scores it on every validated indicator — keep rate, past-5s, est. views — and places it in the embedded space. Save the ones you like.') + pipelineProgress() + expGenPanel();
         if (EXPREG === null) { EXPREG = { loading: 1 }; fetch('/api/indicators/registry').then(r => r.json()).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(() => { EXPREG = { error: 1 }; rtgUpdateExp(); }); }
         if (SAVED === null) { SAVED = { loading: 1 }; fetch('/api/raw/saved-hooks').then(r => r.json()).then(j => { SAVED = j; rtgUpdateExp(); }).catch(() => { SAVED = { hooks: [] }; rtgUpdateExp(); }); }
         const CY = '#22d3ee';
