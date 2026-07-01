@@ -1,5 +1,6 @@
 """Replicate Cog predictor for the fine-tuned idea model (idea_r7). Serves a MERGED Qwen3-30B-A3B
-(base + idea_r7 LoRA, baked into the image at /src/model) via vLLM. Same prompts/sampling as before.
+(base + idea_r7 LoRA) via vLLM. The 57GB merged model is pulled from R2 at startup (NOT baked into
+the image — a single 57GB docker layer won't push). Needs R2_* env on the deployment.
 No Modal, no spend cap — runs on the user's Replicate billing, scales to zero."""
 from cog import BasePredictor, Input
 import os, json, re
@@ -29,8 +30,20 @@ def _split(txt):
 
 class Predictor(BasePredictor):
     def setup(self):
+        import boto3
+        from boto3.s3.transfer import TransferConfig
+        merged = "/src/merged"
+        os.makedirs(merged, exist_ok=True)
+        s3 = boto3.client("s3", endpoint_url="https://%s.r2.cloudflarestorage.com" % os.environ["R2_ACCOUNT_ID"],
+                          aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"], aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"], region_name="auto")
+        b = os.environ["R2_BUCKET_NAME"]
+        cfg = TransferConfig(max_concurrency=16, multipart_chunksize=64 * 1024 * 1024)
+        for o in s3.list_objects_v2(Bucket=b, Prefix="hooks/models/ideamerged_r7/").get("Contents", []):
+            n = o["Key"].split("/")[-1]
+            if n:
+                s3.download_file(b, o["Key"], os.path.join(merged, n), Config=cfg)
         from vllm import LLM, SamplingParams
-        self.llm = LLM(model="/src/model", max_model_len=6144, gpu_memory_utilization=0.90,
+        self.llm = LLM(model=merged, max_model_len=6144, gpu_memory_utilization=0.90,
                        dtype="bfloat16", trust_remote_code=True, enforce_eager=True)
         self.SamplingParams = SamplingParams
 
