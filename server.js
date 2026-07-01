@@ -1399,28 +1399,38 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/raw/embed-upload' && req.method === 'POST') {
         const ext = (req.headers['x-raw-ext'] || 'mp4').replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'mp4';
         const title = (req.headers['x-raw-title'] || 'My upload').toString().slice(0, 80);
-        const chunks = []; let size = 0; const MAX = 200 * 1024 * 1024;
-        req.on('data', c => { size += c.length; if (size > MAX) req.destroy(); chunks.push(c); });
-        req.on('end', () => {
-            if (size === 0 || size > MAX) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'empty or too-large upload (max 200MB)' })); return; }
-            const os = require('os');
-            const tmp = path.join(os.tmpdir(), `rawup_${Date.now()}_${Math.round(Math.random() * 1e6)}.${ext}`);
-            try { fs.writeFileSync(tmp, Buffer.concat(chunks)); }
-            catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write failed: ' + e.message })); return; }
-            const script = path.join(__dirname, 'raw_upload.py');
-            const py = spawn(RAW_PYTHON, [script, '--file', tmp, '--title', title], { env: RAW_PY_ENV });
-            let out = '', err = '';
-            py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-            const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 240000);
-            py.on('close', () => {
-                clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (e) {}
-                const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
-                if (!line) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'embedding produced no result — ' + (err.trim().split('\n').pop() || 'no output').slice(-160), stderr: err.slice(-600) })); return; }
-                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(line);
-            });
-            py.on('error', e => { clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (_) {} res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'spawn failed: ' + e.message })); });
+        const os = require('os');
+        const tmp = path.join(os.tmpdir(), `rawup_${Date.now()}_${Math.round(Math.random() * 1e6)}.${ext}`);
+        const MAX = 1024 * 1024 * 1024;   // 1 GB — STREAMED to disk (never buffered in RAM), so big phone videos don't OOM
+        const ws = fs.createWriteStream(tmp);
+        let size = 0, done = false;
+        const fail = (code, msg) => { if (done) return; done = true; try { ws.destroy(); } catch (e) {} try { fs.unlinkSync(tmp); } catch (e) {} if (!res.headersSent) { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: msg })); } try { req.destroy(); } catch (e) {} };
+        req.on('data', c => {
+            if (done) return;
+            size += c.length;
+            if (size > MAX) { fail(413, 'video too large (over 1 GB) — trim it to the first ~10 seconds and re-upload (only the first 5s is scored)'); return; }
+            if (!ws.write(c)) { req.pause(); ws.once('drain', () => { if (!done) req.resume(); }); }   // back-pressure so a fast upload can't buffer in RAM
         });
-        req.on('error', () => { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'upload stream error' })); });
+        req.on('error', () => fail(400, 'upload stream error — check your connection and retry'));
+        ws.on('error', e => fail(500, 'write failed: ' + e.message));
+        req.on('end', () => {
+            if (done) return;
+            if (size === 0) return fail(400, 'empty upload');
+            ws.end(() => {
+                const script = path.join(__dirname, 'raw_upload.py');
+                const py = spawn(RAW_PYTHON, [script, '--file', tmp, '--title', title], { env: RAW_PY_ENV });
+                let out = '', err = '';
+                py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
+                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 240000);
+                py.on('close', () => {
+                    clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (e) {}
+                    const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+                    if (!line) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'embedding produced no result — ' + (err.trim().split('\n').pop() || 'no output').slice(-160), stderr: err.slice(-600) })); return; }
+                    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(line);
+                });
+                py.on('error', e => { clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (_) {} res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'spawn failed: ' + e.message })); });
+            });
+        });
         return;
     }
 
