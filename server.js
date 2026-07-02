@@ -213,6 +213,39 @@ function sendJsonGz(req, res, data, statusCode) {
     }
 }
 
+// ── TTL'd gzip cache for read-mostly JSON APIs ────────────────────────
+// The heavy JSONs behind the Retention→Views tab (raw maps 6.6MB ×3, tribe-corr 6MB,
+// registry…) were re-downloaded from R2 AND sent uncompressed on EVERY request — the
+// main reason the tab loaded slowly. Serve them from an in-memory cache instead:
+// only the GZIPPED bytes are kept (~10× smaller, tiny RAM on the 2GB box), refreshed
+// from the source at most once per TTL, with an ETag so a browser's repeat open is a
+// bodyless 304. `fill` produces the fresh bytes (R2 download, disk read, or a build).
+const _gzCache = new Map();   // cacheKey → {t, gz, etag}
+const _gzipP = b => new Promise((ok, no) => zlib.gzip(b, (e, z) => e ? no(e) : ok(z)));
+const _gunzipP = b => new Promise((ok, no) => zlib.gunzip(b, (e, z) => e ? no(e) : ok(z)));
+async function serveGzCached(req, res, cacheKey, ttlMs, fill, fallback, fallbackStatus) {
+    let e = _gzCache.get(cacheKey);
+    const now = Date.now();
+    if (!e || now - e.t > ttlMs) {
+        let buf = null;
+        try { buf = await fill(); } catch (err) {}
+        if (buf) {
+            if (typeof buf === 'string') buf = Buffer.from(buf, 'utf8');
+            e = { t: now, gz: await _gzipP(buf), etag: '"' + require('crypto').createHash('md5').update(buf).digest('hex') + '"' };
+            _gzCache.set(cacheKey, e);
+            if (_gzCache.size > 48) _gzCache.delete(_gzCache.keys().next().value);   // bound the cache
+        } else if (e) { e.t = now; }   // source hiccup → keep serving the stale copy
+    }
+    if (!e) { res.writeHead(fallbackStatus || 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); res.end(JSON.stringify(fallback || { error: 'not found' })); return; }
+    const hdr = { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'ETag': e.etag, 'Vary': 'Accept-Encoding' };
+    if (req.headers['if-none-match'] === e.etag) { res.writeHead(304, hdr); res.end(); return; }
+    if ((req.headers['accept-encoding'] || '').includes('gzip')) { res.writeHead(200, { ...hdr, 'Content-Encoding': 'gzip' }); res.end(e.gz); }
+    else { res.writeHead(200, hdr); res.end(await _gunzipP(e.gz)); }
+}
+const serveR2Gz = (req, res, r2key, ttlMs, fallback, fallbackStatus) =>
+    serveGzCached(req, res, r2key, ttlMs, () => cloud.downloadFromR2(r2key), fallback, fallbackStatus);
+const gzCacheInvalidate = key => _gzCache.delete(key);
+
 function compactIndicator(ind) {
     if (!ind) return ind;
     const { dataset, ...rest } = ind;
@@ -1193,6 +1226,7 @@ function aiVideoPromptMessages(count, context, runIndex, totalRuns) {
     ];
 }
 
+const _staticGz = new Map();   // filePath → {mt, gz}: gzipped big static files, keyed by Last-Modified
 const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${PORT}`);
     const pathname = url.pathname;
@@ -3010,40 +3044,21 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // =========================================
     // Library dataset stats (the big research video set on R2)
     if (pathname === '/api/library/stats' && req.method === 'GET') {
-        try {
-            let stats = null;
-            try { const buf = await cloud.downloadFromR2('library/stats.json'); if (buf) stats = JSON.parse(buf.toString('utf8')); } catch (e) {}
-            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify(stats || { stored: 0, discovered: 0, target: 100000 }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        await serveR2Gz(req, res, 'library/stats.json', 60e3, { stored: 0, discovered: 0, target: 100000 });
         return;
     }
     if (pathname === '/api/indicators/registry' && req.method === 'GET') {
-        try {
-            let m = null;
-            try { const buf = await cloud.downloadFromR2('raw/indicators/registry.json'); if (buf) m = JSON.parse(buf.toString('utf8')); } catch (e) {}
-            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify(m || { error: 'no registry yet' }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        await serveR2Gz(req, res, 'raw/indicators/registry.json', 300e3, { error: 'no registry yet' });
         return;
     }
     if (pathname === '/api/raw/fusion' && req.method === 'GET') {
-        try {
-            let m = null;
-            try { const buf = await cloud.downloadFromR2('raw/fusion/report.json'); if (buf) m = JSON.parse(buf.toString('utf8')); } catch (e) {}
-            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify(m || { error: 'no report yet' }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        await serveR2Gz(req, res, 'raw/fusion/report.json', 300e3, { error: 'no report yet' });
         return;
     }
     if (pathname === '/api/raw/map' && req.method === 'GET') {
-        try {
-            const ch = (url.searchParams.get('channel') || 'visual').replace(/[^a-z]/g, '');
-            let m = null;
-            try { const buf = await cloud.downloadFromR2(`raw/${ch}/map.json`); if (buf) m = JSON.parse(buf.toString('utf8')); } catch (e) {}
-            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify(m || { n: 0, channel: ch }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        // 6.6MB per channel — was an R2 download + UNCOMPRESSED send per request; now cached+gzipped (~700KB wire)
+        const ch = (url.searchParams.get('channel') || 'visual').replace(/[^a-z]/g, '');
+        await serveR2Gz(req, res, `raw/${ch}/map.json`, 300e3, { n: 0, channel: ch });
         return;
     }
     // ── Saved hooks: generated ideas / scored hooks the user wants to keep (R2 raw/saved-hooks/) ──
@@ -3135,37 +3150,29 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // multi-channel retention: index + per-channel tables, stored in R2 (private; other
     // creators' analytics never go to git). Main (211) stays the committed static file.
     if (pathname === '/api/retention/channels' && req.method === 'GET') {
-        let cj = null;
-        try { const buf = await cloud.downloadFromR2('retention/channels.json'); if (buf) cj = JSON.parse(buf.toString('utf8')); } catch (e) {}
-        if (!cj) cj = { active: 'tyler', channels: [{ id: 'tyler', name: 'Main', table: 'retention_table.json', n: 211, owner: true }] };
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(JSON.stringify(cj));
+        await serveR2Gz(req, res, 'retention/channels.json', 60e3,
+            { active: 'tyler', channels: [{ id: 'tyler', name: 'Main', table: 'retention_table.json', n: 211, owner: true }] });
         return;
     }
     if (pathname === '/api/retention/table' && req.method === 'GET') {
         const id = (url.searchParams.get('id') || '').replace(/[^a-z0-9_-]/gi, '');
-        let t = null;
-        try { const buf = await cloud.downloadFromR2(`retention/${id}.json`); if (buf) t = JSON.parse(buf.toString('utf8')); } catch (e) {}
-        res.writeHead(t ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(JSON.stringify(t || { error: 'not found', videos: [] }));
+        await serveR2Gz(req, res, `retention/${id}.json`, 300e3, { error: 'not found', videos: [] }, 404);
         return;
     }
     // Tribe-V2 first-5s brain metrics ↔ tracked metrics, precomputed by build-tribe-corr.js.
     // R2 (retention/tribe-corr.json) with local fallback — bounded ~6MB single object.
     if (pathname === '/api/retention/tribe-corr' && req.method === 'GET') {
-        let buf = null;
-        try { buf = await cloud.downloadFromR2('retention/tribe-corr.json'); } catch (e) {}
-        if (!buf) { try { const lp = path.join(DIR, 'buildings', 'jarvis', 'retention-study', 'tribe-corr.json'); if (fs.existsSync(lp)) buf = fs.readFileSync(lp); } catch (e) {} }
-        res.writeHead(buf ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(buf || JSON.stringify({ error: 'not built — run node buildings/jarvis/build-tribe-corr.js', n: 0, rows: [] }));
+        await serveGzCached(req, res, 'retention/tribe-corr.json', 300e3, async () => {
+            let buf = null;
+            try { buf = await cloud.downloadFromR2('retention/tribe-corr.json'); } catch (e) {}
+            if (!buf) { const lp = path.join(DIR, 'buildings', 'jarvis', 'retention-study', 'tribe-corr.json'); if (fs.existsSync(lp)) buf = fs.readFileSync(lp); }
+            return buf;
+        }, { error: 'not built — run node buildings/jarvis/build-tribe-corr.js', n: 0, rows: [] }, 404);
         return;
     }
     if (pathname === '/api/retention/study' && req.method === 'GET') {
         const id = (url.searchParams.get('id') || '').replace(/[^a-z0-9_-]/gi, '');
-        let stu = null;
-        try { const buf = await cloud.downloadFromR2(`retention/study_${id}.json`); if (buf) stu = JSON.parse(buf.toString('utf8')); } catch (e) {}
-        res.writeHead(stu ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(JSON.stringify(stu || { error: 'no study' }));
+        await serveR2Gz(req, res, `retention/study_${id}.json`, 300e3, { error: 'no study' }, 404);
         return;
     }
     const rawMon = pathname.match(/^\/api\/raw\/montage\/([\w-]{6,16})$/);
@@ -3179,29 +3186,28 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     // ── 🎰 Guesses: the hook-RL run manifests + generated montages (written by the Lambda trainer) ──
     if (pathname === '/api/hooks/runs' && req.method === 'GET') {
-        const cands = [].concat(Array.from({ length: 31 }, (_, i) => 'phase' + i), Array.from({ length: 21 }, (_, i) => 'keep' + i));
-        const out = [];
-        for (const r of cands) {
-            try { const buf = await cloud.downloadFromR2(`hooks/runs/${r}/manifest.jsonl`); if (buf && buf.length) out.push(r); } catch (e) {}
-        }
-        for (let i = 1; i <= 21; i++) { const r = 'grpo' + i; try { const buf = await cloud.downloadFromR2(`hooks/grpo/${r}/manifest.jsonl`); if (buf && buf.length) out.push(r); } catch (e) {} }
-        for (let i = 1; i <= 21; i++) { const r = 'discover' + i; try { const buf = await cloud.downloadFromR2(`hooks/grpo/${r}/manifest.jsonl`); if (buf && buf.length) out.push(r); } catch (e) {} }
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(JSON.stringify({ runs: out }));
+        // was ~94 SEQUENTIAL full-manifest downloads just to list run names (30s+); now parallel
+        // existence HEADs, cached 5 min
+        await serveGzCached(req, res, 'hooks:runs-list', 300e3, async () => {
+            const cands = [].concat(
+                Array.from({ length: 31 }, (_, i) => ['phase' + i, `hooks/runs/phase${i}/manifest.jsonl`]),
+                Array.from({ length: 21 }, (_, i) => ['keep' + i, `hooks/runs/keep${i}/manifest.jsonl`]),
+                Array.from({ length: 21 }, (_, i) => ['grpo' + (i + 1), `hooks/grpo/grpo${i + 1}/manifest.jsonl`]),
+                Array.from({ length: 21 }, (_, i) => ['discover' + (i + 1), `hooks/grpo/discover${i + 1}/manifest.jsonl`]));
+            const ok = await Promise.all(cands.map(([, key]) => cloud.existsInR2(key).catch(() => false)));
+            return JSON.stringify({ runs: cands.filter((_, i) => ok[i]).map(([r]) => r) });
+        }, { runs: [] });
         return;
     }
     if (pathname === '/api/hooks/guesses' && req.method === 'GET') {
-        try {
-            const run = (url.searchParams.get('run') || 'phase0').replace(/[^a-z0-9_]/g, '');
-            const isGrpo = run.indexOf('grpo') === 0 || run.indexOf('discover') === 0;  // discover runs live under hooks/grpo/ too
-            let rows = [];
-            try {
-                const buf = await cloud.downloadFromR2(isGrpo ? `hooks/grpo/${run}/manifest.jsonl` : `hooks/runs/${run}/manifest.jsonl`);
-                if (buf) rows = buf.toString('utf8').trim().split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean);
-            } catch (e) {}
-            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify({ run, rows }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        const run = (url.searchParams.get('run') || 'phase0').replace(/[^a-z0-9_]/g, '');
+        const isGrpo = run.indexOf('grpo') === 0 || run.indexOf('discover') === 0;  // discover runs live under hooks/grpo/ too
+        await serveGzCached(req, res, 'hooks:guesses:' + run, 120e3, async () => {
+            const buf = await cloud.downloadFromR2(isGrpo ? `hooks/grpo/${run}/manifest.jsonl` : `hooks/runs/${run}/manifest.jsonl`);
+            if (!buf) return null;
+            const rows = buf.toString('utf8').trim().split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean);
+            return JSON.stringify({ run, rows });
+        }, { run, rows: [] });
         return;
     }
     const hookMon = pathname.match(/^\/api\/hooks\/montage\/([a-z0-9_]{1,24})\/([\w-]{1,40})$/);
@@ -3216,11 +3222,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     // GRPO: per-input groups (the multiple ideas the model generated for each input)
     if (pathname === '/api/hooks/grpo/runs' && req.method === 'GET') {
-        const cands = Array.from({ length: 21 }, (_, i) => 'grpo' + (i + 1));
-        const out = [];
-        for (const r of cands) { try { const b = await cloud.downloadFromR2(`hooks/grpo/${r}/index.jsonl`); if (b && b.length) out.push(r); } catch (e) {} }
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(JSON.stringify({ runs: out }));
+        await serveGzCached(req, res, 'hooks:grpo-runs-list', 300e3, async () => {
+            const cands = Array.from({ length: 21 }, (_, i) => 'grpo' + (i + 1));
+            const ok = await Promise.all(cands.map(r => cloud.existsInR2(`hooks/grpo/${r}/index.jsonl`).catch(() => false)));
+            return JSON.stringify({ runs: cands.filter((_, i) => ok[i]) });
+        }, { runs: [] });
         return;
     }
     if (pathname === '/api/hooks/generate' && req.method === 'POST') {
@@ -3364,12 +3370,7 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
     }
     const RTG_LABELS_R2_KEY = 'data/rtg-labels.json';
     if (pathname === '/api/rtg/labels' && req.method === 'GET') {
-        try {
-            let all = {};
-            try { const buf = await cloud.downloadFromR2(RTG_LABELS_R2_KEY); if (buf) all = JSON.parse(buf.toString('utf8')); } catch (e) {}
-            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify(all));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        await serveR2Gz(req, res, RTG_LABELS_R2_KEY, 300e3, {});
         return;
     }
     if (pathname === '/api/rtg/labels' && req.method === 'POST') {
@@ -3381,6 +3382,7 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
             try { const buf = await cloud.downloadFromR2(RTG_LABELS_R2_KEY); if (buf) all = JSON.parse(buf.toString('utf8')); } catch (e) {}
             if (labels && (labels.pairs || []).length || (labels && (labels.orphans || []).length)) all[videoId] = labels; else delete all[videoId];
             await cloud.uploadToR2(RTG_LABELS_R2_KEY, Buffer.from(JSON.stringify(all)), 'application/json');
+            gzCacheInvalidate(RTG_LABELS_R2_KEY);   // the GET is cache-served — show the new label immediately
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ ok: true, n: Object.keys(all).length }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -8615,11 +8617,26 @@ Respond ONLY as valid JSON (no markdown):
         }
         // gzip text assets — the big data files (novelty.json ~10MB, rtg_field.json ~9MB) compress
         // ~90%, plus jarvis-retention.js itself. Biggest single win for the Retention→Views load.
+        // Large files keep their gzipped bytes in a small mtime-keyed cache so the 10MB gzip CPU
+        // hit happens once per file version, not once per request.
         const GZIP_EXT = new Set(['.json', '.js', '.css', '.html', '.svg', '.md', '.webmanifest']);
         if (GZIP_EXT.has(ext) && (req.headers['accept-encoding'] || '').includes('gzip') && out.length > 1400) {
+            const gzHdr = { ...headers, 'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding' };
+            if (ext !== '.html' && out.length > 262144) {          // html is version-stamped per request — never cache it
+                const mt = headers['Last-Modified'] || String(out.length);
+                const hit = _staticGz.get(filePath);
+                if (hit && hit.mt === mt) { res.writeHead(200, gzHdr); res.end(hit.gz); return; }
+                zlib.gzip(out, (gzErr, gz) => {
+                    if (gzErr) { res.writeHead(200, headers); res.end(out); return; }
+                    _staticGz.set(filePath, { mt, gz });
+                    if (_staticGz.size > 24) _staticGz.delete(_staticGz.keys().next().value);
+                    res.writeHead(200, gzHdr); res.end(gz);
+                });
+                return;
+            }
             zlib.gzip(out, (gzErr, gz) => {
                 if (gzErr) { res.writeHead(200, headers); res.end(out); return; }
-                res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding' });
+                res.writeHead(200, gzHdr);
                 res.end(gz);
             });
             return;

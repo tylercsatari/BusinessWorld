@@ -13,6 +13,7 @@ const JarvisRetention = (function () {
     let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
+    let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
@@ -2193,7 +2194,8 @@ const JarvisRetention = (function () {
         const fam = TRIBE.families || {};
         let h = head;
         // account/scope note
-        h += `<div style="font-size:11px;color:${C.mute};background:${C.card2};border-radius:8px;padding:9px 12px;margin-bottom:10px;line-height:1.6">The ${TRIBE.n} brain-analyzed videos are the <b style="color:${C.green}">Main</b> channel (owner's own). Accounts 1–3 have no Tribe analyses, so this map is Main-only. Indicators: <b style="color:${C.text}">${TRIBE.indicatorIds.length}</b> brain signals (${fam.global || 0} global · ${fam.regions || 0} regions · ${fam.networks || 0} networks · ${fam.destrieux || 0} Destrieux · ${fam.hcp || 0} HCP), each reduced to ${TRIBE_FEATS.length} first-5s features.</div>`;
+        const keepN = R.filter(r => r.metrics.keep != null).length;
+        h += `<div style="font-size:11px;color:${C.mute};background:${C.card2};border-radius:8px;padding:9px 12px;margin-bottom:10px;line-height:1.6">All <b style="color:${C.text}">${TRIBE.n}</b> brain-analyzed <b style="color:${C.green}">Main</b>-channel videos with real views + retention (Accounts 1–3 have no Tribe analyses → Main-only). <b style="color:${C.text}">${keepN}</b> also have the scraped keep-rate (Viewed-vs-Swiped) — so keep/swipe correlate on n=${keepN}, everything else (views/retention/ret5) on n=${TRIBE.n}. Indicators: <b style="color:${C.text}">${TRIBE.indicatorIds.length}</b> brain signals (${fam.global || 0} global · ${fam.regions || 0} regions · ${fam.networks || 0} networks · ${fam.destrieux || 0} Destrieux · ${fam.hcp || 0} HCP), each reduced to ${TRIBE_FEATS.length} first-5s features.</div>`;
         // controls: target · feature · family
         const tcount = t => R.filter(r => r.metrics[t] != null).length;
         h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">influence on</span>${TRIBE_TARGETS.map(([k, l]) => { const n = tcount(k); return `<button data-tribetgt="${k}" style="background:${target === k ? C.accent + '22' : 'transparent'};border:1px solid ${target === k ? C.accent : C.border};color:${target === k ? C.accent : C.dim};border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer">${l} <span style="opacity:.5;font-size:9px">${n}</span></button>`; }).join('')}</div>`;
@@ -2213,7 +2215,7 @@ const JarvisRetention = (function () {
             : `<b style="color:${C.orange}">0 survive FDR</b> — no brain signal beats chance for this metric`;
         h += `<div style="font-size:11px;color:${C.mute};background:${C.card2};border-left:3px solid ${verdictCol};border-radius:6px;padding:8px 11px;margin-bottom:10px;line-height:1.6">
             <b style="color:${C.text}">Rigor check (${esc((TRIBE_TARGETS.find(t => t[0] === target) || [, target])[1])}, ${esc(feat)}, ${decon === 'dec' ? 'deconfounded' : 'raw'}):</b> ${sig.m} signals tested · ${sig.raw} at p&lt;.05 (<b>~${sig.expected} expected by chance</b>) · ${verdict}${sig.bonfK ? ` · ${sig.bonfK} Bonferroni` : ''}${decon === 'raw' && sig.flips ? ` · <b style="color:${C.orange}">${sig.flips}</b> flip sign once duration is removed` : ''}.
-            <span style="color:${C.faint}">n=${TRIBE.n} videos. Brain signals are TRIBE-v2 <i>predictions</i> from the video's audio/visual/text — a content proxy, not your audience's measured brains.</span></div>`;
+            <span style="color:${C.faint}">n=${tcount(target)} videos with this metric. Brain signals are TRIBE-v2 <i>predictions</i> from the video's audio/visual/text — a content proxy, not your audience's measured brains.</span></div>`;
         // ── selected-indicator drill ──
         if (st.tribeSel && TRIBE.rows[0].tribe[st.tribeSel]) {
             const id = st.tribeSel;
@@ -2857,8 +2859,9 @@ const JarvisRetention = (function () {
         } else {
             sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         }
+        const bgNote = BGPEND > 0 ? `<div style="font-size:10px;color:${C.cyan};margin:-4px 0 8px;font-weight:600">⏳ heavy corpus data still streaming in (${BGPEND} file${BGPEND > 1 ? 's' : ''} left) — sections light up as their data lands</div>` : '';
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
-            <div style="font-size:21px;font-weight:900;color:${C.accent};margin-bottom:8px">Retention → Views</div>
+            <div style="font-size:21px;font-weight:900;color:${C.accent};margin-bottom:8px">Retention → Views</div>${bgNote}
             ${chBar}
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><span style="font-size:9px;color:${C.green};text-transform:uppercase;font-weight:800;letter-spacing:.3px">📊 this channel</span>${PERCHAN.map(btn).join('')}${isPer ? badge : ''}</div>${pooledNote}
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px"><span style="font-size:9px;color:${C.purple};text-transform:uppercase;font-weight:800;letter-spacing:.3px">🌐 corpus · all videos</span>${CORPUS.map(btn).join('')}<span style="font-size:9px;color:${C.faint}">— not affected by the channel selector</span></div>${sec}</div>`;
@@ -3219,15 +3222,18 @@ const JarvisRetention = (function () {
             // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
             // cache-bust so the data sheet stays the single source of truth (no stale JSON in the browser)
             const loadJSON = async (url) => { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=117'); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            // CRITICAL PATH: only the 3 small files the default section needs (~100KB gz) — render the
+            // tab the moment they land instead of blanking behind the slowest of 12 loads.
             for (let tries = 1; !DATA; tries++) {
                 try {
                     CHANS = await fetch('/api/retention/channels').then(r => r.json()).catch(() => null);
                     DATA = await loadJSON(base + 'retention_table.json');   // sentinel: throw → retry loop
+                    await loadJSON(base + 'retention_study.json').then(x => { S = x; S_MAIN = x; }).catch(() => { S = null; S_MAIN = null; });
                     RAW = {};
-                    // Everything else was 12 SEQUENTIAL awaits (~sum of times). Load them in PARALLEL
-                    // (~max of times) — combined with server gzip this is the big load-time win.
-                    await Promise.all([
-                        loadJSON(base + 'retention_study.json').then(x => { S = x; S_MAIN = x; }).catch(() => { S = null; S_MAIN = null; }),
+                    // BACKGROUND: the heavy corpus files (novelty ~10MB, rtg_field ~9MB, the raw map…)
+                    // stream in behind the visible tab; each arrival re-renders so its sections light
+                    // up. BGPEND drives the header's "still loading…" note.
+                    const bg = [
                         loadJSON(base + 'principles/novelty.json').then(x => N = x).catch(() => N = null),
                         loadJSON(base + 'principles/novelty_correlations.json').then(x => NCEXP = x).catch(() => NCEXP = null),
                         loadJSON(base + 'principles/novelty_quantify.json').then(x => NQ = x).catch(() => NQ = null),
@@ -3239,7 +3245,9 @@ const JarvisRetention = (function () {
                         loadJSON(base + 'principles/rtg_hazard.json').then(x => RTGH = x).catch(() => RTGH = null),
                         fetch('/api/raw/map?channel=visual').then(r => r.json()).then(x => RAW.visual = x).catch(() => {}),
                         fetch('/api/rtg/labels').then(r => r.json()).then(x => RTGLABELS = x || {}).catch(() => RTGLABELS = {}),
-                    ]);
+                    ];
+                    BGPEND = bg.length;
+                    bg.forEach(p => p.then(() => { BGPEND--; render(); }));
                 } catch (e) {
                     if (tries >= 3) { root.innerHTML = `<div style="padding:24px;color:${C.dim}">Couldn't load data — the site may be mid-deploy. <button data-reload style="background:${C.accent}22;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px">Retry</button></div>`; return; }
                     root.innerHTML = `<div style="padding:40px;text-align:center;color:${C.dim}">Loading… <span style="color:${C.mute};font-size:11px">(retry ${tries})</span></div>`;
