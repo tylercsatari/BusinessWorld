@@ -9052,7 +9052,7 @@ async function fetchT(url, opts, ms) {  // fetch with a hard timeout so nothing 
 // Idea generation runs ONLY on Tyler's fine-tuned model (idea_r7), hosted on REPLICATE
 // (own account, no spend cap; scales to zero). NO Gemini, NO fallback — if the deployment
 // is unset/unreachable the request errors clearly. See cog-idea/predict.py.
-async function hookModelGenerate(premise, invent, count) {
+async function hookModelGenerate(premise, invent, count, onStatus) {
     // idea_r7 baked model version on Replicate (not a secret). Env overrides if the model is bumped.
     const IDEA_VERSION = '522aa069d4197ddc9a630ca837acbed66851feed714797d43d97d51812fea7e2';
     const token = process.env.REPLICATE_API_TOKEN, ver = process.env.REPLICATE_IDEA_VERSION || IDEA_VERSION;
@@ -9060,7 +9060,7 @@ async function hookModelGenerate(premise, invent, count) {
     // Replicate: create a prediction on the model VERSION directly (no deployment needed — deployments
     // require a billing method; direct predictions just need credit). Then poll until terminal. The
     // first run cold-boots the GPU (a couple min); we run in the background queue, so that's fine.
-    const deadline = Date.now() + 12 * 60 * 1000;
+    const t0 = Date.now(), deadline = t0 + 12 * 60 * 1000;
     const cr = await fetchT('https://api.replicate.com/v1/predictions', {
         method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ version: ver, input: { premise: premise || '', invent: !!invent || !premise, count } })
@@ -9068,10 +9068,14 @@ async function hookModelGenerate(premise, invent, count) {
     let p = await cr.json().catch(() => null);
     if (!p || cr.status >= 400 || !p.id) throw new Error('replicate create http ' + cr.status + ': ' + String((p && (p.detail || p.title)) || '').slice(0, 140));
     const getUrl = (p.urls && p.urls.get) || ('https://api.replicate.com/v1/predictions/' + p.id);
+    let lastBeat = 0;
     while (['starting', 'processing'].includes(p.status) && Date.now() < deadline) {
         await new Promise(res => setTimeout(res, 2500));
         const g = await fetchT(getUrl, { headers: { 'Authorization': 'Bearer ' + token } }, 30000);
         p = await g.json().catch(() => p);
+        // heartbeat every ~10s so the UI shows REAL progress ("GPU booting 3m 10s" vs "model
+        // thinking") instead of a frozen line that could equally mean stuck.
+        if (onStatus && Date.now() - lastBeat > 10000) { lastBeat = Date.now(); try { await onStatus(p.status, Math.round((Date.now() - t0) / 1000)); } catch (e) {} }
     }
     if (p.status !== 'succeeded') throw new Error('replicate ' + p.status + (p.error ? ': ' + String(p.error).slice(0, 140) : (Date.now() >= deadline ? ' (timed out waiting for GPU)' : '')));
     let out = p.output;                              // predict.py returns a JSON string {model, attempts}
@@ -9167,15 +9171,17 @@ async function genStoryFrame(modelKey, prompt, refs, relation) {
     return 'data:image/jpeg;base64,' + buf.toString('base64');
 }
 async function hookRenderFrame(prompt) {
-    // flux through the SAME poll-until-terminal path as storyboard frames. 'Prefer: wait'
+    // flux-2-pro (same model as the storyboard builder, ~$0.04/frame) — schnell's draft
+    // quality wasn't worth showing. Poll-until-terminal via replicateRun: 'Prefer: wait'
     // alone returns 202 "starting" whenever flux is cold/queued — which is exactly the FIRST
     // frame after idle — and the old code threw "no render output" there, silently dropping
-    // frame 1 of every hook.
-    const out = await replicateRun('black-forest-labs/flux-schnell', { prompt, aspect_ratio: '9:16', output_format: 'jpg', num_outputs: 1 }, 180000);
+    // frame 1 of every hook. Env override to swap models without a deploy.
+    const model = process.env.HOOK_FRAME_MODEL || 'black-forest-labs/flux-2-pro';
+    const out = await replicateRun(model, { prompt, aspect_ratio: '9:16', output_format: 'jpg' }, 180000);
     return Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
 }
 async function hookProcessRequest(rid, premise, count, invent) {
-    const stat = (o) => cloud.uploadToR2(`hooks/grpo/demo/status/${rid}.json`, Buffer.from(JSON.stringify(o)), 'application/json').catch(() => {});
+    const stat = (o) => cloud.uploadToR2(`hooks/grpo/demo/status/${rid}.json`, Buffer.from(JSON.stringify({ ...o, ts: Date.now() })), 'application/json').catch(() => {});
     let attempts = [];
     let err = '';
     let memN = 0;
@@ -9205,7 +9211,12 @@ async function hookProcessRequest(rid, premise, count, invent) {
         while (attempts.length < count && tries < maxTries) {
             tries++;
             let spec;
-            try { spec = (await hookModelGenerate(premise, invent, 1))[0]; }
+            const beat = (rstat, sec) => {   // live heartbeat while the model call runs — stuck and working look different
+                const t = sec >= 60 ? `${Math.floor(sec / 60)}m ${sec % 60}s` : `${sec}s`;
+                return stat({ stage: 'reasoning', done: attempts.length, n: count, ts: Date.now(),
+                    note: `idea ${attempts.length + 1}/${count}: ${rstat === 'starting' ? `GPU booting (${t} — a cold start loads the 61GB model, ~2–6 min)` : `the model is thinking (${t})`}` });
+            };
+            try { spec = (await hookModelGenerate(premise, invent, 1, beat))[0]; }
             catch (e) { err = 'idea: ' + e.message; if (attempts.length) warns.add(`stopped after ${attempts.length}/${count} ideas — ${err}`); break; }  // hard failure (credit / model down) → stop the batch
             // novelty vs the whole memory AND this batch's accepted ideas (embed failure → accept)
             let nov = null, near = '';
@@ -9261,6 +9272,32 @@ async function hookProcessRequest(rid, premise, count, invent) {
     await writeGroup(true);   // terminal — flips done:true so the UI stops polling
     await stat({ stage: 'done', error: attempts.length ? '' : err });
 }
+// A deploy/restart can kill a worker AFTER it claimed a request (deleted from the queue) but
+// BEFORE any terminal write — the UI then spins on a frozen "reasoning" status for 10+ minutes.
+// On boot, sweep recent non-terminal statuses whose group never finished and write a CLEAR
+// terminal error so the UI resolves immediately.
+async function hookSweepOrphans() {
+    try {
+        const keys = ((await cloud.listR2Keys('hooks/grpo/demo/status/')) || []).filter(k => k.endsWith('.json')).slice(-30);
+        for (const key of keys) {
+            const rid = key.split('/').pop().replace('.json', '');
+            let s = null; try { s = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) { continue; }
+            if (!s || s.stage === 'done') continue;
+            if (s.ts && Date.now() - s.ts < 3 * 60e3) continue;   // fresh heartbeat → live on the OTHER server, leave it
+            let g = null; try { const b = await cloud.downloadFromR2(`hooks/grpo/demo/groups/${rid}.json`); if (b) g = JSON.parse(b.toString('utf8')); } catch (e) {}
+            if (g && g.done) continue;
+            const msg = 'interrupted by a server restart mid-generation — press Generate again';
+            const attempts = (g && g.attempts) || [];
+            await cloud.uploadToR2(`hooks/grpo/demo/groups/${rid}.json`, Buffer.from(JSON.stringify({
+                input_id: rid, premise: (g && g.premise) || '', n: attempts.length, attempts, done: true, streaming: true,
+                error: attempts.length ? '' : msg, warn: attempts.length ? `only ${attempts.length} hook(s) finished — ${msg}` : '',
+                model: 'idea_r7 (fine-tuned) + flux', hosted: true })), 'application/json').catch(() => {});
+            await cloud.uploadToR2(key, Buffer.from(JSON.stringify({ stage: 'done', error: msg })), 'application/json').catch(() => {});
+            console.log('hook sweeper: resolved orphaned generation', rid);
+        }
+    } catch (e) {}
+}
+setTimeout(() => { hookSweepOrphans().catch(() => {}); }, 8000);
 let _hookBusy = false;
 async function hookDemoQueue() {
     if (_hookBusy || !cloud.isR2Ready()) return;
