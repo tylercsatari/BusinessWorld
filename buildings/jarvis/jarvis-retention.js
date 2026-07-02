@@ -1003,12 +1003,24 @@ const JarvisRetention = (function () {
         tries = tries || 0;
         const again = ms => { if (tries < 7200 && st.grindRid === rid) setTimeout(() => grindPoll(rid, tries + 1), ms); };
         fetch('/api/hooks/grind/run/' + rid).then(r => r.ok ? r.json() : null).then(j => {
-            if (j && j.rid) { GRINDRUN = j; rtgUpdateExp(); }
+            if (j && j.rid) { j._at = Date.now(); GRINDRUN = j; st.grindPolls = (st.grindPolls || 0) + 1; rtgUpdateExp(); }
             // keep polling until the run reaches a TERMINAL state — a 404 just means the worker
             // hasn't written the first snapshot yet (the old code stopped here and froze the UI)
             if (!(j && j.rid && j.status !== 'running')) again(4000);
         }).catch(() => again(6000));
     }
+    // WATCHDOG: an independent heartbeat that makes a silently-dead poller impossible — if the
+    // attached run's data goes stale (>20s without a successful poll) it restarts the poll chain,
+    // and it repaints every 10s regardless so elapsed/boot timers always visibly tick.
+    function grindWatchdog() {
+        try {
+            if (!st.grindRid || !GRINDRUN || GRINDRUN.rid !== st.grindRid || GRINDRUN.status !== 'running') return;
+            if (!GRINDRUN._at || Date.now() - GRINDRUN._at > 20000) grindPoll(st.grindRid, 0);
+            const ae = window.document.activeElement;   // don't stomp on typing
+            if (!(ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA'))) rtgUpdateExp();
+        } catch (e) {}
+    }
+    if (typeof window !== 'undefined' && !window.__grindWD) window.__grindWD = window.setInterval(grindWatchdog, 10000);
     function grindEnsure() {
         if (GRINDLIST !== null) return;
         GRINDLIST = { loading: 1 };
@@ -1097,6 +1109,7 @@ const JarvisRetention = (function () {
                   <span style="font-size:12px;font-weight:800;color:${statCol}">${statLab}</span>
                   <span style="font-size:10px;color:${C.mute}">${g.n || 0} attempts · best <b style="color:${g.best != null ? heatCol(g.best / 100) : C.mute}">${g.best != null ? g.best + 'th' : '—'}</b> vs target <b style="color:${C.accent}">${g.threshold}th</b> ${esc(g.metric || 'keep')} · ${g.rejected || 0} rejected as too-similar</span>
                   ${running ? `<span data-grindstop style="cursor:pointer;border:1px solid #ef4444;color:#ef4444;border-radius:6px;padding:3px 11px;font-size:10px;font-weight:800">⏹ Stop</span>` : ''}
+                  ${running && g._at ? `<span style="font-size:9px;color:${C.mute}" title="how fresh this display is — the watchdog revives the poller if this exceeds ~20s">live · updated ${Math.round((Date.now() - g._at) / 1000)}s ago · ${st.grindPolls || 0} polls</span>` : ''}
                 </div>
                 ${g.note ? `<div style="font-size:10px;color:${running ? C.cyan : C.mute};margin-bottom:7px">${running ? '⏳ ' : ''}${esc(g.note)}${running && st.grindT0 ? ` <span style="color:${C.mute}">· ${Math.round((Date.now() - st.grindT0) / 60000)}m elapsed</span>` : ''}</div>` : ''}
                 ${g.error ? `<div style="font-size:10px;color:#ef4444;margin-bottom:7px">${esc(g.error)}</div>` : ''}
