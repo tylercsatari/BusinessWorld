@@ -9267,15 +9267,40 @@ async function genStoryFrame(modelKey, prompt, refs, relation) {
     const buf = Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
     return 'data:image/jpeg;base64,' + buf.toString('base64');
 }
-async function hookRenderFrame(prompt) {
+async function hookRenderFrame(prompt, modelOverride) {
     // flux-2-pro (same model as the storyboard builder, ~$0.04/frame) — schnell's draft
     // quality wasn't worth showing. Poll-until-terminal via replicateRun: 'Prefer: wait'
     // alone returns 202 "starting" whenever flux is cold/queued — which is exactly the FIRST
     // frame after idle — and the old code threw "no render output" there, silently dropping
     // frame 1 of every hook. Env override to swap models without a deploy.
-    const model = process.env.HOOK_FRAME_MODEL || 'black-forest-labs/flux-2-pro';
+    const model = modelOverride || process.env.HOOK_FRAME_MODEL || 'black-forest-labs/flux-2-pro';
     const out = await replicateRun(model, { prompt, aspect_ratio: '9:16', output_format: 'jpg' }, 180000);
     return Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
+}
+// A hook must NEVER ship with a missing frame: 3 tries on the pro model (backoff between),
+// then one draft render on schnell as a last resort (marked so the UI says which frame is a draft).
+async function renderFrameRobust(prompt) {
+    let lastErr = null;
+    for (let t = 0; t < 3; t++) {
+        try { return { buf: await hookRenderFrame(prompt), draft: false }; }
+        catch (e) { lastErr = e; await new Promise(s => setTimeout(s, 1500 * (t + 1))); }
+    }
+    try { return { buf: await hookRenderFrame(prompt, 'black-forest-labs/flux-schnell'), draft: true }; }
+    catch (e) { throw lastErr || e; }
+}
+// The idea model samples at temperature — a single malformed generation (truncated JSON, ≠5
+// frames) is NORMAL, not fatal. Retry up to 3×; only infra failures (credit/config) are terminal.
+async function hookModelGenerateRetry(premise, invent, onStatus, onRetry) {
+    let lastErr = '';
+    for (let t = 0; t < 3; t++) {
+        try { return (await hookModelGenerate(premise, invent, 1, onStatus))[0]; }
+        catch (e) {
+            lastErr = String(e.message || e);
+            if (/credit|billing|spend|402|not configured|refusing/i.test(lastErr)) break;   // real infra failure → stop
+            if (onRetry) { try { await onRetry(lastErr, t + 1); } catch (e2) {} }
+        }
+    }
+    throw new Error(lastErr);
 }
 async function hookProcessRequest(rid, premise, count, invent) {
     _hookLastGen = Date.now(); _hookLastPing = Date.now();   // a real generation IS the warmth — opens the keep-warm window
@@ -9314,7 +9339,8 @@ async function hookProcessRequest(rid, premise, count, invent) {
                 return stat({ stage: 'reasoning', done: attempts.length, n: count, ts: Date.now(),
                     note: `idea ${attempts.length + 1}/${count}: ${rstat === 'starting' ? `GPU booting (${t} — a cold start loads the 61GB model, ~2–6 min)` : `the model is thinking (${t})`}` });
             };
-            try { spec = (await hookModelGenerate(premise, invent, 1, beat))[0]; }
+            const onRetry = (msg, t) => stat({ stage: 'reasoning', done: attempts.length, n: count, note: `idea ${attempts.length + 1}/${count}: malformed sample — retrying (${t}/3)` });
+            try { spec = await hookModelGenerateRetry(premise, invent, beat, onRetry); }
             catch (e) { err = 'idea: ' + e.message; if (attempts.length) warns.add(`stopped after ${attempts.length}/${count} ideas — ${err}`); break; }  // hard failure (credit / model down) → stop the batch
             // novelty vs the whole memory AND this batch's accepted ideas (embed failure → accept)
             let nov = null, near = '';
@@ -9346,13 +9372,14 @@ async function hookProcessRequest(rid, premise, count, invent) {
                 note: attempts.length < count ? `idea ${attempts.length}/${count} done — inventing idea ${attempts.length + 1}/${count} while its frames render…` : 'all ideas in — rendering the last frames…' });
             renders.push((async () => {                       // render THIS hook while the next idea generates
                 for (let i = 0; i < 5; i++) {
-                    let lastErr = null;
-                    for (let t2 = 0; t2 < 2 && !a.frame_imgs[i]; t2++) {   // one retry — transient flux errors are common
-                        try { const buf = await hookRenderFrame(a.frames[i]); const id = `${rid}_${a.k}_${i}`; await cloud.uploadToR2(`hooks/grpo/demo/montages/${id}.jpg`, buf, 'image/jpeg'); a.frame_imgs[i] = id; lastErr = null; }
-                        catch (e) { lastErr = String(e.message || e).slice(0, 160); }
-                    }
-                    if (lastErr) {                             // NEVER silent: the failure rides the group JSON to the card
-                        a.errs = a.errs || []; a.errs.push(`frame ${i + 1}: ${lastErr}`);
+                    try {
+                        const r2 = await renderFrameRobust(a.frames[i]);   // 3× pro + draft fallback — a hole is exceptional
+                        const id = `${rid}_${a.k}_${i}`;
+                        await cloud.uploadToR2(`hooks/grpo/demo/montages/${id}.jpg`, r2.buf, 'image/jpeg'); a.frame_imgs[i] = id;
+                        if (r2.draft) { a.errs = a.errs || []; a.errs.push(`frame ${i + 1}: pro render failed 3× — used a draft (schnell) render`); }
+                    } catch (e) {                              // NEVER silent: the failure rides the group JSON to the card
+                        const lastErr = String(e.message || e).slice(0, 160);
+                        a.errs = a.errs || []; a.errs.push(`frame ${i + 1}: FAILED after all retries — ${lastErr}`);
                         warns.add(`hook ${a.k + 1} frame ${i + 1} failed: ${lastErr.slice(0, 90)}`);
                         err = 'render: ' + lastErr;
                     }
@@ -9485,42 +9512,48 @@ async function grindProcess(rid, req0) {
     const maxAttempts = Math.max(1, Math.min(150, parseInt(req0.maxAttempts) || 80));
     const deadline = Date.now() + Math.min(8, Math.max(0.25, parseFloat(req0.hours) || 3)) * 3600e3;
     let attempts = [], status = 'running', winner = null, err = '', note = '', rejected = 0;
+    // ADAPTIVE EXPLORATION: the minimum embedding distance a variant must keep from every prior
+    // attempt. Starts grounded (0.12); every non-improving attempt widens it (+0.03, cap 0.30) so
+    // a stuck grind is FORCED to explore farther from the pack; a new best pulls it back in.
+    const GATE0 = 0.12; let gate = GATE0, sinceBest = 0, bestPct = null;
     const best = () => attempts.reduce((m, a) => (a.pct != null && (m == null || a.pct > m)) ? a.pct : m, null);
     const write = () => cloud.uploadToR2(`hooks/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
         rid, premise, metric, threshold, attempts, n: attempts.length, status, winner, error: err, note,
-        best: best(), rejected, deadline, ts: Date.now() })), 'application/json').catch(() => {});
-    const vecs = [];   // this run's accepted variants — the embedding-based differentiation
+        best: best(), rejected, gate: Math.round(gate * 100) / 100, deadline, ts: Date.now() })), 'application/json').catch(() => {});
+    const vecs = [];      // this run's accepted variants — text-embedding differentiation
+    const visPrev = [];   // 48-d pooled VISUAL embeddings of scored attempts — quantified visual variety
     let mem = []; try { mem = await genMemLoad(); } catch (e) {}
     try {
         while (attempts.length < maxAttempts && Date.now() < deadline && status === 'running') {
             try { if (await cloud.existsInR2(`hooks/grind/stop/${rid}`)) { status = 'stopped'; note = 'stopped by you'; break; } } catch (e) {}
             _hookLastGen = Date.now(); _hookLastPing = Date.now();   // grinding IS warmth
-            // 1) a variant grounded on the user's written hook
+            // 1) a variant grounded on the user's written hook — malformed samples retried, not fatal
             let spec;
             const beat = (rstat, sec) => { const t = sec >= 60 ? `${Math.floor(sec / 60)}m ${sec % 60}s` : `${sec}s`; note = `attempt ${attempts.length + 1}: ${rstat === 'starting' ? `GPU booting (${t})` : `writing a variant (${t})`}`; return write(); };
-            try { spec = (await hookModelGenerate(premise, false, 1, beat))[0]; }
-            catch (e) { err = 'idea: ' + e.message; status = 'error'; break; }
-            // 2) embedding gate BEFORE any render spend — push each attempt away from the previous ones
+            const onRetry = (msg, t) => { note = `attempt ${attempts.length + 1}: the model returned a malformed idea — retrying (${t}/3) · ${msg.slice(0, 60)}`; return write(); };
+            try { spec = await hookModelGenerateRetry(premise, false, beat, onRetry); }
+            catch (e) { err = 'idea: ' + e.message + ' (3 tries)'; status = 'error'; break; }
+            // 2) ADAPTIVE embedding gate BEFORE any render spend
             const emb = await geminiTextEmbed(spec.premise + '\n' + spec.frames.join('\n'));
             let nov = null;
             if (emb) {
                 const q = Int8Array.from(emb, x => Math.round(x * 127));
                 let m = -1; for (const v of vecs) { const c = genCos(q, v); if (c > m) m = c; }
                 nov = vecs.length ? Math.round((1 - m) * 1000) / 1000 : 1;
-                if (nov < 0.10 && rejected < maxAttempts) { rejected++; note = `variant too close to attempt ${attempts.length} (dist ${nov}) — regenerating (${rejected} rejected)`; await write(); continue; }
+                if (nov < gate && rejected < maxAttempts) { rejected++; note = `variant only ${nov} from an earlier attempt — required ≥ ${gate.toFixed(2)} (exploration widens when stuck) — regenerating (${rejected} rejected)`; await write(); continue; }
                 vecs.push(q); mem.push({ id: rid + '_' + attempts.length, t: Date.now(), p: spec.premise.slice(0, 140), v: genVecEnc(emb), s: 1 });
             }
-            const a = { k: attempts.length, premise: spec.premise, frames: spec.frames, frame_imgs: [null, null, null, null, null], frames_done: 0, status: 'rendering', nov, pct: null, errs: [], ts: Date.now() };
+            const a = { k: attempts.length, premise: spec.premise, frames: spec.frames, frame_imgs: [null, null, null, null, null], frames_done: 0, status: 'rendering', nov, vnov: null, pct: null, errs: [], ts: Date.now() };
             attempts.push(a); note = `attempt ${a.k + 1}: rendering frames…`; await write();
-            // 3) render the 5 frames (streamed) — collect buffers for the montage
+            // 3) render the 5 frames — robust (3× pro + draft fallback), a missing frame is now exceptional
             const bufs = [null, null, null, null, null];
             for (let i = 0; i < 5; i++) {
-                let lastErr = null;
-                for (let t2 = 0; t2 < 2 && !bufs[i]; t2++) {
-                    try { const b = await hookRenderFrame(a.frames[i]); bufs[i] = b; const id = `${rid}_${a.k}_${i}`; await cloud.uploadToR2(`hooks/grind/montages/${id}.jpg`, b, 'image/jpeg'); a.frame_imgs[i] = id; lastErr = null; }
-                    catch (e) { lastErr = String(e.message || e).slice(0, 140); }
-                }
-                if (lastErr) a.errs.push(`frame ${i + 1}: ${lastErr}`);
+                try {
+                    const r2 = await renderFrameRobust(a.frames[i]);
+                    bufs[i] = r2.buf; const id = `${rid}_${a.k}_${i}`;
+                    await cloud.uploadToR2(`hooks/grind/montages/${id}.jpg`, r2.buf, 'image/jpeg'); a.frame_imgs[i] = id;
+                    if (r2.draft) a.errs.push(`frame ${i + 1}: pro render failed 3× — used a draft (schnell) render`);
+                } catch (e) { a.errs.push(`frame ${i + 1}: FAILED after all retries — ${String(e.message || e).slice(0, 120)}`); }
                 a.frames_done = bufs.filter(Boolean).length;
                 await write();
             }
@@ -9535,9 +9568,23 @@ async function grindProcess(rid, req0) {
                 delete score.montage;   // the strip is already in R2 — don't double-store 200KB of b64
                 await cloud.uploadToR2(`hooks/grind/scores/${rid}_${a.k}.json`, Buffer.from(JSON.stringify(score)), 'application/json');
                 a.pct = grindPct(score, metric); a.hasScore = a.pct != null;
+                // quantified VISUAL variety: cosine distance of this attempt's pooled visual embedding
+                // to its most-similar prior attempt — surfaced on the card, and near-duplicate LOOKS
+                // (< 0.02) count as "stuck" so the exploration gate widens even when scores wobble
+                const vp = score.emb_preview && score.emb_preview.visual;
+                if (vp && vp.length) {
+                    let vm = -1; for (const pv of visPrev) { const c = genCos(vp, pv); if (c > vm) vm = c; }
+                    a.vnov = visPrev.length ? Math.round((1 - vm) * 1000) / 1000 : null;
+                    visPrev.push(vp);
+                }
             } catch (e) { a.errs.push('score: ' + String(e.message || e).slice(0, 140)); }
             a.status = 'done';
-            note = a.pct != null ? `attempt ${a.k + 1} scored ${a.pct}th pctile (target ${threshold}) — best so far ${best()}` : `attempt ${a.k + 1} could not be scored`;
+            // drift: widen the required distance while not improving; snap back on a new best
+            if (a.pct != null) {
+                if (bestPct == null || a.pct > bestPct) { bestPct = a.pct; sinceBest = 0; gate = GATE0; }
+                else { sinceBest++; if (a.vnov != null && a.vnov < 0.02) sinceBest++; gate = Math.min(0.30, GATE0 + 0.03 * Math.max(0, sinceBest - 1)); }
+            }
+            note = a.pct != null ? `attempt ${a.k + 1} scored ${a.pct}th pctile (target ${threshold}) — best ${best()} · exploration ≥ ${gate.toFixed(2)}` : `attempt ${a.k + 1} could not be scored`;
             await write();
             if (a.pct != null && a.pct >= threshold) { status = 'won'; winner = a.k; note = `🎯 attempt ${a.k + 1} cleared the bar: ${a.pct} ≥ ${threshold}`; }
         }

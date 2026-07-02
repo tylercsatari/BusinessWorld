@@ -1100,14 +1100,15 @@ const JarvisRetention = (function () {
                   ${img ? `<img src="${img}" style="width:100%;border-radius:5px;display:block;background:#000" loading="lazy"/>` : `<div style="height:44px;background:${bg};border-radius:5px"></div>`}
                   <div style="font-size:9.5px;color:${C.text};line-height:1.35;margin-top:4px;max-height:38px;overflow:hidden">${esc((a.premise || '').slice(0, 90))}</div>
                   <div style="display:flex;gap:5px;margin-top:5px;align-items:center">
-                    ${a.nov != null ? `<span style="font-size:8.5px;color:${C.purple}" title="embedding distance from this run's earlier attempts">🆕${a.nov.toFixed(2)}</span>` : ''}
+                    ${a.nov != null ? `<span style="font-size:8.5px;color:${C.purple}" title="TEXT embedding distance from this run's earlier attempts (idea variety)">🆕${a.nov.toFixed(2)}</span>` : ''}
+                    ${a.vnov != null ? `<span style="font-size:8.5px;color:${a.vnov < 0.02 ? '#ef4444' : C.cyan}" title="VISUAL embedding distance from the most-similar earlier attempt — how different it LOOKS (red = near-duplicate look; counts as stuck and widens exploration)">👁${a.vnov.toFixed(2)}</span>` : ''}
                     ${done && a.pct != null ? `<span data-grindopen="${a.k}" style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">${st.grindOpening === a.k ? '⏳' : 'open full readout'}</span><span data-grindsave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">💾 save</span>` : ''}
                   </div></div>`;
             };
             runHtml = `${foreign}<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px">
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
                   <span style="font-size:12px;font-weight:800;color:${statCol}">${statLab}</span>
-                  <span style="font-size:10px;color:${C.mute}">${g.n || 0} attempts · best <b style="color:${g.best != null ? heatCol(g.best / 100) : C.mute}">${g.best != null ? g.best + 'th' : '—'}</b> vs target <b style="color:${C.accent}">${g.threshold}th</b> ${esc(g.metric || 'keep')} · ${g.rejected || 0} rejected as too-similar</span>
+                  <span style="font-size:10px;color:${C.mute}">${g.n || 0} attempts · best <b style="color:${g.best != null ? heatCol(g.best / 100) : C.mute}">${g.best != null ? g.best + 'th' : '—'}</b> vs target <b style="color:${C.accent}">${g.threshold}th</b> ${esc(g.metric || 'keep')} · ${g.rejected || 0} rejected as too-similar${g.gate != null ? ` · <span title="minimum embedding distance a new variant must keep from every earlier attempt — widens automatically while the score isn't improving (or attempts LOOK alike), snaps back on a new best" style="cursor:help;color:${C.purple}">exploration ≥ ${(+g.gate).toFixed(2)}</span>` : ''}</span>
                   ${running ? `<span data-grindstop style="cursor:pointer;border:1px solid #ef4444;color:#ef4444;border-radius:6px;padding:3px 11px;font-size:10px;font-weight:800">⏹ Stop</span>` : ''}
                   ${running && g._at ? `<span style="font-size:9px;color:${C.mute}" title="how fresh this display is — the watchdog revives the poller if this exceeds ~20s">live · updated ${Math.round((Date.now() - g._at) / 1000)}s ago · ${st.grindPolls || 0} polls</span>` : ''}
                 </div>
