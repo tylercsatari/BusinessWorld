@@ -9014,8 +9014,10 @@ async function fetchT(url, opts, ms) {  // fetch with a hard timeout so nothing 
 // (own account, no spend cap; scales to zero). NO Gemini, NO fallback — if the deployment
 // is unset/unreachable the request errors clearly. See cog-idea/predict.py.
 async function hookModelGenerate(premise, invent, count) {
-    const token = process.env.REPLICATE_API_TOKEN, ver = process.env.REPLICATE_IDEA_VERSION;
-    if (!token || !ver) throw new Error('fine-tuned model endpoint not configured (set REPLICATE_IDEA_VERSION) — refusing to fall back');
+    // idea_r7 baked model version on Replicate (not a secret). Env overrides if the model is bumped.
+    const IDEA_VERSION = '522aa069d4197ddc9a630ca837acbed66851feed714797d43d97d51812fea7e2';
+    const token = process.env.REPLICATE_API_TOKEN, ver = process.env.REPLICATE_IDEA_VERSION || IDEA_VERSION;
+    if (!token) throw new Error('REPLICATE_API_TOKEN not configured — refusing to fall back');
     // Replicate: create a prediction on the model VERSION directly (no deployment needed — deployments
     // require a billing method; direct predictions just need credit). Then poll until terminal. The
     // first run cold-boots the GPU (a couple min); we run in the background queue, so that's fine.
