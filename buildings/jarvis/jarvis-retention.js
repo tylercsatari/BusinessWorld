@@ -994,7 +994,7 @@ const JarvisRetention = (function () {
             <input id="exp-gen-input" value="${esc(st.expGenPrem || '')}" placeholder="type a video idea — or leave blank and the model invents one…" style="flex:1;min-width:240px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px"/>
             <span style="font-size:10px;color:${C.mute}">outputs</span>${[1, 2, 4, 6, 8].map(nPill).join('')}
             <span data-expgen style="cursor:${st.expGenBusy ? 'default' : 'pointer'};background:${st.expGenBusy ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800;display:inline-flex;align-items:center">${st.expGenBusy ? '⏳ working…' : 'Generate'}</span>
-          </div>${result}</div>`;
+          </div>${(!st.expGenBusy && st.warmFiredAt && Date.now() - st.warmFiredAt < 8 * 60e3) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px">🔥 GPU pre-warming since you clicked in (${Math.round((Date.now() - st.warmFiredAt) / 1000)}s ago) — generating now skips most of the cold wait</div>` : ''}${result}</div>`;
     }
     // ── ONE unified progress stepper for EVERY path (generate / render / upload / build → embed → score).
     //    Shown live under the header whenever anything is running, so you always see where it's at. ──
@@ -3230,7 +3230,17 @@ const JarvisRetention = (function () {
 
     async function mount(el) {
         root = el;
-        if (!root.__rb) { root.addEventListener('click', onClick); root.addEventListener('input', onInput); root.addEventListener('change', onChange); root.__rb = true; }
+        if (!root.__rb) {
+            root.addEventListener('click', onClick); root.addEventListener('input', onInput); root.addEventListener('change', onChange);
+            // clicking into the Generate box pre-warms the idea GPU — the cold boot overlaps typing
+            root.addEventListener('focusin', e => {
+                if (e.target && e.target.id === 'exp-gen-input' && !st.expGenBusy && Date.now() - (st.warmPingAt || 0) > 4 * 60e3) {
+                    st.warmPingAt = Date.now();
+                    fetch('/api/hooks/warmup', { method: 'POST' }).then(r => r.json()).then(j => { if (j && j.fired) { st.warmFiredAt = Date.now(); rtgUpdateExp(); } }).catch(() => {});
+                }
+            });
+            root.__rb = true;
+        }
         if (!DATA && !err) {
             root.innerHTML = `<div style="padding:40px;text-align:center;color:${C.dim}">Loading…</div>`;
             const base = './buildings/jarvis/retention-study/';

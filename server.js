@@ -3229,6 +3229,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         }, { runs: [] });
         return;
     }
+    // Pre-warm the idea GPU the moment the user shows intent (clicks into the Generate box) —
+    // the 4-6 min cold boot then overlaps their typing instead of their waiting.
+    if (pathname === '/api/hooks/warmup' && req.method === 'POST') {
+        const fired = await hookWarmPing('user intent').catch(() => false);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, fired }));
+        return;
+    }
     if (pathname === '/api/hooks/generate' && req.method === 'POST') {
         try {
             const body = (await readBody(req)) || {};
@@ -9052,9 +9060,32 @@ async function fetchT(url, opts, ms) {  // fetch with a hard timeout so nothing 
 // Idea generation runs ONLY on Tyler's fine-tuned model (idea_r7), hosted on REPLICATE
 // (own account, no spend cap; scales to zero). NO Gemini, NO fallback — if the deployment
 // is unset/unreachable the request errors clearly. See cog-idea/predict.py.
+// idea_r7 baked model version on Replicate (not a secret). Env overrides if the model is bumped.
+const IDEA_VERSION = '522aa069d4197ddc9a630ca837acbed66851feed714797d43d97d51812fea7e2';
+// ── GPU warm-keeping: the ONLY slow stage is Replicate cold-booting the 61GB model (~4-6 min).
+// Two mitigations: (1) /api/hooks/warmup fires when the user clicks into the Generate box, so the
+// boot overlaps their typing; (2) after any generation, ping every ~3.5 min for 15 min so an active
+// session stays on the warm path (~13s/idea). Private models bill boot+idle time anyway, so this
+// only spends what a cold generate would have. Pings are fire-and-forget count=1 predictions.
+let _hookLastGen = 0, _hookLastPing = 0;
+async function hookWarmPing(reason) {
+    const token = process.env.REPLICATE_API_TOKEN; if (!token) return false;
+    if (Date.now() - _hookLastPing < 3.5 * 60e3) return false;   // one ping per residency window
+    _hookLastPing = Date.now();
+    try {
+        await fetchT('https://api.replicate.com/v1/predictions', {
+            method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ version: process.env.REPLICATE_IDEA_VERSION || IDEA_VERSION, input: { premise: '', invent: true, count: 1 } })
+        }, 30000);   // fire-and-forget: the prediction itself is the warmth; output is discarded
+        console.log('hook GPU warmup ping (' + reason + ')');
+        return true;
+    } catch (e) { return false; }
+}
+setInterval(() => {   // keep-warm window: active session → no re-boots between presses
+    if (_hookBusy) return;
+    if (_hookLastGen && Date.now() - _hookLastGen < 15 * 60e3) hookWarmPing('keep-warm after generation').catch(() => {});
+}, 60e3);
 async function hookModelGenerate(premise, invent, count, onStatus) {
-    // idea_r7 baked model version on Replicate (not a secret). Env overrides if the model is bumped.
-    const IDEA_VERSION = '522aa069d4197ddc9a630ca837acbed66851feed714797d43d97d51812fea7e2';
     const token = process.env.REPLICATE_API_TOKEN, ver = process.env.REPLICATE_IDEA_VERSION || IDEA_VERSION;
     if (!token) throw new Error('REPLICATE_API_TOKEN not configured — refusing to fall back');
     // Replicate: create a prediction on the model VERSION directly (no deployment needed — deployments
@@ -9181,6 +9212,7 @@ async function hookRenderFrame(prompt) {
     return Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
 }
 async function hookProcessRequest(rid, premise, count, invent) {
+    _hookLastGen = Date.now(); _hookLastPing = Date.now();   // a real generation IS the warmth — opens the keep-warm window
     const stat = (o) => cloud.uploadToR2(`hooks/grpo/demo/status/${rid}.json`, Buffer.from(JSON.stringify({ ...o, ts: Date.now() })), 'application/json').catch(() => {});
     let attempts = [];
     let err = '';
