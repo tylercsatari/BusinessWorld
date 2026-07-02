@@ -8594,16 +8594,26 @@ Respond ONLY as valid JSON (no markdown):
             } catch (e) { /* fall through to full send */ }
         }
         // Inject cache-busting version stamps into HTML files
+        let out = data;
         if (ext === '.html') {
             let html = data.toString('utf8');
             html = html.replace(/\.js(\?v=\d+)?"/g, `.js?v=${BUILD_TS}"`);
             html = html.replace(/\.css(\?v=\d+)?"/g, `.css?v=${BUILD_TS}"`);
-            res.writeHead(200, headers);
-            res.end(html);
+            out = Buffer.from(html, 'utf8');
+        }
+        // gzip text assets — the big data files (novelty.json ~10MB, rtg_field.json ~9MB) compress
+        // ~90%, plus jarvis-retention.js itself. Biggest single win for the Retention→Views load.
+        const GZIP_EXT = new Set(['.json', '.js', '.css', '.html', '.svg', '.md', '.webmanifest']);
+        if (GZIP_EXT.has(ext) && (req.headers['accept-encoding'] || '').includes('gzip') && out.length > 1400) {
+            zlib.gzip(out, (gzErr, gz) => {
+                if (gzErr) { res.writeHead(200, headers); res.end(out); return; }
+                res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding' });
+                res.end(gz);
+            });
             return;
         }
         res.writeHead(200, headers);
-        res.end(data);
+        res.end(out);
     });
 });
 

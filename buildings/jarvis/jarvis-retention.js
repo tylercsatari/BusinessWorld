@@ -3135,19 +3135,24 @@ const JarvisRetention = (function () {
             for (let tries = 1; !DATA; tries++) {
                 try {
                     CHANS = await fetch('/api/retention/channels').then(r => r.json()).catch(() => null);
-                    DATA = await loadJSON(base + 'retention_table.json');
-                    S = await loadJSON(base + 'retention_study.json').catch(() => null); S_MAIN = S;
-                    N = await loadJSON(base + 'principles/novelty.json').catch(() => null);
-                    NCEXP = await loadJSON(base + 'principles/novelty_correlations.json').catch(() => null);
-                    NQ = await loadJSON(base + 'principles/novelty_quantify.json').catch(() => null);
-                    CR = await loadJSON(base + 'principles/correlations.json').catch(() => null);
-                    INT = await loadJSON(base + 'principles/interactions.json').catch(() => null);
-                    CF = await loadJSON(base + 'principles/confounds.json').catch(() => null);
-                    RTGF = await loadJSON(base + 'principles/rtg_field.json').catch(() => null);
-                    RTGE = await loadJSON(base + 'principles/rtg_embedmap.json').catch(() => null);
-                    RTGH = await loadJSON(base + 'principles/rtg_hazard.json').catch(() => null);
-                    RAW = {}; try { RAW.visual = await (await fetch('/api/raw/map?channel=visual')).json(); } catch (e) { }
-                    try { RTGLABELS = await (await fetch('/api/rtg/labels')).json() || {}; } catch (e) { RTGLABELS = {}; }
+                    DATA = await loadJSON(base + 'retention_table.json');   // sentinel: throw → retry loop
+                    RAW = {};
+                    // Everything else was 12 SEQUENTIAL awaits (~sum of times). Load them in PARALLEL
+                    // (~max of times) — combined with server gzip this is the big load-time win.
+                    await Promise.all([
+                        loadJSON(base + 'retention_study.json').then(x => { S = x; S_MAIN = x; }).catch(() => { S = null; S_MAIN = null; }),
+                        loadJSON(base + 'principles/novelty.json').then(x => N = x).catch(() => N = null),
+                        loadJSON(base + 'principles/novelty_correlations.json').then(x => NCEXP = x).catch(() => NCEXP = null),
+                        loadJSON(base + 'principles/novelty_quantify.json').then(x => NQ = x).catch(() => NQ = null),
+                        loadJSON(base + 'principles/correlations.json').then(x => CR = x).catch(() => CR = null),
+                        loadJSON(base + 'principles/interactions.json').then(x => INT = x).catch(() => INT = null),
+                        loadJSON(base + 'principles/confounds.json').then(x => CF = x).catch(() => CF = null),
+                        loadJSON(base + 'principles/rtg_field.json').then(x => RTGF = x).catch(() => RTGF = null),
+                        loadJSON(base + 'principles/rtg_embedmap.json').then(x => RTGE = x).catch(() => RTGE = null),
+                        loadJSON(base + 'principles/rtg_hazard.json').then(x => RTGH = x).catch(() => RTGH = null),
+                        fetch('/api/raw/map?channel=visual').then(r => r.json()).then(x => RAW.visual = x).catch(() => {}),
+                        fetch('/api/rtg/labels').then(r => r.json()).then(x => RTGLABELS = x || {}).catch(() => RTGLABELS = {}),
+                    ]);
                 } catch (e) {
                     if (tries >= 3) { root.innerHTML = `<div style="padding:24px;color:${C.dim}">Couldn't load data — the site may be mid-deploy. <button data-reload style="background:${C.accent}22;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px">Retry</button></div>`; return; }
                     root.innerHTML = `<div style="padding:40px;text-align:center;color:${C.dim}">Loading… <span style="color:${C.mute};font-size:11px">(retry ${tries})</span></div>`;
