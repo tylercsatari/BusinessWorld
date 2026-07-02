@@ -1011,8 +1011,11 @@ const JarvisRetention = (function () {
         GRINDLIST = { loading: 1 };
         fetch('/api/hooks/grind/runs').then(r => r.json()).then(j => {
             GRINDLIST = j || { runs: [] };
+            // Only auto-attach a RUNNING run (so a page reload resumes YOUR grind) — and it gets a
+            // clear "already running when you opened this" banner unless this page started it.
+            // Finished runs show as a one-line "previous run" link instead of a full panel.
             const last = (j.runs || [])[0];
-            if (last && !st.grindRid) { st.grindRid = last.rid; grindPoll(last.rid); }
+            if (last && !st.grindRid && last.status === 'running' && !((st.grindHide || {})[last.rid])) { st.grindRid = last.rid; grindPoll(last.rid); }
             rtgUpdateExp();
         }).catch(() => { GRINDLIST = { runs: [] }; });
     }
@@ -1024,7 +1027,7 @@ const JarvisRetention = (function () {
         fetch('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', hours: st.grindHours || 3 }) })
             .then(r => r.json()).then(j => {
                 st.grindStarting = 0;
-                if (j.rid) { st.grindRid = j.rid; GRINDRUN = { rid: j.rid, premise: prem, status: 'running', attempts: [], threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', note: 'queued — the worker picks it up within seconds…' }; grindPoll(j.rid); }
+                if (j.rid) { st.grindMine = st.grindMine || {}; st.grindMine[j.rid] = 1; st.grindRid = j.rid; GRINDRUN = { rid: j.rid, premise: prem, status: 'running', attempts: [], threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', note: 'queued — the worker picks it up within seconds…' }; grindPoll(j.rid); }
                 else st.grindErr = j.error || 'could not start';
                 rtgUpdateExp();
             }).catch(e => { st.grindStarting = 0; st.grindErr = e.message; rtgUpdateExp(); });
@@ -1062,7 +1065,13 @@ const JarvisRetention = (function () {
         const mPill = ([id, lab]) => `<span data-grindmetric="${id}" style="cursor:pointer;border:1px solid ${metric === id ? C.accent : C.border};background:${metric === id ? C.accent + '22' : 'transparent'};color:${metric === id ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
         const hPill = h => `<span data-grindhours="${h}" style="cursor:pointer;border:1px solid ${hours === h ? C.accent : C.border};background:${hours === h ? C.accent + '22' : 'transparent'};color:${hours === h ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${h}h</span>`;
         let runHtml = '';
+        if (!g && GRINDLIST && (GRINDLIST.runs || []).length && !st.grindRid) {
+            const last = GRINDLIST.runs[0];
+            runHtml = `<div style="font-size:10px;color:${C.mute};margin-top:8px">📁 previous run: “${esc((last.premise || '').slice(0, 60))}” — ${esc(last.status)} · best ${last.best != null ? last.best + 'th' : '—'} vs ${last.threshold}th <span data-grindview="${esc(last.rid)}" style="cursor:pointer;color:${C.cyan};text-decoration:underline">view</span></div>`;
+        }
         if (g) {
+            const mine = !!((st.grindMine || {})[g.rid]);
+            const foreign = !mine ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}14;border:1px solid ${C.amber}44;border-radius:6px;padding:6px 10px;margin:8px 0 0;display:flex;justify-content:space-between;gap:8px;align-items:center"><span>📎 this run was <b>already going</b> when you opened the tab (started earlier or from another window) — this page did NOT launch it. Its hook: “${esc((g.premise || '').slice(0, 70))}”</span><span data-grindhide style="cursor:pointer;color:${C.dim};font-weight:800">✕ hide</span></div>` : '';
             const atts = (g.attempts || []).slice().reverse();
             const statCol = { running: C.cyan, won: C.green, stopped: C.amber, error: '#ef4444', deadline: C.amber, maxed: C.amber }[g.status] || C.dim;
             const statLab = { running: '⏳ grinding…', won: '🎯 THRESHOLD CLEARED', stopped: '⏹ stopped', error: '✕ error', deadline: '⏱ time budget spent', maxed: 'attempt budget spent' }[g.status] || g.status;
@@ -1080,7 +1089,7 @@ const JarvisRetention = (function () {
                     ${done && a.pct != null ? `<span data-grindopen="${a.k}" style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">${st.grindOpening === a.k ? '⏳' : 'open full readout'}</span><span data-grindsave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">💾 save</span>` : ''}
                   </div></div>`;
             };
-            runHtml = `<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px">
+            runHtml = `${foreign}<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px">
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
                   <span style="font-size:12px;font-weight:800;color:${statCol}">${statLab}</span>
                   <span style="font-size:10px;color:${C.mute}">${g.n || 0} attempts · best <b style="color:${g.best != null ? heatCol(g.best / 100) : C.mute}">${g.best != null ? g.best + 'th' : '—'}</b> vs target <b style="color:${C.accent}">${g.threshold}th</b> ${esc(g.metric || 'keep')} · ${g.rejected || 0} rejected as too-similar</span>
@@ -3056,6 +3065,8 @@ const JarvisRetention = (function () {
         const gmet = e.target.closest('[data-grindmetric]'); if (gmet) { st.grindMetric = gmet.getAttribute('data-grindmetric'); rtgUpdateExp(); return; }
         const ghr = e.target.closest('[data-grindhours]'); if (ghr) { st.grindHours = +ghr.getAttribute('data-grindhours'); rtgUpdateExp(); return; }
         const gop = e.target.closest('[data-grindopen]'); if (gop) { if (st.grindOpening == null) grindOpen(+gop.getAttribute('data-grindopen')); return; }
+        if (e.target.closest('[data-grindhide]')) { st.grindHide = st.grindHide || {}; if (st.grindRid) st.grindHide[st.grindRid] = 1; st.grindRid = null; GRINDRUN = null; rtgUpdateExp(); return; }
+        const gvw = e.target.closest('[data-grindview]'); if (gvw) { const rid = gvw.getAttribute('data-grindview'); st.grindRid = rid; delete (st.grindHide || {})[rid]; grindPoll(rid); rtgUpdateExp(); return; }
         const gsa = e.target.closest('[data-grindsave]'); if (gsa) { grindSave(+gsa.getAttribute('data-grindsave')); return; }
         const gsc = e.target.closest('[data-genscore]'); if (gsc) { if (!st.rawUploading) { const k = +gsc.getAttribute('data-genscore'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) scoreGenerated(k, a.frame_imgs || [], a.premise || a.caption || ''); } return; }
         const gsv = e.target.closest('[data-gensave]'); if (gsv) { const k = +gsv.getAttribute('data-gensave'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) saveHook({ kind: 'idea', source: 'generated', title: (a.premise || a.caption || 'idea').slice(0, 80), text: a.premise || a.caption || '', frames: a.frames || [], frame_imgs: a.frame_imgs || [], cohesion_mode: a.cohesion_mode || '' }); return; }
