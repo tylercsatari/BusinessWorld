@@ -9115,39 +9115,11 @@ async function genMemLoad() {
 async function genMemSave(items) {
     try { await cloud.uploadToR2(GENMEM_KEY, Buffer.from(JSON.stringify({ items: items.slice(-GENMEM_CAP), updated: new Date().toISOString() })), 'application/json'); } catch (e) {}
 }
-// specs (over-generated) → the `count` most-novel, each tagged {novelty, nearest}; memory updated.
-async function genDiversitySelect(rid, specs, count) {
-    const mem = await genMemLoad();
-    const memVecs = mem.map(it => { try { return genVecDec(it.v); } catch (e) { return null; } }).filter(Boolean);
-    const embs = await Promise.all(specs.map(s => geminiTextEmbed(s.premise + '\n' + s.frames.join('\n'))));
-    if (!embs.some(Boolean)) return { specs: specs.slice(0, count), memN: mem.length };   // embed down → no selection, no memory write
-    const qEmbs = embs.map(e => e ? Int8Array.from(e, x => Math.round(x * 127)) : null);  // compare int8-vs-int8, same as memory
-    specs.forEach((s, i) => {
-        if (!qEmbs[i]) { s._nov = null; s._near = ''; return; }
-        let m = -1, mi = -1;
-        for (let k = 0; k < memVecs.length; k++) { const c = genCos(qEmbs[i], memVecs[k]); if (c > m) { m = c; mi = k; } }
-        s._nov = memVecs.length ? Math.round((1 - m) * 1000) / 1000 : 1;
-        s._near = mi >= 0 ? (mem[mi].p || '') : '';
-    });
-    // greedy max-min: each pick maximises its distance to the memory AND to already-picked siblings
-    const chosen = [], pool = specs.map((_, i) => i).filter(i => qEmbs[i]), noEmb = specs.map((_, i) => i).filter(i => !qEmbs[i]);
-    while (chosen.length < count && pool.length) {
-        let best = -1, bestD = -Infinity;
-        for (const i of pool) {
-            let d = specs[i]._nov != null ? specs[i]._nov : 1;
-            for (const c of chosen) d = Math.min(d, 1 - genCos(qEmbs[i], qEmbs[c]));
-            if (d > bestD) { bestD = d; best = i; }
-        }
-        specs[best]._nov = Math.round(bestD * 1000) / 1000;
-        chosen.push(best); pool.splice(pool.indexOf(best), 1);
-    }
-    while (chosen.length < count && noEmb.length) chosen.push(noEmb.shift());
-    chosen.sort((a, b) => a - b);   // keep the model's own ordering among survivors
-    const now = Date.now();         // remember EVERY attempt (shown or not) so future batches avoid all of it
-    specs.forEach((s, i) => { if (qEmbs[i]) mem.push({ id: rid + '_' + i, t: now, p: String(s.premise).slice(0, 140), v: genVecEnc(embs[i]), s: chosen.includes(i) ? 1 : 0 }); });
-    await genMemSave(mem);
-    return { specs: chosen.map(i => specs[i]), memN: mem.length };
-}
+// Novelty thresholds (calibrated on real gemini-embedding-2 distances 2026-07-02:
+// near-duplicate ideas ≈ 0.13, same-topic-different-idea ≈ 0.30, unrelated ≈ 0.4+).
+// Below the threshold an idea is rejected and regenerated. A typed premise expects
+// closer variations, so its bar is lower than free invention.
+const NOV_MIN_INVENT = 0.18, NOV_MIN_PREMISE = 0.12;
 // ── Storyboard frame generation (Experiment tab) — photorealistic, reference-conditioned ──
 // One model call per frame; prior frames are passed as REFERENCE images so a character/scene can
 // stay consistent across the 5 frames (or not). Models verified on Replicate as of 2026-06-30.
@@ -9215,37 +9187,67 @@ async function hookProcessRequest(rid, premise, count, invent) {
         Buffer.from(JSON.stringify({ input_id: rid, premise: premise || '💡 invented', n: attempts.length, attempts, mem_n: memN,
             done: !!done, streaming: true, error: (done && !attempts.length) ? err : '', model: 'idea_r7 (fine-tuned) + flux', hosted: true })),
         'application/json').catch(() => {});
+    const renders = [];   // per-hook frame-render pipelines, running while the NEXT idea generates
     try {
-        // 1) the fine-tuned model invents idea(s)+frames in ONE batched call (covers GPU cold start).
-        //    Over-generate by 2 so the diversity pass has spares to reject — rejections cost no renders.
-        await stat({ stage: 'reasoning', premise: premise || '(the fine-tuned model is thinking…)' });
-        let specs;
-        try { specs = await hookModelGenerate(premise, invent, Math.min(8, count + 2)); }
-        catch (e) { err = 'idea: ' + e.message; specs = []; }
-        // 1b) diversity: keep the `count` ideas farthest from EVERYTHING generated before (and from
-        //     each other); every attempt joins the memory so the next press explores new territory.
-        if (specs.length) {
-            try { const ds = await genDiversitySelect(rid, specs, count); specs = ds.specs; memN = ds.memN; }
-            catch (e) { specs = specs.slice(0, count); }
-        }
-        // 2) seed every hook immediately so they all appear as cards the instant the ideas land
-        attempts = specs.map((spec, k) => ({ k, premise: spec.premise, frames: spec.frames, frame_imgs: [null, null, null, null, null],
-            frames_done: 0, status: 'rendering', reasoning: spec.reasoning || '', caption: spec.premise, cohesion_mode: spec.cohesion_mode || '',
-            novelty: spec._nov != null ? spec._nov : null, nearest: spec._near || '' }));
-        if (attempts.length) { await stat({ stage: 'rendering', n: attempts.length, done: 0 }); await writeGroup(false); }
-        // 3) render each hook's 5 frames with Flux — streaming each frame into the group as it lands
-        for (let k = 0; k < attempts.length; k++) {
-            const a = attempts[k];
-            for (let i = 0; i < 5; i++) {
-                try { const buf = await hookRenderFrame(a.frames[i]); const id = `${rid}_${k}_${i}`; await cloud.uploadToR2(`hooks/grpo/demo/montages/${id}.jpg`, buf, 'image/jpeg'); a.frame_imgs[i] = id; }
-                catch (e) { err = 'render: ' + e.message; a.frame_imgs[i] = null; }
-                a.frames_done = a.frame_imgs.filter(Boolean).length;
-                await writeGroup(false);   // ← the stream: each frame appears the moment it renders
+        // ONE idea per model call, so each hook streams into the UI the moment it exists —
+        // a batched call would sit silent until Replicate finishes EVERY idea (minutes of nothing).
+        // Each accepted idea's frames render in the background while the next idea generates.
+        // Ideas too close to the diversity memory (everything ever generated) are rejected and
+        // regenerated, with the rejection surfaced live in the status line.
+        let mem = []; try { mem = await genMemLoad(); } catch (e) {}
+        memN = mem.length;
+        const memVecs = mem.map(it => { try { return genVecDec(it.v); } catch (e) { return null; } }).filter(Boolean);
+        const accVecs = [];                                   // this batch's accepted ideas
+        const NOV_MIN = (premise && !invent) ? NOV_MIN_PREMISE : NOV_MIN_INVENT;
+        const maxTries = count + 3;                           // at most 3 regenerations per batch
+        let tries = 0, rejected = 0;
+        await stat({ stage: 'reasoning', done: 0, n: count, note: 'inventing idea 1/' + count + ' — the first one also wakes the GPU, so it takes the longest…' });
+        while (attempts.length < count && tries < maxTries) {
+            tries++;
+            let spec;
+            try { spec = (await hookModelGenerate(premise, invent, 1))[0]; }
+            catch (e) { err = 'idea: ' + e.message; break; }  // hard failure (credit / model down) → stop the batch
+            // novelty vs the whole memory AND this batch's accepted ideas (embed failure → accept)
+            let nov = null, near = '';
+            const emb = await geminiTextEmbed(spec.premise + '\n' + spec.frames.join('\n'));
+            const q = emb ? Int8Array.from(emb, x => Math.round(x * 127)) : null;
+            if (q) {
+                let m = -1, mi = -1;
+                for (let k2 = 0; k2 < memVecs.length; k2++) { const c = genCos(q, memVecs[k2]); if (c > m) { m = c; mi = k2; } }
+                for (const av of accVecs) { const c = genCos(q, av); if (c > m) { m = c; mi = -2; } }
+                nov = (memVecs.length || accVecs.length) ? Math.round((1 - m) * 1000) / 1000 : 1;
+                near = mi >= 0 ? (mem[mi].p || '') : (mi === -2 ? '(another idea in this batch)' : '');
+                mem.push({ id: rid + '_t' + tries, t: Date.now(), p: String(spec.premise).slice(0, 140), v: genVecEnc(emb), s: 0 });
+                const spareTries = (maxTries - tries) - (count - attempts.length - 1);
+                if (nov < NOV_MIN && spareTries > 0) {        // too close to something already generated → try again
+                    rejected++;
+                    await stat({ stage: 'reasoning', done: attempts.length, n: count,
+                        note: `idea ${attempts.length + 1}/${count} came out too close to “${(near || 'a past idea').slice(0, 60)}” (dist ${nov}) — regenerating (${rejected} rejected so far)` });
+                    continue;
+                }
             }
-            a.status = 'done';
-            await stat({ stage: 'rendering', n: attempts.length, done: k + 1, premise: a.premise });
-            await writeGroup(false);
+            const a = { k: attempts.length, premise: spec.premise, frames: spec.frames, frame_imgs: [null, null, null, null, null],
+                frames_done: 0, status: 'rendering', reasoning: spec.reasoning || '', caption: spec.premise,
+                cohesion_mode: spec.cohesion_mode || '', novelty: nov, nearest: near };
+            attempts.push(a);
+            if (q) { accVecs.push(q); mem[mem.length - 1].s = 1; }
+            await writeGroup(false);                          // ← the card appears NOW, frames fill in live
+            await stat({ stage: attempts.length < count ? 'reasoning' : 'rendering', done: attempts.length, n: count,
+                note: attempts.length < count ? `idea ${attempts.length}/${count} done — inventing idea ${attempts.length + 1}/${count} while its frames render…` : 'all ideas in — rendering the last frames…' });
+            renders.push((async () => {                       // render THIS hook while the next idea generates
+                for (let i = 0; i < 5; i++) {
+                    try { const buf = await hookRenderFrame(a.frames[i]); const id = `${rid}_${a.k}_${i}`; await cloud.uploadToR2(`hooks/grpo/demo/montages/${id}.jpg`, buf, 'image/jpeg'); a.frame_imgs[i] = id; }
+                    catch (e) { err = 'render: ' + e.message; a.frame_imgs[i] = null; }
+                    a.frames_done = a.frame_imgs.filter(Boolean).length;
+                    await writeGroup(false);                  // ← each frame appears the moment it renders
+                }
+                a.status = 'done';
+                await writeGroup(false);
+            })());
         }
+        await genMemSave(mem).catch(() => {});                // rejected ideas count too — never re-serve them
+        memN = mem.length;
+        await Promise.all(renders);
     } catch (e) { err = err || e.message; }
     await writeGroup(true);   // terminal — flips done:true so the UI stops polling
     await stat({ stage: 'done', error: attempts.length ? '' : err });

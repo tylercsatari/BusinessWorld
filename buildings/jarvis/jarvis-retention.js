@@ -885,7 +885,7 @@ const JarvisRetention = (function () {
     function expDemoPoll(rid, tries) {
         tries = tries || 0;
         st.expGenT0 = st.expGenT0 || Date.now();
-        fetch('/api/hooks/demo/status/' + rid).then(r => r.json()).then(s => { st.expGenStage = (s && s.stage) || 'queued'; st.expGenStatErr = (s && s.error) || null; if (st.expGenBusy) rtgUpdateExp(); }).catch(() => {});
+        fetch('/api/hooks/demo/status/' + rid).then(r => r.json()).then(s => { st.expGenStage = (s && s.stage) || 'queued'; st.expGenStat = s || null; st.expGenStatErr = (s && s.error) || null; if (st.expGenBusy) rtgUpdateExp(); }).catch(() => {});
         fetch('/api/hooks/grpo/group/demo/' + rid).then(r => r.json()).then(j => {
             if (j && Array.isArray(j.attempts) && j.attempts.length) {
                 EXPDEMO[rid] = j; rtgUpdateExp();               // render live — hooks + frames stream in
@@ -928,16 +928,19 @@ const JarvisRetention = (function () {
             if (st.expGenBusy && !g) {
                 const el = st.expGenT0 ? Math.round((Date.now() - st.expGenT0) / 1000) : 0;
                 const elapsed = el >= 60 ? `${Math.floor(el / 60)}m ${el % 60}s` : `${el}s`;
-                const order = ['queued', 'reasoning', 'rendering'], si = Math.max(0, order.indexOf(st.expGenStage));
-                const steps = [['spin up the GPU'], ['invent the idea + 5 frames'], ['render the frames']];
-                const stepHtml = steps.map(([lab], i) => { const dn = i < si, ac = i === si, col = dn ? C.green : ac ? C.cyan : C.mute; return `<span style="color:${col};font-weight:${ac ? 800 : 600}">${dn ? '✓' : ac ? '⏳' : '○'} ${lab}</span>`; }).join(`<span style="color:${C.mute}"> → </span>`);
-                const longHint = (el > 180 || (st.expGenStatErr && /spend|billing|429/i.test(st.expGenStatErr))) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px;line-height:1.5">Taking longer than usual. Either the GPU is cold-starting (first run pulls the model), or your <b>Replicate credit</b> ran out — top up at replicate.com/account/billing.</div>` : '';
+                const S2 = st.expGenStat || {};
+                const nTot = S2.n || st.expGenN || 4, nDone = S2.done || 0;
+                // per-idea progress dots — ideas stream one at a time now, so this ticks live
+                const ideaDots = Array.from({ length: nTot }, (_, i) => `<span style="color:${i < nDone ? C.green : (i === nDone ? C.cyan : C.mute)};font-weight:800">${i < nDone ? '✓' : (i === nDone ? '⏳' : '○')}</span>`).join(' ');
+                const note = S2.note ? `<div style="font-size:11px;color:${C.cyan};margin-top:6px;line-height:1.5">${esc(S2.note)}</div>` : '';
+                const longHint = (el > 240 && !nDone || (st.expGenStatErr && /spend|billing|429/i.test(st.expGenStatErr))) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px;line-height:1.5">Taking longer than usual. Either the GPU is cold-starting (first run pulls the model), or your <b>Replicate credit</b> ran out — top up at replicate.com/account/billing.</div>` : '';
                 result = `<div style="margin-top:12px;padding:11px 13px;background:${C.card2};border:1px solid ${C.cyan}44;border-radius:10px">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
-                      <span style="font-size:12px;font-weight:800;color:${C.cyan}">✨ Generating your hook…</span>
+                      <span style="font-size:12px;font-weight:800;color:${C.cyan}">✨ Generating — ideas stream in one at a time</span>
                       <span style="font-size:11px;color:${C.mute};font-variant-numeric:tabular-nums">${elapsed} elapsed</span></div>
-                    <div style="font-size:11px;line-height:1.7">${stepHtml}</div>
-                    <div style="font-size:10px;color:${C.mute};margin-top:6px">First click of a session spins up the GPU (~2–3 min); after that ~10 s. It keeps working even if you look away.</div>${longHint}</div>`;
+                    <div style="font-size:12px">ideas: ${ideaDots} <span style="font-size:10px;color:${C.mute}">(${nDone}/${nTot} — each appears below the moment it exists, then its frames fill in)</span></div>
+                    ${note}
+                    <div style="font-size:10px;color:${C.mute};margin-top:6px">The first idea also wakes the GPU (~2–3 min cold, seconds warm). Ideas too similar to anything previously generated are rejected and redone — you'll see that here.</div>${longHint}</div>`;
             }
             else if (g && g.error) result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">${esc(g.error)}</div>`;
             else if (g && g.attempts && g.attempts.length) {
@@ -967,14 +970,15 @@ const JarvisRetention = (function () {
                 const _doneN = g.attempts.filter(x => x.status === 'done').length;
                 const _el = st.expGenT0 ? Math.round((Date.now() - st.expGenT0) / 1000) : 0;
                 const _elapsed = _el >= 60 ? `${Math.floor(_el / 60)}m ${_el % 60}s` : `${_el}s`;
-                const _memNote = g.mem_n ? ` · <span title="every idea ever generated is embedded + remembered; each new batch keeps only the ideas farthest from all of them" style="cursor:help;color:${C.purple}">🧭 steered away from ${g.mem_n} past ideas</span>` : '';
-                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${_streaming ? C.cyan : C.mute};margin-bottom:8px;font-weight:${_streaming ? 700 : 400}">${_streaming ? `✨ streaming live — ${_doneN}/${g.n} hooks finished · ${_elapsed} elapsed${_memNote}` : `${g.n} hook${g.n > 1 ? 's' : ''}${g.premise && g.premise !== '💡 invented' ? ` for "${esc(g.premise)}"` : ' invented'} · ${esc(g.model || 'model')}${_memNote}`}</div>
+                const _memNote = g.mem_n ? ` · <span title="every idea ever generated is embedded + remembered; ideas too close to any of them are rejected and regenerated" style="cursor:help;color:${C.purple}">🧭 steered away from ${g.mem_n} past ideas</span>` : '';
+                const _statNote = (_streaming && st.expGenStat && st.expGenStat.note) ? `<div style="font-size:10px;color:${C.cyan};margin:-4px 0 8px">${esc(st.expGenStat.note)}</div>` : '';
+                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${_streaming ? C.cyan : C.mute};margin-bottom:8px;font-weight:${_streaming ? 700 : 400}">${_streaming ? `✨ streaming live — ${_doneN}/${g.n} hooks finished · ${_elapsed} elapsed${_memNote}` : `${g.n} hook${g.n > 1 ? 's' : ''}${g.premise && g.premise !== '💡 invented' ? ` for "${esc(g.premise)}"` : ' invented'} · ${esc(g.model || 'model')}${_memNote}`}</div>${_statNote}
                   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">${cards}</div></div>`;
             } else if (g && g.attempts) { result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">generation came back empty — try again.</div>`; }
         }
         const nPill = k => `<span data-expgenn="${k}" style="cursor:pointer;border:1px solid ${n === k ? C.accent : C.border};background:${n === k ? C.accent + '22' : 'transparent'};color:${n === k ? C.accent : C.dim};border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700">${k}</span>`;
         return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate an entire hook <span style="font-size:10px;color:${C.mute};font-weight:600">— type an idea (or leave blank to invent one); it writes the idea + a 5-frame opening and renders it. Hooks stream in one at a time. It over-generates, then keeps only the ideas <b style="color:${C.purple}">farthest from everything it's ever generated</b> — press Generate again and again and it keeps exploring new territory instead of repeating itself.</span></div>
+          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate an entire hook <span style="font-size:10px;color:${C.mute};font-weight:600">— type an idea (or leave blank to invent one). Ideas stream in ONE AT A TIME: each appears the moment the model writes it, its frames fill in while the next idea generates. Any idea <b style="color:${C.purple}">too close to anything it's ever generated is rejected and redone</b> (you'll see it happen) — press Generate forever and it keeps exploring new territory.</span></div>
           <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
             <input id="exp-gen-input" value="${esc(st.expGenPrem || '')}" placeholder="type a video idea — or leave blank and the model invents one…" style="flex:1;min-width:240px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px"/>
             <span style="font-size:10px;color:${C.mute}">outputs</span>${[1, 2, 4, 6, 8].map(nPill).join('')}
@@ -986,8 +990,8 @@ const JarvisRetention = (function () {
     function pipelineProgress() {
         let phase = -1, sub = '', cold = false;
         if (st.expGenBusy) {
-            const M = { queued: 'spinning up the fine-tuned model…', reasoning: 'the model is inventing the idea + its 5 frames…', rendering: 'rendering the 5 frames…', done: 'done' };
-            phase = 0; sub = M[st.expGenStage] || 'working…'; cold = (st.expGenStage === 'queued' || st.expGenStage === 'reasoning');
+            const M = { queued: 'spinning up the fine-tuned model…', reasoning: 'the model is inventing ideas — they stream in one at a time…', rendering: 'rendering the 5 frames…', done: 'done' };
+            phase = 0; sub = (st.expGenStat && st.expGenStat.note) || M[st.expGenStage] || 'working…'; cold = (st.expGenStage === 'queued' || (st.expGenStage === 'reasoning' && !(st.expGenStat && st.expGenStat.done)));
         } else if (st.rawGenBusy) {
             phase = 0; sub = st.rawGenStage || 'generating the 5 frames…';
         } else if (st.rawUploading) {
