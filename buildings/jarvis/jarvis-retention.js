@@ -912,7 +912,7 @@ const JarvisRetention = (function () {
     function expGenSubmit() {
         const inp = window.document.getElementById('exp-gen-input');
         const prem = inp ? inp.value.trim() : (st.expGenPrem || '');
-        st.expGenPrem = prem; st.expGenBusy = true; st.expGenRid = null; st.expGenStage = 'queued'; st.expGenT0 = Date.now(); st.expGenStatErr = null;
+        st.expGenPrem = prem; st.expGenBusy = true; st.expGenRid = null; st.expGenStage = 'queued'; st.expGenT0 = Date.now(); st.expGenStatErr = null; st.warmHold = 1;
         window.clearInterval(st._genTick); st._genTick = window.setInterval(() => { if (st.expGenBusy) rtgUpdateExp(); else window.clearInterval(st._genTick); }, 1000);   // live elapsed timer
         fetch('/api/hooks/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, count: st.expGenN || 4, invent: !prem }) })
             .then(r => r.json()).then(j => { if (j.rid) { st.expGenRid = j.rid; rtgUpdateExp(); expDemoPoll(j.rid); } else { st.expGenBusy = false; rtgUpdateExp(); } })
@@ -994,7 +994,7 @@ const JarvisRetention = (function () {
             <input id="exp-gen-input" value="${esc(st.expGenPrem || '')}" placeholder="type a video idea — or leave blank and the model invents one…" style="flex:1;min-width:240px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px"/>
             <span style="font-size:10px;color:${C.mute}">outputs</span>${[1, 2, 4, 6, 8].map(nPill).join('')}
             <span data-expgen style="cursor:${st.expGenBusy ? 'default' : 'pointer'};background:${st.expGenBusy ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800;display:inline-flex;align-items:center">${st.expGenBusy ? '⏳ working…' : 'Generate'}</span>
-          </div>${(!st.expGenBusy && st.warmFiredAt && Date.now() - st.warmFiredAt < 8 * 60e3) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px">🔥 GPU pre-warming since you clicked in (${Math.round((Date.now() - st.warmFiredAt) / 1000)}s ago) — generating now skips most of the cold wait</div>` : ''}${result}</div>`;
+          </div>${(!st.expGenBusy && st.warmHold) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px">🔥 holding the GPU warm while you're on this tab — presses stay fast (~15s/idea); it powers down a few minutes after you leave</div>` : ''}${result}</div>`;
     }
     // ── ONE unified progress stepper for EVERY path (generate / render / upload / build → embed → score).
     //    Shown live under the header whenever anything is running, so you always see where it's at. ──
@@ -3233,12 +3233,18 @@ const JarvisRetention = (function () {
         if (!root.__rb) {
             root.addEventListener('click', onClick); root.addEventListener('input', onInput); root.addEventListener('change', onChange);
             // clicking into the Generate box pre-warms the idea GPU — the cold boot overlaps typing
+            const warmPing = (quiet) => fetch('/api/hooks/warmup', { method: 'POST' }).then(r => r.json()).then(j => { if (j && j.fired) { st.warmFiredAt = Date.now(); if (!quiet) rtgUpdateExp(); } }).catch(() => {});
             root.addEventListener('focusin', e => {
-                if (e.target && e.target.id === 'exp-gen-input' && !st.expGenBusy && Date.now() - (st.warmPingAt || 0) > 4 * 60e3) {
-                    st.warmPingAt = Date.now();
-                    fetch('/api/hooks/warmup', { method: 'POST' }).then(r => r.json()).then(j => { if (j && j.fired) { st.warmFiredAt = Date.now(); rtgUpdateExp(); } }).catch(() => {});
-                }
+                if (e.target && e.target.id === 'exp-gen-input' && !st.expGenBusy) { st.warmHold = 1; warmPing(); }
             });
+            // TAB-HOLD: while the 🧪 Experiment section is open + visible, heartbeat every 60s so the
+            // GPU stays resident (Replicate scales down after <5 min idle — every idle press was a
+            // 2–7 min re-boot). Closing the tab / leaving the section stops the pings → scales down.
+            if (!st._warmHoldT) st._warmHoldT = window.setInterval(() => {
+                try {
+                    if (st.warmHold && st.sec === 'experiment' && root && root.isConnected && window.document.visibilityState === 'visible') warmPing(1);
+                } catch (e) {}
+            }, 60e3);
             root.__rb = true;
         }
         if (!DATA && !err) {

@@ -9070,7 +9070,9 @@ const IDEA_VERSION = '522aa069d4197ddc9a630ca837acbed66851feed714797d43d97d51812
 let _hookLastGen = 0, _hookLastPing = 0;
 async function hookWarmPing(reason) {
     const token = process.env.REPLICATE_API_TOKEN; if (!token) return false;
-    if (Date.now() - _hookLastPing < 3.5 * 60e3) return false;   // one ping per residency window
+    // Replicate scales the instance down after <~5 min idle (measured 2026-07-02: warm at 16:19,
+    // 195s re-boot needed at 16:25) — so pings must land every ~2 min to actually hold it.
+    if (Date.now() - _hookLastPing < 110e3) return false;
     _hookLastPing = Date.now();
     try {
         await fetchT('https://api.replicate.com/v1/predictions', {
@@ -9084,7 +9086,7 @@ async function hookWarmPing(reason) {
 setInterval(() => {   // keep-warm window: active session → no re-boots between presses
     if (_hookBusy) return;
     if (_hookLastGen && Date.now() - _hookLastGen < 15 * 60e3) hookWarmPing('keep-warm after generation').catch(() => {});
-}, 60e3);
+}, 45e3);
 async function hookModelGenerate(premise, invent, count, onStatus) {
     const token = process.env.REPLICATE_API_TOKEN, ver = process.env.REPLICATE_IDEA_VERSION || IDEA_VERSION;
     if (!token) throw new Error('REPLICATE_API_TOKEN not configured — refusing to fall back');
