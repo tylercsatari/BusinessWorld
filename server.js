@@ -9167,14 +9167,12 @@ async function genStoryFrame(modelKey, prompt, refs, relation) {
     return 'data:image/jpeg;base64,' + buf.toString('base64');
 }
 async function hookRenderFrame(prompt) {
-    if (!process.env.REPLICATE_API_TOKEN) throw new Error('REPLICATE_API_TOKEN missing on server');
-    const r = await fetchT('https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions',
-        { method: 'POST', headers: { 'Authorization': 'Bearer ' + process.env.REPLICATE_API_TOKEN, 'Content-Type': 'application/json', 'Prefer': 'wait' },
-          body: JSON.stringify({ input: { prompt, aspect_ratio: '9:16', output_format: 'jpg', num_outputs: 1 } }) }, 90000);
-    const j = await r.json();
-    let out = j.output; if (Array.isArray(out)) out = out[0];
-    if (!out) throw new Error('no render output: ' + JSON.stringify(j).slice(0, 100));
-    return Buffer.from(await (await fetchT(out, {}, 45000)).arrayBuffer());
+    // flux through the SAME poll-until-terminal path as storyboard frames. 'Prefer: wait'
+    // alone returns 202 "starting" whenever flux is cold/queued — which is exactly the FIRST
+    // frame after idle — and the old code threw "no render output" there, silently dropping
+    // frame 1 of every hook.
+    const out = await replicateRun('black-forest-labs/flux-schnell', { prompt, aspect_ratio: '9:16', output_format: 'jpg', num_outputs: 1 }, 180000);
+    return Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
 }
 async function hookProcessRequest(rid, premise, count, invent) {
     const stat = (o) => cloud.uploadToR2(`hooks/grpo/demo/status/${rid}.json`, Buffer.from(JSON.stringify(o)), 'application/json').catch(() => {});
@@ -9183,9 +9181,11 @@ async function hookProcessRequest(rid, premise, count, invent) {
     let memN = 0;
     // STREAMING: the group file is rewritten after every frame so the UI surfaces each hook the
     // moment its idea exists, then fills its 5 frames in live. `done` flips true only at the very end.
+    const warns = new Set();   // non-fatal problems — surfaced in the UI, never swallowed
     const writeGroup = (done) => cloud.uploadToR2(`hooks/grpo/demo/groups/${rid}.json`,
         Buffer.from(JSON.stringify({ input_id: rid, premise: premise || '💡 invented', n: attempts.length, attempts, mem_n: memN,
-            done: !!done, streaming: true, error: (done && !attempts.length) ? err : '', model: 'idea_r7 (fine-tuned) + flux', hosted: true })),
+            done: !!done, streaming: true, error: (done && !attempts.length) ? err : '', warn: Array.from(warns).join(' · '),
+            model: 'idea_r7 (fine-tuned) + flux', hosted: true })),
         'application/json').catch(() => {});
     const renders = [];   // per-hook frame-render pipelines, running while the NEXT idea generates
     try {
@@ -9206,10 +9206,11 @@ async function hookProcessRequest(rid, premise, count, invent) {
             tries++;
             let spec;
             try { spec = (await hookModelGenerate(premise, invent, 1))[0]; }
-            catch (e) { err = 'idea: ' + e.message; break; }  // hard failure (credit / model down) → stop the batch
+            catch (e) { err = 'idea: ' + e.message; if (attempts.length) warns.add(`stopped after ${attempts.length}/${count} ideas — ${err}`); break; }  // hard failure (credit / model down) → stop the batch
             // novelty vs the whole memory AND this batch's accepted ideas (embed failure → accept)
             let nov = null, near = '';
             const emb = await geminiTextEmbed(spec.premise + '\n' + spec.frames.join('\n'));
+            if (!emb) warns.add('novelty check unavailable (embedding failed) — ideas accepted without the diversity filter');
             const q = emb ? Int8Array.from(emb, x => Math.round(x * 127)) : null;
             if (q) {
                 let m = -1, mi = -1;
@@ -9236,8 +9237,16 @@ async function hookProcessRequest(rid, premise, count, invent) {
                 note: attempts.length < count ? `idea ${attempts.length}/${count} done — inventing idea ${attempts.length + 1}/${count} while its frames render…` : 'all ideas in — rendering the last frames…' });
             renders.push((async () => {                       // render THIS hook while the next idea generates
                 for (let i = 0; i < 5; i++) {
-                    try { const buf = await hookRenderFrame(a.frames[i]); const id = `${rid}_${a.k}_${i}`; await cloud.uploadToR2(`hooks/grpo/demo/montages/${id}.jpg`, buf, 'image/jpeg'); a.frame_imgs[i] = id; }
-                    catch (e) { err = 'render: ' + e.message; a.frame_imgs[i] = null; }
+                    let lastErr = null;
+                    for (let t2 = 0; t2 < 2 && !a.frame_imgs[i]; t2++) {   // one retry — transient flux errors are common
+                        try { const buf = await hookRenderFrame(a.frames[i]); const id = `${rid}_${a.k}_${i}`; await cloud.uploadToR2(`hooks/grpo/demo/montages/${id}.jpg`, buf, 'image/jpeg'); a.frame_imgs[i] = id; lastErr = null; }
+                        catch (e) { lastErr = String(e.message || e).slice(0, 160); }
+                    }
+                    if (lastErr) {                             // NEVER silent: the failure rides the group JSON to the card
+                        a.errs = a.errs || []; a.errs.push(`frame ${i + 1}: ${lastErr}`);
+                        warns.add(`hook ${a.k + 1} frame ${i + 1} failed: ${lastErr.slice(0, 90)}`);
+                        err = 'render: ' + lastErr;
+                    }
                     a.frames_done = a.frame_imgs.filter(Boolean).length;
                     await writeGroup(false);                  // ← each frame appears the moment it renders
                 }

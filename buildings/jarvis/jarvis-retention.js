@@ -946,9 +946,17 @@ const JarvisRetention = (function () {
             else if (g && g.attempts && g.attempts.length) {
                 const cards = g.attempts.map(a => {
                     // hosted result: 5 separate frame images; legacy box result: one montage + keep%
+                    const errFor = i => ((a.errs || []).find(x => x.indexOf('frame ' + (i + 1) + ':') === 0) || '').slice(9);
+                    const frameTile = (fid, i) => {
+                        if (fid) return `<div style="flex:1;position:relative"><img src="/api/hooks/grpo/montage/demo/${esc(fid)}" style="width:100%;border-radius:4px;display:block" loading="lazy"><span style="position:absolute;top:2px;left:3px;font-size:8px;color:#fff;background:rgba(0,0,0,.55);border-radius:3px;padding:0 3px">${i + 1}</span></div>`;
+                        const fe = errFor(i);   // failed → red ✕ with the REAL error on hover; pending → empty slot
+                        return fe ? `<div title="${esc('frame ' + (i + 1) + ' failed: ' + fe)}" style="flex:1;aspect-ratio:9/16;background:${C.bg};border:1px solid #ef444455;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#ef4444;font-size:13px;font-weight:800;cursor:help">✕</div>`
+                                  : `<div style="flex:1;aspect-ratio:9/16;background:${C.bg};border-radius:4px"></div>`;
+                    };
                     const frameStrip = (a.frame_imgs && a.frame_imgs.length)
-                        ? `<div style="display:flex;gap:3px">${a.frame_imgs.map((fid, i) => fid ? `<div style="flex:1;position:relative"><img src="/api/hooks/grpo/montage/demo/${esc(fid)}" style="width:100%;border-radius:4px;display:block" loading="lazy"><span style="position:absolute;top:2px;left:3px;font-size:8px;color:#fff;background:rgba(0,0,0,.55);border-radius:3px;padding:0 3px">${i + 1}</span></div>` : `<div style="flex:1;aspect-ratio:9/16;background:${C.bg};border-radius:4px"></div>`).join('')}</div>`
+                        ? `<div style="display:flex;gap:3px">${a.frame_imgs.map(frameTile).join('')}</div>`
                         : `<img src="/api/hooks/grpo/montage/demo/${st.expGenRid}_${a.k}" style="width:100%;border-radius:6px;display:block" loading="lazy">`;
+                    const errLine = (a.errs && a.errs.length) ? `<div style="font-size:9px;color:#ef4444;margin-top:4px;line-height:1.4" title="${esc(a.errs.join('\n'))}">⚠ ${a.errs.length} frame${a.errs.length > 1 ? 's' : ''} failed to render — hover the ✕ tile${a.errs.length > 1 ? 's' : ''} for why</div>` : '';
                     const keepBadge = a.keep_pctile != null ? `<span>keep <b style="color:${heatCol(a.keep_pctile || 0)}">${Math.round((a.keep_pctile || 0) * 100)}%</b></span>` : '';
                     // novelty = cos-distance of this idea's text embedding from EVERY idea ever generated (memory in R2)
                     const novBadge = a.novelty != null ? `<span title="${esc('how far this idea sits from every idea previously generated (cosine distance in embedding space — higher = more new)' + (a.nearest ? '. Closest past idea: “' + a.nearest + '”' : ''))}" style="cursor:help">🆕 unique <b style="color:${heatCol(Math.min(1, (a.novelty || 0) * 2.5))}">${(a.novelty || 0).toFixed(2)}</b></span>` : '';
@@ -957,13 +965,15 @@ const JarvisRetention = (function () {
                         <span data-genscore="${a.k}" style="cursor:${st.rawUploading ? 'default' : 'pointer'};border:1px solid ${C.cyan};background:${C.cyan}22;color:${C.cyan};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">${st.genScoringK === a.k ? '⏳ scoring…' : '◆ Score this hook'}</span>
                         <span data-gensave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">💾 Save idea</span>
                       </div>` : '';
+                    const nOk = (a.frame_imgs || []).filter(Boolean).length, nErr = (a.errs || []).length;
                     const cardStat = a.status === 'done'
-                        ? `<span style="color:${C.green};font-size:9px;font-weight:800;white-space:nowrap">✓ 5 frames</span>`
+                        ? (nErr ? `<span style="color:${C.amber};font-size:9px;font-weight:800;white-space:nowrap">✓ ${nOk}/5 (${nErr} failed)</span>`
+                                : `<span style="color:${C.green};font-size:9px;font-weight:800;white-space:nowrap">✓ 5 frames</span>`)
                         : `<span style="color:${C.cyan};font-size:9px;font-weight:800;white-space:nowrap">⏳ frame ${(a.frames_done || 0)}/5</span>`;
                     return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:9px;background:${C.card2}">
                       <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px">
                         <div style="font-size:12px;color:${C.text};font-weight:700;line-height:1.35">${esc(a.premise || a.caption || '')}</div>${cardStat}</div>
-                      ${frameStrip}
+                      ${frameStrip}${errLine}
                       <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">${keepBadge}${novBadge}<span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${frameText}${actions}</div>`;
                 }).join('');
                 const _streaming = g.streaming && !g.done;
@@ -972,7 +982,8 @@ const JarvisRetention = (function () {
                 const _elapsed = _el >= 60 ? `${Math.floor(_el / 60)}m ${_el % 60}s` : `${_el}s`;
                 const _memNote = g.mem_n ? ` · <span title="every idea ever generated is embedded + remembered; ideas too close to any of them are rejected and regenerated" style="cursor:help;color:${C.purple}">🧭 steered away from ${g.mem_n} past ideas</span>` : '';
                 const _statNote = (_streaming && st.expGenStat && st.expGenStat.note) ? `<div style="font-size:10px;color:${C.cyan};margin:-4px 0 8px">${esc(st.expGenStat.note)}</div>` : '';
-                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${_streaming ? C.cyan : C.mute};margin-bottom:8px;font-weight:${_streaming ? 700 : 400}">${_streaming ? `✨ streaming live — ${_doneN}/${g.n} hooks finished · ${_elapsed} elapsed${_memNote}` : `${g.n} hook${g.n > 1 ? 's' : ''}${g.premise && g.premise !== '💡 invented' ? ` for "${esc(g.premise)}"` : ' invented'} · ${esc(g.model || 'model')}${_memNote}`}</div>${_statNote}
+                const _warn = g.warn ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}14;border:1px solid ${C.amber}44;border-radius:6px;padding:6px 10px;margin:-2px 0 8px;line-height:1.5">⚠ ${esc(g.warn)}</div>` : '';
+                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${_streaming ? C.cyan : C.mute};margin-bottom:8px;font-weight:${_streaming ? 700 : 400}">${_streaming ? `✨ streaming live — ${_doneN}/${g.n} hooks finished · ${_elapsed} elapsed${_memNote}` : `${g.n} hook${g.n > 1 ? 's' : ''}${g.premise && g.premise !== '💡 invented' ? ` for "${esc(g.premise)}"` : ' invented'} · ${esc(g.model || 'model')}${_memNote}`}</div>${_statNote}${_warn}
                   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">${cards}</div></div>`;
             } else if (g && g.attempts) { result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">generation came back empty — try again.</div>`; }
         }
