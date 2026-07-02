@@ -9111,28 +9111,39 @@ async function hookRenderFrame(prompt) {
 }
 async function hookProcessRequest(rid, premise, count, invent) {
     const stat = (o) => cloud.uploadToR2(`hooks/grpo/demo/status/${rid}.json`, Buffer.from(JSON.stringify(o)), 'application/json').catch(() => {});
-    const attempts = [];
+    let attempts = [];
     let err = '';
+    // STREAMING: the group file is rewritten after every frame so the UI surfaces each hook the
+    // moment its idea exists, then fills its 5 frames in live. `done` flips true only at the very end.
+    const writeGroup = (done) => cloud.uploadToR2(`hooks/grpo/demo/groups/${rid}.json`,
+        Buffer.from(JSON.stringify({ input_id: rid, premise: premise || '💡 invented', n: attempts.length, attempts,
+            done: !!done, streaming: true, error: (done && !attempts.length) ? err : '', model: 'idea_r7 (fine-tuned) + flux', hosted: true })),
+        'application/json').catch(() => {});
     try {
-        // 1) the fine-tuned model invents idea(s)+frames in ONE batched call (covers GPU cold start)
+        // 1) the fine-tuned model invents ALL idea(s)+frames in ONE batched call (covers GPU cold start)
         await stat({ stage: 'reasoning', premise: premise || '(the fine-tuned model is thinking…)' });
         let specs;
         try { specs = await hookModelGenerate(premise, invent, count); }
         catch (e) { err = 'idea: ' + e.message; specs = []; }
-        // 2) render each idea's 5 frames with Flux (Replicate, pay-per-use)
-        for (let k = 0; k < specs.length; k++) {
-            const spec = specs[k];
-            await stat({ stage: 'rendering', premise: spec.premise, n: specs.length, done: k });
-            const imgs = [];
+        // 2) seed every hook immediately so they all appear as cards the instant the ideas land
+        attempts = specs.map((spec, k) => ({ k, premise: spec.premise, frames: spec.frames, frame_imgs: [null, null, null, null, null],
+            frames_done: 0, status: 'rendering', reasoning: spec.reasoning || '', caption: spec.premise, cohesion_mode: spec.cohesion_mode || '' }));
+        if (attempts.length) { await stat({ stage: 'rendering', n: attempts.length, done: 0 }); await writeGroup(false); }
+        // 3) render each hook's 5 frames with Flux — streaming each frame into the group as it lands
+        for (let k = 0; k < attempts.length; k++) {
+            const a = attempts[k];
             for (let i = 0; i < 5; i++) {
-                try { const buf = await hookRenderFrame(spec.frames[i]); const id = `${rid}_${k}_${i}`; await cloud.uploadToR2(`hooks/grpo/demo/montages/${id}.jpg`, buf, 'image/jpeg'); imgs.push(id); }
-                catch (e) { err = 'render: ' + e.message; imgs.push(null); }
+                try { const buf = await hookRenderFrame(a.frames[i]); const id = `${rid}_${k}_${i}`; await cloud.uploadToR2(`hooks/grpo/demo/montages/${id}.jpg`, buf, 'image/jpeg'); a.frame_imgs[i] = id; }
+                catch (e) { err = 'render: ' + e.message; a.frame_imgs[i] = null; }
+                a.frames_done = a.frame_imgs.filter(Boolean).length;
+                await writeGroup(false);   // ← the stream: each frame appears the moment it renders
             }
-            attempts.push({ k, premise: spec.premise, frames: spec.frames, frame_imgs: imgs, reasoning: spec.reasoning || '', caption: spec.premise, cohesion_mode: spec.cohesion_mode || '' });
+            a.status = 'done';
+            await stat({ stage: 'rendering', n: attempts.length, done: k + 1, premise: a.premise });
+            await writeGroup(false);
         }
     } catch (e) { err = err || e.message; }
-    // ALWAYS write a terminal result so the UI can never spin forever.
-    await cloud.uploadToR2(`hooks/grpo/demo/groups/${rid}.json`, Buffer.from(JSON.stringify({ input_id: rid, premise: premise || '💡 invented', n: attempts.length, attempts, error: attempts.length ? '' : err, model: 'idea_r5 (fine-tuned) + flux', hosted: true })), 'application/json').catch(() => {});
+    await writeGroup(true);   // terminal — flips done:true so the UI stops polling
     await stat({ stage: 'done', error: attempts.length ? '' : err });
 }
 let _hookBusy = false;

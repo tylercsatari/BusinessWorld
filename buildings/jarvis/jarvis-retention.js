@@ -886,19 +886,26 @@ const JarvisRetention = (function () {
         st.expGenT0 = st.expGenT0 || Date.now();
         fetch('/api/hooks/demo/status/' + rid).then(r => r.json()).then(s => { st.expGenStage = (s && s.stage) || 'queued'; st.expGenStatErr = (s && s.error) || null; if (st.expGenBusy) rtgUpdateExp(); }).catch(() => {});
         fetch('/api/hooks/grpo/group/demo/' + rid).then(r => r.json()).then(j => {
-            if (j && j.attempts && j.attempts.length) { EXPDEMO[rid] = j; st.expGenBusy = false; st.expGenStage = 'done'; rtgUpdateExp(); const a0 = j.attempts[0]; if (a0 && a0.frame_imgs && a0.frame_imgs.filter(Boolean).length) scoreGenerated(0, a0.frame_imgs, a0.premise || a0.caption || ''); }
-            // a REAL terminal result the worker WROTE (has input_id) that failed → surface it. NOT the
-            // endpoint's "not found" placeholder (which just means the result isn't ready yet — keep polling).
-            else if (j && j.input_id && (j.error || (j.n === 0 && Array.isArray(j.attempts)))) { EXPDEMO[rid] = { error: prettyGenErr(j.error || 'came back empty') }; st.expGenBusy = false; rtgUpdateExp(); }
-            else if (tries < 150) { setTimeout(() => expDemoPoll(rid, tries + 1), 4000); }
-            else { EXPDEMO[rid] = { error: 'Timed out. The model may be scaling up — try again in a moment.' }; st.expGenBusy = false; rtgUpdateExp(); }
-        }).catch(() => { if (tries < 150) setTimeout(() => expDemoPoll(rid, tries + 1), 4000); });
+            if (j && Array.isArray(j.attempts) && j.attempts.length) {
+                EXPDEMO[rid] = j; rtgUpdateExp();               // render live — hooks + frames stream in
+                if (j.done) {                                   // fully complete → stop, auto-score the first
+                    st.expGenBusy = false; st.expGenStage = 'done';
+                    const a0 = j.attempts[0]; if (a0 && a0.frame_imgs && a0.frame_imgs.filter(Boolean).length) scoreGenerated(0, a0.frame_imgs, a0.premise || a0.caption || '');
+                } else if (tries < 300) { setTimeout(() => expDemoPoll(rid, tries + 1), 2000); }   // still streaming — poll faster
+                return;
+            }
+            // a REAL terminal failure the worker WROTE (done, no attempts) → surface it. A partial/absent
+            // group just means it isn't ready yet — keep polling.
+            if (j && j.input_id && j.done && !(j.attempts && j.attempts.length)) { EXPDEMO[rid] = { error: prettyGenErr(j.error || 'came back empty') }; st.expGenBusy = false; rtgUpdateExp(); return; }
+            if (tries < 300) { setTimeout(() => expDemoPoll(rid, tries + 1), 3000); return; }
+            EXPDEMO[rid] = { error: 'Timed out. The model may be scaling up — try again in a moment.' }; st.expGenBusy = false; rtgUpdateExp();
+        }).catch(() => { if (tries < 300) setTimeout(() => expDemoPoll(rid, tries + 1), 3000); });
     }
     function prettyGenErr(err) {
         const e = String(err || '').toLowerCase();
-        if (e.indexOf('spend limit') >= 0 || e.indexOf('billing') >= 0) return '⚠ Your Modal usage cap was hit — raise the spend limit in your Modal dashboard (Settings → Usage & Billing), then generation will work again.';
-        if (e.indexOf('not configured') >= 0) return 'The fine-tuned model endpoint isn\'t configured (HOOK_MODEL_URL).';
-        if (e.indexOf('429') >= 0) return '⚠ Rate-limited / usage cap hit on the model host — check your Modal spend limit.';
+        if (e.indexOf('insufficient credit') >= 0 || e.indexOf('credit') >= 0 || e.indexOf('spend limit') >= 0 || e.indexOf('billing') >= 0) return '⚠ Your Replicate credit ran out — top up at replicate.com/account/billing, then generation works again.';
+        if (e.indexOf('not configured') >= 0) return 'The fine-tuned model endpoint isn\'t configured (REPLICATE_API_TOKEN).';
+        if (e.indexOf('429') >= 0) return '⚠ Rate-limited on Replicate — wait a moment and try again.';
         return err ? ('Generation failed: ' + err) : 'Generation came back empty — try again.';
     }
     function expGenSubmit() {
@@ -923,7 +930,7 @@ const JarvisRetention = (function () {
                 const order = ['queued', 'reasoning', 'rendering'], si = Math.max(0, order.indexOf(st.expGenStage));
                 const steps = [['spin up the GPU'], ['invent the idea + 5 frames'], ['render the frames']];
                 const stepHtml = steps.map(([lab], i) => { const dn = i < si, ac = i === si, col = dn ? C.green : ac ? C.cyan : C.mute; return `<span style="color:${col};font-weight:${ac ? 800 : 600}">${dn ? '✓' : ac ? '⏳' : '○'} ${lab}</span>`; }).join(`<span style="color:${C.mute}"> → </span>`);
-                const longHint = (el > 180 || (st.expGenStatErr && /spend|billing|429/i.test(st.expGenStatErr))) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px;line-height:1.5">Taking longer than usual. Either the GPU is cold-starting, or your <b>Modal usage cap</b> is reached — check Modal → Settings → Usage & Billing and raise the spend limit.</div>` : '';
+                const longHint = (el > 180 || (st.expGenStatErr && /spend|billing|429/i.test(st.expGenStatErr))) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px;line-height:1.5">Taking longer than usual. Either the GPU is cold-starting (first run pulls the model), or your <b>Replicate credit</b> ran out — top up at replicate.com/account/billing.</div>` : '';
                 result = `<div style="margin-top:12px;padding:11px 13px;background:${C.card2};border:1px solid ${C.cyan}44;border-radius:10px">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
                       <span style="font-size:12px;font-weight:800;color:${C.cyan}">✨ Generating your hook…</span>
@@ -944,18 +951,26 @@ const JarvisRetention = (function () {
                         <span data-genscore="${a.k}" style="cursor:${st.rawUploading ? 'default' : 'pointer'};border:1px solid ${C.cyan};background:${C.cyan}22;color:${C.cyan};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">${st.genScoringK === a.k ? '⏳ scoring…' : '◆ Score this hook'}</span>
                         <span data-gensave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">💾 Save idea</span>
                       </div>` : '';
+                    const cardStat = a.status === 'done'
+                        ? `<span style="color:${C.green};font-size:9px;font-weight:800;white-space:nowrap">✓ 5 frames</span>`
+                        : `<span style="color:${C.cyan};font-size:9px;font-weight:800;white-space:nowrap">⏳ frame ${(a.frames_done || 0)}/5</span>`;
                     return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:9px;background:${C.card2}">
-                      <div style="font-size:12px;color:${C.text};font-weight:700;line-height:1.35;margin-bottom:6px">${esc(a.premise || a.caption || '')}</div>
+                      <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px">
+                        <div style="font-size:12px;color:${C.text};font-weight:700;line-height:1.35">${esc(a.premise || a.caption || '')}</div>${cardStat}</div>
                       ${frameStrip}
                       <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">${keepBadge}<span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${frameText}${actions}</div>`;
                 }).join('');
-                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${C.mute};margin-bottom:8px">${g.n} hook${g.n > 1 ? 's' : ''}${g.premise && g.premise !== '💡 invented' ? ` for "${esc(g.premise)}"` : ' invented'} · ${esc(g.model || 'model')}</div>
+                const _streaming = g.streaming && !g.done;
+                const _doneN = g.attempts.filter(x => x.status === 'done').length;
+                const _el = st.expGenT0 ? Math.round((Date.now() - st.expGenT0) / 1000) : 0;
+                const _elapsed = _el >= 60 ? `${Math.floor(_el / 60)}m ${_el % 60}s` : `${_el}s`;
+                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${_streaming ? C.cyan : C.mute};margin-bottom:8px;font-weight:${_streaming ? 700 : 400}">${_streaming ? `✨ streaming live — ${_doneN}/${g.n} hooks finished · ${_elapsed} elapsed` : `${g.n} hook${g.n > 1 ? 's' : ''}${g.premise && g.premise !== '💡 invented' ? ` for "${esc(g.premise)}"` : ' invented'} · ${esc(g.model || 'model')}`}</div>
                   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">${cards}</div></div>`;
             } else if (g && g.attempts) { result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">generation came back empty — try again.</div>`; }
         }
         const nPill = k => `<span data-expgenn="${k}" style="cursor:pointer;border:1px solid ${n === k ? C.accent : C.border};background:${n === k ? C.accent + '22' : 'transparent'};color:${n === k ? C.accent : C.dim};border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700">${k}</span>`;
         return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate an entire hook <span style="font-size:10px;color:${C.mute};font-weight:600">— type an idea (or leave blank to invent one); it writes the idea + a 5-frame opening and renders it. Always on, no GPU.</span></div>
+          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate an entire hook <span style="font-size:10px;color:${C.mute};font-weight:600">— type an idea (or leave blank to invent one); it writes the idea + a 5-frame opening and renders it. Hooks stream in one at a time as they finish.</span></div>
           <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
             <input id="exp-gen-input" value="${esc(st.expGenPrem || '')}" placeholder="type a video idea — or leave blank and the model invents one…" style="flex:1;min-width:240px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px"/>
             <span style="font-size:10px;color:${C.mute}">outputs</span>${[1, 2, 4, 6, 8].map(nPill).join('')}
