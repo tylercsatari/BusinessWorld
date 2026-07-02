@@ -957,7 +957,8 @@ const JarvisRetention = (function () {
                     const frameStrip = (a.frame_imgs && a.frame_imgs.length)
                         ? `<div style="display:flex;gap:3px">${a.frame_imgs.map(frameTile).join('')}</div>`
                         : `<img src="/api/hooks/grpo/montage/demo/${st.expGenRid}_${a.k}" style="width:100%;border-radius:6px;display:block" loading="lazy">`;
-                    const errLine = (a.errs && a.errs.length) ? `<div style="font-size:9px;color:#ef4444;margin-top:4px;line-height:1.4" title="${esc(a.errs.join('\n'))}">⚠ ${a.errs.length} frame${a.errs.length > 1 ? 's' : ''} failed to render — hover the ✕ tile${a.errs.length > 1 ? 's' : ''} for why</div>` : '';
+                    const _hardErrs = (a.errs || []).filter(x => x.indexOf('FAILED') >= 0).length;
+                    const errLine = (a.errs && a.errs.length) ? `<div style="font-size:9px;color:${_hardErrs ? '#ef4444' : C.amber};margin-top:4px;line-height:1.4" title="${esc(a.errs.join('\n'))}">⚠ ${a.errs.length} frame note${a.errs.length > 1 ? 's' : ''} (${_hardErrs ? _hardErrs + ' missing, ' : ''}rest = fallback renders) — hover for details</div>` : '';
                     const keepBadge = a.keep_pctile != null ? `<span>keep <b style="color:${heatCol(a.keep_pctile || 0)}">${Math.round((a.keep_pctile || 0) * 100)}%</b></span>` : '';
                     // novelty = cos-distance of this idea's text embedding from EVERY idea ever generated (memory in R2)
                     const novBadge = a.novelty != null ? `<span title="${esc('how far this idea sits from every idea previously generated (cosine distance in embedding space — higher = more new)' + (a.nearest ? '. Closest past idea: “' + a.nearest + '”' : ''))}" style="cursor:help">🆕 unique <b style="color:${heatCol(Math.min(1, (a.novelty || 0) * 2.5))}">${(a.novelty || 0).toFixed(2)}</b></span>` : '';
@@ -966,10 +967,10 @@ const JarvisRetention = (function () {
                         <span data-genscore="${a.k}" style="cursor:${st.rawUploading ? 'default' : 'pointer'};border:1px solid ${C.cyan};background:${C.cyan}22;color:${C.cyan};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">${st.genScoringK === a.k ? '⏳ scoring…' : '◆ Score this hook'}</span>
                         <span data-gensave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">💾 Save idea</span>
                       </div>` : '';
-                    const nOk = (a.frame_imgs || []).filter(Boolean).length, nErr = (a.errs || []).length;
+                    const nOk = (a.frame_imgs || []).filter(Boolean).length, nMiss = 5 - nOk, nNote = (a.errs || []).length;
                     const cardStat = a.status === 'done'
-                        ? (nErr ? `<span style="color:${C.amber};font-size:9px;font-weight:800;white-space:nowrap">✓ ${nOk}/5 (${nErr} failed)</span>`
-                                : `<span style="color:${C.green};font-size:9px;font-weight:800;white-space:nowrap">✓ 5 frames</span>`)
+                        ? (nMiss ? `<span style="color:${C.amber};font-size:9px;font-weight:800;white-space:nowrap">✓ ${nOk}/5 (${nMiss} missing)</span>`
+                                : `<span style="color:${nNote ? C.amber : C.green};font-size:9px;font-weight:800;white-space:nowrap" ${nNote ? `title="${esc((a.errs || []).join('\n'))}"` : ''}>✓ 5 frames${nNote ? ' *' : ''}</span>`)
                         : `<span style="color:${C.cyan};font-size:9px;font-weight:800;white-space:nowrap">⏳ frame ${(a.frames_done || 0)}/5</span>`;
                     return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:9px;background:${C.card2}">
                       <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px">

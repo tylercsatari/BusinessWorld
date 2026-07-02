@@ -9268,25 +9268,35 @@ async function genStoryFrame(modelKey, prompt, refs, relation) {
     return 'data:image/jpeg;base64,' + buf.toString('base64');
 }
 async function hookRenderFrame(prompt, modelOverride) {
-    // flux-2-pro (same model as the storyboard builder, ~$0.04/frame) — schnell's draft
-    // quality wasn't worth showing. Poll-until-terminal via replicateRun: 'Prefer: wait'
-    // alone returns 202 "starting" whenever flux is cold/queued — which is exactly the FIRST
-    // frame after idle — and the old code threw "no render output" there, silently dropping
-    // frame 1 of every hook. Env override to swap models without a deploy.
+    // Poll-until-terminal via replicateRun: 'Prefer: wait' alone returns 202 "starting" whenever
+    // flux is cold/queued — the old code threw "no render output" there, silently dropping frames.
     const model = modelOverride || process.env.HOOK_FRAME_MODEL || 'black-forest-labs/flux-2-pro';
-    const out = await replicateRun(model, { prompt, aspect_ratio: '9:16', output_format: 'jpg' }, 180000);
+    const input = { prompt, aspect_ratio: '9:16' };
+    if (/flux|nano/.test(model)) input.output_format = 'jpg';   // seedream rejects output_format
+    const out = await replicateRun(model, input, 180000);
     return Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
 }
-// A hook must NEVER ship with a missing frame: 3 tries on the pro model (backoff between),
-// then one draft render on schnell as a last resort (marked so the UI says which frame is a draft).
+// A hook must NEVER ship with a missing frame — and failures must be handled DETERMINISTICALLY:
+//  · flux-2-pro's content moderation (E005 "flagged as sensitive") flags the SAME prompt every
+//    time (skulls/bones trip it constantly) — retrying pro is pointless, so on a moderation flag
+//    we go STRAIGHT to Seedream-4 (comparable quality, ~$0.03, doesn't flag this content).
+//  · transient errors (timeouts/5xx) get 2 tries on the primary before falling down the ladder.
+//  · schnell (draft quality) is the true last resort, and it's labelled when used.
 async function renderFrameRobust(prompt) {
-    let lastErr = null;
-    for (let t = 0; t < 3; t++) {
-        try { return { buf: await hookRenderFrame(prompt), draft: false }; }
-        catch (e) { lastErr = e; await new Promise(s => setTimeout(s, 1500 * (t + 1))); }
+    const LADDER = [process.env.HOOK_FRAME_MODEL || 'black-forest-labs/flux-2-pro', 'bytedance/seedream-4', 'black-forest-labs/flux-schnell'];
+    let lastErr = null, flagged = false;
+    for (let mi = 0; mi < LADDER.length; mi++) {
+        const tries = mi === 0 ? 2 : 1;
+        for (let t = 0; t < tries; t++) {
+            try { return { buf: await hookRenderFrame(prompt, LADDER[mi]), model: LADDER[mi].split('/').pop(), fallback: mi > 0, draft: /schnell/.test(LADDER[mi]), flagged }; }
+            catch (e) {
+                lastErr = e;
+                if (/sensitive|E005|flagged|nsfw/i.test(String(e.message || e))) { flagged = true; break; }   // deterministic — next model
+                await new Promise(s => setTimeout(s, 1200 * (t + 1)));
+            }
+        }
     }
-    try { return { buf: await hookRenderFrame(prompt, 'black-forest-labs/flux-schnell'), draft: true }; }
-    catch (e) { throw lastErr || e; }
+    throw lastErr;
 }
 // The idea model samples at temperature — a single malformed generation (truncated JSON, ≠5
 // frames) is NORMAL, not fatal. Retry up to 3×; only infra failures (credit/config) are terminal.
@@ -9373,10 +9383,12 @@ async function hookProcessRequest(rid, premise, count, invent) {
             renders.push((async () => {                       // render THIS hook while the next idea generates
                 for (let i = 0; i < 5; i++) {
                     try {
-                        const r2 = await renderFrameRobust(a.frames[i]);   // 3× pro + draft fallback — a hole is exceptional
+                        const r2 = await renderFrameRobust(a.frames[i]);   // model ladder — a hole is exceptional
                         const id = `${rid}_${a.k}_${i}`;
                         await cloud.uploadToR2(`hooks/grpo/demo/montages/${id}.jpg`, r2.buf, 'image/jpeg'); a.frame_imgs[i] = id;
-                        if (r2.draft) { a.errs = a.errs || []; a.errs.push(`frame ${i + 1}: pro render failed 3× — used a draft (schnell) render`); }
+                        a.errs = a.errs || [];
+                        if (r2.draft) a.errs.push(`frame ${i + 1}: fell through to a DRAFT (schnell) render${r2.flagged ? ' — pro & seedream both flagged it as sensitive' : ''}`);
+                        else if (r2.fallback) a.errs.push(`frame ${i + 1}: ${r2.flagged ? 'flux-2-pro flagged it as sensitive (E005)' : 'flux-2-pro failed'} — rendered with ${r2.model} (full quality)`);
                     } catch (e) {                              // NEVER silent: the failure rides the group JSON to the card
                         const lastErr = String(e.message || e).slice(0, 160);
                         a.errs = a.errs || []; a.errs.push(`frame ${i + 1}: FAILED after all retries — ${lastErr}`);
@@ -9473,7 +9485,9 @@ async function composeMontage(frameBufs) {
         const inputs = [];
         frameBufs.forEach((b, i) => { const p = path.join(dir, `f${i}.jpg`); fs.writeFileSync(p, b); inputs.push('-i', p); });
         const out = path.join(dir, 'm.jpg'), n = frameBufs.length;
-        const scale = frameBufs.map((_, i) => `[${i}:v]scale=320:-2[s${i}]`).join(';');
+        // force EVERY tile to exactly 320x568 (cover-crop) — frames can come from different models
+        // with different native sizes, and hstack hard-fails on mixed heights (ffmpeg exit 1)
+        const scale = frameBufs.map((_, i) => `[${i}:v]scale=320:568:force_original_aspect_ratio=increase,crop=320:568,setsar=1[s${i}]`).join(';');
         const refs = frameBufs.map((_, i) => `[s${i}]`).join('');
         await new Promise((ok, no) => {
             const p = spawn('ffmpeg', ['-nostdin', '-loglevel', 'error', ...inputs, '-filter_complex', `${scale};${refs}hstack=inputs=${n}`, '-frames:v', '1', '-q:v', '4', out], { env: RAW_PY_ENV });
@@ -9552,7 +9566,8 @@ async function grindProcess(rid, req0) {
                     const r2 = await renderFrameRobust(a.frames[i]);
                     bufs[i] = r2.buf; const id = `${rid}_${a.k}_${i}`;
                     await cloud.uploadToR2(`hooks/grind/montages/${id}.jpg`, r2.buf, 'image/jpeg'); a.frame_imgs[i] = id;
-                    if (r2.draft) a.errs.push(`frame ${i + 1}: pro render failed 3× — used a draft (schnell) render`);
+                    if (r2.draft) a.errs.push(`frame ${i + 1}: fell through to a DRAFT (schnell) render${r2.flagged ? ' — pro & seedream both flagged it as sensitive' : ''}`);
+                    else if (r2.fallback) a.errs.push(`frame ${i + 1}: ${r2.flagged ? 'flux-2-pro flagged it as sensitive (E005)' : 'flux-2-pro failed'} — rendered with ${r2.model} (full quality)`);
                 } catch (e) { a.errs.push(`frame ${i + 1}: FAILED after all retries — ${String(e.message || e).slice(0, 120)}`); }
                 a.frames_done = bufs.filter(Boolean).length;
                 await write();
