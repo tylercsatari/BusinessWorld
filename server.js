@@ -9014,14 +9014,15 @@ async function fetchT(url, opts, ms) {  // fetch with a hard timeout so nothing 
 // (own account, no spend cap; scales to zero). NO Gemini, NO fallback — if the deployment
 // is unset/unreachable the request errors clearly. See cog-idea/predict.py.
 async function hookModelGenerate(premise, invent, count) {
-    const token = process.env.REPLICATE_API_TOKEN, dep = process.env.REPLICATE_IDEA_DEPLOYMENT;
-    if (!token || !dep) throw new Error('fine-tuned model endpoint not configured (set REPLICATE_IDEA_DEPLOYMENT) — refusing to fall back');
-    // Replicate deployment: create a prediction, then poll it until terminal. Cold start (GPU
-    // spin-up + model load) can take a few minutes; we run in the background queue, so that's fine.
-    const deadline = Date.now() + 9 * 60 * 1000;
-    const cr = await fetchT('https://api.replicate.com/v1/deployments/' + dep + '/predictions', {
+    const token = process.env.REPLICATE_API_TOKEN, ver = process.env.REPLICATE_IDEA_VERSION;
+    if (!token || !ver) throw new Error('fine-tuned model endpoint not configured (set REPLICATE_IDEA_VERSION) — refusing to fall back');
+    // Replicate: create a prediction on the model VERSION directly (no deployment needed — deployments
+    // require a billing method; direct predictions just need credit). Then poll until terminal. The
+    // first run cold-boots the GPU (a couple min); we run in the background queue, so that's fine.
+    const deadline = Date.now() + 12 * 60 * 1000;
+    const cr = await fetchT('https://api.replicate.com/v1/predictions', {
         method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: { premise: premise || '', invent: !!invent || !premise, count } })
+        body: JSON.stringify({ version: ver, input: { premise: premise || '', invent: !!invent || !premise, count } })
     }, 60000);
     let p = await cr.json().catch(() => null);
     if (!p || cr.status >= 400 || !p.id) throw new Error('replicate create http ' + cr.status + ': ' + String((p && (p.detail || p.title)) || '').slice(0, 140));
