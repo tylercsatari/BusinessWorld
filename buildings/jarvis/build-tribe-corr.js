@@ -68,7 +68,8 @@ function trackedMetrics(id, rrow) {
             m.retentionVariation = num(an.retentionVariation);
             m.avgPercentViewed = num(an.avgPercentViewed);
             m.avgViewDuration = num(an.avgViewDuration);
-            m.swipedAwayRate = num(an.swipedAwayRate);             // 0-100
+            // NOTE: keep/swipe come ONLY from the account retention table (below). The legacy
+            // video_data swipedAwayRate is ~0 for most videos → do NOT use it (it fabricated keep≈100).
             m.viewedRate = num(an.viewedRate);
             m.likes = num(an.likes ?? md.likeCount); m.comments = num(an.comments ?? md.commentCount); m.shares = num(an.shares);
             m.subsGained = num(an.subscribersGained); m.subViewsPct = pct(an.subscriberViews, an.totalViews);
@@ -81,14 +82,15 @@ function trackedMetrics(id, rrow) {
             }
         } catch (e) {}
     }
-    if (rrow) {  // richer keep/ret5 from the new scrape when present
+    if (rrow) {  // keep/ret5/swipe from the REAL account retention table (the Data tab source)
         if (rrow.keep_rate != null) m.keep = num(rrow.keep_rate);
+        if (rrow.swiped != null) m.swipedAwayRate = num(rrow.swiped); else if (rrow.keep_rate != null) m.swipedAwayRate = 100 - num(rrow.keep_rate);
         if (rrow.ret5 != null) m.ret5 = num(rrow.ret5);
         if (rrow.ret5_surv != null) m.ret5_surv = num(rrow.ret5_surv);
         if (m.views == null && rrow.views != null) m.views = num(rrow.views);
         if (rrow.avg_retention != null && m.avgRetention == null) m.avgRetention = num(rrow.avg_retention) / 100;
     }
-    if (m.keep == null && m.swipedAwayRate != null) m.keep = 100 - m.swipedAwayRate;  // derive keep from swipe
+    // no keep fallback: only videos in the account table have a real keep rate (others → keep stays null)
     if (m.views != null) m.logviews = r4(Math.log10(Math.max(1, m.views)));
     return m;
 }
