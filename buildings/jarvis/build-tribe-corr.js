@@ -55,43 +55,28 @@ function tribeIndicators(a) {
     return { out, shapes };
 }
 
-// ── tracked metrics for one video (video_data analysis.json + retention_table row) ──
+// ── tracked metrics for one video — SINGLE SOURCE OF TRUTH: the account retention table (the Data
+// section). video_data/ is legacy and duplicated/conflicted (stale views, swipe≈0) — NOT used.
+// Returns null if the video isn't in the Data section (→ dropped from the join).
 function trackedMetrics(id, rrow) {
+    if (!rrow) return null;
     const m = {};
-    const vp = path.join(VDATA, id, 'analysis.json');
-    if (fs.existsSync(vp)) {
-        try {
-            const a = JSON.parse(fs.readFileSync(vp, 'utf8'));
-            const an = a.analytics || {}, md = a.metadata || {};
-            m.views = num(an.totalViews ?? md.viewCount);
-            m.avgRetention = num(an.avgRetention);                 // 0-1
-            m.retentionVariation = num(an.retentionVariation);
-            m.avgPercentViewed = num(an.avgPercentViewed);
-            m.avgViewDuration = num(an.avgViewDuration);
-            // NOTE: keep/swipe come ONLY from the account retention table (below). The legacy
-            // video_data swipedAwayRate is ~0 for most videos → do NOT use it (it fabricated keep≈100).
-            m.viewedRate = num(an.viewedRate);
-            m.likes = num(an.likes ?? md.likeCount); m.comments = num(an.comments ?? md.commentCount); m.shares = num(an.shares);
-            m.subsGained = num(an.subscribersGained); m.subViewsPct = pct(an.subscriberViews, an.totalViews);
-            m.duration = num(md.duration);
-            // first-5s retention shape (100-pt curve → sample at ~0..5s)
-            if (Array.isArray(an.retentionCurve) && an.retentionCurve.length) {
-                const dur = num(md.duration) || 0;
-                const first5 = an.retentionCurve.filter(p => dur ? (p.second <= 5) : true).map(p => num(p.retention));
-                if (first5.length) { m._ret5curve = first5.slice(0, 12).map(r4); m.ret5mean = r4(first5.slice(0, 6).reduce((x, y) => x + y, 0) / Math.min(6, first5.length)); }
-            }
-        } catch (e) {}
-    }
-    if (rrow) {  // keep/ret5/swipe from the REAL account retention table (the Data tab source)
-        if (rrow.keep_rate != null) m.keep = num(rrow.keep_rate);
-        if (rrow.swiped != null) m.swipedAwayRate = num(rrow.swiped); else if (rrow.keep_rate != null) m.swipedAwayRate = 100 - num(rrow.keep_rate);
-        if (rrow.ret5 != null) m.ret5 = num(rrow.ret5);
-        if (rrow.ret5_surv != null) m.ret5_surv = num(rrow.ret5_surv);
-        if (m.views == null && rrow.views != null) m.views = num(rrow.views);
-        if (rrow.avg_retention != null && m.avgRetention == null) m.avgRetention = num(rrow.avg_retention) / 100;
-    }
-    // no keep fallback: only videos in the account table have a real keep rate (others → keep stays null)
+    m.keep = num(rrow.keep_rate);
+    m.swiped = (rrow.swiped != null) ? num(rrow.swiped) : (rrow.keep_rate != null ? 100 - num(rrow.keep_rate) : null);
+    m.ret5 = num(rrow.ret5);
+    m.ret5_surv = num(rrow.ret5_surv);
+    m.avgRetention = num(rrow.avg_retention);        // % viewed (>100 = re-watch)
+    m.sub_keep = num(rrow.sub_keep);
+    m.nonsub_keep = num(rrow.nonsub_keep);
+    m.views = num(rrow.views);
+    m.duration = num(rrow.duration_s);
+    m.likes = num(rrow.likes); m.comments = num(rrow.comments); m.shares = num(rrow.shares);
     if (m.views != null) m.logviews = r4(Math.log10(Math.max(1, m.views)));
+    // first-5s retention shape from the account curve (100 pts over the whole video → first-5s slice)
+    if (Array.isArray(rrow.curve) && rrow.curve.length && m.duration > 0) {
+        const k = Math.max(3, Math.min(rrow.curve.length, Math.round(5 / m.duration * rrow.curve.length)));
+        m._ret5curve = rrow.curve.slice(0, k).map(r4);
+    }
     return m;
 }
 const num = (x) => { const n = Number(x); return isFinite(n) ? n : null; };
@@ -108,9 +93,10 @@ const pct = (a, b) => { a = Number(a); b = Number(b); return (isFinite(a) && isF
         if (!fs.existsSync(tp)) continue;
         let a; try { a = JSON.parse(fs.readFileSync(tp, 'utf8')); } catch (e) { continue; }
         const { out, shapes } = tribeIndicators(a);
-        const metrics = trackedMetrics(id, rtable[id]);
-        if (metrics.views == null && metrics.avgRetention == null) continue;   // no tracked data → skip
-        rows.push({ id, title: title || id, tribe: out, shapes, metrics });
+        const rrow = rtable[id];
+        const metrics = trackedMetrics(id, rrow);
+        if (!metrics) continue;   // not in the Data section (source of truth) → drop
+        rows.push({ id, title: (rrow && rrow.title) || title || id, tribe: out, shapes, metrics });
         if (i % 25 === 0) console.log(`  …${i}/${ids.length}  (kept ${rows.length})`);
     }
     // realviews: duration-deconfounded additive (keep + ret5 with log-duration partialled out), calibrated to views
