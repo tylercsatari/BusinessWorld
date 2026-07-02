@@ -13,7 +13,7 @@ const JarvisRetention = (function () {
     let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'realviews', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -946,6 +946,8 @@ const JarvisRetention = (function () {
                         ? `<div style="display:flex;gap:3px">${a.frame_imgs.map((fid, i) => fid ? `<div style="flex:1;position:relative"><img src="/api/hooks/grpo/montage/demo/${esc(fid)}" style="width:100%;border-radius:4px;display:block" loading="lazy"><span style="position:absolute;top:2px;left:3px;font-size:8px;color:#fff;background:rgba(0,0,0,.55);border-radius:3px;padding:0 3px">${i + 1}</span></div>` : `<div style="flex:1;aspect-ratio:9/16;background:${C.bg};border-radius:4px"></div>`).join('')}</div>`
                         : `<img src="/api/hooks/grpo/montage/demo/${st.expGenRid}_${a.k}" style="width:100%;border-radius:6px;display:block" loading="lazy">`;
                     const keepBadge = a.keep_pctile != null ? `<span>keep <b style="color:${heatCol(a.keep_pctile || 0)}">${Math.round((a.keep_pctile || 0) * 100)}%</b></span>` : '';
+                    // novelty = cos-distance of this idea's text embedding from EVERY idea ever generated (memory in R2)
+                    const novBadge = a.novelty != null ? `<span title="${esc('how far this idea sits from every idea previously generated (cosine distance in embedding space — higher = more new)' + (a.nearest ? '. Closest past idea: “' + a.nearest + '”' : ''))}" style="cursor:help">🆕 unique <b style="color:${heatCol(Math.min(1, (a.novelty || 0) * 2.5))}">${(a.novelty || 0).toFixed(2)}</b></span>` : '';
                     const frameText = (a.frames && a.frames.length) ? `<details style="margin-top:5px"><summary style="font-size:10px;color:${C.cyan};cursor:pointer">the 5 frames</summary><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:4px">${a.frames.map((f, i) => `<div><b style="color:${C.accent}">${i + 1}.</b> ${esc(f)}</div>`).join('')}</div></details>` : '';
                     const actions = (a.frame_imgs && a.frame_imgs.filter(Boolean).length) ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
                         <span data-genscore="${a.k}" style="cursor:${st.rawUploading ? 'default' : 'pointer'};border:1px solid ${C.cyan};background:${C.cyan}22;color:${C.cyan};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">${st.genScoringK === a.k ? '⏳ scoring…' : '◆ Score this hook'}</span>
@@ -958,19 +960,20 @@ const JarvisRetention = (function () {
                       <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px">
                         <div style="font-size:12px;color:${C.text};font-weight:700;line-height:1.35">${esc(a.premise || a.caption || '')}</div>${cardStat}</div>
                       ${frameStrip}
-                      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">${keepBadge}<span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${frameText}${actions}</div>`;
+                      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">${keepBadge}${novBadge}<span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${frameText}${actions}</div>`;
                 }).join('');
                 const _streaming = g.streaming && !g.done;
                 const _doneN = g.attempts.filter(x => x.status === 'done').length;
                 const _el = st.expGenT0 ? Math.round((Date.now() - st.expGenT0) / 1000) : 0;
                 const _elapsed = _el >= 60 ? `${Math.floor(_el / 60)}m ${_el % 60}s` : `${_el}s`;
-                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${_streaming ? C.cyan : C.mute};margin-bottom:8px;font-weight:${_streaming ? 700 : 400}">${_streaming ? `✨ streaming live — ${_doneN}/${g.n} hooks finished · ${_elapsed} elapsed` : `${g.n} hook${g.n > 1 ? 's' : ''}${g.premise && g.premise !== '💡 invented' ? ` for "${esc(g.premise)}"` : ' invented'} · ${esc(g.model || 'model')}`}</div>
+                const _memNote = g.mem_n ? ` · <span title="every idea ever generated is embedded + remembered; each new batch keeps only the ideas farthest from all of them" style="cursor:help;color:${C.purple}">🧭 steered away from ${g.mem_n} past ideas</span>` : '';
+                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${_streaming ? C.cyan : C.mute};margin-bottom:8px;font-weight:${_streaming ? 700 : 400}">${_streaming ? `✨ streaming live — ${_doneN}/${g.n} hooks finished · ${_elapsed} elapsed${_memNote}` : `${g.n} hook${g.n > 1 ? 's' : ''}${g.premise && g.premise !== '💡 invented' ? ` for "${esc(g.premise)}"` : ' invented'} · ${esc(g.model || 'model')}${_memNote}`}</div>
                   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">${cards}</div></div>`;
             } else if (g && g.attempts) { result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">generation came back empty — try again.</div>`; }
         }
         const nPill = k => `<span data-expgenn="${k}" style="cursor:pointer;border:1px solid ${n === k ? C.accent : C.border};background:${n === k ? C.accent + '22' : 'transparent'};color:${n === k ? C.accent : C.dim};border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700">${k}</span>`;
         return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate an entire hook <span style="font-size:10px;color:${C.mute};font-weight:600">— type an idea (or leave blank to invent one); it writes the idea + a 5-frame opening and renders it. Hooks stream in one at a time as they finish.</span></div>
+          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate an entire hook <span style="font-size:10px;color:${C.mute};font-weight:600">— type an idea (or leave blank to invent one); it writes the idea + a 5-frame opening and renders it. Hooks stream in one at a time. It over-generates, then keeps only the ideas <b style="color:${C.purple}">farthest from everything it's ever generated</b> — press Generate again and again and it keeps exploring new territory instead of repeating itself.</span></div>
           <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
             <input id="exp-gen-input" value="${esc(st.expGenPrem || '')}" placeholder="type a video idea — or leave blank and the model invents one…" style="flex:1;min-width:240px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px"/>
             <span style="font-size:10px;color:${C.mute}">outputs</span>${[1, 2, 4, 6, 8].map(nPill).join('')}
@@ -2025,7 +2028,12 @@ const JarvisRetention = (function () {
     // videos are the owner's own). Two resolutions: MEAN/linear (Pearson per indicator×feature)
     // and SHAPE (per-video first-5s curve co-movement brain↔retention).
     // ══════════════════════════════════════════════════════════════════════════════
-    const TRIBE_TARGETS = [['realviews', 'realviews (deconf.)'], ['keep', 'keep rate'], ['ret5', 'past-5s ret'], ['ret5_surv', '5s survival'], ['avgRetention', 'avg retention'], ['views', 'views'], ['logviews', 'log views'], ['swiped', 'swipe-away'], ['sub_keep', 'sub keep'], ['nonsub_keep', 'non-sub keep'], ['likes', 'likes'], ['comments', 'comments'], ['shares', 'shares']];
+    // Ordered by how honestly each measures HOOK strength. keep = real scraped Viewed-vs-Swiped
+    // (the primary predictor). ret5_surv = opening survival (loop-corrected). ret5 is loop-INFLATED
+    // (median ~110%, >100% for ~97% of videos) so it measures replay, not the hook — flagged as such.
+    // realviews is DERIVED from keep+ret5 (deconfounded), so brain→realviews is partly circular.
+    // sub_keep / nonsub_keep removed (were null for 100% of videos).
+    const TRIBE_TARGETS = [['keep', 'keep rate ★'], ['ret5_surv', '5s survival'], ['swiped', 'swipe-away'], ['avgRetention', 'avg retention'], ['logviews', 'log views'], ['views', 'views'], ['realviews', 'realviews (derived)'], ['ret5', 'past-5s ret (loop-inflated)'], ['likes', 'likes'], ['comments', 'comments'], ['shares', 'shares']];
     const TRIBE_FEATS = [['mean', 'mean'], ['slope', 'slope (trend)'], ['peak', 'peak'], ['argmax', 'peak-second'], ['delta', 'Δ (end−start)']];
     const TRIBE_FAMS = [['all', 'all'], ['global', 'global engage'], ['regions', '10 regions'], ['networks', '8 networks'], ['destrieux', '75 Destrieux'], ['hcp', '181 HCP']];
     function tribeFam(id) { const p = id.split('.')[0]; return (p === 'eng' || p === 'ms') ? 'global' : p === 'reg' ? 'regions' : p === 'net' ? 'networks' : p === 'dx' ? 'destrieux' : 'hcp'; }
@@ -2036,9 +2044,48 @@ const JarvisRetention = (function () {
     function tribePears(xs, ys) { const n = xs.length; if (n < 6) return null; const mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n; let sxy = 0, sx = 0, sy = 0; for (let i = 0; i < n; i++) { const dx = xs[i] - mx, dy = ys[i] - my; sxy += dx * dy; sx += dx * dx; sy += dy * dy; } return (sx && sy) ? sxy / Math.sqrt(sx * sy) : null; }
     function tribeNcdf(z) { const t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2); let p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; }
     function tribeP(r, n) { if (r == null || n < 4 || Math.abs(r) >= 1) return 1; const t = Math.abs(r) * Math.sqrt((n - 2) / (1 - r * r)); return 2 * (1 - tribeNcdf(t)); }
+    // ── Deconfounding: match the rest of the system (deconStats L1256) — Spearman on log-duration
+    //    residuals. Brain signals correlate with duration up to |r|=0.64, so a raw brain↔metric r is
+    //    often just "both track video length". Partial-Spearman removes that. Also a 5-fold sign-
+    //    stability check: at n≈106 a couple of outlier videos can manufacture a correlation.
+    const tribeMean = a => a.reduce((x, y) => x + y, 0) / a.length;
+    const tribeRankArr = a => { const ix = a.map((v, i) => [v, i]).sort((x, y) => x[0] - y[0]), r = []; ix.forEach((p, i) => r[p[1]] = i); return r; };
+    const tribeSpear = (a, b) => tribePears(tribeRankArr(a), tribeRankArr(b));
+    const tribeResidLin = (y, x) => { const mx = tribeMean(x), my = tribeMean(y); let sxy = 0, sxx = 0; for (let i = 0; i < x.length; i++) { sxy += (x[i] - mx) * (y[i] - my); sxx += (x[i] - mx) ** 2; } const b = sxx ? sxy / sxx : 0; return y.map((v, i) => v - (my + b * (x[i] - mx))); };
+    const tribePartial = (a, b, ctrl) => { const ra = tribeResidLin(a, ctrl), rb = tribeResidLin(b, ctrl); return tribeSpear(ra, rb); };
+    // brain feat + metric + log-duration over rows where all three present (needed for deconfounding)
+    function tribeXYZ(id, feat, target) { const xs = [], ys = [], ld = []; for (const r of TRIBE.rows) { const x = r.tribe[id] && r.tribe[id][feat], y = r.metrics[target], d = r.metrics.duration; if (x != null && y != null && isFinite(x) && isFinite(y) && d > 0) { xs.push(x); ys.push(y); ld.push(Math.log(d)); } } return { xs, ys, ld }; }
+    // Unified association: raw Pearson AND deconfounded partial-Spearman + p-values + fold sign-stability.
+    function tribeAssoc(id, feat, target) {
+        const { xs, ys, ld } = tribeXYZ(id, feat, target), n = xs.length;
+        if (n < 8) return null;
+        const raw = tribePears(xs, ys), dec = tribePartial(xs, ys, ld);
+        // 5-fold: recompute the partial on each 80% hold-in; stability = folds agreeing with full sign
+        let agree = 0; const K = 5;
+        for (let k = 0; k < K; k++) { const ax = [], ay = [], al = []; for (let i = 0; i < n; i++) if (i % K !== k) { ax.push(xs[i]); ay.push(ys[i]); al.push(ld[i]); } if (ax.length < 6) { agree++; continue; } const d = tribePartial(ax, ay, al); if ((d >= 0) === (dec >= 0) && Math.abs(d) > 1e-6) agree++; }
+        return { raw, dec, n, pRaw: tribeP(raw, n), pDec: tribeP(dec, n), stab: agree / K, flip: raw != null && dec != null && (raw >= 0) !== (dec >= 0) };
+    }
+    // Benjamini–Hochberg FDR: given a set of p-values across all indicators tested for ONE target,
+    // return the largest p that is "discovery" at q, and the count of survivors. With 282 signals ×
+    // n≈106 this is what separates real hits from the ~14 you'd expect by chance at raw p<.05.
+    function tribeFDR(ps, q) { q = q || 0.05; const m = ps.length; if (!m) return { thr: 0, k: 0, m: 0 }; const s = ps.slice().sort((a, b) => a - b); let k = 0; for (let i = 0; i < m; i++) if (s[i] <= (i + 1) / m * q) k = i + 1; return { thr: k ? s[k - 1] : 0, k, m }; }
+    // For a target+feature+group: gather every indicator's (r,p), then summarise honest significance.
+    function tribeSig(target, feat, group, mode) {
+        mode = mode || st.tribeDecon || 'dec';
+        const ranked = tribeRank(target, feat, group, mode);
+        const ps = ranked.map(x => x.p), m = ps.length;
+        const raw = ranked.filter(x => x.p < 0.05).length;
+        const fdr = tribeFDR(ps, 0.05), bonf = ps.filter(p => p < 0.05 / Math.max(1, m)).length;
+        // of the FDR survivors, how many ALSO hold sign across ≥4/5 folds (outlier-robust)?
+        const robust = ranked.filter(x => x.p <= fdr.thr && fdr.thr > 0 && x.stab >= 0.8).length;
+        const flips = ranked.filter(x => x.flip).length;
+        return { ranked, m, raw, expected: Math.round(m * 0.05), fdrThr: fdr.thr, fdrK: fdr.k, robustK: robust, bonfK: bonf, bonfThr: 0.05 / Math.max(1, m), flips, mode };
+    }
     // xy pairs for indicator id·feat vs target
     function tribeXY(id, feat, target) { const xs = [], ys = [], rr = []; for (const r of TRIBE.rows) { const x = r.tribe[id] && r.tribe[id][feat], y = r.metrics[target]; if (x != null && y != null && isFinite(x) && isFinite(y)) { xs.push(x); ys.push(y); rr.push(r); } } return { xs, ys, rr }; }
-    function tribeRank(target, feat, group) { const out = []; for (const id of TRIBE.indicatorIds) { if (group !== 'all' && tribeFam(id) !== group) continue; const { xs, ys } = tribeXY(id, feat, target); const r = tribePears(xs, ys); if (r != null) out.push({ id, r, n: xs.length, p: tribeP(r, xs.length) }); } out.sort((a, b) => Math.abs(b.r) - Math.abs(a.r)); return out; }
+    // mode = 'dec' (deconfounded partial-Spearman, honest default) | 'raw' (Pearson). r/p reflect the
+    // chosen mode; raw/dec/stab/flip always attached so the UI can show both + confound flags.
+    function tribeRank(target, feat, group, mode) { mode = mode || st.tribeDecon || 'dec'; const out = []; for (const id of TRIBE.indicatorIds) { if (group !== 'all' && tribeFam(id) !== group) continue; const a = tribeAssoc(id, feat, target); if (!a) continue; const r = mode === 'raw' ? a.raw : a.dec, p = mode === 'raw' ? a.pRaw : a.pDec; if (r != null) out.push({ id, r, n: a.n, p, raw: a.raw, dec: a.dec, stab: a.stab, flip: a.flip }); } out.sort((x, y) => Math.abs(y.r) - Math.abs(x.r)); return out; }
     function tribeMeanShape(id) { const R = TRIBE.rows.filter(r => r.shapes && r.shapes[id]); if (!R.length) return null; const L = R[0].shapes[id].length, s = new Array(L).fill(0), c = new Array(L).fill(0); for (const r of R) r.shapes[id].forEach((v, i) => { if (v != null && isFinite(v)) { s[i] += v; c[i]++; } }); return s.map((v, i) => c[i] ? v / c[i] : 0); }
     const tribeNorm = a => { if (!a || !a.length) return a; const mn = Math.min(...a), mx = Math.max(...a); return a.map(v => (v - mn) / (mx - mn || 1)); };
     function tribeSpark(vals, color, w, h) { w = w || 120; h = h || 34; if (!vals || vals.length < 2) return ''; const nv = tribeNorm(vals), n = nv.length, X = i => 3 + i / (n - 1) * (w - 6), Y = v => h - 3 - v * (h - 6); let d = nv.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' '); return `<svg viewBox="0 0 ${w} ${h}" style="width:${w}px;height:${h}px"><path d="${d}" fill="none" stroke="${color}" stroke-width="1.6"/></svg>`; }
@@ -2074,11 +2121,13 @@ const JarvisRetention = (function () {
     const TRIBE_FAMORD = { global: 0, regions: 1, networks: 2, destrieux: 3, hcp: 4 };
     // full correlation matrix: every indicator × every tracked metric, for one first-5s feature. Cached per feature.
     let _tribeMatCache = {};
-    function tribeCorrMatrix(feat) {
-        if (_tribeMatCache[feat]) return _tribeMatCache[feat];
+    function tribeCorrMatrix(feat, mode) {
+        mode = mode || st.tribeDecon || 'dec';
+        const key = feat + '|' + mode;
+        if (_tribeMatCache[key]) return _tribeMatCache[key];
         const ids = TRIBE.indicatorIds, mets = TRIBE_TARGETS.map(t => t[0]);
-        const M = ids.map(id => mets.map(m => { const { xs, ys } = tribeXY(id, feat, m); const r = tribePears(xs, ys); return r == null ? null : { r, n: xs.length, p: tribeP(r, xs.length) }; }));
-        return (_tribeMatCache[feat] = { ids, mets, M });
+        const M = ids.map(id => mets.map(m => { const a = tribeAssoc(id, feat, m); if (!a) return null; const r = mode === 'raw' ? a.raw : a.dec, p = mode === 'raw' ? a.pRaw : a.pDec; return r == null ? null : { r, n: a.n, p, raw: a.raw, dec: a.dec, stab: a.stab, flip: a.flip }; }));
+        return (_tribeMatCache[key] = { ids, mets, M });
     }
     // PCA of the 282 indicators by their correlation-profile (13-dim → 2D), like the Raw clustering
     function tribePCA(M) {
@@ -2095,6 +2144,9 @@ const JarvisRetention = (function () {
     // FULL heatmap — every indicator (rows, grouped by family) × every metric (cols). Nothing truncated.
     function tribeHeatmap(feat, target) {
         const { ids, mets, M } = tribeCorrMatrix(feat), ti = mets.indexOf(target);
+        // Per-column BH-FDR threshold: a cell only earns the "significant" outline if it survives
+        // multiple-comparison control for ITS metric — not raw p<.05 (which flags ~14 chance hits).
+        const fdrThr = mets.map((m, j) => { const ps = ids.map((_, i) => M[i][j]).filter(c => c).map(c => c.p); return tribeFDR(ps, 0.05).thr; });
         const ord = ids.map((id, i) => ({ id, i, fam: tribeFam(id), a: M[i][ti] ? Math.abs(M[i][ti].r) : 0 })).sort((x, y) => (TRIBE_FAMORD[x.fam] - TRIBE_FAMORD[y.fam]) || (y.a - x.a));
         const cw = 30, ch = 13, lw = 150;
         const colHead = `<div style="display:flex;position:sticky;top:0;z-index:2;background:${C.card}"><div style="width:${lw + 6}px;flex-shrink:0"></div>${mets.map(m => { const lab = (TRIBE_TARGETS.find(t => t[0] === m) || [, m])[1]; return `<div data-tribetgt="${m}" title="${esc(lab)}" style="width:${cw}px;height:70px;position:relative;cursor:pointer"><div style="position:absolute;bottom:2px;left:${cw / 2}px;writing-mode:vertical-rl;transform:rotate(180deg);font-size:8px;color:${target === m ? C.accent : C.mute};font-weight:${target === m ? 800 : 400};white-space:nowrap">${esc(lab)}</div></div>`; }).join('')}</div>`;
@@ -2102,7 +2154,7 @@ const JarvisRetention = (function () {
         for (const { id, i, fam } of ord) {
             const band = fam !== lastFam; lastFam = fam;
             if (band) rows += `<div style="display:flex;align-items:center;gap:4px;margin:3px 0 1px"><div style="width:${lw + 6}px;flex-shrink:0;text-align:right;font-size:9px;font-weight:800;color:${TRIBE_FAMCOL[fam]};text-transform:uppercase;letter-spacing:.4px">${fam}</div></div>`;
-            const cells = mets.map((m, j) => { const c = M[i][j]; const bg = c ? divCol(c.r, '52,211,153', '248,113,113', 1) : C.card2; const sel = st.tribeSel === id && target === m; return `<div data-tribecell="${esc(id)}|${m}" title="${esc(tribeLabel(id))} × ${esc(m)}: ${c ? sgn(c.r) + ' (n=' + c.n + (c.p < 0.05 ? ', p<.05' : '') + ')' : 'n/a'}" style="width:${cw}px;height:${ch}px;background:${bg};cursor:pointer;box-sizing:border-box;border:${sel ? '2px solid #fff' : c && c.p < 0.05 ? '1px solid rgba(255,255,255,.25)' : 'none'}"></div>`; }).join('');
+            const cells = mets.map((m, j) => { const c = M[i][j]; const fdrOk = c && fdrThr[j] > 0 && c.p <= fdrThr[j]; const bg = c ? divCol(c.r, '52,211,153', '248,113,113', 1) : C.card2; const sel = st.tribeSel === id && target === m; return `<div data-tribecell="${esc(id)}|${m}" title="${esc(tribeLabel(id))} × ${esc(m)}: ${c ? sgn(c.r) + ' (n=' + c.n + (fdrOk ? ', survives FDR' : c.p < 0.05 ? ', p<.05 but NOT FDR-significant' : '') + ')' : 'n/a'}" style="width:${cw}px;height:${ch}px;background:${bg};cursor:pointer;box-sizing:border-box;border:${sel ? '2px solid #fff' : fdrOk ? '1px solid rgba(255,255,255,.55)' : 'none'}"></div>`; }).join('');
             rows += `<div data-tribesel="${esc(id)}" style="display:flex;align-items:center;gap:0"><div style="width:${lw}px;flex-shrink:0;padding-right:6px;text-align:right;font-size:9px;color:${st.tribeSel === id ? C.text : C.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer" title="${esc(tribeLabel(id))}">${esc(tribeLabel(id).replace(/^[a-z]+ · /, ''))}</div>${cells}</div>`;
         }
         return `<div style="overflow:auto;max-height:640px;border:1px solid ${C.border};border-radius:8px;padding:6px">${colHead}${rows}</div>`;
@@ -2146,13 +2198,32 @@ const JarvisRetention = (function () {
         const tcount = t => R.filter(r => r.metrics[t] != null).length;
         h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">influence on</span>${TRIBE_TARGETS.map(([k, l]) => { const n = tcount(k); return `<button data-tribetgt="${k}" style="background:${target === k ? C.accent + '22' : 'transparent'};border:1px solid ${target === k ? C.accent : C.border};color:${target === k ? C.accent : C.dim};border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer">${l} <span style="opacity:.5;font-size:9px">${n}</span></button>`; }).join('')}</div>`;
         h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">first-5s feature</span>${TRIBE_FEATS.map(([k, l]) => `<button data-tribefeat="${k}" style="background:${feat === k ? C.cyan + '22' : 'transparent'};border:1px solid ${feat === k ? C.cyan : C.border};color:${feat === k ? C.cyan : C.mute};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>`;
-        h += `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">family</span>${TRIBE_FAMS.map(([k, l]) => `<button data-tribegrp="${k}" style="background:${group === k ? C.purple + '22' : 'transparent'};border:1px solid ${group === k ? C.purple : C.border};color:${group === k ? C.purple : C.mute};border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>`;
+        h += `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">family</span>${TRIBE_FAMS.map(([k, l]) => `<button data-tribegrp="${k}" style="background:${group === k ? C.purple + '22' : 'transparent'};border:1px solid ${group === k ? C.purple : C.border};color:${group === k ? C.purple : C.mute};border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>`;
+        // ── raw vs deconfounded toggle — the confound Tyler flagged: brain signals track video duration
+        //    up to |r|=0.64, so a raw brain↔metric r is often just "both scale with length". 'dec' =
+        //    partial-Spearman with log-duration removed (matches deconStats). Default = dec.
+        const decon = st.tribeDecon || 'dec';
+        h += `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">method</span>${[['dec', 'deconfounded ρ (÷duration)'], ['raw', 'raw Pearson r']].map(([k, l]) => `<button data-tribedecon="${k}" style="background:${decon === k ? C.yellow + '22' : 'transparent'};border:1px solid ${decon === k ? C.yellow : C.border};color:${decon === k ? C.yellow : C.mute};border-radius:6px;padding:2px 9px;font-size:10px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>`;
+        // ── HONEST significance banner: with this many signals, most raw p<.05 are chance. This tells
+        //    you whether the current metric has ANY brain signal that survives multiple-comparison control.
+        const sig = tribeSig(target, feat, group, decon);
+        const verdictCol = sig.robustK > 0 ? C.green : sig.fdrK > 0 ? C.yellow : C.orange;
+        const verdict = sig.fdrK > 0
+            ? `<b style="color:${verdictCol}">${sig.fdrK}</b> survive FDR${sig.robustK > 0 ? `, <b style="color:${C.green}">${sig.robustK}</b> also hold sign across 5 folds (outlier-robust)` : ` but <b style="color:${C.orange}">0 are fold-robust</b> (likely outlier-driven)`}`
+            : `<b style="color:${C.orange}">0 survive FDR</b> — no brain signal beats chance for this metric`;
+        h += `<div style="font-size:11px;color:${C.mute};background:${C.card2};border-left:3px solid ${verdictCol};border-radius:6px;padding:8px 11px;margin-bottom:10px;line-height:1.6">
+            <b style="color:${C.text}">Rigor check (${esc((TRIBE_TARGETS.find(t => t[0] === target) || [, target])[1])}, ${esc(feat)}, ${decon === 'dec' ? 'deconfounded' : 'raw'}):</b> ${sig.m} signals tested · ${sig.raw} at p&lt;.05 (<b>~${sig.expected} expected by chance</b>) · ${verdict}${sig.bonfK ? ` · ${sig.bonfK} Bonferroni` : ''}${decon === 'raw' && sig.flips ? ` · <b style="color:${C.orange}">${sig.flips}</b> flip sign once duration is removed` : ''}.
+            <span style="color:${C.faint}">n=${TRIBE.n} videos. Brain signals are TRIBE-v2 <i>predictions</i> from the video's audio/visual/text — a content proxy, not your audience's measured brains.</span></div>`;
         // ── selected-indicator drill ──
         if (st.tribeSel && TRIBE.rows[0].tribe[st.tribeSel]) {
-            const id = st.tribeSel; const { xs } = tribeXY(id, feat, target); const r = tribePears(tribeXY(id, feat, target).xs, tribeXY(id, feat, target).ys);
-            const statsAll = TRIBE_TARGETS.map(([k, l]) => { const q = tribeXY(id, feat, k); const rr = tribePears(q.xs, q.ys); return rr == null ? '' : statc(l, sgn(rr) + (tribeP(rr, q.xs.length) < 0.05 ? ' ✓' : ''), tribeP(rr, q.xs.length) < 0.05 ? (rr >= 0 ? C.green : C.orange) : C.mute); }).join('');
+            const id = st.tribeSel;
+            // per-target: show the deconfounded ρ, ✓ if FDR+fold-robust, ⚠ if raw→dec sign flip
+            const statsAll = TRIBE_TARGETS.map(([k, l]) => { const a = tribeAssoc(id, feat, k); if (!a) return ''; const v = decon === 'raw' ? a.raw : a.dec, p = decon === 'raw' ? a.pRaw : a.pDec; const ok = p < 0.05 && a.stab >= 0.8; return statc(l, sgn(v) + (ok ? ' ✓' : p < 0.05 ? ' ·' : '') + (a.flip ? ' ⚠' : ''), ok ? (v >= 0 ? C.green : C.orange) : C.mute); }).join('');
+            const asc = tribeAssoc(id, feat, target);
+            const detail = asc ? `<div style="font-size:10px;color:${C.mute};margin-bottom:6px">vs <b style="color:${C.text}">${esc((TRIBE_TARGETS.find(t => t[0] === target) || [, target])[1])}</b>: raw r <b style="color:${C.text}">${sgn(asc.raw)}</b> → deconfounded ρ <b style="color:${asc.dec >= 0 ? C.green : C.orange}">${sgn(asc.dec)}</b> (duration removed)${asc.flip ? ` <span style="color:${C.orange}">⚠ sign flips — the raw link was mostly duration</span>` : ''} · fold-stability <b style="color:${asc.stab >= 0.8 ? C.green : C.orange}">${Math.round(asc.stab * 100)}%</b> · p ${(decon === 'raw' ? asc.pRaw : asc.pDec).toExponential(1)} · n=${asc.n}</div>` : '';
             const shape = tribeMeanShape(id);
             h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="font-size:13px;font-weight:800;color:${C.text}">${esc(tribeLabel(id))} <span style="color:${C.mute};font-size:11px">· ${feat} · ${tribeFam(id)}</span></div><button data-tribeclose style="background:transparent;border:1px solid ${C.border2};color:${C.dim};border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer">✕</button></div>
+                ${detail}
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${statsAll}</div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start"><div style="flex:1;min-width:300px">${tribeScatter(id, feat, target)}<div style="font-size:10px;color:${C.mute};margin-top:3px">${feat} of ${esc(tribeLabel(id))} vs ${esc(target)} · dashed = trend · click a point → the video</div></div>${shape ? `<div style="flex:0 0 150px"><div style="font-size:10px;color:${C.mute};margin-bottom:3px">mean first-5s shape</div>${tribeSpark(shape, C.accent, 150, 60)}</div>` : ''}</div>`);
         }
@@ -2161,7 +2232,7 @@ const JarvisRetention = (function () {
         const VIEWS = [['heatmap', '▦ Full heatmap'], ['map', '✺ 2D map'], ['ranked', '≣ Ranked'], ['shapes', '📈 All shapes']];
         h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">view</span>${VIEWS.map(([k, l]) => `<button data-tribeview="${k}" style="background:${st.tribeView === k ? C.green + '22' : 'transparent'};border:1px solid ${st.tribeView === k ? C.green : C.border};color:${st.tribeView === k ? C.green : C.mute};border-radius:7px;padding:4px 11px;font-size:11px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>`;
         if (st.tribeView === 'heatmap') {
-            h += note(`<b>Full influence map</b> — every one of the <b style="color:${C.text}">${TRIBE.indicatorIds.length}</b> first-5s brain signals (rows, grouped by family) × all ${TRIBE_TARGETS.length} tracked metrics (columns). Cell = Pearson r for the <b style="color:${C.cyan}">${feat}</b> feature: <span style="color:#34d399">green +</span> / <span style="color:#f87171">red −</span>, brighter = stronger, white outline = p&lt;0.05. Click a column header to re-sort; click any cell to open its scatter.`, C.dim);
+            h += note(`<b>Full influence map</b> — every one of the <b style="color:${C.text}">${TRIBE.indicatorIds.length}</b> first-5s brain signals (rows, grouped by family) × all ${TRIBE_TARGETS.length} tracked metrics (columns). Cell = ${decon === 'dec' ? '<b style="color:' + C.yellow + '">deconfounded ρ</b> (duration removed)' : 'raw Pearson r'} for the <b style="color:${C.cyan}">${feat}</b> feature: <span style="color:#34d399">green +</span> / <span style="color:#f87171">red −</span>, brighter = stronger, <b>white outline = survives BH-FDR</b> (multiple-comparison-corrected; raw p&lt;.05 alone is NOT outlined because ~14 of those are chance). Click a column header to re-sort; click any cell to open its scatter.`, C.dim);
             h += tribeHeatmap(feat, target);
         } else if (st.tribeView === 'map') {
             h += note(`<b>2D indicator map</b> — every brain signal projected by its correlation profile across all metrics (PCA, like the Raw clustering). Signals that influence metrics the same way sit together. Colour = family, size + opacity = |r| vs <b style="color:${C.accent}">${esc(tlabel)}</b>. Click a dot for its scatter.`, C.dim);
@@ -2174,19 +2245,19 @@ const JarvisRetention = (function () {
             const cards = withShape.map(id => { const sh = tribeMeanShape(id), rr = rmap[id]; return `<div data-tribesel="${esc(id)}" style="cursor:pointer;background:${st.tribeSel === id ? C.card2 : 'transparent'};border:1px solid ${C.border};border-radius:8px;padding:6px 8px;text-align:center"><div style="font-size:9px;color:${C.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(tribeLabel(id))}">${esc(tribeLabel(id))}</div>${tribeSpark(sh, rr && rr.r >= 0 ? C.green : C.orange)}<div style="font-size:9px;color:${rr && rr.p < 0.05 ? C.text : C.faint};font-weight:700">r ${rr ? sgn(rr.r) : '—'}</div></div>`; }).join('');
             h += cardc(`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">${cards}</div>`);
         } else {
-            const ranked = tribeRank(target, feat, group);
-            const nInd = ranked.length, bonf = 0.05 / Math.max(1, nInd), mid = 250, half = 120;
-            const bars = ranked.map(({ id, r, n, p }) => {
-                const sig = p < bonf ? '★★' : p < 0.01 ? '★' : p < 0.05 ? '•' : '';
+            const ranked = sig.ranked, nInd = ranked.length, fThr = sig.fdrThr, mid = 250, half = 120;
+            const bars = ranked.map(({ id, r, p, stab, flip }) => {
+                const fdrOk = fThr > 0 && p <= fThr, robust = fdrOk && stab >= 0.8;
+                const mark = robust ? '★★' : fdrOk ? '★' : p < 0.05 ? '•' : '';
                 const col = r >= 0 ? C.green : C.orange, len = Math.abs(r) * half, on = st.tribeSel === id;
                 return `<div data-tribesel="${esc(id)}" style="display:flex;align-items:center;gap:8px;padding:2px 4px;cursor:pointer;border-radius:5px;background:${on ? C.card2 : 'transparent'}">
-                    <div style="width:158px;flex-shrink:0;font-size:11px;color:${p < 0.05 ? C.text : C.mute};text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(tribeLabel(id))}">${esc(tribeLabel(id))}</div>
+                    <div style="width:158px;flex-shrink:0;font-size:11px;color:${fdrOk ? C.text : C.mute};text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(tribeLabel(id))}">${esc(tribeLabel(id))}</div>
                     <div style="position:relative;flex:1;height:13px"><div style="position:absolute;left:${mid - 4}px;top:0;width:1px;height:13px;background:${C.border2}"></div>
-                        <div style="position:absolute;left:${r >= 0 ? mid : mid - len}px;top:2px;width:${Math.max(1, len)}px;height:9px;border-radius:2px;background:${col};opacity:${p < 0.05 ? 0.95 : 0.4}"></div>
-                        <div style="position:absolute;left:${r >= 0 ? mid + len + 4 : mid - len - 34}px;top:0;font-size:10px;color:${C.text};font-weight:700">${sgn(r)} <span style="color:${sig ? C.yellow : C.faint}">${sig}</span></div></div></div>`;
+                        <div style="position:absolute;left:${r >= 0 ? mid : mid - len}px;top:2px;width:${Math.max(1, len)}px;height:9px;border-radius:2px;background:${col};opacity:${fdrOk ? 0.95 : 0.4}"></div>
+                        <div style="position:absolute;left:${r >= 0 ? mid + len + 4 : mid - len - 44}px;top:0;font-size:10px;color:${C.text};font-weight:700">${sgn(r)} <span style="color:${mark ? C.yellow : C.faint}">${mark}</span>${flip ? `<span title="raw→deconfounded sign flip" style="color:${C.orange}"> ⚠</span>` : ''}</div></div></div>`;
             }).join('');
-            h += note(`<b>Significance:</b> • p&lt;0.05 · ★ p&lt;0.01 · ★★ Bonferroni (p&lt;${bonf.toExponential(1)}, ${nInd} tests). <span style="color:#34d399">green +</span> / <span style="color:#f87171">red −</span>. Correlation, not proven cause. Click any row for its scatter + shape.`, C.dim);
-            h += cardc(`<div style="font-size:11px;color:${C.mute};margin-bottom:6px">all ${nInd} indicators · <b style="color:${C.cyan}">${feat}</b> · sorted by |r| vs <b style="color:${C.accent}">${esc(tlabel)}</b></div><div style="max-height:640px;overflow:auto">${bars}</div>`);
+            h += note(`<b>Markers:</b> • p&lt;.05 (uncorrected, likely chance) · ★ survives BH-FDR · ★★ FDR + holds sign across 5 folds (outlier-robust) · <span style="color:${C.orange}">⚠</span> flips sign after duration removed. <span style="color:#34d399">green +</span> / <span style="color:#f87171">red −</span>. ${sig.mode === 'dec' ? 'Deconfounded partial-Spearman (duration removed).' : 'Raw Pearson — not deconfounded.'} Correlation, not proven cause.`, C.dim);
+            h += cardc(`<div style="font-size:11px;color:${C.mute};margin-bottom:6px">all ${nInd} indicators · <b style="color:${C.cyan}">${feat}</b> · sorted by |${sig.mode === 'dec' ? 'ρ' : 'r'}| vs <b style="color:${C.accent}">${esc(tlabel)}</b></div><div style="max-height:640px;overflow:auto">${bars}</div>`);
         }
         return h;
     }
@@ -2804,6 +2875,7 @@ const JarvisRetention = (function () {
         const tbf = e.target.closest('[data-tribefeat]'); if (tbf) { st.tribeFeat = tbf.getAttribute('data-tribefeat'); rtgUpdateTribe(); return; }
         const tbg = e.target.closest('[data-tribegrp]'); if (tbg) { st.tribeGroup = tbg.getAttribute('data-tribegrp'); rtgUpdateTribe(); return; }
         const tbv = e.target.closest('[data-tribeview]'); if (tbv) { st.tribeView = tbv.getAttribute('data-tribeview'); rtgUpdateTribe(); return; }
+        const tbd = e.target.closest('[data-tribedecon]'); if (tbd) { st.tribeDecon = tbd.getAttribute('data-tribedecon'); rtgUpdateTribe(); return; }
         const tbc = e.target.closest('[data-tribecell]'); if (tbc) { const [id, tg] = tbc.getAttribute('data-tribecell').split('|'); st.tribeSel = id; if (tg) st.tribeTarget = tg; rtgUpdateTribe(); return; }
         if (e.target.closest('[data-tribeclose]')) { st.tribeSel = null; rtgUpdateTribe(); return; }
         const tbs = e.target.closest('[data-tribesel]'); if (tbs && !e.target.closest('a')) { st.tribeSel = tbs.getAttribute('data-tribesel'); rtgUpdateTribe(); return; }

@@ -1336,8 +1336,20 @@ const server = http.createServer(async (req, res) => {
         let ffmpeg = '', ytdlp = '';
         try { ffmpeg = execSync('command -v ffmpeg', { env: RAW_PY_ENV }).toString().trim(); } catch (e) { ffmpeg = '(missing)'; }
         try { ytdlp = execSync('command -v yt-dlp', { env: RAW_PY_ENV }).toString().trim(); } catch (e) { ytdlp = '(missing)'; }
+        // LIVE Gemini check — a key can be present but dead (e.g. billing suspended on the Google
+        // project → 403 on every embed, which silently breaks ALL hook scoring). Test it for real.
+        let gemini = 'no key';
+        if (process.env.GEMINI_API_KEY) {
+            try {
+                const gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+                    body: JSON.stringify({ content: { parts: [{ text: 'ok' }] }, outputDimensionality: 8 }), signal: AbortSignal.timeout(15000) });
+                const gj = await gr.json().catch(() => null);
+                gemini = (gj && gj.embedding) ? 'ok' : `FAIL http ${gr.status}: ${String((gj && gj.error && gj.error.message) || '').slice(0, 140)}`;
+            } catch (e) { gemini = 'FAIL: ' + String(e.message || e).slice(0, 120); }
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ rawPython: RAW_PYTHON, deps, detail, ffmpeg, ytdlp, hasGeminiKey: !!process.env.GEMINI_API_KEY, hasR2: !!process.env.R2_ACCESS_KEY_ID }));
+        res.end(JSON.stringify({ rawPython: RAW_PYTHON, deps, detail, ffmpeg, ytdlp, hasGeminiKey: !!process.env.GEMINI_API_KEY, gemini, hasR2: !!process.env.R2_ACCESS_KEY_ID }));
         return;
     }
 
@@ -9014,7 +9026,7 @@ function renderShareWorkshopPage(videos, assigneeFilter, projectFilter, ideasByI
     return renderSharePage('Workshop — BusinessWorld', bodyHtml);
 }
 
-// ── Persistent "Generate hook" worker: the fine-tuned idea_r5 model (serverless on Modal)
+// ── Persistent "Generate hook" worker: the fine-tuned idea_r7 model (Replicate, version-direct)
 //    invents idea+frames, Replicate Flux renders them. No 24/7 GPU; no fallback model. ──
 async function fetchT(url, opts, ms) {  // fetch with a hard timeout so nothing can deadlock the worker
     const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms);
@@ -9052,6 +9064,72 @@ async function hookModelGenerate(premise, invent, count) {
         .map(s => ({ premise: (s.premise || premise || '').trim(), frames: s.frames.map(f => String(f)), cohesion_mode: s.cohesion_mode || '', reasoning: s.reasoning || '' }));
     if (!specs.length) throw new Error('model produced no valid 5-frame ideas');
     return specs;
+}
+// ── Generation diversity memory: EVERY idea the model has ever generated is text-embedded and
+// remembered (R2 hooks/gen-memory/memory.json, int8-quantized ≈1KB each). Each new batch is
+// over-generated, scored on distance to that whole memory AND to its own siblings, and only the
+// most-novel `count` survive (greedy max-min) — so hammering Generate keeps exploring NEW ideas
+// instead of re-serving variations. A typed premise still steers content (the model conditions
+// on it); novelty only chooses among attempts and pushes future batches away from past ones. ──
+const GENMEM_KEY = 'hooks/gen-memory/memory.json';
+const GENMEM_CAP = 4000;    // oldest beyond this fall off (≈4MB JSON at the cap)
+const GENMEM_DIM = 768;
+async function geminiTextEmbed(text) {
+    const key = process.env.GEMINI_API_KEY; if (!key) return null;
+    try {
+        const r = await fetchT('https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+            body: JSON.stringify({ content: { parts: [{ text: String(text).slice(0, 6000) }] }, outputDimensionality: GENMEM_DIM })
+        }, 20000);
+        const j = await r.json().catch(() => null);
+        const v = j && j.embedding && j.embedding.values;
+        if (!Array.isArray(v) || v.length < 8) return null;
+        let n = 0; for (const x of v) n += x * x; n = Math.sqrt(n) || 1;
+        return v.map(x => x / n);
+    } catch (e) { return null; }
+}
+const genVecEnc = v => Buffer.from(Int8Array.from(v, x => Math.max(-127, Math.min(127, Math.round(x * 127)))).buffer).toString('base64');
+const genVecDec = b => { const buf = Buffer.from(b, 'base64'); return new Int8Array(buf.buffer, buf.byteOffset, buf.length); };
+function genCos(a, b) { let d = 0, na = 0, nb = 0; const n = Math.min(a.length, b.length); for (let i = 0; i < n; i++) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; } return d / (Math.sqrt(na * nb) || 1); }
+async function genMemLoad() {
+    try { const b = await cloud.downloadFromR2(GENMEM_KEY); if (b) { const j = JSON.parse(b.toString('utf8')); if (Array.isArray(j.items)) return j.items; } } catch (e) {}
+    return [];
+}
+async function genMemSave(items) {
+    try { await cloud.uploadToR2(GENMEM_KEY, Buffer.from(JSON.stringify({ items: items.slice(-GENMEM_CAP), updated: new Date().toISOString() })), 'application/json'); } catch (e) {}
+}
+// specs (over-generated) → the `count` most-novel, each tagged {novelty, nearest}; memory updated.
+async function genDiversitySelect(rid, specs, count) {
+    const mem = await genMemLoad();
+    const memVecs = mem.map(it => { try { return genVecDec(it.v); } catch (e) { return null; } }).filter(Boolean);
+    const embs = await Promise.all(specs.map(s => geminiTextEmbed(s.premise + '\n' + s.frames.join('\n'))));
+    if (!embs.some(Boolean)) return { specs: specs.slice(0, count), memN: mem.length };   // embed down → no selection, no memory write
+    const qEmbs = embs.map(e => e ? Int8Array.from(e, x => Math.round(x * 127)) : null);  // compare int8-vs-int8, same as memory
+    specs.forEach((s, i) => {
+        if (!qEmbs[i]) { s._nov = null; s._near = ''; return; }
+        let m = -1, mi = -1;
+        for (let k = 0; k < memVecs.length; k++) { const c = genCos(qEmbs[i], memVecs[k]); if (c > m) { m = c; mi = k; } }
+        s._nov = memVecs.length ? Math.round((1 - m) * 1000) / 1000 : 1;
+        s._near = mi >= 0 ? (mem[mi].p || '') : '';
+    });
+    // greedy max-min: each pick maximises its distance to the memory AND to already-picked siblings
+    const chosen = [], pool = specs.map((_, i) => i).filter(i => qEmbs[i]), noEmb = specs.map((_, i) => i).filter(i => !qEmbs[i]);
+    while (chosen.length < count && pool.length) {
+        let best = -1, bestD = -Infinity;
+        for (const i of pool) {
+            let d = specs[i]._nov != null ? specs[i]._nov : 1;
+            for (const c of chosen) d = Math.min(d, 1 - genCos(qEmbs[i], qEmbs[c]));
+            if (d > bestD) { bestD = d; best = i; }
+        }
+        specs[best]._nov = Math.round(bestD * 1000) / 1000;
+        chosen.push(best); pool.splice(pool.indexOf(best), 1);
+    }
+    while (chosen.length < count && noEmb.length) chosen.push(noEmb.shift());
+    chosen.sort((a, b) => a - b);   // keep the model's own ordering among survivors
+    const now = Date.now();         // remember EVERY attempt (shown or not) so future batches avoid all of it
+    specs.forEach((s, i) => { if (qEmbs[i]) mem.push({ id: rid + '_' + i, t: now, p: String(s.premise).slice(0, 140), v: genVecEnc(embs[i]), s: chosen.includes(i) ? 1 : 0 }); });
+    await genMemSave(mem);
+    return { specs: chosen.map(i => specs[i]), memN: mem.length };
 }
 // ── Storyboard frame generation (Experiment tab) — photorealistic, reference-conditioned ──
 // One model call per frame; prior frames are passed as REFERENCE images so a character/scene can
@@ -9113,21 +9191,30 @@ async function hookProcessRequest(rid, premise, count, invent) {
     const stat = (o) => cloud.uploadToR2(`hooks/grpo/demo/status/${rid}.json`, Buffer.from(JSON.stringify(o)), 'application/json').catch(() => {});
     let attempts = [];
     let err = '';
+    let memN = 0;
     // STREAMING: the group file is rewritten after every frame so the UI surfaces each hook the
     // moment its idea exists, then fills its 5 frames in live. `done` flips true only at the very end.
     const writeGroup = (done) => cloud.uploadToR2(`hooks/grpo/demo/groups/${rid}.json`,
-        Buffer.from(JSON.stringify({ input_id: rid, premise: premise || '💡 invented', n: attempts.length, attempts,
+        Buffer.from(JSON.stringify({ input_id: rid, premise: premise || '💡 invented', n: attempts.length, attempts, mem_n: memN,
             done: !!done, streaming: true, error: (done && !attempts.length) ? err : '', model: 'idea_r7 (fine-tuned) + flux', hosted: true })),
         'application/json').catch(() => {});
     try {
-        // 1) the fine-tuned model invents ALL idea(s)+frames in ONE batched call (covers GPU cold start)
+        // 1) the fine-tuned model invents idea(s)+frames in ONE batched call (covers GPU cold start).
+        //    Over-generate by 2 so the diversity pass has spares to reject — rejections cost no renders.
         await stat({ stage: 'reasoning', premise: premise || '(the fine-tuned model is thinking…)' });
         let specs;
-        try { specs = await hookModelGenerate(premise, invent, count); }
+        try { specs = await hookModelGenerate(premise, invent, Math.min(8, count + 2)); }
         catch (e) { err = 'idea: ' + e.message; specs = []; }
+        // 1b) diversity: keep the `count` ideas farthest from EVERYTHING generated before (and from
+        //     each other); every attempt joins the memory so the next press explores new territory.
+        if (specs.length) {
+            try { const ds = await genDiversitySelect(rid, specs, count); specs = ds.specs; memN = ds.memN; }
+            catch (e) { specs = specs.slice(0, count); }
+        }
         // 2) seed every hook immediately so they all appear as cards the instant the ideas land
         attempts = specs.map((spec, k) => ({ k, premise: spec.premise, frames: spec.frames, frame_imgs: [null, null, null, null, null],
-            frames_done: 0, status: 'rendering', reasoning: spec.reasoning || '', caption: spec.premise, cohesion_mode: spec.cohesion_mode || '' }));
+            frames_done: 0, status: 'rendering', reasoning: spec.reasoning || '', caption: spec.premise, cohesion_mode: spec.cohesion_mode || '',
+            novelty: spec._nov != null ? spec._nov : null, nearest: spec._near || '' }));
         if (attempts.length) { await stat({ stage: 'rendering', n: attempts.length, done: 0 }); await writeGroup(false); }
         // 3) render each hook's 5 frames with Flux — streaming each frame into the group as it lands
         for (let k = 0; k < attempts.length; k++) {
