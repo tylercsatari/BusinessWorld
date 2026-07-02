@@ -9396,6 +9396,22 @@ async function hookSweepOrphans() {
     } catch (e) {}
 }
 setTimeout(() => { hookSweepOrphans().catch(() => {}); }, 8000);
+// Same for grinds: a run whose snapshot has gone stale (>4 min without a write — heartbeats land
+// every ~10s while alive) was killed mid-flight; resolve it with a clear error so the UI stops.
+async function grindSweepOrphans() {
+    try {
+        const keys = ((await cloud.listR2Keys('hooks/grind/runs/')) || []).filter(k => k.endsWith('.json')).slice(-10);
+        for (const key of keys) {
+            let j = null; try { j = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) { continue; }
+            if (!j || j.status !== 'running') continue;
+            if (j.ts && Date.now() - j.ts < 4 * 60e3) continue;   // fresh → live on the other server
+            j.status = 'error'; j.error = 'interrupted by a server restart — the attempts above survived; press Grind to continue from here'; j.note = '';
+            await cloud.uploadToR2(key, Buffer.from(JSON.stringify(j)), 'application/json').catch(() => {});
+            console.log('grind sweeper: resolved orphaned run', j.rid);
+        }
+    } catch (e) {}
+}
+setTimeout(() => { grindSweepOrphans().catch(() => {}); }, 9000);
 let _hookBusy = false;
 async function hookDemoQueue() {
     if (_hookBusy || !cloud.isR2Ready()) return;
@@ -9540,6 +9556,11 @@ async function grindQueue() {
         for (const key of keys) {
             const rid = key.split('/').pop().replace('.json', '');
             let req0 = {}; try { req0 = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) {}
+            // write the first run snapshot BEFORE deleting the request — the client sees "picked up"
+            // within one poll, and a crash right here leaves a sweepable run instead of a lost rid
+            await cloud.uploadToR2(`hooks/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
+                rid, premise: String(req0.premise || '').slice(0, 500), metric: req0.metric || 'keep', threshold: parseInt(req0.threshold) || 82,
+                attempts: [], n: 0, status: 'running', note: 'picked up — starting the model…', best: null, rejected: 0, ts: Date.now() })), 'application/json').catch(() => {});
             await cloud.deleteFromR2(key).catch(() => {});
             try { await grindProcess(rid, req0); } catch (e) { console.warn('grind err:', e.message); }
         }

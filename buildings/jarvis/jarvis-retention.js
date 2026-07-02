@@ -1001,10 +1001,13 @@ const JarvisRetention = (function () {
     //    scores each on the trained models, and keeps going until one clears your threshold. ──
     function grindPoll(rid, tries) {
         tries = tries || 0;
-        fetch('/api/hooks/grind/run/' + rid).then(r => r.json()).then(j => {
+        const again = ms => { if (tries < 7200 && st.grindRid === rid) setTimeout(() => grindPoll(rid, tries + 1), ms); };
+        fetch('/api/hooks/grind/run/' + rid).then(r => r.ok ? r.json() : null).then(j => {
             if (j && j.rid) { GRINDRUN = j; rtgUpdateExp(); }
-            if (j && j.status === 'running' && tries < 7200) setTimeout(() => grindPoll(rid, tries + 1), 4000);
-        }).catch(() => { if (tries < 7200) setTimeout(() => grindPoll(rid, tries + 1), 6000); });
+            // keep polling until the run reaches a TERMINAL state — a 404 just means the worker
+            // hasn't written the first snapshot yet (the old code stopped here and froze the UI)
+            if (!(j && j.rid && j.status !== 'running')) again(4000);
+        }).catch(() => again(6000));
     }
     function grindEnsure() {
         if (GRINDLIST !== null) return;
@@ -1027,7 +1030,7 @@ const JarvisRetention = (function () {
         fetch('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', hours: st.grindHours || 3 }) })
             .then(r => r.json()).then(j => {
                 st.grindStarting = 0;
-                if (j.rid) { st.grindMine = st.grindMine || {}; st.grindMine[j.rid] = 1; st.grindRid = j.rid; GRINDRUN = { rid: j.rid, premise: prem, status: 'running', attempts: [], threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', note: 'queued — the worker picks it up within seconds…' }; grindPoll(j.rid); }
+                if (j.rid) { st.grindMine = st.grindMine || {}; st.grindMine[j.rid] = 1; st.grindRid = j.rid; st.grindT0 = Date.now(); GRINDRUN = { rid: j.rid, premise: prem, status: 'running', attempts: [], threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', note: 'queued — the worker picks it up within seconds…' }; grindPoll(j.rid); }
                 else st.grindErr = j.error || 'could not start';
                 rtgUpdateExp();
             }).catch(e => { st.grindStarting = 0; st.grindErr = e.message; rtgUpdateExp(); });
@@ -1095,9 +1098,9 @@ const JarvisRetention = (function () {
                   <span style="font-size:10px;color:${C.mute}">${g.n || 0} attempts · best <b style="color:${g.best != null ? heatCol(g.best / 100) : C.mute}">${g.best != null ? g.best + 'th' : '—'}</b> vs target <b style="color:${C.accent}">${g.threshold}th</b> ${esc(g.metric || 'keep')} · ${g.rejected || 0} rejected as too-similar</span>
                   ${running ? `<span data-grindstop style="cursor:pointer;border:1px solid #ef4444;color:#ef4444;border-radius:6px;padding:3px 11px;font-size:10px;font-weight:800">⏹ Stop</span>` : ''}
                 </div>
-                ${g.note ? `<div style="font-size:10px;color:${running ? C.cyan : C.mute};margin-bottom:7px">${esc(g.note)}</div>` : ''}
+                ${g.note ? `<div style="font-size:10px;color:${running ? C.cyan : C.mute};margin-bottom:7px">${running ? '⏳ ' : ''}${esc(g.note)}${running && st.grindT0 ? ` <span style="color:${C.mute}">· ${Math.round((Date.now() - st.grindT0) / 60000)}m elapsed</span>` : ''}</div>` : ''}
                 ${g.error ? `<div style="font-size:10px;color:#ef4444;margin-bottom:7px">${esc(g.error)}</div>` : ''}
-                <div style="display:flex;gap:9px;overflow-x:auto;padding-bottom:6px">${atts.map(card).join('') || `<span style="font-size:10px;color:${C.mute}">first attempt starting…</span>`}</div></div>`;
+                <div style="display:flex;gap:9px;overflow-x:auto;padding-bottom:6px">${atts.map(card).join('') || (running ? `<span style="font-size:10px;color:${C.cyan}">⏳ attempt 1 is being written by the model — its card appears here the moment it exists (each attempt ≈ 2–3 min: write → render 5 frames → score)</span>` : '')}</div></div>`;
         }
         return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
           <div style="font-size:14px;font-weight:800;color:${C.text}">🎯 Grind to a threshold <span style="font-size:10px;color:${C.mute};font-weight:600">— write YOUR hook; the loop generates variants grounded on it (each pushed away from the last by embedding distance), renders + scores every one on the trained models, and keeps going — for hours if needed — until one clears your bar. ~$0.25/attempt (frames + GPU).</span></div>
