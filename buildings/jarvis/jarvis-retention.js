@@ -14,6 +14,7 @@ const JarvisRetention = (function () {
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
+    let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
@@ -996,6 +997,111 @@ const JarvisRetention = (function () {
             <span data-expgen style="cursor:${st.expGenBusy ? 'default' : 'pointer'};background:${st.expGenBusy ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800;display:inline-flex;align-items:center">${st.expGenBusy ? '⏳ working…' : 'Generate'}</span>
           </div>${(!st.expGenBusy && st.warmHold) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px">🔥 holding the GPU warm while you're on this tab — presses stay fast (~15s/idea); it powers down a few minutes after you leave</div>` : ''}${result}</div>`;
     }
+    // ── 🎯 GRIND: write a hook → the loop generates variants (embedding-differentiated), renders,
+    //    scores each on the trained models, and keeps going until one clears your threshold. ──
+    function grindPoll(rid, tries) {
+        tries = tries || 0;
+        fetch('/api/hooks/grind/run/' + rid).then(r => r.json()).then(j => {
+            if (j && j.rid) { GRINDRUN = j; rtgUpdateExp(); }
+            if (j && j.status === 'running' && tries < 7200) setTimeout(() => grindPoll(rid, tries + 1), 4000);
+        }).catch(() => { if (tries < 7200) setTimeout(() => grindPoll(rid, tries + 1), 6000); });
+    }
+    function grindEnsure() {
+        if (GRINDLIST !== null) return;
+        GRINDLIST = { loading: 1 };
+        fetch('/api/hooks/grind/runs').then(r => r.json()).then(j => {
+            GRINDLIST = j || { runs: [] };
+            const last = (j.runs || [])[0];
+            if (last && !st.grindRid) { st.grindRid = last.rid; grindPoll(last.rid); }
+            rtgUpdateExp();
+        }).catch(() => { GRINDLIST = { runs: [] }; });
+    }
+    function grindStart() {
+        const inp = window.document.getElementById('grind-input');
+        const prem = inp ? inp.value.trim() : '';
+        if (!prem || st.grindStarting) return;
+        st.grindPrem = prem; st.grindStarting = 1; rtgUpdateExp();
+        fetch('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', hours: st.grindHours || 3 }) })
+            .then(r => r.json()).then(j => {
+                st.grindStarting = 0;
+                if (j.rid) { st.grindRid = j.rid; GRINDRUN = { rid: j.rid, premise: prem, status: 'running', attempts: [], threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', note: 'queued — the worker picks it up within seconds…' }; grindPoll(j.rid); }
+                else st.grindErr = j.error || 'could not start';
+                rtgUpdateExp();
+            }).catch(e => { st.grindStarting = 0; st.grindErr = e.message; rtgUpdateExp(); });
+    }
+    async function grindOpen(k) {
+        const rid = st.grindRid; if (!rid) return;
+        st.grindOpening = k; rtgUpdateExp();
+        try {
+            const score = await fetch('/api/hooks/grind/score/' + rid + '_' + k).then(r => { if (!r.ok) throw new Error('not scored'); return r.json(); });
+            const monUrl = await urlToDataUrl('/api/hooks/grind/montage/' + rid + '_' + k);
+            score.montage = monUrl.split('base64,').pop();
+            score.source = 'grind'; score.montageDataUrl = monUrl;
+            const a = ((GRINDRUN && GRINDRUN.attempts) || []).find(x => x.k === k);
+            score.genFrames = (a && a.frames) || [];
+            st.rawUploads.push(score); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+        } catch (e) { st.grindErr = 'open: ' + e.message; }
+        st.grindOpening = null; rtgUpdateExp();
+        window.setTimeout(() => { const el = window.document.getElementById('exp-scoreout'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
+    }
+    async function grindSave(k) {
+        const rid = st.grindRid; if (!rid) return;
+        try {
+            const a = ((GRINDRUN && GRINDRUN.attempts) || []).find(x => x.k === k);
+            const score = await fetch('/api/hooks/grind/score/' + rid + '_' + k).then(r => r.ok ? r.json() : null);
+            const monUrl = await urlToDataUrl('/api/hooks/grind/montage/' + rid + '_' + k);
+            await saveHook({ kind: 'scored', source: 'grind', title: (a && a.premise) || (GRINDRUN && GRINDRUN.premise) || 'Grind hook', text: (GRINDRUN && GRINDRUN.premise) || '', frames: (a && a.frames) || [], indicators: score && score.indicators, steer: score && score.steer, montage: monUrl });
+        } catch (e) { st.grindErr = 'save: ' + e.message; rtgUpdateExp(); }
+    }
+    function grindPanel() {
+        grindEnsure();
+        const bg = C.bg || '#0f172a', thr = st.grindThr || 82, metric = st.grindMetric || 'keep', hours = st.grindHours || 3;
+        const g = (GRINDRUN && GRINDRUN.rid === st.grindRid) ? GRINDRUN : null;
+        const running = g && g.status === 'running';
+        const M = [['keep', 'keep-rate %ile'], ['ret5', 'past-5s %ile'], ['gt10M', '>10M %ile']];
+        const mPill = ([id, lab]) => `<span data-grindmetric="${id}" style="cursor:pointer;border:1px solid ${metric === id ? C.accent : C.border};background:${metric === id ? C.accent + '22' : 'transparent'};color:${metric === id ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
+        const hPill = h => `<span data-grindhours="${h}" style="cursor:pointer;border:1px solid ${hours === h ? C.accent : C.border};background:${hours === h ? C.accent + '22' : 'transparent'};color:${hours === h ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${h}h</span>`;
+        let runHtml = '';
+        if (g) {
+            const atts = (g.attempts || []).slice().reverse();
+            const statCol = { running: C.cyan, won: C.green, stopped: C.amber, error: '#ef4444', deadline: C.amber, maxed: C.amber }[g.status] || C.dim;
+            const statLab = { running: '⏳ grinding…', won: '🎯 THRESHOLD CLEARED', stopped: '⏹ stopped', error: '✕ error', deadline: '⏱ time budget spent', maxed: 'attempt budget spent' }[g.status] || g.status;
+            const card = a => {
+                const sel = false, done = a.status === 'done';
+                const pctBadge = a.pct != null ? `<b style="color:${heatCol((a.pct || 0) / 100)};font-size:14px">${a.pct}</b><span style="font-size:9px;color:${C.mute}">%ile</span>` : (done ? `<span style="font-size:9px;color:#ef4444" title="${esc((a.errs || []).join('\n'))}">no score${(a.errs || []).length ? ' ⚠' : ''}</span>` : `<span style="font-size:9px;color:${C.cyan}">${a.status === 'scoring' ? '⏳ scoring' : `⏳ ${a.frames_done || 0}/5`}</span>`);
+                const win = g.winner === a.k;
+                const img = done && a.pct != null ? `/api/hooks/grind/montage/${esc(g.rid)}_${a.k}` : (a.frame_imgs && a.frame_imgs.find(Boolean) ? `/api/hooks/grind/montage/${esc(a.frame_imgs.find(Boolean))}` : '');
+                return `<div style="border:2px solid ${win ? C.green : C.border};border-radius:9px;padding:7px;background:${C.card2};width:250px;flex-shrink:0">
+                  <div style="display:flex;justify-content:space-between;gap:6px;align-items:center;margin-bottom:4px"><span style="font-size:10px;font-weight:800;color:${win ? C.green : C.dim}">#${a.k + 1}${win ? ' 🎯 WINNER' : ''}</span>${pctBadge}</div>
+                  ${img ? `<img src="${img}" style="width:100%;border-radius:5px;display:block;background:#000" loading="lazy"/>` : `<div style="height:44px;background:${bg};border-radius:5px"></div>`}
+                  <div style="font-size:9.5px;color:${C.text};line-height:1.35;margin-top:4px;max-height:38px;overflow:hidden">${esc((a.premise || '').slice(0, 90))}</div>
+                  <div style="display:flex;gap:5px;margin-top:5px;align-items:center">
+                    ${a.nov != null ? `<span style="font-size:8.5px;color:${C.purple}" title="embedding distance from this run's earlier attempts">🆕${a.nov.toFixed(2)}</span>` : ''}
+                    ${done && a.pct != null ? `<span data-grindopen="${a.k}" style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">${st.grindOpening === a.k ? '⏳' : 'open full readout'}</span><span data-grindsave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">💾 save</span>` : ''}
+                  </div></div>`;
+            };
+            runHtml = `<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px">
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+                  <span style="font-size:12px;font-weight:800;color:${statCol}">${statLab}</span>
+                  <span style="font-size:10px;color:${C.mute}">${g.n || 0} attempts · best <b style="color:${g.best != null ? heatCol(g.best / 100) : C.mute}">${g.best != null ? g.best + 'th' : '—'}</b> vs target <b style="color:${C.accent}">${g.threshold}th</b> ${esc(g.metric || 'keep')} · ${g.rejected || 0} rejected as too-similar</span>
+                  ${running ? `<span data-grindstop style="cursor:pointer;border:1px solid #ef4444;color:#ef4444;border-radius:6px;padding:3px 11px;font-size:10px;font-weight:800">⏹ Stop</span>` : ''}
+                </div>
+                ${g.note ? `<div style="font-size:10px;color:${running ? C.cyan : C.mute};margin-bottom:7px">${esc(g.note)}</div>` : ''}
+                ${g.error ? `<div style="font-size:10px;color:#ef4444;margin-bottom:7px">${esc(g.error)}</div>` : ''}
+                <div style="display:flex;gap:9px;overflow-x:auto;padding-bottom:6px">${atts.map(card).join('') || `<span style="font-size:10px;color:${C.mute}">first attempt starting…</span>`}</div></div>`;
+        }
+        return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
+          <div style="font-size:14px;font-weight:800;color:${C.text}">🎯 Grind to a threshold <span style="font-size:10px;color:${C.mute};font-weight:600">— write YOUR hook; the loop generates variants grounded on it (each pushed away from the last by embedding distance), renders + scores every one on the trained models, and keeps going — for hours if needed — until one clears your bar. ~$0.25/attempt (frames + GPU).</span></div>
+          <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
+            <input id="grind-input" value="${esc(st.grindPrem || '')}" placeholder="the hook you're writing — every variant stays grounded on this…" style="flex:1;min-width:260px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px" ${running ? 'disabled' : ''}/>
+            <span style="font-size:10px;color:${C.mute}">target ≥ <b style="color:${C.accent}">${thr}</b>th</span>
+            <input type="range" min="60" max="97" value="${thr}" data-grindthr style="width:110px;accent-color:${C.accent}" ${running ? 'disabled' : ''}/>
+            ${M.map(mPill).join('')}<span style="width:4px"></span>${[1, 3, 6].map(hPill).join('')}
+            ${running ? '' : `<span data-grindstart style="cursor:pointer;background:${st.grindStarting ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800">${st.grindStarting ? '⏳' : '🎯 Grind'}</span>`}
+          </div>
+          ${st.grindErr ? `<div style="font-size:10px;color:#ef4444;margin-top:6px">${esc(st.grindErr)}</div>` : ''}
+          ${runHtml}</div>`;
+    }
     // ── ONE unified progress stepper for EVERY path (generate / render / upload / build → embed → score).
     //    Shown live under the header whenever anything is running, so you always see where it's at. ──
     function pipelineProgress() {
@@ -1020,7 +1126,7 @@ const JarvisRetention = (function () {
             <div style="font-size:11px;color:${C.cyan};margin-top:8px;font-weight:600">⏳ ${esc(sub)}${cold ? ` <span style="color:${C.mute};font-weight:400">· first run this session spins up the GPU (~2 min), then it's fast</span>` : ''}</div></div>`;
     }
     function renderExperiment() {
-        const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds the hook and scores it on every validated indicator — keep rate, past-5s, est. views — and places it in the embedded space. Save the ones you like.') + pipelineProgress() + expGenPanel();
+        const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds the hook and scores it on every validated indicator — keep rate, past-5s, est. views — and places it in the embedded space. Save the ones you like.') + pipelineProgress() + expGenPanel() + grindPanel();
         if (EXPREG === null) { EXPREG = { loading: 1 }; fetch('/api/indicators/registry').then(r => r.json()).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(() => { EXPREG = { error: 1 }; rtgUpdateExp(); }); }
         if (SAVED === null) { SAVED = { loading: 1 }; fetch('/api/raw/saved-hooks').then(r => r.json()).then(j => { SAVED = j; rtgUpdateExp(); }).catch(() => { SAVED = { hooks: [] }; rtgUpdateExp(); }); }
         const CY = '#22d3ee';
@@ -2945,6 +3051,12 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-guessreload]')) { GUESSES = {}; st.guessSel = null; rtgUpdateGuesses(); return; }
         const egn = e.target.closest('[data-expgenn]'); if (egn) { st.expGenN = +egn.getAttribute('data-expgenn'); rtgUpdateExp(); return; }
         if (e.target.closest('[data-expgen]')) { if (!st.expGenBusy) expGenSubmit(); return; }
+        if (e.target.closest('[data-grindstart]')) { st.grindErr = null; grindStart(); return; }
+        if (e.target.closest('[data-grindstop]')) { if (st.grindRid) fetch('/api/hooks/grind/stop/' + st.grindRid, { method: 'POST' }).catch(() => {}); return; }
+        const gmet = e.target.closest('[data-grindmetric]'); if (gmet) { st.grindMetric = gmet.getAttribute('data-grindmetric'); rtgUpdateExp(); return; }
+        const ghr = e.target.closest('[data-grindhours]'); if (ghr) { st.grindHours = +ghr.getAttribute('data-grindhours'); rtgUpdateExp(); return; }
+        const gop = e.target.closest('[data-grindopen]'); if (gop) { if (st.grindOpening == null) grindOpen(+gop.getAttribute('data-grindopen')); return; }
+        const gsa = e.target.closest('[data-grindsave]'); if (gsa) { grindSave(+gsa.getAttribute('data-grindsave')); return; }
         const gsc = e.target.closest('[data-genscore]'); if (gsc) { if (!st.rawUploading) { const k = +gsc.getAttribute('data-genscore'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) scoreGenerated(k, a.frame_imgs || [], a.premise || a.caption || ''); } return; }
         const gsv = e.target.closest('[data-gensave]'); if (gsv) { const k = +gsv.getAttribute('data-gensave'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) saveHook({ kind: 'idea', source: 'generated', title: (a.premise || a.caption || 'idea').slice(0, 80), text: a.premise || a.caption || '', frames: a.frames || [], frame_imgs: a.frame_imgs || [], cohesion_mode: a.cohesion_mode || '' }); return; }
         if (e.target.closest('[data-savescored]')) { const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0]; if (up) saveHook({ kind: 'scored', source: up.source || 'scored', title: up.title || (up.transcript || 'Scored hook').slice(0, 60), text: up.transcript || '', montage: up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : ''), frames: up.genFrames || [], frame_imgs: up.genFrameImgs || [], indicators: up.indicators || null, steer: up.steer || null }); return; }
@@ -2991,6 +3103,8 @@ const JarvisRetention = (function () {
         if (e.target.id === 'rtg-hazB') { st.hazB = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-seek') { rtgSeek(+e.target.value); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedfilt')) { const k = e.target.getAttribute('data-savedfilt'); st.savedFilt = st.savedFilt || {}; st.savedFilt[k] = +e.target.value; window.clearTimeout(st._sfT); st._sfT = window.setTimeout(rtgUpdateExp, 130); return; }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-grindthr')) { st.grindThr = +e.target.value; window.clearTimeout(st._gtT); st._gtT = window.setTimeout(rtgUpdateExp, 130); return; }
+        if (e.target.id === 'grind-input') { st.grindPrem = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-rawtext')) { st.rawText = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-framedesc')) { const i = +e.target.getAttribute('data-framedesc'); st.rawFrameDesc = (st.rawFrameDesc || ['', '', '', '', '']).slice(); st.rawFrameDesc[i] = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-pf')) { st.pvals = st.pvals || {}; st.pvals[e.target.getAttribute('data-pf')] = +e.target.value; updatePredict(); return; }

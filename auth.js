@@ -156,7 +156,11 @@ function isPublic(pathname, method) {
     if (pathname.startsWith('/api/raw/saved-montage/')) return true; // saved-hook montages (no data), lets <img> load without a token
     if (pathname.startsWith('/api/hooks/demo/status/')) return true; // demo generation progress (no data), pollable without a token
     if (pathname === '/api/hooks/generate') return true;            // "Generate a hook" button — own Gemini+Flux, rate-guarded server-side
-    if (pathname === '/api/hooks/warmup') return true;              // GPU pre-warm on intent — server-side 3.5-min guard caps spend
+    if (pathname === '/api/hooks/warmup') return true;              // GPU pre-warm on intent — server-side guard caps spend
+    if (pathname === '/api/hooks/grind') return true;               // 🎯 grind start — one-at-a-time guard server-side
+    if (pathname.startsWith('/api/hooks/grind/run/')) return true;  // grind progress polling (no sensitive data)
+    if (pathname.startsWith('/api/hooks/grind/stop/')) return true; // stop flag (write-only, needs the rid)
+    if (pathname.startsWith('/api/hooks/grind/montage/')) return true; // generated frames/strips, lets <img> load without a token
     if (pathname.startsWith('/api/hooks/grpo/group/')) return true; // generated hook results (no sensitive data), pollable without a token
     if (pathname.startsWith('/share/')) return true;       // public share pages
     if (pathname === '/api/youtube/callback') return true; // external OAuth redirect (no token possible)

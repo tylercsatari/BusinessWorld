@@ -3237,6 +3237,70 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         res.end(JSON.stringify({ ok: true, fired }));
         return;
     }
+    // ── 🎯 Grind endpoints: start / stop / poll / images / full score / recent runs ──
+    if (pathname === '/api/hooks/grind' && req.method === 'POST') {
+        try {
+            const body = (await readBody(req)) || {};
+            const premise = String(body.premise || '').trim().slice(0, 500);
+            if (!premise) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write the hook/idea first — it grounds every variant' })); return; }
+            // one grind at a time: it monopolises the GPU + spends real money per attempt
+            try {
+                const pend = ((await cloud.listR2Keys('hooks/grind/requests/')) || []).filter(k => k.endsWith('.json'));
+                if (pend.length) { res.writeHead(429, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'a grind is already queued' })); return; }
+            } catch (e) {}
+            const rid = 'gr' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+            await cloud.uploadToR2(`hooks/grind/requests/${rid}.json`, Buffer.from(JSON.stringify({
+                premise, threshold: body.threshold, metric: body.metric, hours: body.hours, maxAttempts: body.maxAttempts, ts: Date.now() })), 'application/json');
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ rid }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    const grindStop = pathname.match(/^\/api\/hooks\/grind\/stop\/([a-z0-9]{1,32})$/);
+    if (grindStop && req.method === 'POST') {
+        await cloud.uploadToR2(`hooks/grind/stop/${grindStop[1]}`, Buffer.from('1'), 'text/plain').catch(() => {});
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true }));
+        return;
+    }
+    const grindRun = pathname.match(/^\/api\/hooks\/grind\/run\/([a-z0-9]{1,32})$/);
+    if (grindRun && req.method === 'GET') {
+        try {
+            const b = await cloud.downloadFromR2(`hooks/grind/runs/${grindRun[1]}.json`);
+            res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(b || JSON.stringify({ error: 'not started yet' }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    const grindMon = pathname.match(/^\/api\/hooks\/grind\/montage\/([\w-]{1,48})$/);
+    if (grindMon && req.method === 'GET') {
+        try {
+            const buf = await cloud.downloadFromR2(`hooks/grind/montages/${grindMon[1]}.jpg`);
+            if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); }
+            else { res.writeHead(404); res.end(); }
+        } catch (e) { res.writeHead(500); res.end(); }
+        return;
+    }
+    const grindScore = pathname.match(/^\/api\/hooks\/grind\/score\/([\w-]{1,48})$/);
+    if (grindScore && req.method === 'GET') {
+        try {
+            const b = await cloud.downloadFromR2(`hooks/grind/scores/${grindScore[1]}.json`);
+            res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(b || JSON.stringify({ error: 'no score' }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    if (pathname === '/api/hooks/grind/runs' && req.method === 'GET') {
+        try {
+            let keys = []; try { keys = ((await cloud.listR2Keys('hooks/grind/runs/')) || []).filter(k => k.endsWith('.json')); } catch (e) {}
+            keys.sort();   // rid embeds a timestamp → lexicographic ≈ chronological
+            const out = [];
+            for (const k of keys.slice(-6).reverse()) {
+                try { const b = await cloud.downloadFromR2(k); const j = JSON.parse(b.toString('utf8')); out.push({ rid: j.rid, premise: j.premise, status: j.status, n: j.n, best: j.best, threshold: j.threshold, metric: j.metric, ts: j.ts }); } catch (e) {}
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify({ runs: out }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
     if (pathname === '/api/hooks/generate' && req.method === 'POST') {
         try {
             const body = (await readBody(req)) || {};
@@ -9352,6 +9416,136 @@ async function hookDemoQueue() {
     } finally { _hookBusy = false; }
 }
 setInterval(() => { hookDemoQueue().catch(() => {}); }, 4000);
+
+// ── 🎯 GRIND: loop generate→render→score until a hook clears the user's threshold ──────────
+// The user writes the hook (grounding), sets a target (e.g. keep-rate ≥ 82nd pctile) and a time
+// budget; the worker loops: idea_r7 writes a variant grounded on their text → embedding gate
+// rejects variants too close to earlier attempts (before any render spend) → flux renders the 5
+// frames → ffmpeg composes the SAME 5x1 strip the corpus uses → raw_upload.py scores it on the
+// trained steer models → streamed to R2 so every attempt is visible/clickable/savable live.
+async function composeMontage(frameBufs) {
+    const os = require('os');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'grind_'));
+    try {
+        const inputs = [];
+        frameBufs.forEach((b, i) => { const p = path.join(dir, `f${i}.jpg`); fs.writeFileSync(p, b); inputs.push('-i', p); });
+        const out = path.join(dir, 'm.jpg'), n = frameBufs.length;
+        const scale = frameBufs.map((_, i) => `[${i}:v]scale=320:-2[s${i}]`).join(';');
+        const refs = frameBufs.map((_, i) => `[s${i}]`).join('');
+        await new Promise((ok, no) => {
+            const p = spawn('ffmpeg', ['-nostdin', '-loglevel', 'error', ...inputs, '-filter_complex', `${scale};${refs}hstack=inputs=${n}`, '-frames:v', '1', '-q:v', '4', out], { env: RAW_PY_ENV });
+            const t = setTimeout(() => { try { p.kill('SIGKILL'); } catch (e) {} no(new Error('ffmpeg timeout')); }, 60000);
+            p.on('close', c => { clearTimeout(t); c === 0 && fs.existsSync(out) ? ok() : no(new Error('ffmpeg exit ' + c)); });
+            p.on('error', e => { clearTimeout(t); no(e); });
+        });
+        return fs.readFileSync(out);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+async function scoreMontage(buf, text, title) {
+    const os = require('os');
+    const tmp = path.join(os.tmpdir(), `grindmon_${Date.now()}_${Math.round(Math.random() * 1e6)}.jpg`);
+    fs.writeFileSync(tmp, buf);
+    try {
+        return await new Promise((ok, no) => {
+            const py = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--image', tmp, '--text', String(text || '').slice(0, 2000), '--title', String(title || 'grind').slice(0, 80)], { env: RAW_PY_ENV });
+            let out = '', err2 = '';
+            py.stdout.on('data', d => out += d); py.stderr.on('data', d => err2 += d);
+            const t = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 150000);
+            py.on('close', () => { clearTimeout(t); const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop(); if (!line) return no(new Error('scorer: ' + (err2.trim().split('\n').pop() || 'no output').slice(-140))); try { const j = JSON.parse(line); j.error ? no(new Error(j.error)) : ok(j); } catch (e) { no(e); } });
+            py.on('error', no);
+        });
+    } finally { try { fs.unlinkSync(tmp); } catch (e) {} }
+}
+// best-modality percentile for the metric — same preference order as the UI's steerBest
+function grindPct(score, metric) {
+    const s = (score && score.steer) || {};
+    for (const m of ['together', 'text', 'visual']) { const k = s[`${m}_${metric}`]; if (k && k.pctile != null) return Math.round(k.pctile * 10) / 10; }
+    return null;
+}
+async function grindProcess(rid, req0) {
+    const premise = String(req0.premise || '').trim().slice(0, 500);
+    const metric = ['keep', 'ret5', 'views', 'gt10M'].includes(req0.metric) ? req0.metric : 'keep';
+    const threshold = Math.max(50, Math.min(99, parseInt(req0.threshold) || 82));
+    const maxAttempts = Math.max(1, Math.min(150, parseInt(req0.maxAttempts) || 80));
+    const deadline = Date.now() + Math.min(8, Math.max(0.25, parseFloat(req0.hours) || 3)) * 3600e3;
+    let attempts = [], status = 'running', winner = null, err = '', note = '', rejected = 0;
+    const best = () => attempts.reduce((m, a) => (a.pct != null && (m == null || a.pct > m)) ? a.pct : m, null);
+    const write = () => cloud.uploadToR2(`hooks/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
+        rid, premise, metric, threshold, attempts, n: attempts.length, status, winner, error: err, note,
+        best: best(), rejected, deadline, ts: Date.now() })), 'application/json').catch(() => {});
+    const vecs = [];   // this run's accepted variants — the embedding-based differentiation
+    let mem = []; try { mem = await genMemLoad(); } catch (e) {}
+    try {
+        while (attempts.length < maxAttempts && Date.now() < deadline && status === 'running') {
+            try { if (await cloud.existsInR2(`hooks/grind/stop/${rid}`)) { status = 'stopped'; note = 'stopped by you'; break; } } catch (e) {}
+            _hookLastGen = Date.now(); _hookLastPing = Date.now();   // grinding IS warmth
+            // 1) a variant grounded on the user's written hook
+            let spec;
+            const beat = (rstat, sec) => { const t = sec >= 60 ? `${Math.floor(sec / 60)}m ${sec % 60}s` : `${sec}s`; note = `attempt ${attempts.length + 1}: ${rstat === 'starting' ? `GPU booting (${t})` : `writing a variant (${t})`}`; return write(); };
+            try { spec = (await hookModelGenerate(premise, false, 1, beat))[0]; }
+            catch (e) { err = 'idea: ' + e.message; status = 'error'; break; }
+            // 2) embedding gate BEFORE any render spend — push each attempt away from the previous ones
+            const emb = await geminiTextEmbed(spec.premise + '\n' + spec.frames.join('\n'));
+            let nov = null;
+            if (emb) {
+                const q = Int8Array.from(emb, x => Math.round(x * 127));
+                let m = -1; for (const v of vecs) { const c = genCos(q, v); if (c > m) m = c; }
+                nov = vecs.length ? Math.round((1 - m) * 1000) / 1000 : 1;
+                if (nov < 0.10 && rejected < maxAttempts) { rejected++; note = `variant too close to attempt ${attempts.length} (dist ${nov}) — regenerating (${rejected} rejected)`; await write(); continue; }
+                vecs.push(q); mem.push({ id: rid + '_' + attempts.length, t: Date.now(), p: spec.premise.slice(0, 140), v: genVecEnc(emb), s: 1 });
+            }
+            const a = { k: attempts.length, premise: spec.premise, frames: spec.frames, frame_imgs: [null, null, null, null, null], frames_done: 0, status: 'rendering', nov, pct: null, errs: [], ts: Date.now() };
+            attempts.push(a); note = `attempt ${a.k + 1}: rendering frames…`; await write();
+            // 3) render the 5 frames (streamed) — collect buffers for the montage
+            const bufs = [null, null, null, null, null];
+            for (let i = 0; i < 5; i++) {
+                let lastErr = null;
+                for (let t2 = 0; t2 < 2 && !bufs[i]; t2++) {
+                    try { const b = await hookRenderFrame(a.frames[i]); bufs[i] = b; const id = `${rid}_${a.k}_${i}`; await cloud.uploadToR2(`hooks/grind/montages/${id}.jpg`, b, 'image/jpeg'); a.frame_imgs[i] = id; lastErr = null; }
+                    catch (e) { lastErr = String(e.message || e).slice(0, 140); }
+                }
+                if (lastErr) a.errs.push(`frame ${i + 1}: ${lastErr}`);
+                a.frames_done = bufs.filter(Boolean).length;
+                await write();
+            }
+            // 4) compose the strip + score on the trained models
+            a.status = 'scoring'; note = `attempt ${a.k + 1}: scoring on the trained models…`; await write();
+            try {
+                const okBufs = bufs.filter(Boolean);
+                if (!okBufs.length) throw new Error('no frames rendered');
+                const mon = await composeMontage(okBufs);
+                await cloud.uploadToR2(`hooks/grind/montages/${rid}_${a.k}.jpg`, mon, 'image/jpeg');
+                const score = await scoreMontage(mon, premise, spec.premise);
+                delete score.montage;   // the strip is already in R2 — don't double-store 200KB of b64
+                await cloud.uploadToR2(`hooks/grind/scores/${rid}_${a.k}.json`, Buffer.from(JSON.stringify(score)), 'application/json');
+                a.pct = grindPct(score, metric); a.hasScore = a.pct != null;
+            } catch (e) { a.errs.push('score: ' + String(e.message || e).slice(0, 140)); }
+            a.status = 'done';
+            note = a.pct != null ? `attempt ${a.k + 1} scored ${a.pct}th pctile (target ${threshold}) — best so far ${best()}` : `attempt ${a.k + 1} could not be scored`;
+            await write();
+            if (a.pct != null && a.pct >= threshold) { status = 'won'; winner = a.k; note = `🎯 attempt ${a.k + 1} cleared the bar: ${a.pct} ≥ ${threshold}`; }
+        }
+    } catch (e) { err = err || String(e.message || e); status = 'error'; }
+    if (status === 'running') { status = Date.now() >= deadline ? 'deadline' : 'maxed'; note = status === 'deadline' ? 'time budget used up — best attempt shown' : 'attempt budget used up — best attempt shown'; }
+    await genMemSave(mem).catch(() => {});
+    await write();
+}
+let _grindBusy = false;
+async function grindQueue() {
+    if (_grindBusy || !cloud.isR2Ready()) return;
+    let keys; try { keys = ((await cloud.listR2Keys('hooks/grind/requests/')) || []).filter(k => k.endsWith('.json')); } catch (e) { return; }
+    if (!keys.length) return;
+    _grindBusy = true;
+    try {
+        for (const key of keys) {
+            const rid = key.split('/').pop().replace('.json', '');
+            let req0 = {}; try { req0 = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) {}
+            await cloud.deleteFromR2(key).catch(() => {});
+            try { await grindProcess(rid, req0); } catch (e) { console.warn('grind err:', e.message); }
+        }
+    } finally { _grindBusy = false; }
+}
+setInterval(() => { grindQueue().catch(() => {}); }, 5000);
 
 // Initialize R2 cloud storage before accepting requests
 cloud.initR2();
