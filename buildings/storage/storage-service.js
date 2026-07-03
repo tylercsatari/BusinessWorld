@@ -321,11 +321,34 @@ const StorageService = (() => {
             const results = [...byId.values()].sort((a, b) => b.score - a.score);
             if (results.length) return { results, suggestions: [] };
 
-            // Nothing in R2 — suggest near-name R2 items only (no legacy index data).
-            const q = (name || '').toLowerCase().slice(0, 3);
-            const suggestions = q
-                ? items.map(i => i.name).filter(n => n.toLowerCase().includes(q)).slice(0, 5)
-                : [];
+            // No confident match — return the CLOSEST items (up to 10) so the caller can
+            // offer them: the user may have said it wrong, or it's stored under a different
+            // name. Semantic-nearest (reconciled to R2, so they're real items) ranked first,
+            // then a light fuzzy pass, then — if the word is totally unrelated — a small
+            // sample so there's never a dead end. All returned as {name, boxName, score}.
+            const sugById = new Map();
+            const addSug = (storeItem, score) => {
+                if (!storeItem) return;
+                const prev = sugById.get(storeItem.id);
+                if (prev && prev.score >= score) return;
+                sugById.set(storeItem.id, { name: storeItem.name, boxName: getBoxName(storeItem), score });
+            };
+            try {
+                const { bestMatch, suggestions } = await StorageEmbeddings.findBestMatch(name, 12);
+                if (bestMatch) addSug(resolveSemanticToStoreItem(bestMatch), bestMatch.score);
+                for (const m of (suggestions || [])) addSug(resolveSemanticToStoreItem(m), m.score);
+            } catch (e) { /* embeddings optional — fuzzy pass below still gives options */ }
+            // Light fuzzy pass: any R2 item sharing a word/prefix with the query.
+            const words = (name || '').toLowerCase().split(/\s+/).filter(w => w.length >= 3);
+            for (const it of items) {
+                const iName = (it.name || '').toLowerCase();
+                if (words.some(w => iName.includes(w) || w.includes(iName))) addSug(it, 0.4);
+            }
+            let suggestions = [...sugById.values()].sort((a, b) => b.score - a.score).slice(0, 10);
+            // Unrelated word → still show a few real items so the user has something to scan.
+            if (!suggestions.length) {
+                suggestions = items.slice(0, 8).map(i => ({ name: i.name, boxName: getBoxName(i), score: 0 }));
+            }
             return { results: [], suggestions };
         },
 

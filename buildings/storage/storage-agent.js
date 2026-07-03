@@ -25,7 +25,7 @@ const StorageAgent = (() => {
             type: 'function',
             function: {
                 name: 'search_inventory',
-                description: 'Semantic search for items already in storage. Use this to locate items, check what exists, verify a change, or resolve which item the user means. Returns matching items with their box, quantity, and similarity score.',
+                description: 'Semantic search for items already in storage. Use this to locate items, check what exists, verify a change, or resolve which item the user means. Returns { found:[...] } with box/quantity/score for matches. If nothing matches confidently it returns { found:[], suggestions:[...] } — the CLOSEST items in the room (by meaning, then spelling). ALWAYS look at suggestions before telling the user something isn\'t there: it may exist under a different name or they may have said it slightly wrong. When unsure, search a couple of related terms too (e.g. a synonym or the category).',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -206,7 +206,14 @@ HOW TO BEHAVE:
 - ACT, then VALIDATE: make the changes, then in your final reply briefly state what is now true (e.g. "Box A now has 5 batteries and 2 tapes; camera gear has the tripod and cables"). Use search_inventory to confirm when useful.
 - HISTORY: the user can ask where something used to be, what they removed, or to put something back. Use search_history to answer "where was X before I removed it" type questions.
 - ASK ONLY WHEN GENUINELY UNSURE: if a remove/move returns needsClarification (no confident match), ask which item they meant using the suggestions — don't guess. If a request is truly contradictory, ask. Otherwise just do it and create boxes as needed.
-- Keep spoken replies SHORT and natural — one or two sentences, no markdown, no lists, no headers.
+
+FINDING THINGS — NEVER DEAD-END THE USER:
+- People often say an item slightly wrong, or it's filed under a different name. So when the user asks for something and there's no exact match, DO NOT just say "you don't have that." First call search_inventory; it returns the closest items even when nothing matches exactly.
+- Offer the closest options — ideally 5 to 10 — by name, each with the box it's in, and ask if any of them is what they mean. Phrase it warmly, e.g. "I don't see a 'phillips head' by that exact name, but the closest things I have are: small screwdriver (box B), flathead driver (box B), hex key set (box C)… is it one of those?"
+- If the first search comes back thin or all unrelated, try one or two related terms (a synonym, the category, a brand) before concluding it's genuinely not there. Only after that should you say it doesn't appear to be in storage — and even then, name the nearest few so they can double-check.
+- This applies to any "do we have… / where is… / find…" question, whether it comes as a plain question or inside a larger request.
+
+- Keep replies SHORT and natural — normally one or two sentences, no markdown, no headers. EXCEPTION: when offering close options for a lookup, it's fine to read out a short list of candidate item names (with their boxes) so the user can pick — that's exactly what helps them.
 
 CURRENT INVENTORY:
 ${inventorySnapshot()}`;
