@@ -25,7 +25,7 @@ const ResearchUI = (() => {
     let vaultSort = 'views'; // 'views' | 'discoveredAt'
     let vaultFrameFilter = 'all'; // 'all' | 'done' | 'pending'
     // Last-Year dataset (the big crawl: last-year vertical shorts 10k–100M+, full 720p on R2, with metadata + outlier)
-    let lyVideos = [], lyStats = null, lyLoading = false, lySort = 'recent'; // 'recent' | 'views' | 'outlier'
+    let lyVideos = [], lyStats = null, lyLoading = false, lySort = 'recent', lyKind = 'shorts'; // sort: 'recent'|'views'|'outlier'; kind: 'shorts'|'long'
 
     const TIME_OPTIONS = [
         { key: 'week', label: 'This Week' },
@@ -291,7 +291,10 @@ const ResearchUI = (() => {
                         <div class="vault-subtitle" id="ly-subtitle">${sub}</div></div>
                     <button class="vault-refresh-btn" id="ly-refresh-btn">🔄</button>
                 </div>
-                <div class="vault-filters"><div class="vault-filter-group"><label>Sort:</label>
+                <div class="vault-filters">
+                    <div class="vault-filter-group"><label>Type:</label>
+                        <button class="vault-filter-btn${lyKind === 'shorts' ? ' active' : ''}" data-ly-kind="shorts">Shorts</button><button class="vault-filter-btn${lyKind === 'long' ? ' active' : ''}" data-ly-kind="long">Long</button></div>
+                    <div class="vault-filter-group"><label>Sort:</label>
                     ${sortBtn('recent', 'Newest')}${sortBtn('views', 'Views')}${sortBtn('outlier', 'Outlier')}</div></div>
             </div>
             <div class="research-results" id="lastyear-results">${lyLoading && lyVideos.length === 0
@@ -304,12 +307,12 @@ const ResearchUI = (() => {
         const out = v.outlier ? `<span class="vault-badge" style="background:${v.outlier >= 3 ? 'rgba(34,197,94,.18)' : 'rgba(148,163,184,.15)'};color:${v.outlier >= 3 ? '#4ade80' : '#94a3b8'}" title="views ÷ subscribers — how far it beat the channel's size">${v.outlier >= 1 ? v.outlier + '× subs' : v.outlier + '× subs'}</span>` : (v.src === 'vault' ? '<span class="vault-badge vault-badge-done">100M set</span>' : '');
         return `
             <div class="vault-card">
-                <div class="vault-card-thumb"><img src="https://i.ytimg.com/vi/${escAttr(v.videoId)}/hqdefault.jpg" alt="" loading="lazy" />${v.duration ? `<span class="research-thumb-duration">${escHtml(String(v.duration))}</span>` : ''}</div>
+                <div class="vault-card-thumb"><img src="https://i.ytimg.com/vi/${escAttr(v.videoId)}/hqdefault.jpg" alt="" loading="lazy" />${(() => { const d = v.duration || (v.durationSec ? Math.floor(v.durationSec / 60) + ':' + String(Math.round(v.durationSec % 60)).padStart(2, '0') : ''); return d ? `<span class="research-thumb-duration">${escHtml(String(d))}</span>` : ''; })()}</div>
                 <div class="vault-card-info">
                     <div class="vault-card-title" title="${escAttr(v.title || '')}">${escHtml(v.title || '')}</div>
                     <div class="vault-card-channel">${v.channelUrl ? `<a href="${escAttr(v.channelUrl)}" target="_blank" style="color:inherit;text-decoration:none">${escHtml(v.channel || '')}</a>` : escHtml(v.channel || '')}${subs ? ' · ' + subs : ''}</div>
                     <div class="vault-card-meta"><span class="vault-card-views">${formatViews(v.views)} views</span>${date ? `<span class="vault-card-published">${escHtml(date)}</span>` : ''}</div>
-                    <div class="vault-card-bottom">${out}<a href="https://www.youtube.com/shorts/${escAttr(v.videoId)}" target="_blank" class="vault-open-link">▶ Open</a></div>
+                    <div class="vault-card-bottom">${out}<a href="${escAttr(v.url || (v.kind === 'long' ? 'https://www.youtube.com/watch?v=' + v.videoId : 'https://www.youtube.com/shorts/' + v.videoId))}" target="_blank" class="vault-open-link">▶ Open</a></div>
                 </div>
             </div>`;
     }
@@ -324,19 +327,31 @@ const ResearchUI = (() => {
     async function fetchLastYearVideos() {
         lyLoading = true; renderLastYearResults();
         try {
-            const [libR, statR, shR] = await Promise.all([
-                fetch(`/api/library/videos?limit=300&sort=${lySort}`).then(r => r.json()).catch(() => ({ videos: [] })),
-                fetch('/api/library/stats').then(r => r.json()).catch(() => null),
-                fetch('/api/shorts-db/videos?limit=400&sort=views&minViews=0').then(r => r.json()).catch(() => ({ videos: [] })),
-            ]);
-            lyStats = statR;
-            const lib = (libR.videos || []).map(v => ({ ...v, src: 'library' }));
-            const seen = new Set(lib.map(v => v.videoId));
-            const vaultLY = (shR.videos || []).filter(v => !/year/i.test(v.publishedAt || '') && !seen.has(v.videoId))
-                .map(v => ({ videoId: v.videoId, title: v.title, channel: v.channelTitle, views: v.views, publishedAt: v.publishedAt, duration: v.duration, src: 'vault' }));
-            lyVideos = lib.concat(vaultLY);
-            if (lySort === 'views') lyVideos.sort((a, b) => (b.views || 0) - (a.views || 0));
-            else if (lySort === 'outlier') lyVideos.sort((a, b) => (b.outlier || 0) - (a.outlier || 0));
+            if (lyKind === 'long') {
+                // Long-form corpus (title+thumbnail only) — longform-crawler.js → /api/longquant/*
+                const [vidR, statR] = await Promise.all([
+                    fetch(`/api/longquant/videos?limit=300&sort=${lySort}`).then(r => r.json()).catch(() => ({ videos: [] })),
+                    fetch('/api/longquant/stats').then(r => r.json()).catch(() => null),
+                ]);
+                lyStats = statR;
+                lyVideos = (vidR.videos || []).map(v => ({ ...v, src: 'longform', kind: 'long' }));
+                if (lySort === 'views') lyVideos.sort((a, b) => (b.views || 0) - (a.views || 0));
+                else if (lySort === 'outlier') lyVideos.sort((a, b) => (b.outlier || 0) - (a.outlier || 0));
+            } else {
+                const [libR, statR, shR] = await Promise.all([
+                    fetch(`/api/library/videos?limit=300&sort=${lySort}`).then(r => r.json()).catch(() => ({ videos: [] })),
+                    fetch('/api/library/stats').then(r => r.json()).catch(() => null),
+                    fetch('/api/shorts-db/videos?limit=400&sort=views&minViews=0').then(r => r.json()).catch(() => ({ videos: [] })),
+                ]);
+                lyStats = statR;
+                const lib = (libR.videos || []).map(v => ({ ...v, src: 'library' }));
+                const seen = new Set(lib.map(v => v.videoId));
+                const vaultLY = (shR.videos || []).filter(v => !/year/i.test(v.publishedAt || '') && !seen.has(v.videoId))
+                    .map(v => ({ videoId: v.videoId, title: v.title, channel: v.channelTitle, views: v.views, publishedAt: v.publishedAt, duration: v.duration, src: 'vault' }));
+                lyVideos = lib.concat(vaultLY);
+                if (lySort === 'views') lyVideos.sort((a, b) => (b.views || 0) - (a.views || 0));
+                else if (lySort === 'outlier') lyVideos.sort((a, b) => (b.outlier || 0) - (a.outlier || 0));
+            }
         } catch (e) { /* ignore */ }
         lyLoading = false;
         const sub = document.getElementById('ly-subtitle');
@@ -349,6 +364,11 @@ const ResearchUI = (() => {
             lySort = b.dataset.lySort;
             container.querySelectorAll('[data-ly-sort]').forEach(x => x.classList.toggle('active', x.dataset.lySort === lySort));
             fetchLastYearVideos();
+        }));
+        container.querySelectorAll('[data-ly-kind]').forEach(b => b.addEventListener('click', () => {
+            lyKind = b.dataset.lyKind;
+            container.querySelectorAll('[data-ly-kind]').forEach(x => x.classList.toggle('active', x.dataset.lyKind === lyKind));
+            lyVideos = []; fetchLastYearVideos();
         }));
         document.getElementById('ly-refresh-btn')?.addEventListener('click', () => fetchLastYearVideos());
     }

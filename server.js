@@ -3033,6 +3033,22 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         await serveR2Gz(req, res, `raw/${ch}/map.json`, 300e3, { n: 0, channel: ch });
         return;
     }
+    // Long Quant raw embeddings (title+thumbnail), namespaced raw-long/. Built later by raw_embed_long.py.
+    if (pathname === '/api/raw-long/map' && req.method === 'GET') {
+        const ch = (url.searchParams.get('channel') || 'visual').replace(/[^a-z]/g, '');
+        await serveR2Gz(req, res, `raw-long/${ch}/map.json`, 300e3, { n: 0, channel: ch });
+        return;
+    }
+    // For long-form the "montage" input IS the thumbnail we already stored.
+    const rawLongThumb = pathname.match(/^\/api\/raw-long\/montage\/([\w-]{6,16})$/);
+    if (rawLongThumb && req.method === 'GET') {
+        try {
+            const buf = await cloud.downloadFromR2(`longform/thumbs/${rawLongThumb[1]}.jpg`);
+            if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); }
+            else { res.writeHead(404); res.end(); }
+        } catch (e) { res.writeHead(500); res.end(); }
+        return;
+    }
     // ── Saved hooks: generated ideas / scored hooks the user wants to keep (R2 raw/saved-hooks/) ──
     if (pathname === '/api/raw/hook-save' && req.method === 'POST') {
         try {
@@ -3145,6 +3161,23 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if (pathname === '/api/retention/study' && req.method === 'GET') {
         const id = (url.searchParams.get('id') || '').replace(/[^a-z0-9_-]/gi, '');
         await serveR2Gz(req, res, `retention/study_${id}.json`, 300e3, { error: 'no study' }, 404);
+        return;
+    }
+    // ── Long Quant: long-form per-channel account analysis (mirror of /api/retention/*) ──
+    // Populated by scrape-channels-long.js → R2 longform/{channels,ret_<id>,study_<id>}.json
+    if (pathname === '/api/longquant/channels' && req.method === 'GET') {
+        await serveR2Gz(req, res, 'longform/channels.json', 60e3,
+            { active: 'tyler', channels: [{ id: 'tyler', name: 'Main', table: 'retention_table.json', n: 0, owner: true }] });
+        return;
+    }
+    if (pathname === '/api/longquant/table' && req.method === 'GET') {
+        const id = (url.searchParams.get('id') || '').replace(/[^a-z0-9_-]/gi, '');
+        await serveR2Gz(req, res, `longform/ret_${id}.json`, 300e3, { error: 'not found', videos: [] }, 404);
+        return;
+    }
+    if (pathname === '/api/longquant/study' && req.method === 'GET') {
+        const id = (url.searchParams.get('id') || '').replace(/[^a-z0-9_-]/gi, '');
+        await serveR2Gz(req, res, `longform/study_${id}.json`, 300e3, { error: 'no study' }, 404);
         return;
     }
     const rawMon = pathname.match(/^\/api\/raw\/montage\/([\w-]{6,16})$/);

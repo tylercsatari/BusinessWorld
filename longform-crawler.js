@@ -15,7 +15,7 @@ const cloud = require('./cloud-storage');
 const sc = require('./shorts-crawler');
 if (cloud.initR2 && !cloud.isR2Ready()) cloud.initR2();
 
-const MIN_VIEWS = 10_000;
+const MIN_VIEWS = 1_000;                   // ~1k → billions (full range, last year)
 const MAX_VIEWS = Infinity;
 const TARGET = 50_000;                     // tens of thousands
 const UPLOAD_DATE = 5;                     // YouTube filter: this year
