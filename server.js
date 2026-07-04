@@ -1241,7 +1241,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/api/')) {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-QRD-Type, X-QRD-Ext');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
         if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
     }
 
@@ -1402,44 +1402,6 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =========================================
-    // API: QRD predictive playground — upload a reel, get swipe-away/dud risk
-    // (reliable, AUC 0.84) + a weak retention ranking estimate. Runs the
-    // reproducible extracted-only model (librosa/opencv/whisper, no LLM).
-    // Raw binary body; metadata in X-QRD-Type (video|audio) / X-QRD-Ext headers.
-    // =========================================
-    if (pathname === '/api/qrd/predict' && req.method === 'POST') {
-        const type = (req.headers['x-qrd-type'] === 'audio') ? 'audio' : 'video';
-        const ext = (req.headers['x-qrd-ext'] || (type === 'audio' ? 'wav' : 'mp4')).replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'mp4';
-        const chunks = [];
-        let size = 0;
-        const MAX = 200 * 1024 * 1024; // 200 MB cap
-        req.on('data', c => { size += c.length; if (size > MAX) { req.destroy(); } chunks.push(c); });
-        req.on('end', () => {
-            if (size === 0 || size > MAX) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'empty or too-large upload (max 200MB)' })); return; }
-            const os = require('os');
-            const tmp = path.join(os.tmpdir(), `qrd_upload_${Date.now()}_${Math.round(Math.random() * 1e6)}.${ext}`);
-            try { fs.writeFileSync(tmp, Buffer.concat(chunks)); }
-            catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write failed: ' + e.message })); return; }
-            const script = path.join(__dirname, 'buildings', 'jarvis', 'qrd', 'extract_one.py');
-            const py = spawn('python3', [script, '--file', tmp, '--type', type], { env: { ...process.env } });
-            let out = '', err = '';
-            py.stdout.on('data', d => out += d);
-            py.stderr.on('data', d => err += d);
-            const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 240000);
-            py.on('close', () => {
-                clearTimeout(timer);
-                try { fs.unlinkSync(tmp); } catch (e) {}
-                const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
-                if (!line) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'extraction produced no result', stderr: err.slice(-600) })); return; }
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(line);
-            });
-            py.on('error', e => { clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (_) {} res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'spawn failed: ' + e.message })); });
-        });
-        req.on('error', () => { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'upload stream error' })); });
-        return;
-    }
-
     // RAW upload — embed an uploaded video's first-5s hook (visual/text/together) and
     // locate it in the existing map by nearest neighbours. Raw binary body; ext in X-Raw-Ext.
     if (pathname === '/api/raw/embed-upload' && req.method === 'POST') {
@@ -1486,9 +1448,16 @@ const server = http.createServer(async (req, res) => {
     // RAW build-a-hook — a montage (5 frames stitched in the browser) + user-set text.
     // No ffmpeg/transcription: just embed visual/text/together and locate by neighbours.
     if (pathname === '/api/raw/embed-montage' && req.method === 'POST') {
-        let body = ''; let size = 0; const MAX = 25 * 1024 * 1024;
-        req.on('data', c => { size += c.length; if (size > MAX) req.destroy(); body += c; });
+        let body = ''; let size = 0, tooBig = false; const MAX = 25 * 1024 * 1024;
+        // Over cap: stop buffering and drain to end, then reply 413 (see /api/qrd/predict).
+        req.on('data', c => {
+            if (tooBig) return;
+            size += c.length;
+            if (size > MAX) { tooBig = true; body = ''; return; }
+            body += c;
+        });
         req.on('end', () => {
+            if (tooBig) { res.writeHead(413, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'montage too large (max 25MB)' })); return; }
             let j; try { j = JSON.parse(body); } catch (e) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'bad json' })); return; }
             const m = (j.montage || '').toString().replace(/^data:image\/\w+;base64,/, '');
             if (!m) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'no montage' })); return; }
@@ -1509,34 +1478,7 @@ const server = http.createServer(async (req, res) => {
             });
             py.on('error', e => { clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (_) {} res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'spawn failed: ' + e.message })); });
         });
-        req.on('error', () => { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'upload stream error' })); });
-        return;
-    }
-
-    // Quant 2 (pure) — score a new hook from raw pixels/audio (DINOv2+VideoMAE+wav2vec2+DSP, no LLM)
-    if (pathname === '/api/quant2/predict' && req.method === 'POST') {
-        const chunks = []; let size = 0; const MAX = 200 * 1024 * 1024;
-        req.on('data', c => { size += c.length; if (size > MAX) req.destroy(); chunks.push(c); });
-        req.on('end', () => {
-            if (size === 0 || size > MAX) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'empty or too-large upload (max 200MB)' })); return; }
-            const os = require('os');
-            const tmp = path.join(os.tmpdir(), `q2_${Date.now()}_${Math.round(Math.random() * 1e6)}.mp4`);
-            try { fs.writeFileSync(tmp, Buffer.concat(chunks)); }
-            catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write failed: ' + e.message })); return; }
-            const script = path.join(__dirname, 'buildings', 'jarvis', 'quant2', 'predict_pure.py');
-            const py = spawn('python3', [script, '--file', tmp], { env: { ...process.env } });
-            let out = '', err = '';
-            py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-            const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 300000);
-            py.on('close', () => {
-                clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (e) {}
-                const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
-                if (!line) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'prediction produced no result', stderr: err.slice(-600) })); return; }
-                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(line);
-            });
-            py.on('error', e => { clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (_) {} res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'spawn failed: ' + e.message })); });
-        });
-        req.on('error', () => { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'upload stream error' })); });
+        req.on('error', () => { if (res.headersSent) return; res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'upload stream error' })); });
         return;
     }
 
@@ -3045,6 +2987,36 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // Library dataset stats (the big research video set on R2)
     if (pathname === '/api/library/stats' && req.method === 'GET') {
         await serveR2Gz(req, res, 'library/stats.json', 60e3, { stored: 0, discovered: 0, target: 100000 });
+        return;
+    }
+    // Long Quant — long-form (horizontal) thumbnail+title corpus (longform-crawler.js)
+    if (pathname === '/api/longquant/stats' && req.method === 'GET') {
+        await serveR2Gz(req, res, 'longform/stats.json', 60e3, { stored: 0, discovered: 0, target: 50000 });
+        return;
+    }
+    if (pathname === '/api/longquant/videos' && req.method === 'GET') {
+        try {
+            const limit = Math.min(parseInt(url.searchParams.get('limit')) || 150, 400);
+            let videos = [];
+            try {
+                const buf = await cloud.downloadFromR2('longform/db.json');
+                if (buf) {
+                    const db = JSON.parse(buf.toString('utf8'));
+                    const sort = url.searchParams.get('sort') || 'recent';
+                    let arr = Object.values(db.videos || {}).filter(v => v.stored);
+                    arr.sort(sort === 'views' ? (a, b) => (b.views || 0) - (a.views || 0)
+                        : sort === 'outlier' ? (a, b) => (b.outlier || 0) - (a.outlier || 0)
+                        : (a, b) => (b.storedAt || 0) - (a.storedAt || 0));
+                    videos = arr.slice(0, limit).map(v => ({ videoId: v.videoId, title: v.title, channel: v.channel, channelUrl: v.channelUrl,
+                        views: v.views, subs: v.subs, outlier: v.outlier != null ? v.outlier : (v.subs > 0 ? +((v.views || 0) / v.subs).toFixed(1) : null),
+                        publishedAt: v.publishedAt, uploadDate: v.uploadDate, likes: v.likes, comments: v.comments,
+                        durationSec: v.durationSec, width: v.width, height: v.height,
+                        thumb: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`, url: v.url || `https://www.youtube.com/watch?v=${v.videoId}` }));
+                }
+            } catch (e) {}
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify({ videos }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
     if (pathname === '/api/indicators/registry' && req.method === 'GET') {

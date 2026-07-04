@@ -1,7 +1,7 @@
 /* ── Jarvis Building ── Analytical Intelligence Hub ── */
 const JarvisUI = (() => {
     let container = null;
-    let activeTab = 'qrd';
+    let activeTab = 'retention';
     let dataset = null;
     let activeToolId = null;
     let toolResults = {};
@@ -105,9 +105,8 @@ const JarvisUI = (() => {
 
     // ── Tab structure ──
     const TABS = [
-        { id: 'qrd', label: '🔬 Quant Decoder' },
-        { id: 'quant2', label: '🧬 Quant 2' },
-        { id: 'retention', label: '📉 Retention→Views' },
+        { id: 'retention', label: '📊 Shorts Quant' },
+        { id: 'longquant', label: '🎬 Long Quant' },
         { id: 'analytical', label: 'Analytical' },
         { id: 'tactical', label: 'Tactical' },
         { id: 'experiments', label: 'Experiments' },
@@ -205,9 +204,8 @@ const JarvisUI = (() => {
 
     function renderTab() {
         switch (activeTab) {
-            case 'qrd': return '<div id="qrd-root"></div>';
-            case 'quant2': return '<div id="quant2-root"></div>';
             case 'retention': return '<div id="retention-root"></div>';
+            case 'longquant': return '<div id="longquant-root"></div>';
             case 'analytical': return renderAnalytical();
             case 'tactical': return renderTactical();
             case 'experiments': return renderExperiments();
@@ -11149,26 +11147,22 @@ const JarvisUI = (() => {
             btn.addEventListener('click', () => executeTool(btn.dataset.tool));
         });
 
-        // QRD (Quant Research Decoded): hand off the mounted root to the
-        // self-contained module, which manages its own data, render & events.
-        if (activeTab === 'qrd' && window.JarvisQRD) {
-            const qrdRoot = container.querySelector('#qrd-root');
-            if (qrdRoot) window.JarvisQRD.mount(qrdRoot);
-        }
-        if (activeTab === 'quant2' && window.JarvisQuant2) {
-            const q2Root = container.querySelector('#quant2-root');
-            if (q2Root) window.JarvisQuant2.mount(q2Root);
-        }
+        // Self-contained modules: hand off the mounted root to each, which
+        // manages its own data, render & events.
         if (activeTab === 'retention' && window.JarvisRetention) {
             const rRoot = container.querySelector('#retention-root');
             if (rRoot) window.JarvisRetention.mount(rRoot);
+        }
+        if (activeTab === 'longquant' && window.JarvisLongQuant) {
+            const lqRoot = container.querySelector('#longquant-root');
+            if (lqRoot) window.JarvisLongQuant.mount(lqRoot);
         }
     }
 
     // ── Public API ──
     function open(bodyEl) {
         container = bodyEl;
-        activeTab = 'qrd';
+        activeTab = 'retention';
         dataset = null;
         activeToolId = null;
         toolResults = {};
