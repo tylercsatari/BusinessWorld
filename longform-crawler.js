@@ -198,7 +198,9 @@ async function discover() {
 // full metadata dump (no download) — dimensions for the horizontal filter + everything else
 const { execFile } = require('child_process');
 function ytJson(id) {
-    return new Promise(res => execFile('yt-dlp', ['--no-playlist', '-q', '--no-warnings', '-J', `https://www.youtube.com/watch?v=${id}`],
+    return new Promise(res => execFile('yt-dlp', ['--no-playlist', '-q', '--no-warnings',
+        '--extractor-args', 'youtube:player_client=web_safari,mweb,tv_embedded,web_embedded',   // bypass the "confirm you're not a bot" wall without cookies
+        '-J', `https://www.youtube.com/watch?v=${id}`],
         { timeout: 70000, maxBuffer: 96 * 1024 * 1024 }, (err, out) => { if (err) return res(null); try { res(JSON.parse(out)); } catch { res(null); } }));
 }
 // LONG-FORM = horizontal only. Reject vertical/square (those are shorts territory).
