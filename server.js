@@ -3042,8 +3042,19 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // For long-form the "montage" input IS the thumbnail we already stored.
     const rawLongThumb = pathname.match(/^\/api\/raw-long\/montage\/([\w-]{6,16})$/);
     if (rawLongThumb && req.method === 'GET') {
+        const vid = rawLongThumb[1];
         try {
-            const buf = await cloud.downloadFromR2(`longform/thumbs/${rawLongThumb[1]}.jpg`);
+            let buf = await cloud.downloadFromR2(`longform/thumbs/${vid}.jpg`);   // crawled corpus thumbnails
+            if (!buf) {
+                // owned account videos aren't in the corpus store — serve the exact input we embedded
+                // (their YouTube thumbnail) straight from the CDN so the panel always shows the thumbnail.
+                for (const nm of ['maxresdefault', 'hqdefault']) {
+                    try {
+                        const r = await fetch(`https://i.ytimg.com/vi/${vid}/${nm}.jpg`);
+                        if (r.ok) { const ab = Buffer.from(await r.arrayBuffer()); if (ab.length > 1500) { buf = ab; break; } }
+                    } catch (e) {}
+                }
+            }
             if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); }
             else { res.writeHead(404); res.end(); }
         } catch (e) { res.writeHead(500); res.end(); }
