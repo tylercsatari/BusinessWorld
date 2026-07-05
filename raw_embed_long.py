@@ -37,7 +37,7 @@ DIM = 1536
 KEY = env('GEMINI_API_KEY')
 EMB_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent'
 CHANS = ['visual', 'text', 'together']
-SAVE_EVERY = int(os.environ.get('RAW_LONG_SAVE_EVERY', '250'))
+SAVE_EVERY = int(os.environ.get('RAW_LONG_SAVE_EVERY', '100'))
 LIMIT = int(os.environ.get('RAW_LONG_LIMIT', '0'))
 
 def embed(parts):
@@ -210,8 +210,12 @@ def main():
         n += 1
         if n % 50 == 0: print(f"  embedded {n}/{len(todo)} (last: {v['title'][:44]!r} {v['views']:,.0f} views)", flush=True)
         if n % SAVE_EVERY == 0:
-            for c in CHANS: save_npz(c); build_map(c)   # rebuild maps each checkpoint so the Raw tab fills progressively
-            print(f"  ✓ checkpoint saved + maps rebuilt at {n}", flush=True)
+            for c in CHANS: save_npz(c)                 # persist embeddings often (cheap)
+            if n % (SAVE_EVERY * 5) == 0:               # rebuild the expensive UMAP/PLS maps less often
+                for c in CHANS: build_map(c)
+                print(f"  ✓ checkpoint + maps rebuilt at {n}", flush=True)
+            else:
+                print(f"  ✓ embeddings saved at {n}", flush=True)
     for c in CHANS: save_npz(c); build_map(c)
     print(f"done — embedded {n} this run. raw-long/{{visual,text,together}}/embeddings.npz + map.json on R2.", flush=True)
 
