@@ -166,24 +166,37 @@ function parseRetention(body, videoId) {
     };
 }
 
-// load the Reach tab so its get_screen payload (impressions/CTR) fires, capture it
+// one-time raw-payload dumps so we can pin the EXACT Studio metric keys (dir is gitignored)
+let _dbgReach = true, _dbgRet = true;
+
+// load the Reach tab so its get_screen payload (impressions/CTR) fires, capture it.
+// domcontentloaded (NOT networkidle — Studio's SPA never idles → 30s hangs + tab instability),
+// then poll until the get_screen XHR arrives.
 async function scrapeReach(page, videoId) {
     let body = null;
-    const h = async (resp) => { const u = resp.url(); if (u.includes('youtubei') && u.includes('get_screen')) { try { const b = await resp.text(); if (b.includes('VIDEO_THUMBNAIL_IMPRESSIONS')) body = b; } catch (e) {} } };
+    const h = async (resp) => { try { const u = resp.url(); if (u.includes('youtubei') && u.includes('get_screen')) { const b = await resp.text(); if (/IMPRESSION|CLICK_THROUGH|THUMBNAIL/i.test(b)) body = b; } } catch (e) {} };
     page.on('response', h);
-    await page.goto(`https://studio.youtube.com/video/${videoId}/analytics/tab-reach`, { waitUntil: 'networkidle', timeout: 30000 }).catch(() => {});
-    await page.waitForTimeout(2500);
-    page.off('response', h);
+    try {
+        await page.goto(`https://studio.youtube.com/video/${videoId}/analytics/tab-reach`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+        for (let t = 0; t < 30 && !body; t++) await page.waitForTimeout(500);   // up to ~15s for the XHR to fire
+    } finally { try { page.off('response', h); } catch (e) {} }
+    if (body && _dbgReach) { _dbgReach = false; try { fs.writeFileSync(path.join(RET_DIR, '_debug_reach.json'), body); console.log('\n  [debug] wrote first Reach payload → longform-study/retention/_debug_reach.json'); } catch (e) {} }
     return body ? parseReach(body) : {};
 }
 
 // load the video's analytics so the get_screen payload (with the retention curve) fires, capture it
 async function scrapeRetention(page, videoId) {
     let body = null;
-    const h = async (resp) => { const u = resp.url(); if (u.includes('youtubei') && u.includes('get_screen')) { try { const b = await resp.text(); if (b.includes('retentionValues')) body = b; } catch (e) {} } };
+    const h = async (resp) => { try { const u = resp.url(); if (u.includes('youtubei') && u.includes('get_screen')) { const b = await resp.text(); if (b.includes('retentionValues')) body = b; } } catch (e) {} };
     page.on('response', h);
-    for (const tab of ['tab-overview', 'tab-engagement']) { if (body) break; await page.goto(`https://studio.youtube.com/video/${videoId}/analytics/${tab}`, { waitUntil: 'networkidle', timeout: 30000 }).catch(() => {}); await page.waitForTimeout(2500); }
-    page.off('response', h);
+    try {
+        for (const tab of ['tab-overview', 'tab-engagement']) {
+            if (body) break;
+            await page.goto(`https://studio.youtube.com/video/${videoId}/analytics/${tab}`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+            for (let t = 0; t < 24 && !body; t++) await page.waitForTimeout(500);   // up to ~12s per tab
+        }
+    } finally { try { page.off('response', h); } catch (e) {} }
+    if (body && _dbgRet) { _dbgRet = false; try { fs.writeFileSync(path.join(RET_DIR, '_debug_retention.json'), body); console.log('\n  [debug] wrote first Retention payload → longform-study/retention/_debug_retention.json'); } catch (e) {} }
     return body ? parseRetention(body, videoId) : {};
 }
 
@@ -230,8 +243,8 @@ async function main() {
     const cfg = JSON.parse(fs.readFileSync(CONFIG, 'utf8'));
     fs.mkdirSync(RET_DIR, { recursive: true });
     const context = await chromium.launchPersistentContext(scraper.SESSION_DIR, { headless: false, channel: 'chrome', viewport: { width: 1280, height: 900 } });
-    const page = context.pages()[0] || await context.newPage();
-    const metaPage = await context.newPage();   // separate tab for public metadata (keeps Studio context)
+    let page = context.pages()[0] || await context.newPage();
+    let metaPage = await context.newPage();   // separate tab for public metadata (keeps Studio context)
     await page.bringToFront();
     await page.goto('https://studio.youtube.com', { waitUntil: 'domcontentloaded' });
     await ask('\nMake sure you are LOGGED IN to YouTube Studio in the Chrome window, then press Enter…');
@@ -256,6 +269,11 @@ async function main() {
         for (let i = 0; i < ids.length; i++) {
             process.stdout.write(`  [${i + 1}/${ids.length}] ${ids[i]} … `);
             try {
+                // recover a tab that died mid-run (Studio can close it) instead of failing every remaining video
+                if (page.isClosed() || metaPage.isClosed()) {
+                    try { if (page.isClosed()) page = await context.newPage(); if (metaPage.isClosed()) metaPage = await context.newPage(); }
+                    catch (e) { console.log('\n⚠ browser/context closed — stopping this channel (re-run to resume; saved videos are already on R2).'); break; }
+                }
                 const meta = await fetchMeta(metaPage, ids[i]);         // views / title / duration / published (PUBLIC watch page)
                 // GATE: only PUBLIC videos from the last year. Private (owner still sees metadata → use
                 // videoDetails.isPrivate) and unavailable (no metadata) are dropped; so is anything > 1yr old.
