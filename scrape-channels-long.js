@@ -35,6 +35,7 @@ const STUDY = path.join(__dirname, 'buildings/jarvis/longform-study');
 const RET_DIR = path.join(STUDY, 'retention');
 const CHANNELS_JSON = path.join(STUDY, 'channels.json');
 const CONFIG = path.join(__dirname, process.argv[2] || 'scrape-channels-long.config.json');
+const YEAR_MS = 365 * 24 * 3600 * 1000;   // "past year" rolling window
 
 const ask = (q) => new Promise(res => { const rl = readline.createInterface({ input: process.stdin, output: process.stdout }); rl.question(q, a => { rl.close(); res(a); }); });
 
@@ -51,14 +52,40 @@ async function discoverVideoIds(page) {
     const url = chId ? `https://studio.youtube.com/channel/${chId}/videos/upload` : 'https://studio.youtube.com';
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(2500);
-    const ids = new Set();
-    for (let scroll = 0; scroll < 40; scroll++) {
-        const batch = await page.evaluate(() => Array.from(document.querySelectorAll('a[href*="/video/"]')).map(a => (a.getAttribute('href').match(/\/video\/([\w-]{6,})/) || [])[1]).filter(Boolean));
-        batch.forEach(id => ids.add(id));
+    // capture id + visibility + row text per row, then drop Private/Draft/Scheduled, and (where the
+    // grid publish date is legible) anything older than a year. fetchMeta re-checks privacy + date.
+    const seen = new Map();
+    for (let scroll = 0; scroll < 60; scroll++) {
+        const batch = await page.evaluate(() => {
+            const out = [];
+            const rows = document.querySelectorAll('ytcp-video-row');
+            const pick = (row) => {
+                const a = row.querySelector('a[href*="/video/"]');
+                const id = a ? (a.getAttribute('href').match(/\/video\/([\w-]{6,})/) || [])[1] : null;
+                if (!id) return;
+                const visEl = row.querySelector('[id*="visibility" i], [class*="visibility" i], ytcp-video-visibility-select');
+                const vis = ((visEl && (visEl.innerText || visEl.textContent)) || '').replace(/\s+/g, ' ').trim();
+                const txt = ((row.innerText || row.textContent) || '').replace(/\s+/g, ' ').trim();
+                out.push({ id, vis, txt });
+            };
+            if (rows.length) rows.forEach(pick);
+            else document.querySelectorAll('a[href*="/video/"]').forEach(a => { const id = (a.getAttribute('href').match(/\/video\/([\w-]{6,})/) || [])[1]; if (id) out.push({ id, vis: '', txt: '' }); });
+            return out;
+        });
+        batch.forEach(r => { if (!seen.has(r.id)) seen.set(r.id, r); });
         await page.mouse.wheel(0, 4000); await page.waitForTimeout(700);
         if (scroll > 3 && batch.length === 0) break;
     }
-    return [...ids];
+    const PRIV = /\b(Private|Draft|Scheduled)\b/i, cutoff = Date.now() - YEAR_MS;
+    const kept = [], dPriv = [], dOld = [];
+    for (const [id, r] of seen) {
+        if (r.vis ? PRIV.test(r.vis) : PRIV.test(r.txt)) { dPriv.push(id); continue; }   // exclude private/draft/scheduled
+        const dm = r.txt.match(/([A-Z][a-z]{2,9}\.? \d{1,2}, \d{4})/);                    // grid publish date, if legible
+        if (dm) { const t = Date.parse(dm[1].replace('.', '')); if (!isNaN(t) && t < cutoff) { dOld.push(id); continue; } }
+        kept.push(id);
+    }
+    console.log(`  discovery: ${seen.size} found → ${kept.length} public & last-year kept · ${dPriv.length} private/draft/scheduled skipped · ${dOld.length} older-than-1yr skipped (fetchMeta re-checks each)`);
+    return kept;
 }
 
 // public video metadata (views/title/duration/date) via a SECOND tab in the same logged-in
@@ -69,7 +96,7 @@ async function fetchMeta(metaPage, videoId) {
         await metaPage.waitForTimeout(400);
         return await metaPage.evaluate(() => {
             const r = window.ytInitialPlayerResponse || {}; const vd = r.videoDetails || {}, mf = (r.microformat || {}).playerMicroformatRenderer || {};
-            return { title: vd.title || null, views: parseInt(vd.viewCount) || null, duration_s: parseInt(vd.lengthSeconds) || null, published: mf.publishDate || mf.uploadDate || null };
+            return { title: vd.title || null, views: parseInt(vd.viewCount) || null, duration_s: parseInt(vd.lengthSeconds) || null, published: mf.publishDate || mf.uploadDate || null, is_private: !!vd.isPrivate };
         });
     } catch (e) { return {}; }
 }
@@ -224,12 +251,20 @@ async function main() {
             if (final) console.log(`Saved longform/ret_${ch.id}.json (${rows.length} videos) → R2.`);
             else console.log(`  …progress saved (${rows.length}/${ids.length}) → R2`);
         };
+        const cutoff = Date.now() - YEAR_MS;
+        let skipPriv = 0, skipOld = 0;
         for (let i = 0; i < ids.length; i++) {
             process.stdout.write(`  [${i + 1}/${ids.length}] ${ids[i]} … `);
             try {
+                const meta = await fetchMeta(metaPage, ids[i]);         // views / title / duration / published (PUBLIC watch page)
+                // GATE: only PUBLIC videos from the last year. Private (owner still sees metadata → use
+                // videoDetails.isPrivate) and unavailable (no metadata) are dropped; so is anything > 1yr old.
+                if (meta.is_private) { skipPriv++; console.log('skip (private)'); continue; }
+                const pub = meta.published ? Date.parse(meta.published) : NaN;
+                if (isNaN(pub)) { skipPriv++; console.log('skip (unavailable — no public metadata)'); continue; }
+                if (pub < cutoff) { skipOld++; console.log(`skip (older than 1yr · ${String(meta.published).slice(0, 10)})`); continue; }
                 const reach = await scrapeReach(page, ids[i]);          // ctr / impressions
                 const ret = await scrapeRetention(page, ids[i]);        // curve / curve_abs / ret5 / ret30 / avg_view_duration
-                const meta = await fetchMeta(metaPage, ids[i]);         // views / title / duration / published
                 const row = toRow(ids[i], Object.assign({}, reach, ret), meta);
                 rows.push(row);
                 // per-video files (local + R2)
@@ -239,6 +274,7 @@ async function main() {
             } catch (e) { console.log('failed:', e.message.slice(0, 60)); }
             if (rows.length && (i + 1) % 20 === 0) await save(false);      // checkpoint every 20
         }
+        console.log(`  ${ch.name}: ${rows.length} public last-year videos scraped · skipped ${skipPriv} private/unavailable · ${skipOld} older-than-1yr`);
         await save(true);
     }
     await context.close();
