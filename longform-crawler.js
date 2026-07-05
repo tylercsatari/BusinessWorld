@@ -17,7 +17,7 @@ if (cloud.initR2 && !cloud.isR2Ready()) cloud.initR2();
 
 const MIN_VIEWS = 1_000;                   // ~1k → billions (full range, last year)
 const MAX_VIEWS = Infinity;
-const TARGET = 50_000;                     // tens of thousands
+const TARGET = 100_000;                    // overnight: grab as many as possible
 const UPLOAD_DATE = 5;                     // YouTube filter: this year
 const CONC = 8;                            // concurrent thumbnail+meta fetches (light — no video)
 const DB_KEY = 'longform/db.json';
@@ -87,6 +87,36 @@ const QUERIES = [
     'hindi vlog', 'tamil', 'telugu', 'bangla', 'urdu podcast', 'arabic', 'spanish', 'portugues', 'brasil', 'indonesia',
     'filipino', 'korean', 'japanese', 'thai', 'vietnam', 'turkce', 'russian', 'polski', 'deutsch', 'francais', 'italiano',
     'podcast episode', 'interview', 'full episode', 'q and a', 'ama', 'fireside chat', 'panel discussion', 'keynote',
+    // ── overnight mega-pool (keep discovery from drying up before 100k) ──
+    'best', 'worst', 'top 10', 'top 5', 'greatest', 'insane', 'unbelievable', 'satisfying', 'oddly satisfying',
+    'compilation', 'moments', 'highlights', 'fails', 'wins', 'clips', 'edit', 'montage', 'supercut',
+    'vs', 'comparison', 'which is better', 'battle', 'showdown', 'tournament', 'championship', 'finals',
+    'review 2024', 'review 2025', 'unboxing 2025', 'first impressions', 'long term review', 'one year later',
+    'explained in', 'in 10 minutes', 'in 5 minutes', 'in depth', 'deep dive into', 'everything about', 'the science of',
+    'how to make', 'how to build', 'how to fix', 'how to draw', 'how to cook', 'how to start', 'how to grow', 'how to learn',
+    'diy', 'build with me', 'restoration project', 'transformation', 'before and after', 'makeover', 'flip',
+    'street interview', 'man on the street', 'social experiment', 'prank', 'undercover', 'hidden camera',
+    'reaction to', 'reacting', 'watching for the first time', 'blind reaction', 'americans react', 'tier list ranking',
+    'basketball highlights', 'football highlights', 'soccer skills', 'nba', 'nfl', 'fifa', 'ufc', 'boxing highlights', 'f1',
+    'guitar cover', 'piano cover', 'drum cover', 'live performance', 'concert', 'acoustic', 'lo fi', 'beat making',
+    'cooking show', 'baking recipe', 'street food', 'taste test', 'food review', 'mukbang', 'what i ate', 'restaurant tour',
+    'workout routine', 'full body workout', 'home workout', 'gym motivation', 'yoga class', 'stretching', 'meditation',
+    'travel guide', 'things to do in', 'living in', 'cost of living', 'moving abroad', 'city tour', 'road trip', 'hidden gems',
+    'nature', 'hiking trail', 'camping trip', 'backpacking', 'wildlife documentary', 'ocean documentary', 'space exploration',
+    'car review', 'suv', 'electric car', 'truck review', 'motorcycle review', 'test drive', 'pov drive', 'car detailing',
+    'tech review', 'smartphone', 'laptop review', 'gaming pc', 'keyboard', 'headphones', 'camera review', 'gadgets',
+    'coding project', 'build an app', 'web development', 'full stack', 'system design', 'leetcode', 'devops', 'cybersecurity',
+    'ai explained', 'chatgpt tutorial', 'ai tools 2025', 'automate', 'no code', 'saas', 'startup story', 'founder interview',
+    'personal finance', 'budgeting', 'debt free', 'investing for beginners', 'retirement', 'real estate investing', 'taxes',
+    'productivity', 'study with me', 'note taking', 'digital minimalism', 'morning routine', 'self improvement', 'discipline',
+    'history of', 'the fall of', 'ancient rome', 'world war', 'cold war', 'medieval', 'empire', 'lost civilization',
+    'true crime', 'documentary 2025', 'investigation', 'case file', 'mystery', 'unsolved', 'disappearance', 'scandal',
+    'minecraft', 'fortnite', 'roblox', 'valorant', 'league of legends', 'gta 5', 'call of duty', 'elden ring', 'zelda', 'pokemon',
+    'movie review', 'film analysis', 'ending explained', 'trailer breakdown', 'top movies', 'best shows', 'anime recap',
+    'kdrama', 'bollywood', 'nollywood', 'telenovela', 'comedy sketch', 'stand up', 'improv', 'parody', 'skit',
+    'hindi', 'tamil', 'telugu', 'kannada', 'malayalam', 'marathi', 'gujarati', 'punjabi', 'bengali', 'urdu',
+    'espanol', 'portugues', 'francais', 'deutsch', 'italiano', 'nederlands', 'polski', 'turkce', 'русский', '日本語', '한국어',
+    'tagalog', 'bahasa indonesia', 'bahasa melayu', 'ไทย', 'tiếng việt', 'العربية', 'فارسی', 'kiswahili', 'yoruba', 'amharic',
 ];
 
 let db = null, running = false, stop = false;
