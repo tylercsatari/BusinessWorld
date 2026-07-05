@@ -186,8 +186,9 @@ def main():
     done = {c: load_existing(c) for c in CHANS}
     print(f"resume: visual={len(done['visual'])} text={len(done['text'])} together={len(done['together'])} already embedded", flush=True)
     src = load_sources()
-    # CORPUS first — those have fast R2 thumbnails so progress is immediate; owned (CDN thumbs) trail.
-    src.sort(key=lambda v: v['mine'])
+    # OWNED account videos FIRST (only ~50, and they're what matters most) — safe now that thumbnail
+    # fetch fast-fails; then the ~6k corpus. Every re-run embeds any new owned before continuing corpus.
+    src.sort(key=lambda v: not v['mine'])
     if LIMIT: src = src[:LIMIT]
     todo = [v for v in src if v['id'] not in done['together']]
     print(f"sources: {len(src)} ({sum(v['mine'] for v in src)} owned) · {len(todo)} to embed", flush=True)
