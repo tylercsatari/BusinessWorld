@@ -51,7 +51,7 @@ if not any(c.get('id') == 'tyler' for c in chans):
     chans = [{'id': 'tyler', 'owner': True, 'name': 'Main'}] + chans
 ACC = {}                       # acct_id → {keep,ret5,dur,views,name}
 for c in chans:
-    t = load_table(c); K = {}; R = {}; D = {}; Vw = {}
+    t = load_table(c); K = {}; R = {}; D = {}; Vw = {}; Sw = {}
     for v in t.get('videos', []):
         vid = str(v.get('id') or v.get('videoId') or '')
         if not vid: continue
@@ -59,13 +59,15 @@ for c in chans:
         if v.get('ret5') is not None: R[vid] = float(v['ret5'])
         if v.get('duration_s') is not None: D[vid] = float(v['duration_s'])
         if v.get('views') is not None: Vw[vid] = float(v['views'])
-    ACC[c['id']] = {'keep': K, 'ret5': R, 'dur': D, 'views': Vw, 'name': c.get('name', c['id'])}
+        if v.get('swiped') is not None: Sw[vid] = float(v['swiped'])            # projected swipe-away ratio
+        elif v.get('keep_rate') is not None: Sw[vid] = 100.0 - float(v['keep_rate'])
+    ACC[c['id']] = {'keep': K, 'ret5': R, 'dur': D, 'views': Vw, 'swipe': Sw, 'name': c.get('name', c['id'])}
     print(f"  account {c['id']} ({c.get('name')}): keep={len(K)} ret5={len(R)}", flush=True)
 # pooled 'all' = union of every account
-aK = {}; aR = {}; aD = {}; aVw = {}
+aK = {}; aR = {}; aD = {}; aVw = {}; aSw = {}
 for cid, a in ACC.items():
-    aK.update(a['keep']); aR.update(a['ret5']); aD.update(a['dur']); aVw.update(a['views'])
-ACC['all'] = {'keep': aK, 'ret5': aR, 'dur': aD, 'views': aVw, 'name': 'All pooled'}
+    aK.update(a['keep']); aR.update(a['ret5']); aD.update(a['dur']); aVw.update(a['views']); aSw.update(a['swipe'])
+ACC['all'] = {'keep': aK, 'ret5': aR, 'dur': aD, 'views': aVw, 'swipe': aSw, 'name': 'All pooled'}
 owner_of = {}                  # vid → account id (single-account membership; library vids absent)
 for cid, a in ACC.items():
     if cid == 'all': continue
@@ -145,8 +147,8 @@ for ch in ['visual', 'text', 'together']:
 
     # ── PER-ACCOUNT keep / ret5 / realviews ──
     for acct in ACCTS:
-        KEEP, RET5 = ACC[acct]['keep'], ACC[acct]['ret5']
-        for tgt, lab in [('keep', KEEP), ('ret5', RET5)]:
+        KEEP, RET5, SWIPE = ACC[acct]['keep'], ACC[acct]['ret5'], ACC[acct]['swipe']
+        for tgt, lab in [('keep', KEEP), ('ret5', RET5), ('swipe', SWIPE)]:
             pj, nown = steer_metric(Vm, mids, lab)
             if pj is None:
                 print(f'  {ch}/{tgt}__{acct}: too few owned ({nown})', flush=True); continue
@@ -169,7 +171,7 @@ for ch in ['visual', 'text', 'together']:
                                                 'est': [round(float(x)) for x in rv], 'predscope': True}
             print(f'  {ch}/realviews__{acct}: held-out r={cvr:.3f} · median {np.median(rv):,.0f}', flush=True)
     # base keys alias Main so the existing UI keeps working if not account-aware
-    for b in ['keep', 'ret5', 'realviews']:
+    for b in ['keep', 'ret5', 'realviews', 'swipe']:
         if f'{b}__tyler' in mp['proj']: mp['proj'][b] = mp['proj'][f'{b}__tyler']
 
     # ── GLOBAL library-driven metrics (single, unchanged): steer models for views/outlier/>10M ──

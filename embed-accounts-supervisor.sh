@@ -19,5 +19,11 @@ for pass in $(seq 1 60); do
   sleep 60
 done
 
+# raw_embed.py's build_map() rewrites each raw/<chan>/map.json from scratch every pass, STRIPPING the
+# per-account steered projections (keep/ret5/realviews/swipe). Re-inject them now so they don't vanish
+# from the 🔬 Raw tab after an embed run (this is the durable fix for the disappearing-projection bug).
+echo "supervisor: re-injecting steered projections (keep/ret5/realviews/swipe) $(date)" >> raw_embed.log
+python3 add_steered_proj.py >> raw_embed.log 2>&1
+
 echo "supervisor: account embed finished — resuming crawler $(date)" >> raw_embed.log
 launchctl load "$PLIST" 2>/dev/null

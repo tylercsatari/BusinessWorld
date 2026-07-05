@@ -332,12 +332,12 @@ const JarvisRetention = (function () {
         // selected account scopes them to its own data; views/outlier/etc. stay shared (library-driven).
         const ACCT = st.channel || (CHANS && CHANS.active) || 'tyler';
         const ACCT_NM = ACCT === 'all' ? 'All pooled' : ((CHANS && (CHANS.channels.find(c => c.id === ACCT) || {}).name) || 'Main');
-        const accKey = key => (['keep', 'ret5', 'realviews'].includes(key) && PJ[key + '__' + ACCT]) ? key + '__' + ACCT : key;
-        const accHas = key => ['keep', 'ret5', 'realviews'].includes(key) && !!PJ[key + '__' + ACCT];
-        const PROJS = [['both', '→ views+outlier'], ['views', '→ views (log)'], ['rawviews', '→ views (raw)'], ['realviews', '→ realistic views'], ['outlier', '→ outlier'], ['hi10m', '>10M class'], ['hiout', 'top-outlier'], ['keep', '→ keep-rate'], ['ret5', '→ 5s-retention'], ['umap', 'UMAP raw'], ['pca', 'PCA raw']].filter(p => PJ[accKey(p[0])]);
+        const accKey = key => (['keep', 'ret5', 'realviews', 'swipe'].includes(key) && PJ[key + '__' + ACCT]) ? key + '__' + ACCT : key;
+        const accHas = key => ['keep', 'ret5', 'realviews', 'swipe'].includes(key) && !!PJ[key + '__' + ACCT];
+        const PROJS = [['both', '→ views+outlier'], ['views', '→ views (log)'], ['rawviews', '→ views (raw)'], ['realviews', '→ realistic views'], ['outlier', '→ outlier'], ['hi10m', '>10M class'], ['hiout', 'top-outlier'], ['keep', '→ keep-rate'], ['ret5', '→ 5s-retention'], ['swipe', '→ swipe-ratio'], ['umap', 'UMAP raw'], ['pca', 'PCA raw']].filter(p => PJ[accKey(p[0])]);
         let pm = st.rawProj || 'both'; if (!PJ[accKey(pm)]) pm = PROJS.length ? PROJS[0][0] : null;
         const proj = (pm && PJ[accKey(pm)]) || { x: R.x || [], y: R.y || [], cv: 0, co: 0 };
-        const isAcctProj = ['keep', 'ret5', 'realviews'].includes(pm);   // this projection is account-specific
+        const isAcctProj = ['keep', 'ret5', 'realviews', 'swipe'].includes(pm);   // this projection is account-specific
         const supervised = pm && !['umap', 'pca'].includes(pm);
         const mode = st.rawColor || 'cluster', k = st.rawK || '10';
         // "mine" highlight follows the selected account (owner tags); 'all' = every account's videos.
