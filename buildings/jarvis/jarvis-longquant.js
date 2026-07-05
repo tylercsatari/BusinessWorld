@@ -320,7 +320,7 @@ const JarvisLongQuant = (function () {
         const chan = st.rawChan || 'visual';
         const chanPill = (id, lab) => `<span data-rawchan="${id}" style="cursor:pointer;border:1px solid ${chan === id ? C.purple : C.border};background:${chan === id ? C.purple + '22' : 'transparent'};color:${chan === id ? C.purple : C.dim};border-radius:8px;padding:5px 13px;font-size:12px;font-weight:700">${lab}</span>`;
         const tabs = `<div style="display:flex;gap:6px;margin-bottom:10px">${chanPill('visual', '🖼 Visual')}${chanPill('text', '🗣 Text')}${chanPill('together', '🔗 Together')}</div>`;
-        const head = h2c('🔬 Raw — hook embeddings', 'The first 5 seconds of every stored video, embedded with Gemini, no labels. Three channels — what it LOOKS like, what is SAID, and both. Steer the projection toward views/outliers (held-out scored) and click any dot to see the exact input.');
+        const head = h2c('🔬 Raw — thumbnail + title embeddings', 'The thumbnail + title of every video, embedded with Gemini, no labels. Three channels — what it LOOKS like (thumbnail), what it SAYS (title), and both. Steer the projection toward views/outliers (held-out scored) and click any dot to see the exact input.');
         const R = RAW[chan];
         if (!R) { rawEnsure(chan); return head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading ${chan}…</div>`); }
         if (R.loading) return head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading ${chan}…</div>`);
@@ -506,19 +506,17 @@ const JarvisLongQuant = (function () {
             if (ESTP) meta.unshift([metLabel, (ACTP && ACTP[i] != null) ? `<span style="color:#fbbf24">${ACTP[i].toFixed(0)}% (yours, actual)</span>` : (ESTP[i] != null ? `~${ESTP[i].toFixed(0)}% (est.)` : '—')]);
             const isMine = (R.mine || [])[i], isSilent = (R.silent || [])[i];
             const lab = s => `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">${s}</div>`;
-            const imgEl = `<img src="${monUrl}" style="width:100%;border-radius:6px;background:#000;margin-bottom:8px;min-height:60px" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'Montage still rendering for this video — the embed run reaches it shortly.',style:'font-size:11px;color:#94a3b8;padding:14px;text-align:center;background:#0f172a;border-radius:6px;margin-bottom:8px'}))"/>`;
-            const txtEl = txt ? `<div style="font-size:12px;color:${C.text};font-style:italic;margin-bottom:8px;line-height:1.45;background:${C.bg || '#0f172a'};border-radius:6px;padding:9px 11px">"${esc(txt)}"</div>` : `<div style="font-size:11px;color:${C.dim};margin-bottom:8px">No speech in the first 5s — an empty transcript was embedded.</div>`;
-            // Show EXACTLY what this channel fed the embedder — nothing more.
+            const imgEl = `<img src="${monUrl}" style="width:100%;border-radius:6px;background:#000;margin-bottom:8px;min-height:60px" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'Thumbnail loading…',style:'font-size:11px;color:#94a3b8;padding:14px;text-align:center;background:#0f172a;border-radius:6px;margin-bottom:8px'}))"/>`;
+            const titleTxt = txt || R.title[i] || '';
+            const txtEl = titleTxt ? `<div style="font-size:13px;color:${C.text};font-weight:600;margin-bottom:8px;line-height:1.45;background:${C.bg || '#0f172a'};border-radius:6px;padding:9px 11px">${esc(titleTxt)}</div>` : `<div style="font-size:11px;color:${C.dim};margin-bottom:8px">(no title)</div>`;
+            // Show EXACTLY what this channel fed the embedder — the thumbnail and/or the title, nothing more.
             let inputBlock;
             if (chan === 'visual') {
-                inputBlock = lab('Exact input embedded — first-5s frames, 1/sec') + imgEl;
+                inputBlock = lab('Exact input embedded — the thumbnail') + imgEl;
             } else if (chan === 'text') {
-                inputBlock = lab('Exact input embedded — first-5s transcript (Whisper)') + txtEl
-                    + `<div style="font-size:9px;color:${C.faint};text-transform:uppercase;margin:2px 0 4px">↓ source video (for reference — NOT part of the text embedding)</div>` + imgEl;
+                inputBlock = lab('Exact input embedded — the title') + txtEl;
             } else {
-                inputBlock = txt
-                    ? lab('Exact input embedded — frames + transcript, fused into one vector') + imgEl + txtEl
-                    : lab('Exact input embedded — frames only (no speech in first 5s, so nothing text was added)') + imgEl;
+                inputBlock = lab('Exact input embedded — thumbnail + title, fused into one vector') + imgEl + txtEl;
             }
             return `<div style="margin-top:10px;border:1px solid ${isMine ? '#fbbf24' : C.border};border-radius:10px;padding:12px;background:${C.card2}">
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="font-size:12px;font-weight:700;color:${C.text};line-height:1.4">${isMine ? `<span style="color:#fbbf24">★ YOUR VIDEO</span> · ` : ''}${esc(R.title[i] || '(untitled)')}${isSilent ? ` <span style="color:${C.faint};font-weight:400;font-size:10px">· no voiceover</span>` : ''}</div><span data-rawclose="1" style="cursor:pointer;color:${C.dim};font-size:16px;line-height:1;padding:0 4px">×</span></div>
