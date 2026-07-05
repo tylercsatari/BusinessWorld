@@ -88,3 +88,6 @@ buildings/jarvis/retention-study/channels.json
 
 buildings/jarvis/hook-rl/cog-idea/r2creds.json
 buildings/jarvis/hook-rl/cog-idea/merged/
+
+# Long-form Raw embedding run log
+raw_embed_long.log
