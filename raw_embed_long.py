@@ -209,8 +209,8 @@ def main():
         n += 1
         if n % 50 == 0: print(f"  embedded {n}/{len(todo)} (last: {v['title'][:44]!r} {v['views']:,.0f} views)", flush=True)
         if n % SAVE_EVERY == 0:
-            for c in CHANS: save_npz(c)
-            print(f"  ✓ checkpoint saved at {n}", flush=True)
+            for c in CHANS: save_npz(c); build_map(c)   # rebuild maps each checkpoint so the Raw tab fills progressively
+            print(f"  ✓ checkpoint saved + maps rebuilt at {n}", flush=True)
     for c in CHANS: save_npz(c); build_map(c)
     print(f"done — embedded {n} this run. raw-long/{{visual,text,together}}/embeddings.npz + map.json on R2.", flush=True)
 
