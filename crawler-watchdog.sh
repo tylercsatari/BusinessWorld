@@ -11,7 +11,7 @@ set -euo pipefail
 LABELS=(
   "com.businessworld.library-crawler"     # shorts video crawler
   "com.businessworld.longform-crawler"    # long-form thumbnail crawler
-  "com.businessworld.embed-long"          # continuous long-form thumbnail+title embedder
+  # "com.businessworld.embed-long"        # PAUSED — Gemini free-tier quota (1000/day) exhausted; needs a paid key (see below)
 )
 PLIST_DIR="$HOME/Library/LaunchAgents"
 LOG="/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/crawler-watchdog.log"
