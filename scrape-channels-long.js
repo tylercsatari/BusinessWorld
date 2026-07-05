@@ -124,18 +124,18 @@ function parseReach(body) {
     const sum = a => a.reduce((x, y) => x + (+y || 0), 0);
     // a metric can appear at several time ranges (same type, different sums) — take the widest (largest total)
     const impCols = byType('VIDEO_THUMBNAIL_IMPRESSIONS');
-    let imp = null; for (const c of impCols) { const s = sum(c.values); if (!imp || s > imp._sum) imp = { values: c.values, _sum: s }; }
-    const impressions = imp ? Math.round(imp._sum) : null;
-    // CTR = the VTR column matching the chosen impressions range (same length), impressions-weighted
-    const vtrCols = byType('VIDEO_THUMBNAIL_IMPRESSIONS_VTR');
-    let vtr = imp ? vtrCols.find(c => c.values.length === imp.values.length) : null; vtr = vtr || vtrCols[0];
+    let imp = null; for (const c of impCols) { const s = sum(c.values); if (!imp || s > imp.sum) imp = { len: c.values.length, sum: s }; }
+    const impressions = imp ? Math.round(imp.sum) : null;
+    // CTR = impressed views ÷ impressions (YouTube's "impressions click-through rate"). Studio ships NO
+    // VTR value column — only VIDEO_THUMBNAIL_IMPRESSED_VIEWS (the clicks) — so compute the definition.
     let ctr = null;
-    if (vtr && imp && vtr.values.length === imp.values.length) {
-        let num = 0, den = 0;
-        for (let i = 0; i < vtr.values.length; i++) { const w = +imp.values[i] || 0; num += (+vtr.values[i] || 0) * w; den += w; }
-        ctr = den ? num / den : null;
-    } else if (vtr) ctr = vtr.values.length ? sum(vtr.values) / vtr.values.length : null;
-    if (ctr != null && ctr <= 1) ctr *= 100;           // ratio → percent
+    if (imp && imp.sum > 0) {
+        const ivCols = byType('VIDEO_THUMBNAIL_IMPRESSED_VIEWS');
+        const iv = ivCols.find(c => c.values.length === imp.len) || ivCols.slice().sort((a, b) => sum(b.values) - sum(a.values))[0];
+        if (iv) ctr = (sum(iv.values) / imp.sum) * 100;
+    }
+    // fallback: a real VTR value column, if a future payload ever ships one
+    if (ctr == null) { const vtr = byType('VIDEO_THUMBNAIL_IMPRESSIONS_VTR')[0]; if (vtr && vtr.values.length) { ctr = sum(vtr.values) / vtr.values.length; if (ctr <= 1) ctr *= 100; } }
     return { impressions, ctr: ctr != null ? +ctr.toFixed(2) : null };
 }
 
