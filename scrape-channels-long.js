@@ -35,7 +35,7 @@ const STUDY = path.join(__dirname, 'buildings/jarvis/longform-study');
 const RET_DIR = path.join(STUDY, 'retention');
 const CHANNELS_JSON = path.join(STUDY, 'channels.json');
 const CONFIG = path.join(__dirname, process.argv[2] || 'scrape-channels-long.config.json');
-const YEAR_MS = 365 * 24 * 3600 * 1000;   // "past year" rolling window
+const WINDOW_MS = 3 * 365 * 24 * 3600 * 1000;   // account scrape window: last 3 YEARS (the public thumbnail crawler stays at 1yr)
 
 const ask = (q) => new Promise(res => { const rl = readline.createInterface({ input: process.stdin, output: process.stdout }); rl.question(q, a => { rl.close(); res(a); }); });
 
@@ -76,15 +76,15 @@ async function discoverVideoIds(page) {
         await page.mouse.wheel(0, 4000); await page.waitForTimeout(700);
         if (scroll > 3 && batch.length === 0) break;
     }
-    const PRIV = /\b(Private|Draft|Scheduled)\b/i, cutoff = Date.now() - YEAR_MS;
+    const PRIV = /\b(Private|Unlisted|Draft|Scheduled)\b/i, cutoff = Date.now() - WINDOW_MS;
     const kept = [], dPriv = [], dOld = [];
     for (const [id, r] of seen) {
-        if (r.vis ? PRIV.test(r.vis) : PRIV.test(r.txt)) { dPriv.push(id); continue; }   // exclude private/draft/scheduled
+        if (r.vis ? PRIV.test(r.vis) : PRIV.test(r.txt)) { dPriv.push(id); continue; }   // exclude private/unlisted/draft/scheduled
         const dm = r.txt.match(/([A-Z][a-z]{2,9}\.? \d{1,2}, \d{4})/);                    // grid publish date, if legible
         if (dm) { const t = Date.parse(dm[1].replace('.', '')); if (!isNaN(t) && t < cutoff) { dOld.push(id); continue; } }
         kept.push(id);
     }
-    console.log(`  discovery: ${seen.size} found → ${kept.length} public & last-year kept · ${dPriv.length} private/draft/scheduled skipped · ${dOld.length} older-than-1yr skipped (fetchMeta re-checks each)`);
+    console.log(`  discovery: ${seen.size} found → ${kept.length} public & last-3yr kept · ${dPriv.length} private/unlisted/draft skipped · ${dOld.length} older-than-3yr skipped (fetchMeta re-checks each)`);
     return kept;
 }
 
@@ -96,41 +96,47 @@ async function fetchMeta(metaPage, videoId) {
         await metaPage.waitForTimeout(400);
         return await metaPage.evaluate(() => {
             const r = window.ytInitialPlayerResponse || {}; const vd = r.videoDetails || {}, mf = (r.microformat || {}).playerMicroformatRenderer || {};
-            return { title: vd.title || null, views: parseInt(vd.viewCount) || null, duration_s: parseInt(vd.lengthSeconds) || null, published: mf.publishDate || mf.uploadDate || null, is_private: !!vd.isPrivate };
+            return { title: vd.title || null, views: parseInt(vd.viewCount) || null, duration_s: parseInt(vd.lengthSeconds) || null, published: mf.publishDate || mf.uploadDate || null, is_private: !!vd.isPrivate, is_unlisted: !!mf.isUnlisted };
         });
     } catch (e) { return {}; }
 }
 
 // ── reach parse (CTR + impressions) ───────────────────────────────────────────
-// Pull impressions + click-through-rate out of a Studio Reach-tab get_screen payload.
-// Studio labels the metrics VIDEO_THUMBNAIL_IMPRESSIONS (impressions, an integer count) and
-// VIDEO_THUMBNAIL_IMPRESSIONS_VTR (thumbnail click-through-rate / view-through-rate, a 0..1 ratio).
-// NOTE (needs live verification): the exact JSON shape around these metric keys can vary — this
-// grabs the first numeric "value" (or first bare number) that follows the key within a window,
-// mirroring how parseRetention slices near "retentionValues".
-function findMetricValue(body, metricKey) {
-    // exact key with a trailing quote so "VIDEO_THUMBNAIL_IMPRESSIONS" does NOT match the longer
-    // "VIDEO_THUMBNAIL_IMPRESSIONS_VTR" key (the trailing quote disambiguates the two).
-    const needle = '"' + metricKey + '"';
-    const i = body.indexOf(needle);
-    if (i < 0) return null;
-    const win = body.slice(i + needle.length, i + needle.length + 600);
-    // prefer an explicit "value": N
-    let mm = win.match(/"value"\s*:\s*"?(-?[0-9][0-9.eE+]*)"?/);
-    // fall back to the first number that appears after the key
-    if (!mm) mm = win.match(/:\s*"?(-?[0-9][0-9.eE+]*)"?/);
-    if (!mm) mm = win.match(/(-?[0-9][0-9.eE+]*)/);
-    return mm ? parseFloat(mm[1]) : null;
+// Confirmed from a real Studio get_screen payload: each metric is a metricColumns[] entry
+//   { "metric": { "type": "VIDEO_THUMBNAIL_IMPRESSIONS" }, "counts": { "values": [ …daily… ] } }
+// Impressions = Σ VIDEO_THUMBNAIL_IMPRESSIONS counts; CTR = VIDEO_THUMBNAIL_IMPRESSIONS_VTR
+// (a 0..1 ratio) impressions-weighted over its daily values. Recursive walk → robust to nesting.
+function reachColumns(body) {
+    let root; try { root = JSON.parse(body.replace(/^\)\]\}'\s*/, '')); } catch (e) { return []; }
+    const cols = [];
+    (function walk(o) {
+        if (!o || typeof o !== 'object') return;
+        if (Array.isArray(o)) { o.forEach(walk); return; }
+        const type = o.metric && (o.metric.type || (typeof o.metric === 'string' ? o.metric : null));
+        if (type && o.counts && Array.isArray(o.counts.values)) cols.push({ type, values: o.counts.values });
+        for (const k in o) walk(o[k]);
+    })(root);
+    return cols;
 }
 function parseReach(body) {
-    const impressions = findMetricValue(body, 'VIDEO_THUMBNAIL_IMPRESSIONS');
-    let ctr = findMetricValue(body, 'VIDEO_THUMBNAIL_IMPRESSIONS_VTR');
-    // Studio delivers CTR as a fraction (0..1) → normalise to a percentage like the UI shows.
-    if (ctr != null && ctr <= 1) ctr = ctr * 100;
-    return {
-        impressions: impressions != null ? Math.round(impressions) : null,
-        ctr: ctr != null ? +ctr.toFixed(2) : null,
-    };
+    const cols = reachColumns(body);
+    const byType = t => cols.filter(c => c.type === t);
+    const sum = a => a.reduce((x, y) => x + (+y || 0), 0);
+    // a metric can appear at several time ranges (same type, different sums) — take the widest (largest total)
+    const impCols = byType('VIDEO_THUMBNAIL_IMPRESSIONS');
+    let imp = null; for (const c of impCols) { const s = sum(c.values); if (!imp || s > imp._sum) imp = { values: c.values, _sum: s }; }
+    const impressions = imp ? Math.round(imp._sum) : null;
+    // CTR = the VTR column matching the chosen impressions range (same length), impressions-weighted
+    const vtrCols = byType('VIDEO_THUMBNAIL_IMPRESSIONS_VTR');
+    let vtr = imp ? vtrCols.find(c => c.values.length === imp.values.length) : null; vtr = vtr || vtrCols[0];
+    let ctr = null;
+    if (vtr && imp && vtr.values.length === imp.values.length) {
+        let num = 0, den = 0;
+        for (let i = 0; i < vtr.values.length; i++) { const w = +imp.values[i] || 0; num += (+vtr.values[i] || 0) * w; den += w; }
+        ctr = den ? num / den : null;
+    } else if (vtr) ctr = vtr.values.length ? sum(vtr.values) / vtr.values.length : null;
+    if (ctr != null && ctr <= 1) ctr *= 100;           // ratio → percent
+    return { impressions, ctr: ctr != null ? +ctr.toFixed(2) : null };
 }
 
 // ── retention parse (relative + absolute curves, ret5, ret30, avg_view_duration) ──
@@ -173,15 +179,16 @@ let _dbgReach = true, _dbgRet = true;
 // domcontentloaded (NOT networkidle — Studio's SPA never idles → 30s hangs + tab instability),
 // then poll until the get_screen XHR arrives.
 async function scrapeReach(page, videoId) {
-    let body = null;
-    const h = async (resp) => { try { const u = resp.url(); if (u.includes('youtubei') && u.includes('get_screen')) { const b = await resp.text(); if (/IMPRESSION|CLICK_THROUGH|THUMBNAIL/i.test(b)) body = b; } } catch (e) {} };
+    let body = null, any = null;   // body = the get_screen carrying impression counts; any = last seen (for the debug dump)
+    const h = async (resp) => { try { const u = resp.url(); if (u.includes('youtubei') && u.includes('get_screen')) { const b = await resp.text(); any = b; if (b.includes('VIDEO_THUMBNAIL_IMPRESSIONS') && b.includes('counts')) body = b; } } catch (e) {} };
     page.on('response', h);
     try {
         await page.goto(`https://studio.youtube.com/video/${videoId}/analytics/tab-reach`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
-        for (let t = 0; t < 30 && !body; t++) await page.waitForTimeout(500);   // up to ~15s for the XHR to fire
+        for (let t = 0; t < 40 && !body; t++) await page.waitForTimeout(500);   // up to ~20s for the reach XHR to fire
     } finally { try { page.off('response', h); } catch (e) {} }
-    if (body && _dbgReach) { _dbgReach = false; try { fs.writeFileSync(path.join(RET_DIR, '_debug_reach.json'), body); console.log('\n  [debug] wrote first Reach payload → longform-study/retention/_debug_reach.json'); } catch (e) {} }
-    return body ? parseReach(body) : {};
+    const use = body || any;
+    if (use && _dbgReach) { _dbgReach = false; try { fs.writeFileSync(path.join(RET_DIR, '_debug_reach.json'), use); console.log('\n  [debug] wrote first Reach payload → longform-study/retention/_debug_reach.json'); } catch (e) {} }
+    return use ? parseReach(use) : {};
 }
 
 // load the video's analytics so the get_screen payload (with the retention curve) fires, capture it
@@ -264,7 +271,7 @@ async function main() {
             if (final) console.log(`Saved longform/ret_${ch.id}.json (${rows.length} videos) → R2.`);
             else console.log(`  …progress saved (${rows.length}/${ids.length}) → R2`);
         };
-        const cutoff = Date.now() - YEAR_MS;
+        const cutoff = Date.now() - WINDOW_MS;
         let skipPriv = 0, skipOld = 0;
         for (let i = 0; i < ids.length; i++) {
             process.stdout.write(`  [${i + 1}/${ids.length}] ${ids[i]} … `);
@@ -275,12 +282,13 @@ async function main() {
                     catch (e) { console.log('\n⚠ browser/context closed — stopping this channel (re-run to resume; saved videos are already on R2).'); break; }
                 }
                 const meta = await fetchMeta(metaPage, ids[i]);         // views / title / duration / published (PUBLIC watch page)
-                // GATE: only PUBLIC videos from the last year. Private (owner still sees metadata → use
-                // videoDetails.isPrivate) and unavailable (no metadata) are dropped; so is anything > 1yr old.
-                if (meta.is_private) { skipPriv++; console.log('skip (private)'); continue; }
+                // GATE: only PUBLIC videos from the last 3 years. Private + Unlisted (owner still sees
+                // metadata, so use videoDetails.isPrivate + microformat.isUnlisted) and unavailable are
+                // dropped; so is anything older than the window.
+                if (meta.is_private || meta.is_unlisted) { skipPriv++; console.log(`skip (${meta.is_private ? 'private' : 'unlisted'})`); continue; }
                 const pub = meta.published ? Date.parse(meta.published) : NaN;
                 if (isNaN(pub)) { skipPriv++; console.log('skip (unavailable — no public metadata)'); continue; }
-                if (pub < cutoff) { skipOld++; console.log(`skip (older than 1yr · ${String(meta.published).slice(0, 10)})`); continue; }
+                if (pub < cutoff) { skipOld++; console.log(`skip (older than 3yr · ${String(meta.published).slice(0, 10)})`); continue; }
                 const reach = await scrapeReach(page, ids[i]);          // ctr / impressions
                 const ret = await scrapeRetention(page, ids[i]);        // curve / curve_abs / ret5 / ret30 / avg_view_duration
                 const row = toRow(ids[i], Object.assign({}, reach, ret), meta);
@@ -292,7 +300,7 @@ async function main() {
             } catch (e) { console.log('failed:', e.message.slice(0, 60)); }
             if (rows.length && (i + 1) % 20 === 0) await save(false);      // checkpoint every 20
         }
-        console.log(`  ${ch.name}: ${rows.length} public last-year videos scraped · skipped ${skipPriv} private/unavailable · ${skipOld} older-than-1yr`);
+        console.log(`  ${ch.name}: ${rows.length} public last-3yr videos scraped · skipped ${skipPriv} private/unlisted/unavailable · ${skipOld} older-than-3yr`);
         await save(true);
     }
     await context.close();
