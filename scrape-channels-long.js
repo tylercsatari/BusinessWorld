@@ -35,7 +35,7 @@ const STUDY = path.join(__dirname, 'buildings/jarvis/longform-study');
 const RET_DIR = path.join(STUDY, 'retention');
 const CHANNELS_JSON = path.join(STUDY, 'channels.json');
 const CONFIG = path.join(__dirname, process.argv[2] || 'scrape-channels-long.config.json');
-const WINDOW_MS = 3 * 365 * 24 * 3600 * 1000;   // account scrape window: last 3 YEARS (the public thumbnail crawler stays at 1yr)
+const WINDOW_MS = 5 * 365 * 24 * 3600 * 1000;   // account scrape window: last 5 YEARS (the public thumbnail crawler stays at 1yr)
 
 const ask = (q) => new Promise(res => { const rl = readline.createInterface({ input: process.stdin, output: process.stdout }); rl.question(q, a => { rl.close(); res(a); }); });
 
@@ -84,7 +84,7 @@ async function discoverVideoIds(page) {
         if (dm) { const t = Date.parse(dm[1].replace('.', '')); if (!isNaN(t) && t < cutoff) { dOld.push(id); continue; } }
         kept.push(id);
     }
-    console.log(`  discovery: ${seen.size} found → ${kept.length} public & last-3yr kept · ${dPriv.length} private/unlisted/draft skipped · ${dOld.length} older-than-3yr skipped (fetchMeta re-checks each)`);
+    console.log(`  discovery: ${seen.size} found → ${kept.length} public & last-5yr kept · ${dPriv.length} private/unlisted/draft skipped · ${dOld.length} older-than-5yr skipped (fetchMeta re-checks each)`);
     return kept;
 }
 
@@ -172,39 +172,45 @@ function parseRetention(body, videoId) {
     };
 }
 
-// one-time raw-payload dumps so we can pin the EXACT Studio metric keys (dir is gitignored)
-let _dbgReach = true, _dbgRet = true;
+// one-time manifest + raw-payload dump so we can pin exactly where impressions/CTR come from
+let _dbg = true;
 
-// load the Reach tab so its get_screen payload (impressions/CTR) fires, capture it.
-// domcontentloaded (NOT networkidle — Studio's SPA never idles → 30s hangs + tab instability),
-// then poll until the get_screen XHR arrives.
-async function scrapeReach(page, videoId) {
-    let body = null, any = null;   // body = the get_screen carrying impression counts; any = last seen (for the debug dump)
-    const h = async (resp) => { try { const u = resp.url(); if (u.includes('youtubei') && u.includes('get_screen')) { const b = await resp.text(); any = b; if (b.includes('VIDEO_THUMBNAIL_IMPRESSIONS') && b.includes('counts')) body = b; } } catch (e) {} };
+// Visit EVERY analytics tab and capture ALL youtubei analytics responses. Retention comes from the
+// body carrying retentionValues; impressions/CTR from whichever body actually carries a
+// VIDEO_THUMBNAIL_IMPRESSIONS metric column (with counts.values). Studio's reach tab often doesn't
+// fire its own get_screen, so we don't assume which tab/endpoint delivers impressions — we watch them all.
+async function scrapeAnalytics(page, videoId) {
+    const manifest = [];
+    let retBody = null, impBody = null;
+    const h = async (resp) => {
+        try {
+            const u = resp.url();
+            if (!u.includes('youtubei') || !/analytics|get_screen|get_card|dashboard/i.test(u)) return;
+            const b = await resp.text();
+            const hasRet = b.includes('retentionValues');
+            const hasImp = b.includes('VIDEO_THUMBNAIL_IMPRESSIONS') && b.includes('"values"') && parseReach(b).impressions != null;
+            manifest.push({ url: u.replace(/^https?:\/\/[^/]+/, ''), len: b.length, hasRet, hasImp });
+            if (!retBody && hasRet) retBody = b;
+            if (!impBody && hasImp) impBody = b;
+        } catch (e) {}
+    };
     page.on('response', h);
     try {
-        await page.goto(`https://studio.youtube.com/video/${videoId}/analytics/tab-reach`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
-        for (let t = 0; t < 40 && !body; t++) await page.waitForTimeout(500);   // up to ~20s for the reach XHR to fire
-    } finally { try { page.off('response', h); } catch (e) {} }
-    const use = body || any;
-    if (use && _dbgReach) { _dbgReach = false; try { fs.writeFileSync(path.join(RET_DIR, '_debug_reach.json'), use); console.log('\n  [debug] wrote first Reach payload → longform-study/retention/_debug_reach.json'); } catch (e) {} }
-    return use ? parseReach(use) : {};
-}
-
-// load the video's analytics so the get_screen payload (with the retention curve) fires, capture it
-async function scrapeRetention(page, videoId) {
-    let body = null;
-    const h = async (resp) => { try { const u = resp.url(); if (u.includes('youtubei') && u.includes('get_screen')) { const b = await resp.text(); if (b.includes('retentionValues')) body = b; } } catch (e) {} };
-    page.on('response', h);
-    try {
-        for (const tab of ['tab-overview', 'tab-engagement']) {
-            if (body) break;
+        for (const tab of ['tab-overview', 'tab-reach', 'tab-engagement', 'tab-audience']) {
             await page.goto(`https://studio.youtube.com/video/${videoId}/analytics/${tab}`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
-            for (let t = 0; t < 24 && !body; t++) await page.waitForTimeout(500);   // up to ~12s per tab
+            for (let t = 0; t < 20 && (!retBody || !impBody); t++) await page.waitForTimeout(500);   // ~10s/tab; stop early once both found
         }
     } finally { try { page.off('response', h); } catch (e) {} }
-    if (body && _dbgRet) { _dbgRet = false; try { fs.writeFileSync(path.join(RET_DIR, '_debug_retention.json'), body); console.log('\n  [debug] wrote first Retention payload → longform-study/retention/_debug_retention.json'); } catch (e) {} }
-    return body ? parseRetention(body, videoId) : {};
+    if (_dbg) {
+        _dbg = false;
+        try {
+            fs.writeFileSync(path.join(RET_DIR, '_debug_screens.json'), JSON.stringify(manifest, null, 1));
+            if (retBody) fs.writeFileSync(path.join(RET_DIR, '_debug_retention.json'), retBody);
+            if (impBody) fs.writeFileSync(path.join(RET_DIR, '_debug_reach.json'), impBody);
+            console.log(`\n  [debug] analytics manifest → _debug_screens.json (${manifest.length} responses · retention:${!!retBody} · impressions:${!!impBody})`);
+        } catch (e) {}
+    }
+    return Object.assign({}, retBody ? parseRetention(retBody, videoId) : {}, impBody ? parseReach(impBody) : {});
 }
 
 // map one scraped long-form video to the row schema
@@ -282,16 +288,15 @@ async function main() {
                     catch (e) { console.log('\n⚠ browser/context closed — stopping this channel (re-run to resume; saved videos are already on R2).'); break; }
                 }
                 const meta = await fetchMeta(metaPage, ids[i]);         // views / title / duration / published (PUBLIC watch page)
-                // GATE: only PUBLIC videos from the last 3 years. Private + Unlisted (owner still sees
+                // GATE: only PUBLIC videos from the last 5 years. Private + Unlisted (owner still sees
                 // metadata, so use videoDetails.isPrivate + microformat.isUnlisted) and unavailable are
                 // dropped; so is anything older than the window.
                 if (meta.is_private || meta.is_unlisted) { skipPriv++; console.log(`skip (${meta.is_private ? 'private' : 'unlisted'})`); continue; }
                 const pub = meta.published ? Date.parse(meta.published) : NaN;
                 if (isNaN(pub)) { skipPriv++; console.log('skip (unavailable — no public metadata)'); continue; }
-                if (pub < cutoff) { skipOld++; console.log(`skip (older than 3yr · ${String(meta.published).slice(0, 10)})`); continue; }
-                const reach = await scrapeReach(page, ids[i]);          // ctr / impressions
-                const ret = await scrapeRetention(page, ids[i]);        // curve / curve_abs / ret5 / ret30 / avg_view_duration
-                const row = toRow(ids[i], Object.assign({}, reach, ret), meta);
+                if (pub < cutoff) { skipOld++; console.log(`skip (older than 5yr · ${String(meta.published).slice(0, 10)})`); continue; }
+                const data = await scrapeAnalytics(page, ids[i]);       // retention + impressions/CTR from whichever payload carries them
+                const row = toRow(ids[i], data, meta);
                 rows.push(row);
                 // per-video files (local + R2)
                 fs.writeFileSync(path.join(RET_DIR, `${ids[i]}.json`), JSON.stringify(row));
@@ -300,7 +305,7 @@ async function main() {
             } catch (e) { console.log('failed:', e.message.slice(0, 60)); }
             if (rows.length && (i + 1) % 20 === 0) await save(false);      // checkpoint every 20
         }
-        console.log(`  ${ch.name}: ${rows.length} public last-3yr videos scraped · skipped ${skipPriv} private/unlisted/unavailable · ${skipOld} older-than-3yr`);
+        console.log(`  ${ch.name}: ${rows.length} public last-5yr videos scraped · skipped ${skipPriv} private/unlisted/unavailable · ${skipOld} older-than-5yr`);
         await save(true);
     }
     await context.close();
