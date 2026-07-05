@@ -11,16 +11,17 @@
 // SAME logged-in Chrome profile (yt-chrome-profile) via swipe-scraper-long.js's SESSION_DIR,
 // so one login serves both flows.
 //
-// SETUP: it reads the SAME scrape-channels.config.json as the Shorts flow:
+// SETUP: it reads scrape-channels-long.config.json by default (Main + Account 1/2/3):
 //   { "channels": [ { "id": "tyler", "name": "Main" },
-//                   { "id": "bob",  "name": "Bob", "videoIds": ["abc","def"] } ] }
-//   (videoIds optional — omitted → auto-discovers that channel's regular /videos/upload grid.)
-//   You can also pass a dedicated config: node scrape-channels-long.js my-config.json
+//                   { "id": "bob",  "name": "Bob", "videoIdsLong": ["abc","def"] } ] }
+//   (videoIdsLong optional — omitted → auto-discovers that channel's regular /videos/upload grid.)
+//   Override with a different file: node scrape-channels-long.js my-config.json
 //
 // RUN: node scrape-channels-long.js
 //   Opens real Chrome (your logged-in profile). You MUST already be LOGGED IN to YouTube
 //   Studio. When it pauses for a channel, use the account menu (top-right in Studio) to
-//   SWITCH to that channel, then press Enter.
+//   SWITCH to that channel, then press Enter — it discovers + scrapes all that channel's
+//   long-form uploads, then moves to the next channel.
 
 const fs = require('fs');
 const path = require('path');
@@ -33,7 +34,7 @@ async function r2put(key, obj) { if (!cloud || !cloud.uploadToR2) return; try { 
 const STUDY = path.join(__dirname, 'buildings/jarvis/longform-study');
 const RET_DIR = path.join(STUDY, 'retention');
 const CHANNELS_JSON = path.join(STUDY, 'channels.json');
-const CONFIG = path.join(__dirname, process.argv[2] || 'scrape-channels.config.json');
+const CONFIG = path.join(__dirname, process.argv[2] || 'scrape-channels-long.config.json');
 
 const ask = (q) => new Promise(res => { const rl = readline.createInterface({ input: process.stdin, output: process.stdout }); rl.question(q, a => { rl.close(); res(a); }); });
 
