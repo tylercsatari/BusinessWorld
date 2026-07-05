@@ -11,6 +11,7 @@ set -euo pipefail
 LABELS=(
   "com.businessworld.library-crawler"     # shorts video crawler
   "com.businessworld.longform-crawler"    # long-form thumbnail crawler
+  "com.businessworld.embed-long"          # continuous long-form thumbnail+title embedder
 )
 PLIST_DIR="$HOME/Library/LaunchAgents"
 LOG="/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/crawler-watchdog.log"
