@@ -297,6 +297,7 @@ const ResearchUI = (() => {
                     <div class="vault-filter-group"><label>Sort:</label>
                     ${sortBtn('recent', 'Newest')}${sortBtn('views', 'Views')}${sortBtn('outlier', 'Outlier')}</div></div>
             </div>
+            <div id="ly-buckets" style="padding:2px 4px 0"></div>
             <div class="research-results" id="lastyear-results">${lyLoading && lyVideos.length === 0
                 ? '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Loading dataset…</div></div>' : ''}</div>`;
     }
@@ -315,6 +316,26 @@ const ResearchUI = (() => {
                     <div class="vault-card-bottom">${out}<a href="${escAttr(v.url || (v.kind === 'long' ? 'https://www.youtube.com/watch?v=' + v.videoId : 'https://www.youtube.com/shorts/' + v.videoId))}" target="_blank" class="vault-open-link">▶ Open</a></div>
                 </div>
             </div>`;
+    }
+
+    // view-count distribution histogram (1–10K … 100M+) from the crawler's stats.viewBuckets
+    function renderBuckets() {
+        const el = document.getElementById('ly-buckets');
+        if (!el) return;
+        const b = (lyStats && lyStats.viewBuckets) || {};
+        const order = [['1k-10k', '1–10K'], ['10k-100k', '10–100K'], ['100k-1M', '100K–1M'], ['1M-10M', '1M–10M'], ['10M-100M', '10M–100M'], ['100M+', '100M+']];
+        const counts = order.map(([k]) => b[k] || 0);
+        const total = counts.reduce((a, c) => a + c, 0);
+        if (!total) { el.innerHTML = ''; return; }
+        const max = Math.max(1, ...counts);
+        el.innerHTML = '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin:6px 0 3px">' +
+            order.map(([k, l], i) => {
+                const c = counts[i], h = 8 + Math.round((c / max) * 44), pct = total ? Math.round((c / total) * 100) : 0;
+                return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;min-width:62px" title="${c.toLocaleString()} videos (${pct}%)">
+                    <div style="font-size:11px;font-weight:700;color:#e6edf3">${c.toLocaleString()}</div>
+                    <div style="width:100%;height:${h}px;background:linear-gradient(180deg,#4a9eff,#3fb950);border-radius:4px"></div>
+                    <div style="font-size:9.5px;color:#94a3b8;white-space:nowrap">${l}</div></div>`;
+            }).join('') + '</div><div style="font-size:10px;color:#6b7686;margin-bottom:6px">view-count distribution · ' + total.toLocaleString() + ' videos on R2</div>';
     }
 
     function renderLastYearResults() {
@@ -355,7 +376,8 @@ const ResearchUI = (() => {
         } catch (e) { /* ignore */ }
         lyLoading = false;
         const sub = document.getElementById('ly-subtitle');
-        if (sub && lyStats) sub.textContent = `${(lyStats.stored || 0).toLocaleString()} stored on R2 · ${(lyStats.discovered || 0).toLocaleString()} discovered · ${lyStats.removed ? lyStats.removed + ' horizontals removed · ' : ''}target ${(lyStats.target || 100000).toLocaleString()}`;
+        if (sub && lyStats) sub.textContent = `${(lyStats.stored || 0).toLocaleString()} stored on R2 · ${(lyStats.discovered || 0).toLocaleString()} discovered · ${lyStats.removed ? lyStats.removed + (lyKind === 'long' ? ' verticals removed · ' : ' horizontals removed · ') : ''}target ${(lyStats.target || (lyKind === 'long' ? 50000 : 100000)).toLocaleString()}`;
+        renderBuckets();
         renderLastYearResults();
     }
 

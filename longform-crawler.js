@@ -86,11 +86,11 @@ function computeStats() {
     const vids = Object.values(db.videos);
     const stored = vids.filter(v => v.stored);
     const bytes = stored.reduce((s, v) => s + (v.thumbBytes || 0), 0);
-    const buckets = { '10k-100k': 0, '100k-1M': 0, '1M-10M': 0, '10M-100M': 0, '100M+': 0 };
+    const buckets = { '1k-10k': 0, '10k-100k': 0, '100k-1M': 0, '1M-10M': 0, '10M-100M': 0, '100M+': 0 };
     let outliers = 0;
     for (const v of stored) {
         const x = v.views;
-        if (x < 1e5) buckets['10k-100k']++; else if (x < 1e6) buckets['100k-1M']++;
+        if (x < 1e4) buckets['1k-10k']++; else if (x < 1e5) buckets['10k-100k']++; else if (x < 1e6) buckets['100k-1M']++;
         else if (x < 1e7) buckets['1M-10M']++; else if (x < 1e8) buckets['10M-100M']++; else buckets['100M+']++;
         if ((v.outlier || 0) >= 3) outliers++;
     }

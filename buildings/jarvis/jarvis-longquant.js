@@ -2944,10 +2944,8 @@ const JarvisLongQuant = (function () {
     // switch the active channel → reload its retention table into DATA (or merge all → pooled)
     async function loadChannel(id) {
         st.channel = id;
-        // Main (your 211) = the committed static file; every other channel = R2 via the API.
-        const fetchTable = c => ((c.owner || c.id === 'tyler')
-            ? fetch('./buildings/jarvis/longform-study/' + (c.table || 'retention_table.json') + '?v=131')
-            : fetch('/api/longquant/table?id=' + encodeURIComponent(c.id))).then(r => r.json());
+        // Long-form: every channel (incl. Main) is scraped to R2 → uniform API load.
+        const fetchTable = c => fetch('/api/longquant/table?id=' + encodeURIComponent(c.id)).then(r => r.json());
         try {
             if (id === 'all') {
                 const tabs = await Promise.all(CHANS.channels.map(c => fetchTable(c).catch(() => null)));
@@ -2959,8 +2957,7 @@ const JarvisLongQuant = (function () {
             }
             // swap the analysis study to match the channel: Main = committed study; others = R2
             // (built by build_study.py); pooled = none yet → its analysis tabs gate.
-            if (id === 'tyler') S = S_MAIN;
-            else { S = await fetch('/api/longquant/study?id=' + encodeURIComponent(id)).then(r => r.ok ? r.json() : null).catch(() => null); if (S && S.error) S = null; }   // 'all' → study_all.json (pooled)
+            S = await fetch('/api/longquant/study?id=' + encodeURIComponent(id)).then(r => r.ok ? r.json() : null).catch(() => null); if (S && S.error) S = null;   // 'all' → study_all.json (pooled)
         } catch (e) { console.warn('[channel] load failed', e); }
         render();
     }
@@ -3430,7 +3427,8 @@ const JarvisLongQuant = (function () {
                 }
             }
         }
-        render();
+        // hydrate the active channel's real table/study from R2 (Main included — long-form has no committed table)
+        if (CHANS && CHANS.channels && CHANS.channels.length) loadChannel(st.channel || CHANS.active || 'tyler'); else render();
     }
     return { mount };
 })();

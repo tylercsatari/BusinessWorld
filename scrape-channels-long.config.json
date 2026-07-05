@@ -1,0 +1,9 @@
+{
+  "_comment": "Long-form scrape target list. id must match the shorts channels.json ids so the Long Quant channel bar lines up. name is what shows in the tab. Video ids are auto-discovered from each account's /videos/upload grid — you just switch Chrome to the right account at each prompt. Add \"limit\": N to any channel for a quick test run.",
+  "channels": [
+    { "id": "tyler", "name": "Main" },
+    { "id": "brushlabs", "name": "Account 1" },
+    { "id": "creatinganything", "name": "Account 2" },
+    { "id": "hafu", "name": "Account 3" }
+  ]
+}
