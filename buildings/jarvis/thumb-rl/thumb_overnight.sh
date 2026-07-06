@@ -1,30 +1,36 @@
 #!/bin/bash
-# Long-form THUMBNAIL RL loop: per-title group harvest (reason->1 thumbnail x G=5, relevance-gated
-# ctrviews-percentile reward, per-title advantage) -> RAFT update -> repeat with the improved model.
-# Round 1 starts from the BASE Qwen3-30B-A3B. Stops at ~11h or 2 dry rounds. Budget is sized so total
-# renders ~= 50000 (the $150 Replicate budget at $0.003/img): round1 3000 to validate the cycle fast,
-# then ~10000/round.
+# Long-form THUMBNAIL RL loop — vLLM harvest (full 1500-token reasoning) + RAFT LoRA update.
+# Speed comes from the ENVIRONMENT: vLLM MoE kernels + batched generation + parallel rendering.
+# Robust round counting via runs/thumbN/_produced (the wc -l diff broke on resume-seeding).
+# Each round is its own run name (thumb1, thumb2, ...) so guesses never collide and every round's
+# data is self-contained. Harvest value is banked BEFORE the update, so a training failure never
+# throws away the guesses.
 set -o pipefail
 cd /home/ubuntu/thumbrl
 V="venv/bin/python"
 log(){ echo "[$(date +%H:%M:%S)] $*"; }
-DEADLINE=$(( $(date +%s) + 11*3600 ))
-PREV=/home/ubuntu/thumbrl/models/qwen3-30b-a3b   # round 1 = base model (no prior thumb LoRA yet)
+DEADLINE=$(( $(date +%s) + 20*3600 ))
+PREV=/home/ubuntu/thumbrl/models/qwen3-30b-a3b   # round 1 = base model
 N=1; STRIKES=0
 while true; do
-  [ $(date +%s) -ge $DEADLINE ] && { log "11h deadline"; break; }
-  BEFORE=$(wc -l < runs/thumb$N/index.jsonl 2>/dev/null || echo 0)
-  if [ $N -eq 1 ]; then BUD=3000; else BUD=10000; fi   # small first round to validate the cycle fast
-  log "=== round $N : thumb_harvest with $(basename $PREV) (budget $BUD, G=5) ==="
-  RUN=thumb$N MODEL=$PREV G=5 IMG_BUDGET=$BUD $V thumb_harvest.py 2>&1 | grep -vE "Loading weights|it/s\]"
-  AFTER=$(wc -l < runs/thumb$N/index.jsonl 2>/dev/null || echo 0); GOT=$(( AFTER - BEFORE ))
-  log "round $N got $GOT title-groups (total $AFTER)"
-  if [ "$GOT" -lt 4 ]; then STRIKES=$(( STRIKES + 1 )); log "round $N ~0 groups (strike $STRIKES/2)"; [ $STRIKES -ge 2 ] && { log "stopping"; break; }; N=$(( N + 1 )); continue; fi
+  [ $(date +%s) -ge $DEADLINE ] && { log "20h deadline"; break; }
+  BUD=$([ $N -eq 1 ] && echo 6000 || echo 8000)
+  rm -f runs/thumb$N/_produced
+  log "=== round $N : vLLM harvest with $(basename $PREV) (budget $BUD, full reasoning) ==="
+  RUN=thumb$N MODEL=$PREV G=5 TBATCH=32 MAXNEW=1500 IMG_BUDGET=$BUD $V -u thumb_harvest.py 2>&1 \
+    | grep -avE 'it/s|Adding requests|Processed prompts|Loading safetensors|Capturing|profile'
+  GOT=$(cat runs/thumb$N/_produced 2>/dev/null || echo 0)
+  log "round $N produced $GOT new groups (banked to R2)"
+  if [ "$GOT" -lt 8 ]; then STRIKES=$((STRIKES+1)); log "thin round (strike $STRIKES/2)"; [ $STRIKES -ge 2 ] && { log "stopping"; break; }; N=$((N+1)); continue; fi
   STRIKES=0
   [ $(date +%s) -ge $DEADLINE ] && break
-  log "=== round $N : THUMB update -> thumb_r$N ==="
-  THUMB_ROUND=$N $V thumb_update.py 2>&1 | grep -vE "Loading weights|it/s\]" || { log "update$N failed, stopping"; break; }
-  PREV=/home/ubuntu/thumbrl/models/thumbmerged_r$N
-  N=$(( N + 1 ))
+  log "=== round $N : LoRA update -> thumb_r$N ==="
+  if THUMB_ROUND=$N $V thumb_update.py 2>&1 | grep -avE 'it/s|Loading'; then
+    PREV=/home/ubuntu/thumbrl/models/thumbmerged_r$N; log "round $N trained -> $(basename $PREV)"
+  else
+    log "update$N failed (guesses are safe) — continuing harvest on the SAME model"
+    # keep harvesting with the current model rather than dying; training can be fixed without losing data
+  fi
+  N=$((N+1))
 done
-log "=== THUMB_OVERNIGHT_DONE (last: $(basename $PREV)) ==="
+log "=== THUMB_OVERNIGHT_DONE (last model: $(basename $PREV)) ==="

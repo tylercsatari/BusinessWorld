@@ -4,7 +4,8 @@ cd /home/ubuntu/thumbrl
 echo "=== venv + deps ==="
 python3 -m venv venv
 venv/bin/pip install -q --upgrade pip
-venv/bin/pip install -q "numpy<2.3" torch transformers peft trl bitsandbytes accelerate datasets boto3 pillow hf_transfer huggingface_hub scipy scikit-learn
+venv/bin/pip install -q --index-url https://download.pytorch.org/whl/cu124 torch   # CUDA 12.x to match Lambda's driver (default pip grabs cu130 → cuda=False)
+venv/bin/pip install -q "numpy<2.3" transformers peft trl bitsandbytes accelerate datasets boto3 pillow hf_transfer huggingface_hub scipy scikit-learn
 echo DEPS_DONE
 echo "=== download Qwen3-30B-A3B ==="
 HF_HUB_ENABLE_HF_TRANSFER=1 venv/bin/python -c "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-30B-A3B', local_dir='/home/ubuntu/thumbrl/models/qwen3-30b-a3b')"

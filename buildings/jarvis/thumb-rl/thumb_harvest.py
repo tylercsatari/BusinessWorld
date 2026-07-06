@@ -37,29 +37,27 @@ def split_think(txt):
     except Exception: spec = None
     return reasoning, spec
 
-print("loading %s for run=%s (G=%d)" % (MODEL, RUN, G), flush=True)
+print("loading %s (vLLM) for run=%s (G=%d)" % (MODEL, RUN, G), flush=True)
+from vllm import LLM, SamplingParams
 tok = AutoTokenizer.from_pretrained(MODEL)
-if tok.pad_token is None: tok.pad_token = tok.eos_token
-tok.padding_side = "left"
-model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, device_map="cuda"); model.eval()
-model.config.output_router_logits = False  # SFT-merged Qwen3-MoE bakes this True -> aux-loss crash at generate; off for inference
+llm = LLM(model=MODEL, dtype="bfloat16", gpu_memory_utilization=0.92, max_model_len=4096, trust_remote_code=True)
+SAMPLING = SamplingParams(temperature=1.05, top_p=0.95, max_tokens=MAXNEW)
 print("model ready", flush=True)
 
 def gen_batch(titles_list, temp=1.05):
-    """G reasoning+prompt attempts for EACH title, all in ONE batched forward pass (the throughput win —
-    at G=5 the 30B model barely uses the GPU). Returns a list (per title) of G attempt dicts."""
+    """G reasoning+prompt attempts for EACH title. vLLM continuous-batches ALL TBATCH*G prompts with proper
+    MoE kernels, so the FULL 1500-token reasoning generates ~15-40x faster than transformers (which is the
+    slow-MoE bottleneck we hit). vLLM preserves prompt order. Returns a list (per title) of G attempt dicts."""
     prompts = []
     for t in titles_list:
         prompts += [tok.apply_chat_template([{"role": "system", "content": SYS}, {"role": "user", "content": t}],
                                             tokenize=False, add_generation_prompt=True, enable_thinking=True)] * G
-    ins = tok(prompts, return_tensors="pt", padding=True).to("cuda")
-    with torch.no_grad():
-        out = model.generate(**ins, max_new_tokens=MAXNEW, do_sample=True, temperature=temp, top_p=0.95, pad_token_id=tok.pad_token_id)
+    outs = llm.generate(prompts, SAMPLING)
     groups = []
     for ti in range(len(titles_list)):
         grp = []
         for gi in range(G):
-            full = tok.decode(out[ti * G + gi][ins.input_ids.shape[1]:], skip_special_tokens=True)
+            full = outs[ti * G + gi].outputs[0].text
             reasoning, spec = split_think(full)
             pr = spec.get("prompt") if spec else None
             grp.append({"reasoning": reasoning, "prompt": pr if (isinstance(pr, str) and len(pr.strip()) > 8) else None, "completion": full})
@@ -102,6 +100,8 @@ if os.path.exists(INDEX):
         try: done.add(json.loads(l)["input_id"])
         except Exception: pass
 print("titles=%d resume=%d budget=%d" % (len(titles), len(done), IMG_BUDGET), flush=True)
+import threading as _th
+_WLOCK = _th.Lock(); PRODUCED = [0]   # lock guards the shared local jsonl files; PRODUCED = new groups THIS run (for the overnight loop)
 
 def process_input(item, iid, group=None, run=RUN, gkey=None):
     """Generate G reasoned thumbnails for one title, render+score, store the group. For run==RUN it also
@@ -127,10 +127,10 @@ def process_input(item, iid, group=None, run=RUN, gkey=None):
             "caption": s["caption"], "x": s["x"], "y": s["y"], "nbr": s["nbr"]})
         if run == RUN:  # training run: feed the trainer + the Guesses-map manifest
             if adv > 0.02:
-                with open(TRAIN, "a") as f:
+                with _WLOCK, open(TRAIN, "a") as f:
                     f.write(json.dumps({"input_id": iid, "title": title, "reasoning": s["reasoning"],
                         "prompt": s["prompt"], "advantage": round(adv, 4)}) + "\n")
-            with open(MANIF, "a") as f:
+            with _WLOCK, open(MANIF, "a") as f:
                 f.write(json.dumps({"id": "%s_%d" % (iid, k), "input_id": iid, "k": k, "title": title,
                     "x": s["x"], "y": s["y"], "nbr": s["nbr"], "pctile": round(s["pctile"], 4),
                     "nn_cos": round(s["nn_cos"], 4),
@@ -144,11 +144,13 @@ def process_input(item, iid, group=None, run=RUN, gkey=None):
     H.s3.put_object(Bucket=H.BUCKET, Key="longform/guesses/%s/groups/%s.json" % (run, gid),
                     Body=json.dumps(grp).encode(), ContentType="application/json")
     if run == RUN:
-        with open(INDEX, "a") as f:
-            f.write(json.dumps({"input_id": iid, "title": title, "best_pctile": grp["best_pctile"],
-                "best_reward": grp["best_reward"], "group_mean": grp["group_mean"], "spread": grp["spread"], "n": grp["n"]}) + "\n")
-        H.s3.upload_file(INDEX, H.BUCKET, "longform/guesses/%s/index.jsonl" % RUN)
-        H.s3.upload_file(MANIF, H.BUCKET, "longform/guesses/%s/manifest.jsonl" % RUN)
+        with _WLOCK:
+            with open(INDEX, "a") as f:
+                f.write(json.dumps({"input_id": iid, "title": title, "best_pctile": grp["best_pctile"],
+                    "best_reward": grp["best_reward"], "group_mean": grp["group_mean"], "spread": grp["spread"], "n": grp["n"]}) + "\n")
+            PRODUCED[0] += 1
+            H.s3.upload_file(INDEX, H.BUCKET, "longform/guesses/%s/index.jsonl" % RUN)
+            H.s3.upload_file(MANIF, H.BUCKET, "longform/guesses/%s/manifest.jsonl" % RUN)
     print("[%s] %s n=%d best_pct=%.0f%% best_rew=%.2f mean=%.2f spread=%.2f imgs=%d $%.2f" % (
         run, gid, len(scored), grp["best_pctile"]*100, grp["best_reward"], base, grp["spread"], H.RENDERS[0], H.RENDERS[0]*0.003), flush=True)
     return True
@@ -187,11 +189,20 @@ while bi < len(pending):
         groups = gen_batch([(it.get("title") or "").strip() for _, it in chunk])
     except Exception as e:
         print("[%s] gen_batch err %s" % (RUN, str(e)[:90]), flush=True); continue
-    for (ii, item), grp in zip(chunk, groups):
-        if H.RENDERS[0] >= IMG_BUDGET: break
-        iid = "t%05d" % ii
-        try: process_input(item, iid, group=grp)
-        except H.BillingHalt as e: print("=== BILLING HALT: %s ===" % str(e)[:80], flush=True); bi = len(pending); break
-        except Exception as e: print("[%s] %s err %s" % (RUN, iid, str(e)[:90]), flush=True)
+    # render+score ALL groups of this batch CONCURRENTLY (rendering, not generation, is the bottleneck now)
+    def _do(pair):
+        (ii, item), grp = pair
+        if H.RENDERS[0] >= IMG_BUDGET: return
+        try: process_input(item, "t%05d" % ii, group=grp)
+        except H.BillingHalt: raise
+        except Exception as e: print("[%s] t%05d err %s" % (RUN, ii, str(e)[:90]), flush=True)
+    try:
+        with ThreadPoolExecutor(max_workers=min(len(chunk), 8)) as ex:
+            list(ex.map(_do, list(zip(chunk, groups))))
+    except H.BillingHalt as e:
+        print("=== BILLING HALT: %s ===" % str(e)[:80], flush=True); break
 serve_requests()
-print("=== THUMB_HARVEST_DONE ===", flush=True)
+try:
+    with open(RUNDIR + "/_produced", "w") as fp: fp.write(str(PRODUCED[0]))   # overnight loop reads this (robust vs the wc -l resume bug)
+except Exception: pass
+print("=== THUMB_HARVEST_DONE produced=%d ===" % PRODUCED[0], flush=True)
