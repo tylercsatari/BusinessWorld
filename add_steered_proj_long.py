@@ -34,6 +34,9 @@ def norm(X): return X / (np.linalg.norm(X, axis=1, keepdims=True) + 1e-9)
 def grid(a):
     a = np.asarray(a, float); q1, q9 = np.nanpercentile(a, 1), np.nanpercentile(a, 99)
     return (np.clip((a - q1) / ((q9 - q1) or 1), 0, 1) * 1000).round().astype(int).tolist()
+def pls_dir(X, y):                          # PLS1 unit direction that best predicts y
+    m = PLSRegression(1).fit(X, y); w = np.asarray(m.coef_).reshape(-1); return w / (np.linalg.norm(w) + 1e-9)
+CTRVIEWS_ALPHA = 0.3                         # 30% CTR-direction + 70% views-direction (from exp_ctr_views_long.py)
 
 MIN_OWNED = 12   # long-form accounts have far fewer videos than the shorts 211 — lower the bar
 
@@ -133,6 +136,8 @@ for ch in ['visual', 'text', 'together']:
         j = epos.get(vid)
         if j is not None: Vm[i] = V[j]
     mp['owner'] = [owner_of.get(vid, '') for vid in mids]
+    lv_all = np.log10(np.array(mp.get('views', []), float) + 1)
+    w_views_ch = pls_dir(Vm, lv_all) if len(lv_all) == len(mids) and float(np.nanstd(lv_all)) > 1e-9 else None
 
     for acct in ACCTS:
         CTR, RET30 = ACC[acct]['ctr'], ACC[acct]['ret30']
@@ -158,7 +163,19 @@ for ch in ['visual', 'text', 'together']:
             mp['proj'][f'realviews__{acct}'] = {'x': grid(XYr[:, 0]), 'y': grid(XYr[:, 1]), 'cv': round(cvr, 3), 'co': 0.0,
                                                 'est': [round(float(x)) for x in rv], 'predscope': True}
             print(f'  {ch}/realviews__{acct}: held-out r={cvr:.3f} · median {np.median(rv):,.0f}', flush=True)
-    for b in ['ctr', 'ret30', 'realviews']:
+        # JOINT CTR+views axis (from exp_ctr_views_long.py) — a blend aligned with BOTH at once
+        own = [i for i, vid in enumerate(mids) if vid in ACC[acct]['ctr']]
+        if w_views_ch is not None and len(own) >= MIN_OWNED:
+            cy = np.array([ACC[acct]['ctr'][mids[i]] for i in own])
+            w_ctr = pls_dir(Vm[own], cy)
+            blend = CTRVIEWS_ALPHA * w_ctr + (1 - CTRVIEWS_ALPHA) * w_views_ch; blend /= (np.linalg.norm(blend) + 1e-9)
+            x = Vm @ blend
+            Xc = Vm - Vm.mean(0); pc = np.linalg.svd(Xc, full_matrices=False)[2][0]
+            po = pc - (pc @ blend) * blend; po /= (np.linalg.norm(po) + 1e-9); y = Xc @ po
+            cvv = abs(float(spearmanr(x, lv_all)[0])); coc = abs(float(spearmanr(x[own], cy)[0]))
+            mp['proj'][f'ctrviews__{acct}'] = {'x': grid(x), 'y': grid(y), 'cv': round(cvv, 3), 'co': round(coc, 3), 'joint': True}
+            print(f'  {ch}/ctrviews__{acct}: views r={cvv:.3f} · CTR r={coc:.3f} (owned {len(own)})', flush=True)
+    for b in ['ctr', 'ret30', 'realviews', 'ctrviews']:
         if f'{b}__tyler' in mp['proj']: mp['proj'][b] = mp['proj'][f'{b}__tyler']
 
     # global library-driven rawviews (raw scale) so a corpus-wide views axis exists
