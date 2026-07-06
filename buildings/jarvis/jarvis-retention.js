@@ -3092,6 +3092,10 @@ const JarvisRetention = (function () {
         const sdel = e.target.closest('[data-savedel]'); if (sdel) { deleteSaved(sdel.getAttribute('data-savedel')); return; }
         if (e.target.closest('[data-savedclose]')) { st.savedSel = null; rtgUpdateExp(); return; }
         const ssort = e.target.closest('[data-savedsort]'); if (ssort) { st.savedSort = ssort.getAttribute('data-savedsort'); rtgUpdateExp(); return; }
+        const sfdel = e.target.closest('[data-savedfolderdel]'); if (sfdel) { deleteFolder(sfdel.getAttribute('data-savedfolderdel')); return; }
+        const sfol = e.target.closest('[data-savedfolder]'); if (sfol) { st.savedFolder = sfol.getAttribute('data-savedfolder'); st.savedShow = 60; rtgUpdateExp(); return; }
+        if (e.target.closest('[data-savedfoldernew]')) { createFolder(); return; }
+        if (e.target.closest('[data-savedmore]')) { st.savedShow = (st.savedShow || 60) + 60; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedfiltclear]')) { st.savedFilt = {}; rtgUpdateExp(); return; }
         const sopen = e.target.closest('[data-savedopen]'); if (sopen) { openSaved(sopen.getAttribute('data-savedopen')); return; }
         const gvBtn = e.target.closest('[data-guessview]'); if (gvBtn) { st.guessView = gvBtn.getAttribute('data-guessview'); rtgUpdateGuesses(); return; }
@@ -3140,6 +3144,7 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-q]')) { st.q = e.target.value; render(); }
     }
     function onChange(e) {
+        if (e.target.getAttribute && e.target.getAttribute('data-savedmove') != null) { moveHook(e.target.getAttribute('data-savedmove'), e.target.value); return; }
         if (e.target.id === 'rawUpFile') { if (e.target.files && e.target.files.length) rtgRawUpload(e.target.files); return; }
         if (e.target.id === 'rawFrameFile') { const f = e.target.files && e.target.files[0]; if (f) rtgFrameFile(f, st.rawFrameSlot || 0); return; }
         if (e.target.closest('[data-tracked]')) { st.trackedOnly = e.target.checked; render(); }
@@ -3284,14 +3289,26 @@ const JarvisRetention = (function () {
     }
     async function saveHook(payload) {
         try {
+            const cf = st.savedFolder; if (cf && cf !== 'all' && cf !== 'none') payload = Object.assign({}, payload, { folder: cf });
             const r = await fetch('/api/raw/hook-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const j = await r.json();
-            if (j.ok) { st.savedFlash = j.id; SAVED = null; rtgUpdateExp(); window.setTimeout(() => { if (st.savedFlash === j.id) { st.savedFlash = null; rtgUpdateExp(); } }, 2500); }
+            if (j.ok) { st.savedFlash = j.id; SAVED = null; rtgUpdateExp(); window.setTimeout(() => { if (st.savedFlash === j.id) { st.savedFlash = null; rtgUpdateExp(); } }, 3500); }
             else { st.rawUpErr = j.error || 'save failed'; rtgUpdateExp(); }
         } catch (e) { st.rawUpErr = e.message; rtgUpdateExp(); }
     }
     async function deleteSaved(id) {
         try { await fetch('/api/raw/hook-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); SAVED = null; rtgUpdateExp(); } catch (e) {}
+    }
+    async function createFolder() {
+        const name = window.prompt('New folder name:'); if (!name || !name.trim()) return;
+        try { const r = await fetch('/api/raw/folder-create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) }); const j = await r.json(); if (j && j.id) st.savedFolder = j.id; SAVED = null; rtgUpdateExp(); } catch (e) {}
+    }
+    async function moveHook(id, folder) {
+        try { await fetch('/api/raw/hook-move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, folder: folder || null }) }); SAVED = null; rtgUpdateExp(); } catch (e) {}
+    }
+    async function deleteFolder(fid) {
+        if (!window.confirm('Delete this folder? Hooks inside become Unfiled.')) return;
+        try { await fetch('/api/raw/folder-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: fid }) }); if (st.savedFolder === fid) st.savedFolder = 'all'; SAVED = null; rtgUpdateExp(); } catch (e) {}
     }
     // Clicking a saved hook re-runs its montage through the SAME embed-montage scorer → it lands in
     // the standard score display (trace + every indicator + embedded-space placement), identical to
@@ -3340,35 +3357,49 @@ const JarvisRetention = (function () {
             if (thr('outlier') && !(m.outlier >= thr('outlier'))) return false;
             return true;
         };
-        const sortK = st.savedSort || 'keep';
-        const hooks = all.filter(pass).sort((a, b) => ((b.m || {})[sortK] || 0) - ((a.m || {})[sortK] || 0));
-        const CAP = 150;
+        const folders = SAVED.folders || [];
+        const curF = st.savedFolder || 'all';
+        const inFolder = h => curF === 'all' ? true : curF === 'none' ? !h.folder : h.folder === curF;
+        const sortK = st.savedSort || 'recent';
+        const hooks = all.filter(h => pass(h) && inFolder(h));
+        if (sortK === 'recent') hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+        else if (sortK === 'oldest') hooks.sort((a, b) => (a.savedAt || 0) - (b.savedAt || 0));
+        else hooks.sort((a, b) => ((b.m || {})[sortK] || 0) - ((a.m || {})[sortK] || 0));
+        const SHOW = st.savedShow || 60;
         const fbar = METRICS.map(([k, lab, mx, u]) => `<div style="display:flex;flex-direction:column;gap:1px;min-width:118px">
             <span style="font-size:9px;color:${C.mute}">${lab} ≥ <b style="color:${thr(k) ? C.accent : C.dim}">${thr(k)}${u}</b></span>
             <input type="range" min="0" max="${mx}" value="${thr(k)}" data-savedfilt="${k}" style="width:118px;accent-color:${C.accent}"/></div>`).join('');
-        const sortSel = METRICS.map(([k, lab]) => `<span data-savedsort="${k}" style="cursor:pointer;font-size:9px;border:1px solid ${sortK === k ? C.accent : C.border};background:${sortK === k ? C.accent + '22' : 'transparent'};color:${sortK === k ? C.accent : C.dim};border-radius:5px;padding:2px 6px">${k}</span>`).join('');
+        const SORTS = [['recent', '🕑 recent'], ['oldest', 'oldest'], ['keep', 'keep'], ['ret5', 'ret5'], ['views', 'views'], ['sviews', 'sviews'], ['gt10M', '>10M'], ['outlier', 'outlier']];
+        const sortSel = SORTS.map(([k, lab]) => `<span data-savedsort="${k}" style="cursor:pointer;font-size:9px;border:1px solid ${sortK === k ? C.accent : C.border};background:${sortK === k ? C.accent + '22' : 'transparent'};color:${sortK === k ? C.accent : C.dim};border-radius:5px;padding:2px 6px">${lab}</span>`).join('');
+        const fcount = id => all.filter(h => id === 'none' ? !h.folder : h.folder === id).length;
+        const folderPills = [['all', 'All (' + all.length + ')'], ['none', 'Unfiled (' + fcount('none') + ')']].concat(folders.map(f => [f.id, esc(f.name) + ' (' + fcount(f.id) + ')']));
+        const folderBar = `<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:9px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">folder</span>${folderPills.map(([id, lab]) => `<span data-savedfolder="${id}" style="cursor:pointer;font-size:10px;border:1px solid ${curF === id ? C.accent : C.border};background:${curF === id ? C.accent + '22' : 'transparent'};color:${curF === id ? C.accent : C.dim};border-radius:6px;padding:2px 8px">${lab}${(id !== 'all' && id !== 'none') ? ` <span data-savedfolderdel="${id}" title="delete folder" style="color:${C.mute};margin-left:3px">✕</span>` : ''}</span>`).join('')}<span data-savedfoldernew style="cursor:pointer;font-size:10px;border:1px dashed ${C.accent};color:${C.accent};border-radius:6px;padding:2px 8px">+ New folder</span></div>`;
+        const folderOpts = h => `<option value="">📁 —</option>` + folders.map(f => `<option value="${f.id}" ${h.folder === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('');
         const card = h => {
             const thumb = h.hasMontage ? `/api/raw/saved-montage/${h.id}` : (h.frame_imgs && h.frame_imgs[0] ? `/api/hooks/grpo/montage/demo/${h.frame_imgs[0]}` : '');
             const kp = h.steer && (h.steer.visual_keep || h.steer.together_keep || h.steer.text_keep);
-            const kpct = (h.keep != null) ? h.keep : (kp && kp.pctile != null ? kp.pctile : null);
+            const kpct = (h.keep != null) ? h.keep : (kp && kp.pctile != null ? kp.pctile : ((h.m && h.m.keep != null) ? h.m.keep : null));
             const badge = (kpct != null) ? `<span style="font-size:9px;font-weight:700;color:${heatCol((kpct || 0) / 100)}">keep ${Math.round(kpct)}%ile</span>` : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'scored' : 'idea'}</span>`;
             const sel = st.savedSel === h.id;
             return `<div data-savedopen="${h.id}" style="border:1px solid ${sel ? C.accent : C.border};border-radius:8px;padding:7px;background:${C.card2};width:152px;position:relative;cursor:pointer">
               <span data-savedel="${h.id}" title="delete" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer;z-index:2">✕</span>
               ${thumb ? `<img src="${thumb}" style="width:100%;border-radius:5px;display:block;margin-bottom:5px;background:#000" loading="lazy"/>` : ''}
               <div style="font-size:10px;color:${C.text};font-weight:700;line-height:1.3;max-height:39px;overflow:hidden">${esc((h.title || '').slice(0, 75))}</div>
-              <div style="margin-top:3px">${badge}</div></div>`;
+              <div style="margin-top:4px;display:flex;justify-content:space-between;align-items:center;gap:4px">${badge}${folders.length ? `<select data-savedmove="${h.id}" onclick="event.stopPropagation()" title="move to folder" style="font-size:9px;background:${C.card};color:${C.dim};border:1px solid ${C.border};border-radius:4px;max-width:66px;cursor:pointer">${folderOpts(h)}</select>` : ''}</div></div>`;
         };
-        const shown = hooks.slice(0, CAP);
+        const shown = hooks.slice(0, SHOW);
         const anyFilt = METRICS.some(([k]) => thr(k));
-        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💾 Saved hooks <span style="font-size:10px;color:${C.mute};font-weight:600">— ${all.length} above your keep/views threshold${anyFilt ? ` · <b style="color:${C.accent}">${hooks.length} match your filter</b>` : ''} · click any for the full read-out</span></div>
+        const flash = st.savedFlash ? `<div style="background:${C.green}1e;border:1px solid ${C.green};border-radius:8px;padding:9px 13px;margin-bottom:10px;font-size:12px;color:${C.green};font-weight:800">✅ Saved${(curF !== 'all' && curF !== 'none') ? ' to ' + esc((folders.find(f => f.id === curF) || {}).name || '') : ''}!</div>` : '';
+        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💾 Saved hooks <span style="font-size:10px;color:${C.mute};font-weight:600">— ${all.length} total · click any for the full read-out</span></div>
+          ${flash}${folderBar}
           <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;padding:8px;background:${C.card2};border-radius:8px">
             <span style="font-size:9px;color:${C.mute};align-self:center">filter ≥</span>${fbar}
             ${anyFilt ? `<span data-savedfiltclear style="cursor:pointer;font-size:9px;color:${C.dim};text-decoration:underline;align-self:center">clear</span>` : ''}
             <span style="width:10px"></span><span style="font-size:9px;color:${C.mute};align-self:center">sort by</span>${sortSel}</div>
           ${savedDetail()}
+          <div style="font-size:10px;color:${C.mute};margin-bottom:6px">${hooks.length} ${(anyFilt || curF !== 'all') ? 'match' : 'saved'} · showing ${Math.min(SHOW, hooks.length)}</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">${shown.map(card).join('')}</div>
-          ${hooks.length > CAP ? `<div style="font-size:10px;color:${C.mute};margin-top:8px">showing top ${CAP} of ${hooks.length} — tighten the filter to narrow down</div>` : ''}`, 12);
+          ${hooks.length > SHOW ? `<div style="text-align:center;margin-top:12px"><span data-savedmore style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:8px;padding:6px 18px;font-size:11px;font-weight:700">Load ${Math.min(60, hooks.length - SHOW)} more · ${hooks.length - SHOW} left</span></div>` : ''}`, 12);
     }
 
     async function mount(el) {

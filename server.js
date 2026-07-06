@@ -3074,6 +3074,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 id, savedAt: Date.now(),
                 kind: body.kind === 'scored' ? 'scored' : 'idea',
                 source: String(body.source || '').slice(0, 20),
+                folder: (String(body.folder || '').slice(0, 40)) || null,
                 title: String(body.title || 'Saved hook').slice(0, 140),
                 text: String(body.text || '').slice(0, 2000),
                 frames: Array.isArray(body.frames) ? body.frames.slice(0, 5).map(f => String(f).slice(0, 600)) : [],
@@ -3090,7 +3091,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 try { const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
                 if (!Array.isArray(idx.hooks)) idx.hooks = [];
                 const g = t => (rec.steer && (rec.steer['together_' + t] || rec.steer['visual_' + t])) || {};
-                idx.hooks.push({ id, title: rec.title, kind: rec.kind, hasMontage, savedAt: rec.savedAt, keep: g('keep').pctile, m: { keep: g('keep').pctile, keep_est: g('keep').est, ret5: g('ret5').pctile, views: g('views').est, sviews: g('realviews').est, gt10M: g('gt10M').est, outlier: g('outlier').pctile } });
+                idx.hooks.push({ id, title: rec.title, kind: rec.kind, hasMontage, savedAt: rec.savedAt, folder: rec.folder, keep: g('keep').pctile, m: { keep: g('keep').pctile, keep_est: g('keep').est, ret5: g('ret5').pctile, views: g('views').est, sviews: g('realviews').est, gt10M: g('gt10M').est, outlier: g('outlier').pctile } });
                 await cloud.uploadToR2('raw/saved-hooks/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
             } catch (e) {}
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, id }));
@@ -3105,7 +3106,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (idx && Array.isArray(idx.hooks)) {
                 idx.hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
                 res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-                res.end(JSON.stringify({ hooks: idx.hooks, indexed: true }));
+                res.end(JSON.stringify({ hooks: idx.hooks, folders: idx.folders || [], indexed: true }));
                 return;
             }
             // Fallback (no index yet): only the most-recent ~80 records so we never time out on a big bank.
@@ -3115,7 +3116,35 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             for (const k of keys) { try { const b = await cloud.downloadFromR2(k); if (b) hooks.push(JSON.parse(b.toString('utf8'))); } catch (e) {} }
             hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify({ hooks, indexed: false }));
+            res.end(JSON.stringify({ hooks, folders: [], indexed: false }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    // Folders for saved hooks: create a folder / move a hook into one / delete a folder. Stored in the index.
+    if ((pathname === '/api/raw/folder-create' || pathname === '/api/raw/hook-move' || pathname === '/api/raw/folder-delete') && req.method === 'POST') {
+        try {
+            const body = (await readBody(req)) || {};
+            let idx = { hooks: [], folders: [] };
+            try { const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
+            if (!Array.isArray(idx.hooks)) idx.hooks = [];
+            if (!Array.isArray(idx.folders)) idx.folders = [];
+            const out = { ok: true };
+            if (pathname === '/api/raw/folder-create') {
+                const name = String(body.name || '').slice(0, 60).trim();
+                if (!name) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no name"}'); return; }
+                let f = idx.folders.find(x => (x.name || '').toLowerCase() === name.toLowerCase());
+                if (!f) { f = { id: 'f' + Date.now().toString(36), name }; idx.folders.push(f); }
+                out.id = f.id; out.name = f.name;
+            } else if (pathname === '/api/raw/hook-move') {
+                const id = String(body.id || ''); const folder = body.folder ? String(body.folder).slice(0, 40) : null;
+                const h = idx.hooks.find(x => x.id === id); if (h) h.folder = folder;
+                try { const rb = await cloud.downloadFromR2(`raw/saved-hooks/${id}.json`); if (rb) { const rec = JSON.parse(rb.toString('utf8')); rec.folder = folder; await cloud.uploadToR2(`raw/saved-hooks/${id}.json`, Buffer.from(JSON.stringify(rec)), 'application/json'); } } catch (e) {}
+            } else {  // folder-delete: drop the folder, unfile its hooks
+                const fid = String(body.id || ''); idx.folders = idx.folders.filter(x => x.id !== fid);
+                idx.hooks.forEach(h => { if (h.folder === fid) h.folder = null; });
+            }
+            await cloud.uploadToR2('raw/saved-hooks/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(out));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
