@@ -173,7 +173,8 @@ for ch in ['visual', 'text', 'together']:
             Xc = Vm - Vm.mean(0); pc = np.linalg.svd(Xc, full_matrices=False)[2][0]
             po = pc - (pc @ blend) * blend; po /= (np.linalg.norm(po) + 1e-9); y = Xc @ po
             cvv = abs(float(spearmanr(x, lv_all)[0])); coc = abs(float(spearmanr(x[own], cy)[0]))
-            mp['proj'][f'ctrviews__{acct}'] = {'x': grid(x), 'y': grid(y), 'cv': round(cvv, 3), 'co': round(coc, 3), 'joint': True}
+            ce = mp['proj'].get(f'ctr__{acct}', {}).get('est')   # per-point CTR estimate (reused from the ctr__ axis) so the trend bands can show CTR too
+            mp['proj'][f'ctrviews__{acct}'] = {'x': grid(x), 'y': grid(y), 'cv': round(cvv, 3), 'co': round(coc, 3), 'joint': True, 'ctr_est': ce}
             print(f'  {ch}/ctrviews__{acct}: views r={cvv:.3f} · CTR r={coc:.3f} (owned {len(own)})', flush=True)
     for b in ['ctr', 'ret30', 'realviews', 'ctrviews']:
         if f'{b}__tyler' in mp['proj']: mp['proj'][b] = mp['proj'][f'{b}__tyler']

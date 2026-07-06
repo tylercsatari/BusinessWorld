@@ -340,6 +340,10 @@ const JarvisLongQuant = (function () {
         const isAcctProj = ['ctr', 'ret30', 'realviews', 'ctrviews'].includes(pm);   // this projection is account-specific
         const supervised = pm && !['umap', 'pca'].includes(pm);
         const mode = st.rawColor || 'cluster', k = st.rawK || '10';
+        // dataset curation: exclude whole k-means clusters (per k), dim them, then save the kept set
+        const _clK = (R.clusters || {})[k] || [];
+        const _excl = new Set((st.rawExcl && st.rawExcl[k]) || []);
+        const isExcl = i => _excl.size > 0 && _clK[i] != null && _excl.has(_clK[i]);
         // "mine" highlight follows the selected account (owner tags); 'all' = every account's videos.
         const OWNER = R.owner || [];
         const MINE = OWNER.length ? (ACCT === 'all' ? OWNER.map(o => !!o) : OWNER.map(o => o === ACCT)) : (R.mine || []);
@@ -362,6 +366,8 @@ const JarvisLongQuant = (function () {
             if (pm === 'hiout') { const ov = O.map(x => (x == null ? NaN : +x)), sv = ov.filter(x => !isNaN(x)).slice().sort((p, q) => p - q), thr = sv.length ? sv[Math.floor(sv.length * 0.85)] : Infinity; return { dir: ov.map(x => (!isNaN(x) && x >= thr) ? 1 : 0), label: 'top-outlier share', fmt: v => Math.round(v * 100) + '%', binary: true, pctLinear: false }; }
             if (pm === 'outlier') return { dir: O.map(x => (x == null ? NaN : Math.log10(+x + 1))), label: 'outlier', fmt: v => v.toFixed(1) + '×', binary: false, pctLinear: false };
             if (pm === 'realviews' && proj.est) return { dir: proj.est.map(x => Math.log10((+x || 0) + 1)), label: 'realistic views (your scale)', fmt: v => fv(v), binary: false, pctLinear: false };
+            // JOINT axis: band by views (primary path) AND surface CTR as a second per-band label
+            if (pm === 'ctrviews') { const ce = proj.ctr_est || []; return { dir: V.map(x => Math.log10((+x || 0) + 1)), label: 'views', fmt: v => fv(v), binary: false, pctLinear: false, dir2: ce.length === V.length ? ce : null, label2: 'CTR', fmt2: v => (+v).toFixed(1) + '%' }; }
             return { dir: V.map(x => Math.log10((+x || 0) + 1)), label: 'views', fmt: v => fv(v), binary: false, pctLinear: false };
         };
         const BM = st.rawBands ? bandMetric() : null;
@@ -395,9 +401,9 @@ const JarvisLongQuant = (function () {
         for (let i = 0; i < n; i++) {
             const kpv = ESTP ? ((ACTP && ACTP[i] != null) ? `${ACTP[i].toFixed(0)}% ${metLabel} (actual)` : (ESTP[i] != null ? `~${ESTP[i].toFixed(0)}% ${metLabel} (est.)` : '')) : '';
             const tip = `${MINE[i] ? '★ YOUR VIDEO · ' : ''}${esc((R.title[i] || '').slice(0, 40))} · ${fv(R.views[i])} views${kpv ? ' · ' + kpv : ''}${SILENT[i] ? ' · no voiceover' : ''}`;
-            const sel = i === selI, mine = hiMine && MINE[i];
-            const op = sel ? 1 : (hiMine && !MINE[i] ? 0.12 : 0.72);
-            const circ = `<circle data-rawid="${R.id ? R.id[i] : ''}" cx="${X(proj.x[i]).toFixed(1)}" cy="${Yc(proj.y[i]).toFixed(1)}" r="${sel ? 5.5 : mine ? 4 : 2.4}" fill="${mine ? GOLD : colOf(i)}" opacity="${op}" stroke="${sel ? '#fff' : mine ? GOLD : 'none'}" stroke-width="${sel ? 1.5 : mine ? 1.2 : 0}" style="cursor:pointer"><title>${tip}</title></circle>`;
+            const sel = i === selI, mine = hiMine && MINE[i], ex = isExcl(i);
+            const op = sel ? 1 : ex ? 0.05 : (hiMine && !MINE[i] ? 0.12 : 0.72);
+            const circ = `<circle data-rawid="${R.id ? R.id[i] : ''}" cx="${X(proj.x[i]).toFixed(1)}" cy="${Yc(proj.y[i]).toFixed(1)}" r="${sel ? 5.5 : mine ? 4 : 2.4}" fill="${ex ? '#334155' : mine ? GOLD : colOf(i)}" opacity="${op}" stroke="${sel ? '#fff' : mine ? GOLD : 'none'}" stroke-width="${sel ? 1.5 : mine ? 1.2 : 0}" style="cursor:pointer"><title>${tip}</title></circle>`;
             if (mine) mineDots += circ; else dots += circ;   // draw mine on top
         }
         dots += mineDots;
@@ -464,8 +470,8 @@ const JarvisLongQuant = (function () {
                     const ord = idxV.map((_, j) => j).sort((p, q) => t[p] - t[q]);
                     const M = ord.length, binOf = new Array(M);
                     ord.forEach((j, rank) => { binOf[j] = Math.min(K - 1, Math.floor(rank / M * K)); });
-                    const bins = Array.from({ length: K }, () => ({ vals: [], gx: 0, gy: 0, cnt: 0 }));
-                    for (let j = 0; j < M; j++) { const i = idxV[j], bn = bins[binOf[j]]; bn.vals.push(dir[i]); bn.gx += sxOf(i); bn.gy += syOf(i); bn.cnt++; }
+                    const bins = Array.from({ length: K }, () => ({ vals: [], vals2: [], gx: 0, gy: 0, cnt: 0 }));
+                    for (let j = 0; j < M; j++) { const i = idxV[j], bn = bins[binOf[j]]; bn.vals.push(dir[i]); if (BM.dir2) bn.vals2.push(BM.dir2[i]); bn.gx += sxOf(i); bn.gy += syOf(i); bn.cnt++; }
                     const bndT = [];                                       // t-value of each divider = midpoint between adjacent groups
                     for (let bI = 1; bI < K; bI++) { const r = Math.floor(bI / K * M); bndT.push((t[ord[r - 1]] + t[ord[r]]) / 2); }
                     // dividers: clip the screen-space line a·x + b·y = c to the plot rectangle → drawn ⟂ to (a,b)
@@ -485,11 +491,13 @@ const JarvisLongQuant = (function () {
                     for (let bi = 0; bi < K; bi++) {
                         const bn = bins[bi]; if (bn.cnt < 3) continue;
                         const cx = bn.gx / bn.cnt, cy = bn.gy / bn.cnt, v = stat(bn);
-                        const txt = fmt((binary || pctLinear) ? v : Math.pow(10, v)), w = txt.length * 6.6 + 12;
+                        let txt = fmt((binary || pctLinear) ? v : Math.pow(10, v));
+                        if (BM.dir2 && bn.vals2.length) { const s2 = bn.vals2.filter(x => x != null && isFinite(x)).sort((p, q) => p - q); if (s2.length) txt += ' · ' + BM.fmt2(s2[s2.length >> 1]); }
+                        const w = txt.length * 6.6 + 12;
                         bandOver += `<g style="pointer-events:none"><rect x="${(cx - w / 2).toFixed(1)}" y="${(cy - 9).toFixed(1)}" width="${w.toFixed(1)}" height="16" rx="4" fill="#0f172a" opacity="0.85" stroke="#1e293b"/><text x="${cx.toFixed(1)}" y="${(cy + 2.8).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#e2e8f0">${txt}</text></g>`;
                     }
                     const statWord = (binary || pctLinear) ? 'avg' : 'median';
-                    bandNote = `<b style="color:${C.cyan}">Trend bands ON</b> — dots are coloured by <b>${label}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>) so the colour <b>always matches the band metric</b> — the colour pills are paused; the cyan <b>path</b> (→ arrow) is the best-fit direction it rises; dashed lines cut <b>⟂ to that path</b> into ${K} equal-count bands, each labelled with its <b>${statWord} ${label}</b>.`;
+                    bandNote = `<b style="color:${C.cyan}">Trend bands ON</b> — dots are coloured by <b>${label}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>) so the colour <b>always matches the band metric</b> — the colour pills are paused; the cyan <b>path</b> (→ arrow) is the best-fit direction it rises; dashed lines cut <b>⟂ to that path</b> into ${K} equal-count bands, each labelled with its <b>${statWord} ${label}</b>${BM.dir2 ? ` <b style="color:${C.green}">· ${statWord} ${BM.label2}</b> — the joint axis tracks both, so you can see how CTR and views separate together` : ''}.`;
                 }
             }
             if (!bandNote) bandNote = `<b style="color:${C.cyan}">Trend bands</b> — not enough data to fit a trend here.`;
@@ -578,7 +586,13 @@ const JarvisLongQuant = (function () {
         h += `<input id="rawUpFile" type="file" accept="video/*" multiple style="display:none"><input id="rawFrameFile" type="file" accept="image/*" style="display:none">`;
         h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
               <div style="font-size:12px;font-weight:700;color:${C.text};display:flex;gap:6px;align-items:center;flex-wrap:wrap">${n.toLocaleString()} hooks · ${chan} ${mineBtn} ${modeToggle} ${st.rawBuildMode ? showBtn : upBtn} ${upErr}</div>
-              <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${chan !== 'text' ? pill('voiceover', 'voiceover', mode === 'voiceover', 'data-rawcolor') : ''}${mode === 'cluster' ? `<span style="width:6px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div></div>${builder}
+              <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${chan !== 'text' ? pill('voiceover', 'voiceover', mode === 'voiceover', 'data-rawcolor') : ''}${mode === 'cluster' ? `<span style="width:6px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div>${mode === 'cluster' ? (() => {
+                const cnt = {}; _clK.forEach(c => { if (c != null) cnt[c] = (cnt[c] || 0) + 1; });
+                const cids = Object.keys(cnt).map(Number).sort((a, b) => a - b); if (!cids.length) return '';
+                const kept = _clK.filter(c => c != null && !_excl.has(c)).length;
+                const chips = cids.map(cid => `<span data-rawexcl="${cid}" title="cluster ${cid}: ${cnt[cid]} videos — click to ${_excl.has(cid) ? 'keep' : 'drop'}" style="cursor:pointer;display:inline-flex;align-items:center;gap:3px;border:1px solid ${_excl.has(cid) ? C.border : tcol(cid)};background:${_excl.has(cid) ? 'transparent' : tcol(cid) + '22'};border-radius:5px;padding:2px 6px;font-size:10px;font-weight:700;color:${_excl.has(cid) ? C.faint : tcol(cid)};${_excl.has(cid) ? 'text-decoration:line-through;opacity:.55' : ''}"><span style="width:8px;height:8px;border-radius:2px;background:${tcol(cid)};display:inline-block"></span>${cid}·${cnt[cid]}</span>`).join('');
+                return `<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">clusters · click to drop</span>${chips}<span style="width:8px"></span><span data-rawsave="1" style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:3px 10px;font-size:10px;font-weight:800">💾 Save clean set (${kept.toLocaleString()} kept)</span>${st.rawCurateMsg ? `<span style="font-size:10px;color:${(st.rawCurateMsg.indexOf('error') >= 0 ? C.red : C.green)};margin-left:4px">${esc(st.rawCurateMsg)}</span>` : ''}</div>`;
+            })() : ''}</div>${builder}
             <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">project</span>${PROJS.map(projPill).join('')}<span style="width:8px"></span><span data-rawbands="1" style="cursor:pointer;border:1px solid ${st.rawBands ? C.cyan : C.border};background:${st.rawBands ? C.cyan + '22' : 'transparent'};color:${st.rawBands ? C.cyan : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">📊 trend bands</span>${st.rawBands ? `<span style="font-size:9px;color:${C.mute};margin-left:2px">sections</span>${[4, 6, 8, 12, 16].map(kk => `<span data-rawbandk="${kk}" style="cursor:pointer;border:1px solid ${(st.rawBandK || 6) === kk ? C.cyan : C.border};background:${(st.rawBandK || 6) === kk ? C.cyan + '1e' : 'transparent'};color:${(st.rawBandK || 6) === kk ? C.cyan : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${kk}</span>`).join('')}` : ''}</div>
             ${isAcctProj ? (() => { const ml = { ctr: 'CTR', ret30: '30-sec retention', realviews: 'realistic views', ctrviews: 'CTR + views (joint)' }[pm]; return `<div style="font-size:10px;margin-bottom:6px;line-height:1.55;background:${accHas(pm) ? C.green : C.amber}14;border-left:3px solid ${accHas(pm) ? C.green : C.amber};padding:6px 10px;border-radius:4px">${accHas(pm) ? `<b style="color:${C.green}">${esc(ml)} · scoped to ${esc(ACCT_NM)}</b> — fit on ${esc(ACCT_NM)}'s own videos and projected across all ${(R.n || 0).toLocaleString()} thumbnails${pm === 'realviews' ? ' through the same duration-deconfounded equation as ⑤ Predict' : ''}. Switch accounts in the channel bar to see how the same thumbnails re-score per account.` : `<b style="color:${C.amber}">${esc(ACCT_NM)} has too few videos</b> (needs ≥12) for its own ${esc(ml)} projection — showing <b>Main</b>'s as a fallback. Pick another account or All pooled.`}</div>`; })() : ''}
             ${st.rawBands ? `<div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${bandNote}</div>` : ''}
@@ -588,6 +602,19 @@ const JarvisLongQuant = (function () {
         return h;
     }
     function rtgUpdateRaw() { try { const el = window.document.getElementById('rtg-rawpanel'); if (el) el.innerHTML = renderRaw(); } catch (e) { } try { const e2 = window.document.getElementById('rtg-exppanel'); if (e2) e2.innerHTML = renderExperiment(); } catch (e) { } }
+    // curation: save the kept video ids (everything NOT in a dropped cluster) as a clean training set
+    async function doRawCurate() {
+        const ch = st.rawChan || 'visual', R = RAW[ch]; if (!R || !R.id) return;
+        const kk = st.rawK || '10', cl = (R.clusters || {})[kk] || [], excl = new Set((st.rawExcl && st.rawExcl[kk]) || []);
+        const kept = R.id.filter((_, i) => cl[i] != null && !excl.has(cl[i]));
+        st.rawCurateMsg = 'saving ' + kept.length.toLocaleString() + '…'; rtgUpdateRaw();
+        try {
+            const r = await fetch('/api/longquant/curate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel: ch, account: (st.channel || 'tyler'), k: kk, excludedClusters: [...excl], keptIds: kept }) });
+            const j = await r.json();
+            st.rawCurateMsg = r.ok ? ('✓ saved ' + (j.n || kept.length).toLocaleString() + ' → ' + (j.key || 'R2')) : ('error: ' + (j.error || r.status));
+        } catch (e) { st.rawCurateMsg = 'error: ' + e.message; }
+        rtgUpdateRaw();
+    }
     // ── 🎰 Guesses: every hook the model generates, dropped into the SAME map as the library ──
     function guessEnsure(run) { run = run || 'phase0'; if (GUESSES[run]) return; GUESSES[run] = { loading: 1 }; fetch('/api/hooks/guesses?run=' + run).then(r => r.json()).then(j => { GUESSES[run] = j; rtgUpdateGuesses(); }).catch(() => { GUESSES[run] = { rows: [] }; rtgUpdateGuesses(); }); }
     function rtgUpdateGuesses() { try { const el = window.document.getElementById('rtg-guesspanel'); if (el) el.innerHTML = renderGuesses(); } catch (e) { } }
@@ -3059,6 +3086,8 @@ const JarvisLongQuant = (function () {
         const hu = e.target.closest('[data-hazunit]'); if (hu) { st.hazUnit = hu.getAttribute('data-hazunit'); rtgUpdateHaz(); return; }
         const rc = e.target.closest('[data-rawcolor]'); if (rc) { st.rawColor = rc.getAttribute('data-rawcolor'); rtgUpdateRaw(); return; }
         const rk = e.target.closest('[data-rawk]'); if (rk) { st.rawK = rk.getAttribute('data-rawk'); rtgUpdateRaw(); return; }
+        const rex = e.target.closest('[data-rawexcl]'); if (rex) { const cid = +rex.getAttribute('data-rawexcl'), kk = st.rawK || '10'; st.rawExcl = st.rawExcl || {}; const arr = (st.rawExcl[kk] || []).slice(), j = arr.indexOf(cid); if (j >= 0) arr.splice(j, 1); else arr.push(cid); st.rawExcl[kk] = arr; st.rawCurateMsg = ''; rtgUpdateRaw(); return; }
+        const rsv = e.target.closest('[data-rawsave]'); if (rsv) { doRawCurate(); return; }
         const rp = e.target.closest('[data-rawproj]'); if (rp) { st.rawProj = rp.getAttribute('data-rawproj'); rtgUpdateRaw(); return; }
         const gm = e.target.closest('[data-genmodel]'); if (gm) { st.rawGenModel = gm.getAttribute('data-genmodel'); rtgUpdateExp(); return; }
         if (e.target.closest('[data-gengo]')) { genFrames(); return; }

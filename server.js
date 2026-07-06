@@ -3191,6 +3191,20 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         await serveR2Gz(req, res, `longform/study_${id}.json`, 300e3, { error: 'no study' }, 404);
         return;
     }
+    // Save a curated clean dataset (kept video ids after dropping k-means clusters in the Raw tab)
+    if (pathname === '/api/longquant/curate' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const ch = String(body.channel || 'visual').replace(/[^a-z]/g, '') || 'visual';
+            const acct = String(body.account || 'tyler').replace(/[^a-z0-9_-]/gi, '') || 'tyler';
+            const kept = Array.isArray(body.keptIds) ? body.keptIds.filter(x => typeof x === 'string').slice(0, 200000) : [];
+            const key = `longform/curated/${acct}_${ch}.json`;
+            const data = { account: acct, channel: ch, k: body.k, excludedClusters: body.excludedClusters || [], n: kept.length, keptIds: kept, saved_at: new Date().toISOString() };
+            await cloud.uploadToR2(key, Buffer.from(JSON.stringify(data)), 'application/json');
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, n: kept.length, key }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
     const rawMon = pathname.match(/^\/api\/raw\/montage\/([\w-]{6,16})$/);
     if (rawMon && req.method === 'GET') {
         try {
