@@ -24,12 +24,18 @@ while true; do
   if [ "$GOT" -lt 8 ]; then STRIKES=$((STRIKES+1)); log "thin round (strike $STRIKES/2)"; [ $STRIKES -ge 2 ] && { log "stopping"; break; }; N=$((N+1)); continue; fi
   STRIKES=0
   [ $(date +%s) -ge $DEADLINE ] && break
-  log "=== round $N : LoRA update -> thumb_r$N ==="
-  if THUMB_ROUND=$N $V thumb_update.py 2>&1 | grep -avE 'it/s|Loading'; then
+  # First RAFT_ROUNDS rounds = RAFT (imitate within-title winners); after that = DPO (best-vs-worst-per-title contrast)
+  if [ $N -le ${RAFT_ROUNDS:-2} ]; then
+    log "=== round $N : RAFT LoRA update -> thumb_r$N ==="
+    THUMB_ROUND=$N $V thumb_update.py 2>&1 | grep -avE 'it/s|Loading'; RC=${PIPESTATUS[0]}
+  else
+    log "=== round $N : DPO preference update (best-vs-worst per title) -> thumb_r$N ==="
+    THUMB_ROUND=$N DPO_INIT=$PREV $V thumb_dpo.py 2>&1 | grep -avE 'it/s|Loading'; RC=${PIPESTATUS[0]}
+  fi
+  if [ "$RC" = "0" ] && [ -d /home/ubuntu/thumbrl/models/thumbmerged_r$N ]; then
     PREV=/home/ubuntu/thumbrl/models/thumbmerged_r$N; log "round $N trained -> $(basename $PREV)"
   else
-    log "update$N failed (guesses are safe) — continuing harvest on the SAME model"
-    # keep harvesting with the current model rather than dying; training can be fixed without losing data
+    log "update$N failed/skipped (guesses are safe) — continuing on the SAME model"
   fi
   N=$((N+1))
 done
