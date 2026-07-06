@@ -10,8 +10,8 @@ cd /home/ubuntu/thumbrl
 V="venv/bin/python"
 log(){ echo "[$(date +%H:%M:%S)] $*"; }
 DEADLINE=$(( $(date +%s) + 20*3600 ))
-PREV=/home/ubuntu/thumbrl/models/qwen3-30b-a3b   # round 1 = base model
-N=1; STRIKES=0
+PREV=${START_MODEL:-/home/ubuntu/thumbrl/models/qwen3-30b-a3b}   # round 1 = base model (override to resume)
+N=${START_ROUND:-1}; STRIKES=0
 while true; do
   [ $(date +%s) -ge $DEADLINE ] && { log "20h deadline"; break; }
   BUD=$([ $N -eq 1 ] && echo 6000 || echo 8000)

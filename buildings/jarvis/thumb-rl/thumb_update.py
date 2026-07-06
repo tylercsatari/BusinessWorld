@@ -41,7 +41,7 @@ def fmt(r):
 ds = Dataset.from_list([fmt(r) for r in rows])
 
 print("loading base bf16...", flush=True)
-model = AutoModelForCausalLM.from_pretrained(MODELP, dtype=torch.bfloat16, device_map="cuda")
+model = AutoModelForCausalLM.from_pretrained(MODELP, torch_dtype=torch.bfloat16, device_map="cuda")   # transformers 4.53.2 uses torch_dtype (not dtype)
 model.config.use_cache = False
 model.gradient_checkpointing_enable(); model.enable_input_require_grads()
 lora = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05, bias="none", task_type="CAUSAL_LM",
