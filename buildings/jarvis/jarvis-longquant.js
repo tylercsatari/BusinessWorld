@@ -617,8 +617,10 @@ const JarvisLongQuant = (function () {
     }
     // ── 🎰 Guesses: every hook the model generates, dropped into the SAME map as the library ──
     // ═══ 🎰 Guesses — long-form thumbnail RL attempts (R2 longform/guesses/<run>/) ═══
-    const LGRUNS = [null], LGIDX = {}, LGGRP = {};
+    const LGRUNS = [null], LGIDX = {}, LGGRP = {}, LGMANI = {};
     function rtgUpdateGuessesL() { try { const el = window.document.getElementById('rtg-guesspanel'); if (el) el.innerHTML = renderLongGuesses(); } catch (e) { } }
+    function lgMani(run) { if (!run || LGMANI[run]) return; LGMANI[run] = { loading: 1 }; fetch('/api/longquant/guesses/manifest?run=' + run).then(r => r.text()).then(t => { LGMANI[run] = { rows: t.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean) }; rtgUpdateGuessesL(); }).catch(() => { LGMANI[run] = { rows: [] }; rtgUpdateGuessesL(); }); }
+    function lgHeat(p) { p = Math.max(0, Math.min(1, p || 0)); return `rgb(${Math.round(239 * (1 - p) + 34 * p)},${Math.round(68 * (1 - p) + 197 * p)},${Math.round(68 * (1 - p) + 94 * p)})`; }
     function lgIdx(run) { if (!run || LGIDX[run]) return; LGIDX[run] = { loading: 1 }; fetch('/api/longquant/guesses/index?run=' + run).then(r => r.text()).then(t => { LGIDX[run] = { rows: t.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean) }; rtgUpdateGuessesL(); }).catch(() => { LGIDX[run] = { rows: [] }; rtgUpdateGuessesL(); }); }
     function lgGrp(run, iid) { const key = run + '/' + iid; if (LGGRP[key]) return; LGGRP[key] = { loading: 1 }; fetch('/api/longquant/guesses/group/' + run + '/' + iid).then(r => r.json()).then(j => { LGGRP[key] = j; rtgUpdateGuessesL(); }).catch(() => { LGGRP[key] = { error: 1 }; rtgUpdateGuessesL(); }); }
     async function lgDemo() {
@@ -642,27 +644,48 @@ const JarvisLongQuant = (function () {
             <div style="font-size:11px;color:${C.text};font-weight:700;margin-bottom:5px">🧪 Try the live model on any title</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap"><input data-lgtitle value="${esc(st.lgDemoTitle || '')}" placeholder="e.g. I Built a Real Iron Man Suit" style="flex:1;min-width:220px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:12px"/><span data-lgdemo style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:6px 12px;font-size:11px;font-weight:800">generate 5 →</span></div>
             ${st.lgDemoStatus ? `<div style="font-size:10px;color:${C.amber};margin-top:5px">${esc(st.lgDemoStatus)}</div>` : ''}</div>`;
-        const IX = run ? LGIDX[run] : null; if (run) lgIdx(run);
+        const view = st.lgView || 'map';
+        const vToggle = ['map', 'list'].map(v => `<span data-lgview="${v}" style="cursor:pointer;border:1px solid ${view === v ? C.accent : C.border};background:${view === v ? C.accent + '1e' : 'transparent'};color:${view === v ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${v === 'map' ? '🗺 map' : '☰ list'}</span>`).join('');
         let body = '';
-        if (IX && IX.rows) {
-            const rows = IX.rows.slice().sort((a, b) => (b.best_pctile || 0) - (a.best_pctile || 0));
-            const bests = rows.map(r => r.best_pctile || 0);
-            const hit90 = bests.filter(p => p >= 0.9).length, med = bests.length ? bests.slice().sort((a, b) => a - b)[bests.length >> 1] : 0;
-            body += `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:${C.mute};margin:8px 0"><span><b style="color:${C.text}">${rows.length}</b> titles</span><span>best-thumbnail median <b style="color:${C.text}">${(med * 100).toFixed(0)}th</b> pctile</span><span><b style="color:${hit90 ? C.green : C.dim}">${hit90}</b> hit ≥90th (${rows.length ? (hit90 / rows.length * 100).toFixed(0) : 0}%)</span></div>`;
-            body += `<div style="max-height:520px;overflow:auto">${rows.slice(0, 300).map(r => { const p = r.best_pctile || 0, sel = st.lgSel === run + ':' + r.input_id; return `<div data-lggroup="${r.input_id}" style="cursor:pointer;padding:6px 8px;border-radius:6px;margin-bottom:3px;background:${sel ? C.accent + '18' : 'transparent'};border:1px solid ${sel ? C.accent : 'transparent'}"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="font-size:12px;color:${C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(r.title || '')}</span><span style="font-size:11px;font-weight:800;color:${p >= 0.9 ? C.green : p >= 0.7 ? C.amber : C.dim}">${(p * 100).toFixed(0)}th</span></div><div style="height:3px;background:${C.border};border-radius:2px;margin-top:3px"><div style="height:3px;width:${(p * 100).toFixed(0)}%;background:${p >= 0.9 ? C.green : C.accent};border-radius:2px"></div></div></div>`; }).join('')}</div>`;
-        } else if (run) body += `<div style="font-size:12px;color:${C.dim};padding:14px">Loading ${run}…</div>`;
-        let detail = '';
-        const isDemo = st.lgSel && st.lgSel.indexOf('demo:') === 0;
-        const selKey = isDemo ? 'demo/' + st.lgSel.slice(5) : (st.lgSel && run ? run + '/' + st.lgSel.split(':')[1] : null);
-        if (selKey) {
-            if (!isDemo && !LGGRP[selKey]) lgGrp(run, st.lgSel.split(':')[1]);
-            const G = LGGRP[selKey];
-            if (G && G.attempts) {
-                const dRun = isDemo ? 'demo' : run, gid = isDemo ? st.lgSel.slice(5) : st.lgSel.split(':')[1];
-                detail = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid ${C.border}"><div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:2px">${esc(G.title || '')}</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">${(G.attempts || []).length} thumbnails · best ${((G.best_pctile || 0) * 100).toFixed(0)}th pctile · group mean reward ${(G.group_mean || 0).toFixed(2)} · ranked by advantage</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">${(G.attempts || []).map(a => `<div style="border:1px solid ${a.advantage > 0 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}"><img src="/api/longquant/guesses/montage/${dRun}/${gid}_${a.k}" loading="lazy" style="width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}"/><div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;font-size:10px"><span style="font-weight:800;color:${a.pctile >= 0.9 ? C.green : C.text}">${((a.pctile || 0) * 100).toFixed(0)}th</span><span style="color:${a.advantage > 0 ? C.green : C.dim}">adv ${a.advantage > 0 ? '+' : ''}${(a.advantage || 0).toFixed(2)}</span></div><div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:44px;overflow:hidden">${esc((a.prompt || '').slice(0, 140))}</div></div></div>`).join('')}</div></div>`;
-            } else detail = `<div style="margin-top:10px;font-size:11px;color:${C.dim}">Loading thumbnails…</div>`;
+        if (view === 'map') {
+            const MANI = run ? LGMANI[run] : null; if (run) lgMani(run);
+            if (MANI && MANI.rows) {
+                const rows = MANI.rows.filter(r => isFinite(r.x) && isFinite(r.y));
+                const W = 760, H = 460, pad = 26, X = x => pad + (x / 1000) * (W - 2 * pad), Y = y => H - pad - (y / 1000) * (H - 2 * pad);
+                let bg = ''; const RV = RAW['visual'];
+                if (RV && RV.proj && RV.proj.ctrviews) { const px = RV.proj.ctrviews.x || [], py = RV.proj.ctrviews.y || [], step = Math.max(1, Math.ceil(px.length / 2500)); for (let i = 0; i < px.length; i += step) bg += `<circle cx="${X(px[i]).toFixed(1)}" cy="${Y(py[i]).toFixed(1)}" r="1" fill="${C.border}" opacity="0.45"/>`; }
+                const selId = st.lgSel && st.lgSel.indexOf('dot:') === 0 ? st.lgSel.split(':').slice(2).join(':') : null;
+                const dots = rows.map(r => { const sel = r.id === selId; return `<circle data-lgdot="${r.id}" cx="${X(r.x).toFixed(1)}" cy="${Y(r.y).toFixed(1)}" r="${sel ? 6 : 3.2}" fill="${lgHeat(r.pctile)}" stroke="${sel ? '#fff' : 'rgba(0,0,0,.5)'}" stroke-width="${sel ? 1.6 : 0.5}" style="cursor:pointer"><title>${esc((r.title || '').slice(0, 44))} · ${((r.pctile || 0) * 100).toFixed(0)}th</title></circle>`; }).join('');
+                body = `<div style="font-size:11px;color:${C.mute};margin:6px 0">${rows.length.toLocaleString()} thumbnails on the CTR+views map · colour = percentile (<span style="color:${lgHeat(0)}">low</span>→<span style="color:${lgHeat(1)}">high</span>) · faint grey = your real thumbnails · <b style="color:${C.text}">click a dot</b> to see the generated thumbnail</div><svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px">${bg}${dots}</svg>`;
+            } else if (run) body = `<div style="font-size:12px;color:${C.dim};padding:14px">Loading map…</div>`;
+        } else {
+            const IX = run ? LGIDX[run] : null; if (run) lgIdx(run);
+            if (IX && IX.rows) {
+                const rows = IX.rows.slice().sort((a, b) => (b.best_pctile || 0) - (a.best_pctile || 0));
+                const bests = rows.map(r => r.best_pctile || 0);
+                const hit90 = bests.filter(p => p >= 0.9).length, med = bests.length ? bests.slice().sort((a, b) => a - b)[bests.length >> 1] : 0;
+                body += `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:${C.mute};margin:8px 0"><span><b style="color:${C.text}">${rows.length}</b> titles</span><span>best-thumbnail median <b style="color:${C.text}">${(med * 100).toFixed(0)}th</b> pctile</span><span><b style="color:${hit90 ? C.green : C.dim}">${hit90}</b> hit ≥90th (${rows.length ? (hit90 / rows.length * 100).toFixed(0) : 0}%)</span></div>`;
+                body += `<div style="max-height:520px;overflow:auto">${rows.slice(0, 300).map(r => { const p = r.best_pctile || 0, sel = st.lgSel === run + ':' + r.input_id; return `<div data-lggroup="${r.input_id}" style="cursor:pointer;padding:6px 8px;border-radius:6px;margin-bottom:3px;background:${sel ? C.accent + '18' : 'transparent'};border:1px solid ${sel ? C.accent : 'transparent'}"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="font-size:12px;color:${C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(r.title || '')}</span><span style="font-size:11px;font-weight:800;color:${p >= 0.9 ? C.green : p >= 0.7 ? C.amber : C.dim}">${(p * 100).toFixed(0)}th</span></div><div style="height:3px;background:${C.border};border-radius:2px;margin-top:3px"><div style="height:3px;width:${(p * 100).toFixed(0)}%;background:${p >= 0.9 ? C.green : C.accent};border-radius:2px"></div></div></div>`; }).join('')}</div>`;
+            } else if (run) body += `<div style="font-size:12px;color:${C.dim};padding:14px">Loading ${run}…</div>`;
         }
-        return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — thumbnail RL</div><div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every title the model trained on, with its 5 generated thumbnails scored on the CTR+views percentile (${'0.164'} = 90th). Higher = better predicted thumbnail. Ranked by advantage vs the title's own group.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:4px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">round</span>${runPills || `<span style="font-size:11px;color:${C.dim}">no runs yet — starts when training kicks off</span>`}</div>${demo}${body}${detail}`, 14);
+        let detail = '';
+        if (st.lgSel && st.lgSel.indexOf('dot:') === 0) {
+            const dr = st.lgSel.split(':')[1], id = st.lgSel.split(':').slice(2).join(':');
+            const row = ((LGMANI[dr] || {}).rows || []).find(r => r.id === id);
+            if (row) detail = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid ${C.border};display:flex;gap:14px;flex-wrap:wrap"><img src="/api/longquant/guesses/montage/${dr}/${id}" style="width:320px;max-width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;background:${C.card2};border:2px solid ${lgHeat(row.pctile)}"/><div style="flex:1;min-width:220px"><div style="font-size:13px;font-weight:700;color:${C.text}">${esc(row.title || '')}</div><div style="font-size:11px;margin:5px 0"><span style="font-weight:800;color:${row.pctile >= 0.9 ? C.green : C.text}">${((row.pctile || 0) * 100).toFixed(0)}th pctile</span> · adv ${row.advantage > 0 ? '+' : ''}${(row.advantage || 0).toFixed(2)} · relevance ${row.relevance != null ? row.relevance.toFixed(2) : '—'}</div><div style="font-size:11px;color:${C.dim};line-height:1.5;margin-bottom:6px"><b style="color:${C.mute}">prompt:</b> ${esc(row.prompt || '')}</div><div style="font-size:10px;color:${C.mute};line-height:1.45;max-height:150px;overflow:auto"><b>reasoning:</b> ${esc((row.reasoning || '').slice(0, 900))}</div></div></div>`;
+        } else {
+            const isDemo = st.lgSel && st.lgSel.indexOf('demo:') === 0;
+            const selKey = isDemo ? 'demo/' + st.lgSel.slice(5) : (st.lgSel && run ? run + '/' + st.lgSel.split(':')[1] : null);
+            if (selKey) {
+                if (!isDemo && !LGGRP[selKey]) lgGrp(run, st.lgSel.split(':')[1]);
+                const G = LGGRP[selKey];
+                if (G && G.attempts) {
+                    const dRun = isDemo ? 'demo' : run, gid = isDemo ? st.lgSel.slice(5) : st.lgSel.split(':')[1];
+                    detail = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid ${C.border}"><div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:2px">${esc(G.title || '')}</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">${(G.attempts || []).length} thumbnails · best ${((G.best_pctile || 0) * 100).toFixed(0)}th pctile · group mean reward ${(G.group_mean || 0).toFixed(2)} · ranked by advantage</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">${(G.attempts || []).map(a => `<div style="border:1px solid ${a.advantage > 0 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}"><img src="/api/longquant/guesses/montage/${dRun}/${gid}_${a.k}" loading="lazy" style="width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}"/><div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;font-size:10px"><span style="font-weight:800;color:${a.pctile >= 0.9 ? C.green : C.text}">${((a.pctile || 0) * 100).toFixed(0)}th</span><span style="color:${a.advantage > 0 ? C.green : C.dim}">adv ${a.advantage > 0 ? '+' : ''}${(a.advantage || 0).toFixed(2)}</span></div><div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:44px;overflow:hidden">${esc((a.prompt || '').slice(0, 140))}</div></div></div>`).join('')}</div></div>`;
+                } else detail = `<div style="margin-top:10px;font-size:11px;color:${C.dim}">Loading thumbnails…</div>`;
+            }
+        }
+        return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — thumbnail RL</div><div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every title the model tried, with its 5 generated thumbnails scored on the CTR+views percentile (0.164 = 90th). The map shows where each thumbnail lands vs your real ones — click any dot to see it.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:4px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">round</span>${runPills || `<span style="font-size:11px;color:${C.dim}">no runs yet — starts when training kicks off</span>`}<span style="width:10px"></span>${vToggle}</div>${demo}${body}${detail}`, 14);
     }
     function guessEnsure(run) { run = run || 'phase0'; if (GUESSES[run]) return; GUESSES[run] = { loading: 1 }; fetch('/api/hooks/guesses?run=' + run).then(r => r.json()).then(j => { GUESSES[run] = j; rtgUpdateGuesses(); }).catch(() => { GUESSES[run] = { rows: [] }; rtgUpdateGuesses(); }); }
     function rtgUpdateGuesses() { try { const el = window.document.getElementById('rtg-guesspanel'); if (el) el.innerHTML = renderGuesses(); } catch (e) { } }
@@ -3138,6 +3161,8 @@ const JarvisLongQuant = (function () {
         const rsv = e.target.closest('[data-rawsave]'); if (rsv) { doRawCurate(); return; }
         const lgr = e.target.closest('[data-lgrun]'); if (lgr) { st.lgRun = lgr.getAttribute('data-lgrun'); st.lgSel = null; rtgUpdateGuessesL(); return; }
         const lgg = e.target.closest('[data-lggroup]'); if (lgg) { st.lgSel = (st.lgRun || '') + ':' + lgg.getAttribute('data-lggroup'); rtgUpdateGuessesL(); return; }
+        const lgv = e.target.closest('[data-lgview]'); if (lgv) { st.lgView = lgv.getAttribute('data-lgview'); rtgUpdateGuessesL(); return; }
+        const lgdot = e.target.closest('[data-lgdot]'); if (lgdot) { st.lgSel = 'dot:' + (st.lgRun || '') + ':' + lgdot.getAttribute('data-lgdot'); rtgUpdateGuessesL(); return; }
         const lgd = e.target.closest('[data-lgdemo]'); if (lgd) { const inp = window.document.querySelector('[data-lgtitle]'); if (inp) st.lgDemoTitle = inp.value; lgDemo(); return; }
         const rp = e.target.closest('[data-rawproj]'); if (rp) { st.rawProj = rp.getAttribute('data-rawproj'); rtgUpdateRaw(); return; }
         const gm = e.target.closest('[data-genmodel]'); if (gm) { st.rawGenModel = gm.getAttribute('data-genmodel'); rtgUpdateExp(); return; }
