@@ -40,6 +40,14 @@ CHANS = ['visual', 'text', 'together']
 SAVE_EVERY = int(os.environ.get('RAW_LONG_SAVE_EVERY', '100'))
 LIMIT = int(os.environ.get('RAW_LONG_LIMIT', '0'))
 
+def run_steering():
+    # re-inject the per-account ctr/ret30/realviews projections that build_map() strips each rebuild
+    try:
+        import subprocess, sys as _sys
+        subprocess.run([_sys.executable, os.path.join(HERE, 'add_steered_proj_long.py')], cwd=HERE, timeout=900)
+    except Exception as e:
+        print('  steering skipped:', str(e)[:80], flush=True)
+
 def embed(parts):
     for attempt in range(6):
         try:
@@ -213,10 +221,12 @@ def main():
             for c in CHANS: save_npz(c)                 # persist embeddings often (cheap)
             if n % (SAVE_EVERY * 5) == 0:               # rebuild the expensive UMAP/PLS maps less often
                 for c in CHANS: build_map(c)
-                print(f"  ✓ checkpoint + maps rebuilt at {n}", flush=True)
+                run_steering()                          # re-add per-account ctr/ret30/realviews after the rebuild
+                print(f"  ✓ checkpoint + maps + steering at {n}", flush=True)
             else:
                 print(f"  ✓ embeddings saved at {n}", flush=True)
     for c in CHANS: save_npz(c); build_map(c)
+    run_steering()
     print(f"done — embedded {n} this run. raw-long/{{visual,text,together}}/embeddings.npz + map.json on R2.", flush=True)
 
 if __name__ == '__main__':
