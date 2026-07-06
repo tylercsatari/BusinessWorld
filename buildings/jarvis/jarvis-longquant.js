@@ -616,6 +616,54 @@ const JarvisLongQuant = (function () {
         rtgUpdateRaw();
     }
     // ── 🎰 Guesses: every hook the model generates, dropped into the SAME map as the library ──
+    // ═══ 🎰 Guesses — long-form thumbnail RL attempts (R2 longform/guesses/<run>/) ═══
+    const LGRUNS = [null], LGIDX = {}, LGGRP = {};
+    function rtgUpdateGuessesL() { try { const el = window.document.getElementById('rtg-guesspanel'); if (el) el.innerHTML = renderLongGuesses(); } catch (e) { } }
+    function lgIdx(run) { if (!run || LGIDX[run]) return; LGIDX[run] = { loading: 1 }; fetch('/api/longquant/guesses/index?run=' + run).then(r => r.text()).then(t => { LGIDX[run] = { rows: t.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean) }; rtgUpdateGuessesL(); }).catch(() => { LGIDX[run] = { rows: [] }; rtgUpdateGuessesL(); }); }
+    function lgGrp(run, iid) { const key = run + '/' + iid; if (LGGRP[key]) return; LGGRP[key] = { loading: 1 }; fetch('/api/longquant/guesses/group/' + run + '/' + iid).then(r => r.json()).then(j => { LGGRP[key] = j; rtgUpdateGuessesL(); }).catch(() => { LGGRP[key] = { error: 1 }; rtgUpdateGuessesL(); }); }
+    async function lgDemo() {
+        const t = (st.lgDemoTitle || '').trim(); if (!t) return;
+        st.lgDemoStatus = 'generating 5 thumbnails…'; st.lgDemoRid = null; rtgUpdateGuessesL();
+        try { const r = await fetch('/api/longquant/guesses/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: t }) }); const j = await r.json(); st.lgDemoRid = j.rid; setTimeout(lgDemoPoll, 4000); } catch (e) { st.lgDemoStatus = 'error: ' + e.message; rtgUpdateGuessesL(); }
+    }
+    function lgDemoPoll() {
+        if (!st.lgDemoRid) return; const rid = st.lgDemoRid;
+        fetch('/api/longquant/guesses/group/demo/' + rid).then(r => r.ok ? r.json() : null).then(j => {
+            if (j && j.attempts) { st.lgDemoStatus = null; LGGRP['demo/' + rid] = j; st.lgSel = 'demo:' + rid; rtgUpdateGuessesL(); }
+            else { st.lgDemoStatus = 'generating on the GPU — ~1–2 min…'; rtgUpdateGuessesL(); setTimeout(lgDemoPoll, 5000); }
+        }).catch(() => setTimeout(lgDemoPoll, 5000));
+    }
+    function renderLongGuesses() {
+        if (!LGRUNS[0]) { LGRUNS[0] = { loading: 1 }; fetch('/api/longquant/guesses/runs').then(r => r.json()).then(j => { const rr = j.runs || []; LGRUNS[0] = rr; if (!st.lgRun && rr.length) st.lgRun = rr[rr.length - 1]; rtgUpdateGuessesL(); }).catch(() => { LGRUNS[0] = []; rtgUpdateGuessesL(); }); }
+        const runs = Array.isArray(LGRUNS[0]) ? LGRUNS[0] : [];
+        const run = st.lgRun || (runs.length ? runs[runs.length - 1] : null);
+        const runPills = runs.map(r => `<span data-lgrun="${r}" style="cursor:pointer;border:1px solid ${run === r ? C.accent : C.border};background:${run === r ? C.accent + '1e' : 'transparent'};color:${run === r ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${r}</span>`).join('');
+        const demo = `<div style="margin:8px 0;padding:10px;border:1px solid ${C.border};border-radius:8px;background:${C.card2}">
+            <div style="font-size:11px;color:${C.text};font-weight:700;margin-bottom:5px">🧪 Try the live model on any title</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap"><input data-lgtitle value="${esc(st.lgDemoTitle || '')}" placeholder="e.g. I Built a Real Iron Man Suit" style="flex:1;min-width:220px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:12px"/><span data-lgdemo style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:6px 12px;font-size:11px;font-weight:800">generate 5 →</span></div>
+            ${st.lgDemoStatus ? `<div style="font-size:10px;color:${C.amber};margin-top:5px">${esc(st.lgDemoStatus)}</div>` : ''}</div>`;
+        const IX = run ? LGIDX[run] : null; if (run) lgIdx(run);
+        let body = '';
+        if (IX && IX.rows) {
+            const rows = IX.rows.slice().sort((a, b) => (b.best_pctile || 0) - (a.best_pctile || 0));
+            const bests = rows.map(r => r.best_pctile || 0);
+            const hit90 = bests.filter(p => p >= 0.9).length, med = bests.length ? bests.slice().sort((a, b) => a - b)[bests.length >> 1] : 0;
+            body += `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:${C.mute};margin:8px 0"><span><b style="color:${C.text}">${rows.length}</b> titles</span><span>best-thumbnail median <b style="color:${C.text}">${(med * 100).toFixed(0)}th</b> pctile</span><span><b style="color:${hit90 ? C.green : C.dim}">${hit90}</b> hit ≥90th (${rows.length ? (hit90 / rows.length * 100).toFixed(0) : 0}%)</span></div>`;
+            body += `<div style="max-height:520px;overflow:auto">${rows.slice(0, 300).map(r => { const p = r.best_pctile || 0, sel = st.lgSel === run + ':' + r.input_id; return `<div data-lggroup="${r.input_id}" style="cursor:pointer;padding:6px 8px;border-radius:6px;margin-bottom:3px;background:${sel ? C.accent + '18' : 'transparent'};border:1px solid ${sel ? C.accent : 'transparent'}"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="font-size:12px;color:${C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(r.title || '')}</span><span style="font-size:11px;font-weight:800;color:${p >= 0.9 ? C.green : p >= 0.7 ? C.amber : C.dim}">${(p * 100).toFixed(0)}th</span></div><div style="height:3px;background:${C.border};border-radius:2px;margin-top:3px"><div style="height:3px;width:${(p * 100).toFixed(0)}%;background:${p >= 0.9 ? C.green : C.accent};border-radius:2px"></div></div></div>`; }).join('')}</div>`;
+        } else if (run) body += `<div style="font-size:12px;color:${C.dim};padding:14px">Loading ${run}…</div>`;
+        let detail = '';
+        const isDemo = st.lgSel && st.lgSel.indexOf('demo:') === 0;
+        const selKey = isDemo ? 'demo/' + st.lgSel.slice(5) : (st.lgSel && run ? run + '/' + st.lgSel.split(':')[1] : null);
+        if (selKey) {
+            if (!isDemo && !LGGRP[selKey]) lgGrp(run, st.lgSel.split(':')[1]);
+            const G = LGGRP[selKey];
+            if (G && G.attempts) {
+                const dRun = isDemo ? 'demo' : run, gid = isDemo ? st.lgSel.slice(5) : st.lgSel.split(':')[1];
+                detail = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid ${C.border}"><div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:2px">${esc(G.title || '')}</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">${(G.attempts || []).length} thumbnails · best ${((G.best_pctile || 0) * 100).toFixed(0)}th pctile · group mean reward ${(G.group_mean || 0).toFixed(2)} · ranked by advantage</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">${(G.attempts || []).map(a => `<div style="border:1px solid ${a.advantage > 0 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}"><img src="/api/longquant/guesses/montage/${dRun}/${gid}_${a.k}" loading="lazy" style="width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}"/><div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;font-size:10px"><span style="font-weight:800;color:${a.pctile >= 0.9 ? C.green : C.text}">${((a.pctile || 0) * 100).toFixed(0)}th</span><span style="color:${a.advantage > 0 ? C.green : C.dim}">adv ${a.advantage > 0 ? '+' : ''}${(a.advantage || 0).toFixed(2)}</span></div><div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:44px;overflow:hidden">${esc((a.prompt || '').slice(0, 140))}</div></div></div>`).join('')}</div></div>`;
+            } else detail = `<div style="margin-top:10px;font-size:11px;color:${C.dim}">Loading thumbnails…</div>`;
+        }
+        return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — thumbnail RL</div><div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every title the model trained on, with its 5 generated thumbnails scored on the CTR+views percentile (${'0.164'} = 90th). Higher = better predicted thumbnail. Ranked by advantage vs the title's own group.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:4px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">round</span>${runPills || `<span style="font-size:11px;color:${C.dim}">no runs yet — starts when training kicks off</span>`}</div>${demo}${body}${detail}`, 14);
+    }
     function guessEnsure(run) { run = run || 'phase0'; if (GUESSES[run]) return; GUESSES[run] = { loading: 1 }; fetch('/api/hooks/guesses?run=' + run).then(r => r.json()).then(j => { GUESSES[run] = j; rtgUpdateGuesses(); }).catch(() => { GUESSES[run] = { rows: [] }; rtgUpdateGuesses(); }); }
     function rtgUpdateGuesses() { try { const el = window.document.getElementById('rtg-guesspanel'); if (el) el.innerHTML = renderGuesses(); } catch (e) { } }
     function renderGuesses() {
@@ -2992,7 +3040,7 @@ const JarvisLongQuant = (function () {
         //  • PER-CHANNEL  — analyses of the selected account's own videos (scoped by the channel bar)
         //  • CORPUS       — built on ALL videos (your 211 + the 11k library); account-independent
         const PERCHAN = [['data', '📋 Data'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict']];
-        const CORPUS = [['raw', '🔬 Raw']];
+        const CORPUS = [['raw', '🔬 Raw'], ['guesses', '🎰 Guesses']];
         const SECLBL = Object.fromEntries([...PERCHAN, ...CORPUS]);
         const isPer = PERCHAN.some(([id]) => id === st.sec);
         const btn = ([id, l]) => `<button data-rs="${id}" style="background:${st.sec === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.sec === id ? C.accent : C.border};color:${st.sec === id ? C.accent : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`;
@@ -3028,7 +3076,7 @@ const JarvisLongQuant = (function () {
         if (isPer && st.sec !== 'data' && !S) {
             sec = cardc(`<div style="padding:26px;text-align:center"><div style="font-size:14px;font-weight:800;color:${C.text};margin-bottom:6px">${SECLBL[st.sec]} — not computed for ${chName} yet</div><div style="font-size:11px;color:${C.mute};line-height:1.7;max-width:580px;margin:0 auto">${active === 'all' ? 'Pooled analysis isn\'t built yet — switch to a single channel.' : `This per-channel analysis hasn't been run for <b>${chName}</b>. It has <b style="color:${C.green}">${nKeep}</b> videos with retention — open <b>📋 Data</b>, or run <code>build_study.py ${active}</code>.`}</div></div>`, 16);
         } else {
-            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
+            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderLongGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         }
         const bgNote = BGPEND > 0 ? `<div style="font-size:10px;color:${C.cyan};margin:-4px 0 8px;font-weight:600">⏳ heavy corpus data still streaming in (${BGPEND} file${BGPEND > 1 ? 's' : ''} left) — sections light up as their data lands</div>` : '';
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
@@ -3088,6 +3136,9 @@ const JarvisLongQuant = (function () {
         const rk = e.target.closest('[data-rawk]'); if (rk) { st.rawK = rk.getAttribute('data-rawk'); rtgUpdateRaw(); return; }
         const rex = e.target.closest('[data-rawexcl]'); if (rex) { const cid = +rex.getAttribute('data-rawexcl'), kk = st.rawK || '10'; st.rawExcl = st.rawExcl || {}; const arr = (st.rawExcl[kk] || []).slice(), j = arr.indexOf(cid); if (j >= 0) arr.splice(j, 1); else arr.push(cid); st.rawExcl[kk] = arr; st.rawCurateMsg = ''; rtgUpdateRaw(); return; }
         const rsv = e.target.closest('[data-rawsave]'); if (rsv) { doRawCurate(); return; }
+        const lgr = e.target.closest('[data-lgrun]'); if (lgr) { st.lgRun = lgr.getAttribute('data-lgrun'); st.lgSel = null; rtgUpdateGuessesL(); return; }
+        const lgg = e.target.closest('[data-lggroup]'); if (lgg) { st.lgSel = (st.lgRun || '') + ':' + lgg.getAttribute('data-lggroup'); rtgUpdateGuessesL(); return; }
+        const lgd = e.target.closest('[data-lgdemo]'); if (lgd) { const inp = window.document.querySelector('[data-lgtitle]'); if (inp) st.lgDemoTitle = inp.value; lgDemo(); return; }
         const rp = e.target.closest('[data-rawproj]'); if (rp) { st.rawProj = rp.getAttribute('data-rawproj'); rtgUpdateRaw(); return; }
         const gm = e.target.closest('[data-genmodel]'); if (gm) { st.rawGenModel = gm.getAttribute('data-genmodel'); rtgUpdateExp(); return; }
         if (e.target.closest('[data-gengo]')) { genFrames(); return; }

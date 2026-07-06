@@ -3205,6 +3205,37 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    // ── Long-form thumbnail RL "Guesses" (R2 longform/guesses/<run>/*) ──
+    if (pathname === '/api/longquant/guesses/runs' && req.method === 'GET') {
+        const cands = Array.from({ length: 30 }, (_, i) => 'thumb' + (i + 1));
+        const ok = await Promise.all(cands.map(r => cloud.existsInR2(`longform/guesses/${r}/index.jsonl`).catch(() => false)));
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ runs: cands.filter((_, i) => ok[i]) })); return;
+    }
+    if (pathname === '/api/longquant/guesses/index' && req.method === 'GET') {
+        const run = (url.searchParams.get('run') || '').replace(/[^a-z0-9]/gi, '');
+        await serveR2Gz(req, res, `longform/guesses/${run}/index.jsonl`, 4e6, { error: 'no run' }, 404); return;
+    }
+    if (pathname === '/api/longquant/guesses/manifest' && req.method === 'GET') {
+        const run = (url.searchParams.get('run') || '').replace(/[^a-z0-9]/gi, '');
+        await serveR2Gz(req, res, `longform/guesses/${run}/manifest.jsonl`, 16e6, { error: 'no run' }, 404); return;
+    }
+    const lgGroup = pathname.match(/^\/api\/longquant\/guesses\/group\/([a-z0-9]+)\/([a-z0-9]+)$/i);
+    if (lgGroup && req.method === 'GET') {
+        await serveR2Gz(req, res, `longform/guesses/${lgGroup[1]}/groups/${lgGroup[2]}.json`, 3e6, { error: 'no group' }, 404); return;
+    }
+    const lgMon = pathname.match(/^\/api\/longquant\/guesses\/montage\/([a-z0-9]+)\/([a-z0-9_]+)$/i);
+    if (lgMon && req.method === 'GET') {
+        const buf = await cloud.downloadFromR2(`longform/guesses/${lgMon[1]}/montages/${lgMon[2]}.jpg`).catch(() => null);
+        if (!buf) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return; }
+        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); return;
+    }
+    if (pathname === '/api/longquant/guesses/request' && req.method === 'POST') {
+        const body = await readBody(req); const title = String(body.title || '').slice(0, 200).trim();
+        if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no title"}'); return; }
+        const rid = 'd' + Date.now().toString(36);
+        await cloud.uploadToR2(`longform/guesses/requests/${rid}.json`, Buffer.from(JSON.stringify({ title, ts: Date.now() })), 'application/json');
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid })); return;
+    }
     const rawMon = pathname.match(/^\/api\/raw\/montage\/([\w-]{6,16})$/);
     if (rawMon && req.method === 'GET') {
         try {
