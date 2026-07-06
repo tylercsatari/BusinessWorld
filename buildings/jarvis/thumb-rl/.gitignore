@@ -1,0 +1,12 @@
+# secrets + ephemeral box state (never commit)
+lambda_key.txt
+instance_id.txt
+box_ip.txt
+launched_type.txt
+.env
+# training artifacts
+runs/
+models/
+data/
+*.log
+__pycache__/
