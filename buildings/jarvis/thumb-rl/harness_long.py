@@ -20,20 +20,54 @@ GEMINI, REPL, BUCKET = ENV["GEMINI_API_KEY"], ENV["REPLICATE_API_TOKEN"], ENV["R
 s3 = boto3.client("s3", endpoint_url="https://%s.r2.cloudflarestorage.com" % ENV["R2_ACCOUNT_ID"],
     aws_access_key_id=ENV["R2_ACCESS_KEY_ID"], aws_secret_access_key=ENV["R2_SECRET_ACCESS_KEY"], region_name="auto")
 
+class GeminiHalt(Exception):
+    """Gemini credits depleted / persistently unavailable — HALT so we never render (spend) unscoreable images."""
+
+def write_status(state, note=""):
+    """Publish trainer state to R2 so the UI + monitors can see it — no silent failure."""
+    try:
+        s3.put_object(Bucket=BUCKET, Key="longform/thumb-rl/status.json",
+                      Body=json.dumps({"state": state, "note": str(note)[:300], "ts": int(time.time() * 1000)}).encode(),
+                      ContentType="application/json")
+    except Exception:
+        pass
+
 EMB_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent"
-def embed_image(jpg_bytes, tries=6):
-    b64 = base64.b64encode(jpg_bytes).decode()
-    body = json.dumps({"content": {"parts": [{"inlineData": {"mimeType": "image/jpeg", "data": b64}}]},
-                       "outputDimensionality": 1536}).encode()
+def _embed_call(body, tries):
+    last = ""
     for a in range(tries):
         try:
             req = urllib.request.Request(EMB_URL, data=body, method="POST",
                 headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI})
             with urllib.request.urlopen(req, timeout=60) as r:
                 return np.array(json.loads(r.read())["embedding"]["values"], np.float32)
-        except Exception:
+        except urllib.error.HTTPError as e:
+            try: last = e.read().decode()[:300]
+            except Exception: last = "HTTP %s" % e.code
+            if "depleted" in last or "RESOURCE_EXHAUSTED" in last:   # credits gone — no point retrying
+                raise GeminiHalt("Gemini credits depleted: " + last[:120])
             if a < tries - 1: time.sleep(1.5 * (a + 1)); continue
-            return None
+        except GeminiHalt:
+            raise
+        except Exception as e:
+            last = str(e)[:120]
+            if a < tries - 1: time.sleep(1.5 * (a + 1)); continue
+    raise GeminiHalt("Gemini embed failed after %d tries: %s" % (tries, last))   # LOUD, never a silent None
+
+def embed_image(jpg_bytes, tries=6):
+    b64 = base64.b64encode(jpg_bytes).decode()
+    return _embed_call(json.dumps({"content": {"parts": [{"inlineData": {"mimeType": "image/jpeg", "data": b64}}]},
+                                   "outputDimensionality": 1536}).encode(), tries)
+
+def gemini_ok():
+    """Cheap pre-flight (one tiny text embed). Returns (ok, msg) — gates rendering so we never pay for unscoreable images."""
+    try:
+        _embed_call(json.dumps({"content": {"parts": [{"text": "ping"}]}, "outputDimensionality": 1536}).encode(), 2)
+        return True, ""
+    except GeminiHalt as e:
+        return False, str(e)
+    except Exception as e:
+        return False, str(e)[:150]
 
 class BillingHalt(Exception):
     """Replicate billing/quota failure — stop the run cleanly so it can be resumed."""

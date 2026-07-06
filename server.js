@@ -3235,6 +3235,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
     // ── Long-form thumbnail RL "Guesses" (R2 longform/guesses/<run>/*) ──
+    if (pathname === '/api/longquant/guesses/status' && req.method === 'GET') {
+        const buf = await cloud.downloadFromR2('longform/thumb-rl/status.json').catch(() => null);
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(buf ? buf.toString('utf8') : '{}'); return;
+    }
     if (pathname === '/api/longquant/guesses/runs' && req.method === 'GET') {
         const cands = Array.from({ length: 30 }, (_, i) => 'thumb' + (i + 1));
         const ok = await Promise.all(cands.map(r => cloud.existsInR2(`longform/guesses/${r}/index.jsonl`).catch(() => false)));

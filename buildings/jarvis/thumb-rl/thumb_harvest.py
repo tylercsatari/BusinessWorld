@@ -4,7 +4,7 @@ scored on the ctrviews percentile, and relevance-gated vs the title. advantage =
 (the baseline IS the title, so difficulty cancels — no labels). Stores EVERY candidate per title
 (reasoning + thumbnail + scores) to R2 for the Guesses tab, and writes advantage-weighted training data.
 Env: RUN, MODEL, G, IMG_BUDGET, TITLES."""
-import json, os, re, random
+import json, os, re, random, time
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np, torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -190,19 +190,34 @@ while bi < len(pending):
     except Exception as e:
         print("[%s] gen_batch err %s" % (RUN, str(e)[:90]), flush=True); continue
     # render+score ALL groups of this batch CONCURRENTLY (rendering, not generation, is the bottleneck now)
+    # NEVER render while Gemini can't score (paying for unscoreable images) — pre-flight gate, auto-resumes
+    ok, msg = H.gemini_ok()
+    while not ok:
+        H.write_status("halted-gemini", msg)
+        print("=== GEMINI HALT: %s — waiting 5 min, auto-resumes when credits are back ===" % msg[:110], flush=True)
+        time.sleep(300); ok, msg = H.gemini_ok()
+    H.write_status("running", "run %s · %d renders" % (RUN, H.RENDERS[0]))
     def _do(pair):
         (ii, item), grp = pair
         if H.RENDERS[0] >= IMG_BUDGET: return
         try: process_input(item, "t%05d" % ii, group=grp)
-        except H.BillingHalt: raise
+        except (H.BillingHalt, H.GeminiHalt): raise
         except Exception as e: print("[%s] t%05d err %s" % (RUN, ii, str(e)[:90]), flush=True)
     try:
         with ThreadPoolExecutor(max_workers=min(len(chunk), 8)) as ex:
             list(ex.map(_do, list(zip(chunk, groups))))
     except H.BillingHalt as e:
-        print("=== BILLING HALT: %s ===" % str(e)[:80], flush=True); break
+        H.write_status("halted-replicate", str(e)); print("=== BILLING HALT: %s ===" % str(e)[:80], flush=True); break
+    except H.GeminiHalt as e:
+        # mid-batch depletion: loud, wait, auto-resume (that batch's renders are lost — the pre-gate makes this rare)
+        H.write_status("halted-gemini", str(e))
+        print("=== GEMINI HALT mid-batch: %s — waiting 5 min ===" % str(e)[:110], flush=True)
+        ok2, m2 = H.gemini_ok()
+        while not ok2: time.sleep(300); ok2, m2 = H.gemini_ok()
+        H.write_status("running", "resumed after gemini halt")
 serve_requests()
 try:
     with open(RUNDIR + "/_produced", "w") as fp: fp.write(str(PRODUCED[0]))   # overnight loop reads this (robust vs the wc -l resume bug)
 except Exception: pass
+H.write_status("done", "run %s produced %d groups" % (RUN, PRODUCED[0]))
 print("=== THUMB_HARVEST_DONE produced=%d ===" % PRODUCED[0], flush=True)
