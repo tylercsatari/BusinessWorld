@@ -36,6 +36,8 @@ while true; do
     PREV=/home/ubuntu/thumbrl/models/thumbmerged_r$N; log "round $N trained -> $(basename $PREV)"
   else
     log "update$N failed/skipped (guesses are safe) — continuing on the SAME model"
+    # surface it in the UI banner too — a broken training step must never be log-only
+    $V -c "import harness_long as H; H.write_status('update-failed','round $N LoRA update failed — harvest continues on prior model; check overnight log')" 2>/dev/null || true
   fi
   N=$((N+1))
 done
