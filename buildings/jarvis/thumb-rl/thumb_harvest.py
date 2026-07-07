@@ -99,6 +99,16 @@ if os.path.exists(INDEX):
     for l in open(INDEX):
         try: done.add(json.loads(l)["input_id"])
         except Exception: pass
+# FRESH INPUTS EVERY ROUND: also skip titles ANY previous round already used. The fixed shuffle seed makes
+# input_ids stable across rounds, so each round continues into unseen titles instead of re-grinding the same
+# ones — the model must generalize to new inputs, not memorize a fixed slice. (24k titles ≈ many rounds.)
+for _n in range(1, 41):
+    try:
+        for l in H.s3.get_object(Bucket=H.BUCKET, Key="longform/guesses/thumb%d/index.jsonl" % _n)["Body"].read().decode().splitlines():
+            try: done.add(json.loads(l)["input_id"])
+            except Exception: pass
+    except Exception: pass
+print("cross-round resume: %d titles already used by ANY round -> this round gets fresh ones" % len(done), flush=True)
 print("titles=%d resume=%d budget=%d" % (len(titles), len(done), IMG_BUDGET), flush=True)
 import threading as _th
 _WLOCK = _th.Lock(); PRODUCED = [0]   # lock guards the shared local jsonl files; PRODUCED = new groups THIS run (for the overnight loop)
