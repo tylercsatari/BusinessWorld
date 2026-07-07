@@ -48,6 +48,17 @@ print(('REVERT' if (cur is not None and prev is not None and cur < prev-0.03) el
     PREV=$PREV2
   fi
   [ $(date +%s) -ge $DEADLINE ] && break
+  if [ "${UPDATER:-dpo}" = "bond" ]; then
+    log "=== round $N : BOND re-distillation (all banked winners, 1 epoch) -> thumb_b$N ==="
+    BOND_ROUND=b$N EPOCHS=1 $V thumb_bond.py 2>&1 | grep -avE 'it/s|Loading'; RC=${PIPESTATUS[0]}
+    if [ "$RC" = "0" ] && [ -d /home/ubuntu/thumbrl/models/thumbmerged_b$N ]; then
+      PREV2=$PREV; PREV=/home/ubuntu/thumbrl/models/thumbmerged_b$N; log "round $N BOND -> $(basename $PREV)"
+    else
+      log "bond$N failed/skipped (guesses safe) — continuing on SAME model"
+      $V -c "import harness_long as H; H.write_status('update-failed','round $N BOND failed — see log')" 2>/dev/null || true
+    fi
+    N=$((N+1)); continue
+  fi
   # First RAFT_ROUNDS rounds = RAFT (imitate within-title winners); after that = DPO (best-vs-worst-per-title contrast)
   if [ $N -le ${RAFT_ROUNDS:-0} ]; then
     log "=== round $N : RAFT LoRA update -> thumb_r$N ==="

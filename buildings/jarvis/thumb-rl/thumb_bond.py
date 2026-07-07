@@ -57,7 +57,7 @@ model.gradient_checkpointing_enable(); model.enable_input_require_grads()
 lora = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05, bias="none", task_type="CAUSAL_LM",
                   target_modules=["q_proj", "k_proj", "v_proj", "o_proj"])
 cfg = SFTConfig(output_dir=OUT, per_device_train_batch_size=2, gradient_accumulation_steps=8,
-                num_train_epochs=2, learning_rate=1e-5, bf16=True, logging_steps=20, save_strategy="no",
+                num_train_epochs=int(os.environ.get("EPOCHS","2")), learning_rate=1e-5, bf16=True, logging_steps=20, save_strategy="no",
                 max_length=700, report_to=[])   # targets are short — big batches, fast steps
 trainer = SFTTrainer(model=model, args=cfg, train_dataset=ds, processing_class=tok, peft_config=lora)
 trainer.train()
