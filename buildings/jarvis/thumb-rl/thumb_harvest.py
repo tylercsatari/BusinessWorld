@@ -98,7 +98,7 @@ def score_attempt(att, title_vec):
     if not att["prompt"]: return None
     jpg, emb, sc = H.render_score(att["prompt"])
     if sc is None: return None
-    rel, cap = REL.relevance(None, jpg, input_vec=title_vec)
+    rel, cap = REL.relevance_emb(emb, title_vec)   # caption-free leash: direct image↔title cosine in the joint space
     reward = REL.gated_reward(sc["pctile"], rel, sc["nn_cos"])
     return {**att, "jpg": jpg, "pctile": sc["pctile"], "nn_cos": sc["nn_cos"],
             "x": sc["x"], "y": sc["y"], "nbr": sc["nbr"], "relevance": rel, "caption": cap, "reward": reward}

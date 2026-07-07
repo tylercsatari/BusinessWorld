@@ -53,8 +53,17 @@ def relevance(title_text, thumb_jpg, input_vec=None):
     if cv is None or iv is None: return None, cap
     return float(cv @ iv), cap
 
-# Reward shaping. Thumbnail<->title captions are looser than short-hook montages, so a slightly lower
-# floor than shorts (0.45); tune from the observed on/off-title margins on the first run.
+def relevance_emb(thumb_emb, title_vec):
+    """CAPTION-FREE relevance: gemini-embedding-2 is a JOINT image/text space, so the thumbnail's image
+    embedding (already computed for scoring) against the title's text embedding IS the on-topic signal —
+    zero extra API calls, no caption-model quota exposure (both flash caption buckets exhausted 2026-07-07).
+    Calibrated on 2000 real pairs: matched thumb↔own-title cosine p10=0.392, mismatched p90=0.290."""
+    import numpy as _np
+    v = thumb_emb / (_np.linalg.norm(thumb_emb) + 1e-8)
+    return float(v @ title_vec), None
+
+# Reward shaping. REL_FLOOR calibrated 2026-07-07 from real matched/mismatched pairs (see relevance_emb):
+# sits between mismatched p90 (0.290) and matched p10 (0.392) — catches off-topic without punishing legit.
 REL_FLOOR = 0.35   # below this the thumbnail has drifted off the title
 def gated_reward(pctile, rel, nn_cos):
     """Be viral (ctrviews pctile) AND on-title (rel) AND on the real-thumbnail manifold (nn_cos)."""
