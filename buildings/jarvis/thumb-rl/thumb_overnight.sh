@@ -22,7 +22,7 @@ while true; do
   log "=== round $N : proxy retrain (prompt-text -> pctile, r>=0.3 gate) ==="
   $V -u proxy_train.py 2>&1 | grep -aE 'proxy|PROXY' | tail -3 || log "proxy retrain failed — harvest falls back to render-all"
   log "=== round $N : vLLM harvest with $(basename $PREV) (budget $BUD, PROXY_G=${PROXY_G:-10}, full reasoning) ==="
-  RUN=thumb$N MODEL=$PREV G=5 PROXY_G=${PROXY_G:-10} TBATCH=${TBATCH:-16} MAXNEW=1500 IMG_BUDGET=$BUD $V -u thumb_harvest.py 2>&1 \
+  RUN=thumb$N MODEL=$PREV G=${G:-5} PROXY_G=${PROXY_G:-10} TBATCH=${TBATCH:-16} MAXNEW=${MAXNEW:-1500} IMG_BUDGET=$BUD $V -u thumb_harvest.py 2>&1 \
     | grep -avE 'it/s|Adding requests|Processed prompts|Loading safetensors|Capturing|profile'
   GOT=$(cat runs/thumb$N/_produced 2>/dev/null || echo 0)
   log "round $N produced $GOT new groups (banked to R2)"
