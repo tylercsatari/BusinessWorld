@@ -174,7 +174,7 @@ def process_input(item, iid, group=None, run=RUN, gkey=None):
                     "nn_cos": round(s["nn_cos"], 4),
                     "relevance": round(s["relevance"], 4) if s["relevance"] is not None else None,
                     "advantage": round(adv, 4), "reward": round(s["reward"], 4),
-                    "reasoning": s["reasoning"][:1800], "caption": s["caption"], "prompt": s["prompt"]}) + "\n")
+                    "reasoning": s["reasoning"], "caption": s["caption"], "prompt": s["prompt"]}) + "\n")   # FULL reasoning — truncated copies poisoned DPO (model learned to never close <think>)
     grp = {"input_id": gid, "title": title, "group_mean": round(base, 4),
            "best_reward": round(scored[0]["reward"], 4), "best_pctile": round(scored[0]["pctile"], 4),
            "spread": round(float(rewards.max() - rewards.min()), 4), "n": len(scored), "attempts": attempts_out,

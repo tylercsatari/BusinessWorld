@@ -37,6 +37,10 @@ for pf in _pats:   # manifest has EVERY attempt (winners + losers)
     for l in open(pf):
         try:
             r = json.loads(l)
+            # REJECT truncated-reasoning rows (old manifests cut at 1800/2000 chars mid-sentence — training
+            # on them taught the r3 model to never close <think>, rambling to max_tokens every generation)
+            rs = r.get("reasoning") or ""
+            if len(rs) in (1800, 2000) or (len(rs) >= 1750 and not rs.rstrip().endswith((".", "!", "?", '"'))): continue
             if r.get("prompt") and r.get("input_id") is not None and r.get("reward") is not None:
                 groups.setdefault(r["input_id"], []).append(r)
         except Exception: pass
