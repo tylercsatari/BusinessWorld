@@ -11,6 +11,7 @@ V="venv/bin/python"
 log(){ echo "[$(date +%H:%M:%S)] $*"; }
 DEADLINE=$(( $(date +%s) + 20*3600 ))
 PREV=${START_MODEL:-/home/ubuntu/thumbrl/models/qwen3-30b-a3b}   # round 1 = base model (override to resume)
+PREV2=$PREV                                                       # one-step rollback target for the regression gate
 N=${START_ROUND:-1}; STRIKES=0
 while true; do
   [ $(date +%s) -ge $DEADLINE ] && { log "20h deadline"; break; }
@@ -27,6 +28,25 @@ while true; do
   log "round $N produced $GOT new groups (banked to R2)"
   if [ "$GOT" -lt 8 ]; then STRIKES=$((STRIKES+1)); log "thin round (strike $STRIKES/2)"; [ $STRIKES -ge 2 ] && { log "stopping"; break; }; N=$((N+1)); continue; fi
   STRIKES=0
+  # REGRESSION GATE: this round's harvest measures the CURRENT policy on fresh titles. If it scores >3
+  # pctile points below the previous round, the last update made the model WORSE — roll the policy back
+  # one step (training can never compound a regression silently).
+  GATE=$($V -c "
+import json
+def avg(p):
+    try:
+        xs=[json.loads(l)['best_pctile'] for l in open(p) if l.strip()]
+        return sum(xs)/len(xs) if len(xs)>=20 else None
+    except Exception: return None
+cur=avg('runs/thumb$N/index.jsonl'); prev=avg('runs/thumb$((N-1))/index.jsonl')
+print(('REVERT' if (cur is not None and prev is not None and cur < prev-0.03) else 'OK'), (round(cur*100,1) if cur is not None else '?'), (round(prev*100,1) if prev is not None else '?'))" 2>/dev/null)
+  set -- $GATE; VERDICT=${1:-OK}; CURAVG=${2:-?}; PREVAVG=${3:-?}
+  log "gate: round $N avg ${CURAVG}th vs prev ${PREVAVG}th -> $VERDICT"
+  if [ "$VERDICT" = "REVERT" ]; then
+    log "REGRESSION — reverting policy to $(basename $PREV2); round $N pairs are kept as data"
+    $V -c "import harness_long as H; H.write_status('reverted','round $N avg ${CURAVG}th < prev ${PREVAVG}th - rolled model back one step')" 2>/dev/null || true
+    PREV=$PREV2
+  fi
   [ $(date +%s) -ge $DEADLINE ] && break
   # First RAFT_ROUNDS rounds = RAFT (imitate within-title winners); after that = DPO (best-vs-worst-per-title contrast)
   if [ $N -le ${RAFT_ROUNDS:-0} ]; then
@@ -42,7 +62,7 @@ while true; do
     THUMB_ROUND=$N DPO_INIT=$PREV DPO_RUNS="thumb$N,thumb$((N-1)),thumb30" $V thumb_dpo.py 2>&1 | grep -avE 'it/s|Loading'; RC=${PIPESTATUS[0]}
   fi
   if [ "$RC" = "0" ] && [ -d /home/ubuntu/thumbrl/models/thumbmerged_r$N ]; then
-    PREV=/home/ubuntu/thumbrl/models/thumbmerged_r$N; log "round $N trained -> $(basename $PREV)"
+    PREV2=$PREV; PREV=/home/ubuntu/thumbrl/models/thumbmerged_r$N; log "round $N trained -> $(basename $PREV)"
   else
     log "update$N failed/skipped (guesses are safe) — continuing on the SAME model"
     # surface it in the UI banner too — a broken training step must never be log-only

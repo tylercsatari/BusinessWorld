@@ -1,0 +1,1 @@
+gpu_1x_h100_sxm5 us-southeast-1
