@@ -26,8 +26,14 @@ tok = AutoTokenizer.from_pretrained(MODELP)
 if tok.pad_token is None: tok.pad_token = tok.eos_token
 
 # ── build (chosen, rejected) preference pairs: best vs worst thumbnail PER TITLE ──
+# DPO_RUNS (comma-separated) limits pairs to specific rounds — iterative DPO should train on RECENT
+# (near-on-policy) pairs, not re-grind every old round's pairs each update. Unset = all rounds.
+_runs = [r for r in os.environ.get("DPO_RUNS", "").split(",") if r.strip()]
+_pats = ["/home/ubuntu/thumbrl/runs/%s/manifest.jsonl" % r.strip() for r in _runs] if _runs \
+        else glob.glob("/home/ubuntu/thumbrl/runs/thumb*/manifest.jsonl")
 groups = {}
-for pf in glob.glob("/home/ubuntu/thumbrl/runs/thumb*/manifest.jsonl"):   # manifest has EVERY attempt (winners + losers)
+for pf in _pats:   # manifest has EVERY attempt (winners + losers)
+    if not os.path.exists(pf): continue
     for l in open(pf):
         try:
             r = json.loads(l)

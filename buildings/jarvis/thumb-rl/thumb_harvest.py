@@ -17,6 +17,33 @@ G = int(os.environ.get("G", "5"))                 # thumbnails per title (the GR
 IMG_BUDGET = int(os.environ.get("IMG_BUDGET", "10000"))
 TBATCH = int(os.environ.get("TBATCH", "8"))       # titles generated per batched forward pass (throughput — GPU is idle at G=5)
 MAXNEW = int(os.environ.get("MAXNEW", "700"))     # cap reasoning length (1500 was overkill for a single prompt)
+# PROXY MODE (measured: prompt text predicts rendered pctile at held-out r=0.85): generate PROXY_G
+# candidates, score them ALL by text-embedding proxy (~free), render only proxy-BEST + proxy-WORST →
+# 2 renders/title instead of G, with a deliberately wide DPO gap. Real rendered scores still decide the
+# pair (proxy only filters — it can't be reward-hacked into training data).
+PROXY_G = int(os.environ.get("PROXY_G", "0"))
+_PX = [None]
+def proxy_load():
+    if _PX[0] is not None: return _PX[0]
+    try:
+        import joblib
+        _PX[0] = joblib.load("/home/ubuntu/thumbrl/data/proxy_prompt.joblib")
+        print("proxy loaded: r=%.3f n=%d" % (_PX[0].get("r", 0), _PX[0].get("n", 0)), flush=True)
+    except Exception as e:
+        print("no proxy (%s) — falling back to render-all-G" % str(e)[:60], flush=True); _PX[0] = False
+    return _PX[0]
+def proxy_pick(grp):
+    """Return the (best, worst) attempts of a candidate group by proxy score, or None if proxy unavailable."""
+    px = proxy_load()
+    if not px: return None
+    cands = [a for a in grp if a.get("prompt")]
+    if len(cands) < 2: return None
+    embs = []
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        embs = list(ex.map(lambda a: H._embed_call(json.dumps({"content": {"parts": [{"text": a["prompt"][:1800]}]}, "outputDimensionality": 1536}).encode(), 3), cands))
+    X = np.array(embs, np.float32); X /= (np.linalg.norm(X, axis=1, keepdims=True) + 1e-9)
+    s = px["model"].predict(X).ravel()
+    return [cands[int(np.argmax(s))], cands[int(np.argmin(s))]]
 TITLES = os.environ.get("TITLES", "") or "/home/ubuntu/thumbrl/data/titles.jsonl"
 RUNDIR = "/home/ubuntu/thumbrl/runs/%s" % RUN; os.makedirs(RUNDIR, exist_ok=True)
 TRAIN = RUNDIR + "/thumb_data.jsonl"; INDEX = RUNDIR + "/index.jsonl"; MANIF = RUNDIR + "/manifest.jsonl"
@@ -44,20 +71,21 @@ llm = LLM(model=MODEL, dtype="bfloat16", gpu_memory_utilization=0.92, max_model_
 SAMPLING = SamplingParams(temperature=1.05, top_p=0.95, max_tokens=MAXNEW)
 print("model ready", flush=True)
 
-def gen_batch(titles_list, temp=1.05):
-    """G reasoning+prompt attempts for EACH title. vLLM continuous-batches ALL TBATCH*G prompts with proper
-    MoE kernels, so the FULL 1500-token reasoning generates ~15-40x faster than transformers (which is the
-    slow-MoE bottleneck we hit). vLLM preserves prompt order. Returns a list (per title) of G attempt dicts."""
+def gen_batch(titles_list, temp=1.05, n=None):
+    """n (default G) reasoning+prompt attempts for EACH title. vLLM continuous-batches ALL prompts with
+    proper MoE kernels, so the FULL 1500-token reasoning generates ~15-40x faster than transformers (which
+    is the slow-MoE bottleneck we hit). vLLM preserves prompt order. Returns a list (per title) of dicts."""
+    n = n or G
     prompts = []
     for t in titles_list:
         prompts += [tok.apply_chat_template([{"role": "system", "content": SYS}, {"role": "user", "content": t}],
-                                            tokenize=False, add_generation_prompt=True, enable_thinking=True)] * G
+                                            tokenize=False, add_generation_prompt=True, enable_thinking=True)] * n
     outs = llm.generate(prompts, SAMPLING)
     groups = []
     for ti in range(len(titles_list)):
         grp = []
-        for gi in range(G):
-            full = outs[ti * G + gi].outputs[0].text
+        for gi in range(n):
+            full = outs[ti * n + gi].outputs[0].text
             reasoning, spec = split_think(full)
             pr = spec.get("prompt") if spec else None
             grp.append({"reasoning": reasoning, "prompt": pr if (isinstance(pr, str) and len(pr.strip()) > 8) else None, "completion": full})
@@ -196,7 +224,7 @@ while bi < len(pending):
     if H.RENDERS[0] >= IMG_BUDGET: print("=== BUDGET REACHED ==="); break
     chunk = pending[bi:bi + TBATCH]; bi += TBATCH
     try:
-        groups = gen_batch([(it.get("title") or "").strip() for _, it in chunk])
+        groups = gen_batch([(it.get("title") or "").strip() for _, it in chunk], n=(PROXY_G or G))
     except Exception as e:
         print("[%s] gen_batch err %s" % (RUN, str(e)[:90]), flush=True); continue
     # render+score ALL groups of this batch CONCURRENTLY (rendering, not generation, is the bottleneck now)
@@ -210,7 +238,11 @@ while bi < len(pending):
     def _do(pair):
         (ii, item), grp = pair
         if H.RENDERS[0] >= IMG_BUDGET: return
-        try: process_input(item, "t%05d" % ii, group=grp)
+        try:
+            if PROXY_G:
+                g2 = proxy_pick(grp)           # text-proxy filters PROXY_G candidates → render only best+worst
+                if g2: grp = g2
+            process_input(item, "t%05d" % ii, group=grp)
         except (H.BillingHalt, H.GeminiHalt): raise
         except Exception as e: print("[%s] t%05d err %s" % (RUN, ii, str(e)[:90]), flush=True)
     try:
