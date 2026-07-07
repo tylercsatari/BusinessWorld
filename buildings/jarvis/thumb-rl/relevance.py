@@ -6,7 +6,7 @@ import json, base64, urllib.request, time
 import numpy as np
 import harness_long as H  # reuses H.GEMINI, H.s3, H.BUCKET, H.DENSITY_FLOOR helpers
 
-CAP_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
+CAP_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"   # 3.5-flash has a separate quota bucket that exhausted (429) with two boxes captioning; 2.5-flash verified working
 EMB_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent"
 
 _CAPFAILS = [0]   # consecutive caption failures — a systemic outage must HALT, never silently drop the leash
