@@ -55,13 +55,27 @@ for iid, atts in groups.items():
     atts = [a for a in atts if a.get("prompt")]
     if len(atts) < 2: continue
     atts.sort(key=lambda a: a["reward"])
-    lo, hi = atts[0], atts[-1]
-    if (hi["reward"] - lo["reward"]) < MINGAP: continue          # too close = no clear winner
-    key = (hi.get("title", ""), hi["prompt"][:60], lo["prompt"][:60])
-    if key in seen: continue
-    seen.add(key)
-    pairs.append({"prompt": prompt_text(hi.get("title", "")), "chosen": completion(hi), "rejected": completion(lo)})
-print("THUMB DPO round %s on %d best-vs-worst-per-title pairs (gap>=%.2f) from %d titles" % (ROUND, len(pairs), MINGAP, len(groups)), flush=True)
+    # up to TWO nested pairs per title: (best, worst) and (2nd-best, 2nd-worst) — ~2x preference signal
+    # per rendered group; each pair still gap-filtered (DAPO-style: low-spread groups contribute nothing)
+    cand_pairs = [(atts[-1], atts[0])] + ([(atts[-2], atts[1])] if len(atts) >= 4 else [])
+    for hi, lo in cand_pairs:
+        if (hi["reward"] - lo["reward"]) < MINGAP: continue
+        key = (hi.get("title", ""), hi["prompt"][:60], lo["prompt"][:60])
+        if key in seen: continue
+        seen.add(key)
+        pairs.append({"prompt": prompt_text(hi.get("title", "")), "chosen": completion(hi), "rejected": completion(lo)})
+print("THUMB DPO round %s on %d pairs (nested best-vs-worst, gap>=%.2f) from %d titles" % (ROUND, len(pairs), MINGAP, len(groups)), flush=True)
+# LENGTH-BALANCE AUDIT (Dr. GRPO lesson, and we already lived the length-hack failure once): if chosen
+# completions are systematically longer/shorter than rejected, DPO learns LENGTH, not quality. Abort loudly.
+if pairs:
+    cl = sum(len(p["chosen"]) for p in pairs) / len(pairs); rl = sum(len(p["rejected"]) for p in pairs) / len(pairs)
+    skew = (cl - rl) / max(cl, rl)
+    print("length balance: chosen avg %d chars vs rejected %d (skew %+.1f%%)" % (cl, rl, skew * 100), flush=True)
+    if abs(skew) > 0.20:
+        import harness_long as _H
+        _H.write_status("update-failed", "round %s DPO aborted: length skew %+.0f%% — pairs would teach length, not quality" % (ROUND, skew * 100))
+        print("=== ABORT: length skew %+.1f%% > 20%% — refusing to train a length hack ===" % (skew * 100), flush=True)
+        raise SystemExit(1)
 if len(pairs) < 16:
     print("=== too few clear pairs (%d) — skipping DPO this round ===" % len(pairs), flush=True); raise SystemExit(0)
 ds = Dataset.from_list(pairs)
