@@ -210,7 +210,9 @@ def serve_requests():
             H.s3.delete_object(Bucket=H.BUCKET, Key=key)
             if not title: continue
             print("[demo] serving %s: %s" % (rid, title[:60]), flush=True)
-            try: process_input({"title": title}, iid=rid, run="demo", gkey=rid)
+            # user-facing request: BEST-OF-N serving — generate DEMO_G candidates, render+score ALL,
+            # return ranked (the way to hand back the best possible thumbnail for an arbitrary input)
+            try: process_input({"title": title}, iid=rid, group=gen_group(title, n=int(os.environ.get("DEMO_G", "12"))), run="demo", gkey=rid)
             except Exception as e: print("[demo] err", str(e)[:80], flush=True)
     except Exception as e:
         print("[demo] poll err", str(e)[:80], flush=True)
