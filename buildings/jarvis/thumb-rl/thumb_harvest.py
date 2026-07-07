@@ -77,9 +77,10 @@ def gen_batch(titles_list, temp=1.05, n=None):
     is the slow-MoE bottleneck we hit). vLLM preserves prompt order. Returns a list (per title) of dicts."""
     n = n or G
     prompts = []
+    think = os.environ.get("NOTHINK") != "1"   # NOTHINK=1 → no-think mode (matches BOND prompt-only training)
     for t in titles_list:
         prompts += [tok.apply_chat_template([{"role": "system", "content": SYS}, {"role": "user", "content": t}],
-                                            tokenize=False, add_generation_prompt=True, enable_thinking=True)] * n
+                                            tokenize=False, add_generation_prompt=True, enable_thinking=think)] * n
     outs = llm.generate(prompts, SAMPLING)
     groups = []
     for ti in range(len(titles_list)):
