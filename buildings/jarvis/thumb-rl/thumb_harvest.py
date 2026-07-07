@@ -215,48 +215,57 @@ def serve_requests():
     except Exception as e:
         print("[demo] poll err", str(e)[:80], flush=True)
 
-# process titles in batches of TBATCH: ONE big generation per batch, then score each title's group
+# process titles in batches of TBATCH — PIPELINED: while the GPU generates batch N+1, batch N renders and
+# scores in a background lane (these used to serialize: GPU idled during renders, renders idled during gen).
 pending = [(ii, item) for ii, item in enumerate(titles) if ("t%05d" % ii) not in done]
-print("pending after resume: %d (batch %d, maxnew %d)" % (len(pending), TBATCH, MAXNEW), flush=True)
-bi = 0
+SHARD = os.environ.get("TITLE_SHARD", "")   # "0/2" and "1/2" let TWO boxes harvest disjoint titles with zero coordination
+if SHARD:
+    _k, _m = (int(x) for x in SHARD.split("/"))
+    pending = [(ii, it) for (ii, it) in pending if ii % _m == _k]
+print("pending after resume: %d (batch %d, maxnew %d, pipelined%s)" % (len(pending), TBATCH, MAXNEW, (", shard " + SHARD) if SHARD else ""), flush=True)
+def _do(pair):
+    (ii, item), grp = pair
+    if H.RENDERS[0] >= IMG_BUDGET: return
+    try:
+        if PROXY_G:
+            g2 = proxy_pick(grp)           # text-proxy filters PROXY_G candidates → render only best+worst
+            if g2: grp = g2
+        process_input(item, "t%05d" % ii, group=grp)
+    except (H.BillingHalt, H.GeminiHalt): raise
+    except Exception as e: print("[%s] t%05d err %s" % (RUN, ii, str(e)[:90]), flush=True)
+SCORE_EX = ThreadPoolExecutor(max_workers=16)   # background render+score lane (network-bound)
+def _join(futs):
+    """Drain a scoring batch; surface halts LOUDLY (BillingHalt stops the run, GeminiHalt waits + resumes)."""
+    for f in futs:
+        try: f.result()
+        except H.BillingHalt as e:
+            H.write_status("halted-replicate", str(e)); print("=== BILLING HALT: %s ===" % str(e)[:80], flush=True); return "stop"
+        except H.GeminiHalt as e:
+            H.write_status("halted-gemini", str(e))
+            print("=== GEMINI HALT: %s — waiting 5 min, auto-resumes ===" % str(e)[:110], flush=True)
+            ok2, m2 = H.gemini_ok()
+            while not ok2: time.sleep(300); ok2, m2 = H.gemini_ok()
+            H.write_status("running", "resumed after gemini halt")
+    return None
+bi = 0; prev_futs = []; halted = False
 while bi < len(pending):
     serve_requests()                       # answer user demo requests first (live model)
     if H.RENDERS[0] >= IMG_BUDGET: print("=== BUDGET REACHED ==="); break
     chunk = pending[bi:bi + TBATCH]; bi += TBATCH
     try:
-        groups = gen_batch([(it.get("title") or "").strip() for _, it in chunk], n=(PROXY_G or G))
+        groups = gen_batch([(it.get("title") or "").strip() for _, it in chunk], n=(PROXY_G or G))  # GPU lane
     except Exception as e:
         print("[%s] gen_batch err %s" % (RUN, str(e)[:90]), flush=True); continue
-    # render+score ALL groups of this batch CONCURRENTLY (rendering, not generation, is the bottleneck now)
-    # NEVER render while Gemini can't score (paying for unscoreable images) — pre-flight gate, auto-resumes
+    if _join(prev_futs) == "stop": prev_futs = []; halted = True; break   # ≤1 scoring batch in flight behind the GPU
+    # NEVER render while Gemini can't score (paying for unscoreable images) — gate before the render lane
     ok, msg = H.gemini_ok()
     while not ok:
         H.write_status("halted-gemini", msg)
         print("=== GEMINI HALT: %s — waiting 5 min, auto-resumes when credits are back ===" % msg[:110], flush=True)
         time.sleep(300); ok, msg = H.gemini_ok()
     H.write_status("running", "run %s · %d renders" % (RUN, H.RENDERS[0]))
-    def _do(pair):
-        (ii, item), grp = pair
-        if H.RENDERS[0] >= IMG_BUDGET: return
-        try:
-            if PROXY_G:
-                g2 = proxy_pick(grp)           # text-proxy filters PROXY_G candidates → render only best+worst
-                if g2: grp = g2
-            process_input(item, "t%05d" % ii, group=grp)
-        except (H.BillingHalt, H.GeminiHalt): raise
-        except Exception as e: print("[%s] t%05d err %s" % (RUN, ii, str(e)[:90]), flush=True)
-    try:
-        with ThreadPoolExecutor(max_workers=min(len(chunk), 8)) as ex:
-            list(ex.map(_do, list(zip(chunk, groups))))
-    except H.BillingHalt as e:
-        H.write_status("halted-replicate", str(e)); print("=== BILLING HALT: %s ===" % str(e)[:80], flush=True); break
-    except H.GeminiHalt as e:
-        # mid-batch depletion: loud, wait, auto-resume (that batch's renders are lost — the pre-gate makes this rare)
-        H.write_status("halted-gemini", str(e))
-        print("=== GEMINI HALT mid-batch: %s — waiting 5 min ===" % str(e)[:110], flush=True)
-        ok2, m2 = H.gemini_ok()
-        while not ok2: time.sleep(300); ok2, m2 = H.gemini_ok()
-        H.write_status("running", "resumed after gemini halt")
+    prev_futs = [SCORE_EX.submit(_do, p) for p in zip(chunk, groups)]
+if not halted: _join(prev_futs)                 # drain the last in-flight batch
 serve_requests()
 try:
     with open(RUNDIR + "/_produced", "w") as fp: fp.write(str(PRODUCED[0]))   # overnight loop reads this (robust vs the wc -l resume bug)

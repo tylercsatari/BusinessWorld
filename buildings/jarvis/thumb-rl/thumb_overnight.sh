@@ -33,8 +33,13 @@ while true; do
     log "=== round $N : RAFT LoRA update -> thumb_r$N ==="
     THUMB_ROUND=$N $V thumb_update.py 2>&1 | grep -avE 'it/s|Loading'; RC=${PIPESTATUS[0]}
   else
-    log "=== round $N : DPO preference update (best-vs-worst per title, recent rounds) -> thumb_r$N ==="
-    THUMB_ROUND=$N DPO_INIT=$PREV DPO_RUNS="thumb$N,thumb$((N-1))" $V thumb_dpo.py 2>&1 | grep -avE 'it/s|Loading'; RC=${PIPESTATUS[0]}
+    # pull the explorer box's pairs (run thumb30, disjoint title shard) so every DPO trains on BOTH boxes' data
+    mkdir -p runs/thumb30
+    for F in index.jsonl manifest.jsonl; do
+      $V -c "import harness_long as H; H.s3.download_file(H.BUCKET,'longform/guesses/thumb30/$F','runs/thumb30/$F')" 2>/dev/null || true
+    done
+    log "=== round $N : DPO preference update (best-vs-worst per title, recent rounds + explorer) -> thumb_r$N ==="
+    THUMB_ROUND=$N DPO_INIT=$PREV DPO_RUNS="thumb$N,thumb$((N-1)),thumb30" $V thumb_dpo.py 2>&1 | grep -avE 'it/s|Loading'; RC=${PIPESTATUS[0]}
   fi
   if [ "$RC" = "0" ] && [ -d /home/ubuntu/thumbrl/models/thumbmerged_r$N ]; then
     PREV=/home/ubuntu/thumbrl/models/thumbmerged_r$N; log "round $N trained -> $(basename $PREV)"
