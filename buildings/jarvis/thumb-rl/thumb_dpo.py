@@ -32,9 +32,11 @@ _runs = [r for r in os.environ.get("DPO_RUNS", "").split(",") if r.strip()]
 _pats = ["/home/ubuntu/thumbrl/runs/%s/manifest.jsonl" % r.strip() for r in _runs] if _runs \
         else glob.glob("/home/ubuntu/thumbrl/runs/thumb*/manifest.jsonl")
 groups = {}
-for pf in _pats:   # manifest has EVERY attempt (winners + losers)
+for _fi, pf in enumerate(_pats):   # manifest has EVERY attempt (winners + losers)
     if not os.path.exists(pf): continue
+    _ln = 0
     for l in open(pf):
+        _ln += 1
         try:
             r = json.loads(l)
             # REJECT truncated-reasoning rows (old manifests cut at 1800/2000 chars mid-sentence — training
@@ -42,6 +44,7 @@ for pf in _pats:   # manifest has EVERY attempt (winners + losers)
             rs = r.get("reasoning") or ""
             if len(rs) in (1800, 2000) or (len(rs) >= 1750 and not rs.rstrip().endswith((".", "!", "?", '"'))): continue
             if r.get("prompt") and r.get("input_id") is not None and r.get("reward") is not None:
+                r["_ord"] = (_fi, -_ln)   # source order: own-run files first, then newest explorer rows
                 groups.setdefault(r["input_id"], []).append(r)
         except Exception: pass
 def completion(r):
@@ -63,8 +66,14 @@ for iid, atts in groups.items():
         key = (hi.get("title", ""), hi["prompt"][:60], lo["prompt"][:60])
         if key in seen: continue
         seen.add(key)
-        pairs.append({"prompt": prompt_text(hi.get("title", "")), "chosen": completion(hi), "rejected": completion(lo)})
-print("THUMB DPO round %s on %d pairs (nested best-vs-worst, gap>=%.2f) from %d titles" % (ROUND, len(pairs), MINGAP, len(groups)), flush=True)
+        pairs.append({"prompt": prompt_text(hi.get("title", "")), "chosen": completion(hi), "rejected": completion(lo), "_o": hi.get("_ord", (9, 0))})
+# freshness cap: prefer own-round pairs, then the NEWEST explorer pairs; cap total so consecutive rounds
+# don't re-train the same accumulated bank every update (near-on-policy iterative DPO)
+MAXP = int(os.environ.get("DPO_MAXPAIRS", "2500"))
+pairs.sort(key=lambda p: p["_o"])
+pairs = pairs[:MAXP]
+for p in pairs: p.pop("_o", None)
+print("THUMB DPO round %s on %d pairs (nested best-vs-worst, gap>=%.2f, freshness-capped %d) from %d titles" % (ROUND, len(pairs), MINGAP, MAXP, len(groups)), flush=True)
 # LENGTH-BALANCE AUDIT (Dr. GRPO lesson, and we already lived the length-hack failure once): if chosen
 # completions are systematically longer/shorter than rejected, DPO learns LENGTH, not quality. Abort loudly.
 if pairs:

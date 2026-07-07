@@ -59,7 +59,7 @@ print(('REVERT' if (cur is not None and prev is not None and cur < prev-0.03) el
       $V -c "import harness_long as H; H.s3.download_file(H.BUCKET,'longform/guesses/thumb30/$F','runs/thumb30/$F')" 2>/dev/null || true
     done
     log "=== round $N : DPO preference update (best-vs-worst per title, recent rounds + explorer) -> thumb_r$N ==="
-    THUMB_ROUND=$N DPO_INIT=$PREV DPO_RUNS="thumb$N,thumb$((N-1)),thumb30" $V thumb_dpo.py 2>&1 | grep -avE 'it/s|Loading'; RC=${PIPESTATUS[0]}
+    THUMB_ROUND=$N DPO_INIT=$PREV DPO_RUNS="thumb$N,thumb30" $V thumb_dpo.py 2>&1 | grep -avE 'it/s|Loading'; RC=${PIPESTATUS[0]}   # own round + newest explorer only (N-1's pairs were just trained on)
   fi
   if [ "$RC" = "0" ] && [ -d /home/ubuntu/thumbrl/models/thumbmerged_r$N ]; then
     PREV2=$PREV; PREV=/home/ubuntu/thumbrl/models/thumbmerged_r$N; log "round $N trained -> $(basename $PREV)"
