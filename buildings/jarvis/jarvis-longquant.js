@@ -674,11 +674,35 @@ const JarvisLongQuant = (function () {
     function renderLongGuesses() {
         if (!LGRUNS[0]) { LGRUNS[0] = { loading: 1 }; fetch('/api/longquant/guesses/runs').then(r => r.json()).then(j => { const rr = j.runs || []; LGRUNS[0] = rr; if (!st.lgRun && rr.length) st.lgRun = rr[rr.length - 1]; rtgUpdateGuessesL(); }).catch(() => { LGRUNS[0] = []; rtgUpdateGuessesL(); }); }
         if (Date.now() - LGSTATUS[1] > 60e3) { LGSTATUS[1] = Date.now(); fetch('/api/longquant/guesses/status').then(r => r.json()).then(j => { LGSTATUS[0] = j; rtgUpdateGuessesL(); }).catch(() => { }); }
+        // LIVE: while the Guesses panel is open, refresh status+runs+active-round every 40s (manifest every 3rd tick)
+        // so the banner/rounds can never go stale — no interaction needed.
+        if (!st._lgLive) {
+            st._lgLive = window.setInterval(() => {
+                if (!window.document.getElementById('rtg-guesspanel')) return;
+                st._lgTick = (st._lgTick || 0) + 1;
+                LGSTATUS[1] = 0; LGRUNS[0] = null;
+                const r = st.lgRun; if (r) { LGIDX[r] = null; if (st._lgTick % 3 === 0) delete LGMANI[r]; }
+                rtgUpdateGuessesL();
+            }, 40000);
+        }
         const STAT = LGSTATUS[0];
-        const statBanner = (STAT && STAT.state && STAT.state !== 'running') ? `<div style="background:${STAT.state === 'done' ? C.green : C.red}18;border:1px solid ${STAT.state === 'done' ? C.green : C.red};border-radius:8px;padding:8px 12px;margin-bottom:9px;font-size:11px;color:${STAT.state === 'done' ? C.green : C.red};font-weight:700">${STAT.state === 'done' ? '✅ trainer finished' : '⛔ trainer ' + esc(STAT.state)}${STAT.note ? ` — ${esc(STAT.note)}` : ''}${STAT.ts ? ` <span style="color:${C.mute};font-weight:400">(${Math.round((Date.now() - STAT.ts) / 60000)} min ago)</span>` : ''}</div>` : '';
+        // ALWAYS-visible trainer state strip: stage + round + freshness, green/amber/red
+        const statStrip = (STAT && STAT.state) ? (() => {
+            const good = STAT.state === 'running', warn = STAT.state === 'done' || STAT.state === 'update-failed';
+            const col = good ? C.green : warn ? C.amber : C.red;
+            const ico = good ? '🟢' : STAT.state === 'done' ? '✅' : STAT.state === 'update-failed' ? '⚠️' : '⛔';
+            const age = STAT.ts ? Math.round((Date.now() - STAT.ts) / 60000) : null;
+            return `<div style="background:${col}14;border:1px solid ${col};border-radius:8px;padding:7px 12px;margin-bottom:9px;font-size:11px;color:${col};font-weight:700;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><span>${ico} trainer ${esc(STAT.state)}</span>${STAT.note ? `<span style="font-weight:400;color:${C.text}">${esc(STAT.note)}</span>` : ''}${age != null ? `<span style="color:${C.mute};font-weight:400">updated ${age < 1 ? '<1' : age} min ago${age > 20 ? ' — ⚠️ stale, trainer may be between stages' : ''}</span>` : ''}</div>`;
+        })() : '';
         const runs = Array.isArray(LGRUNS[0]) ? LGRUNS[0] : [];
         const run = st.lgRun || (runs.length ? runs[runs.length - 1] : null);
-        const runPills = runs.map(r => `<span data-lgrun="${r}" style="cursor:pointer;border:1px solid ${run === r ? C.accent : C.border};background:${run === r ? C.accent + '1e' : 'transparent'};color:${run === r ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${r}</span>`).join('');
+        // one pill per ROUND with live stats (titles · avg best pctile) so every stage is visible at a glance
+        const runPills = runs.map(r => {
+            lgIdx(r); const ix = LGIDX[r], rows = (ix && ix.rows) || null;
+            const n = rows ? rows.length : null;
+            const avg = (rows && rows.length) ? rows.reduce((s, x) => s + (x.best_pctile || 0), 0) / rows.length : null;
+            return `<span data-lgrun="${r}" style="cursor:pointer;border:1px solid ${run === r ? C.accent : C.border};background:${run === r ? C.accent + '1e' : 'transparent'};color:${run === r ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">round ${r.replace('thumb', '')}${n != null ? ` <span style="opacity:.75;font-weight:400">· ${n} titles · avg ${(avg * 100).toFixed(1)}th</span>` : ''}</span>`;
+        }).join('');
         const demo = `<div style="margin:8px 0;padding:10px;border:1px solid ${C.border};border-radius:8px;background:${C.card2}">
             <div style="font-size:11px;color:${C.text};font-weight:700;margin-bottom:5px">🧪 Try the live model on any title</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap"><input data-lgtitle value="${esc(st.lgDemoTitle || '')}" placeholder="e.g. I Built a Real Iron Man Suit" style="flex:1;min-width:220px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:12px"/><span data-lgdemo style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:6px 12px;font-size:11px;font-weight:800">generate 5 →</span></div>
@@ -721,7 +745,7 @@ const JarvisLongQuant = (function () {
             const grp = MANI.rows.filter(r => r.input_id === gsel).sort((a, b) => (b.advantage || 0) - (a.advantage || 0));
             if (grp.length) detail = `<div style="margin-top:12px;padding-top:10px;border-top:1px solid ${C.border}"><div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:2px">${esc(grp[0].title || '')}</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">${grp.length} thumbnails · best ${(Math.max.apply(null, grp.map(r => r.pctile || 0)) * 100).toFixed(0)}th pctile · ranked by advantage vs this title's own group</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${grp.map(r => `<div style="border:1px solid ${r.advantage > 0 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}"><img src="/api/longquant/guesses/montage/${run}/${r.id}" loading="lazy" style="width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}"/><div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;font-size:10px"><span style="font-weight:800;color:${r.pctile >= 0.9 ? C.green : C.text}">${((r.pctile || 0) * 100).toFixed(0)}th pctile</span><span style="color:${r.advantage > 0 ? C.green : C.dim}">adv ${r.advantage > 0 ? '+' : ''}${(r.advantage || 0).toFixed(2)}</span></div><div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:52px;overflow:hidden">${esc((r.prompt || '').slice(0, 160))}</div></div></div>`).join('')}</div></div>`;
         }
-        return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — thumbnail RL</div>${statBanner}<div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every title the model tried + its 5 generated thumbnails. Click a title to light up its guesses on the map and see all five below. Switch the latent space to view the same guesses projected different ways.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">round</span>${runPills || `<span style="font-size:11px;color:${C.dim}">no runs yet — starts when training kicks off</span>`}</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">latent space</span>${projPills}</div>${demo}${body}${detail}`, 14);
+        return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — thumbnail RL</div>${statStrip}<div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every title the model tried + its 5 generated thumbnails. Click a title to light up its guesses on the map and see all five below. Switch the latent space to view the same guesses projected different ways.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">round</span>${runPills || `<span style="font-size:11px;color:${C.dim}">no runs yet — starts when training kicks off</span>`}</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">latent space</span>${projPills}</div>${demo}${body}${detail}`, 14);
     }
     function guessEnsure(run) { run = run || 'phase0'; if (GUESSES[run]) return; GUESSES[run] = { loading: 1 }; fetch('/api/hooks/guesses?run=' + run).then(r => r.json()).then(j => { GUESSES[run] = j; rtgUpdateGuesses(); }).catch(() => { GUESSES[run] = { rows: [] }; rtgUpdateGuesses(); }); }
     function rtgUpdateGuesses() { try { const el = window.document.getElementById('rtg-guesspanel'); if (el) el.innerHTML = renderGuesses(); } catch (e) { } }
