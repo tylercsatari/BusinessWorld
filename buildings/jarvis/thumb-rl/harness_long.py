@@ -24,9 +24,10 @@ class GeminiHalt(Exception):
     """Gemini credits depleted / persistently unavailable — HALT so we never render (spend) unscoreable images."""
 
 def write_status(state, note=""):
-    """Publish trainer state to R2 so the UI + monitors can see it — no silent failure."""
+    """Publish trainer state to R2 so the UI + monitors can see it — no silent failure.
+    STATUS_KEY env lets the idea trainer publish to its own channel."""
     try:
-        s3.put_object(Bucket=BUCKET, Key="longform/thumb-rl/status.json",
+        s3.put_object(Bucket=BUCKET, Key=os.environ.get("STATUS_KEY", "longform/thumb-rl/status.json"),
                       Body=json.dumps({"state": state, "note": str(note)[:300], "ts": int(time.time() * 1000)}).encode(),
                       ContentType="application/json")
     except Exception:
