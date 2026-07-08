@@ -40,6 +40,18 @@ _sc = np.load("/home/ubuntu/thumbrl/data/scorer_text.npz", allow_pickle=True)
 BLEND = np.asarray(_sc["blend"], np.float32); LADDER = np.asarray(_sc["ladder"], np.float32)
 def score_pct(v): return float(np.searchsorted(LADDER, float(v @ BLEND)) / len(LADDER))
 
+# diversity anchors: top-decile REAL titles (few-shot style exemplars) + random inspiration seeds,
+# and the full corpus title embeddings for a NEAR-COPY gate (an invented idea must not be a real title).
+H.s3.download_file(H.BUCKET, "longform/idea-rl/top_titles.json", "/home/ubuntu/thumbrl/data/top_titles.json")
+TOP = json.load(open("/home/ubuntu/thumbrl/data/top_titles.json"))
+INSP = [json.loads(l)["title"] for l in open("/home/ubuntu/thumbrl/data/titles.jsonl") if l.strip()]
+try:
+    H.s3.download_file(H.BUCKET, "raw-long/text/embeddings.npz", "/home/ubuntu/thumbrl/data/text_corpus_embeddings.npz")
+except Exception: pass
+_tc = np.load("/home/ubuntu/thumbrl/data/text_corpus_embeddings.npz", allow_pickle=True)
+CORPUS_V = np.asarray(_tc["vecs"], np.float32); CORPUS_V /= (np.linalg.norm(CORPUS_V, axis=1, keepdims=True) + 1e-9)
+COPY_MAX = float(os.environ.get("COPY_MAX", "0.92"))
+
 def embt(t):
     return H._embed_call(json.dumps({"content": {"parts": [{"text": t[:400]}]}, "outputDimensionality": 1536}).encode(), 4)
 
@@ -59,8 +71,14 @@ if os.path.exists(ACCEPTED):
 if os.path.exists(INDEX): n_gen = sum(1 for _ in open(INDEX))
 print("resume: %d generated, %d accepted" % (n_gen, n_acc), flush=True)
 
-prompt = tok.apply_chat_template([{"role": "system", "content": SYS}, {"role": "user", "content": "Invent a new idea now."}],
-                                 tokenize=False, add_generation_prompt=True, enable_thinking=False)
+import random as _rnd
+def make_prompt():
+    ex = _rnd.sample(TOP, 2); seed = _rnd.choice(INSP)
+    user = ("Style examples that PERFORM (match their energy, do NOT copy them):\n- %s\n- %s\n"
+            "Topic inspiration (a different area, riff on it or ignore it): %s\n"
+            "Now invent ONE completely NEW idea." % (ex[0], ex[1], seed))
+    return tok.apply_chat_template([{"role": "system", "content": SYS}, {"role": "user", "content": user}],
+                                   tokenize=False, add_generation_prompt=True, enable_thinking=False)
 def parse(txt):
     m = re.search(r"\{.*\}", txt, re.S)
     try:
@@ -75,7 +93,7 @@ while n_gen < IDEA_BUDGET:
     while not ok:
         H.write_status("halted-gemini", msg); print("GEMINI HALT: %s" % msg[:90], flush=True)
         time.sleep(300); ok, msg = H.gemini_ok()
-    outs = llm.generate([prompt] * GBATCH, SAMPLING)
+    outs = llm.generate([make_prompt() for _ in range(GBATCH)], SAMPLING)
     ideas = [parse(o.outputs[0].text) for o in outs]
     ideas = [(i, t) for i, t in enumerate(ideas) if t]
     with ThreadPoolExecutor(max_workers=10) as ex:
@@ -84,11 +102,12 @@ while n_gen < IDEA_BUDGET:
     for (k, (gi, idea)) in enumerate(ideas):
         v = vecs[k] / (np.linalg.norm(vecs[k]) + 1e-9)
         pct = score_pct(v)
+        copy_sim = float(np.max(CORPUS_V @ v))            # similarity to the CLOSEST real title
         nov = 1.0 if not acc_vecs else float(1 - max(float(v @ a) for a in acc_vecs))
-        accepted = pct >= SCORE_FLOOR and nov >= NOV_FLOOR
+        accepted = pct >= SCORE_FLOOR and nov >= NOV_FLOOR and copy_sim <= COPY_MAX
         n_gen += 1
         row = {"id": "%s_%06d" % (RUN, n_gen), "idea": idea, "pctile": round(pct, 4),
-               "novelty": round(nov, 4), "accepted": bool(accepted), "ts": int(time.time() * 1000)}
+               "novelty": round(nov, 4), "copy_sim": round(copy_sim, 4), "accepted": bool(accepted), "ts": int(time.time() * 1000)}
         rows.append(row)
         if accepted:
             acc_vecs.append(v); n_acc += 1; PRODUCED[0] += 1
