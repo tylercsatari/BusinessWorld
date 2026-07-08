@@ -3275,6 +3275,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
         res.end(buf ? buf.toString('utf8') : '{}'); return;
     }
+    const lgReqStatus = pathname.match(/^\/api\/longquant\/guesses\/status\/([a-z0-9]+)$/i);
+    if (lgReqStatus && req.method === 'GET') {
+        const buf = await cloud.downloadFromR2(`longform/guesses/demo/status/${lgReqStatus[1]}.json`).catch(() => null);
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(buf ? buf.toString('utf8') : '{"stage":"queued"}'); return;
+    }
     if (pathname === '/api/longquant/guesses/runs' && req.method === 'GET') {
         const cands = Array.from({ length: 30 }, (_, i) => 'thumb' + (i + 1));
         const ok = await Promise.all(cands.map(r => cloud.existsInR2(`longform/guesses/${r}/index.jsonl`).catch(() => false)));

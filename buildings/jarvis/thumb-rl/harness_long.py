@@ -2,7 +2,7 @@
 percentile) -> R2. ONE thumbnail per candidate (no montage). Reward = percentile of the thumbnail's
 Gemini visual embedding projected onto the FROZEN ctrviews blend direction, read off the curated-set
 score ladder (scorer_visual.npz). Mirrors the shorts harness.py structure/idioms."""
-import os, io, json, time, base64, random, threading, urllib.request, urllib.error
+import os, io, json, time, base64, random, threading, re, urllib.request, urllib.error
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
@@ -87,30 +87,69 @@ def _rl_gate():
         if wait > 0: time.sleep(wait)
         _RL_LAST[0] = time.time()
 
+def _render_safe_prompt(prompt):
+    p = str(prompt or "")
+    replacements = [
+        (r"\bIron\s*Man\b", "a red and gold homemade powered exosuit"),
+        (r"\bMarvel\b", "comic-book inspired"),
+        (r"\bTony\s+Stark\b", "a charismatic inventor"),
+        (r"\bSpider[-\s]?Man\b", "an agile masked stunt performer"),
+        (r"\bBatman\b", "a dark high-tech vigilante-inspired suit"),
+        (r"\bgun(s)?\b", "tool"),
+        (r"\bweapon(s)?\b", "device"),
+        (r"\bblood\b", "dramatic red lighting"),
+        (r"\bgore\b", "debris"),
+    ]
+    for pat, repl in replacements:
+        p = re.sub(pat, repl, p, flags=re.I)
+    guard = ("Family-safe photorealistic YouTube thumbnail, no copyrighted character names or logos, "
+             "no gore, no weapons, no readable text. ")
+    return guard + p
+
 def flux_schnell(prompt, tries=7):
     # 16:9 horizontal — long-form thumbnails (shorts used 9:16 vertical).
-    body = json.dumps({"input": {"prompt": prompt, "aspect_ratio": "16:9", "output_format": "jpg", "num_outputs": 1}}).encode()
+    last = ""
     for a in range(tries):
         try:
             _rl_gate()
+            render_prompt = prompt if a == 0 and "flux-schnell" in RENDER_MODEL else _render_safe_prompt(prompt)
+            inp = {"prompt": render_prompt, "aspect_ratio": "16:9", "output_format": "jpg"}
+            if RENDER_MODEL.endswith("flux-schnell"):
+                inp["num_outputs"] = 1
+            body = json.dumps({"input": inp}).encode()
             req = urllib.request.Request("https://api.replicate.com/v1/models/%s/predictions" % RENDER_MODEL,
                 data=body, headers={"Authorization": "Bearer " + REPL, "Content-Type": "application/json", "Prefer": "wait"})
             r = json.loads(urllib.request.urlopen(req, timeout=120).read())
+            deadline = time.time() + 240
+            while (r.get("status") in ("starting", "processing")
+                   and (r.get("urls") or {}).get("get")
+                   and time.time() < deadline):
+                time.sleep(1.5)
+                poll = urllib.request.Request((r.get("urls") or {}).get("get"),
+                    headers={"Authorization": "Bearer " + REPL})
+                r = json.loads(urllib.request.urlopen(poll, timeout=30).read())
+            if r.get("error"):
+                last = str(r.get("error"))[:220]
             out = r.get("output")
             if isinstance(out, list): out = out[0] if out else None
             if out:
                 img = urllib.request.urlopen(out, timeout=60).read()
                 RENDERS[0] += 1
                 return img
+            last = last or ("status=%s no output" % r.get("status"))
         except urllib.error.HTTPError as e:
             if e.code == 402:                       # genuine payment-required -> stop the run
                 raise BillingHalt("Replicate 402 Payment Required")
+            try: last = "HTTP %s %s" % (e.code, e.read().decode()[:220])
+            except Exception: last = "HTTP %s" % e.code
             # 429 = transient burst/rate cap on a FUNDED account: back off with jitter, never halt.
             if a < tries - 1: time.sleep(min(20, 1.5 * (a + 1)) + random.uniform(0, 1.5)); continue
         except BillingHalt:
             raise
-        except Exception:
+        except Exception as e:
+            last = str(e)[:220]
             if a < tries - 1: time.sleep(min(20, 1.5 * (a + 1)) + random.uniform(0, 1.5)); continue
+    print("render failed via %s: %s" % (RENDER_MODEL, last[:220]), flush=True)
     return None
 
 # ---- FROZEN reward: ctrviews blend direction + curated-set percentile ladder (built off-box) ----

@@ -794,10 +794,19 @@ const JarvisLongQuant = (function () {
     }
     function lqxPoll() {
         if (!st.lqxRid) return; const rid = st.lqxRid;
+        fetch('/api/longquant/guesses/status/' + rid).then(r => r.json()).then(s => {
+            if (st.lqxRid !== rid) return;
+            if (s && s.stage && s.stage !== 'queued') {
+                const el = st.lqxStart ? Math.round((Date.now() - st.lqxStart) / 1000) : 0;
+                const prog = s.n ? ` · ${s.done || 0}/${s.n}` : '';
+                st.lqxStatus = `${s.stage}${prog} — ${s.note || 'trained longform worker'} (${el}s)`;
+                rtgUpdateLqExp();
+            }
+        }).catch(() => {});
         fetch('/api/longquant/guesses/group/demo/' + rid).then(r => r.ok ? r.json() : null).then(j => {
             if (st.lqxRid !== rid) return;
             if (j && j.attempts) { st.lqxResult = j; st.lqxStatus = null; rtgUpdateLqExp(); }
-            else { st.lqxStatus = 'queued — served by the model box; if training is mid-phase this can take a few minutes (' + Math.round((Date.now() - st.lqxStart) / 1000) + 's)'; rtgUpdateLqExp(); window.setTimeout(lqxPoll, 5000); }
+            else { st.lqxStatus = 'queued — waiting for the trained longform thumbnail worker (' + Math.round((Date.now() - st.lqxStart) / 1000) + 's)'; rtgUpdateLqExp(); window.setTimeout(lqxPoll, 3000); }
         }).catch(() => { if (st.lqxRid === rid) window.setTimeout(lqxPoll, 6000); });
     }
     async function lqxSave(payload, flashKey) {
