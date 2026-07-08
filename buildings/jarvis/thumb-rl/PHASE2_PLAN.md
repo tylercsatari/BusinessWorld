@@ -14,18 +14,18 @@
 
 ## Execution stages
 - [x] S0 This plan + memory update.
-- [ ] S1 Assets: text-side idea scorer (longform/idea-rl/scorer_text.{npz,json}) = PLS raw-long/text →
+- [x] S1 Assets: text-side idea scorer (longform/idea-rl/scorer_text.{npz,json}) = PLS raw-long/text →
       log-views percentile ladder; export scorer_visual.json (blend+ladder as JSON) for Node scoring.
-- [ ] S2 UI+server build (delegated to subagent): Long Quant 🧪 Experiment section + 💡 Ideas section,
+- [x] S2 UI+server build (delegated to subagent): Long Quant 🧪 Experiment section + 💡 Ideas section,
       routes /api/longquant/exp/{generate,status,score-upload}, /api/longquant/thumbs/{save,list,delete},
       /api/longquant/ideas/*. Generation uses the existing request queue (longform/guesses/requests/,
       count param) — served whenever a thumb-model process polls; UI says "queued" when unserved.
-- [ ] S3 Idea pipeline scripts (idea-rl/): idea_train_long.py (gen G ideas no-input → text-embed → score
+- [x] S3 Idea pipeline scripts (idea-rl/): idea_train_long.py (gen G ideas no-input → text-embed → score
       percentile + novelty=1−max cos vs accepted bank → accept score≥FLOOR & nov≥NOV → RAFT SFT rounds),
       launcher, loud-fail + status → longform/idea-rl/status.json, guesses → longform/ideas/<run>/.
-- [ ] S4 Thumbnail wrap on round-14 verdict (monitor notifies): pick winner (b13 vs b10 by round-14 avg),
+- [x] S4 Thumbnail wrap on round-14 verdict (monitor notifies): pick winner (b13 vs b10 by round-14 avg),
       record FINAL model in memory + status; adapters already on R2 hooks/models/.
-- [ ] S5 Switchover: stop thumb loop on the box; scp idea-rl; launch idea training (tmux). Thumb DEMO
+- [x] S5 Switchover: stop thumb loop on the box; scp idea-rl; launch idea training (tmux). Thumb DEMO
       serving pauses during idea era (request queue holds; revisit hosting via Replicate cog later).
 
 ## Key facts for whoever resumes
