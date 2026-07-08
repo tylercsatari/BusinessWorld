@@ -475,8 +475,43 @@ const RAW_PYTHON = (() => {
     return 'python3';
 })();
 console.log('[raw-upload] using python:', RAW_PYTHON);
+const LONGQUANT_IDEA_MODEL = process.env.LONGQUANT_IDEA_MODEL || 'idea_long_r26';
+const LONGQUANT_THUMB_MODEL = process.env.LONGQUANT_THUMB_MODEL || 'thumb_b10';
+const LONGQUANT_RENDER_MODEL = process.env.LONGQUANT_RENDER_MODEL || 'black-forest-labs/flux-2-pro';
 const TRIBE_CACHE = process.env.TRIBE_CACHE
     || '/Users/tylercsatari/Desktop/BusinessHub/tribev2/cache';
+
+async function longQuantScoreImageBuffer(buf, title, idea) {
+    const os = require('os');
+    const tmp = path.join(os.tmpdir(), `lqscore_${Date.now()}_${Math.round(Math.random() * 1e6)}.jpg`);
+    fs.writeFileSync(tmp, buf);
+    try {
+        return await new Promise((ok, no) => {
+            const py = spawn(RAW_PYTHON, [
+                path.join(__dirname, 'longquant_score.py'),
+                '--image', tmp,
+                '--title', String(title || '').slice(0, 500),
+                '--idea', String(idea || '').slice(0, 500),
+            ], { env: RAW_PY_ENV });
+            let out = '', err = '';
+            py.stdout.on('data', d => out += d);
+            py.stderr.on('data', d => err += d);
+            const t = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('longquant scorer timeout')); }, 240000);
+            py.on('close', () => {
+                clearTimeout(t);
+                const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+                if (!line) return no(new Error('longquant scorer: ' + (err.trim().split('\n').pop() || 'no output').slice(-180)));
+                try {
+                    const j = JSON.parse(line);
+                    return j.error ? no(new Error(j.error)) : ok(j);
+                } catch (e) { return no(e); }
+            });
+            py.on('error', e => { clearTimeout(t); no(e); });
+        });
+    } finally {
+        try { fs.unlinkSync(tmp); } catch (e) {}
+    }
+}
 
 function _tribeStartJob(videoId, videoPath) {
     if (_tribeJobs[videoId] && (_tribeJobs[videoId].status === 'running' || _tribeJobs[videoId].status === 'queued')) {
@@ -3274,11 +3309,19 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if (pathname === '/api/longquant/exp/generate' && req.method === 'POST') {
         const body = await readBody(req);
         const title = String(body.title || '').slice(0, 200).trim();
-        const count = Math.max(1, Math.min(12, parseInt(body.count, 10) || 6));
-        if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no title"}'); return; }
+        const count = Math.max(1, Math.min(12, parseInt(body.count, 10) || 5));
         const rid = 'd' + Date.now().toString(36);
-        await cloud.uploadToR2(`longform/guesses/requests/${rid}.json`, Buffer.from(JSON.stringify({ title, count, ts: Date.now() })), 'application/json');
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid })); return;
+        const payload = {
+            title, premise: title, idea: title, count, invent: !title, ts: Date.now(),
+            ideaModel: LONGQUANT_IDEA_MODEL,
+            thumbModel: LONGQUANT_THUMB_MODEL,
+            renderModel: LONGQUANT_RENDER_MODEL,
+            scoring: ['ctr', 'ret30', 'views', 'scaled_views', 'realviews', 'gt10m', 'ctrviews'],
+        };
+        await cloud.uploadToR2(`longform/guesses/requests/${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, rid, invent: !title, model: payload }));
+        return;
     }
     if (pathname === '/api/longquant/exp/scorer' && req.method === 'GET') {
         await serveGzCached(req, res, 'lq:scorer-visual', 600e3, async () => {
@@ -3294,38 +3337,53 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const b64 = img.indexOf('base64,') >= 0 ? img.split('base64,').pop() : img;
             if (!b64 || b64.length < 100) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no image"}'); return; }
             if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
-            const embed = async (parts) => {
-                const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-                    body: JSON.stringify({ content: { parts }, outputDimensionality: 1536 })
-                });
-                const j = await r.json();
-                if (!r.ok || !j.embedding) throw new Error(JSON.stringify(j.error || j).slice(0, 240));
-                return j.embedding.values;
-            };
-            const norm = v => { const n = Math.sqrt(v.reduce((s, x) => s + x * x, 0)) + 1e-9; return v.map(x => x / n); };
-            const emb = norm(await embed([{ inlineData: { mimeType: 'image/jpeg', data: b64 } }]));
-            // scorer (cached 10 min): blend direction + curated-set percentile ladder
-            global.__lqsc = global.__lqsc || { t: 0, d: null };
-            if (!global.__lqsc.d || Date.now() - global.__lqsc.t > 600e3) {
-                const sb = await cloud.downloadFromR2('longform/thumb-rl/scorer_visual.json');
-                global.__lqsc = { t: Date.now(), d: JSON.parse(sb.toString('utf8')) };
-            }
-            const sc = global.__lqsc.d;
-            const proj = emb.reduce((s, x, i) => s + x * sc.blend[i], 0);
-            let lo = 0, hi = sc.ladder.length;   // ladder is sorted — binary search for percentile
-            while (lo < hi) { const m = (lo + hi) >> 1; if (sc.ladder[m] < proj) lo = m + 1; else hi = m; }
-            const pctile = lo / sc.ladder.length;
-            let relevance = null;
             const title = String(body.title || '').slice(0, 200).trim();
-            if (title) {
-                const temb = norm(await embed([{ text: title }]));
-                relevance = emb.reduce((s, x, i) => s + x * temb[i], 0);
-            }
+            const score = await longQuantScoreImageBuffer(Buffer.from(b64, 'base64'), title, title);
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ pctile: Math.round(pctile * 1e4) / 1e4, proj: Math.round(proj * 1e4) / 1e4, relevance: relevance == null ? null : Math.round(relevance * 1e4) / 1e4, p90: sc.p90 }));
+            res.end(JSON.stringify(score));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
+    }
+    if (pathname === '/api/longquant/grind/start' && req.method === 'POST') {
+        const body = await readBody(req);
+        const idea = String(body.idea || body.title || '').slice(0, 500).trim();
+        const rid = 'lqg' + Date.now().toString(36);
+        const payload = {
+            rid, idea, title: idea, invent: !idea,
+            threshold: Math.max(50, Math.min(99, parseInt(body.threshold, 10) || 85)),
+            maxAttempts: Math.max(1, Math.min(100, parseInt(body.maxAttempts, 10) || 40)),
+            count: Math.max(1, Math.min(8, parseInt(body.count, 10) || 5)),
+            hours: Math.min(8, Math.max(0.1, parseFloat(body.hours) || 2)),
+            ideaModel: LONGQUANT_IDEA_MODEL,
+            thumbModel: LONGQUANT_THUMB_MODEL,
+            renderModel: LONGQUANT_RENDER_MODEL,
+            ts: Date.now(),
+        };
+        await cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
+            rid, idea, threshold: payload.threshold, attempts: [], status: 'queued',
+            note: 'queued — waiting for the Long Quant model worker', best: null, ts: Date.now(),
+            ideaModel: payload.ideaModel, thumbModel: payload.thumbModel, renderModel: payload.renderModel,
+        })), 'application/json').catch(() => {});
+        await cloud.uploadToR2(`longform/grind/requests/${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid }));
+        return;
+    }
+    const lqGrindRun = pathname.match(/^\/api\/longquant\/grind\/run\/([a-z0-9]+)$/i);
+    if (lqGrindRun && req.method === 'GET') {
+        const b = await cloud.downloadFromR2(`longform/grind/runs/${lqGrindRun[1]}.json`).catch(() => null);
+        res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json' }); res.end(b ? b.toString('utf8') : '{}'); return;
+    }
+    if (pathname === '/api/longquant/grind/stop' && req.method === 'POST') {
+        const body = await readBody(req); const rid = String(body.rid || '').replace(/[^a-z0-9]/gi, '');
+        if (!rid) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no rid"}'); return; }
+        await cloud.uploadToR2(`longform/grind/stop/${rid}`, Buffer.from('1'), 'text/plain');
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}'); return;
+    }
+    const lqGrindImg = pathname.match(/^\/api\/longquant\/grind\/img\/([a-z0-9_]+)$/i);
+    if (lqGrindImg && req.method === 'GET') {
+        const buf = await cloud.downloadFromR2(`longform/grind/montages/${lqGrindImg[1]}.jpg`).catch(() => null);
+        if (!buf) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return; }
+        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); return;
     }
     // ── Saved long-form thumbnails bank (longform/saved-thumbs/) ──
     if (pathname === '/api/longquant/thumbs/save' && req.method === 'POST') {
@@ -9849,6 +9907,188 @@ async function grindQueue() {
     } finally { _grindBusy = false; }
 }
 setInterval(() => { grindQueue().catch(() => {}); }, 5000);
+
+// ── Long Quant GRIND: idea model → thumbnail model → Flux Pro → raw-long scorer ────────────
+async function replicateVersionRun(version, input, timeoutMs = 720000) {
+    const token = process.env.REPLICATE_API_TOKEN;
+    if (!token) throw new Error('REPLICATE_API_TOKEN not configured');
+    if (!version) throw new Error('model version not configured');
+    const r = await fetchT('https://api.replicate.com/v1/predictions', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version, input })
+    }, 60000);
+    let p = await r.json().catch(() => null);
+    if (!p || r.status >= 400 || !p.id) throw new Error('replicate create http ' + r.status + ': ' + String((p && (p.detail || p.title || p.error)) || '').slice(0, 180));
+    const getUrl = (p.urls && p.urls.get) || ('https://api.replicate.com/v1/predictions/' + p.id);
+    const deadline = Date.now() + timeoutMs;
+    while (p && ['starting', 'processing'].includes(p.status) && Date.now() < deadline) {
+        await new Promise(res => setTimeout(res, 2500));
+        p = await (await fetchT(getUrl, { headers: { 'Authorization': 'Bearer ' + token } }, 30000)).json().catch(() => p);
+    }
+    if (!p || p.status !== 'succeeded') throw new Error('replicate ' + ((p && p.status) || 'unknown') + (p && p.error ? ': ' + String(p.error).slice(0, 180) : ''));
+    let out = p.output;
+    if (typeof out === 'string') { try { out = JSON.parse(out); } catch (e) {} }
+    return out;
+}
+function lqStringsFromOutput(out) {
+    if (!out) return [];
+    if (Array.isArray(out)) return out.flatMap(lqStringsFromOutput);
+    if (typeof out === 'string') return [out];
+    if (typeof out !== 'object') return [];
+    const bags = [out.ideas, out.titles, out.prompts, out.thumbnail_prompts, out.candidates, out.attempts, out.results].filter(Boolean);
+    let xs = bags.flatMap(lqStringsFromOutput);
+    for (const k of ['idea', 'title', 'premise', 'prompt', 'thumbnail_prompt', 'caption']) {
+        if (typeof out[k] === 'string') xs.push(out[k]);
+    }
+    return xs;
+}
+async function longQuantIdeaGenerate(seed, attempt, prior) {
+    const ver = process.env.LONGQUANT_IDEA_VERSION || process.env.REPLICATE_LONG_IDEA_VERSION || '';
+    if (!ver) {
+        if (attempt === 0 && seed) return seed;
+        throw new Error('LONGQUANT_IDEA_VERSION is not configured; set it to the exported idea model version for idea-space exploration');
+    }
+    const out = await replicateVersionRun(ver, {
+        premise: seed || '',
+        idea: seed || '',
+        invent: !seed || attempt > 0,
+        count: 1,
+        attempt,
+        avoid: (prior || []).slice(-8).map(a => a.idea || a.title || '').filter(Boolean),
+        instruction: 'Generate one long-form YouTube video idea. If a seed is present, move quantifiably farther from it in a new direction while staying viable for thumbnail scoring.',
+    });
+    const xs = lqStringsFromOutput(out).map(s => String(s).replace(/\s+/g, ' ').trim()).filter(s => s.length >= 8);
+    if (!xs.length) throw new Error('idea model produced no usable idea');
+    return xs[0].slice(0, 300);
+}
+async function longQuantThumbPrompts(idea, count) {
+    const ver = process.env.LONGQUANT_THUMB_VERSION || process.env.REPLICATE_LONG_THUMB_VERSION || '';
+    if (!ver) throw new Error('LONGQUANT_THUMB_VERSION is not configured; set it to the exported thumbnail prompt model version');
+    const out = await replicateVersionRun(ver, {
+        title: idea,
+        idea,
+        count,
+        aspect_ratio: '16:9',
+        instruction: 'Write high-performing photoreal YouTube thumbnail prompts for this long-form video idea.',
+    });
+    let xs = lqStringsFromOutput(out).map(s => String(s).replace(/\s+/g, ' ').trim()).filter(s => s.length >= 12);
+    xs = Array.from(new Set(xs)).slice(0, count);
+    if (!xs.length) throw new Error('thumbnail model produced no usable prompts');
+    return xs;
+}
+async function longQuantRenderThumb(prompt) {
+    const model = process.env.LONGQUANT_RENDER_MODEL || LONGQUANT_RENDER_MODEL;
+    const input = { prompt, aspect_ratio: '16:9' };
+    if (/flux|nano/i.test(model)) input.output_format = 'jpg';
+    const out = await replicateRun(model, input, 240000);
+    return Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
+}
+function lqScorePct(score) {
+    const p = score && score.pctile;
+    if (p == null) return null;
+    const n = Number(p);
+    return n <= 1 ? Math.round(n * 1000) / 10 : Math.round(n * 10) / 10;
+}
+async function longQuantGrindProcess(rid, req0) {
+    const seed = String(req0.idea || req0.title || '').trim().slice(0, 500);
+    const threshold = Math.max(50, Math.min(99, parseInt(req0.threshold, 10) || 85));
+    const maxAttempts = Math.max(1, Math.min(100, parseInt(req0.maxAttempts, 10) || 40));
+    const count = Math.max(1, Math.min(8, parseInt(req0.count, 10) || 5));
+    const deadline = Date.now() + Math.min(8, Math.max(0.1, parseFloat(req0.hours) || 2)) * 3600e3;
+    const required = ['REPLICATE_API_TOKEN', 'GEMINI_API_KEY'];
+    for (const k of required) if (!process.env[k]) {
+        await cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({ rid, idea: seed, threshold, attempts: [], status: 'error', error: `${k} not configured`, ts: Date.now() })), 'application/json').catch(() => {});
+        return;
+    }
+    let attempts = [], status = 'running', winner = null, err = '', note = '', best = null, rejected = 0;
+    let gate = seed ? 0.10 : 0.18, sinceBest = 0;
+    const vecs = [];
+    const write = () => cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
+        rid, idea: seed, threshold, count, attempts, n: attempts.length, status, winner, error: err, note,
+        best, rejected, gate: Math.round(gate * 1000) / 1000, deadline, ts: Date.now(),
+        ideaModel: LONGQUANT_IDEA_MODEL, thumbModel: LONGQUANT_THUMB_MODEL, renderModel: LONGQUANT_RENDER_MODEL,
+    })), 'application/json').catch(() => {});
+    const acceptIdea = async (idea, spare) => {
+        const emb = await geminiTextEmbed(idea);
+        if (!emb) return { ok: true, distSeed: null, distPrior: null };
+        let distSeed = null;
+        if (seed && idea !== seed) {
+            const se = await geminiTextEmbed(seed);
+            if (se) distSeed = Math.round((1 - genCos(Int8Array.from(emb, x => Math.round(x * 127)), Int8Array.from(se, x => Math.round(x * 127)))) * 1000) / 1000;
+        }
+        const q = Int8Array.from(emb, x => Math.round(x * 127));
+        let m = -1;
+        for (const v of vecs) { const c = genCos(q, v); if (c > m) m = c; }
+        const distPrior = vecs.length ? Math.round((1 - m) * 1000) / 1000 : 1;
+        if (vecs.length && distPrior < gate && spare > 0) return { ok: false, distSeed, distPrior };
+        vecs.push(q);
+        return { ok: true, distSeed, distPrior };
+    };
+    try {
+        await write();
+        while (attempts.length < maxAttempts && Date.now() < deadline && status === 'running') {
+            try { if (await cloud.existsInR2(`longform/grind/stop/${rid}`)) { status = 'stopped'; note = 'stopped by you'; break; } } catch (e) {}
+            note = `attempt ${attempts.length + 1}: generating a candidate idea`; await write();
+            let idea = '';
+            let gateInfo = {};
+            for (let tries = 0; tries < 4; tries++) {
+                idea = await longQuantIdeaGenerate(seed, attempts.length + tries, attempts);
+                const gateRes = await acceptIdea(idea, (maxAttempts - attempts.length - 1) + (3 - tries));
+                if (gateRes.ok) { idea = String(idea).slice(0, 300); gateInfo = gateRes; break; }
+                rejected++; note = `candidate was too close to a prior idea (dist ${gateRes.distPrior}, need ${gate.toFixed(2)}) — regenerating`; await write();
+                idea = '';
+            }
+            if (!idea) { rejected++; continue; }
+            const a = { k: attempts.length, idea, title: idea, status: 'prompting', thumbs: [], pct: null, distSeed: gateInfo.distSeed, distPrior: gateInfo.distPrior, ts: Date.now() };
+            attempts.push(a); await write();
+            let prompts = [];
+            try { prompts = await longQuantThumbPrompts(idea, count); }
+            catch (e) { a.status = 'error'; a.error = 'thumbnail prompts: ' + String(e.message || e).slice(0, 160); await write(); continue; }
+            a.status = 'rendering'; a.prompts = prompts; note = `attempt ${a.k + 1}: rendering ${prompts.length} thumbnails with ${LONGQUANT_RENDER_MODEL}`; await write();
+            for (let i = 0; i < prompts.length; i++) {
+                const t = { i, prompt: prompts[i], status: 'rendering', pct: null };
+                a.thumbs.push(t); await write();
+                try {
+                    const jpg = await longQuantRenderThumb(prompts[i]);
+                    const imgId = `${rid}_${a.k}_${i}`;
+                    await cloud.uploadToR2(`longform/grind/montages/${imgId}.jpg`, jpg, 'image/jpeg');
+                    t.image = imgId; t.status = 'scoring'; await write();
+                    const score = await longQuantScoreImageBuffer(jpg, idea, idea);
+                    t.score = score; t.pct = lqScorePct(score); t.metrics = score.metrics || null; t.status = 'done';
+                    if (t.pct != null && (a.pct == null || t.pct > a.pct)) { a.pct = t.pct; a.bestThumb = i; }
+                } catch (e) {
+                    t.status = 'error'; t.error = String(e.message || e).slice(0, 160);
+                }
+                await write();
+            }
+            a.status = 'done';
+            if (a.pct != null && (best == null || a.pct > best)) { best = a.pct; sinceBest = 0; gate = seed ? 0.10 : 0.18; }
+            else { sinceBest++; gate = Math.min(0.34, (seed ? 0.10 : 0.18) + 0.03 * sinceBest); }
+            note = a.pct != null ? `attempt ${a.k + 1} best thumbnail scored ${a.pct}th (target ${threshold})` : `attempt ${a.k + 1} finished without a score`;
+            await write();
+            if (a.pct != null && a.pct >= threshold) { status = 'won'; winner = a.k; note = `threshold cleared: attempt ${a.k + 1} hit ${a.pct}th`; break; }
+        }
+    } catch (e) { err = String(e.message || e).slice(0, 220); status = 'error'; }
+    if (status === 'running') status = Date.now() >= deadline ? 'deadline' : 'maxed';
+    await write();
+}
+let _lqGrindBusy = false;
+async function longQuantGrindQueue() {
+    if (_lqGrindBusy || !cloud.isR2Ready()) return;
+    let keys; try { keys = ((await cloud.listR2Keys('longform/grind/requests/')) || []).filter(k => k.endsWith('.json')); } catch (e) { return; }
+    if (!keys.length) return;
+    _lqGrindBusy = true;
+    try {
+        for (const key of keys) {
+            const rid = key.split('/').pop().replace('.json', '');
+            let req0 = {}; try { req0 = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) {}
+            await cloud.deleteFromR2(key).catch(() => {});
+            try { await longQuantGrindProcess(rid, req0); } catch (e) { console.warn('longquant grind err:', e.message); }
+        }
+    } finally { _lqGrindBusy = false; }
+}
+setInterval(() => { longQuantGrindQueue().catch(() => {}); }, 5000);
 
 // Initialize R2 cloud storage before accepting requests
 cloud.initR2();

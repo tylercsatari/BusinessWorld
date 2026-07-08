@@ -17,6 +17,7 @@ def load_env():
     return env
 ENV = load_env()
 GEMINI, REPL, BUCKET = ENV["GEMINI_API_KEY"], ENV["REPLICATE_API_TOKEN"], ENV["R2_BUCKET_NAME"]
+RENDER_MODEL = os.environ.get("LONGQUANT_RENDER_MODEL") or ENV.get("LONGQUANT_RENDER_MODEL") or "black-forest-labs/flux-schnell"
 s3 = boto3.client("s3", endpoint_url="https://%s.r2.cloudflarestorage.com" % ENV["R2_ACCOUNT_ID"],
     aws_access_key_id=ENV["R2_ACCESS_KEY_ID"], aws_secret_access_key=ENV["R2_SECRET_ACCESS_KEY"], region_name="auto")
 
@@ -92,7 +93,7 @@ def flux_schnell(prompt, tries=7):
     for a in range(tries):
         try:
             _rl_gate()
-            req = urllib.request.Request("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions",
+            req = urllib.request.Request("https://api.replicate.com/v1/models/%s/predictions" % RENDER_MODEL,
                 data=body, headers={"Authorization": "Bearer " + REPL, "Content-Type": "application/json", "Prefer": "wait"})
             r = json.loads(urllib.request.urlopen(req, timeout=120).read())
             out = r.get("output")
