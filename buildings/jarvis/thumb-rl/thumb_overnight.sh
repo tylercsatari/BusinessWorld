@@ -50,7 +50,7 @@ print(('REVERT' if (cur is not None and prev is not None and cur < prev-0.03) el
   [ $(date +%s) -ge $DEADLINE ] && break
   if [ "${UPDATER:-dpo}" = "bond" ]; then
     log "=== round $N : BOND re-distillation (all banked winners, 1 epoch) -> thumb_b$N ==="
-    BOND_ROUND=b$N EPOCHS=${BOND_EPOCHS:-2} $V thumb_bond.py 2>&1 | grep -avE 'it/s|Loading'; RC=${PIPESTATUS[0]}
+    BOND_ROUND=b$N EPOCHS=${BOND_EPOCHS:-2} MIN_PCT=${BOND_MINPCT:-0.70} $V thumb_bond.py 2>&1 | grep -avE 'it/s|Loading'; RC=${PIPESTATUS[0]}
     if [ "$RC" = "0" ] && [ -d /home/ubuntu/thumbrl/models/thumbmerged_b$N ]; then
       PREV2=$PREV; PREV=/home/ubuntu/thumbrl/models/thumbmerged_b$N; log "round $N BOND -> $(basename $PREV)"
     else
