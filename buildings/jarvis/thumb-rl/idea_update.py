@@ -19,7 +19,7 @@ SYS = ("Invent ONE new viral long-form YouTube video idea (the kind of engineeri
 tok = AutoTokenizer.from_pretrained(MODELP)
 if tok.pad_token is None: tok.pad_token = tok.eos_token
 rows, seen = [], set()
-for pf in glob.glob("/home/ubuntu/thumbrl/runs/idea*/accepted.jsonl"):
+for pf in glob.glob("/home/ubuntu/thumbrl/runs/idea2*/accepted.jsonl"):
     for l in open(pf):
         try:
             r = json.loads(l)

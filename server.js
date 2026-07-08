@@ -3376,6 +3376,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); return;
     }
     // ── 💡 Ideas: idea-model training runs (longform/ideas/idea<N>/) ──
+    const ideaMon = pathname.match(/^\/api\/longquant\/ideas\/montage\/([a-z0-9]+)\/([a-z0-9_]+)$/i);
+    if (ideaMon && req.method === 'GET') {
+        const buf = await cloud.downloadFromR2(`longform/ideas/${ideaMon[1]}/montages/${ideaMon[2]}.jpg`).catch(() => null);
+        if (!buf) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return; }
+        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); return;
+    }
     if (pathname === '/api/longquant/ideas/runs' && req.method === 'GET') {
         const cands = Array.from({ length: 30 }, (_, i) => 'idea' + (i + 1));
         const ok = await Promise.all(cands.map(r => cloud.existsInR2(`longform/ideas/${r}/index.jsonl`).catch(() => false)));
