@@ -153,6 +153,7 @@ function isPublic(pathname, method) {
     if (pathname.startsWith('/api/raw/montage/')) return true; // hook frame-stitches from public YT videos; no data, lets <img> load without a token
     if (pathname.startsWith('/api/raw-long/montage/')) return true; // long-form thumbnails (public YT thumbs); no data, lets <img> load without a token
     if (pathname.startsWith('/api/longquant/guesses/montage/')) return true; // generated thumbnail guesses (no data), lets <img> load without a token
+    if (pathname.startsWith('/api/longquant/thumbs/img/')) return true; // saved long-form thumbnails (no data), lets <img> load without a token
     if (pathname.startsWith('/api/hooks/montage/')) return true; // generated hook montages (no data), lets <img> load without a token
     if (pathname.startsWith('/api/hooks/grpo/montage/')) return true; // GRPO per-input attempt montages, lets <img> load without a token
     if (pathname.startsWith('/api/raw/saved-montage/')) return true; // saved-hook montages (no data), lets <img> load without a token

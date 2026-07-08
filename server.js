@@ -3270,6 +3270,121 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         await cloud.uploadToR2(`longform/guesses/requests/${rid}.json`, Buffer.from(JSON.stringify({ title, ts: Date.now() })), 'application/json');
         res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid })); return;
     }
+    // ── Long Quant 🧪 Experiment: generate thumbnails with the trained model + score uploads ──
+    if (pathname === '/api/longquant/exp/generate' && req.method === 'POST') {
+        const body = await readBody(req);
+        const title = String(body.title || '').slice(0, 200).trim();
+        const count = Math.max(1, Math.min(12, parseInt(body.count, 10) || 6));
+        if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no title"}'); return; }
+        const rid = 'd' + Date.now().toString(36);
+        await cloud.uploadToR2(`longform/guesses/requests/${rid}.json`, Buffer.from(JSON.stringify({ title, count, ts: Date.now() })), 'application/json');
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid })); return;
+    }
+    if (pathname === '/api/longquant/exp/scorer' && req.method === 'GET') {
+        await serveGzCached(req, res, 'lq:scorer-visual', 600e3, async () => {
+            const b = await cloud.downloadFromR2('longform/thumb-rl/scorer_visual.json');
+            return b ? b.toString('utf8') : '{}';
+        }, {});
+        return;
+    }
+    if (pathname === '/api/longquant/exp/score-upload' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const img = String(body.image || '');
+            const b64 = img.indexOf('base64,') >= 0 ? img.split('base64,').pop() : img;
+            if (!b64 || b64.length < 100) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no image"}'); return; }
+            if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
+            const embed = async (parts) => {
+                const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+                    body: JSON.stringify({ content: { parts }, outputDimensionality: 1536 })
+                });
+                const j = await r.json();
+                if (!r.ok || !j.embedding) throw new Error(JSON.stringify(j.error || j).slice(0, 240));
+                return j.embedding.values;
+            };
+            const norm = v => { const n = Math.sqrt(v.reduce((s, x) => s + x * x, 0)) + 1e-9; return v.map(x => x / n); };
+            const emb = norm(await embed([{ inlineData: { mimeType: 'image/jpeg', data: b64 } }]));
+            // scorer (cached 10 min): blend direction + curated-set percentile ladder
+            global.__lqsc = global.__lqsc || { t: 0, d: null };
+            if (!global.__lqsc.d || Date.now() - global.__lqsc.t > 600e3) {
+                const sb = await cloud.downloadFromR2('longform/thumb-rl/scorer_visual.json');
+                global.__lqsc = { t: Date.now(), d: JSON.parse(sb.toString('utf8')) };
+            }
+            const sc = global.__lqsc.d;
+            const proj = emb.reduce((s, x, i) => s + x * sc.blend[i], 0);
+            let lo = 0, hi = sc.ladder.length;   // ladder is sorted — binary search for percentile
+            while (lo < hi) { const m = (lo + hi) >> 1; if (sc.ladder[m] < proj) lo = m + 1; else hi = m; }
+            const pctile = lo / sc.ladder.length;
+            let relevance = null;
+            const title = String(body.title || '').slice(0, 200).trim();
+            if (title) {
+                const temb = norm(await embed([{ text: title }]));
+                relevance = emb.reduce((s, x, i) => s + x * temb[i], 0);
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ pctile: Math.round(pctile * 1e4) / 1e4, proj: Math.round(proj * 1e4) / 1e4, relevance: relevance == null ? null : Math.round(relevance * 1e4) / 1e4, p90: sc.p90 }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    // ── Saved long-form thumbnails bank (longform/saved-thumbs/) ──
+    if (pathname === '/api/longquant/thumbs/save' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const id = 'lt' + Date.now().toString(36) + Math.floor(Math.random() * 1e3).toString(36);
+            let jpg = null;
+            if (typeof body.image === 'string' && body.image.indexOf('base64,') >= 0) jpg = Buffer.from(body.image.split('base64,').pop(), 'base64');
+            else if (typeof body.montageKey === 'string' && /^longform\/guesses\/[\w\/-]+\.jpg$/.test(body.montageKey)) jpg = await cloud.downloadFromR2(body.montageKey).catch(() => null);
+            if (!jpg) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no image"}'); return; }
+            await cloud.uploadToR2(`longform/saved-thumbs/${id}.jpg`, jpg, 'image/jpeg');
+            const rec = { id, savedAt: Date.now(), title: String(body.title || '').slice(0, 200), prompt: String(body.prompt || '').slice(0, 800),
+                pctile: (typeof body.pctile === 'number') ? body.pctile : null, relevance: (typeof body.relevance === 'number') ? body.relevance : null };
+            await cloud.uploadToR2(`longform/saved-thumbs/${id}.json`, Buffer.from(JSON.stringify(rec)), 'application/json');
+            let idx = { thumbs: [] };
+            try { const ib = await cloud.downloadFromR2('longform/saved-thumbs/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
+            if (!Array.isArray(idx.thumbs)) idx.thumbs = [];
+            idx.thumbs.push(rec);
+            await cloud.uploadToR2('longform/saved-thumbs/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, id }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    if (pathname === '/api/longquant/thumbs/list' && req.method === 'GET') {
+        const b = await cloud.downloadFromR2('longform/saved-thumbs/index.json').catch(() => null);
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(b ? b.toString('utf8') : '{"thumbs":[]}'); return;
+    }
+    if (pathname === '/api/longquant/thumbs/delete' && req.method === 'POST') {
+        try {
+            const body = await readBody(req); const id = String(body.id || '').replace(/[^a-z0-9]/gi, '');
+            if (id) {
+                await cloud.deleteFromR2(`longform/saved-thumbs/${id}.jpg`).catch(() => {});
+                await cloud.deleteFromR2(`longform/saved-thumbs/${id}.json`).catch(() => {});
+                let idx = { thumbs: [] };
+                try { const ib = await cloud.downloadFromR2('longform/saved-thumbs/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
+                idx.thumbs = (idx.thumbs || []).filter(t => t.id !== id);
+                await cloud.uploadToR2('longform/saved-thumbs/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}');
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    const ltImg = pathname.match(/^\/api\/longquant\/thumbs\/img\/([a-z0-9]{1,32})$/);
+    if (ltImg && req.method === 'GET') {
+        const buf = await cloud.downloadFromR2(`longform/saved-thumbs/${ltImg[1]}.jpg`).catch(() => null);
+        if (!buf) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); return;
+    }
+    // ── 💡 Ideas: idea-model training runs (longform/ideas/idea<N>/) ──
+    if (pathname === '/api/longquant/ideas/runs' && req.method === 'GET') {
+        const cands = Array.from({ length: 30 }, (_, i) => 'idea' + (i + 1));
+        const ok = await Promise.all(cands.map(r => cloud.existsInR2(`longform/ideas/${r}/index.jsonl`).catch(() => false)));
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ runs: cands.filter((_, i) => ok[i]) })); return;
+    }
+    if (pathname === '/api/longquant/ideas/index' && req.method === 'GET') {
+        const run = (url.searchParams.get('run') || '').replace(/[^a-z0-9]/gi, '');
+        await serveR2Gz(req, res, `longform/ideas/${run}/index.jsonl`, 8e6, { error: 'no run' }, 404); return;
+    }
     const rawMon = pathname.match(/^\/api\/raw\/montage\/([\w-]{6,16})$/);
     if (rawMon && req.method === 'GET') {
         try {
