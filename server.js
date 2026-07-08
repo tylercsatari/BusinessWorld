@@ -3376,6 +3376,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); return;
     }
     // ── 💡 Ideas: idea-model training runs (longform/ideas/idea<N>/) ──
+    const ideaGrp = pathname.match(/^\/api\/longquant\/ideas\/group\/([a-z0-9]+)\/([a-z0-9_]+)$/i);
+    if (ideaGrp && req.method === 'GET') {
+        await serveR2Gz(req, res, `longform/ideas/${ideaGrp[1]}/groups/${ideaGrp[2]}.json`, 2e6, { error: 'no group' }, 404); return;
+    }
     const ideaMon = pathname.match(/^\/api\/longquant\/ideas\/montage\/([a-z0-9]+)\/([a-z0-9_]+)$/i);
     if (ideaMon && req.method === 'GET') {
         const buf = await cloud.downloadFromR2(`longform/ideas/${ideaMon[1]}/montages/${ideaMon[2]}.jpg`).catch(() => null);
