@@ -682,6 +682,7 @@ const JarvisLongQuant = (function () {
                 st._lgTick = (st._lgTick || 0) + 1;
                 LGSTATUS[1] = 0; LGRUNS[0] = null;
                 const r = st.lgRun; if (r) { LGIDX[r] = null; if (st._lgTick % 3 === 0) delete LGMANI[r]; }
+                if ((st.gPhase || '').indexOf('idea') === 0) { LQIDEARUNS[0] = null; if (st.ideaRun) delete LQIDEAIDX[st.ideaRun]; }
                 rtgUpdateGuessesL();
             }, 40000);
         }
@@ -696,13 +697,37 @@ const JarvisLongQuant = (function () {
         })() : '';
         const runs = Array.isArray(LGRUNS[0]) ? LGRUNS[0] : [];
         const run = st.lgRun || (runs.length ? runs[runs.length - 1] : null);
-        // one pill per ROUND with live stats (titles · avg best pctile) so every stage is visible at a glance
-        const runPills = runs.map(r => {
-            lgIdx(r); const ix = LGIDX[r], rows = (ix && ix.rows) || null;
-            const n = rows ? rows.length : null;
-            const avg = (rows && rows.length) ? rows.reduce((s, x) => s + (x.best_pctile || 0), 0) / rows.length : null;
-            return `<span data-lgrun="${r}" style="cursor:pointer;border:1px solid ${run === r ? C.accent : C.border};background:${run === r ? C.accent + '1e' : 'transparent'};color:${run === r ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">round ${r.replace('thumb', '')}${n != null ? ` <span style="opacity:.75;font-weight:400">· ${n} titles · avg ${(avg * 100).toFixed(1)}th</span>` : ''}</span>`;
-        }).join('');
+        // ── CONSOLIDATED phases: thumbnail training + BOTH idea eras live here now (Ideas tab removed) ──
+        lqIdeaRunsEnsure();
+        const ideaRunsAll = Array.isArray(LQIDEARUNS[0]) ? LQIDEARUNS[0] : [];
+        const chainRuns = ideaRunsAll.filter(r => lqIdeaEraOf(r, (LQIDEAIDX[r] || {}).rows) === 'visual');
+        const textRuns = ideaRunsAll.filter(r => lqIdeaEraOf(r, (LQIDEAIDX[r] || {}).rows) === 'text');
+        const phase = st.gPhase || (chainRuns.length ? 'ideachain' : 'thumb');
+        const PHASES = [['thumb', '🖼 Thumbnail model training'], ['ideatext', '💡 Idea model — text era (legacy)'], ['ideachain', '💡 Idea + thumbnail chain']];
+        const selStyle = `background:${C.card2};border:1px solid ${C.border};color:${C.text};border-radius:7px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;max-width:100%`;
+        const phaseSel = `<select data-guessphase style="${selStyle}">${PHASES.map(([k, l]) => `<option value="${k}" ${phase === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+        let runSel = '';
+        if (phase === 'thumb') {
+            runSel = `<select data-guessrunsel style="${selStyle}">${runs.map(r => {
+                lgIdx(r); const ix = LGIDX[r], rows = (ix && ix.rows) || null;
+                const n = rows ? rows.length : null;
+                const avg = (rows && rows.length) ? rows.reduce((s, x) => s + (x.best_pctile || 0), 0) / rows.length : null;
+                return `<option value="${r}" ${run === r ? 'selected' : ''}>round ${r.replace('thumb', '')}${n != null ? ` · ${n} titles · avg ${(avg * 100).toFixed(1)}th` : ''}</option>`;
+            }).join('')}</select>`;
+        } else {
+            const rs = phase === 'ideachain' ? chainRuns : textRuns;
+            const cur = st.ideaRun && rs.indexOf(st.ideaRun) >= 0 ? st.ideaRun : (rs.length ? rs[rs.length - 1] : null);
+            runSel = rs.length ? `<select data-guessrunsel style="${selStyle}">${rs.map(r => {
+                const ix = LQIDEAIDX[r], rows = (ix && ix.rows) || null;
+                const n = rows ? rows.length : null;
+                const avg = (rows && rows.length) ? rows.reduce((s, x) => s + (x.pctile || 0), 0) / rows.length : null;
+                return `<option value="${r}" ${cur === r ? 'selected' : ''}>run ${r.replace('idea', '')}${n != null ? ` · ${n} ideas · avg ${(avg * 100).toFixed(1)}th` : ''}</option>`;
+            }).join('')}</select>` : `<span style="font-size:11px;color:${C.dim}">no runs in this phase yet</span>`;
+        }
+        const selectorsRow = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">phase</span>${phaseSel}<span style="font-size:9px;color:${C.mute};text-transform:uppercase">round</span>${runSel}</div>`;
+        if (phase !== 'thumb') {
+            return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — what the models generate</div>${statStrip}${selectorsRow}${renderIdeaPhase(phase === 'ideachain' ? 'visual' : 'text')}`, 14);
+        }
         const demo = `<div style="margin:8px 0;padding:10px;border:1px solid ${C.border};border-radius:8px;background:${C.card2}">
             <div style="font-size:11px;color:${C.text};font-weight:700;margin-bottom:5px">🧪 Try the live model on any title</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap"><input data-lgtitle value="${esc(st.lgDemoTitle || '')}" placeholder="e.g. I Built a Real Iron Man Suit" style="flex:1;min-width:220px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:12px"/><span data-lgdemo style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:6px 12px;font-size:11px;font-weight:800">generate 5 →</span></div>
@@ -745,12 +770,14 @@ const JarvisLongQuant = (function () {
             const grp = MANI.rows.filter(r => r.input_id === gsel).sort((a, b) => (b.advantage || 0) - (a.advantage || 0));
             if (grp.length) detail = `<div style="margin-top:12px;padding-top:10px;border-top:1px solid ${C.border}"><div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:2px">${esc(grp[0].title || '')}</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">${grp.length} thumbnails · best ${(Math.max.apply(null, grp.map(r => r.pctile || 0)) * 100).toFixed(0)}th pctile · ranked by advantage vs this title's own group</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${grp.map(r => `<div style="border:1px solid ${r.advantage > 0 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}"><img src="/api/longquant/guesses/montage/${run}/${r.id}" loading="lazy" style="width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}"/><div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;font-size:10px"><span style="font-weight:800;color:${r.pctile >= 0.9 ? C.green : C.text}">${((r.pctile || 0) * 100).toFixed(0)}th pctile</span><span style="color:${r.advantage > 0 ? C.green : C.dim}">adv ${r.advantage > 0 ? '+' : ''}${(r.advantage || 0).toFixed(2)}</span></div><div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:52px;overflow:hidden">${esc((r.prompt || '').slice(0, 160))}</div></div></div>`).join('')}</div></div>`;
         }
-        return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — thumbnail RL</div>${statStrip}<div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every title the model tried + its 5 generated thumbnails. Click a title to light up its guesses on the map and see all five below. Switch the latent space to view the same guesses projected different ways.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">round</span>${runPills || `<span style="font-size:11px;color:${C.dim}">no runs yet — starts when training kicks off</span>`}</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">latent space</span>${projPills}</div>${demo}${body}${detail}`, 14);
+        return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — what the models generate</div>${statStrip}${selectorsRow}<div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every title the thumbnail model trained on + its generated thumbnails, scored on the CTR+views axis. Click a title to light up its guesses on the map and see them below. Switch the latent space to view the same guesses projected different ways.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">latent space</span>${projPills}</div>${demo}${body}${detail}`, 14);
     }
     // ═══ 🧪 Long-form Experiment: generate thumbnails with the trained model + score uploads + saved bank ═══
-    const LQTHUMBS = [null], LQIDEARUNS = [null], LQIDEAIDX = {};
+    const LQTHUMBS = [null], LQIDEARUNS = [null], LQIDEAIDX = {}, LQIDEAGRP = {};
     function rtgUpdateLqExp() { try { const el = window.document.getElementById('rtg-lqexppanel'); if (el) el.innerHTML = renderLqExperiment(); } catch (e) { } }
-    function rtgUpdateLqIdeas() { try { const el = window.document.getElementById('rtg-lqideapanel'); if (el) el.innerHTML = renderLqIdeas(); } catch (e) { } }
+    // Ideas are CONSOLIDATED into the 🎰 Guesses section — idea data refreshes repaint the guesses panel.
+    function rtgUpdateLqIdeas() { rtgUpdateGuessesL(); }
+    function lqIdeaGrp(run, iid) { const key = run + '/' + iid; if (LQIDEAGRP[key]) return; LQIDEAGRP[key] = { loading: 1 }; fetch('/api/longquant/ideas/group/' + run + '/' + iid).then(r => r.json()).then(j => { LQIDEAGRP[key] = j; rtgUpdateGuessesL(); }).catch(() => { LQIDEAGRP[key] = { error: 1 }; rtgUpdateGuessesL(); }); }
     function lqThumbsEnsure(force) { if (LQTHUMBS[0] && !force) return; LQTHUMBS[0] = LQTHUMBS[0] || { loading: 1 }; fetch('/api/longquant/thumbs/list').then(r => r.json()).then(j => { LQTHUMBS[0] = j; rtgUpdateLqExp(); }).catch(() => { LQTHUMBS[0] = { thumbs: [] }; rtgUpdateLqExp(); }); }
     function lqIdeaRunsEnsure(force) { if (LQIDEARUNS[0] && !force) return; LQIDEARUNS[0] = LQIDEARUNS[0] || { loading: 1 }; fetch('/api/longquant/ideas/runs').then(r => r.json()).then(j => { LQIDEARUNS[0] = j.runs || []; if (!st.ideaRun && LQIDEARUNS[0].length) st.ideaRun = LQIDEARUNS[0][LQIDEARUNS[0].length - 1]; rtgUpdateLqIdeas(); rtgUpdateLqExp(); }).catch(() => { LQIDEARUNS[0] = []; rtgUpdateLqIdeas(); }); }
     function lqIdeaIdx(run) { if (!run || LQIDEAIDX[run]) return; LQIDEAIDX[run] = { loading: 1 }; fetch('/api/longquant/ideas/index?run=' + run).then(r => r.text()).then(t => { LQIDEAIDX[run] = { rows: t.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean) }; rtgUpdateLqIdeas(); rtgUpdateLqExp(); }).catch(() => { LQIDEAIDX[run] = { rows: [] }; rtgUpdateLqIdeas(); }); }
@@ -833,21 +860,19 @@ const JarvisLongQuant = (function () {
         if (rows && rows.length) return rows[0].era === 'text' ? 'text' : 'visual';
         return (parseInt(String(run).replace('idea', ''), 10) || 0) >= 20 ? 'visual' : 'text';
     }
-    function renderLqIdeas() {
+    // renderIdeaPhase(era) — the idea-model views, rendered INSIDE the 🎰 Guesses section.
+    // era 'visual' = chain runs (idea20+, scores are REAL rendered thumbnails); era 'text' = legacy runs 1-11.
+    function renderIdeaPhase(era) {
         lqIdeaRunsEnsure();
         const runsAll = Array.isArray(LQIDEARUNS[0]) ? LQIDEARUNS[0] : [];
-        const era = st.ideaEra || 'visual';
         const eraOf = r => lqIdeaEraOf(r, (LQIDEAIDX[r] || {}).rows);
         const runs = runsAll.filter(r => eraOf(r) === era);
         let run = st.ideaRun && runs.indexOf(st.ideaRun) >= 0 ? st.ideaRun : (runs.length ? runs[runs.length - 1] : null);
-        const eraPills = [['visual', '🖼 Visually validated (chain)'], ['text', '📝 Text validated (legacy)']].map(([k, l]) =>
-            `<span data-ideaera="${k}" style="cursor:pointer;border:1px solid ${era === k ? C.accent : C.border};background:${era === k ? C.accent + '1e' : 'transparent'};color:${era === k ? C.accent : C.dim};border-radius:6px;padding:4px 11px;font-size:11px;font-weight:700">${l}</span>`).join('');
         // EXACT validation-axis labels — these state precisely what each era's score IS
         const axisLabel = era === 'visual'
-            ? `validated on: <b style="color:${C.text}">🖼 visual channel → CTR + views (ctrviews)</b> — the same axis as the 🎰 Guesses map — measured on REAL thumbnails rendered by thumb_b10 from each idea, with an idea↔image relevance penalty. Prefilter column 'txt' = curated-English text→views gate.`
+            ? `validated on: <b style="color:${C.text}">🖼 visual channel → CTR + views (ctrviews)</b> — the same axis as the thumbnail-training map — measured on REAL thumbnails rendered by thumb_b10 from each idea, with an idea↔image relevance penalty. 'txt' chip = curated-English text→views prefilter.`
             : `validated on: <b style="color:${C.text}">📝 text channel → views (log)</b> — the title-embedding projected on the corpus views axis (held-out r=0.68). NOT CTR / retention / realistic-views / outlier — views only. Kept for reference; superseded by the visual chain.`;
-        const runPills = runs.map(r => `<span data-idearun="${r}" style="cursor:pointer;border:1px solid ${run === r ? C.accent : C.border};background:${run === r ? C.accent + '1e' : 'transparent'};color:${run === r ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">run ${r.replace('idea', '')}</span>`).join('');
-        let body = '', map = '';
+        let body = '', map = '', detail = '';
         if (!runs.length && Array.isArray(LQIDEARUNS[0])) {
             body = era === 'visual'
                 ? `<div style="font-size:12px;color:${C.dim};padding:16px">no chain-validated runs yet — the idea→thumb_b10→render→score loop populates this as it runs.</div>`
@@ -857,31 +882,27 @@ const JarvisLongQuant = (function () {
             const ix = LQIDEAIDX[run];
             if (ix && ix.rows) {
                 const all = ix.rows;
-                // ── TEXT-era MAP: ideas placed on the raw-long TEXT channel map by their real-title neighbours ──
-                if (era === 'text') {
-                    const RT = RAW['text']; if (!RT || RT.loading) rawEnsure('text');
-                    if (RT && RT.proj) {
-                        const TPROJ = [['views', 'views'], ['ctrviews', 'CTR + views'], ['ctr', 'CTR'], ['ret30', '30s-ret'], ['outlier', 'outlier'], ['realviews', 'realistic views']].filter(p => RT.proj[p[0]]);
-                        let tproj = st.ideaProj || 'views'; if (!TPROJ.some(p => p[0] === tproj)) tproj = TPROJ.length ? TPROJ[0][0] : 'views';
-                        const projPills = TPROJ.map(([k, l]) => `<span data-ideaproj="${k}" style="cursor:pointer;border:1px solid ${tproj === k ? C.cyan : C.border};background:${tproj === k ? C.cyan + '1e' : 'transparent'};color:${tproj === k ? C.cyan : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${l}${k === 'views' ? ' <span style="font-weight:800">✓ validation axis</span>' : ''}</span>`).join('');
-                        const P = RT.proj[tproj] || null, px = P ? (P.x || []) : [], py = P ? (P.y || []) : [];
-                        const id2i = lgId2i(RT);
-                        const gpos = r => { if (!P || !Array.isArray(r.nbr)) return null; let sx = 0, sy = 0, n = 0; r.nbr.forEach(nb => { const i = id2i[String(nb[0])]; if (i != null && px[i] != null) { sx += px[i]; sy += py[i]; n++; } }); return n ? [sx / n, sy / n] : null; };
-                        const W = 780, H = 440, pad = 26, X = x => pad + (x / 1000) * (W - 2 * pad), Y = y => H - pad - (y / 1000) * (H - 2 * pad);
-                        let bg = ''; if (P) { const step = Math.max(1, Math.ceil(px.length / 2500)); for (let i = 0; i < px.length; i += step) if (px[i] != null) bg += `<circle cx="${X(px[i]).toFixed(1)}" cy="${Y(py[i]).toFixed(1)}" r="1" fill="${C.border}" opacity="0.4"/>`; }
-                        const selId = st.ideaSel || null;
-                        let placed = 0;
-                        const dots = all.map(r => { const q = gpos(r); if (!q) return ''; placed++; const on = r.id === selId; return `<circle data-ideadot="${r.id}" cx="${X(q[0]).toFixed(1)}" cy="${Y(q[1]).toFixed(1)}" r="${on ? 6 : 3.2}" fill="${lgHeat(r.pctile)}" opacity="${on ? 1 : 0.85}" stroke="${on ? '#fff' : 'rgba(0,0,0,.45)'}" stroke-width="${on ? 1.6 : 0.5}" style="cursor:pointer"><title>${esc((r.idea || '').slice(0, 50))} · ${((r.pctile || 0) * 100).toFixed(0)}th</title></circle>`; }).join('');
-                        let sel = '';
-                        if (selId) {
-                            const r = all.find(x => x.id === selId);
-                            if (r) sel = `<div style="margin-top:8px;padding:8px 12px;border:1px solid ${lgHeat(r.pctile)};border-radius:8px;background:${C.card2}"><div style="font-size:12px;color:${C.text};font-weight:700">${esc(r.idea || '')}</div><div style="font-size:11px;color:${C.mute};margin-top:3px"><b style="color:${(r.pctile || 0) >= 0.8 ? C.green : C.text}">${((r.pctile || 0) * 100).toFixed(0)}th</b> — text→views percentile · novelty ${r.novelty != null ? r.novelty.toFixed(2) : '—'}${r.copy_sim != null ? ` · closest real title ${r.copy_sim.toFixed(2)}` : ''} · ${r.accepted ? '<span style="color:' + C.green + '">accepted ✓</span>' : 'rejected ✗'}</div></div>`;
-                        }
-                        map = `<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:6px 0"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">latent space</span>${projPills}</div>
-                          <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px">${bg}${dots}</svg>
-                          <div style="font-size:10px;color:${C.mute};margin-top:4px">grey = real library titles · dots = generated ideas placed by their nearest real-title neighbours (${placed} of ${all.length} placed — accepted/≥75th ideas carry neighbour data) · colour = text→views percentile · <b style="color:${C.text}">click a dot</b></div>${sel}`;
-                    } else map = `<div style="font-size:11px;color:${C.dim};padding:8px">loading the text-channel map…</div>`;
-                }
+                // ── MAP (both eras): ideas placed on the raw-long TEXT channel map by their real-title neighbours ──
+                const RT = RAW['text']; if (!RT || RT.loading) rawEnsure('text');
+                if (RT && RT.proj) {
+                    const TPROJ = [['views', 'views'], ['ctrviews', 'CTR + views'], ['ctr', 'CTR'], ['ret30', '30s-ret'], ['outlier', 'outlier'], ['realviews', 'realistic views']].filter(p => RT.proj[p[0]]);
+                    let tproj = st.ideaProj || 'views'; if (!TPROJ.some(p => p[0] === tproj)) tproj = TPROJ.length ? TPROJ[0][0] : 'views';
+                    const projPills = TPROJ.map(([k, l]) => `<span data-ideaproj="${k}" style="cursor:pointer;border:1px solid ${tproj === k ? C.cyan : C.border};background:${tproj === k ? C.cyan + '1e' : 'transparent'};color:${tproj === k ? C.cyan : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${l}${(era === 'text' && k === 'views') ? ' <span style="font-weight:800">✓ validation axis</span>' : ''}</span>`).join('');
+                    const P = RT.proj[tproj] || null, px = P ? (P.x || []) : [], py = P ? (P.y || []) : [];
+                    const id2i = lgId2i(RT);
+                    const gpos = r => { if (!P || !Array.isArray(r.nbr)) return null; let sx = 0, sy = 0, n = 0; r.nbr.forEach(nb => { const i = id2i[String(nb[0])]; if (i != null && px[i] != null) { sx += px[i]; sy += py[i]; n++; } }); return n ? [sx / n, sy / n] : null; };
+                    const W = 780, H = 440, pad = 26, X = x => pad + (x / 1000) * (W - 2 * pad), Y = y => H - pad - (y / 1000) * (H - 2 * pad);
+                    let bg = ''; if (P) { const step = Math.max(1, Math.ceil(px.length / 2500)); for (let i = 0; i < px.length; i += step) if (px[i] != null) bg += `<circle cx="${X(px[i]).toFixed(1)}" cy="${Y(py[i]).toFixed(1)}" r="1" fill="${C.border}" opacity="0.4"/>`; }
+                    const selId = st.ideaSel || null;
+                    let placed = 0;
+                    const dots = all.map(r => { const q = gpos(r); if (!q) return ''; placed++; const on = r.id === selId; return `<circle data-ideadot="${r.id}" cx="${X(q[0]).toFixed(1)}" cy="${Y(q[1]).toFixed(1)}" r="${on ? 6 : 3.2}" fill="${lgHeat(r.pctile)}" opacity="${on ? 1 : 0.85}" stroke="${on ? '#fff' : 'rgba(0,0,0,.45)'}" stroke-width="${on ? 1.6 : 0.5}" style="cursor:pointer"><title>${esc((r.idea || '').slice(0, 50))} · ${((r.pctile || 0) * 100).toFixed(0)}th</title></circle>`; }).join('');
+                    const mapNote = era === 'text'
+                        ? `grey = real library titles · dots = generated ideas placed by their nearest real-title neighbours (${placed} of ${all.length} placed — accepted/≥75th ideas carry neighbour data) · colour = text→views percentile`
+                        : `ideas placed on the text-channel map by their nearest real-title neighbours (${placed} of ${all.length}); scores are VISUAL ctrviews via thumb_b10 renders · colour = visual pctile`;
+                    map = `<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:6px 0"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">latent space</span>${projPills}</div>
+                      <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px">${bg}${dots}</svg>
+                      <div style="font-size:10px;color:${C.mute};margin-top:4px">${mapNote} · <b style="color:${C.text}">click a dot or a row</b></div>`;
+                } else map = `<div style="font-size:11px;color:${C.dim};padding:8px">loading the text-channel map…</div>`;
                 const filt = st.ideaFilter || 'all';
                 const filtPills = [['all', 'all'], ['accepted', 'accepted ✓'], ['top', '≥80th']].map(([k, l]) => `<span data-ideafilt="${k}" style="cursor:pointer;border:1px solid ${filt === k ? C.cyan : C.border};background:${filt === k ? C.cyan + '1e' : 'transparent'};color:${filt === k ? C.cyan : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${l}</span>`).join('');
                 const rows = all.filter(r => filt === 'accepted' ? r.accepted : filt === 'top' ? (r.pctile || 0) >= 0.8 : true).sort((a, b) => (b.pctile || 0) - (a.pctile || 0));
@@ -889,19 +910,46 @@ const JarvisLongQuant = (function () {
                 const avg = all.length ? all.reduce((s, r) => s + (r.pctile || 0), 0) / all.length : 0;
                 body = `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:${C.mute};margin:8px 0"><span><b style="color:${C.text}">${all.length}</b> ideas</span><span><b style="color:${C.green}">${acc}</b> accepted</span><span>avg <b style="color:${C.text}">${(avg * 100).toFixed(1)}th</b></span><span><b style="color:${top ? C.green : C.dim}">${top}</b> ≥80th</span></div>
                   <div style="display:flex;gap:5px;margin-bottom:8px">${filtPills}</div>
-                  <div style="max-height:560px;overflow:auto">${rows.slice(0, 400).map(r => {
-                      // CHAIN rows carry real thumbnails (validated through thumb_b10 + renders): show them
-                      const th = Array.isArray(r.thumbs) && r.id ? `<div style="display:flex;gap:6px;margin-top:5px">${r.thumbs.map(t => `<img src="/api/longquant/ideas/montage/${run}/${r.id}_${t.k}" loading="lazy" title="${((t.pctile || 0) * 100).toFixed(0)}th · rel ${t.rel != null ? t.rel.toFixed(2) : '—'}" style="width:150px;aspect-ratio:16/9;object-fit:cover;border-radius:5px;border:1.5px solid ${(t.pctile || 0) >= 0.8 ? C.green : C.border};background:${C.card}"/>`).join('')}</div>` : '';
-                      const vlab = Array.isArray(r.thumbs) ? 'vis' : 'txt';
-                      const txtChip = (Array.isArray(r.thumbs) && r.text_pct != null) ? `<span style="font-size:9px;color:${C.mute};border:1px solid ${C.border};border-radius:4px;padding:1px 5px;white-space:nowrap">txt ${(r.text_pct * 100).toFixed(0)}</span>` : '';
-                      return `<div style="padding:6px 8px;border-radius:6px;margin-bottom:3px;background:${(r.pctile || 0) >= 0.8 ? C.green + '10' : 'transparent'};border:1px solid ${(r.pctile || 0) >= 0.8 ? C.green + '44' : C.border}"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="font-size:12px;color:${r.accepted ? C.text : C.dim};flex:1">${esc(r.idea || '')}</span>${txtChip}<span style="font-size:10px;color:${C.mute};white-space:nowrap">nov ${(r.novelty != null ? r.novelty.toFixed(2) : '—')}</span><span style="font-size:11px;font-weight:800;color:${(r.pctile || 0) >= 0.8 ? C.green : (r.pctile || 0) >= 0.6 ? C.amber : C.dim};white-space:nowrap">${((r.pctile || 0) * 100).toFixed(0)}th <span style="font-weight:400;color:${C.faint}">${vlab}</span></span><span style="font-size:10px;color:${r.accepted ? C.green : C.faint}">${r.accepted ? '✓' : '✗'}</span></div>${th}</div>`;
+                  <div style="max-height:460px;overflow:auto">${rows.slice(0, 400).map(r => {
+                      const isChain = Array.isArray(r.thumbs);
+                      const on = r.id != null && r.id === st.ideaSel;
+                      const th = isChain && r.id ? `<div style="display:flex;gap:6px;margin-top:5px">${r.thumbs.map(t => `<img src="/api/longquant/ideas/montage/${run}/${r.id}_${t.k}" loading="lazy" title="${((t.pctile || 0) * 100).toFixed(0)}th · rel ${t.rel != null ? t.rel.toFixed(2) : '—'}" style="width:130px;aspect-ratio:16/9;object-fit:cover;border-radius:5px;border:1.5px solid ${(t.pctile || 0) >= 0.8 ? C.green : C.border};background:${C.card}"/>`).join('')}</div>` : '';
+                      const vlab = isChain ? 'vis' : 'txt';
+                      const txtChip = (isChain && r.text_pct != null) ? `<span style="font-size:9px;color:${C.mute};border:1px solid ${C.border};border-radius:4px;padding:1px 5px;white-space:nowrap">txt ${(r.text_pct * 100).toFixed(0)}</span>` : '';
+                      return `<div data-ideapick="${r.id || ''}" style="cursor:pointer;padding:6px 8px;border-radius:6px;margin-bottom:3px;background:${on ? C.accent + '18' : (r.pctile || 0) >= 0.8 ? C.green + '10' : 'transparent'};border:1px solid ${on ? C.accent : (r.pctile || 0) >= 0.8 ? C.green + '44' : C.border}"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="font-size:12px;color:${r.accepted ? C.text : C.dim};flex:1">${esc(r.idea || '')}</span>${txtChip}<span style="font-size:10px;color:${C.mute};white-space:nowrap">nov ${(r.novelty != null ? r.novelty.toFixed(2) : '—')}</span><span style="font-size:11px;font-weight:800;color:${(r.pctile || 0) >= 0.8 ? C.green : (r.pctile || 0) >= 0.6 ? C.amber : C.dim};white-space:nowrap">${((r.pctile || 0) * 100).toFixed(0)}th <span style="font-weight:400;color:${C.faint}">${vlab}</span></span><span style="font-size:10px;color:${r.accepted ? C.green : C.faint}">${r.accepted ? '✓' : '✗'}</span></div>${th}</div>`;
                   }).join('')}</div>`;
+                // ── FULL-DETAIL panel for the selected idea: everything about it in one place ──
+                const selRow = st.ideaSel ? all.find(x => x.id === st.ideaSel) : null;
+                if (selRow && era === 'visual') {
+                    lqIdeaGrp(run, selRow.id);
+                    const G = LQIDEAGRP[run + '/' + selRow.id];
+                    const nums = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:7px 0">${[
+                        [`${((selRow.pctile || 0) * 100).toFixed(0)}th`, 'visual ctrviews — the validation score', (selRow.pctile || 0) >= 0.8 ? C.green : C.amber],
+                        [selRow.text_pct != null ? `${(selRow.text_pct * 100).toFixed(0)}th` : '—', 'text→views prefilter', C.cyan],
+                        [selRow.novelty != null ? selRow.novelty.toFixed(2) : '—', 'novelty (vs accepted ideas)', C.purple || C.accent],
+                        [selRow.copy_sim != null ? selRow.copy_sim.toFixed(2) : '—', 'closest real title similarity', C.dim]
+                    ].map(([v, l, col]) => `<div style="border:1px solid ${col};border-radius:8px;padding:6px 12px;background:${C.card2}"><div style="font-size:15px;font-weight:800;color:${col}">${v}</div><div style="font-size:9px;color:${C.mute}">${l}</div></div>`).join('')}</div>`;
+                    let thumbsBig = `<div style="font-size:11px;color:${C.dim}">loading thumbnail details…</div>`;
+                    if (G && G.thumbs) {
+                        const ts = G.thumbs.slice().sort((a, b) => (b.pctile || 0) - (a.pctile || 0));
+                        thumbsBig = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">${ts.map((t, i) => `
+                          <div style="border:2px solid ${i === 0 ? C.green : C.border};border-radius:10px;overflow:hidden;background:${C.card2}">
+                            <img src="/api/longquant/ideas/montage/${run}/${selRow.id}_${t.k}" style="width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}"/>
+                            <div style="padding:8px 10px">
+                              <div style="display:flex;gap:8px;align-items:center;font-size:11px">${i === 0 ? `<span style="background:${C.green}22;border:1px solid ${C.green};color:${C.green};border-radius:5px;padding:1px 7px;font-weight:800">🏆 best</span>` : `<span style="color:${C.dim}">#${i + 1}</span>`}<span style="font-weight:800;color:${(t.pctile || 0) >= 0.8 ? C.green : C.text}">${((t.pctile || 0) * 100).toFixed(0)}th pctile</span><span style="color:${C.mute}">relevance ${t.rel != null ? t.rel.toFixed(2) : '—'}</span></div>
+                              <div style="font-size:10px;color:${C.mute};margin-top:6px;line-height:1.5;max-height:120px;overflow:auto"><b style="color:${C.text}">what the thumbnail model wrote:</b> ${esc(t.prompt || '')}</div>
+                            </div>
+                          </div>`).join('')}</div>`;
+                    } else if (G && G.error) thumbsBig = `<div style="font-size:11px;color:${C.red}">couldn't load this idea's detail</div>`;
+                    detail = `<div style="margin-top:12px;padding-top:12px;border-top:1px solid ${C.border}">
+                      <div style="font-size:14px;font-weight:800;color:${C.text};line-height:1.4">${esc(selRow.idea || '')} ${selRow.accepted ? `<span style="font-size:10px;color:${C.green}">accepted ✓</span>` : `<span style="font-size:10px;color:${C.faint}">rejected ✗</span>`}</div>
+                      ${nums}${thumbsBig}</div>`;
+                } else if (selRow) {
+                    detail = `<div style="margin-top:10px;padding:8px 12px;border:1px solid ${lgHeat(selRow.pctile)};border-radius:8px;background:${C.card2}"><div style="font-size:12px;color:${C.text};font-weight:700">${esc(selRow.idea || '')}</div><div style="font-size:11px;color:${C.mute};margin-top:3px"><b style="color:${(selRow.pctile || 0) >= 0.8 ? C.green : C.text}">${((selRow.pctile || 0) * 100).toFixed(0)}th</b> — text→views percentile · novelty ${selRow.novelty != null ? selRow.novelty.toFixed(2) : '—'}${selRow.copy_sim != null ? ` · closest real title ${selRow.copy_sim.toFixed(2)}` : ''} · ${selRow.accepted ? '<span style="color:' + C.green + '">accepted ✓</span>' : 'rejected ✗'}</div></div>`;
+                }
             } else body = `<div style="font-size:12px;color:${C.dim};padding:14px">Loading ${run}…</div>`;
         }
-        return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">💡 Ideas — long-form idea model</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${eraPills}</div>
-          <div style="font-size:11px;color:${C.mute};margin-bottom:8px;line-height:1.55">${axisLabel}</div>
-          <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">round</span>${runPills || `<span style="font-size:11px;color:${C.dim}">no runs in this era yet</span>`}</div>${map}${body}`, 14);
+        return `<div style="font-size:11px;color:${C.mute};margin-bottom:8px;line-height:1.55">${axisLabel}</div>${map}${body}${detail}`;
     }
     function guessEnsure(run) { run = run || 'phase0'; if (GUESSES[run]) return; GUESSES[run] = { loading: 1 }; fetch('/api/hooks/guesses?run=' + run).then(r => r.json()).then(j => { GUESSES[run] = j; rtgUpdateGuesses(); }).catch(() => { GUESSES[run] = { rows: [] }; rtgUpdateGuesses(); }); }
     function rtgUpdateGuesses() { try { const el = window.document.getElementById('rtg-guesspanel'); if (el) el.innerHTML = renderGuesses(); } catch (e) { } }
@@ -3279,7 +3327,7 @@ const JarvisLongQuant = (function () {
         //  • PER-CHANNEL  — analyses of the selected account's own videos (scoped by the channel bar)
         //  • CORPUS       — built on ALL videos (your 211 + the 11k library); account-independent
         const PERCHAN = [['data', '📋 Data'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict']];
-        const CORPUS = [['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['ideas', '💡 Ideas']];
+        const CORPUS = [['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment']];   // 💡 Ideas consolidated into 🎰 Guesses (phase dropdown)
         const SECLBL = Object.fromEntries([...PERCHAN, ...CORPUS]);
         const isPer = PERCHAN.some(([id]) => id === st.sec);
         const btn = ([id, l]) => `<button data-rs="${id}" style="background:${st.sec === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.sec === id ? C.accent : C.border};color:${st.sec === id ? C.accent : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`;
@@ -3315,7 +3363,7 @@ const JarvisLongQuant = (function () {
         if (isPer && st.sec !== 'data' && !S) {
             sec = cardc(`<div style="padding:26px;text-align:center"><div style="font-size:14px;font-weight:800;color:${C.text};margin-bottom:6px">${SECLBL[st.sec]} — not computed for ${chName} yet</div><div style="font-size:11px;color:${C.mute};line-height:1.7;max-width:580px;margin:0 auto">${active === 'all' ? 'Pooled analysis isn\'t built yet — switch to a single channel.' : `This per-channel analysis hasn't been run for <b>${chName}</b>. It has <b style="color:${C.green}">${nKeep}</b> videos with retention — open <b>📋 Data</b>, or run <code>build_study.py ${active}</code>.`}</div></div>`, 16);
         } else {
-            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderLongGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-lqexppanel">${renderLqExperiment()}</div>` : st.sec === 'ideas' ? `<div id="rtg-lqideapanel">${renderLqIdeas()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
+            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderLongGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-lqexppanel">${renderLqExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         }
         const bgNote = BGPEND > 0 ? `<div style="font-size:10px;color:${C.cyan};margin:-4px 0 8px;font-weight:600">⏳ heavy corpus data still streaming in (${BGPEND} file${BGPEND > 1 ? 's' : ''} left) — sections light up as their data lands</div>` : '';
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
@@ -3396,6 +3444,7 @@ const JarvisLongQuant = (function () {
         const ier = e.target.closest('[data-ideaera]'); if (ier) { st.ideaEra = ier.getAttribute('data-ideaera'); st.ideaRun = null; st.ideaSel = null; rtgUpdateLqIdeas(); return; }
         const ipr = e.target.closest('[data-ideaproj]'); if (ipr) { st.ideaProj = ipr.getAttribute('data-ideaproj'); rtgUpdateLqIdeas(); return; }
         const idt = e.target.closest('[data-ideadot]'); if (idt) { const id = idt.getAttribute('data-ideadot'); st.ideaSel = (st.ideaSel === id ? null : id); rtgUpdateLqIdeas(); return; }
+        const ipk = e.target.closest('[data-ideapick]'); if (ipk) { const id = ipk.getAttribute('data-ideapick'); if (id) { st.ideaSel = (st.ideaSel === id ? null : id); rtgUpdateGuessesL(); } return; }
         const lgd = e.target.closest('[data-lgdemo]'); if (lgd) { const inp = window.document.querySelector('[data-lgtitle]'); if (inp) st.lgDemoTitle = inp.value; lgDemo(); return; }
         const rp = e.target.closest('[data-rawproj]'); if (rp) { st.rawProj = rp.getAttribute('data-rawproj'); rtgUpdateRaw(); return; }
         const gm = e.target.closest('[data-genmodel]'); if (gm) { st.rawGenModel = gm.getAttribute('data-genmodel'); rtgUpdateExp(); return; }
@@ -3474,6 +3523,12 @@ const JarvisLongQuant = (function () {
         if (e.target.closest('[data-q]')) { st.q = e.target.value; render(); }
     }
     function onChange(e) {
+        if (e.target.hasAttribute && e.target.hasAttribute('data-guessphase')) { st.gPhase = e.target.value; st.ideaSel = null; st.lgSel = null; rtgUpdateGuessesL(); return; }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-guessrunsel')) {
+            const v = e.target.value;
+            if ((st.gPhase || '').indexOf('idea') === 0) { st.ideaRun = v; st.ideaSel = null; } else { st.lgRun = v; st.lgSel = null; }
+            rtgUpdateGuessesL(); return;
+        }
         if (e.target.id === 'lqx-file') {
             const f = e.target.files && e.target.files[0];
             if (f) { const rd = new FileReader(); rd.onload = () => { st.lqxScoreImg = rd.result; st.lqxScore = null; rtgUpdateLqExp(); }; rd.readAsDataURL(f); }
