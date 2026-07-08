@@ -206,14 +206,17 @@ def serve_requests():
             rid = key.rsplit("/", 1)[-1][:-5]
             if rid in _served: continue
             _served.add(rid)
-            try: title = (json.loads(H.s3.get_object(Bucket=H.BUCKET, Key=key)["Body"].read()).get("title") or "").strip()
-            except Exception: title = ""
+            try:
+                _req = json.loads(H.s3.get_object(Bucket=H.BUCKET, Key=key)["Body"].read())
+                title = (_req.get("title") or "").strip()
+                _cnt = max(1, min(12, int(_req.get("count") or 0))) if _req.get("count") else None
+            except Exception: title = ""; _cnt = None
             H.s3.delete_object(Bucket=H.BUCKET, Key=key)
             if not title: continue
             print("[demo] serving %s: %s" % (rid, title[:60]), flush=True)
             # user-facing request: BEST-OF-N serving — generate DEMO_G candidates, render+score ALL,
             # return ranked (the way to hand back the best possible thumbnail for an arbitrary input)
-            try: process_input({"title": title}, iid=rid, group=gen_group(title, n=int(os.environ.get("DEMO_G", "12"))), run="demo", gkey=rid)
+            try: process_input({"title": title}, iid=rid, group=gen_group(title, n=(_cnt or int(os.environ.get("DEMO_G", "12")))), run="demo", gkey=rid)
             except Exception as e: print("[demo] err", str(e)[:80], flush=True)
     except Exception as e:
         print("[demo] poll err", str(e)[:80], flush=True)
