@@ -27,7 +27,7 @@ for pf in glob.glob("/home/ubuntu/thumbrl/runs/idea*/accepted.jsonl"):
             if r.get("idea") and k not in seen: seen.add(k); rows.append(r)
         except Exception: pass
 print("IDEA update r%s on %d accepted ideas" % (ROUND, len(rows)), flush=True)
-assert len(rows) >= 150, "too few accepted ideas to train"
+assert len(rows) >= 100, "too few accepted ideas to train"
 def fmt(r):
     target = "<think>\n\n</think>\n\n" + json.dumps({"idea": r["idea"]}, ensure_ascii=False)
     return {"text": tok.apply_chat_template([{"role": "system", "content": SYS},

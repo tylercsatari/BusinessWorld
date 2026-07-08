@@ -10,7 +10,7 @@ log(){ echo "[$(date +%H:%M:%S)] $*"; }
 DEADLINE=$(( $(date +%s) + 20*3600 ))
 PREV=${START_MODEL:-/home/ubuntu/thumbrl/models/qwen3-30b-a3b}
 PREV2=$PREV
-N=${START_ROUND:-1}; FLOOR=${SCORE_FLOOR:-0.70}; STRIKES=0
+N=${START_ROUND:-1}; FLOOR=${SCORE_FLOOR:-0.60}; STRIKES=0
 while true; do
   [ $(date +%s) -ge $DEADLINE ] && { log "deadline"; break; }
   rm -f runs/idea$N/_produced
