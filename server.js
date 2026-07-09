@@ -3684,7 +3684,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         if (!run) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"no run with that rid"}'); return; }
         // the stop marker persists in R2 and force-stops any rid that carries it — clear it or nothing can restart
         await cloud.deleteFromR2(`longform/grind/stop/${rid}`).catch(() => {});
-        const freshRunning = run.status === 'running' && (Date.now() - (Number(run.ts) || 0)) < longQuantStaleMs();
+        // workers heartbeat every 20s, so 90s of silence = genuinely not running — don't block the restart
+        const freshRunning = run.status === 'running' && (Date.now() - (Number(run.ts) || 0)) < 90e3;
         if (_lqGrindActive.has(rid) || freshRunning) {
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid, already: true })); return;
         }
@@ -10738,7 +10739,8 @@ function longQuantActiveSort(a, b) {
 }
 function longQuantRequestPriority(req) {
     if (!req || typeof req !== 'object') return 9;
-    if (req.urgent) return -1;   // user clicked "start now" — front of the queue
+    if (req.urgent) return -1;     // user clicked "start now" — front of the queue
+    if (req.resume) return -0.5;   // interrupted mid-run — finish it before starting fresh queued runs
     if (req.sourceVideo && (req.sourceVideo.id || req.sourceVideo.title)) return 0;
     if (req.batchId) return 0;
     if (/channel|overnight|youtube/i.test(String(req.source || ''))) return 0;
@@ -10975,6 +10977,10 @@ async function longQuantGrindProcess(rid, req0) {
         const priorBuf = await cloud.downloadFromR2(`longform/grind/runs/${rid}.json`);
         if (priorBuf) priorRun = JSON.parse(priorBuf.toString('utf8'));
     } catch (e) { priorRun = null; }
+    // two server instances (local dev + Render) poll the same R2 queue — if the run is already
+    // heartbeating from another worker, do NOT start a second one on top of it
+    if (priorRun && priorRun.status === 'running' && !req0.resumedByUser
+        && (Date.now() - (Number(priorRun.ts) || 0)) < Math.max(60e3, parseInt(process.env.LONGQUANT_GRIND_ORPHAN_MS || String(300e3), 10))) return;
     const seed = String(req0.idea || req0.title || '').trim().slice(0, 500);
     const context = longQuantCleanContext(req0.context || req0.transcript30 || '');
     const sourceVideo = longQuantCompactSourceVideo(req0.sourceVideo);
@@ -11055,6 +11061,11 @@ async function longQuantGrindProcess(rid, req0) {
         return true;
     };
     const checkStopped = async () => (await longQuantGrindStopped(rid)) ? markStopped() : false;
+    // HEARTBEAT: a live worker must never look orphaned. Silent stages (resume re-embeds, cold
+    // idea-model calls) used to let run.ts age past the orphan window, so the recovery sweeper
+    // yanked runs that were still running back into the queue mid-flight. Touch the run every 20s
+    // unconditionally; only a worker that has genuinely died goes quiet now.
+    const hb = setInterval(() => { if (status === 'running') write(); }, 20000);
     const topicFloor = () => seedQ ? Math.max(0.22, 0.62 - gate * 0.35) : null;
     const acceptIdea = async (idea, spare) => {
         const emb = await geminiTextEmbed(idea);
@@ -11073,11 +11084,12 @@ async function longQuantGrindProcess(rid, req0) {
         return { ok: true, distSeed, distPrior, topic, floor: floor == null ? null : Math.round(floor * 1000) / 1000 };
     };
     try {
-        if (await checkStopped()) return;
+        if (await checkStopped()) { clearInterval(hb); return; }
         if (thumbTryCount() >= maxAttempts) {
             status = 'maxed';
             note = `maxed at ${thumbTryCount()}/${maxAttempts} thumbnails without clearing ${threshold}th`;
             await write();
+            clearInterval(hb);
             return;
         }
         if (sourceVideo && sourceVideo.id) {
@@ -11279,6 +11291,7 @@ async function longQuantGrindProcess(rid, req0) {
             autosaved = { error: String(e.message || e).slice(0, 180) };
         }
     }
+    clearInterval(hb);
     await write();
 }
 const _lqGrindActive = new Set();
@@ -11319,7 +11332,10 @@ async function longQuantRecoverStaleGrinds() {
     if (now - _lqGrindRecoverAt < 60e3) return;
     _lqGrindRecoverAt = now;
     const staleMs = longQuantStaleMs();
-    const orphanMs = Math.max(60e3, parseInt(process.env.LONGQUANT_GRIND_ORPHAN_MS || String(90e3), 10));
+    // 5 min, not 90s: with the 20s worker heartbeat a live run always looks fresh, and a genuinely
+    // dead worker still gets requeued within minutes — but a slow stage can no longer get "recovered"
+    // (i.e. yanked back into the queue) while it is actually still running.
+    const orphanMs = Math.max(60e3, parseInt(process.env.LONGQUANT_GRIND_ORPHAN_MS || String(300e3), 10));
     let runKeys = [], reqKeys = [];
     try {
         [runKeys, reqKeys] = await Promise.all([
@@ -11349,6 +11365,7 @@ async function longQuantRecoverStaleGrinds() {
         const storedTries = Number(run.thumbTryCount);
         const thumbTries = Math.max(slotTries, isFinite(storedTries) ? storedTries : 0);
         const req = longQuantRequestFromRun(run, rid);
+        req.resume = thumbTries > 0;   // finish interrupted work before fresh queued runs
         if (thumbTries >= req.maxAttempts) {
             run.status = 'maxed';
             run.note = `maxed at ${thumbTries}/${req.maxAttempts} thumbnails without clearing ${req.threshold}th`;
