@@ -561,6 +561,9 @@ console.log('[raw-upload] using python:', RAW_PYTHON);
 const LONGQUANT_IDEA_MODEL = process.env.LONGQUANT_IDEA_MODEL || 'idea_long_r26';
 const LONGQUANT_THUMB_MODEL = process.env.LONGQUANT_THUMB_MODEL || 'thumb_b10';
 const LONGQUANT_RENDER_MODEL = process.env.LONGQUANT_RENDER_MODEL || 'black-forest-labs/flux-2-pro';
+const LONGQUANT_CONTEXT_CHARS = Math.max(1600, Math.min(12000, parseInt(process.env.LONGQUANT_CONTEXT_CHARS, 10) || 6000));
+const LONGQUANT_PROMPT_CONTEXT_CHARS = Math.min(6000, LONGQUANT_CONTEXT_CHARS);
+const LONGQUANT_SCORE_TEXT_CHARS = Math.min(6000, LONGQUANT_CONTEXT_CHARS);
 const LONGQUANT_DEMO_REQUEST_PREFIX = 'longform/guesses/app-requests/';
 const TRIBE_CACHE = process.env.TRIBE_CACHE
     || '/Users/tylercsatari/Desktop/BusinessHub/tribev2/cache';
@@ -3518,7 +3521,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         const body = await readBody(req);
         const idea = String(body.idea || body.title || '').slice(0, 500).trim();
         const rid = 'lqg' + Date.now().toString(36);
-        const context = String(body.context || body.transcript30 || '').slice(0, 1600).trim();
+        const context = longQuantCleanContext(body.context || body.transcript30);
         const sourceVideo = (body.sourceVideo && typeof body.sourceVideo === 'object') ? {
             id: String(body.sourceVideo.id || body.sourceVideo.videoId || '').slice(0, 40),
             title: String(body.sourceVideo.title || body.title || idea || '').slice(0, 220),
@@ -3544,8 +3547,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         };
         await cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
             rid, idea, threshold: payload.threshold, attempts: [], status: 'queued',
-            note: idea ? 'queued — first attempt will generate thumbnails for your exact idea' : 'queued — waiting for the idea model to invent the first candidate',
+            note: idea ? `queued — first attempt will generate thumbnails for your exact idea${context ? ' with transcript context' : ''}` : 'queued — waiting for the idea model to invent the first candidate',
             best: null, ts: Date.now(), context, sourceVideo, batchId: payload.batchId, source: payload.source,
+            contextChars: context.length,
             ideaModel: payload.ideaModel, thumbModel: payload.thumbModel, renderModel: payload.renderModel,
         })), 'application/json').catch(() => {});
         await cloud.uploadToR2(`longform/grind/requests/${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
@@ -10226,6 +10230,34 @@ function lqStringsFromOutput(out) {
     }
     return xs;
 }
+function longQuantCleanContext(s, limit = LONGQUANT_CONTEXT_CHARS) {
+    return String(s || '')
+        .replace(/&gt;/g, '>')
+        .replace(/&lt;/g, '<')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, limit);
+}
+function longQuantRealityContext(title, context, sourceVideo) {
+    const ttl = String(title || (sourceVideo && sourceVideo.title) || '').replace(/\s+/g, ' ').trim().slice(0, 260);
+    const ctx = longQuantCleanContext(context, LONGQUANT_PROMPT_CONTEXT_CHARS);
+    const parts = [];
+    if (ttl) parts.push(`Original/current video title: ${ttl}`);
+    if (ctx) parts.push(`Actual video context from transcript/captions: ${ctx}`);
+    if (sourceVideo && sourceVideo.id) parts.push(`Source YouTube video id: ${sourceVideo.id}`);
+    return parts.join('\n').slice(0, LONGQUANT_PROMPT_CONTEXT_CHARS);
+}
+function longQuantScoreText(title, idea, context, sourceVideo) {
+    const reality = longQuantRealityContext(title || idea, context, sourceVideo);
+    return [
+        title ? `Original video title: ${title}` : '',
+        idea && idea !== title ? `Current candidate title/angle: ${idea}` : '',
+        reality ? `Authoritative video context: ${reality}` : '',
+    ].filter(Boolean).join('\n').slice(0, LONGQUANT_SCORE_TEXT_CHARS);
+}
 let _lqIdeaBankCache = { t: 0, rows: [] };
 async function longQuantIdeaBank() {
     const now = Date.now();
@@ -10258,6 +10290,7 @@ async function longQuantIdeaBank() {
     return clean;
 }
 async function longQuantIdeaGenerate(seed, attempt, prior, guide = {}, context = '') {
+    const videoReality = longQuantRealityContext(seed, context);
     const hosted = !!(process.env.REPLICATE_API_TOKEN && (process.env.LONGQUANT_IDEA_VERSION || process.env.REPLICATE_LONG_IDEA_VERSION || process.env.LONGQUANT_IDEA_MODEL_SLUG || process.env.REPLICATE_LONG_IDEA_MODEL));
     const avoid = (prior || []).slice(-14).map(a => ({
         idea: a.idea || a.title || '',
@@ -10277,8 +10310,8 @@ async function longQuantIdeaGenerate(seed, attempt, prior, guide = {}, context =
         if (attempt === 0 && seed) return seed;
         if (seed) {
             const j = await hookLlmJson([
-                { role: 'system', content: 'Return only JSON: {"idea":"..."}. Create one long-form YouTube video idea variant. Preserve the seed idea core subject, audience promise, and communicative intent. Proactively aim for the requested semantic distance band before writing the idea.' },
-                { role: 'user', content: JSON.stringify({ seed, openingTranscriptContext: String(context || '').slice(0, 1200), attempt, semanticRing: ring, avoid }) }
+                { role: 'system', content: 'Return only JSON: {"idea":"..."}. Create one title/idea angle for the same actual YouTube video, not a new video concept. The video reality context is authoritative: preserve the specific object built/tested, people, setting, constraints, and outcome. You may change hook angle, stakes, framing, title language, or curiosity gap. Proactively aim for the requested semantic distance band before writing the idea.' },
+                { role: 'user', content: JSON.stringify({ seedTitle: seed, videoRealityContext: videoReality, attempt, semanticRing: ring, avoid }) }
             ]).catch(() => null);
             const idea = String((j && (j.idea || j.title || j.premise)) || '').replace(/\s+/g, ' ').trim();
             if (idea.length >= 8) return idea.slice(0, 300);
@@ -10295,11 +10328,12 @@ async function longQuantIdeaGenerate(seed, attempt, prior, guide = {}, context =
         attempt,
         avoid,
         semantic_ring: ring,
-        opening_transcript_context: String(context || '').slice(0, 1200),
+        opening_transcript_context: videoReality,
+        video_reality_context: videoReality,
         min_distance_from_prior: ring.minDistanceFromAnyPrior,
         seed_topic_similarity_floor: ring.seedTopicSimilarityFloor,
         instruction: seed
-            ? 'Generate one long-form YouTube video idea. Preserve the seed idea core subject, audience promise, and communicative intent. Aim BEFORE writing for the provided semantic_ring: far enough from every avoided prior idea, but still above the seed topic floor. Explore a different angle/mechanism/stakes rather than unrelated virality.'
+            ? 'Generate one title/idea angle for the same actual long-form YouTube video, not a new video. The supplied video_reality_context is authoritative; preserve the specific built/tested object, people, setting, constraints, and outcome. Aim BEFORE writing for the provided semantic_ring: far enough from every avoided prior angle, but still above the seed topic floor.'
             : 'Generate one long-form YouTube video idea that is viable for thumbnail scoring.',
     });
     const xs = lqStringsFromOutput(out).map(s => String(s).replace(/\s+/g, ' ').trim()).filter(s => s.length >= 8);
@@ -10315,8 +10349,8 @@ function longQuantCleanThumbPrompt(s) {
 }
 function longQuantTemplateThumbPrompts(idea, count, context = '') {
     const core = String(idea || 'an impossible long-form challenge').replace(/\s+/g, ' ').trim().slice(0, 240);
-    const ctx = String(context || '').replace(/\s+/g, ' ').trim().slice(0, 360);
-    const rel = ctx ? ` The video opening is about: "${ctx}". Keep the thumbnail faithful to that real content.` : '';
+    const ctx = longQuantRealityContext(core, context).replace(/\s+/g, ' ').trim().slice(0, 900);
+    const rel = ctx ? ` Actual video context is authoritative: "${ctx}". Depict only real objects, actions, builds, people, settings, and stakes supported by that context; do not swap in a different weapon, suit, challenge, or premise.` : '';
     const bases = [
         `Photorealistic 16:9 YouTube thumbnail for the video idea "${core}".${rel} Show the central moment literally and instantly: the main subject in the foreground, the clearest object or danger from the idea beside them, high emotional tension, strong depth, crisp natural lighting, saturated but realistic color, no logos, no readable text.`,
         `Cinematic documentary-style 16:9 thumbnail for "${core}".${rel} Frame the most extreme visual proof of the idea in one readable image, close foreground subject, dramatic background context, shocked or determined expression if a person is involved, high contrast, realistic camera perspective, no text overlay, no watermark.`,
@@ -10333,9 +10367,10 @@ function longQuantTemplateThumbPrompts(idea, count, context = '') {
 }
 async function longQuantThumbPromptsFallback(idea, count, context = '') {
     const n = Math.max(1, Math.min(12, parseInt(count, 10) || 5));
+    const videoReality = longQuantRealityContext(idea, context);
     const j = await hookLlmJson([
-        { role: 'system', content: 'Return only JSON: {"prompts":["..."]}. Write photorealistic 16:9 YouTube thumbnail prompts. Do not invent a different video idea. Each prompt must keep the exact user idea and opening transcript context, varying only composition, framing, emotion, scale, lighting, and visual proof. Avoid readable text/logos/watermarks.' },
-        { role: 'user', content: JSON.stringify({ idea: String(idea || '').slice(0, 500), openingTranscriptContext: String(context || '').slice(0, 1200), count: n }) }
+        { role: 'system', content: 'Return only JSON: {"prompts":["..."]}. Write photorealistic 16:9 YouTube thumbnail prompts for the same actual video. The video reality context is authoritative. Do not invent a different build, object, weapon, suit, challenge, person, setting, or outcome. Vary only composition, framing, emotion, scale, lighting, visual proof, and curiosity. Avoid readable text/logos/watermarks.' },
+        { role: 'user', content: JSON.stringify({ idea: String(idea || '').slice(0, 500), videoRealityContext: videoReality, count: n }) }
     ]).catch(() => null);
     let xs = lqStringsFromOutput(j).map(longQuantCleanThumbPrompt).filter(s => s.length >= 24);
     xs = Array.from(new Set(xs)).slice(0, n);
@@ -10351,14 +10386,16 @@ async function longQuantThumbPromptsFallback(idea, count, context = '') {
 }
 async function longQuantThumbPrompts(idea, count, context = '') {
     if (!longQuantHostedModelConfigured('thumb')) return longQuantThumbPromptsFallback(idea, count, context);
+    const videoReality = longQuantRealityContext(idea, context);
     const out = await replicateLongModelRun('thumb', {
         title: idea,
         idea,
-        context: String(context || '').slice(0, 1200),
-        opening_transcript_context: String(context || '').slice(0, 1200),
+        context: videoReality,
+        opening_transcript_context: videoReality,
+        video_reality_context: videoReality,
         count,
         aspect_ratio: '16:9',
-        instruction: 'Write high-performing photoreal YouTube thumbnail prompts for this long-form video idea. Keep the supplied idea and opening transcript context; do not invent a different topic.',
+        instruction: 'Write high-performing photoreal YouTube thumbnail prompts for this same actual long-form video. The video_reality_context is authoritative; do not invent a different object, weapon, suit, build, challenge, setting, person, or outcome. You may vary only composition, scale, emotion, lighting, framing, and visual proof.',
     });
     let xs = lqStringsFromOutput(out).map(s => String(s).replace(/\s+/g, ' ').trim()).filter(s => s.length >= 12);
     xs = Array.from(new Set(xs)).slice(0, count);
@@ -10415,8 +10452,8 @@ async function longQuantSaveThumbRecord(body = {}) {
     const id = 'lt' + Date.now().toString(36) + Math.floor(Math.random() * 1e5).toString(36);
     const title = String(body.title || body.idea || '').replace(/\s+/g, ' ').trim().slice(0, 220);
     const prompt = String(body.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 1200);
-    const context = String(body.context || body.transcript30 || (body.meta && (body.meta.context || body.meta.transcript30)) || '').slice(0, 1600);
-    const scoreText = String(body.scoreText || body.idea || context || title || '').slice(0, 2000);
+    const context = longQuantCleanContext(body.context || body.transcript30 || (body.meta && (body.meta.context || body.meta.transcript30)) || '');
+    const scoreText = String(body.scoreText || longQuantScoreText(title, body.idea || title, context, body.sourceVideo || (body.meta && body.meta.sourceVideo)) || body.idea || context || title || '').slice(0, LONGQUANT_SCORE_TEXT_CHARS);
     let savedScore = (body.score && typeof body.score === 'object' && !body.score.loading && !body.score.error) ? body.score : null;
     if (!savedScore || !savedScore.channels || !savedScore.emb_preview) {
         savedScore = longQuantPublicScore(await longQuantScoreImageBuffer(jpg, title, scoreText || title));
@@ -10463,15 +10500,15 @@ async function longQuantSaveThumbRecord(body = {}) {
 }
 async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
     const n = Math.max(1, Math.min(opts.maxCount || 12, parseInt(count, 10) || 5));
-    const context = String(opts.context || opts.transcript30 || '').slice(0, 1600);
+    const context = longQuantCleanContext(opts.context || opts.transcript30 || '');
     const sourceVideo = longQuantCompactSourceVideo(opts.sourceVideo);
-    const scoreText = [idea, context ? `Opening transcript: ${context}` : ''].filter(Boolean).join('\n').slice(0, 2000);
+    const scoreText = longQuantScoreText((sourceVideo && sourceVideo.title) || idea, idea, context, sourceVideo);
     const stopRid = opts.stopRid || opts.grindRid || opts.parentRid || '';
     const checkStop = () => stopRid ? longQuantThrowIfStopped(stopRid) : Promise.resolve();
     const hostedThumb = longQuantHostedModelConfigured('thumb');
     const promptModel = longQuantThumbPromptModelLabel();
     const group = {
-        input_id: rid, title: idea, idea, invented: !!opts.invented, n, context, sourceVideo,
+        input_id: rid, title: idea, idea, invented: !!opts.invented, n, context, contextChars: context.length, sourceVideo,
         model: `${promptModel} + ${LONGQUANT_RENDER_MODEL.split('/').pop()}`,
         promptModel, hosted: hostedThumb, attempts: [], done: false, streaming: true,
     };
@@ -10536,7 +10573,7 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
 }
 async function longQuantProcessRequest(rid, req) {
     const typed = String(req.forceTitle || req.title || req.idea || req.premise || '').trim().slice(0, 500);
-    const context = String(req.context || req.transcript30 || '').slice(0, 1600);
+    const context = longQuantCleanContext(req.context || req.transcript30 || '');
     let idea = typed;
     try {
         if (!idea) {
@@ -10598,10 +10635,10 @@ async function longQuantFetchYoutubeThumb(videoId, url) {
 }
 async function longQuantGrindProcess(rid, req0) {
     const seed = String(req0.idea || req0.title || '').trim().slice(0, 500);
-    const context = String(req0.context || req0.transcript30 || '').slice(0, 1600).trim();
+    const context = longQuantCleanContext(req0.context || req0.transcript30 || '');
     const sourceVideo = longQuantCompactSourceVideo(req0.sourceVideo);
     const sourceTitle = (sourceVideo && sourceVideo.title) || seed;
-    const scoreText = [sourceTitle || seed, context ? `Opening transcript: ${context}` : ''].filter(Boolean).join('\n').slice(0, 2000);
+    const scoreText = longQuantScoreText(sourceTitle || seed, seed, context, sourceVideo);
     const batchId = String(req0.batchId || '').slice(0, 80);
     const source = String(req0.source || '').slice(0, 80);
     const threshold = Math.max(50, Math.min(99, parseInt(req0.threshold, 10) || 85));
@@ -10627,6 +10664,7 @@ async function longQuantGrindProcess(rid, req0) {
     }
     const write = () => cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
         rid, idea: seed, title: sourceTitle || seed, context, sourceVideo, source, batchId,
+        contextChars: context.length,
         threshold, count, attempts, n: attempts.length, status, winner, error: err, note,
         best, rejected, gate: Math.round(gate * 1000) / 1000, deadline, ts: Date.now(),
         baseline, autosaved,
@@ -10687,7 +10725,7 @@ async function longQuantGrindProcess(rid, req0) {
             if (seed && attempts.length === 0) {
                 idea = seed.slice(0, 300);
                 gateInfo = { distSeed: 0, distPrior: null, topic: 1, floor: topicFloor() == null ? null : Math.round(topicFloor() * 1000) / 1000 };
-                note = 'attempt 1: rendering your original idea before exploring variants';
+                note = `attempt 1: rendering your original title before exploring variants${context ? ' — transcript context is constraining thumbnail prompts' : ''}`;
                 await write();
             } else {
                 const floorNow = topicFloor();

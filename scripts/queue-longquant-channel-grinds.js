@@ -16,6 +16,9 @@ if (fs.existsSync(envPath)) {
 }
 
 const cloud = require('../cloud-storage');
+const TRANSCRIPT_FIRST_SECONDS = Math.max(10, parseInt(process.env.LONGQUANT_TRANSCRIPT_FIRST_SECONDS, 10) || 30);
+const TRANSCRIPT_CONTEXT_CHARS = Math.max(1200, Math.min(12000, parseInt(process.env.LONGQUANT_CONTEXT_CHARS, 10) || 6000));
+const TRANSCRIPT_FULL_WORDS = Math.max(120, Math.min(1400, parseInt(process.env.LONGQUANT_TRANSCRIPT_WORDS, 10) || 900));
 
 function arg(name, fallback = '') {
     const p = process.argv.indexOf('--' + name);
@@ -41,6 +44,8 @@ function run(cmd, args, opts = {}) {
 function cleanText(s) {
     return String(s || '')
         .replace(/<[^>]+>/g, ' ')
+        .replace(/&gt;/g, '>')
+        .replace(/&lt;/g, '<')
         .replace(/&amp;/g, '&')
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'")
@@ -54,10 +59,19 @@ function tsSec(ts) {
     if (parts.length === 2) return parts[0] * 60 + parts[1];
     return Number(parts[0] || 0);
 }
-function parseVttFirst30(file) {
+function transcriptContext(video, transcript) {
+    const first = cleanText(transcript.first || '');
+    const full = cleanText(transcript.full || '');
+    const parts = [];
+    if (video && video.title) parts.push(`Original/current video title: ${video.title}`);
+    if (first) parts.push(`First ${TRANSCRIPT_FIRST_SECONDS} seconds transcript: ${first}`);
+    if (full && full !== first) parts.push(`Longer transcript excerpt: ${full.split(/\s+/).slice(0, TRANSCRIPT_FULL_WORDS).join(' ')}`);
+    return cleanText(parts.join('\n')).slice(0, TRANSCRIPT_CONTEXT_CHARS);
+}
+function parseVttTranscript(file) {
     const txt = fs.readFileSync(file, 'utf8');
     const lines = txt.split(/\r?\n/);
-    const out = [];
+    const first = [], full = [];
     let keep = false;
     for (const raw of lines) {
         const line = raw.trim();
@@ -69,12 +83,33 @@ function parseVttFirst30(file) {
         }
         if (keep) {
             const t = cleanText(line);
-            if (t && out[out.length - 1] !== t) out.push(t);
+            if (t && first[first.length - 1] !== t) first.push(t);
         }
+        const t = cleanText(line);
+        if (t && !/^[0-9:.]+\s+-->\s+[0-9:.]+/.test(line) && full[full.length - 1] !== t) full.push(t);
     }
-    return cleanText(out.join(' ')).slice(0, 1200);
+    return { first: cleanText(first.join(' ')), full: cleanText(full.join(' ')) };
 }
-function localTranscript30(id) {
+function parseJson3Transcript(file) {
+    try {
+        const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const first = [], full = [];
+        for (const ev of data.events || []) {
+            if (!ev || !ev.segs) continue;
+            const start = Number(ev.tStartMs || 0) / 1000;
+            for (const seg of ev.segs) {
+                const t = cleanText(seg && seg.utf8 || '');
+                if (!t) continue;
+                full.push(t);
+                if (start <= TRANSCRIPT_FIRST_SECONDS) first.push(t);
+            }
+        }
+        return { first: cleanText(first.join(' ')), full: cleanText(full.join(' ')) };
+    } catch (e) {
+        return { first: '', full: '' };
+    }
+}
+function localTranscriptContext(id, video) {
     const candidates = [
         path.join(ROOT, 'video_data', id, 'analysis.json'),
         path.join(ROOT, 'data', 'video_data', id, 'analysis.json'),
@@ -85,30 +120,37 @@ function localTranscript30(id) {
             const j = JSON.parse(fs.readFileSync(f, 'utf8'));
             const words = j.transcript && Array.isArray(j.transcript.words) ? j.transcript.words : [];
             if (words.length) {
-                return cleanText(words.filter(w => Number(w.timestamp || w.start || 0) <= 30).map(w => w.word || w.text || '').join(' ')).slice(0, 1200);
+                const first = cleanText(words.filter(w => Number(w.timestamp || w.start || 0) <= TRANSCRIPT_FIRST_SECONDS).map(w => w.word || w.text || '').join(' '));
+                const full = cleanText(words.map(w => w.word || w.text || '').join(' '));
+                return transcriptContext(video, { first, full });
             }
             const full = cleanText(j.transcript && (j.transcript.fullText || j.transcript.text) || '');
-            if (full) return full.split(/\s+/).slice(0, 95).join(' ');
+            if (full) return transcriptContext(video, { first: full.split(/\s+/).slice(0, 95).join(' '), full });
         } catch (e) {}
     }
     return '';
 }
-async function ytdlpTranscript30(id, url, extraArgs) {
+async function ytdlpTranscriptContext(id, url, extraArgs, video) {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lq-caps-'));
     try {
         const args = [
             '--skip-download', '--write-auto-subs', '--write-subs',
             '--sub-langs', 'en,en.*,en-US',
-            '--sub-format', 'vtt',
+            '--sub-format', 'json3/vtt/best',
             '--no-warnings',
             '--output', path.join(tmp, '%(id)s.%(ext)s'),
             ...extraArgs,
             url || `https://www.youtube.com/watch?v=${id}`,
         ];
         await run('yt-dlp', args, { timeout: 90000, maxBuffer: 2 * 1024 * 1024 }).catch(() => null);
-        const files = fs.readdirSync(tmp).filter(f => f.endsWith('.vtt')).map(f => path.join(tmp, f));
-        for (const f of files) {
-            const t = parseVttFirst30(f);
+        const jsonFiles = fs.readdirSync(tmp).filter(f => f.endsWith('.json3')).map(f => path.join(tmp, f));
+        for (const f of jsonFiles) {
+            const t = transcriptContext(video, parseJson3Transcript(f));
+            if (t) return t;
+        }
+        const vttFiles = fs.readdirSync(tmp).filter(f => f.endsWith('.vtt')).map(f => path.join(tmp, f));
+        for (const f of vttFiles) {
+            const t = transcriptContext(video, parseVttTranscript(f));
             if (t) return t;
         }
     } finally {
@@ -166,14 +208,17 @@ async function main() {
     const queued = [];
     for (let i = 0; i < videos.length; i++) {
         const v = videos[i];
-        const transcript30 = localTranscript30(v.id) || await ytdlpTranscript30(v.id, v.url, extraArgs);
+        const context = localTranscriptContext(v.id, v) || await ytdlpTranscriptContext(v.id, v.url, extraArgs, v);
+        const contextStatus = context ? 'ok' : 'missing';
         const rid = 'lqg' + Date.now().toString(36) + i.toString(36).padStart(2, '0');
         const payload = {
             rid,
             idea: v.title,
             title: v.title,
-            context: transcript30,
-            transcript30,
+            context,
+            transcript30: context,
+            contextChars: context.length,
+            contextStatus,
             threshold,
             maxAttempts,
             count,
@@ -184,17 +229,17 @@ async function main() {
             sourceVideo: v,
             ts: Date.now(),
         };
-        queued.push({ rid, video: v, transcriptChars: transcript30.length, requestKey: `longform/grind/requests/${rid}.json` });
+        queued.push({ rid, video: v, transcriptChars: context.length, contextStatus, requestKey: `longform/grind/requests/${rid}.json` });
         if (!dryRun) {
             await cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
-                rid, idea: v.title, title: v.title, context: transcript30, sourceVideo: v,
+                rid, idea: v.title, title: v.title, context, transcript30: context, contextChars: context.length, contextStatus, sourceVideo: v,
                 threshold, count, attempts: [], status: 'queued',
-                note: 'queued by Tyler channel overnight batch — first attempt will render the current video title exactly',
+                note: `queued by Tyler channel overnight batch — first attempt will render the current video title exactly${context ? ' with transcript context' : ' (transcript missing)'}`,
                 best: null, ts: Date.now(), source: payload.source, batchId: bid,
             })), 'application/json');
             await cloud.uploadToR2(`longform/grind/requests/${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
         }
-        console.log(`${dryRun ? 'would queue' : 'queued'} ${i + 1}/${videos.length}: ${v.id} ${v.title} (${transcript30.length} transcript chars)`);
+        console.log(`${dryRun ? 'would queue' : 'queued'} ${i + 1}/${videos.length}: ${v.id} ${v.title} (${context.length} context chars, ${contextStatus})`);
     }
     const manifest = {
         batchId: bid,
