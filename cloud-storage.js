@@ -112,6 +112,27 @@ async function listR2Keys(prefix) {
     return keys;
 }
 
+async function listR2Objects(prefix) {
+    if (!s3) throw new Error('R2 not ready');
+    const objects = [];
+    let continuationToken;
+    do {
+        const resp = await s3.send(new ListObjectsV2Command({
+            Bucket: bucket, Prefix: prefix, ContinuationToken: continuationToken
+        }));
+        for (const obj of (resp.Contents || [])) {
+            objects.push({
+                key: obj.Key,
+                size: Number(obj.Size) || 0,
+                etag: String(obj.ETag || ''),
+                lastModified: obj.LastModified ? new Date(obj.LastModified).getTime() : 0,
+            });
+        }
+        continuationToken = resp.IsTruncated ? resp.NextContinuationToken : undefined;
+    } while (continuationToken);
+    return objects;
+}
+
 // ── Dropbox ────────────────────────────────────────────────
 
 let dropboxTokenRefreshedThisRun = false;
@@ -399,7 +420,7 @@ function sanitizeTitle(title) {
 module.exports = {
     // R2
     initR2, isR2Ready, uploadToR2, downloadFromR2, getR2Stream, getR2SignedUrl,
-    existsInR2, deleteFromR2, listR2Keys,
+    existsInR2, deleteFromR2, listR2Keys, listR2Objects,
     // Dropbox
     getDropboxToken, getDropboxAuthStatus, uploadToDropbox, uploadLargeToDropbox, createDropboxFolder,
     // Job persistence

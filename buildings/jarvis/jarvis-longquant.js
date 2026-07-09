@@ -917,10 +917,11 @@ const JarvisLongQuant = (function () {
         try {
             if (!window.document.getElementById('rtg-lqexppanel')) return;
             lqGrindStatusEnsure(true);
-            if (!st._lqRunsLiveT || Date.now() - st._lqRunsLiveT > 30000) { st._lqRunsLiveT = Date.now(); lqGrindRunsEnsure(true); }
-            const live = LQGRINDSTATUS[0], active = live && Array.isArray(live.active) ? live.active : [];
-            active.slice(0, 4).forEach(r => { if (r && r.rid) lqGrindDetail(r.rid, true); });
-            if (st.lqxChannelRid) lqGrindDetail(st.lqxChannelRid, true);
+            if (!st._lqRunsLiveT || Date.now() - st._lqRunsLiveT > 60000) { st._lqRunsLiveT = Date.now(); lqGrindRunsEnsure(true); }
+            const live = LQGRINDSTATUS[0];
+            const running = live && Array.isArray(live.runningNow) ? live.runningNow : [];
+            running.slice(0, 4).forEach(r => { if (r && r.rid) lqGrindDetail(r.rid); });
+            if (st.lqxChannelRid) lqGrindDetail(st.lqxChannelRid);
         } catch (e) {}
     }
     if (typeof window !== 'undefined' && !window.__lqGrindLivePoll) window.__lqGrindLivePoll = window.setInterval(lqGrindLiveTick, LQ_LIVE_REFRESH_MS);
@@ -953,15 +954,22 @@ const JarvisLongQuant = (function () {
         if (rec && rec.loading) return '';
         if (!rec || (rec.error && now - (rec.at || 0) > 2500)) {
             LQIMGS[k] = { loading: 1, url, at: now };
-            urlToDataUrl(url).then(d => { LQIMGS[k] = { data: d, url, at: Date.now() }; rtgUpdateLqExp(); rtgUpdateGuessesL(); rtgUpdateRaw(); })
+            urlToDataUrl(url).then(d => {
+                LQIMGS[k] = { data: d, url, at: Date.now() };
+                const cached = Object.keys(LQIMGS).filter(x => LQIMGS[x] && LQIMGS[x].data).sort((a, b) => (LQIMGS[a].at || 0) - (LQIMGS[b].at || 0));
+                while (cached.length > 16) delete LQIMGS[cached.shift()];
+                rtgUpdateLqExp(); rtgUpdateGuessesL(); rtgUpdateRaw();
+            })
                 .catch(e => { LQIMGS[k] = { error: String(e.message || e).slice(0, 120), url, at: Date.now() }; window.setTimeout(() => { if (LQIMGS[k] && LQIMGS[k].error) { delete LQIMGS[k]; rtgUpdateLqExp(); rtgUpdateGuessesL(); } }, 3500); rtgUpdateLqExp(); rtgUpdateGuessesL(); });
         }
         return '';
     }
     function lqxImg(url, id, style) {
         if (!url) return '';
-        const cached = lqxImgData(url, id);
-        const src = cached || url;
+        // Cards use the public image URL directly. Base64 copies are reserved for the
+        // graph/modal paths that actually need pixels.
+        const rec = LQIMGS[id || url];
+        const src = rec && rec.data ? rec.data : url;
         const retryUrl = String(url).replace(/"/g, '&quot;');
         const fallbackStyle = String(style || '').replace(/'/g, "\\'");
         const onerr = `const n=+(this.dataset.lqxretry||0);if(n<5){this.dataset.lqxretry=n+1;this.style.opacity=.45;this.alt='image loading';setTimeout(()=>{this.src='${retryUrl}${retryUrl.indexOf('?')>=0?'&':'?'}retry='+(n+1)+'&t='+Date.now();this.style.opacity=1},900*(n+1));}else{this.replaceWith(Object.assign(document.createElement('div'),{textContent:'image still syncing…',style:'${fallbackStyle};display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px;text-align:center;padding:8px;box-sizing:border-box'}))}`;
@@ -1440,6 +1448,10 @@ const JarvisLongQuant = (function () {
             const n = Number(r && (r.thumbErrors != null ? r.thumbErrors : (r.thumbsError != null ? r.thumbsError : 0)));
             return isFinite(n) ? n : 0;
         };
+        const grindThumbStopped = r => {
+            const n = Number(r && (r.thumbStopped != null ? r.thumbStopped : (r.thumbsStopped != null ? r.thumbsStopped : 0)));
+            return isFinite(n) ? n : 0;
+        };
         const grindThumbLimit = r => {
             const n = Number(r && (r.thumbTryLimit || r.maxAttempts || 40));
             return isFinite(n) && n > 0 ? n : 40;
@@ -1449,9 +1461,9 @@ const JarvisLongQuant = (function () {
             // and failures are separate, labelled counts — never folded into "thumbnails".
             const total = grindThumbTotal(r), max = grindThumbLimit(r), target = (r && r.threshold) || 90;
             const bestTxt = r && r.best != null ? ` · best ${Number(r.best).toFixed(1).replace(/\.0$/, '')}th` : '';
-            const imgs = grindThumbImages(r), errs = grindThumbErrors(r);
-            const inFlight = Math.max(0, total - imgs - errs);
-            return `${imgs} image${imgs === 1 ? '' : 's'}${inFlight ? ` · ${inFlight} rendering` : ''}${errs ? ` · ${errs} failed` : ''} · cap ${max}${bestTxt} · target ${target}th`;
+            const imgs = grindThumbImages(r), errs = grindThumbErrors(r), stopped = grindThumbStopped(r);
+            const inFlight = Math.max(0, total - imgs - errs - stopped);
+            return `${imgs} image${imgs === 1 ? '' : 's'}${inFlight ? ` · ${inFlight} rendering` : ''}${errs ? ` · ${errs} failed` : ''}${stopped ? ` · ${stopped} stopped` : ''} · cap ${max}${bestTxt} · target ${target}th`;
         };
         const terminalLq = r => ['won', 'error', 'maxed', 'deadline', 'stopped', 'archived', 'done'].includes((r && r.status) || '');
         const doneStatuses = ['archived', 'done', 'won', 'maxed', 'deadline'];
@@ -1534,10 +1546,12 @@ const JarvisLongQuant = (function () {
         };
         const stateCounts = grLive.stateCounts || {};
         const doneCount = doneStatuses.reduce((sum, k) => sum + Number(statusCounts[k] || 0), 0);
+        const generatingNow = grLive.runningWorkerCount == null ? runningNow.length : Number(grLive.runningWorkerCount || 0);
+        const localWorkers = grLive.localActiveWorkers == null ? (grLive.activeWorkers == null ? (grLive.workerBusy ? 1 : 0) : grLive.activeWorkers) : grLive.localActiveWorkers;
         const channelFilter = st.lqxChannelFilter || 'all';
         const chip = (key, lab, n, col) => `<span data-lqxchanfilter="${esc(key)}" style="cursor:pointer;border:1px solid ${channelFilter === key ? col : C.border};background:${channelFilter === key ? col + '24' : col + '12'};color:${channelFilter === key ? col : C.dim};border-radius:7px;padding:4px 9px;font-size:10px;font-weight:900">${n || 0} ${lab}</span>`;
         const runStatusHtml = (channelRuns.length || grLive.loading || grLive.error || grLive.ok) ? cardc(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
-          <div><div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">📡 Tyler channel grind status</div><div style="font-size:10px;color:${C.mute}">${grLive.ok ? `live poll ${grLive.refreshing ? 'refreshing' : 'ok'} · updated ${ageTxt((Date.now() - (grLive._t || Date.now())) / 1000)} · workers ${grLive.activeWorkers == null ? (grLive.workerBusy ? 1 : 0) : grLive.activeWorkers}/${grLive.workerLimit || 1} · queue ${grLive.queueDepth == null ? '—' : grLive.queueDepth}` : grLive.loading ? 'loading live worker status…' : `status fetch failed${grLive.error ? ': ' + esc(grLive.error) : ''}`}</div></div>
+          <div><div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">📡 Tyler channel grind status</div><div style="font-size:10px;color:${C.mute}">${grLive.ok ? `live poll ${grLive.refreshing ? 'refreshing' : 'ok'} · updated ${ageTxt((Date.now() - (grLive._t || Date.now())) / 1000)} · ${generatingNow} generating now · this instance ${localWorkers}/${grLive.workerLimit || 1} worker slots · ${grLive.queueDepth == null ? '—' : grLive.queueDepth} queued` : grLive.loading ? 'loading live worker status…' : `status fetch failed${grLive.error ? ': ' + esc(grLive.error) : ''}`}</div></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">${[
               ['all', 'all', channelRuns.length, C.border], ['running', 'running now', stateCounts.running || runningNow.length, C.cyan], ['queued', 'queued', stateCounts.queued || queuedNext.length, C.dim], ['recovering', 'recovering', stateCounts.recovering || recoveringNow.length, C.amber], ['saved', 'saved', statusCounts.saved || 0, C.accent], ['done', 'done', doneCount, C.green], ['stopped', 'stopped', statusCounts.stopped || 0, C.amber], ['error', 'errors', statusCounts.error || 0, C.red],
           ].map(([k, lab, cnt, col]) => chip(k, lab, cnt, col)).join('')}</div>
@@ -1606,10 +1620,12 @@ const JarvisLongQuant = (function () {
                     }
                 }
                 const thumbSlotsFromAttempts = attempts.reduce((s, a) => s + ((a.thumbs || []).length), 0);
-                const thumbSlots = Math.max(Number(det.thumbTryCount || 0), thumbSlotsFromAttempts);
+                const thumbSlots = thumbSlotsFromAttempts;
                 const thumbLimit = det.thumbTryLimit || det.maxAttempts || selected.maxAttempts || 40;
                 const thumbErrors = attempts.reduce((s, a) => s + ((a.thumbs || []).filter(t => t && (t.status === 'error' || t.error)).length), 0);
-                detailHtml = `<div><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div><div style="font-size:13px;color:${C.text};font-weight:900;line-height:1.3">${esc(runTitle || 'Selected channel video')}</div><div style="font-size:10px;color:${C.mute};margin-top:3px">${esc(grindStateLabel(selected || det))} · ${thumbs.length} image${thumbs.length === 1 ? '' : 's'}${thumbSlots - thumbs.length - thumbErrors > 0 ? ' · ' + (thumbSlots - thumbs.length - thumbErrors) + ' rendering' : ''}${thumbErrors ? ' · ' + thumbErrors + ' failed' : ''} · cap ${thumbLimit} · target ${det.threshold || selected.threshold || 90}th</div>${det.note ? `<div style="font-size:9px;color:${C.faint};margin-top:3px">${esc(det.note)}</div>` : ''}</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div style="font-size:20px;font-weight:900;color:${pctCol(bestPct)};white-space:nowrap">${bestPct == null ? '—' : bestPct + 'th best'}</div><div style="display:flex;gap:5px">${grindCtlBtns(selected || det)}</div></div></div>${baselineHtml ? `<div style="display:flex;gap:10px;align-items:flex-start;overflow:auto;margin-bottom:10px">${baselineHtml}</div>` : ''}${thumbGrid}</div>`;
+                const thumbStopped = attempts.reduce((s, a) => s + ((a.thumbs || []).filter(t => t && t.status === 'stopped').length), 0);
+                const thumbRendering = Math.max(0, thumbSlots - thumbs.length - thumbErrors - thumbStopped);
+                detailHtml = `<div><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div><div style="font-size:13px;color:${C.text};font-weight:900;line-height:1.3">${esc(runTitle || 'Selected channel video')}</div><div style="font-size:10px;color:${C.mute};margin-top:3px">${esc(grindStateLabel(selected || det))} · ${thumbs.length} image${thumbs.length === 1 ? '' : 's'}${thumbRendering ? ' · ' + thumbRendering + ' rendering' : ''}${thumbErrors ? ' · ' + thumbErrors + ' failed' : ''}${thumbStopped ? ' · ' + thumbStopped + ' stopped' : ''} · cap ${thumbLimit} · target ${det.threshold || selected.threshold || 90}th</div>${det.note ? `<div style="font-size:9px;color:${C.faint};margin-top:3px">${esc(det.note)}</div>` : ''}</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div style="font-size:20px;font-weight:900;color:${pctCol(bestPct)};white-space:nowrap">${bestPct == null ? '—' : bestPct + 'th best'}</div><div style="display:flex;gap:5px">${grindCtlBtns(selected || det)}</div></div></div>${baselineHtml ? `<div style="display:flex;gap:10px;align-items:flex-start;overflow:auto;margin-bottom:10px">${baselineHtml}</div>` : ''}${thumbGrid}</div>`;
             }
             return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:9px"><div><div style="font-size:12px;font-weight:900;color:${C.text}">🎞 Channel video thumbnail history</div><div style="font-size:10px;color:${C.mute};margin-top:2px">Filter: <b style="color:${C.text}">${esc(filterLabel)}</b>. Pick a video to scroll every generated thumbnail, ranked best to worst.</div></div><div style="font-size:10px;color:${C.dim};font-weight:800">${filteredChannelRuns.length}/${channelRuns.length} videos</div></div><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div data-lqxscrollkey="channel-runs" style="flex:0 0 280px;max-width:100%;max-height:520px;overflow:auto;padding-right:3px">${runCards || `<div style="font-size:10px;color:${C.dim};padding:10px;border:1px dashed ${C.border};border-radius:8px">No videos in this filter.</div>`}</div><div data-lqxscrollkey="channel-detail" style="flex:1 1 520px;min-width:280px;max-height:640px;overflow:auto;padding-right:3px">${detailHtml}</div></div>`, 12);
         })() : '';
