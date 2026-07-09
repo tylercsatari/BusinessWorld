@@ -3587,6 +3587,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 .sort((a, b) => longQuantActiveSort(a, b))
                 .slice(0, 20);
             const staleRunning = active.filter(r => r.status === 'running' && r.lastWriteAgeSec > longQuantStaleMs() / 1000).length;
+            const orphanedRunning = active.filter(r => r.orphanedRunning).length;
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify({
                 ok: true,
@@ -3604,6 +3605,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 active,
                 recent: runs.slice(0, 30),
                 staleRunning,
+                orphanedRunning,
                 staleAfterSec: Math.round(longQuantStaleMs() / 1000),
             }));
         } catch (e) {
@@ -10516,6 +10518,9 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
     const errorThumbs = thumbs.filter(t => t && (t.status === 'error' || t.error)).length;
     const doneAttempts = attempts.filter(a => a && ['done', 'error', 'stopped'].includes(a.status || '')).length;
     const ts = Number(run.ts) || 0;
+    const workerAttached = typeof _lqGrindActive !== 'undefined' && _lqGrindActive.has(rid);
+    const queuedRequest = !!(reqIds && reqIds.has(rid));
+    const orphanedRunning = run.status === 'running' && !workerAttached && !queuedRequest;
     const activeAttempt = lastAttempt ? {
         k: lastAttempt.k,
         idea: lastAttempt.idea || lastAttempt.title || '',
@@ -10542,7 +10547,9 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
         deadline: run.deadline || null,
         ts,
         lastWriteAgeSec: ts ? Math.max(0, Math.round((Date.now() - ts) / 1000)) : null,
-        queuedRequest: !!(reqIds && reqIds.has(rid)),
+        queuedRequest,
+        workerAttached,
+        orphanedRunning,
         source: run.source || '',
         batchId: run.batchId || '',
         sourceVideo: run.sourceVideo || null,
@@ -11107,9 +11114,10 @@ function longQuantRequestFromRun(run, rid) {
 }
 async function longQuantRecoverStaleGrinds() {
     const now = Date.now();
-    if (now - _lqGrindRecoverAt < 5 * 60e3) return;
+    if (now - _lqGrindRecoverAt < 60e3) return;
     _lqGrindRecoverAt = now;
     const staleMs = longQuantStaleMs();
+    const orphanMs = Math.max(60e3, parseInt(process.env.LONGQUANT_GRIND_ORPHAN_MS || String(90e3), 10));
     let runKeys = [], reqKeys = [];
     try {
         [runKeys, reqKeys] = await Promise.all([
@@ -11128,7 +11136,7 @@ async function longQuantRecoverStaleGrinds() {
         try { const b = await cloud.downloadFromR2(key); if (b) run = JSON.parse(b.toString('utf8')); } catch (e) { continue; }
         if (!run || longQuantTerminalStatus(run.status)) continue;
         const age = now - (Number(run.ts) || 0);
-        const shouldRecover = run.status === 'queued' || (run.status === 'running' && age > staleMs);
+        const shouldRecover = run.status === 'queued' || (run.status === 'running' && age > Math.min(staleMs, orphanMs));
         if (!shouldRecover) continue;
         if (await longQuantGrindStopped(rid)) {
             run.status = 'stopped'; run.note = 'stopped by you'; run.ts = now;
