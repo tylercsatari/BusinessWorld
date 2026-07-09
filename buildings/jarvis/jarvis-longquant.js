@@ -10,11 +10,10 @@ const JarvisLongQuant = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', amber: '#f59e0b', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
+    let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, FUSION = null, NOV = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
-    let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['ctr', 'retention', 'ret30', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
@@ -640,7 +639,7 @@ const JarvisLongQuant = (function () {
             <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px;margin-top:6px">${bandUnder}${dots}${bandOver}</svg>${detail}${upDetail}`, 12);
         return h;
     }
-    function rtgUpdateRaw() { try { const el = window.document.getElementById('rtg-rawpanel'); if (el) el.innerHTML = renderRaw(); } catch (e) { } try { const e2 = window.document.getElementById('rtg-exppanel'); if (e2) e2.innerHTML = renderExperiment(); } catch (e) { } }
+    function rtgUpdateRaw() { try { const el = window.document.getElementById('rtg-rawpanel'); if (el) el.innerHTML = renderRaw(); } catch (e) { } }
     // curation: save the kept video ids (everything NOT in a dropped cluster) as a clean training set
     async function doRawCurate() {
         const ch = st.rawChan || 'visual', R = RAW[ch]; if (!R || !R.id) return;
@@ -709,7 +708,21 @@ const JarvisLongQuant = (function () {
             else { st.lgDemoStatus = 'generating on the GPU — ~1–2 min…'; rtgUpdateGuessesL(); setTimeout(lgDemoPoll, 5000); }
         }).catch(() => setTimeout(lgDemoPoll, 5000));
     }
-    const LGSTATUS = [null, 0];
+    const LGSTATUS = [null, 0], LGIDEASTATUS = [null, 0];   // [json, lastFetchTs] per trainer
+    // one strip per trainer: stage + note + freshness, green/amber/red. A 'done' whose note mentions a
+    // run reads as "between phases" (amber) — the overnight loop chains runs — unless the note says FINAL.
+    function trainerStrip(STAT, label) {
+        if (!STAT || !STAT.state) return '';
+        const note = STAT.note || '';
+        const between = STAT.state === 'done' && note.indexOf('FINAL') < 0 && /run|idea\d|thumb\d|stage/i.test(note);
+        const good = STAT.state === 'running', warn = between || STAT.state === 'done' || STAT.state === 'update-failed';
+        const col = good ? C.green : warn ? C.amber : C.red;
+        const ico = good ? '🟢' : between ? '⏳' : STAT.state === 'done' ? '✅' : STAT.state === 'update-failed' ? '⚠️' : '⛔';
+        const head = between ? `⏳ ${label} between phases` : `${ico} ${label} ${esc(STAT.state)}`;
+        const noteHtml = note ? `<span style="font-weight:400;color:${C.text}">${between ? 'last: ' : ''}${esc(note)}</span>` : '';
+        const age = STAT.ts ? Math.round((Date.now() - STAT.ts) / 60000) : null;
+        return `<div style="background:${col}14;border:1px solid ${col};border-radius:8px;padding:7px 12px;margin-bottom:9px;font-size:11px;color:${col};font-weight:700;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><span>${head}</span>${noteHtml}${age != null ? `<span style="color:${C.mute};font-weight:400">updated ${age < 1 ? '<1' : age} min ago${age > 20 ? ' — ⚠️ stale, trainer may be between stages' : ''}</span>` : ''}</div>`;
+    }
     function renderLongGuesses() {
         if (!LGRUNS[0]) { LGRUNS[0] = { loading: 1 }; fetch('/api/longquant/guesses/runs').then(r => r.json()).then(j => { const rr = j.runs || []; LGRUNS[0] = rr; if (!st.lgRun && rr.length) st.lgRun = rr[rr.length - 1]; rtgUpdateGuessesL(); }).catch(() => { LGRUNS[0] = []; rtgUpdateGuessesL(); }); }
         if (Date.now() - LGSTATUS[1] > 60e3) { LGSTATUS[1] = Date.now(); fetch('/api/longquant/guesses/status').then(r => r.json()).then(j => { LGSTATUS[0] = j; rtgUpdateGuessesL(); }).catch(() => { }); }
@@ -721,19 +734,12 @@ const JarvisLongQuant = (function () {
                 st._lgTick = (st._lgTick || 0) + 1;
                 LGSTATUS[1] = 0; LGRUNS[0] = null;
                 const r = st.lgRun; if (r) { LGIDX[r] = null; if (st._lgTick % 3 === 0) delete LGMANI[r]; }
-                if ((st.gPhase || '').indexOf('idea') === 0) { LQIDEARUNS[0] = null; if (st.ideaRun) delete LQIDEAIDX[st.ideaRun]; }
+                if ((st.gPhase || '').indexOf('idea') === 0) { LGIDEASTATUS[1] = 0; LQIDEARUNS[0] = null; if (st.ideaRun) delete LQIDEAIDX[st.ideaRun]; }
                 rtgUpdateGuessesL();
             }, 40000);
         }
-        const STAT = LGSTATUS[0];
         // ALWAYS-visible trainer state strip: stage + round + freshness, green/amber/red
-        const statStrip = (STAT && STAT.state) ? (() => {
-            const good = STAT.state === 'running', warn = STAT.state === 'done' || STAT.state === 'update-failed';
-            const col = good ? C.green : warn ? C.amber : C.red;
-            const ico = good ? '🟢' : STAT.state === 'done' ? '✅' : STAT.state === 'update-failed' ? '⚠️' : '⛔';
-            const age = STAT.ts ? Math.round((Date.now() - STAT.ts) / 60000) : null;
-            return `<div style="background:${col}14;border:1px solid ${col};border-radius:8px;padding:7px 12px;margin-bottom:9px;font-size:11px;color:${col};font-weight:700;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><span>${ico} trainer ${esc(STAT.state)}</span>${STAT.note ? `<span style="font-weight:400;color:${C.text}">${esc(STAT.note)}</span>` : ''}${age != null ? `<span style="color:${C.mute};font-weight:400">updated ${age < 1 ? '<1' : age} min ago${age > 20 ? ' — ⚠️ stale, trainer may be between stages' : ''}</span>` : ''}</div>`;
-        })() : '';
+        const statStrip = trainerStrip(LGSTATUS[0], 'thumbnail trainer');
         const runs = Array.isArray(LGRUNS[0]) ? LGRUNS[0] : [];
         const run = st.lgRun || (runs.length ? runs[runs.length - 1] : null);
         // ── CONSOLIDATED phases: thumbnail training + BOTH idea eras live here now (Ideas tab removed) ──
@@ -765,7 +771,10 @@ const JarvisLongQuant = (function () {
         }
         const selectorsRow = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">phase</span>${phaseSel}<span style="font-size:9px;color:${C.mute};text-transform:uppercase">round</span>${runSel}</div>`;
         if (phase !== 'thumb') {
-            return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — what the models generate</div>${statStrip}${selectorsRow}${renderIdeaPhase(phase === 'ideachain' ? 'visual' : 'text')}`, 14);
+            // idea phases get the IDEA trainer's live strip too (same cadence: the 40s tick zeroes the cache)
+            if (Date.now() - LGIDEASTATUS[1] > 60e3) { LGIDEASTATUS[1] = Date.now(); fetch('/api/longquant/ideas/status').then(r => r.json()).then(j => { LGIDEASTATUS[0] = j; rtgUpdateGuessesL(); }).catch(() => { }); }
+            const ideaStrip = trainerStrip(LGIDEASTATUS[0], 'idea trainer');
+            return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — what the models generate</div><div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every video idea the idea model generated, scored on that phase's validation axis. Pick a run, click an idea to see its details${phase === 'ideachain' ? ' and its rendered thumbnails' : ''}.</div>${statStrip}${ideaStrip}${selectorsRow}${renderIdeaPhase(phase === 'ideachain' ? 'visual' : 'text')}`, 14);
         }
         const demo = `<div style="margin:8px 0;padding:10px;border:1px solid ${C.border};border-radius:8px;background:${C.card2}">
             <div style="font-size:11px;color:${C.text};font-weight:700;margin-bottom:5px">🧪 Try the live model on any title</div>
@@ -798,16 +807,16 @@ const JarvisLongQuant = (function () {
             const glist = Object.keys(groups).map(k => ({ id: k, title: groups[k].title, best: groups[k].best })).sort((a, b) => b.best - a.best);
             const bests = glist.map(g => g.best), hit90 = bests.filter(p => p >= 0.9).length, med = bests.length ? bests.slice().sort((a, b) => a - b)[bests.length >> 1] : 0;
             body += `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:${C.mute};margin:10px 0 6px"><span><b style="color:${C.text}">${glist.length}</b> titles</span><span>best-thumb median <b style="color:${C.text}">${(med * 100).toFixed(0)}th</b></span><span><b style="color:${hit90 ? C.green : C.dim}">${hit90}</b> hit ≥90th</span></div>`;
-            body += `<div style="max-height:300px;overflow:auto">${glist.slice(0, 400).map(g => { const on = g.id === gsel; return `<div data-lgpick="${g.id}" style="cursor:pointer;padding:6px 8px;border-radius:6px;margin-bottom:3px;background:${on ? C.accent + '20' : 'transparent'};border:1px solid ${on ? C.accent : 'transparent'}"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="font-size:12px;color:${C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(g.title || '')}</span><span style="font-size:11px;font-weight:800;color:${g.best >= 0.9 ? C.green : g.best >= 0.7 ? C.amber : C.dim}">${(g.best * 100).toFixed(0)}th</span></div><div style="height:3px;background:${C.border};border-radius:2px;margin-top:3px"><div style="height:3px;width:${(g.best * 100).toFixed(0)}%;background:${g.best >= 0.9 ? C.green : C.accent};border-radius:2px"></div></div></div>`; }).join('')}</div>`;
+            body += `<div style="max-height:300px;overflow:auto">${glist.slice(0, 400).map(g => { const on = g.id === gsel; return `<div data-lgpick="${g.id}" style="cursor:pointer;padding:6px 8px;border-radius:6px;margin-bottom:3px;background:${on ? C.accent + '20' : 'transparent'};border:1px solid ${on ? C.accent : 'transparent'}"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="font-size:12px;color:${C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(g.title || '')}</span><span style="font-size:11px;font-weight:800;color:${g.best >= 0.8 ? C.green : g.best >= 0.7 ? C.amber : C.dim}">${(g.best * 100).toFixed(0)}th</span></div><div style="height:3px;background:${C.border};border-radius:2px;margin-top:3px"><div style="height:3px;width:${(g.best * 100).toFixed(0)}%;background:${g.best >= 0.8 ? C.green : C.accent};border-radius:2px"></div></div></div>`; }).join('')}</div>`;
         } else if (run) body = `<div style="font-size:12px;color:${C.dim};padding:14px">Loading guesses…</div>`;
         let detail = '';
         if (st.lgSel && st.lgSel.indexOf('demo:') === 0) {
             const rid = st.lgSel.slice(5), G = LGGRP['demo/' + rid];
-            if (G && G.attempts) detail = `<div style="margin-top:12px;padding-top:10px;border-top:1px solid ${C.border}"><div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:6px">${esc(G.title || '')} <span style="color:${C.mute};font-weight:400">· live demo</span></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${(G.attempts || []).map(a => `<div style="border:1px solid ${a.advantage > 0 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/guesses/montage/demo/${rid}_${a.k}`, `guessdemo:${rid}_${a.k}`, `width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}`)}<div style="padding:6px 8px"><div style="font-size:10px;font-weight:800;color:${a.pctile >= 0.9 ? C.green : C.text}">${((a.pctile || 0) * 100).toFixed(0)}th</div><div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:44px;overflow:hidden">${esc((a.prompt || '').slice(0, 150))}</div></div></div>`).join('')}</div></div>`;
+            if (G && G.attempts) detail = `<div style="margin-top:12px;padding-top:10px;border-top:1px solid ${C.border}"><div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:6px">${esc(G.title || '')} <span style="color:${C.mute};font-weight:400">· live demo</span></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${(G.attempts || []).map(a => `<div style="border:1px solid ${a.advantage > 0 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/guesses/montage/demo/${rid}_${a.k}`, `guessdemo:${rid}_${a.k}`, `width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}`)}<div style="padding:6px 8px"><div style="font-size:10px;font-weight:800;color:${a.pctile >= 0.8 ? C.green : a.pctile >= 0.7 ? C.amber : C.text}">${((a.pctile || 0) * 100).toFixed(0)}th</div><div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:44px;overflow:hidden">${esc((a.prompt || '').slice(0, 150))}</div></div></div>`).join('')}</div></div>`;
             else detail = `<div style="margin-top:10px;font-size:11px;color:${C.dim}">Generating live demo…</div>`;
         } else if (gsel && MANI && MANI.rows) {
             const grp = MANI.rows.filter(r => r.input_id === gsel).sort((a, b) => (b.advantage || 0) - (a.advantage || 0));
-            if (grp.length) detail = `<div style="margin-top:12px;padding-top:10px;border-top:1px solid ${C.border}"><div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:2px">${esc(grp[0].title || '')}</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">${grp.length} thumbnails · best ${(Math.max.apply(null, grp.map(r => r.pctile || 0)) * 100).toFixed(0)}th pctile · ranked by advantage vs this title's own group</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${grp.map(r => `<div style="border:1px solid ${r.advantage > 0 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/guesses/montage/${run}/${r.id}`, `guess:${run}:${r.id}`, `width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}`)}<div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;font-size:10px"><span style="font-weight:800;color:${r.pctile >= 0.9 ? C.green : C.text}">${((r.pctile || 0) * 100).toFixed(0)}th pctile</span><span style="color:${r.advantage > 0 ? C.green : C.dim}">adv ${r.advantage > 0 ? '+' : ''}${(r.advantage || 0).toFixed(2)}</span></div><div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:52px;overflow:hidden">${esc((r.prompt || '').slice(0, 160))}</div></div></div>`).join('')}</div></div>`;
+            if (grp.length) detail = `<div style="margin-top:12px;padding-top:10px;border-top:1px solid ${C.border}"><div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:2px">${esc(grp[0].title || '')}</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">${grp.length} thumbnails · best ${(Math.max.apply(null, grp.map(r => r.pctile || 0)) * 100).toFixed(0)}th pctile · ranked by advantage vs this title's own group</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${grp.map(r => `<div style="border:1px solid ${r.advantage > 0 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/guesses/montage/${run}/${r.id}`, `guess:${run}:${r.id}`, `width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}`)}<div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;font-size:10px"><span style="font-weight:800;color:${r.pctile >= 0.8 ? C.green : r.pctile >= 0.7 ? C.amber : C.text}">${((r.pctile || 0) * 100).toFixed(0)}th pctile</span><span style="color:${r.advantage > 0 ? C.green : C.dim}">adv ${r.advantage > 0 ? '+' : ''}${(r.advantage || 0).toFixed(2)}</span></div><div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:52px;overflow:hidden">${esc((r.prompt || '').slice(0, 160))}</div></div></div>`).join('')}</div></div>`;
         }
         return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — what the models generate</div>${statStrip}${selectorsRow}<div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every title the thumbnail model trained on + its generated thumbnails, scored on the CTR+views axis. Click a title to light up its guesses on the map and see them below. Switch the latent space to view the same guesses projected different ways.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">latent space</span>${projPills}</div>${demo}${body}${detail}`, 14);
     }
@@ -1215,7 +1224,7 @@ const JarvisLongQuant = (function () {
         const cacheId = o.cacheId || ('inline:' + lqxHash((o.title || '') + '|' + (o.img || '')));
         const imgSrc = o.img ? (lqxImgData(o.img, cacheId + ':fullimg') || o.img) : '';
         const p = lqxPct01((score && score.pctile != null) ? score.pctile : (o.pctile != null ? o.pctile : null));
-        const col = p == null ? C.dim : p >= 0.9 ? C.green : p >= 0.8 ? C.green : p >= 0.6 ? C.amber : C.red;
+        const col = p == null ? C.dim : p >= 0.8 ? C.green : p >= 0.7 ? C.amber : C.red;
         if (score && score.loading) return `<div style="font-size:11px;color:${C.cyan};padding:12px">embedding and scoring this thumbnail…</div>`;
         if (score && score.error) return `<div style="font-size:11px;color:${C.red};padding:12px">${esc(score.error)}</div>`;
         const rawBtn = lqxRawButton(score, cacheId, o.title || (score && score.title) || '', imgSrc || o.img || '');
@@ -1301,7 +1310,7 @@ const JarvisLongQuant = (function () {
             gen += `<div style="font-size:10px;color:${C.mute};margin:9px 0 6px">${R.attempts.length} thumbnails for <b style="color:${C.text}">${esc(R.title || '')}</b> — ranked by score</div>
               <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${R.attempts.map(a => {
                   const fk = rid + '_' + a.k, mk = `longform/guesses/demo/montages/${fk}.jpg`, sc2 = lqxScoreFor('gen:' + fk, mk, R.title || st.lqxTitle || '', R.title || st.lqxTitle || '', a.score, true);
-                  return `<div data-lqxopen="gen:${fk}" style="cursor:pointer;border:1px solid ${a.pctile >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/guesses/montage/demo/${fk}`, `genimg:${fk}`, `width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}`)}<div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;align-items:center;font-size:10px"><span style="font-weight:800;color:${a.pctile >= 0.9 ? C.green : a.pctile >= 0.8 ? C.green : C.text}">${((a.pctile || 0) * 100).toFixed(0)}th pctile</span><span data-lqxsave="${a.k}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === fk ? C.green : C.accent};color:${st.lqxSaveFlash === fk ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-weight:700">${st.lqxSaveFlash === fk ? '✅ Saved' : '💾 Save'}</span></div>${lqxMetricHtml(sc2 || a)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">scoring full embeddings…</div>` : ''}<div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:40px;overflow:hidden">${esc((a.prompt || '').slice(0, 130))}</div>${lqxRawButton(sc2 || a.score, 'gen:' + fk, R.title || st.lqxTitle || '', `/api/longquant/guesses/montage/demo/${fk}`)}</div></div>`;
+                  return `<div data-lqxopen="gen:${fk}" style="cursor:pointer;border:1px solid ${a.pctile >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/guesses/montage/demo/${fk}`, `genimg:${fk}`, `width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}`)}<div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;align-items:center;font-size:10px"><span style="font-weight:800;color:${a.pctile >= 0.8 ? C.green : a.pctile >= 0.7 ? C.amber : C.text}">${((a.pctile || 0) * 100).toFixed(0)}th pctile</span><span data-lqxsave="${a.k}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === fk ? C.green : C.accent};color:${st.lqxSaveFlash === fk ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-weight:700">${st.lqxSaveFlash === fk ? '✅ Saved' : '💾 Save'}</span></div>${lqxMetricHtml(sc2 || a)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">scoring full embeddings…</div>` : ''}<div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:40px;overflow:hidden">${esc((a.prompt || '').slice(0, 130))}</div>${lqxRawButton(sc2 || a.score, 'gen:' + fk, R.title || st.lqxTitle || '', `/api/longquant/guesses/montage/demo/${fk}`)}</div></div>`;
               }).join('')}</div>`;
             if (st.lqxOpen && String(st.lqxOpen).indexOf('gen:') === 0) {
                 const fk = st.lqxOpen.slice(4), a = R.attempts.find(x => fk === rid + '_' + x.k), mk = `longform/guesses/demo/montages/${fk}.jpg`;
@@ -1574,7 +1583,7 @@ const JarvisLongQuant = (function () {
                       const th = isChain && r.id ? `<div style="display:flex;gap:6px;margin-top:5px">${r.thumbs.map(t => `<div title="${((t.pctile || 0) * 100).toFixed(0)}th · rel ${t.rel != null ? t.rel.toFixed(2) : '—'}">${lqxImg(`/api/longquant/ideas/montage/${run}/${r.id}_${t.k}`, `ideaphase:${run}:${r.id}_${t.k}`, `width:130px;aspect-ratio:16/9;object-fit:cover;border-radius:5px;border:1.5px solid ${(t.pctile || 0) >= 0.8 ? C.green : C.border};background:${C.card}`)}</div>`).join('')}</div>` : '';
                       const vlab = isChain ? 'vis' : 'txt';
                       const txtChip = (isChain && r.text_pct != null) ? `<span style="font-size:9px;color:${C.mute};border:1px solid ${C.border};border-radius:4px;padding:1px 5px;white-space:nowrap">txt ${(r.text_pct * 100).toFixed(0)}</span>` : '';
-                      return `<div data-ideapick="${r.id || ''}" style="cursor:pointer;padding:6px 8px;border-radius:6px;margin-bottom:3px;background:${on ? C.accent + '18' : (r.pctile || 0) >= 0.8 ? C.green + '10' : 'transparent'};border:1px solid ${on ? C.accent : (r.pctile || 0) >= 0.8 ? C.green + '44' : C.border}"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="font-size:12px;color:${r.accepted ? C.text : C.dim};flex:1">${esc(r.idea || '')}</span>${txtChip}<span style="font-size:10px;color:${C.mute};white-space:nowrap">nov ${(r.novelty != null ? r.novelty.toFixed(2) : '—')}</span><span style="font-size:11px;font-weight:800;color:${(r.pctile || 0) >= 0.8 ? C.green : (r.pctile || 0) >= 0.6 ? C.amber : C.dim};white-space:nowrap">${((r.pctile || 0) * 100).toFixed(0)}th <span style="font-weight:400;color:${C.faint}">${vlab}</span></span><span style="font-size:10px;color:${r.accepted ? C.green : C.faint}">${r.accepted ? '✓' : '✗'}</span></div>${th}</div>`;
+                      return `<div data-ideapick="${r.id || ''}" style="cursor:pointer;padding:6px 8px;border-radius:6px;margin-bottom:3px;background:${on ? C.accent + '18' : (r.pctile || 0) >= 0.8 ? C.green + '10' : 'transparent'};border:1px solid ${on ? C.accent : (r.pctile || 0) >= 0.8 ? C.green + '44' : C.border}"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="font-size:12px;color:${r.accepted ? C.text : C.dim};flex:1">${esc(r.idea || '')}</span>${txtChip}<span style="font-size:10px;color:${C.mute};white-space:nowrap">nov ${(r.novelty != null ? r.novelty.toFixed(2) : '—')}</span><span style="font-size:11px;font-weight:800;color:${(r.pctile || 0) >= 0.8 ? C.green : (r.pctile || 0) >= 0.7 ? C.amber : C.dim};white-space:nowrap">${((r.pctile || 0) * 100).toFixed(0)}th <span style="font-weight:400;color:${C.faint}">${vlab}</span></span><span style="font-size:10px;color:${r.accepted ? C.green : C.faint}">${r.accepted ? '✓' : '✗'}</span></div>${th}</div>`;
                   }).join('')}</div>`;
                 // ── FULL-DETAIL panel for the selected idea: everything about it in one place ──
                 const selRow = st.ideaSel ? all.find(x => x.id === st.ideaSel) : null;
@@ -1609,696 +1618,7 @@ const JarvisLongQuant = (function () {
         }
         return `<div style="font-size:11px;color:${C.mute};margin-bottom:8px;line-height:1.55">${axisLabel}</div>${map}${body}${detail}`;
     }
-    function guessEnsure(run) { run = run || 'phase0'; if (GUESSES[run]) return; GUESSES[run] = { loading: 1 }; fetch('/api/hooks/guesses?run=' + run).then(r => r.json()).then(j => { GUESSES[run] = j; rtgUpdateGuesses(); }).catch(() => { GUESSES[run] = { rows: [] }; rtgUpdateGuesses(); }); }
-    function rtgUpdateGuesses() { try { const el = window.document.getElementById('rtg-guesspanel'); if (el) el.innerHTML = renderGuesses(); } catch (e) { } }
-    function renderGuesses() {
-        const run = st.guessRun || 'phase1', metric = st.guessMetric || 'views', bands = !!st.guessBands;
-        const gview = st.guessView || 'map';
-        const vToggle = `<div style="display:flex;gap:6px;margin-bottom:12px">` +
-            [['map', '🗺 Map'], ['grpo', '🧠 Ideas per input']].map(([id, lab]) => `<span data-guessview="${id}" style="cursor:pointer;border:1px solid ${gview === id ? C.accent : C.border};background:${gview === id ? C.accent + '1e' : 'transparent'};color:${gview === id ? C.accent : C.dim};border-radius:7px;padding:4px 11px;font-size:12px;font-weight:700">${lab}</span>`).join('') + `</div>`;
-        const gACCT = st.channel || (CHANS && CHANS.active) || 'tyler';
-        const gACCT_NM = gACCT === 'all' ? 'All pooled' : ((CHANS && (CHANS.channels.find(c => c.id === gACCT) || {}).name) || 'Main');
-        const guessNote = gACCT !== 'tyler' ? note(`<b style="color:${C.amber}">Guesses are Main-only so far.</b> The model that dreams up hooks was trained on <b>Main</b>'s reward signal — there are <b>no model guesses for ${esc(gACCT_NM)}</b> yet (that needs re-training the hook model on this account's keep/retention). The map + percentiles below are still Main's. Account 1/2/3 now have embeddings + per-account projections (see 🔬 Raw), so per-account guesses are the next step.`, C.amber) : '';
-        const head = h2c('🎰 Guesses — what the model generates', 'Every hook the model dreams up, embedded into the SAME map as your 11k library. Library dots are coloured by the real metric; white-ringed dots are the model\'s guesses (coloured by predicted-views percentile). As it trains, the rings climb toward the high-views region.') + guessNote + vToggle;
-        if (gview === 'grpo') return head + renderGrpo();
-        const rp = (id) => `<span data-guessrun="${id}" style="cursor:pointer;border:1px solid ${run === id ? C.purple : C.border};background:${run === id ? C.purple + '22' : 'transparent'};color:${run === id ? C.purple : C.dim};border-radius:8px;padding:4px 12px;font-size:12px;font-weight:700">${id}</span>`;
-        if (GUESSRUNS == null) { GUESSRUNS = []; fetch('/api/hooks/runs').then(r => r.json()).then(j => { GUESSRUNS = (j.runs && j.runs.length) ? j.runs : ['phase0', 'phase1']; if (GUESSRUNS.length && !st.guessRunSet) { st.guessRun = GUESSRUNS[GUESSRUNS.length - 1]; st.guessProj = null; st.guessRunSet = 1; } rtgUpdateGuesses(); }).catch(() => { GUESSRUNS = ['phase0', 'phase1']; }); }
-        const runList = (GUESSRUNS && GUESSRUNS.length) ? GUESSRUNS : ['phase0', 'phase1'];
-        const G = GUESSES[run], R = RAW.visual;
-        if (!R || R.loading) rawEnsure('visual');
-        if (!G) guessEnsure(run);
-        const PROJS = R && R.proj ? [['ctr', '→ CTR'], ['ret30', '→ 30s-ret'], ['hi10m', '>10M class'], ['views', '→ views'], ['outlier', '→ outlier'], ['both', 'views+outlier'], ['hiout', 'top-outlier'], ['umap', 'UMAP'], ['pca', 'PCA']].filter(p => R.proj[p[0]]) : [];
-        let proj = st.guessProj || ((run.indexOf('keep') === 0 || run.indexOf('grpo') === 0) ? 'keep' : 'hi10m'); if (R && R.proj && !R.proj[proj]) proj = PROJS.length ? PROJS[0][0] : 'views';
-        const pPill = ([id, lab]) => `<span data-guessproj="${id}" style="cursor:pointer;border:1px solid ${proj === id ? C.accent : C.border};background:${proj === id ? C.accent + '1e' : 'transparent'};color:${proj === id ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
-        const bandPill = `<span data-guessbands style="cursor:pointer;border:1px solid ${bands ? C.cyan : C.border};background:${bands ? C.cyan + '22' : 'transparent'};color:${bands ? C.cyan : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">📊 trend bands</span>`;
-        const resPills = bands ? `<span style="font-size:9px;color:${C.mute};margin-left:2px">sections</span>` + [4, 6, 8, 12, 16].map(kk => `<span data-guessbandk="${kk}" style="cursor:pointer;border:1px solid ${(st.guessBandK || 6) === kk ? C.cyan : C.border};background:${(st.guessBandK || 6) === kk ? C.cyan + '1e' : 'transparent'};color:${(st.guessBandK || 6) === kk ? C.cyan : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${kk}</span>`).join('') : '';
-        const bandNote = bands ? `<div style="font-size:10px;color:${C.mute};margin-bottom:6px;line-height:1.5"><b style="color:${C.cyan}">Trend bands</b> — the cyan <b>path</b> (→ arrow) is the best-fit direction the metric rises across this projection; dashed lines cut <b>⟂ to it</b> into ${Math.max(2, Math.min(20, st.guessBandK || 6))} equal-count bands, each labelled with its median value. Same method as the 🔬 Raw tab.</div>` : '';
-        const controls = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px;align-items:center">${runList.map(rp).join('')}<span style="width:8px"></span><span style="font-size:10px;color:${C.mute}">projection:</span>${PROJS.map(pPill).join('')}<span style="width:6px"></span>${bandPill}${resPills}</div>` + bandNote;
-        if (!G || G.loading || !R || R.loading || !R.proj) return head + controls + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading guesses + 11k library map…</div>`);
-        const rows = (G.rows || []);
-        if (!rows.length) return head + controls + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No guesses yet for ${esc(run)} — they stream in as the harvest runs. <span data-guessreload style="cursor:pointer;text-decoration:underline">↻ refresh</span></div>`);
-        const W = 820, H = 520, pad = 16, Sg = 1000, X = g => pad + g / Sg * (W - 2 * pad), Yc = g => pad + (1 - g / Sg) * (H - 2 * pad);
-        const P = R.proj[proj] || { x: [], y: [] }, px = P.x || [], py = P.y || [];
-        const LV = R.views || [], LO = R.outlier || [], logv = v => Math.log10((+v || 0) + 1);
-        let dir, colOf, legLo, legHi;
-        if (proj === 'hi10m') { dir = LV.map(v => +v > 1e7 ? 1 : 0); colOf = i => heatCol(dir[i]); legLo = '<10M views'; legHi = '>10M views'; }
-        else if (proj === 'hiout') { const ov = LO.map(o => o == null ? NaN : +o), sv = ov.filter(x => !isNaN(x)).slice().sort((a, b) => a - b), thr = sv.length ? sv[Math.floor(sv.length * 0.85)] : Infinity; dir = ov.map(x => (!isNaN(x) && x >= thr) ? 1 : 0); colOf = i => heatCol(dir[i]); legLo = 'rest'; legHi = 'top-outlier'; }
-        else if (proj === 'outlier') { const vals = LO.map(o => o == null ? null : logv(o)), ok = vals.filter(x => x != null && isFinite(x)), lo = Math.min(...ok), hi = Math.max(...ok); dir = vals; colOf = i => (vals[i] == null || !isFinite(vals[i])) ? '#334155' : heatCol((vals[i] - lo) / ((hi - lo) || 1)); legLo = 'low'; legHi = 'high outlier'; }
-        else if (proj === 'keep' || proj === 'ret5') { const est = (R.proj[proj] && R.proj[proj].est) || [], ok = est.filter(x => x != null && isFinite(x)), lo = Math.min(...ok), hi = Math.max(...ok); dir = est; colOf = i => (est[i] == null || !isFinite(est[i])) ? '#334155' : heatCol((est[i] - lo) / ((hi - lo) || 1)); legLo = proj === 'keep' ? 'swipe away' : 'low 5s-ret'; legHi = proj === 'keep' ? 'high keep-rate' : 'high 5s-ret'; }
-        else { const vals = LV.map(logv), ok = vals.filter(x => isFinite(x)), lo = Math.min(...ok), hi = Math.max(...ok); dir = vals; colOf = i => !isFinite(vals[i]) ? '#334155' : heatCol((vals[i] - lo) / ((hi - lo) || 1)); legLo = 'low views'; legHi = 'high views'; }
-        let bg = '';
-        for (let i = 0; i < px.length; i++) { if (px[i] == null) continue; bg += `<circle cx="${X(px[i]).toFixed(1)}" cy="${Yc(py[i]).toFixed(1)}" r="2" fill="${colOf(i)}" opacity="0.6"/>`; }
-        const RID = R.id || [], idIndex = {}; for (let i = 0; i < RID.length; i++) idIndex[RID[i]] = i;
-        const placeG = g => { if (g.nbr && g.nbr.length) { let sx = 0, sy = 0, sw = 0; for (const nb of g.nbr) { const idx = idIndex[nb[0]]; if (idx == null || px[idx] == null) continue; const w = Math.max(0.001, nb[1]); sx += px[idx] * w; sy += py[idx] * w; sw += w; } if (sw > 0) return [sx / sw, sy / sw]; } return (proj === 'views' && g.x != null) ? [g.x, g.y] : null; };
-        let bandLines = '', bandLabels = '';
-        if (bands) {
-            const idxV = []; for (let i = 0; i < px.length; i++) if (dir[i] != null && isFinite(dir[i]) && px[i] != null) idxV.push(i);
-            if (idxV.length > 30) {
-                const sx = i => X(px[i]), sy = i => Yc(py[i]);
-                let mx = 0, my = 0, mm = 0; for (const i of idxV) { mx += sx(i); my += sy(i); mm += dir[i]; } mx /= idxV.length; my /= idxV.length; mm /= idxV.length;
-                let Sxx = 0, Syy = 0, Sxy = 0, Sxm = 0, Sym = 0;
-                for (const i of idxV) { const dx = sx(i) - mx, dy = sy(i) - my, dm = dir[i] - mm; Sxx += dx * dx; Syy += dy * dy; Sxy += dx * dy; Sxm += dx * dm; Sym += dy * dm; }
-                const det = Sxx * Syy - Sxy * Sxy; let a = 0, b = 0;
-                if (Math.abs(det) > 1e-9) { a = (Syy * Sxm - Sxy * Sym) / det; b = (Sxx * Sym - Sxy * Sxm) / det; }
-                if (Math.hypot(a, b) > 1e-12) {
-                    const t = idxV.map(i => a * sx(i) + b * sy(i)), K = Math.max(2, Math.min(20, st.guessBandK || 6));
-                    const ord = idxV.map((_, j) => j).sort((p, q) => t[p] - t[q]), M = ord.length, binOf = new Array(M);
-                    ord.forEach((j, rank) => { binOf[j] = Math.min(K - 1, Math.floor(rank / M * K)); });
-                    const bins = Array.from({ length: K }, () => ({ vals: [], gx: 0, gy: 0, cnt: 0 }));
-                    for (let j = 0; j < M; j++) { const i = idxV[j], bn = bins[binOf[j]]; bn.vals.push(dir[i]); bn.gx += sx(i); bn.gy += sy(i); bn.cnt++; }
-                    const x0 = pad, x1 = W - pad, y0 = pad, y1 = H - pad;
-                    const clip = (A, B, c) => { const p = []; if (Math.abs(B) > 1e-9) { let y = (c - A * x0) / B; if (y >= y0 && y <= y1) p.push([x0, y]); y = (c - A * x1) / B; if (y >= y0 && y <= y1) p.push([x1, y]); } if (Math.abs(A) > 1e-9) { let x = (c - B * y0) / A; if (x >= x0 && x <= x1) p.push([x, y0]); x = (c - B * y1) / A; if (x >= x0 && x <= x1) p.push([x, y1]); } return p.length >= 2 ? [p[0], p[1]] : null; };
-                    for (let bI = 1; bI < K; bI++) { const rr = Math.floor(bI / K * M), c = (t[ord[rr - 1]] + t[ord[rr]]) / 2, seg = clip(a, b, c); if (seg) bandLines += `<line x1="${seg[0][0].toFixed(1)}" y1="${seg[0][1].toFixed(1)}" x2="${seg[1][0].toFixed(1)}" y2="${seg[1][1].toFixed(1)}" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 5" opacity="0.45"/>`; }
-                    const cents = []; for (let bi = 0; bi < K; bi++) { const bn = bins[bi]; if (bn.cnt >= 3) cents.push([bn.gx / bn.cnt, bn.gy / bn.cnt]); }
-                    if (cents.length >= 2) {
-                        bandLines += `<polyline points="${cents.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}" fill="none" stroke="${C.cyan}" stroke-width="2" opacity="0.75"/>`;
-                        const e0 = cents[cents.length - 2], e1 = cents[cents.length - 1], ang = Math.atan2(e1[1] - e0[1], e1[0] - e0[0]), ah = 9;
-                        bandLines += `<path d="M${e1[0].toFixed(1)},${e1[1].toFixed(1)} L${(e1[0] - ah * Math.cos(ang - 0.45)).toFixed(1)},${(e1[1] - ah * Math.sin(ang - 0.45)).toFixed(1)} M${e1[0].toFixed(1)},${e1[1].toFixed(1)} L${(e1[0] - ah * Math.cos(ang + 0.45)).toFixed(1)},${(e1[1] - ah * Math.sin(ang + 0.45)).toFixed(1)}" stroke="${C.cyan}" stroke-width="2" fill="none" opacity="0.85"/>`;
-                    }
-                    const med = arr => { const s = arr.slice().sort((p, q) => p - q), m = s.length; return m % 2 ? s[(m - 1) / 2] : (s[m / 2 - 1] + s[m / 2]) / 2; };
-                    const isBin = (proj === 'hi10m' || proj === 'hiout');
-                    for (let bi = 0; bi < K; bi++) { const bn = bins[bi]; if (bn.cnt < 3) continue; const cx = bn.gx / bn.cnt, cy = bn.gy / bn.cnt;
-                        const txt = isBin ? Math.round(bn.vals.reduce((s, x) => s + x, 0) / bn.cnt * 100) + '%' : proj === 'outlier' ? Math.pow(10, med(bn.vals)).toFixed(1) + '×' : fv(Math.pow(10, med(bn.vals)));
-                        const w = txt.length * 6.6 + 12;
-                        bandLabels += `<g style="pointer-events:none"><rect x="${(cx - w / 2).toFixed(1)}" y="${(cy - 9).toFixed(1)}" width="${w.toFixed(1)}" height="16" rx="4" fill="#0f172a" opacity="0.88" stroke="#1e293b"/><text x="${cx.toFixed(1)}" y="${(cy + 2.8).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#e2e8f0">${txt}</text></g>`;
-                    }
-                }
-            }
-        }
-        const sel = st.guessSel;
-        let gsd = '', selDot = '', placed = 0;
-        rows.forEach(r => { const pos = placeG(r); if (!pos) return; placed++; const isSel = sel === r.id, c = heatCol(r.pctile == null ? 0 : r.pctile);
-            const circ = `<circle data-guessid="${esc(r.id)}" cx="${X(pos[0]).toFixed(1)}" cy="${Yc(pos[1]).toFixed(1)}" r="${isSel ? 7.5 : 4.6}" fill="${c}" opacity="1" stroke="#fff" stroke-width="${isSel ? 2.4 : 1.2}" style="cursor:pointer"><title>${esc((r.brief || '').slice(0, 70) + ' · ' + Math.round((r.pctile || 0) * 100) + 'th pctile')}</title></circle>`;
-            if (isSel) selDot += circ; else gsd += circ; });
-        const svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${bg}${bandLines}${gsd}${selDot}${bandLabels}</svg>`;
-        const pjLabel = (PROJS.find(p => p[0] === proj) || [proj, proj])[1];
-        const scaleLab = `<div style="font-size:10px;color:${C.mute};margin-top:5px;line-height:1.5"><b style="color:${C.dim}">Layout</b>: the <b style="color:${C.accent}">${pjLabel}</b> projection — the IDENTICAL embedding & coordinates shown in 🔬 Raw. Library coloured by that metric; each guess placed at the centroid of its 12 nearest library hooks (same method as a Raw upload), coloured by predicted-views percentile. ${placed}/${rows.length} placed${placed < rows.length ? ' (others awaiting neighbour backfill)' : ''}.</div>`;
-        const PC = rows.map(r => r.pctile || 0).slice().sort((a, b) => a - b), med2 = PC.length ? PC[Math.floor(PC.length / 2)] : 0, mx2 = PC.length ? PC[PC.length - 1] : 0;
-        const stat = `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:${C.mute};margin:7px 2px"><span><b style="color:${C.text}">${rows.length}</b> guesses</span><span>median <b style="color:${C.accent}">${Math.round(med2 * 100)}th</b></span><span>best <b style="color:${C.green}">${Math.round(mx2 * 100)}th</b> pctile</span><span style="color:${C.dim}">run ${esc(run)}</span><span data-guessreload style="cursor:pointer;color:${C.dim};text-decoration:underline">↻ refresh</span></div>`;
-        let detail = '';
-        if (sel) { const r = rows.find(x => x.id === sel); if (r) detail = guessDetail(run, r); }
-        return head + controls + cardc(`${legendBar(legLo, legHi)}${svg}${scaleLab}${stat}`, 12) + detail;
-    }
-    function guessDetail(run, r) {
-        const frames = (r.frames || []).map((f, i) => `<div style="display:flex;gap:8px;margin-bottom:5px"><span style="color:${C.accent};font-weight:800;flex-shrink:0">${i + 1}</span><span style="font-size:11px;color:${C.dim};line-height:1.45">${esc(f)}</span></div>`).join('');
-        const isG = run.indexOf('grpo') === 0 || r.reasoning != null;
-        if (isG) {
-            const lab = s => `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;letter-spacing:.04em;margin:10px 0 4px">${s}</div>`;
-            const bgc = C.bg || '#0f172a';
-            const advCol = (r.advantage || 0) > 0 ? C.green : ((r.advantage || 0) < 0 ? '#ef4444' : C.mute);
-            const relBad = r.relevance != null && r.relevance < 0.45;
-            const sibs = ((GUESSES[run] && GUESSES[run].rows) || []).filter(x => x.input_id === r.input_id).sort((a, b) => (b.pctile || 0) - (a.pctile || 0));
-            const sibStrip = sibs.map(x => `<div data-guessid="${x.id}" style="cursor:pointer;flex-shrink:0;width:74px;border:2px solid ${x.id === r.id ? C.accent : 'transparent'};border-radius:6px;overflow:hidden"><img src="/api/hooks/montage/${esc(run)}/${esc(x.id)}" style="width:100%;display:block" loading="lazy"/><div style="font-size:9px;text-align:center;color:${heatCol(x.pctile || 0)};font-weight:800">${Math.round((x.pctile || 0) * 100)}%</div></div>`).join('');
-            return cardc(`<div style="display:flex;gap:16px;flex-wrap:wrap">
-              <div style="flex:1;min-width:300px">
-                ${lab('INPUT — the video idea (no niche, no priors given)')}
-                <div style="font-size:13px;color:${C.text};background:${bgc};border-radius:6px;padding:9px 11px;line-height:1.5;font-weight:700">${esc(r.premise || r.brief || '')}</div>
-                ${lab('OUTPUT — this idea\'s 5 frames · cohesion: ' + esc(r.cohesion_mode || '—'))}
-                <img src="/api/hooks/montage/${esc(run)}/${esc(r.id)}" style="width:100%;border-radius:8px;background:#000;min-height:60px;margin-bottom:6px" onerror="this.style.display='none'"/>
-                <div style="background:${bgc};border-radius:6px;padding:10px 11px">${frames || '—'}</div>
-                ${lab('REASONING — the model\'s own thinking before it chose these frames')}
-                <div style="font-size:11px;color:${C.dim};background:${bgc};border-radius:6px;padding:10px 11px;line-height:1.55;white-space:pre-wrap;max-height:260px;overflow:auto">${esc(r.reasoning || '(no trace)')}</div>
-              </div>
-              <div style="flex:1;min-width:230px">
-                ${lab('SCORE — keep-rate, gated by relevance, ranked within this input')}
-                <div style="font-size:12px;color:${C.mute};line-height:2.05">
-                  keep-rate percentile: <b style="color:${heatCol(r.pctile || 0)}">${Math.round((r.pctile || 0) * 100)}th</b><br>
-                  relevance to input: <b style="color:${relBad ? '#ef4444' : C.text}">${r.relevance != null ? fmt(r.relevance, 2) : '—'}</b> <span style="font-size:9px;color:${C.faint || C.mute}">(on-topic ≥0.45; below = penalised)</span><br>
-                  advantage vs its group: <b style="color:${advCol}">${(r.advantage || 0) > 0 ? '+' : ''}${fmt(r.advantage, 2)}</b> <span style="font-size:9px;color:${C.faint || C.mute}">(beats the model's other tries at this idea)</span><br>
-                  reward: <b style="color:${C.text}">${fmt(r.reward, 2)}</b><br>
-                  in-distribution (nn-cos): <b style="color:${C.cyan}">${fmt(r.nn_cos, 3)}</b><br>
-                  what's literally shown: <span style="color:${C.dim};font-style:italic">${esc(r.caption || '—')}</span>
-                </div>
-                ${lab('ALL ' + sibs.length + ' IDEAS IT GENERATED FOR THIS INPUT (click to compare)')}
-                <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px">${sibStrip}</div>
-                <div style="margin-top:12px"><span data-guessclose style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 11px;font-size:11px">close</span></div>
-              </div></div>`, 12);
-        }
-        const lab = s => `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;letter-spacing:.04em;margin:10px 0 4px">${s}</div>`;
-        const bgc = C.bg || '#0f172a';
-        return cardc(`<div style="display:flex;gap:16px;flex-wrap:wrap">
-          <div style="flex:1;min-width:300px">
-            ${lab('Generated hook — the 5 frames (1/sec)')}
-            <img src="/api/hooks/montage/${esc(run)}/${esc(r.id)}" style="width:100%;border-radius:8px;background:#000;min-height:60px" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'Montage still syncing to storage…',style:'font-size:11px;color:#94a3b8;padding:14px;text-align:center;background:#0f172a;border-radius:6px'}))"/>
-            ${lab('① INPUT — the brief the model was given')}
-            <div style="font-size:12px;color:${C.text};background:${bgc};border-radius:6px;padding:9px 11px;line-height:1.5">${esc(r.brief || '')}</div>
-            ${lab('② OUTPUT — the 5-frame spec the model wrote · cohesion: ' + esc(r.cohesion_mode || '—'))}
-            <div style="background:${bgc};border-radius:6px;padding:10px 11px">${frames || '<span style="color:' + C.dim + '">—</span>'}</div>
-          </div>
-          <div style="flex:1;min-width:230px">
-            ${lab('③ WHERE IT LANDS — scored on the real views axis')}
-            <div style="font-size:12px;color:${C.mute};line-height:2.05">
-              estimated views <b style="color:${C.accent}">${fv(Math.pow(10, r.pred || 0))}</b> <span style="font-size:9px;color:${C.faint || C.mute}">(model estimate = 10^prediction from the views axis — not a label)</span><br>
-              percentile vs 11k library: <b style="color:${C.green}">${Math.round((r.pctile || 0) * 100)}th</b><br>
-              grid position: <b style="color:${C.dim}">(${Math.round(r.x)}, ${Math.round(r.y)})</b> / 1000<br>
-              in-distribution (nn-cos): <b style="color:${C.cyan}">${fmt(r.nn_cos, 3)}</b> <span style="font-size:9px;color:${C.faint || C.mute}">(real hooks: .72–.87)</span><br>
-              niche: <b style="color:${C.dim}">${esc(r.niche || '—')}</b><br>
-              source idea: <b style="color:${C.dim}">${esc(r.source || '—')}</b> · brief #${r.iter != null ? r.iter : '—'}, rank ${r.rank != null ? r.rank : '—'}
-            </div>
-            <div style="margin-top:12px"><span data-guessclose style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 11px;font-size:11px">close</span></div>
-          </div></div>`, 12);
-    }
-    // ── 🧠 GRPO: the multiple ideas the model generates per input, ranked by within-input advantage ──
-    function rtgUpdateGrpo() { rtgUpdateGuesses(); }  // GRPO renders inside the Guesses tab
-    function grpoEnsureRuns() {
-        if (GRPORUNS != null) return;
-        GRPORUNS = [];
-        fetch('/api/hooks/grpo/runs').then(r => r.json()).then(j => {
-            GRPORUNS = (j.runs && j.runs.length) ? j.runs : [];
-            if (GRPORUNS.length && !st.grpoRun) st.grpoRun = GRPORUNS[GRPORUNS.length - 1];
-            rtgUpdateGrpo();
-        }).catch(() => { GRPORUNS = []; });
-    }
-    function grpoEnsureIndex(run) {
-        if (!run || GRPOIDX[run]) return;
-        GRPOIDX[run] = { loading: 1 };
-        fetch('/api/hooks/grpo/index?run=' + run).then(r => r.json()).then(j => { GRPOIDX[run] = j; rtgUpdateGrpo(); }).catch(() => { GRPOIDX[run] = { rows: [] }; rtgUpdateGrpo(); });
-    }
-    function grpoEnsureGroup(run, id) {
-        const k = run + '/' + id;
-        if (GRPOGRP[k]) return;
-        GRPOGRP[k] = { loading: 1 };
-        fetch('/api/hooks/grpo/group/' + run + '/' + id).then(r => r.json()).then(j => { GRPOGRP[k] = j; rtgUpdateGrpo(); }).catch(() => { GRPOGRP[k] = { error: 1 }; rtgUpdateGrpo(); });
-    }
-    function grpoDetail(run, id) {
-        grpoEnsureGroup(run, id);
-        const g = GRPOGRP[run + '/' + id];
-        if (!g || g.loading) return `<div style="color:${C.mute};padding:16px">loading ideas…</div>`;
-        if (g.error || !g.attempts) return `<div style="color:${C.mute};padding:16px">could not load this group.</div>`;
-        const cards = g.attempts.map(a => {
-            const advCol = a.advantage > 0 ? C.green : (a.advantage < 0 ? '#ef4444' : C.mute);
-            const relBad = a.relevance != null && a.relevance < 0.45;
-            const reasoning = a.reasoning ? `<details style="margin-top:6px"><summary style="font-size:10px;color:${C.cyan};cursor:pointer">reasoning</summary><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:4px;white-space:pre-wrap;max-height:220px;overflow:auto">${esc(a.reasoning)}</div></details>` : '';
-            return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:8px;background:${C.card2}">
-              <img src="/api/hooks/grpo/montage/${run}/${id}_${a.k}" style="width:100%;border-radius:6px;display:block" loading="lazy">
-              <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">
-                <span>keep <b style="color:${heatCol(a.keep_pctile || 0)}">${Math.round((a.keep_pctile || 0) * 100)}%</b></span>
-                <span>rel <b style="color:${relBad ? '#ef4444' : C.text}">${a.relevance != null ? a.relevance.toFixed(2) : '—'}</b></span>
-                <span>reward <b style="color:${C.text}">${(a.reward || 0).toFixed(2)}</b></span>
-                <span>adv <b style="color:${advCol}">${a.advantage > 0 ? '+' : ''}${(a.advantage || 0).toFixed(2)}</b></span>
-                <span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span>
-              </div>
-              <div style="font-size:10px;color:${C.mute};margin-top:4px;font-style:italic">${esc(a.caption || '')}</div>
-              ${reasoning}</div>`;
-        }).join('');
-        return `<div style="margin-bottom:8px"><div style="font-size:13px;color:${C.text};font-weight:800">${esc(g.premise || id)}</div>
-          <div style="font-size:10px;color:${C.mute}">group mean reward ${(g.group_mean || 0).toFixed(2)} · best ${(g.best_reward || 0).toFixed(2)} · ${g.n} ideas · winner ringed</div></div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">${cards}</div>`;
-    }
-    function renderGrpo() {
-        const head = `<div style="font-size:12px;color:${C.dim};margin-bottom:10px;line-height:1.5">🧠 <b style="color:${C.text}">Per-input ideas (GRPO)</b> — for each input the model reasons and proposes several hooks. Each is rendered, scored on keep-rate, gated by relevance to the input, and ranked by advantage vs the group's OWN mean — what beats its other attempts at the same idea, no niche or label.</div>`;
-        grpoEnsureRuns();
-        if (GRPORUNS == null || !GRPORUNS.length) return head + `<div style="color:${C.mute};padding:20px">No GRPO runs yet — input-groups appear here as the run produces them.</div>`;
-        const runPills = GRPORUNS.map(r => `<button data-grporun="${r}" style="background:${st.grpoRun === r ? C.accent + '22' : 'transparent'};border:1px solid ${st.grpoRun === r ? C.accent : C.border};color:${st.grpoRun === r ? C.accent : C.dim};border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">${r}</button>`).join('');
-        const run = st.grpoRun || GRPORUNS[GRPORUNS.length - 1];
-        grpoEnsureIndex(run);
-        const idx = GRPOIDX[run];
-        let body;
-        if (!idx || idx.loading) body = `<div style="color:${C.mute};padding:16px">loading…</div>`;
-        else {
-            const rows = (idx.rows || []).slice().sort((a, b) => (b.best_keep || 0) - (a.best_keep || 0));
-            const list = rows.map(r => {
-                const sel = st.grpoSel === r.input_id;
-                return `<div data-grpoinput="${r.input_id}" style="cursor:pointer;border:1px solid ${sel ? C.accent : C.border};background:${sel ? C.accent + '15' : C.card2};border-radius:8px;padding:8px 10px;margin-bottom:6px">
-                  <div style="font-size:12px;color:${C.text};font-weight:700;line-height:1.3">${esc(r.premise || r.input_id)}</div>
-                  <div style="font-size:10px;color:${C.mute};margin-top:3px">best keep <b style="color:${heatCol(r.best_keep || 0)}">${Math.round((r.best_keep || 0) * 100)}%</b> · ${r.n} ideas · spread ${(r.spread || 0).toFixed(2)}</div></div>`;
-            }).join('');
-            const detail = st.grpoSel ? grpoDetail(run, st.grpoSel) : `<div style="color:${C.mute};padding:16px">Pick an input on the left to see the ideas the model generated for it, ranked by advantage.</div>`;
-            body = `<div style="font-size:11px;color:${C.mute};margin-bottom:8px">${rows.length} inputs in ${run}</div><div style="display:grid;grid-template-columns:310px 1fr;gap:14px">
-              <div style="max-height:660px;overflow:auto">${list || `<div style="color:${C.mute}">no groups yet</div>`}</div>
-              <div>${detail}</div></div>`;
-        }
-        return head + `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${runPills}</div>` + body;
-    }
-    function rtgUpdateExp() { try { const el = window.document.getElementById('rtg-exppanel'); if (el) el.innerHTML = renderExperiment(); } catch (e) { } }
-    // ── Describe → generate the 5 frames (photorealistic, reference-conditioned) ──
-    // UNIFIED architecture: you just describe each frame in plain language. A planner LLM reads ALL the
-    // descriptions and infers which frames share a concrete visual entity (a person, place, object,
-    // style) by resolving references ("she", "the kitchen", "the same man") — no dial, no "keep the
-    // same person as frame 1", and the image prompt is your description VERBATIM. Each frame is then
-    // generated conditioned on exactly the frames the planner linked it to (any subset, any direction),
-    // so consistency emerges only where your descriptions actually share something; unrelated frames
-    // come out independent. Generation order is the planner's (an entity is created before it's reused).
-    const GEN_MODELS = [['flux-2-pro', 'FLUX.2 pro', '~$0.04'], ['seedream-4', 'Seedream 4', '$0.03'], ['nano-banana', 'Nano-Banana', '~$0.04'], ['nano-banana-pro', 'NB Pro', '~$0.15']];
-    function genFramesPanel() {
-        const descs = st.rawFrameDesc || ['', '', '', '', ''], CY = C.cyan, frames = st.rawFrames || [], plan = st.rawGenPlan;
-        const mPill = ([id, lab, pr]) => `<span data-genmodel="${id}" title="${id}" style="cursor:pointer;border:1px solid ${st.rawGenModel === id ? CY : C.border};background:${st.rawGenModel === id ? CY + '22' : 'transparent'};color:${st.rawGenModel === id ? CY : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${lab} <span style="opacity:.6;font-weight:400">${pr}</span></span>`;
-        const REL = { new: ['NEW', C.dim], edit: ['EDIT', C.green], compose: ['COMPOSE', C.purple] };
-        const linkOf = i => {
-            const f = plan && (plan.frames || []).find(x => x.i === i); if (!f) return '';
-            const r = REL[f.relation] || REL.new, src = f.relation === 'edit' ? `← ${f.edit_of + 1}` : f.relation === 'compose' ? `← ${(f.compose_from || []).map(x => x + 1).join(',')}` : '';
-            const pr = f.prompt && f.prompt !== descs[i] ? `<span style="opacity:.65;font-weight:400" title="${esc(f.prompt)}"> · ${esc(f.prompt.slice(0, 42))}${f.prompt.length > 42 ? '…' : ''}</span>` : '';
-            return `<span style="color:${r[1]};font-weight:800">${r[0]}${src ? ' ' + src : ''}</span>${pr}`;
-        };
-        const rows = [0, 1, 2, 3, 4].map(i => `<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px">
-            <span style="width:14px;font-size:11px;font-weight:800;color:${frames[i] ? C.green : C.mute}">${frames[i] ? '✓' : i + 1}</span>
-            <input data-framedesc="${i}" type="text" value="${esc(descs[i] || '')}" placeholder="frame ${i + 1} — describe the shot in plain language…" style="flex:1;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:11px"/>
-            <span style="font-size:9px;flex:0 0 220px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${linkOf(i)}</span></div>`).join('');
-        const any = (descs || []).some(d => (d || '').trim());
-        return `<div style="border:1px solid ${C.border};border-radius:10px;padding:10px;margin-top:8px;background:${C.card2}">
-            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Describe each frame in plain language — nothing else. A <b>director</b> reads the whole storyboard and decides per frame whether it's a <b style="color:${C.dim}">NEW</b> scene, an <b style="color:${C.green}">EDIT</b> of a prior frame's actual image (e.g. "now glowing" transforms the real picture, not a lookalike), or a <b style="color:${C.purple}">COMPOSE</b> of entities from several frames — resolving "it/she/the picture" itself. No dials, no "same as frame 1"; your words reach the model with only pronouns resolved. EDIT frames use an image-editing model so the actual content carries forward.</div>
-            <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">model</span>${GEN_MODELS.map(mPill).join('')}</div>
-            ${rows}
-            <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
-                <span data-gengo="1" style="cursor:${any && !st.rawGenBusy ? 'pointer' : 'not-allowed'};border:1px solid ${any && !st.rawGenBusy ? C.accent : C.border};background:${any && !st.rawGenBusy ? C.accent + '22' : 'transparent'};color:${any && !st.rawGenBusy ? C.accent : C.faint};border-radius:6px;padding:5px 14px;font-size:11px;font-weight:800">${st.rawGenBusy ? '⏳ Generating…' : '✨ Generate frames'}</span>
-                ${st.rawGenStage ? `<span style="font-size:10px;color:${C.cyan}">${esc(st.rawGenStage)}</span>` : ''}
-                ${st.rawGenErr ? `<span style="font-size:10px;color:${C.red}">${esc(st.rawGenErr)}</span>` : ''}</div></div>`;
-    }
-    async function genFrames() {
-        if (st.rawGenBusy) return;
-        const descs = st.rawFrameDesc || ['', '', '', '', ''];
-        const idx = [0, 1, 2, 3, 4].filter(i => (descs[i] || '').trim());
-        if (!idx.length) { st.rawGenErr = 'Describe at least one frame first.'; rtgUpdateExp(); return; }
-        st.rawGenBusy = true; st.rawGenErr = null; st.rawGenPlan = null; rtgUpdateExp();
-        const model = st.rawGenModel || 'flux-2-pro';
-        const frames = (st.rawFrames || [null, null, null, null, null]).slice();
-        const J = { 'Content-Type': 'application/json' };
-        try {
-            // 1) the director reads the whole storyboard → per-frame relation (new/edit/compose) + resolved prompt
-            st.rawGenStage = 'directing the storyboard…'; rtgUpdateExp();
-            let plan = await fetch('/api/frames/plan', { method: 'POST', headers: J, body: JSON.stringify({ descriptions: descs }) }).then(r => r.json()).catch(() => null);
-            if (!plan || plan.error || !Array.isArray(plan.order)) plan = { order: idx.slice(), frames: idx.map(i => ({ i, relation: 'new', edit_of: null, compose_from: [], prompt: descs[i] })) };
-            st.rawGenPlan = plan; rtgUpdateExp();   // show the director's plan live
-            const planOf = i => (plan.frames || []).find(x => x.i === i) || { i, relation: 'new', edit_of: null, compose_from: [], prompt: descs[i] };
-            const order = plan.order.filter(i => idx.includes(i)); idx.forEach(i => { if (!order.includes(i)) order.push(i); });
-            const done = new Set();
-            // 2) generate in the director's order; route each frame by relation, using ALREADY-generated source frames
-            for (let n = 0; n < order.length; n++) {
-                const i = order[n], f = planOf(i);
-                let relation = f.relation || 'new';
-                let srcIdx = relation === 'edit' ? (f.edit_of != null ? [f.edit_of] : []) : relation === 'compose' ? (f.compose_from || []) : [];
-                srcIdx = srcIdx.filter(s => done.has(s) && frames[s]);                 // only sources that actually exist yet
-                if (relation === 'edit' && !srcIdx.length) relation = 'new';            // source missing → fall back to fresh
-                if (relation === 'compose' && !srcIdx.length) relation = 'new';         // COMPOSE keeps a single reference (new scene, reused entity)
-                const refs = srcIdx.map(s => frames[s]);
-                st.rawGenStage = `${relation === 'edit' ? 'editing' : relation === 'compose' ? 'composing' : 'generating'} frame ${i + 1} (${n + 1}/${order.length})…`; rtgUpdateExp();
-                const j = await fetch('/api/frames/gen', { method: 'POST', headers: J, body: JSON.stringify({ model, prompt: (f.prompt || descs[i]).trim(), refs, relation }) }).then(r => r.json());
-                if (!j || j.error) throw new Error((j && j.error) || 'generation failed');
-                frames[i] = j.image; done.add(i); st.rawFrames = frames.slice(); rtgUpdateExp();
-            }
-            st.rawGenStage = '';
-        } catch (e) { st.rawGenErr = String((e && e.message) || e).slice(0, 160); }
-        st.rawGenBusy = false; st.rawGenStage = ''; rtgUpdateExp();
-        if (!st.rawGenErr && (st.rawFrames || []).some(Boolean)) rtgPlaceHook();   // auto-embed + score the generated frames → same output as every other path
-    }
-    function expDemoPoll(rid, tries) {
-        tries = tries || 0;
-        st.expGenT0 = st.expGenT0 || Date.now();
-        fetch('/api/hooks/demo/status/' + rid).then(r => r.json()).then(s => { st.expGenStage = (s && s.stage) || 'queued'; st.expGenStat = s || null; st.expGenStatErr = (s && s.error) || null; if (st.expGenBusy) rtgUpdateExp(); }).catch(() => {});
-        fetch('/api/hooks/grpo/group/demo/' + rid).then(r => r.json()).then(j => {
-            if (j && Array.isArray(j.attempts) && j.attempts.length) {
-                EXPDEMO[rid] = j; rtgUpdateExp();               // render live — hooks + frames stream in
-                if (j.done) {                                   // fully complete → stop, auto-score the first
-                    st.expGenBusy = false; st.expGenStage = 'done';
-                    const a0 = j.attempts[0]; if (a0 && a0.frame_imgs && a0.frame_imgs.filter(Boolean).length) scoreGenerated(0, a0.frame_imgs, a0.premise || a0.caption || '');
-                } else if (tries < 300) { setTimeout(() => expDemoPoll(rid, tries + 1), 2000); }   // still streaming — poll faster
-                return;
-            }
-            // a REAL terminal failure the worker WROTE (done, no attempts) → surface it. A partial/absent
-            // group just means it isn't ready yet — keep polling.
-            if (j && j.input_id && j.done && !(j.attempts && j.attempts.length)) { EXPDEMO[rid] = { error: prettyGenErr(j.error || 'came back empty') }; st.expGenBusy = false; rtgUpdateExp(); return; }
-            if (tries < 300) { setTimeout(() => expDemoPoll(rid, tries + 1), 3000); return; }
-            EXPDEMO[rid] = { error: 'Timed out. The model may be scaling up — try again in a moment.' }; st.expGenBusy = false; rtgUpdateExp();
-        }).catch(() => { if (tries < 300) setTimeout(() => expDemoPoll(rid, tries + 1), 3000); });
-    }
-    function prettyGenErr(err) {
-        const e = String(err || '').toLowerCase();
-        if (e.indexOf('insufficient credit') >= 0 || e.indexOf('credit') >= 0 || e.indexOf('spend limit') >= 0 || e.indexOf('billing') >= 0) return '⚠ Your Replicate credit ran out — top up at replicate.com/account/billing, then generation works again.';
-        if (e.indexOf('not configured') >= 0) return 'The fine-tuned model endpoint isn\'t configured (REPLICATE_API_TOKEN).';
-        if (e.indexOf('429') >= 0) return '⚠ Rate-limited on Replicate — wait a moment and try again.';
-        return err ? ('Generation failed: ' + err) : 'Generation came back empty — try again.';
-    }
-    function expGenSubmit() {
-        const inp = window.document.getElementById('exp-gen-input');
-        const prem = inp ? inp.value.trim() : (st.expGenPrem || '');
-        st.expGenPrem = prem; st.expGenBusy = true; st.expGenRid = null; st.expGenStage = 'queued'; st.expGenT0 = Date.now(); st.expGenStatErr = null; st.warmHold = 1;
-        window.clearInterval(st._genTick); st._genTick = window.setInterval(() => { if (st.expGenBusy) rtgUpdateExp(); else window.clearInterval(st._genTick); }, 1000);   // live elapsed timer
-        fetch('/api/hooks/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, count: st.expGenN || 4, invent: !prem }) })
-            .then(r => r.json()).then(j => { if (j.rid) { st.expGenRid = j.rid; rtgUpdateExp(); expDemoPoll(j.rid); } else { st.expGenBusy = false; rtgUpdateExp(); } })
-            .catch(() => { st.expGenBusy = false; rtgUpdateExp(); });
-        rtgUpdateExp();
-    }
-    function expGenPanel() {
-        const bg = C.bg || '#0f172a', n = st.expGenN || 4;
-        const STAGES = { queued: 'queued — spinning up the fine-tuned model…', reasoning: 'the fine-tuned model is thinking…', rendering: 'rendering frames…', done: 'done' };
-        let result = '';
-        if (st.expGenRid) {
-            const g = EXPDEMO[st.expGenRid];
-            if (st.expGenBusy && !g) {
-                const el = st.expGenT0 ? Math.round((Date.now() - st.expGenT0) / 1000) : 0;
-                const elapsed = el >= 60 ? `${Math.floor(el / 60)}m ${el % 60}s` : `${el}s`;
-                const S2 = st.expGenStat || {};
-                const nTot = S2.n || st.expGenN || 4, nDone = S2.done || 0;
-                // per-idea progress dots — ideas stream one at a time now, so this ticks live
-                const ideaDots = Array.from({ length: nTot }, (_, i) => `<span style="color:${i < nDone ? C.green : (i === nDone ? C.cyan : C.mute)};font-weight:800">${i < nDone ? '✓' : (i === nDone ? '⏳' : '○')}</span>`).join(' ');
-                const note = S2.note ? `<div style="font-size:11px;color:${C.cyan};margin-top:6px;line-height:1.5">${esc(S2.note)}</div>` : '';
-                const longHint = (el > 240 && !nDone || (st.expGenStatErr && /spend|billing|429/i.test(st.expGenStatErr))) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px;line-height:1.5">Taking longer than usual. Either the GPU is cold-starting (first run pulls the model), or your <b>Replicate credit</b> ran out — top up at replicate.com/account/billing.</div>` : '';
-                result = `<div style="margin-top:12px;padding:11px 13px;background:${C.card2};border:1px solid ${C.cyan}44;border-radius:10px">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
-                      <span style="font-size:12px;font-weight:800;color:${C.cyan}">✨ Generating — ideas stream in one at a time</span>
-                      <span style="font-size:11px;color:${C.mute};font-variant-numeric:tabular-nums">${elapsed} elapsed</span></div>
-                    <div style="font-size:12px">ideas: ${ideaDots} <span style="font-size:10px;color:${C.mute}">(${nDone}/${nTot} — each appears below the moment it exists, then its frames fill in)</span></div>
-                    ${note}
-                    <div style="font-size:10px;color:${C.mute};margin-top:6px">The first idea also wakes the GPU (~2–3 min cold, seconds warm). Ideas too similar to anything previously generated are rejected and redone — you'll see that here.</div>${longHint}</div>`;
-            }
-            else if (g && g.error) result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">${esc(g.error)}</div>`;
-            else if (g && g.attempts && g.attempts.length) {
-                const cards = g.attempts.map(a => {
-                    // hosted result: 5 separate frame images; legacy box result: one montage + keep%
-                    const errFor = i => ((a.errs || []).find(x => x.indexOf('frame ' + (i + 1) + ':') === 0) || '').slice(9);
-                    const frameTile = (fid, i) => {
-                        if (fid) return `<div style="flex:1;position:relative"><img src="/api/hooks/grpo/montage/demo/${esc(fid)}" style="width:100%;border-radius:4px;display:block" loading="lazy"><span style="position:absolute;top:2px;left:3px;font-size:8px;color:#fff;background:rgba(0,0,0,.55);border-radius:3px;padding:0 3px">${i + 1}</span></div>`;
-                        const fe = errFor(i);   // failed → red ✕ with the REAL error on hover; pending → empty slot
-                        return fe ? `<div title="${esc('frame ' + (i + 1) + ' failed: ' + fe)}" style="flex:1;aspect-ratio:9/16;background:${C.bg};border:1px solid #ef444455;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#ef4444;font-size:13px;font-weight:800;cursor:help">✕</div>`
-                                  : `<div style="flex:1;aspect-ratio:9/16;background:${C.bg};border-radius:4px"></div>`;
-                    };
-                    const frameStrip = (a.frame_imgs && a.frame_imgs.length)
-                        ? `<div style="display:flex;gap:3px">${a.frame_imgs.map(frameTile).join('')}</div>`
-                        : `<img src="/api/hooks/grpo/montage/demo/${st.expGenRid}_${a.k}" style="width:100%;border-radius:6px;display:block" loading="lazy">`;
-                    const _hardErrs = (a.errs || []).filter(x => x.indexOf('FAILED') >= 0).length;
-                    const errLine = (a.errs && a.errs.length) ? `<div style="font-size:9px;color:${_hardErrs ? '#ef4444' : C.amber};margin-top:4px;line-height:1.4" title="${esc(a.errs.join('\n'))}">⚠ ${a.errs.length} frame note${a.errs.length > 1 ? 's' : ''} (${_hardErrs ? _hardErrs + ' missing, ' : ''}rest = fallback renders) — hover for details</div>` : '';
-                    const keepBadge = a.keep_pctile != null ? `<span>keep <b style="color:${heatCol(a.keep_pctile || 0)}">${Math.round((a.keep_pctile || 0) * 100)}%</b></span>` : '';
-                    // novelty = cos-distance of this idea's text embedding from EVERY idea ever generated (memory in R2)
-                    const novBadge = a.novelty != null ? `<span title="${esc('how far this idea sits from every idea previously generated (cosine distance in embedding space — higher = more new)' + (a.nearest ? '. Closest past idea: “' + a.nearest + '”' : ''))}" style="cursor:help">🆕 unique <b style="color:${heatCol(Math.min(1, (a.novelty || 0) * 2.5))}">${(a.novelty || 0).toFixed(2)}</b></span>` : '';
-                    const frameText = (a.frames && a.frames.length) ? `<details style="margin-top:5px"><summary style="font-size:10px;color:${C.cyan};cursor:pointer">the 5 frames</summary><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:4px">${a.frames.map((f, i) => `<div><b style="color:${C.accent}">${i + 1}.</b> ${esc(f)}</div>`).join('')}</div></details>` : '';
-                    const actions = (a.frame_imgs && a.frame_imgs.filter(Boolean).length) ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-                        <span data-genscore="${a.k}" style="cursor:${st.rawUploading ? 'default' : 'pointer'};border:1px solid ${C.cyan};background:${C.cyan}22;color:${C.cyan};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">${st.genScoringK === a.k ? '⏳ scoring…' : '◆ Score this hook'}</span>
-                        <span data-gensave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">💾 Save idea</span>
-                      </div>` : '';
-                    const nOk = (a.frame_imgs || []).filter(Boolean).length, nMiss = 5 - nOk, nNote = (a.errs || []).length;
-                    const cardStat = a.status === 'done'
-                        ? (nMiss ? `<span style="color:${C.amber};font-size:9px;font-weight:800;white-space:nowrap">✓ ${nOk}/5 (${nMiss} missing)</span>`
-                                : `<span style="color:${nNote ? C.amber : C.green};font-size:9px;font-weight:800;white-space:nowrap" ${nNote ? `title="${esc((a.errs || []).join('\n'))}"` : ''}>✓ 5 frames${nNote ? ' *' : ''}</span>`)
-                        : `<span style="color:${C.cyan};font-size:9px;font-weight:800;white-space:nowrap">⏳ frame ${(a.frames_done || 0)}/5</span>`;
-                    return `<div style="border:1px solid ${a.k === 0 ? C.accent : C.border};border-radius:10px;padding:9px;background:${C.card2}">
-                      <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px">
-                        <div style="font-size:12px;color:${C.text};font-weight:700;line-height:1.35">${esc(a.premise || a.caption || '')}</div>${cardStat}</div>
-                      ${frameStrip}${errLine}
-                      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:${C.dim}">${keepBadge}${novBadge}<span style="color:${C.mute}">${esc(a.cohesion_mode || '')}</span></div>${frameText}${actions}</div>`;
-                }).join('');
-                const _streaming = g.streaming && !g.done;
-                const _doneN = g.attempts.filter(x => x.status === 'done').length;
-                const _el = st.expGenT0 ? Math.round((Date.now() - st.expGenT0) / 1000) : 0;
-                const _elapsed = _el >= 60 ? `${Math.floor(_el / 60)}m ${_el % 60}s` : `${_el}s`;
-                const _memNote = g.mem_n ? ` · <span title="every idea ever generated is embedded + remembered; ideas too close to any of them are rejected and regenerated" style="cursor:help;color:${C.purple}">🧭 steered away from ${g.mem_n} past ideas</span>` : '';
-                const _statNote = (_streaming && st.expGenStat && st.expGenStat.note) ? `<div style="font-size:10px;color:${C.cyan};margin:-4px 0 8px">${esc(st.expGenStat.note)}</div>` : '';
-                const _warn = g.warn ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}14;border:1px solid ${C.amber}44;border-radius:6px;padding:6px 10px;margin:-2px 0 8px;line-height:1.5">⚠ ${esc(g.warn)}</div>` : '';
-                result = `<div style="margin-top:10px"><div style="font-size:11px;color:${_streaming ? C.cyan : C.mute};margin-bottom:8px;font-weight:${_streaming ? 700 : 400}">${_streaming ? `✨ streaming live — ${_doneN}/${g.n} hooks finished · ${_elapsed} elapsed${_memNote}` : `${g.n} hook${g.n > 1 ? 's' : ''}${g.premise && g.premise !== '💡 invented' ? ` for "${esc(g.premise)}"` : ' invented'} · ${esc(g.model || 'model')}${_memNote}`}</div>${_statNote}${_warn}
-                  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">${cards}</div></div>`;
-            } else if (g && g.attempts) { result = `<div style="margin-top:12px;font-size:12px;color:#ef4444">generation came back empty — try again.</div>`; }
-        }
-        const nPill = k => `<span data-expgenn="${k}" style="cursor:pointer;border:1px solid ${n === k ? C.accent : C.border};background:${n === k ? C.accent + '22' : 'transparent'};color:${n === k ? C.accent : C.dim};border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700">${k}</span>`;
-        return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800;color:${C.text}">✨ Generate an entire hook <span style="font-size:10px;color:${C.mute};font-weight:600">— type an idea (or leave blank to invent one). Ideas stream in ONE AT A TIME: each appears the moment the model writes it, its frames fill in while the next idea generates. Any idea <b style="color:${C.purple}">too close to anything it's ever generated is rejected and redone</b> (you'll see it happen) — press Generate forever and it keeps exploring new territory.</span></div>
-          <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
-            <input id="exp-gen-input" value="${esc(st.expGenPrem || '')}" placeholder="type a video idea — or leave blank and the model invents one…" style="flex:1;min-width:240px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px"/>
-            <span style="font-size:10px;color:${C.mute}">outputs</span>${[1, 2, 4, 6, 8].map(nPill).join('')}
-            <span data-expgen style="cursor:${st.expGenBusy ? 'default' : 'pointer'};background:${st.expGenBusy ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800;display:inline-flex;align-items:center">${st.expGenBusy ? '⏳ working…' : 'Generate'}</span>
-          </div>${(!st.expGenBusy && st.warmHold) ? `<div style="font-size:10px;color:${C.amber};margin-top:6px">🔥 holding the GPU warm while you're on this tab — presses stay fast (~15s/idea); it powers down a few minutes after you leave</div>` : ''}${result}</div>`;
-    }
-    // ── 🎯 GRIND: write a hook → the loop generates variants (embedding-differentiated), renders,
-    //    scores each on the trained models, and keeps going until one clears your threshold. ──
-    function grindPoll(rid, tries) {
-        tries = tries || 0;
-        const again = ms => { if (tries < 7200 && st.grindRid === rid) setTimeout(() => grindPoll(rid, tries + 1), ms); };
-        fetch('/api/hooks/grind/run/' + rid).then(r => r.ok ? r.json() : null).then(j => {
-            if (j && j.rid) { j._at = Date.now(); GRINDRUN = j; st.grindPolls = (st.grindPolls || 0) + 1; rtgUpdateExp(); }
-            // keep polling until the run reaches a TERMINAL state — a 404 just means the worker
-            // hasn't written the first snapshot yet (the old code stopped here and froze the UI)
-            if (!(j && j.rid && j.status !== 'running')) again(4000);
-        }).catch(() => again(6000));
-    }
-    // WATCHDOG: an independent heartbeat that makes a silently-dead poller impossible — if the
-    // attached run's data goes stale (>20s without a successful poll) it restarts the poll chain,
-    // and it repaints every 10s regardless so elapsed/boot timers always visibly tick.
-    function grindWatchdog() {
-        try {
-            if (!st.grindRid || !GRINDRUN || GRINDRUN.rid !== st.grindRid || GRINDRUN.status !== 'running') return;
-            if (!GRINDRUN._at || Date.now() - GRINDRUN._at > 20000) grindPoll(st.grindRid, 0);
-            const ae = window.document.activeElement;   // don't stomp on typing
-            if (!(ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA'))) rtgUpdateExp();
-        } catch (e) {}
-    }
-    if (typeof window !== 'undefined' && !window.__grindWD) window.__grindWD = window.setInterval(grindWatchdog, 10000);
-    function grindEnsure() {
-        if (GRINDLIST !== null) return;
-        GRINDLIST = { loading: 1 };
-        fetch('/api/hooks/grind/runs').then(r => r.json()).then(j => {
-            GRINDLIST = j || { runs: [] };
-            // Only auto-attach a RUNNING run (so a page reload resumes YOUR grind) — and it gets a
-            // clear "already running when you opened this" banner unless this page started it.
-            // Finished runs show as a one-line "previous run" link instead of a full panel.
-            const last = (j.runs || [])[0];
-            if (last && !st.grindRid && last.status === 'running' && !((st.grindHide || {})[last.rid])) { st.grindRid = last.rid; grindPoll(last.rid); }
-            rtgUpdateExp();
-        }).catch(() => { GRINDLIST = { runs: [] }; });
-    }
-    function grindStart() {
-        const inp = window.document.getElementById('grind-input');
-        const prem = inp ? inp.value.trim() : '';
-        if (!prem || st.grindStarting) return;
-        st.grindPrem = prem; st.grindStarting = 1; rtgUpdateExp();
-        fetch('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', hours: st.grindHours || 3 }) })
-            .then(r => r.json()).then(j => {
-                st.grindStarting = 0;
-                if (j.rid) { st.grindMine = st.grindMine || {}; st.grindMine[j.rid] = 1; st.grindRid = j.rid; st.grindT0 = Date.now(); GRINDRUN = { rid: j.rid, premise: prem, status: 'running', attempts: [], threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', note: 'queued — the worker picks it up within seconds…' }; grindPoll(j.rid); }
-                else st.grindErr = j.error || 'could not start';
-                rtgUpdateExp();
-            }).catch(e => { st.grindStarting = 0; st.grindErr = e.message; rtgUpdateExp(); });
-    }
-    async function grindOpen(k) {
-        const rid = st.grindRid; if (!rid) return;
-        st.grindOpening = k; rtgUpdateExp();
-        try {
-            const score = await fetch('/api/hooks/grind/score/' + rid + '_' + k).then(r => { if (!r.ok) throw new Error('not scored'); return r.json(); });
-            const monUrl = await urlToDataUrl('/api/hooks/grind/montage/' + rid + '_' + k);
-            score.montage = monUrl.split('base64,').pop();
-            score.source = 'grind'; score.montageDataUrl = monUrl;
-            const a = ((GRINDRUN && GRINDRUN.attempts) || []).find(x => x.k === k);
-            score.genFrames = (a && a.frames) || [];
-            st.rawUploads.push(score); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-        } catch (e) { st.grindErr = 'open: ' + e.message; }
-        st.grindOpening = null; rtgUpdateExp();
-        window.setTimeout(() => { const el = window.document.getElementById('exp-scoreout'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
-    }
-    async function grindSave(k) {
-        const rid = st.grindRid; if (!rid) return;
-        try {
-            const a = ((GRINDRUN && GRINDRUN.attempts) || []).find(x => x.k === k);
-            const score = await fetch('/api/hooks/grind/score/' + rid + '_' + k).then(r => r.ok ? r.json() : null);
-            const monUrl = await urlToDataUrl('/api/hooks/grind/montage/' + rid + '_' + k);
-            await saveHook({ kind: 'scored', source: 'grind', title: (a && a.premise) || (GRINDRUN && GRINDRUN.premise) || 'Grind hook', text: (GRINDRUN && GRINDRUN.premise) || '', frames: (a && a.frames) || [], indicators: score && score.indicators, steer: score && score.steer, channels: score && score.channels, emb_preview: score && score.emb_preview, input_manifest: score && score.input_manifest, montage: monUrl });
-        } catch (e) { st.grindErr = 'save: ' + e.message; rtgUpdateExp(); }
-    }
-    function grindPanel() {
-        grindEnsure();
-        const bg = C.bg || '#0f172a', thr = st.grindThr || 82, metric = st.grindMetric || 'keep', hours = st.grindHours || 3;
-        const g = (GRINDRUN && GRINDRUN.rid === st.grindRid) ? GRINDRUN : null;
-        const running = g && g.status === 'running';
-        const M = [['keep', 'keep-rate %ile'], ['ret5', 'past-5s %ile'], ['gt10M', '>10M %ile']];
-        const mPill = ([id, lab]) => `<span data-grindmetric="${id}" style="cursor:pointer;border:1px solid ${metric === id ? C.accent : C.border};background:${metric === id ? C.accent + '22' : 'transparent'};color:${metric === id ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
-        const hPill = h => `<span data-grindhours="${h}" style="cursor:pointer;border:1px solid ${hours === h ? C.accent : C.border};background:${hours === h ? C.accent + '22' : 'transparent'};color:${hours === h ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${h}h</span>`;
-        let runHtml = '';
-        if (!g && GRINDLIST && (GRINDLIST.runs || []).length && !st.grindRid) {
-            const last = GRINDLIST.runs[0];
-            runHtml = `<div style="font-size:10px;color:${C.mute};margin-top:8px">📁 previous run: “${esc((last.premise || '').slice(0, 60))}” — ${esc(last.status)} · best ${last.best != null ? last.best + 'th' : '—'} vs ${last.threshold}th <span data-grindview="${esc(last.rid)}" style="cursor:pointer;color:${C.cyan};text-decoration:underline">view</span></div>`;
-        }
-        if (g) {
-            const mine = !!((st.grindMine || {})[g.rid]);
-            const foreign = !mine ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}14;border:1px solid ${C.amber}44;border-radius:6px;padding:6px 10px;margin:8px 0 0;display:flex;justify-content:space-between;gap:8px;align-items:center"><span>📎 this run was <b>already going</b> when you opened the tab (started earlier or from another window) — this page did NOT launch it. Its hook: “${esc((g.premise || '').slice(0, 70))}”</span><span data-grindhide style="cursor:pointer;color:${C.dim};font-weight:800">✕ hide</span></div>` : '';
-            const atts = (g.attempts || []).slice().reverse();
-            const statCol = { running: C.cyan, won: C.green, stopped: C.amber, error: '#ef4444', deadline: C.amber, maxed: C.amber }[g.status] || C.dim;
-            const statLab = { running: '⏳ grinding…', won: '🎯 THRESHOLD CLEARED', stopped: '⏹ stopped', error: '✕ error', deadline: '⏱ time budget spent', maxed: 'attempt budget spent' }[g.status] || g.status;
-            const card = a => {
-                const sel = false, done = a.status === 'done';
-                const pctBadge = a.pct != null ? `<b style="color:${heatCol((a.pct || 0) / 100)};font-size:14px">${a.pct}</b><span style="font-size:9px;color:${C.mute}">%ile</span>` : (done ? `<span style="font-size:9px;color:#ef4444" title="${esc((a.errs || []).join('\n'))}">no score${(a.errs || []).length ? ' ⚠' : ''}</span>` : `<span style="font-size:9px;color:${C.cyan}">${a.status === 'scoring' ? '⏳ scoring' : `⏳ ${a.frames_done || 0}/5`}</span>`);
-                const win = g.winner === a.k;
-                const img = done && a.pct != null ? `/api/hooks/grind/montage/${esc(g.rid)}_${a.k}` : (a.frame_imgs && a.frame_imgs.find(Boolean) ? `/api/hooks/grind/montage/${esc(a.frame_imgs.find(Boolean))}` : '');
-                return `<div style="border:2px solid ${win ? C.green : C.border};border-radius:9px;padding:7px;background:${C.card2};width:250px;flex-shrink:0">
-                  <div style="display:flex;justify-content:space-between;gap:6px;align-items:center;margin-bottom:4px"><span style="font-size:10px;font-weight:800;color:${win ? C.green : C.dim}">#${a.k + 1}${win ? ' 🎯 WINNER' : ''}</span>${pctBadge}</div>
-                  ${img ? `<img src="${img}" style="width:100%;border-radius:5px;display:block;background:#000" loading="lazy"/>` : `<div style="height:44px;background:${bg};border-radius:5px"></div>`}
-                  <div style="font-size:9.5px;color:${C.text};line-height:1.35;margin-top:4px;max-height:38px;overflow:hidden">${esc((a.premise || '').slice(0, 90))}</div>
-                  <div style="display:flex;gap:5px;margin-top:5px;align-items:center">
-                    ${a.nov != null ? `<span style="font-size:8.5px;color:${C.purple}" title="TEXT embedding distance from this run's earlier attempts (idea variety)">🆕${a.nov.toFixed(2)}</span>` : ''}
-                    ${a.vnov != null ? `<span style="font-size:8.5px;color:${a.vnov < 0.02 ? '#ef4444' : C.cyan}" title="VISUAL embedding distance from the most-similar earlier attempt — how different it LOOKS (red = near-duplicate look; counts as stuck and widens exploration)">👁${a.vnov.toFixed(2)}</span>` : ''}
-                    ${done && a.pct != null ? `<span data-grindopen="${a.k}" style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">${st.grindOpening === a.k ? '⏳' : 'open full readout'}</span><span data-grindsave="${a.k}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 8px;font-size:9px;font-weight:700">💾 save</span>` : ''}
-                  </div></div>`;
-            };
-            runHtml = `${foreign}<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px">
-                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
-                  <span style="font-size:12px;font-weight:800;color:${statCol}">${statLab}</span>
-                  <span style="font-size:10px;color:${C.mute}">${g.n || 0} attempts · best <b style="color:${g.best != null ? heatCol(g.best / 100) : C.mute}">${g.best != null ? g.best + 'th' : '—'}</b> vs target <b style="color:${C.accent}">${g.threshold}th</b> ${esc(g.metric || 'keep')} · ${g.rejected || 0} rejected as too-similar${g.gate != null ? ` · <span title="minimum embedding distance a new variant must keep from every earlier attempt — widens automatically while the score isn't improving (or attempts LOOK alike), snaps back on a new best" style="cursor:help;color:${C.purple}">exploration ≥ ${(+g.gate).toFixed(2)}</span>` : ''}</span>
-                  ${running ? `<span data-grindstop style="cursor:pointer;border:1px solid #ef4444;color:#ef4444;border-radius:6px;padding:3px 11px;font-size:10px;font-weight:800">⏹ Stop</span>` : ''}
-                  ${running && g._at ? `<span style="font-size:9px;color:${C.mute}" title="how fresh this display is — the watchdog revives the poller if this exceeds ~20s">live · updated ${Math.round((Date.now() - g._at) / 1000)}s ago · ${st.grindPolls || 0} polls</span>` : ''}
-                </div>
-                ${g.note ? `<div style="font-size:10px;color:${running ? C.cyan : C.mute};margin-bottom:7px">${running ? '⏳ ' : ''}${esc(g.note)}${running && st.grindT0 ? ` <span style="color:${C.mute}">· ${Math.round((Date.now() - st.grindT0) / 60000)}m elapsed</span>` : ''}</div>` : ''}
-                ${g.error ? `<div style="font-size:10px;color:#ef4444;margin-bottom:7px">${esc(g.error)}</div>` : ''}
-                <div style="display:flex;gap:9px;overflow-x:auto;padding-bottom:6px">${atts.map(card).join('') || (running ? `<span style="font-size:10px;color:${C.cyan}">⏳ attempt 1 is being written by the model — its card appears here the moment it exists (each attempt ≈ 2–3 min: write → render 5 frames → score)</span>` : '')}</div></div>`;
-        }
-        return `<div style="background:${C.card};border:1px solid ${C.border};border-radius:12px;padding:14px;margin-bottom:14px">
-          <div style="font-size:14px;font-weight:800;color:${C.text}">🎯 Grind to a threshold <span style="font-size:10px;color:${C.mute};font-weight:600">— write YOUR hook; the loop generates variants grounded on it (each pushed away from the last by embedding distance), renders + scores every one on the trained models, and keeps going — for hours if needed — until one clears your bar. ~$0.25/attempt (frames + GPU).</span></div>
-          <div style="display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap">
-            <input id="grind-input" value="${esc(st.grindPrem || '')}" placeholder="the hook you're writing — every variant stays grounded on this…" style="flex:1;min-width:260px;background:${bg};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:9px 12px;font-size:13px" ${running ? 'disabled' : ''}/>
-            <span style="font-size:10px;color:${C.mute}">target ≥ <b style="color:${C.accent}">${thr}</b>th</span>
-            <input type="range" min="60" max="97" value="${thr}" data-grindthr style="width:110px;accent-color:${C.accent}" ${running ? 'disabled' : ''}/>
-            ${M.map(mPill).join('')}<span style="width:4px"></span>${[1, 3, 6].map(hPill).join('')}
-            ${running ? '' : `<span data-grindstart style="cursor:pointer;background:${st.grindStarting ? C.border : C.accent};color:#04121f;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:800">${st.grindStarting ? '⏳' : '🎯 Grind'}</span>`}
-          </div>
-          ${st.grindErr ? `<div style="font-size:10px;color:#ef4444;margin-top:6px">${esc(st.grindErr)}</div>` : ''}
-          ${runHtml}</div>`;
-    }
-    // ── ONE unified progress stepper for EVERY path (generate / render / upload / build → embed → score).
-    //    Shown live under the header whenever anything is running, so you always see where it's at. ──
-    function pipelineProgress() {
-        let phase = -1, sub = '', cold = false;
-        if (st.expGenBusy) {
-            const M = { queued: 'spinning up the fine-tuned model…', reasoning: 'the model is inventing ideas — they stream in one at a time…', rendering: 'rendering the 5 frames…', done: 'done' };
-            phase = 0; sub = (st.expGenStat && st.expGenStat.note) || M[st.expGenStage] || 'working…'; cold = (st.expGenStage === 'queued' || (st.expGenStage === 'reasoning' && !(st.expGenStat && st.expGenStat.done)));
-        } else if (st.rawGenBusy) {
-            phase = 0; sub = st.rawGenStage || 'generating the 5 frames…';
-        } else if (st.rawUploading) {
-            const s = Math.min(st.rawUpStage || 0, 4), vid = !!(st.rawUpQueue && st.rawUpQueue.total);
-            if (vid) { phase = s <= 2 ? 0 : (s === 3 ? 1 : 2); sub = ['uploading the video…', 'extracting the 5 hook frames…', 'transcribing the audio…', 'embedding (visual · text · together)…', 'placing among similar hooks…'][s]; }
-            else { phase = s <= 1 ? 1 : (s === 2 ? 1 : 2); sub = ['', 'embedding the 5 frames (visual · text · together)…', 'embedding…', 'scoring every validated indicator…', 'placing it in the embedded map…'][s] || 'embedding…'; }
-        } else return '';
-        const STEPS = ['Create the 5 frames', 'Embed', 'Score & place'];
-        const dots = STEPS.map((s, i) => {
-            const done = i < phase, act = i === phase, col = done ? C.green : act ? C.cyan : C.mute, icon = done ? '✓' : act ? '⏳' : (i + 1);
-            return `<div style="display:flex;align-items:center;gap:6px"><span style="width:20px;height:20px;border-radius:50%;border:2px solid ${col};color:${col};display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800">${icon}</span><span style="font-size:11px;font-weight:${act ? 800 : 600};color:${col}">${s}</span></div>${i < STEPS.length - 1 ? `<span style="flex:1;height:2px;background:${i < phase ? C.green : C.border};min-width:16px;border-radius:2px"></span>` : ''}`;
-        }).join('');
-        return `<div style="background:${C.card};border:1px solid ${C.cyan}66;border-radius:12px;padding:12px 14px;margin-bottom:14px">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${dots}</div>
-            <div style="font-size:11px;color:${C.cyan};margin-top:8px;font-weight:600">⏳ ${esc(sub)}${cold ? ` <span style="color:${C.mute};font-weight:400">· first run this session spins up the GPU (~2 min), then it's fast</span>` : ''}</div></div>`;
-    }
-    function renderExperiment() {
-        const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds the hook and scores it on every validated indicator — keep rate, past-5s, est. views — and places it in the embedded space. Save the ones you like.') + pipelineProgress() + expGenPanel() + grindPanel();
-        if (EXPREG === null) { EXPREG = { loading: 1 }; fetch('/api/indicators/registry').then(r => r.json()).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(() => { EXPREG = { error: 1 }; rtgUpdateExp(); }); }
-        if (SAVED === null) { SAVED = { loading: 1 }; fetch('/api/raw-long/saved-hooks').then(r => r.json()).then(j => { SAVED = j; rtgUpdateExp(); }).catch(() => { SAVED = { hooks: [] }; rtgUpdateExp(); }); }
-        const CY = '#22d3ee';
-        const fr = st.rawFrames || [null, null, null, null, null], nFrames = fr.filter(Boolean).length;
-        const modePill = (m, lab) => `<span data-rawbuildmode="${m}" style="cursor:pointer;border:1px solid ${(!!st.rawBuildMode === !!m) ? CY : C.border};background:${(!!st.rawBuildMode === !!m) ? CY + '22' : 'transparent'};color:${(!!st.rawBuildMode === !!m) ? CY : C.dim};border-radius:${m ? '0 6px 6px 0' : '6px 0 0 6px'};padding:4px 10px;font-size:11px;font-weight:700">${lab}</span>`;
-        const UPSTAGES = ['Uploading…', 'Extracting 5 frames…', 'Transcribing…', 'Embedding…', 'Scoring indicators…'];
-        const upLabel = (st.rawUpQueue && st.rawUpQueue.trimming) ? 'Trimming to first 6s…' : UPSTAGES[Math.min(st.rawUpStage || 0, 4)];
-        const prog = st.rawUploading ? `<span style="display:inline-flex;flex-direction:column;gap:3px;min-width:230px"><span style="font-size:10px;color:${CY};font-weight:700">⏳ ${upLabel}</span><span style="height:6px;background:${C.border};border-radius:4px;overflow:hidden;display:block"><span style="display:block;height:100%;width:${Math.min(93, ((st.rawUpStage || 0) + 1) / 5 * 100)}%;background:${CY};border-radius:4px;transition:width .5s"></span></span></span>` : '';
-        const builder = st.rawBuildMode ? `<div style="margin-top:8px;display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">${[0, 1, 2, 3, 4].map(i => fr[i]
-            ? `<div style="position:relative"><img src="${fr[i]}" style="width:42px;height:75px;object-fit:cover;border-radius:5px;border:1px solid ${C.border}"/><span data-rawframedel="${i}" style="position:absolute;top:-7px;right:-7px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:15px;height:15px;line-height:13px;text-align:center;font-size:9px;cursor:pointer">✕</span></div>`
-            : `<div data-rawframe="${i}" style="width:42px;height:75px;border:1px dashed ${C.border};border-radius:5px;display:flex;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋${i + 1}</div>`).join('')}
-            <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="hook text…" style="flex:1;min-width:160px;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:12px"/>
-            <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CY : C.border};background:${nFrames ? CY + '22' : 'transparent'};color:${nFrames ? CY : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Score this hook</span></div>${genFramesPanel()}` : '';
-        const controls = `<input id="rawUpFile" type="file" accept="video/*" style="display:none"><input id="rawFrameFile" type="file" accept="image/*" style="display:none">` +
-            cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, '🖼 5 frames + text')}${!st.rawBuildMode ? `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ Upload video</span>` : ''}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red}">${esc(String(st.rawUpErr).slice(0, 70))}</span>` : ''}</div>${builder}`, 12);
-        if (!EXPREG || EXPREG.loading) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">Loading the indicator registry…</div>`);
-        if (EXPREG.error || !EXPREG.indicators) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">No indicator registry yet — run <code>indicators.py</code>.</div>`);
-        // scorable = the indicators a NEW hook can actually be scored on (content probes + global novelty)
-        const scorableKind = d => d.kind === 'content' || d.kind === 'novelty';
-        const val = EXPREG.indicators.filter(d => d.validated && scorableKind(d));
-        const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0];
-        const keyOf = d => d.kind === 'content' ? `${d.name}__${d.target}` : d.name;
-        const TLAB = { keep: 'keep rate (stay to watch)', ret5: 'past 5 seconds', views: 'est. views', gt10M: 'chance >10M views' };
-        if (!up) {
-            const byT = {}; val.forEach(d => { (byT[d.target] = byT[d.target] || []).push(d); });
-            return head + controls + cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:4px">${val.length} scorable indicators ready</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Generate a hook above (or upload/build one) and it's scored on each of these, fully traceable. Grouped by what they predict:</div>${(EXPREG.meta.targets || []).map(t => byT[t.name] ? `<div style="margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:${C.accent}">${t.label}</span> <span style="font-size:10px;color:${C.mute}">— ${byT[t.name].map(d => d.name.replace('content_', '').replace('nov_', 'nov ')).join(', ')}</span></div>` : '').join('')}`, 12) + savedStrip();
-        }
-        // ── 1. trace: raw input → embedding ──
-        const embHeat = ch => { const a = up.emb_preview && up.emb_preview[ch]; if (!a) return `<div style="font-size:9px;color:${C.faint}">${ch}: ${esc(rawInputLabel(up, ch))}</div>`; const mn = Math.min(...a), mx = Math.max(...a); return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span title="${esc(rawInputLabel(up, ch))}" style="font-size:9px;color:${C.dim};width:58px">${ch}</span><svg viewBox="0 0 ${a.length * 5} 10" style="height:11px;width:${a.length * 5}px">${a.map((v, i) => `<rect x="${i * 5}" width="4.4" height="10" fill="${rawRamp((v - mn) / ((mx - mn) || 1))}"/>`).join('')}</svg><span style="font-size:8px;color:${C.faint};white-space:nowrap">${esc(rawInputLabel(up, ch))}</span></div>`; };
-        const trace = cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px">
-              <span style="font-size:12px;font-weight:800;color:${C.text}">From raw input to score — every number is traceable</span>
-              <span data-savescored style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${st.savedFlash ? '✅ saved' : '💾 Save this hook'}</span></div>
-            <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
-              <div><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">1 · the 5-frame hook (what gets embedded)</div><img src="data:image/jpeg;base64,${up.montage}" style="width:260px;border-radius:6px;background:#000"/></div>
-              <div style="flex:1;min-width:220px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">2 · transcript</div><div style="font-size:11px;font-style:italic;color:${C.text};background:#0f172a;border-radius:6px;padding:8px;margin-bottom:8px">${up.silent ? '(no voiceover — text channel scores as empty)' : '"' + esc(up.transcript || '') + '"'}</div>
-                <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">3 · Gemini embedding (1536-d, pooled to 48 for display)</div>${embHeat('visual')}${embHeat('text')}${embHeat('together')}${rawInputManifestHtml(up)}</div>
-            </div>
-            <div style="font-size:10px;color:${C.mute};margin-top:7px">4 · each indicator = <b>embedding · (a direction learned toward that metric) + bias → one number</b>, placed on the corpus scatter below.</div>`, 12);
-        // ── 2. big clear outputs (ensemble of content probes) ──
-        // R = held-out strength; calib = read the actual metric off the corpus curve at the
-        // hook's score (the raw probe over-shrinks at n=211, so we CALIBRATE through the curve).
-        const Rof = d => d.auc ? Math.abs(d.auc - 0.5) * 2 : Math.abs(d.spearman || 0);
-        // percentile (0-1) of the hook among the corpus on this indicator, and a QUANTILE-
-        // calibrated estimate: map that rank → the actual-metric value at the same rank, so
-        // it spans the FULL observed range (not compressed to the mean / capped at ~77).
-        const pctOf = (d, sc) => { const p = d.pts || []; if (!p.length || sc == null) return null; let r = p.filter(x => x[0] <= sc).length / p.length; return (d.spearman || 0) < 0 ? 1 - r : r; };
-        const calib = (d, sc) => { const p = d.pts || []; if (!p.length || sc == null) return null; const r = pctOf(d, sc); const acts = p.map(x => x[1]).sort((a, b) => a - b); return acts[Math.max(0, Math.min(acts.length - 1, Math.round(r * (acts.length - 1))))]; };
-        const dispV = (tn, v) => v == null ? null : (tn === 'views' ? fv(Math.pow(10, v)) : tn === 'gt10M' ? (v * 100).toFixed(0) + '%' : v.toFixed(0) + '%');
-        // ── 3. per-indicator: the SAME Raw cluster (channel × projection), coloured by
-        //    the target, with YOUR hook placed via its neighbours. Click → opens it in Raw. ──
-        const chMap = { visual: 'visual', text: 'text', together: 'together', vis: 'visual', txt: 'text', tog: 'together' };
-        ['visual', 'text', 'together'].forEach(c => { if (!RAW[c]) { RAW[c] = { loading: 1 }; fetch('/api/raw-long/map?channel=' + c).then(r => r.json()).then(j => { RAW[c] = j; rtgUpdateExp(); }).catch(() => { RAW[c] = { n: 0 }; rtgUpdateExp(); }); } });
-        const Nmod = { visual: 'visual', text: 'text', together: 'whole' };
-        const idNovCache = {};
-        const idNov = ch => { if (idNovCache[ch]) return idNovCache[ch]; const m = {}; try { const g = N && N.hook && N.hook.global && N.hook.global[Nmod[ch]]; if (g) N.videos.forEach((v, i) => { m[v.id] = g.nov[i]; }); } catch (e) {} return (idNovCache[ch] = m); };
-        const whatEmbedded = ch => rawInputLabel(up, ch);
-        const cluster = (ch, projName, colorMode) => {
-            const R = RAW[ch];
-            if (!R || R.loading) return `<div style="height:150px;display:flex;align-items:center;justify-content:center;background:${C.card2};border-radius:6px;font-size:10px;color:${C.dim}">loading ${ch} cluster…</div>`;
-            const proj = R.proj && R.proj[projName]; if (!proj || !proj.x) return `<div style="height:150px;display:flex;align-items:center;justify-content:center;background:${C.card2};border-radius:6px;font-size:10px;color:${C.faint}">no ${projName} cluster for ${ch}</div>`;
-            const ids = R.id || [], nP = R.n || proj.x.length, S = 1000, W = 250, H = 150, pad = 8, X = g => pad + g / S * (W - 2 * pad), Y = g => pad + (1 - g / S) * (H - 2 * pad);
-            let colf;
-            if (colorMode === 'gt10m') colf = i => (R.views && R.views[i] > 1e7) ? '#f87171' : '#2b3648';
-            else if (colorMode === 'novelty') { const nm = idNov(ch), vs = ids.map(id => nm[id]), ok = vs.filter(v => v != null && isFinite(v)), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => vs[i] == null ? '#2b3648' : rawRamp((vs[i] - lo) / ((hi - lo) || 1)); }
-            else if (colorMode === 'metric' && proj.est && proj.predscope) { const e = proj.est.map(x => Math.log10((+x || 0) + 1)), ok = e.filter(isFinite), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => isFinite(e[i]) ? rawRamp((e[i] - lo) / ((hi - lo) || 1)) : '#2b3648'; }
-            else if (colorMode === 'metric' && proj.est) { const e = proj.est, ac = proj.actual, ok = e.filter(v => v != null && isFinite(v)), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => { const v = (ac && ac[i] != null) ? ac[i] : e[i]; return v == null ? '#2b3648' : rawRamp((v - lo) / ((hi - lo) || 1)); }; }
-            else if (colorMode === 'axis' || colorMode === 'metric') { const xs2 = proj.x, lo = Math.min(...xs2), hi = Math.max(...xs2); colf = i => rawRamp((proj.x[i] - lo) / ((hi - lo) || 1)); }
-            else if (colorMode === 'owned') colf = i => (R.mine && R.mine[i]) ? '#fbbf24' : '#2b3648';
-            else { const v = (R.views || []).map(x => Math.log10((+x || 0) + 1)), ok = v.filter(isFinite), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => rawRamp((v[i] - lo) / ((hi - lo) || 1)); }
-            let s = ''; for (let i = 0; i < nP; i++) s += `<circle cx="${X(proj.x[i]).toFixed(1)}" cy="${Y(proj.y[i]).toFixed(1)}" r="1.5" fill="${colf(i)}" opacity="0.55"/>`;
-            const nb = up.channels[ch] && up.channels[ch].neighbors; let mk = '';
-            if (nb) { let sx = 0, sy = 0, sw = 0; for (const nn of nb) { const idx = ids.indexOf(nn.id); if (idx < 0) continue; const w = Math.max(0.001, nn.sim); sx += proj.x[idx] * w; sy += proj.y[idx] * w; sw += w; } if (sw > 0) { const hx = X(sx / sw).toFixed(1), hy = Y(sy / sw).toFixed(1); mk = `<line x1="${hx}" y1="${(+hy - 9)}" x2="${hx}" y2="${(+hy + 9)}" stroke="${CY}" stroke-width="1"/><line x1="${(+hx - 9)}" y1="${hy}" x2="${(+hx + 9)}" y2="${hy}" stroke="${CY}" stroke-width="1"/><circle cx="${hx}" cy="${hy}" r="5" fill="${CY}" stroke="#fff" stroke-width="1.5"/>`; } }
-            return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:6px">${s}${mk}</svg>`;
-        };
-        const projFor = { keep: 'keep', ret5: 'ret5', views: 'views', realviews: 'realviews', gt10M: 'hi10m' };
-        const colorFor = { keep: 'metric', ret5: 'metric', views: 'views', realviews: 'metric', gt10M: 'gt10m' };
-        // ── SEVEN independent output boxes: 4 EMBEDDING (steered map estimate + its graph) and
-        //    3 NOVELTY (its OWN calibration curve). Novelty is never in the same box as views/>10M,
-        //    and is shown ONCE per metric (a curve, not a re-clustered map). ──
-        const metShort = tn => ({ keep: 'keep rate', ret5: '5s retention (rel)', views: 'views (library)', realviews: 'views (your scale)', gt10M: '>10M class' })[tn];
-        const bigNumHTML = (s, sub) => `<div style="font-size:26px;font-weight:900;color:${C.text};line-height:1.1;margin:3px 0">${s}${sub ? ` <span style="font-size:11px;color:${C.mute};font-weight:600">${sub}</span>` : ''}</div>`;
-        // EMBEDDING box — the steered cluster + steered estimate (= the marker on that graph).
-        // Two view boxes: 'views' = RAW library-scale (10k–1B distribution); 'realviews' = predict-scope
-        // (embedding→retention→your 211's view model) on YOUR channel scale. Both steered, both shown.
-        const embBox = tn => {
-            const b = steerBest(up, tn), ch = b ? b.mod : 'together', pj = projFor[tn], cm = colorFor[tn];
-            const big = b ? steerDisp(tn, b.est) : '—';
-            let sub = '', foot;
-            if (tn === 'realviews') {
-                const durTxt = b && b.dur_s ? (b.dur_assumed ? `assumed ${b.dur_s}s` : `${b.dur_s}s video`) : 'median dur';
-                sub = b ? durTxt : '';
-                const vb = steerBest(up, 'views');
-                foot = `displayed channel: <b>${ch}</b> = ${esc(rawInputLabel(up, ch))} · keep+5s-ret+<b>duration</b> → your 211's view model <span style="color:${C.green}">(retention deconfounded — held at fixed length)</span>${vb ? ` · library raw: <b>${steerDisp('views', vb.est)}</b>` : ''}`;
-            } else {
-                sub = b && b.pctile != null ? `${b.pctile.toFixed(0)}th pctile` : '';
-                const mods = ['together', 'text', 'visual'].map(m => ({ m, k: steerOf(up, m, tn) })).filter(x => x.k);
-                foot = mods.length ? `displayed channel: <b>${ch}</b> = ${esc(rawInputLabel(up, ch))}<br>${mods.map(p => `${p.m} (${esc(rawInputLabel(up, p.m))}) ${steerDisp(tn, p.k.est)}`).join(' · ')}` : 'embed not ready';
-            }
-            const tag = tn === 'realviews' ? ` <span style="color:${C.green}">(your scale)</span>` : tn === 'views' ? ` <span style="color:${C.mute}">(library)</span>` : '';
-            return cardc(`<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:11px;color:${CY};font-weight:800;text-transform:uppercase">Embedding → ${metShort(tn).replace(' (library)', '').replace(' (your scale)', '')}${tag}</div>${bigNumHTML(big, sub)}${cluster(ch, pj, cm)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${foot} · <span style="color:${C.accent}">open graph →</span></div></div>`, 12);
-        };
-        // NOVELTY box — the strongest novelty indicator's OWN calibration curve (novelty → this metric), hook marked
-        const novCurve = (d, sc) => {
-            const cv = d.curve || []; if (cv.length < 2) return `<div style="height:84px;display:flex;align-items:center;justify-content:center;color:${C.faint};font-size:9px;background:${C.card2};border-radius:6px">no curve</div>`;
-            const Wc = 240, Hc = 84, pd = 16, xs = cv.map(b => (b.lo + b.hi) / 2), ys = cv.map(b => b.mean);
-            const allx = sc != null ? xs.concat([sc]) : xs, xmin = Math.min(...allx), xmax = Math.max(...allx), ymin = Math.min(...ys), ymax = Math.max(...ys);
-            const Xc = v => pd + (v - xmin) / ((xmax - xmin) || 1) * (Wc - 2 * pd), Yc2 = v => Hc - pd - (v - ymin) / ((ymax - ymin) || 1) * (Hc - 2 * pd);
-            const path = cv.map((b, i) => `${i ? 'L' : 'M'}${Xc(xs[i]).toFixed(1)},${Yc2(ys[i]).toFixed(1)}`).join(' ');
-            let hook = ''; if (sc != null) { const est = calib(d, sc), hx = Xc(sc); hook = `<line x1="${hx.toFixed(1)}" y1="${pd}" x2="${hx.toFixed(1)}" y2="${Hc - pd}" stroke="${CY}" stroke-dasharray="3 3" opacity="0.7"/><circle cx="${hx.toFixed(1)}" cy="${Yc2(est != null ? Math.max(ymin, Math.min(ymax, est)) : ys[0]).toFixed(1)}" r="4" fill="${CY}" stroke="#fff" stroke-width="1.5"/>`; }
-            return `<svg viewBox="0 0 ${Wc} ${Hc}" style="width:100%;background:${C.card2};border-radius:6px"><path d="${path}" fill="none" stroke="${C.purple}" stroke-width="2"/>${hook}</svg>`;
-        };
-        const novBox = tn => {
-            const pool = EXPREG.indicators.filter(d => d.kind === 'novelty' && d.target === tn && up.indicators[keyOf(d)] != null);
-            const dv = pool.filter(d => d.validated).sort((a, b) => Rof(b) - Rof(a)), d = dv[0] || pool.slice().sort((a, b) => Rof(b) - Rof(a))[0];
-            if (!d) return cardc(`<div><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML('—', 'no novelty signal')}</div>`, 12);
-            const sc = up.indicators[keyOf(d)], est = calib(d, sc), star = d.validated ? '' : `<span style="color:${C.amber}">*</span>`, pc = pctOf(d, sc);
-            return cardc(`<div><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML((dispV(tn, est) || '—') + star, pc != null ? `${(pc * 100).toFixed(0)}th pctile novel` : '')}${novCurve(d, sc)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${d.name.replace('nov_', '')} (R=${Rof(d).toFixed(2)}) — novelty→${metShort(tn)} curve, your hook ◆</div></div>`, 12);
-        };
-        const gcol = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:12px';
-        const boxes = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">8 independent outputs — 5 embedding, 3 novelty, each its own box</div>
-            <div style="font-size:9px;color:${C.mute};margin-bottom:8px">Every number is the one the graph shows. <b style="color:${CY}">Embedding</b> = the steered map estimate (click → that graph; the marker matches). <b style="color:${C.purple}">Novelty</b> = its OWN calibration, never mixed with views/>10M. <span style="color:${C.amber}">*</span> = unvalidated (5s-retention has no novelty signal — noise).</div>
-            <div style="font-size:10px;color:${CY};font-weight:800;text-transform:uppercase;margin-bottom:5px">Embedding — 5 boxes (views in BOTH library &amp; your scale)</div>
-            <div style="${gcol};margin-bottom:12px">${['keep', 'ret5', 'views', 'realviews', 'gt10M'].map(embBox).join('')}</div>
-            <div style="font-size:10px;color:${C.purple};font-weight:800;text-transform:uppercase;margin-bottom:5px">Novelty — 3 boxes (independent)</div>
-            <div style="${gcol}">${['keep', 'ret5', 'views'].map(novBox).join('')}</div>`, 12);
-        return head + controls + '<div id="exp-scoreout"></div>' + trace + boxes + savedStrip();
-    }
+    function rtgUpdateExp() { }   // legacy shorts-clone experiment removed — reachable callers (raw upload/build flows) safely no-op
     function rtgUpdateFusion() { try { const el = window.document.getElementById('rtg-fusionpanel'); if (el) el.innerHTML = renderFusion(); } catch (e) { } }
     function fuHeat(v) { // -1..1 correlation → blue(neg)…grey…red(pos)
         const t = Math.max(-1, Math.min(1, v));
@@ -4181,8 +3501,6 @@ const JarvisLongQuant = (function () {
         const ipk = e.target.closest('[data-ideapick]'); if (ipk) { const id = ipk.getAttribute('data-ideapick'); if (id) { st.ideaSel = (st.ideaSel === id ? null : id); rtgUpdateGuessesL(); } return; }
         const lgd = e.target.closest('[data-lgdemo]'); if (lgd) { const inp = window.document.querySelector('[data-lgtitle]'); if (inp) st.lgDemoTitle = inp.value; lgDemo(); return; }
         const rp = e.target.closest('[data-rawproj]'); if (rp) { st.rawProj = rp.getAttribute('data-rawproj'); rtgUpdateRaw(); return; }
-        const gm = e.target.closest('[data-genmodel]'); if (gm) { st.rawGenModel = gm.getAttribute('data-genmodel'); rtgUpdateExp(); return; }
-        if (e.target.closest('[data-gengo]')) { genFrames(); return; }
         const fut = e.target.closest('[data-futarget]'); if (fut) { st.fuTarget = fut.getAttribute('data-futarget'); rtgUpdateFusion(); return; }
         if (e.target.closest('[data-rawbands]')) { st.rawBands = !st.rawBands; rtgUpdateRaw(); return; }
         const rbk = e.target.closest('[data-rawbandk]'); if (rbk) { st.rawBandK = +rbk.getAttribute('data-rawbandk'); rtgUpdateRaw(); return; }
@@ -4190,35 +3508,6 @@ const JarvisLongQuant = (function () {
         const rm = e.target.closest('[data-rawmine]'); if (rm) { st.rawMine = !st.rawMine; rtgUpdateRaw(); return; }
         const rcl = e.target.closest('[data-rawclose]'); if (rcl) { st.rawSel = null; rtgUpdateRaw(); return; }
         const rid = e.target.closest('[data-rawid]'); if (rid) { const id = rid.getAttribute('data-rawid'); st.rawSel = (st.rawSel === id || !id) ? null : id; st.rawUpSel = false; rtgUpdateRaw(); return; }
-        const ggi = e.target.closest('[data-guessid]'); if (ggi) { const id = ggi.getAttribute('data-guessid'); st.guessSel = (st.guessSel === id ? null : id); rtgUpdateGuesses(); return; }
-        if (e.target.closest('[data-guessclose]')) { st.guessSel = null; rtgUpdateGuesses(); return; }
-        if (e.target.closest('[data-guessreload]')) { GUESSES = {}; st.guessSel = null; rtgUpdateGuesses(); return; }
-        const egn = e.target.closest('[data-expgenn]'); if (egn) { st.expGenN = +egn.getAttribute('data-expgenn'); rtgUpdateExp(); return; }
-        if (e.target.closest('[data-expgen]')) { if (!st.expGenBusy) expGenSubmit(); return; }
-        if (e.target.closest('[data-grindstart]')) { st.grindErr = null; grindStart(); return; }
-        if (e.target.closest('[data-grindstop]')) { if (st.grindRid) fetch('/api/hooks/grind/stop/' + st.grindRid, { method: 'POST' }).catch(() => {}); return; }
-        const gmet = e.target.closest('[data-grindmetric]'); if (gmet) { st.grindMetric = gmet.getAttribute('data-grindmetric'); rtgUpdateExp(); return; }
-        const ghr = e.target.closest('[data-grindhours]'); if (ghr) { st.grindHours = +ghr.getAttribute('data-grindhours'); rtgUpdateExp(); return; }
-        const gop = e.target.closest('[data-grindopen]'); if (gop) { if (st.grindOpening == null) grindOpen(+gop.getAttribute('data-grindopen')); return; }
-        if (e.target.closest('[data-grindhide]')) { st.grindHide = st.grindHide || {}; if (st.grindRid) st.grindHide[st.grindRid] = 1; st.grindRid = null; GRINDRUN = null; rtgUpdateExp(); return; }
-        const gvw = e.target.closest('[data-grindview]'); if (gvw) { const rid = gvw.getAttribute('data-grindview'); st.grindRid = rid; delete (st.grindHide || {})[rid]; grindPoll(rid); rtgUpdateExp(); return; }
-        const gsa = e.target.closest('[data-grindsave]'); if (gsa) { grindSave(+gsa.getAttribute('data-grindsave')); return; }
-        const gsc = e.target.closest('[data-genscore]'); if (gsc) { if (!st.rawUploading) { const k = +gsc.getAttribute('data-genscore'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) scoreGenerated(k, a.frame_imgs || [], a.premise || a.caption || ''); } return; }
-        const gsv = e.target.closest('[data-gensave]'); if (gsv) { const k = +gsv.getAttribute('data-gensave'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) saveHook({ kind: 'idea', source: 'generated', title: (a.premise || a.caption || 'idea').slice(0, 80), text: a.premise || a.caption || '', frames: a.frames || [], frame_imgs: a.frame_imgs || [], cohesion_mode: a.cohesion_mode || '' }); return; }
-        if (e.target.closest('[data-savescored]')) { const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0]; if (up) saveHook({ kind: 'scored', source: up.source || 'scored', title: up.title || (up.transcript || 'Scored hook').slice(0, 60), text: up.transcript || '', montage: up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : ''), frames: up.genFrames || [], frame_imgs: up.genFrameImgs || [], indicators: up.indicators || null, steer: up.steer || null, channels: up.channels || null, emb_preview: up.emb_preview || null, input_manifest: up.input_manifest || rawInputManifestData(up) }); return; }
-        const sdel = e.target.closest('[data-savedel]'); if (sdel) { deleteSaved(sdel.getAttribute('data-savedel')); return; }
-        if (e.target.closest('[data-savedclose]')) { st.savedSel = null; rtgUpdateExp(); return; }
-        const ssort = e.target.closest('[data-savedsort]'); if (ssort) { st.savedSort = ssort.getAttribute('data-savedsort'); rtgUpdateExp(); return; }
-        if (e.target.closest('[data-savedfiltclear]')) { st.savedFilt = {}; rtgUpdateExp(); return; }
-        const sopen = e.target.closest('[data-savedopen]'); if (sopen) { openSaved(sopen.getAttribute('data-savedopen')); return; }
-        const gvBtn = e.target.closest('[data-guessview]'); if (gvBtn) { st.guessView = gvBtn.getAttribute('data-guessview'); rtgUpdateGuesses(); return; }
-        const grpoRunBtn = e.target.closest('[data-grporun]'); if (grpoRunBtn) { st.grpoRun = grpoRunBtn.getAttribute('data-grporun'); st.grpoSel = null; rtgUpdateGrpo(); return; }
-        const grpoInpBtn = e.target.closest('[data-grpoinput]'); if (grpoInpBtn) { st.grpoSel = grpoInpBtn.getAttribute('data-grpoinput'); rtgUpdateGrpo(); return; }
-        const grun = e.target.closest('[data-guessrun]'); if (grun) { st.guessRun = grun.getAttribute('data-guessrun'); st.guessSel = null; st.guessProj = null; rtgUpdateGuesses(); return; }
-        const gpj = e.target.closest('[data-guessproj]'); if (gpj) { st.guessProj = gpj.getAttribute('data-guessproj'); rtgUpdateGuesses(); return; }
-        if (e.target.closest('[data-guessbands]')) { st.guessBands = !st.guessBands; rtgUpdateGuesses(); return; }
-        const gbk = e.target.closest('[data-guessbandk]'); if (gbk) { st.guessBandK = +gbk.getAttribute('data-guessbandk'); rtgUpdateGuesses(); return; }
-        const xpg = e.target.closest('[data-expgo]'); if (xpg) { const [ch, pj] = xpg.getAttribute('data-expgo').split(':'); st.sec = 'raw'; st.rawChan = ch; st.rawProj = pj; st.rawColor = pj === 'hi10m' ? 'views' : 'cluster'; render(); return; }
         if (e.target.closest('[data-rawupload]')) { const fi = window.document.getElementById('rawUpFile'); if (fi) { fi.value = ''; fi.click(); } return; }
         if (e.target.closest('[data-rawupshow]')) { st.rawUpShow = !st.rawUpShow; rtgUpdateRaw(); return; }
         const updel = e.target.closest('[data-rawupdel]'); if (updel) { const i = +updel.getAttribute('data-rawupdel'); st.rawUploads.splice(i, 1); st.rawUpSel = null; rtgUpdateRaw(); return; }
@@ -4248,8 +3537,6 @@ const JarvisLongQuant = (function () {
         if (e.target.id === 'rtg-hazA') { st.hazA = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-hazB') { st.hazB = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-seek') { rtgSeek(+e.target.value); return; }
-        if (e.target.hasAttribute && e.target.hasAttribute('data-savedfilt')) { const k = e.target.getAttribute('data-savedfilt'); st.savedFilt = st.savedFilt || {}; st.savedFilt[k] = +e.target.value; window.clearTimeout(st._sfT); st._sfT = window.setTimeout(rtgUpdateExp, 130); return; }
-        if (e.target.hasAttribute && e.target.hasAttribute('data-grindthr')) { st.grindThr = +e.target.value; window.clearTimeout(st._gtT); st._gtT = window.setTimeout(rtgUpdateExp, 130); return; }
         if (e.target.id === 'grind-input') { st.grindPrem = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-rawtext')) { st.rawText = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-framedesc')) { const i = +e.target.getAttribute('data-framedesc'); st.rawFrameDesc = (st.rawFrameDesc || ['', '', '', '', '']).slice(); st.rawFrameDesc[i] = e.target.value; return; }
@@ -4397,132 +3684,11 @@ const JarvisLongQuant = (function () {
         const b = await r.blob();
         return await new Promise((res, rej) => { const fr = new window.FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(b); });
     }
-    // Score a GENERATED hook through the SAME embed+score pipeline as a built/uploaded hook,
-    // so it lands in the same indicator + embedded-space display.
-    async function scoreGenerated(k, fids, text) {
-        st.genScoringK = k; st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; rtgUpdateExp();
-        const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1600);
-        try {
-            const dataUrls = [];
-            for (const f of (fids || [])) dataUrls.push(f ? await urlToDataUrl('/api/hooks/grpo/montage/demo/' + f) : null);
-            const montage = await composeFrames(dataUrls);
-            const r = await fetch('/api/raw-long/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: text || '', title: (text || 'Generated hook').slice(0, 40) }) });
-            const j = await r.json();
-            if (!r.ok || j.error) { st.rawUpErr = j.error || ('HTTP ' + r.status); }
-            else {
-                const g = EXPDEMO[st.expGenRid], a = g && g.attempts && g.attempts.find(x => x.k === k);
-                j.source = 'generated'; j.genFrameImgs = fids; j.genFrames = (a && a.frames) || []; j.montageDataUrl = montage;
-                st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-            }
-        } catch (e) { st.rawUpErr = e.message; }
-        window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0; st.genScoringK = null; rtgUpdateExp();
-    }
-    async function saveHook(payload) {
-        try {
-            const r = await fetch('/api/raw-long/hook-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            const j = await r.json();
-            if (j.ok) { st.savedFlash = j.id; SAVED = null; rtgUpdateExp(); window.setTimeout(() => { if (st.savedFlash === j.id) { st.savedFlash = null; rtgUpdateExp(); } }, 2500); }
-            else { st.rawUpErr = j.error || 'save failed'; rtgUpdateExp(); }
-        } catch (e) { st.rawUpErr = e.message; rtgUpdateExp(); }
-    }
-    async function deleteSaved(id) {
-        try { await fetch('/api/raw-long/hook-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); SAVED = null; rtgUpdateExp(); } catch (e) {}
-    }
-    // Clicking a saved hook re-runs its montage through the SAME embed-montage scorer → it lands in
-    // the standard score display (trace + every indicator + embedded-space placement), identical to
-    // scoring a hook in Experiments. Then scroll up to that read-out.
-    async function openSaved(id) {
-        st.savedSel = id; st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; rtgUpdateExp();
-        try {
-            const rec = await fetch('/api/raw-long/saved-hook/' + id).then(r => r.json()).catch(() => ({}));
-            const montage = await urlToDataUrl('/api/raw-long/saved-montage/' + id);
-            if (rec && rec.emb_preview && rec.channels) {
-                // INSTANT: full embeddings already stored — build the up-object directly, no re-embed
-                st.rawUploads.push({ montage: montage.split('base64,').pop(), transcript: rec.transcript || rec.text || '', silent: rec.silent, title: rec.title, indicators: rec.indicators, steer: rec.steer, emb_preview: rec.emb_preview, channels: rec.channels, input_manifest: rec.input_manifest || null, source: 'saved', savedId: id, genFrames: rec.frames || [], montageDataUrl: montage });
-                st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-            } else {
-                // fallback while the storage pass is still running: re-score once
-                const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1200);
-                const r = await fetch('/api/raw-long/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: rec.text || rec.title || '', title: (rec.title || 'Saved hook').slice(0, 40) }) });
-                const j = await r.json(); window.clearInterval(tick);
-                if (!r.ok || j.error) st.rawUpErr = j.error || ('HTTP ' + r.status);
-                else { j.source = 'saved'; j.savedId = id; j.genFrames = rec.frames || []; j.montageDataUrl = montage; st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; }
-            }
-        } catch (e) { st.rawUpErr = e.message; }
-        st.rawUploading = false; st.rawUpStage = 0; rtgUpdateExp();
-        window.setTimeout(() => { const el = window.document.getElementById('exp-scoreout'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
-    }
-    function savedDetail() {
-        if (!st.savedSel) return '';
-        const msg = st.rawUploading ? '⏳ scoring this hook — the full embedding read-out will appear above ↑'
-            : '✓ Scored — the full embedding read-out (every indicator + embedded-space placement) is shown above ↑';
-        return `<div style="background:${C.accent}14;border:1px solid ${C.accent}55;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:${C.accent};display:flex;justify-content:space-between;align-items:center"><span>${msg}</span><span data-savedclose style="cursor:pointer;color:${C.dim};font-weight:700">✕</span></div>`;
-    }
-    function savedStrip() {
-        if (!SAVED || SAVED.loading || !(SAVED.hooks || []).length) return '';
-        const all = SAVED.hooks;
-        const F = st.savedFilt || (st.savedFilt = {});
-        // filter on any combination of metrics; sort by the chosen sort metric (default keep)
-        const METRICS = [['keep', 'keep-rate %ile', 100, ''], ['ret5', 'past-5s %ile', 100, ''], ['views', 'embed views ≥', 50, 'M'], ['sviews', 'scaled views ≥', 50, 'M'], ['gt10M', 'chance >10M', 100, '%'], ['outlier', 'outlier %ile', 100, '']];
-        const thr = k => F[k] || 0;
-        const pass = h => {
-            const m = h.m || {};
-            if (thr('keep') && !(m.keep >= thr('keep'))) return false;
-            if (thr('ret5') && !(m.ret5 >= thr('ret5'))) return false;
-            if (thr('views') && !(m.views >= thr('views') * 1e6)) return false;
-            if (thr('sviews') && !((m.sviews || 0) >= thr('sviews') * 1e6)) return false;
-            if (thr('gt10M') && !((m.gt10M || 0) * 100 >= thr('gt10M'))) return false;
-            if (thr('outlier') && !(m.outlier >= thr('outlier'))) return false;
-            return true;
-        };
-        const sortK = st.savedSort || 'keep';
-        const hooks = all.filter(pass).sort((a, b) => ((b.m || {})[sortK] || 0) - ((a.m || {})[sortK] || 0));
-        const CAP = 150;
-        const fbar = METRICS.map(([k, lab, mx, u]) => `<div style="display:flex;flex-direction:column;gap:1px;min-width:118px">
-            <span style="font-size:9px;color:${C.mute}">${lab} ≥ <b style="color:${thr(k) ? C.accent : C.dim}">${thr(k)}${u}</b></span>
-            <input type="range" min="0" max="${mx}" value="${thr(k)}" data-savedfilt="${k}" style="width:118px;accent-color:${C.accent}"/></div>`).join('');
-        const sortSel = METRICS.map(([k, lab]) => `<span data-savedsort="${k}" style="cursor:pointer;font-size:9px;border:1px solid ${sortK === k ? C.accent : C.border};background:${sortK === k ? C.accent + '22' : 'transparent'};color:${sortK === k ? C.accent : C.dim};border-radius:5px;padding:2px 6px">${k}</span>`).join('');
-        const card = h => {
-            const thumb = h.hasMontage ? `/api/raw-long/saved-montage/${h.id}` : (h.frame_imgs && h.frame_imgs[0] ? `/api/hooks/grpo/montage/demo/${h.frame_imgs[0]}` : '');
-            const kp = h.steer && (h.steer.visual_keep || h.steer.together_keep || h.steer.text_keep);
-            const kpct = (h.keep != null) ? h.keep : (kp && kp.pctile != null ? kp.pctile : null);
-            const badge = (kpct != null) ? `<span style="font-size:9px;font-weight:700;color:${heatCol((kpct || 0) / 100)}">keep ${Math.round(kpct)}%ile</span>` : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'scored' : 'idea'}</span>`;
-            const sel = st.savedSel === h.id;
-            return `<div data-savedopen="${h.id}" style="border:1px solid ${sel ? C.accent : C.border};border-radius:8px;padding:7px;background:${C.card2};width:152px;position:relative;cursor:pointer">
-              <span data-savedel="${h.id}" title="delete" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer;z-index:2">✕</span>
-              ${thumb ? `<img src="${thumb}" style="width:100%;border-radius:5px;display:block;margin-bottom:5px;background:#000" loading="lazy"/>` : ''}
-              <div style="font-size:10px;color:${C.text};font-weight:700;line-height:1.3;max-height:39px;overflow:hidden">${esc((h.title || '').slice(0, 75))}</div>
-              <div style="margin-top:3px">${badge}</div></div>`;
-        };
-        const shown = hooks.slice(0, CAP);
-        const anyFilt = METRICS.some(([k]) => thr(k));
-        return cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💾 Saved hooks <span style="font-size:10px;color:${C.mute};font-weight:600">— ${all.length} above your keep/views threshold${anyFilt ? ` · <b style="color:${C.accent}">${hooks.length} match your filter</b>` : ''} · click any for the full read-out</span></div>
-          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;padding:8px;background:${C.card2};border-radius:8px">
-            <span style="font-size:9px;color:${C.mute};align-self:center">filter ≥</span>${fbar}
-            ${anyFilt ? `<span data-savedfiltclear style="cursor:pointer;font-size:9px;color:${C.dim};text-decoration:underline;align-self:center">clear</span>` : ''}
-            <span style="width:10px"></span><span style="font-size:9px;color:${C.mute};align-self:center">sort by</span>${sortSel}</div>
-          ${savedDetail()}
-          <div style="display:flex;gap:10px;flex-wrap:wrap">${shown.map(card).join('')}</div>
-          ${hooks.length > CAP ? `<div style="font-size:10px;color:${C.mute};margin-top:8px">showing top ${CAP} of ${hooks.length} — tighten the filter to narrow down</div>` : ''}`, 12);
-    }
 
     async function mount(el) {
         root = el;
         if (!root.__rb) {
             root.addEventListener('click', onClick); root.addEventListener('input', onInput); root.addEventListener('change', onChange);
-            // clicking into the Generate box pre-warms the idea GPU — the cold boot overlaps typing
-            const warmPing = (quiet) => fetch('/api/hooks/warmup', { method: 'POST' }).then(r => r.json()).then(j => { if (j && j.fired) { st.warmFiredAt = Date.now(); if (!quiet) rtgUpdateExp(); } }).catch(() => {});
-            root.addEventListener('focusin', e => {
-                if (e.target && e.target.id === 'exp-gen-input' && !st.expGenBusy) { st.warmHold = 1; warmPing(); }
-            });
-            // TAB-HOLD: while the 🧪 Experiment section is open + visible, heartbeat every 60s so the
-            // GPU stays resident (Replicate scales down after <5 min idle — every idle press was a
-            // 2–7 min re-boot). Closing the tab / leaving the section stops the pings → scales down.
-            if (!st._warmHoldT) st._warmHoldT = window.setInterval(() => {
-                try {
-                    if (st.warmHold && st.sec === 'experiment' && root && root.isConnected && window.document.visibilityState === 'visible') warmPing(1);
-                } catch (e) {}
-            }, 60e3);
             root.__rb = true;
         }
         if (!DATA && !err) {
