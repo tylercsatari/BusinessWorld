@@ -337,10 +337,11 @@ async function queuePayload(payload, note, dryRun) {
     await putJson(`longform/grind/runs/${payload.rid}.json`, initialRunFromPayload(payload, note));
     await putJson(`longform/grind/requests/${payload.rid}.json`, payload);
 }
-async function requeuePendingRun(rec, opts, dryRun) {
-    if (!rec || !rec.run || !rec.id) return null;
-    const run = rec.run;
-    const video = run.sourceVideo || {};
+async function normalizePendingRun(rec, opts, dryRun) {
+    if (!rec || !rec.id) return null;
+    const run = rec.run || {};
+    const req = rec.request && rec.request.req ? rec.request.req : {};
+    const video = req.sourceVideo || run.sourceVideo || {};
     const rid = cleanRid(rec.rid || run.rid);
     if (!rid) return null;
     const payload = buildGrindPayload(rid, {
@@ -350,25 +351,39 @@ async function requeuePendingRun(rec, opts, dryRun) {
         duration: video.duration || null,
         channel: video.channel || 'Tyler Csatari',
         thumbnail: video.thumbnail || `https://i.ytimg.com/vi/${rec.id}/maxresdefault.jpg`,
-    }, run.context || run.transcript30 || '', {
+    }, req.context || req.transcript30 || run.context || run.transcript30 || '', {
         ...opts,
-        contextStatus: run.contextStatus || (run.context ? 'ok' : 'missing'),
+        contextStatus: req.contextStatus || run.contextStatus || ((req.context || run.context) ? 'ok' : 'missing'),
     });
     if (!dryRun) {
-        run.status = 'queued';
-        run.note = 'queued as unanalyzed channel work — first attempt will render this original title before exploring variants';
-        run.threshold = payload.threshold;
-        run.maxAttempts = payload.maxAttempts;
-        run.count = payload.count;
-        run.hours = payload.hours;
-        run.autosaveBest = true;
-        run.source = CHANNEL_SOURCE;
-        run.batchId = opts.batchId;
-        run.ts = Date.now();
-        await putJson(`longform/grind/runs/${rid}.json`, run);
+        const nextRun = {
+            ...run,
+            rid,
+            idea: payload.idea,
+            title: payload.title,
+            context: payload.context,
+            transcript30: payload.context,
+            contextChars: payload.contextChars,
+            contextStatus: payload.contextStatus,
+            sourceVideo: payload.sourceVideo,
+            status: 'queued',
+            note: run.note || 'queued as unanalyzed channel work — first attempt will render this original title before exploring variants',
+            threshold: payload.threshold,
+            maxAttempts: payload.maxAttempts,
+            count: payload.count,
+            hours: payload.hours,
+            autosaveBest: true,
+            source: CHANNEL_SOURCE,
+            batchId: run.batchId || opts.batchId,
+            ts: Date.now(),
+            ideaModel: payload.ideaModel || run.ideaModel,
+            thumbModel: payload.thumbModel || run.thumbModel,
+            renderModel: payload.renderModel || run.renderModel,
+        };
+        await putJson(`longform/grind/runs/${rid}.json`, nextRun);
         await putJson(`longform/grind/requests/${rid}.json`, payload);
     }
-    return { rid, video: payload.sourceVideo, transcriptChars: payload.contextChars, contextStatus: payload.contextStatus, requestKey: `longform/grind/requests/${rid}.json`, requeued: true };
+    return { rid, video: payload.sourceVideo, transcriptChars: payload.contextChars, contextStatus: payload.contextStatus, requestKey: `longform/grind/requests/${rid}.json`, normalized: true, hadRequest: !!(rec.request && rec.request.key) };
 }
 async function archiveGeneratedWork(idx, dryRun) {
     const stats = { archived: 0, stopped: 0, deletedRequests: 0 };
@@ -429,12 +444,8 @@ async function main() {
         }
         const pending = idx.pendingByVideo.get(v.id);
         if (pending && !forceRequeue) {
-            if (pending.request) {
-                retained.push({ id: v.id, title: v.title, rid: pending.rid || pending.request.rid, reason: 'already-queued-unstarted' });
-            } else {
-                const rq = await requeuePendingRun(pending, opts, dryRun);
-                if (rq) retained.push({ id: v.id, title: v.title, rid: rq.rid, reason: 'requeued-unstarted' });
-            }
+            const rq = await normalizePendingRun(pending, opts, dryRun);
+            if (rq) retained.push({ id: v.id, title: v.title, rid: rq.rid, reason: rq.hadRequest ? 'normalized-queued-unstarted' : 'requeued-unstarted' });
             continue;
         }
         if (limit > 0 && queued.length >= limit) {
