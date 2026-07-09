@@ -16,15 +16,20 @@ ctrviews reward still uses the frozen thumbnail scorer ladder exactly.
 """
 import argparse
 import base64
+import gc
 import io
 import json
 import os
+import re
+import shutil
 import tempfile
 import time
 import urllib.request
+import zipfile
 
 import boto3
 import numpy as np
+import requests
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIM = 1536
@@ -66,22 +71,23 @@ def r2_get(key):
 def embed(parts, tries=4):
     if not KEY:
         raise RuntimeError("GEMINI_API_KEY not set")
-    body = json.dumps({"content": {"parts": parts}, "outputDimensionality": DIM}).encode()
+    body = {"content": {"parts": parts}, "outputDimensionality": DIM}
     last = ""
     for a in range(tries):
         try:
-            req = urllib.request.Request(
+            r = requests.post(
                 EMB_URL,
-                data=body,
-                method="POST",
                 headers={"Content-Type": "application/json", "x-goog-api-key": KEY},
+                json=body,
+                timeout=35,
             )
-            with urllib.request.urlopen(req, timeout=45) as r:
-                return np.asarray(json.loads(r.read())["embedding"]["values"], np.float32)
+            if r.ok:
+                return np.asarray(r.json()["embedding"]["values"], np.float32)
+            last = f"http {r.status_code}: {r.text[:120]}"
         except Exception as e:
             last = str(e)[:160]
-            if a < tries - 1:
-                time.sleep(1.2 * (a + 1))
+        if a < tries - 1:
+            time.sleep(1.2 * (a + 1))
     raise RuntimeError("Gemini embed failed: " + last)
 
 
@@ -103,45 +109,64 @@ def preview(e):
     return [round(float(x), 3) for x in a[:64]]
 
 
-def cache_npz(chan):
+def cache_tag(etag):
+    return re.sub(r"[^a-zA-Z0-9_-]+", "", str(etag or "noetag"))[:80] or "noetag"
+
+
+def download_file(key, path):
+    tmp = path + ".tmp"
+    try:
+        os.remove(tmp)
+    except Exception:
+        pass
+    s3.download_file(BUCKET, key, tmp)
+    os.replace(tmp, path)
+
+
+def cache_vecs(chan):
     cdir = tempfile.gettempdir()
-    npy = os.path.join(cdir, f"rawlong_{chan}.npy")
-    meta = os.path.join(cdir, f"rawlong_{chan}.json")
     etag = None
     try:
         etag = s3.head_object(Bucket=BUCKET, Key=f"raw-long/{chan}/embeddings.npz").get("ETag")
     except Exception:
         pass
-    if etag and os.path.exists(npy) and os.path.exists(meta):
+    tag = cache_tag(etag)
+    npy = os.path.join(cdir, f"rawlong_{chan}_{tag}_vecs.npy")
+    if not os.path.exists(npy):
+        npz = os.path.join(cdir, f"rawlong_{chan}_{tag}.npz")
+        if not os.path.exists(npz):
+            download_file(f"raw-long/{chan}/embeddings.npz", npz)
+        with zipfile.ZipFile(npz) as zf:
+            names = zf.namelist()
+            vec_name = "vecs.npy" if "vecs.npy" in names else next((n for n in names if n.endswith("/vecs.npy") or n.endswith("vecs.npy")), None)
+            if not vec_name:
+                raise RuntimeError(f"raw-long/{chan}/embeddings.npz missing vecs.npy")
+            tmp = npy + ".tmp"
+            with zf.open(vec_name) as src, open(tmp, "wb") as dst:
+                shutil.copyfileobj(src, dst, 1024 * 1024)
+            os.replace(tmp, npy)
         try:
-            m = json.load(open(meta))
-            if m.get("etag") == etag:
-                return np.load(npy, mmap_mode="r"), m["ids"], m
+            os.remove(npz)
         except Exception:
             pass
-    buf = r2_get(f"raw-long/{chan}/embeddings.npz")
-    if not buf:
-        return None, None, None
-    z = np.load(io.BytesIO(buf), allow_pickle=True)
-    V = np.asarray(z["vecs"], np.float32)
-    V = V / (np.linalg.norm(V, axis=1, keepdims=True) + 1e-9)
-    m = {
-        "etag": etag,
-        "ids": [str(x) for x in z["ids"]],
-        "views": [float(x) for x in z["views"]] if "views" in z.files else [],
-        "title": [str(x) for x in z["title"]] if "title" in z.files else [],
-    }
-    try:
-        np.save(npy, V)
-        json.dump(m, open(meta, "w"))
-    except Exception:
-        pass
-    return np.load(npy, mmap_mode="r"), m["ids"], m
+    return np.load(npy, mmap_mode="r")
 
 
 def load_map(chan):
-    b = r2_get(f"raw-long/{chan}/map.json")
-    return json.loads(b.decode("utf8")) if b else {}
+    cdir = tempfile.gettempdir()
+    etag = None
+    try:
+        etag = s3.head_object(Bucket=BUCKET, Key=f"raw-long/{chan}/map.json").get("ETag")
+    except Exception:
+        pass
+    path = os.path.join(cdir, f"rawlong_{chan}_{cache_tag(etag)}_map.json")
+    if not os.path.exists(path):
+        download_file(f"raw-long/{chan}/map.json", path)
+    try:
+        return json.load(open(path))
+    except Exception:
+        b = r2_get(f"raw-long/{chan}/map.json")
+        return json.loads(b.decode("utf8")) if b else {}
 
 
 def rank_pct(vals, x):
@@ -174,18 +199,20 @@ def wavg(vals, idx, w):
 
 
 def top_neighbors(chan, q, k=24):
-    V, ids, meta = cache_npz(chan)
+    V = cache_vecs(chan)
     if V is None or not len(V):
-        return None, None, None, None
-    q = norm(q)
+        return None, None, None
+    q = norm(q).astype(np.float32)
     sims = np.empty(len(V), np.float32)
-    for i in range(0, len(V), 4096):
-        sims[i:i + 4096] = np.asarray(V[i:i + 4096]) @ q
+    step = max(256, int(os.environ.get("LONGQUANT_SCORE_CHUNK", "2048") or "2048"))
+    for i in range(0, len(V), step):
+        B = np.asarray(V[i:i + step], np.float32)
+        sims[i:i + len(B)] = (B @ q) / (np.linalg.norm(B, axis=1) + 1e-9)
     kk = min(k, len(V))
     part = np.argpartition(-sims, kk - 1)[:kk]
     order = part[np.argsort(-sims[part])]
     weights = np.maximum(sims[order], 0) ** 8 + 1e-6
-    return order, sims[order], weights, {"ids": ids, **(meta or {})}
+    return order, sims[order], weights
 
 
 def metric_obj(est, pctile=None, kind="neighbor"):
@@ -197,13 +224,13 @@ def metric_obj(est, pctile=None, kind="neighbor"):
 
 
 def channel_score(chan, emb):
-    idx, sims, weights, meta = top_neighbors(chan, emb)
+    idx, sims, weights = top_neighbors(chan, emb)
     if idx is None:
         return None
     mp = load_map(chan)
-    ids = mp.get("id") or meta.get("ids") or []
-    titles = mp.get("title") or meta.get("title") or []
-    views = mp.get("views") or meta.get("views") or []
+    ids = mp.get("id") or []
+    titles = mp.get("title") or []
+    views = mp.get("views") or []
     outlier = mp.get("outlier") or []
     proj = mp.get("proj") or {}
     metrics = {}
@@ -271,20 +298,36 @@ def main():
     ap.add_argument("--image", required=True)
     ap.add_argument("--title", default="")
     ap.add_argument("--idea", default="")
+    ap.add_argument("--emb-json", default="")
     args = ap.parse_args()
     if not os.path.exists(args.image):
         print(json.dumps({"error": "no image"}))
         return
     title = (args.title or args.idea or "").strip()[:500]
     b64 = base64.b64encode(open(args.image, "rb").read()).decode()
-    ev = embed([img_part(b64)])
-    et = embed([{"text": title}]) if title else None
-    eg = embed([img_part(b64), {"text": title}]) if title else None
+    if args.emb_json:
+        ej = json.load(open(args.emb_json))
+        ev = np.asarray(ej.get("visual") or [], np.float32)
+        et = np.asarray(ej.get("text") or [], np.float32) if ej.get("text") is not None else None
+        eg = np.asarray(ej.get("together") or [], np.float32) if ej.get("together") is not None else None
+        if ev.size != DIM:
+            raise RuntimeError("bad visual embedding")
+        if et is not None and et.size != DIM:
+            et = None
+        if eg is not None and eg.size != DIM:
+            eg = None
+    else:
+        ev = embed([img_part(b64)])
+        et = embed([{"text": title}]) if title else None
+        eg = embed([img_part(b64), {"text": title}]) if title else None
 
     channels = {"visual": channel_score("visual", ev)}
+    gc.collect()
     if et is not None:
         channels["text"] = channel_score("text", et)
+        gc.collect()
         channels["together"] = channel_score("together", eg)
+        gc.collect()
 
     exact = visual_ctrviews_exact(ev)
     if exact and channels.get("visual"):
