@@ -773,7 +773,7 @@ const JarvisLongQuant = (function () {
         return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — what the models generate</div>${statStrip}${selectorsRow}<div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every title the thumbnail model trained on + its generated thumbnails, scored on the CTR+views axis. Click a title to light up its guesses on the map and see them below. Switch the latent space to view the same guesses projected different ways.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">latent space</span>${projPills}</div>${demo}${body}${detail}`, 14);
     }
     // ═══ 🧪 Long-form Experiment: generate thumbnails with the trained model + score uploads + saved bank ═══
-    const LQTHUMBS = [null], LQIDEARUNS = [null], LQGRINDRUNS = [null], LQIDEAIDX = {}, LQIDEAGRP = {}, LQSCORES = {}, LQDETAILS = {}, LQRAW = {}, LQIMGS = {};
+    const LQTHUMBS = [null], LQIDEARUNS = [null], LQGRINDRUNS = [null], LQGRINDDETAILS = {}, LQIDEAIDX = {}, LQIDEAGRP = {}, LQSCORES = {}, LQDETAILS = {}, LQRAW = {}, LQIMGS = {};
     const LQ_REFRESH_MS = 15000;
     function rtgUpdateLqExp() { try { const el = window.document.getElementById('rtg-lqexppanel'); if (el) el.innerHTML = renderLqExperiment(); } catch (e) { } }
     // Ideas are CONSOLIDATED into the 🎰 Guesses section — idea data refreshes repaint the guesses panel.
@@ -810,6 +810,24 @@ const JarvisLongQuant = (function () {
         if (cur && !force && now - (cur._t || 0) < LQ_REFRESH_MS) return;
         LQGRINDRUNS[0] = cur && cur.runs ? { ...cur, refreshing: 1 } : { loading: 1 };
         lqxJson('/api/longquant/grind/runs?limit=120').then(j => { j._t = Date.now(); LQGRINDRUNS[0] = j; rtgUpdateLqExp(); }).catch(e => { LQGRINDRUNS[0] = { runs: (cur && cur.runs) || [], error: e.message || 'could not load grind runs', _t: Date.now() }; rtgUpdateLqExp(); });
+    }
+    function lqGrindDetail(rid, force) {
+        if (!rid) return;
+        const cur = LQGRINDDETAILS[rid];
+        if (cur && (cur.loading || cur.refreshing) && !force) return;
+        if (cur && cur.rid && !force) {
+            const live = !['won', 'error', 'maxed', 'deadline', 'stopped'].includes(cur.status || '');
+            if (!live || Date.now() - (cur._t || 0) < LQ_REFRESH_MS) return;
+        }
+        LQGRINDDETAILS[rid] = cur && cur.rid ? { ...cur, refreshing: 1 } : { loading: 1 };
+        lqxJson('/api/longquant/grind/run/' + rid).then(j => {
+            if (j) j._t = Date.now();
+            LQGRINDDETAILS[rid] = j || {};
+            rtgUpdateLqExp();
+        }).catch(e => {
+            LQGRINDDETAILS[rid] = { error: e.message || 'could not load grind run' };
+            rtgUpdateLqExp();
+        });
     }
     function lqIdeaRunsEnsure(force) { if (LQIDEARUNS[0] && !force) return; LQIDEARUNS[0] = LQIDEARUNS[0] || { loading: 1 }; lqxJson('/api/longquant/ideas/runs').then(j => { LQIDEARUNS[0] = j.runs || []; if (!st.ideaRun && LQIDEARUNS[0].length) st.ideaRun = LQIDEARUNS[0][LQIDEARUNS[0].length - 1]; rtgUpdateLqIdeas(); rtgUpdateLqExp(); }).catch(() => { LQIDEARUNS[0] = []; rtgUpdateLqIdeas(); }); }
     function lqIdeaIdx(run) { if (!run || LQIDEAIDX[run]) return; LQIDEAIDX[run] = { loading: 1 }; fetch('/api/longquant/ideas/index?run=' + run).then(r => r.text()).then(t => { LQIDEAIDX[run] = { rows: t.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean) }; rtgUpdateLqIdeas(); rtgUpdateLqExp(); }).catch(() => { LQIDEAIDX[run] = { rows: [] }; rtgUpdateLqIdeas(); }); }
@@ -1190,6 +1208,58 @@ const JarvisLongQuant = (function () {
               ['won', 'won', C.green], ['running', 'running', C.cyan], ['queued', 'queued', C.amber], ['saved', 'saved', C.accent], ['error', 'errors', C.red],
           ].map(([k, lab, col]) => `<span style="border:1px solid ${col};background:${col}18;color:${col};border-radius:7px;padding:4px 9px;font-size:10px;font-weight:800">${statusCounts[k] || 0} ${lab}</span>`).join('')}</div>
         </div>`, 12) : (grBank && grBank.loading ? cardc(`<div style="font-size:11px;color:${C.cyan}">loading Long Quant grind status…</div>`, 12) : (grBank && grBank.error ? cardc(`<div style="font-size:11px;color:${C.red}">Long Quant grind status failed: ${esc(grBank.error)}</div>`, 12) : ''));
+        const channelHistoryHtml = channelRuns.length ? (() => {
+            const toPct = v => {
+                if (v == null || !isFinite(Number(v))) return null;
+                const n = Number(v);
+                return Math.round(n <= 1 ? n * 100 : n);
+            };
+            const thumbPct = t => t && t.pct != null ? toPct(t.pct) : toPct(t && t.score && t.score.pctile);
+            const pctCol = p => p == null ? C.dim : p >= 90 ? C.green : p >= 75 ? C.amber : C.text;
+            const selected = (st.lqxChannelRid && channelRuns.find(r => r.rid === st.lqxChannelRid)) || channelRuns.find(r => r.autosaved && r.autosaved.id) || channelRuns[0];
+            if (selected && selected.rid && st.lqxChannelRid !== selected.rid) st.lqxChannelRid = selected.rid;
+            const selRid = selected && selected.rid;
+            if (selRid) lqGrindDetail(selRid);
+            const det = selRid ? LQGRINDDETAILS[selRid] : null;
+            const runTitle = (selected && selected.sourceVideo && selected.sourceVideo.title) || (det && det.title) || (selected && selected.idea) || '';
+            const runCards = channelRuns.map(r => {
+                const pct = toPct(r.best), on = r.rid === st.lqxChannelRid;
+                const title = (r.sourceVideo && r.sourceVideo.title) || r.idea || '';
+                const saved = r.autosaved && r.autosaved.id ? ` · saved ${esc(r.autosaved.id)}` : '';
+                return `<div data-lqxchannelrun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${on ? C.accent : pct >= (r.threshold || 90) ? C.green : C.border};border-radius:8px;background:${on ? C.accent + '18' : C.card2};padding:8px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="font-size:11px;font-weight:800;color:${C.text};line-height:1.3;max-height:36px;overflow:hidden">${esc(title.slice(0, 120))}</div><div style="font-size:11px;font-weight:900;color:${pctCol(pct)};white-space:nowrap">${pct == null ? '—' : pct + 'th'}</div></div><div style="font-size:9px;color:${C.mute};margin-top:4px">${esc(r.status || '')} · target ${r.threshold || '—'}th · ${r.n || 0} attempts${saved}</div></div>`;
+            }).join('');
+            let detailHtml = '';
+            if (!det || det.loading) detailHtml = `<div style="min-height:220px;display:flex;align-items:center;justify-content:center;color:${C.cyan};font-size:11px;background:${C.card2};border:1px solid ${C.border};border-radius:8px">loading full thumbnail history…</div>`;
+            else if (det.error) detailHtml = `<div style="font-size:11px;color:${C.red};padding:14px;background:${C.card2};border:1px solid ${C.border};border-radius:8px">could not load this grind run: ${esc(det.error)}</div>`;
+            else {
+                const attempts = Array.isArray(det.attempts) ? det.attempts : [];
+                const thumbs = [];
+                attempts.forEach(a => (a.thumbs || []).forEach(t => { if (t && t.image) thumbs.push({ a, t, idea: a.idea || det.idea || runTitle }); }));
+                thumbs.sort((x, y) => (thumbPct(y.t) == null ? -1 : thumbPct(y.t)) - (thumbPct(x.t) == null ? -1 : thumbPct(x.t)));
+                const bestPct = thumbs.length ? thumbPct(thumbs[0].t) : toPct(det.best);
+                const baseline = det.baseline || null;
+                const baselinePct = baseline ? toPct(baseline.pct != null ? baseline.pct : baseline.pctile) : null;
+                const baselineScore = baseline && baseline.score && !baseline.score.error ? baseline.score : null;
+                const baselineHtml = baseline && baseline.image ? `<div style="border:1px solid ${C.border};border-radius:8px;background:${C.card2};overflow:hidden;width:220px;flex:0 0 220px">${lqxImg(`/api/longquant/grind/original/${selRid}`, `grindorig:${selRid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:7px 8px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;font-weight:800">current thumbnail baseline</div><div style="font-size:13px;font-weight:900;color:${pctCol(baselinePct)};margin-top:2px">${baselinePct == null ? '—' : baselinePct + 'th'}</div>${lqxMetricHtml(baselineScore || baseline)}${baselineScore ? lqxRawButton(baselineScore, 'grind-original:' + selRid, runTitle, `/api/longquant/grind/original/${selRid}`) : ''}${baseline.error ? `<div style="font-size:9px;color:${C.red};margin-top:4px">${esc(baseline.error)}</div>` : ''}</div></div>` : '';
+                const thumbGrid = thumbs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px">${thumbs.map((h, idx) => {
+                    const t = h.t, a = h.a, cid = t.image, idea = h.idea || runTitle;
+                    const pct = thumbPct(t), key = `longform/grind/montages/${cid}.jpg`;
+                    const score = lqxScoreFor('grind:' + cid, key, idea, idea, t.score, true);
+                    const att = a.k != null ? Number(a.k) + 1 : '';
+                    return `<div data-lqxopen="history:${esc(cid)}" style="cursor:pointer;border:1px solid ${pct >= (det.threshold || selected.threshold || 90) ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/grind/img/${cid}`, `grindhist:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:7px 8px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="font-size:10px;font-weight:900;color:${pctCol(pct)}">#${idx + 1} · ${pct == null ? '—' : pct + 'th'}</div><span data-lqxhistSave="${esc(cid)}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === cid ? C.green : C.accent};color:${st.lqxSaveFlash === cid ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-size:9px;font-weight:800">${st.lqxSaveFlash === cid ? 'saved' : 'save'}</span></div><div style="font-size:9px;color:${C.mute};margin-top:3px">attempt ${att || '—'}${a.distSeed == null ? '' : ' · seed dist ' + a.distSeed}${a.topic == null ? '' : ' · topical ' + a.topic}</div>${lqxMetricHtml(score || t.score || t)}${score && score.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">embedding visual · text · together…</div>` : ''}<div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.3;max-height:38px;overflow:hidden;margin-top:5px">${esc((idea || '').slice(0, 120))}</div><div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:42px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 150))}</div>${lqxRawButton(score || t.score, 'grind:' + cid, idea, `/api/longquant/grind/img/${cid}`)}${t.error ? `<div style="font-size:9px;color:${C.red};margin-top:3px">${esc(t.error)}</div>` : ''}</div></div>`;
+                }).join('')}</div>` : `<div style="font-size:11px;color:${C.dim};padding:16px;background:${C.card2};border:1px solid ${C.border};border-radius:8px">No generated thumbnails are stored for this run yet. If it is still queued or rendering, this fills in as attempts finish.</div>`;
+                if (st.lqxOpen && String(st.lqxOpen).indexOf('history:') === 0) {
+                    const imgId = st.lqxOpen.slice(8);
+                    const hit = thumbs.find(h => h.t && h.t.image === imgId);
+                    if (hit) {
+                        const idea = hit.idea || runTitle, key = `longform/grind/montages/${imgId}.jpg`;
+                        lqModalHtml = lqxModal(lqxFullReadout({ cacheId: 'grind:' + imgId, title: idea, prompt: hit.t.prompt || '', img: `/api/longquant/grind/img/${imgId}`, pctile: hit.t.pct != null ? hit.t.pct / 100 : null, score: lqxScoreFor('grind:' + imgId, key, idea, idea, hit.t.score, true) }));
+                    }
+                }
+                detailHtml = `<div><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div><div style="font-size:13px;color:${C.text};font-weight:900;line-height:1.3">${esc(runTitle || 'Selected channel video')}</div><div style="font-size:10px;color:${C.mute};margin-top:3px">${esc(det.status || selected.status || '')} · ${attempts.length} attempts · ${thumbs.length} generated thumbnails · target ${det.threshold || selected.threshold || '—'}th</div>${det.note ? `<div style="font-size:9px;color:${C.faint};margin-top:3px">${esc(det.note)}</div>` : ''}</div><div style="font-size:20px;font-weight:900;color:${pctCol(bestPct)};white-space:nowrap">${bestPct == null ? '—' : bestPct + 'th best'}</div></div>${baselineHtml ? `<div style="display:flex;gap:10px;align-items:flex-start;overflow:auto;margin-bottom:10px">${baselineHtml}</div>` : ''}${thumbGrid}</div>`;
+            }
+            return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:9px"><div><div style="font-size:12px;font-weight:900;color:${C.text}">🎞 Channel video thumbnail history</div><div style="font-size:10px;color:${C.mute};margin-top:2px">Pick a video to scroll every thumbnail generated during its threshold grind, ranked best to worst.</div></div><div style="font-size:10px;color:${C.dim};font-weight:800">${channelRuns.length} videos</div></div><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="flex:0 0 280px;max-width:100%;max-height:520px;overflow:auto;padding-right:3px">${runCards}</div><div style="flex:1 1 520px;min-width:280px;max-height:640px;overflow:auto;padding-right:3px">${detailHtml}</div></div>`, 12);
+        })() : '';
         const runHtml = recentRuns.length ? cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">🧪 Recent grind runs <span style="font-size:10px;color:${C.mute};font-weight:600">— overnight/channel jobs land here, then winners auto-save below</span></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px">${recentRuns.slice(0, 24).map(r => {
               const pct = r.best == null ? null : Number(r.best);
@@ -1261,7 +1331,7 @@ const JarvisLongQuant = (function () {
           }).join('')}</div>
           ${saved.length > show ? `<div style="text-align:center;margin-top:10px"><span data-lqxmore style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:8px;padding:5px 16px;font-size:11px;font-weight:700">Load 30 more · ${saved.length - show} left</span></div>` : ''}${savedDetail}`, 12) : '';
         return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🧪 Experiment — long-form quant generation</div><div style="font-size:11px;color:${C.mute};margin-bottom:10px">Powered by the trained long-form idea model, the thumbnail prompt model, Flux Pro renders, and raw-long scoring. Generate from an idea, score any thumbnail, grind toward a threshold, save the keepers.</div>`, 14)
-            + cardc(gen, 12) + cardc(sc, 12) + cardc(grind, 12) + runStatusHtml + runHtml + ideas + savedHtml + lqModalHtml;
+            + cardc(gen, 12) + cardc(sc, 12) + cardc(grind, 12) + runStatusHtml + channelHistoryHtml + runHtml + ideas + savedHtml + lqModalHtml;
     }
     // ═══ 💡 Ideas: the long-form idea model's training output ═══
     function lqIdeaEraOf(run, rows) {
@@ -3849,6 +3919,37 @@ const JarvisLongQuant = (function () {
             const cid = xgs.getAttribute('data-lqxgrindsave'), gr = st.lqxGrindRun || {}; let hit = null, idea = '';
             (gr.attempts || []).forEach(a => (a.thumbs || []).forEach(t => { if ((t.image || `${a.k}_${t.i}`) === cid) { hit = t; idea = a.idea || gr.idea || ''; } }));
             if (hit && hit.image) lqxSave({ title: idea, prompt: hit.prompt || '', pctile: hit.pct != null ? hit.pct / 100 : null, montageKey: `longform/grind/montages/${hit.image}.jpg`, source: 'grind', score: hit.score || LQSCORES['grind:' + hit.image] || null }, hit.image);
+            return;
+        }
+        const xhs = e.target.closest('[data-lqxhistSave]'); if (xhs) {
+            const img = xhs.getAttribute('data-lqxhistSave'), det = LQGRINDDETAILS[st.lqxChannelRid] || {};
+            let hit = null, att = null, idea = '';
+            (det.attempts || []).forEach(a => (a.thumbs || []).forEach(t => { if (t && t.image === img) { hit = t; att = a; idea = a.idea || det.idea || ''; } }));
+            if (hit && hit.image) {
+                const sc2 = LQSCORES['grind:' + hit.image] || hit.score || null;
+                lqxSave({
+                    title: (det.sourceVideo && det.sourceVideo.title) || idea,
+                    idea,
+                    prompt: hit.prompt || '',
+                    pctile: hit.pct != null ? hit.pct / 100 : null,
+                    montageKey: `longform/grind/montages/${hit.image}.jpg`,
+                    source: det.source || 'channel-grind-history',
+                    score: sc2 && !sc2.loading && !sc2.error ? sc2 : (hit.score || null),
+                    context: det.context || '',
+                    transcript30: det.transcript30 || det.context || '',
+                    sourceVideo: det.sourceVideo || null,
+                    batchId: det.batchId || '',
+                    runRid: det.rid || st.lqxChannelRid || '',
+                    attemptK: att && att.k != null ? att.k : null,
+                    thumbI: hit.i != null ? hit.i : null,
+                    meta: { source: det.source || 'channel-grind-history', sourceVideo: det.sourceVideo || null, batchId: det.batchId || '', runRid: det.rid || st.lqxChannelRid || '', attemptK: att && att.k != null ? att.k : null, thumbI: hit.i != null ? hit.i : null, context: det.context || '', baseline: det.baseline || null },
+                }, hit.image);
+            }
+            return;
+        }
+        const xchr = e.target.closest('[data-lqxchannelrun]'); if (xchr) {
+            const rid = xchr.getAttribute('data-lqxchannelrun');
+            if (rid) { st.lqxChannelRid = rid; st.lqxOpen = null; st.lqxSavedSel = null; lqGrindDetail(rid); rtgUpdateLqExp(); }
             return;
         }
         const xrun = e.target.closest('[data-lqxrun]'); if (xrun) {
