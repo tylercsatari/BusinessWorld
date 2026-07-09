@@ -10160,22 +10160,29 @@ async function longQuantGrindProcess(rid, req0) {
         await write();
         while (attempts.length < maxAttempts && Date.now() < deadline && status === 'running') {
             try { if (await cloud.existsInR2(`longform/grind/stop/${rid}`)) { status = 'stopped'; note = 'stopped by you'; break; } } catch (e) {}
-            note = `attempt ${attempts.length + 1}: generating a candidate idea`; await write();
             let idea = '';
             let gateInfo = {};
             let farthest = null, bestTopical = null;
-            for (let tries = 0; tries < 4; tries++) {
-                idea = await longQuantIdeaGenerate(seed, attempts.length + tries, attempts);
-                const gateRes = await acceptIdea(idea, (maxAttempts - attempts.length - 1) + (3 - tries));
-                if (gateRes.ok) { idea = String(idea).slice(0, 300); gateInfo = gateRes; break; }
-                if (!bestTopical || (gateRes.topic || -1) > (bestTopical.gateRes.topic || -1)) bestTopical = { idea, gateRes };
-                if (gateRes.reason !== 'off_topic' && (!farthest || (gateRes.distPrior || 0) > (farthest.gateRes.distPrior || 0))) farthest = { idea, gateRes };
-                rejected++;
-                note = gateRes.reason === 'off_topic'
-                    ? `candidate drifted off the seed topic (topic ${gateRes.topic}, need ≥ ${gateRes.floor}) — regenerating`
-                    : `candidate was too close to a prior idea (dist ${gateRes.distPrior}, need ${gate.toFixed(2)}) — regenerating`;
+            if (seed && attempts.length === 0) {
+                idea = seed.slice(0, 300);
+                gateInfo = { distSeed: 0, distPrior: null, topic: 1, floor: topicFloor() == null ? null : Math.round(topicFloor() * 1000) / 1000 };
+                note = 'attempt 1: rendering your original idea before exploring variants';
                 await write();
-                idea = '';
+            } else {
+                note = `attempt ${attempts.length + 1}: generating a candidate idea`; await write();
+                for (let tries = 0; tries < 4; tries++) {
+                    idea = await longQuantIdeaGenerate(seed, attempts.length + tries, attempts);
+                    const gateRes = await acceptIdea(idea, (maxAttempts - attempts.length - 1) + (3 - tries));
+                    if (gateRes.ok) { idea = String(idea).slice(0, 300); gateInfo = gateRes; break; }
+                    if (!bestTopical || (gateRes.topic || -1) > (bestTopical.gateRes.topic || -1)) bestTopical = { idea, gateRes };
+                    if (gateRes.reason !== 'off_topic' && (!farthest || (gateRes.distPrior || 0) > (farthest.gateRes.distPrior || 0))) farthest = { idea, gateRes };
+                    rejected++;
+                    note = gateRes.reason === 'off_topic'
+                        ? `candidate drifted off the seed topic (topic ${gateRes.topic}, need ≥ ${gateRes.floor}) — regenerating`
+                        : `candidate was too close to a prior rendered idea (dist ${gateRes.distPrior}, need ${gate.toFixed(2)}) — regenerating`;
+                    await write();
+                    idea = '';
+                }
             }
             const fallback = farthest || bestTopical;
             if (!idea && fallback) {
