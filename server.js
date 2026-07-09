@@ -3593,8 +3593,20 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if (pathname === '/api/longquant/grind/stop' && req.method === 'POST') {
         const body = await readBody(req); const rid = String(body.rid || '').replace(/[^a-z0-9]/gi, '');
         if (!rid) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no rid"}'); return; }
-        await cloud.uploadToR2(`longform/grind/stop/${rid}`, Buffer.from('1'), 'text/plain');
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}'); return;
+        const runKey = `longform/grind/runs/${rid}.json`;
+        await cloud.uploadToR2(`longform/grind/stop/${rid}`, Buffer.from('1'), 'text/plain').catch(() => {});
+        await cloud.deleteFromR2(`longform/grind/requests/${rid}.json`).catch(() => {});
+        let run = { rid, attempts: [] };
+        try {
+            const b = await cloud.downloadFromR2(runKey);
+            if (b) run = { ...run, ...JSON.parse(b.toString('utf8')) };
+        } catch (e) {}
+        run.status = 'stopped';
+        run.note = 'stopped by you';
+        run.stoppedAt = Date.now();
+        run.ts = Date.now();
+        await cloud.uploadToR2(runKey, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid, run })); return;
     }
     const lqGrindImg = pathname.match(/^\/api\/longquant\/grind\/img\/([a-z0-9_]+)$/i);
     if (lqGrindImg && req.method === 'GET') {
@@ -10362,6 +10374,14 @@ async function longQuantRenderThumb(prompt) {
 }
 const lqDemoStatus = (rid, o) => cloud.uploadToR2(`longform/guesses/demo/status/${rid}.json`, Buffer.from(JSON.stringify({ ...o, ts: Date.now() })), 'application/json').catch(() => {});
 const lqDemoGroupWrite = (rid, group) => cloud.uploadToR2(`longform/guesses/demo/groups/${rid}.json`, Buffer.from(JSON.stringify(group)), 'application/json').catch(() => {});
+const longQuantGrindStopped = rid => rid ? cloud.existsInR2(`longform/grind/stop/${rid}`).catch(() => false) : Promise.resolve(false);
+async function longQuantThrowIfStopped(rid) {
+    if (await longQuantGrindStopped(rid)) {
+        const e = new Error('stopped by you');
+        e.code = 'LONGQUANT_STOPPED';
+        throw e;
+    }
+}
 function longQuantPublicScore(score) {
     if (!score || score.error) return score || null;
     const pct = score.pctile == null ? null : Number(score.pctile);
@@ -10446,6 +10466,8 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
     const context = String(opts.context || opts.transcript30 || '').slice(0, 1600);
     const sourceVideo = longQuantCompactSourceVideo(opts.sourceVideo);
     const scoreText = [idea, context ? `Opening transcript: ${context}` : ''].filter(Boolean).join('\n').slice(0, 2000);
+    const stopRid = opts.stopRid || opts.grindRid || opts.parentRid || '';
+    const checkStop = () => stopRid ? longQuantThrowIfStopped(stopRid) : Promise.resolve();
     const hostedThumb = longQuantHostedModelConfigured('thumb');
     const promptModel = longQuantThumbPromptModelLabel();
     const group = {
@@ -10453,25 +10475,33 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
         model: `${promptModel} + ${LONGQUANT_RENDER_MODEL.split('/').pop()}`,
         promptModel, hosted: hostedThumb, attempts: [], done: false, streaming: true,
     };
+    await checkStop();
     await lqDemoStatus(rid, { stage: 'prompting', title: idea, n, done: 0, note: hostedThumb ? 'trained thumbnail model is writing prompts on the app server' : 'app prompt worker is writing thumbnail prompts from your exact idea' });
     await lqDemoGroupWrite(rid, group);
+    await checkStop();
     const prompts = await longQuantThumbPrompts(idea, n, context);
+    await checkStop();
     group.n = prompts.length;
     await lqDemoStatus(rid, { stage: 'rendering', title: idea, n: prompts.length, done: 0, note: 'Flux Pro is rendering thumbnails; each result is scored and embedded as it lands' });
     await lqDemoGroupWrite(rid, group);
     for (let k = 0; k < prompts.length; k++) {
+        await checkStop();
         const prompt = prompts[k];
         const id = `${rid}_${k}`;
         const att = { k, prompt, status: 'rendering', montage_key: `longform/guesses/demo/montages/${id}.jpg` };
         group.attempts.push(att);
         await lqDemoGroupWrite(rid, group);
         try {
+            await checkStop();
             const jpg = await longQuantRenderThumb(prompt);
+            await checkStop();
             await cloud.uploadToR2(att.montage_key, jpg, 'image/jpeg');
             att.status = 'scoring';
             await lqDemoStatus(rid, { stage: 'scoring', title: idea, n: prompts.length, done: k, note: `scoring thumbnail ${k + 1}/${prompts.length} on raw-long visual/text/together embeddings` });
             await lqDemoGroupWrite(rid, group);
+            await checkStop();
             const score = longQuantPublicScore(await longQuantScoreImageBuffer(jpg, idea, scoreText || idea));
+            await checkStop();
             att.score = score;
             att.pctile = score && score.pctile != null ? score.pctile : null;
             att.relevance = score && score.relevance != null ? score.relevance : null;
@@ -10479,6 +10509,15 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
             att.reward = score && score.reward != null ? score.reward : att.pctile;
             att.status = 'done';
         } catch (e) {
+            if (e && e.code === 'LONGQUANT_STOPPED') {
+                att.status = 'stopped';
+                group.done = true;
+                group.streaming = false;
+                group.error = 'stopped by you';
+                await lqDemoGroupWrite(rid, group);
+                await lqDemoStatus(rid, { stage: 'stopped', title: idea, n: prompts.length, done: k, note: 'stopped by you' });
+                throw e;
+            }
             att.status = 'error';
             att.error = String(e.message || e).slice(0, 220);
         }
@@ -10593,6 +10632,13 @@ async function longQuantGrindProcess(rid, req0) {
         baseline, autosaved,
         ideaModel: LONGQUANT_IDEA_MODEL, thumbModel: longQuantThumbPromptModelLabel(), renderModel: LONGQUANT_RENDER_MODEL,
     })), 'application/json').catch(() => {});
+    const markStopped = async () => {
+        status = 'stopped';
+        note = 'stopped by you';
+        await write();
+        return true;
+    };
+    const checkStopped = async () => (await longQuantGrindStopped(rid)) ? markStopped() : false;
     const topicFloor = () => seedQ ? Math.max(0.22, 0.62 - gate * 0.35) : null;
     const acceptIdea = async (idea, spare) => {
         const emb = await geminiTextEmbed(idea);
@@ -10611,13 +10657,18 @@ async function longQuantGrindProcess(rid, req0) {
         return { ok: true, distSeed, distPrior, topic, floor: floor == null ? null : Math.round(floor * 1000) / 1000 };
     };
     try {
+        if (await checkStopped()) return;
         if (sourceVideo && sourceVideo.id) {
             note = 'scoring the current source thumbnail as a baseline';
             await write();
+            if (await checkStopped()) return;
             const jpg = await longQuantFetchYoutubeThumb(sourceVideo.id, sourceVideo.thumbnail).catch(() => null);
+            if (await checkStopped()) return;
             if (jpg) {
                 await cloud.uploadToR2(`longform/grind/originals/${rid}.jpg`, jpg, 'image/jpeg').catch(() => {});
+                if (await checkStopped()) return;
                 const sc = longQuantPublicScore(await longQuantScoreImageBuffer(jpg, sourceTitle || seed, scoreText || sourceTitle || seed).catch(e => ({ error: e.message })));
+                if (await checkStopped()) return;
                 baseline = {
                     image: rid,
                     pctile: sc && !sc.error ? sc.pctile : null,
@@ -10629,7 +10680,7 @@ async function longQuantGrindProcess(rid, req0) {
         }
         await write();
         while (attempts.length < maxAttempts && Date.now() < deadline && status === 'running') {
-            try { if (await cloud.existsInR2(`longform/grind/stop/${rid}`)) { status = 'stopped'; note = 'stopped by you'; break; } } catch (e) {}
+            if (await checkStopped()) break;
             let idea = '';
             let gateInfo = {};
             let farthest = null, bestTopical = null;
@@ -10644,8 +10695,11 @@ async function longQuantGrindProcess(rid, req0) {
                 note = `attempt ${attempts.length + 1}: generating inside semantic band — prior distance ≥ ${guide.minDistance}${guide.topicFloor == null ? '' : ` · topical ≥ ${guide.topicFloor}`}`;
                 await write();
                 for (let tries = 0; tries < 4; tries++) {
+                    if (await checkStopped()) break;
                     idea = await longQuantIdeaGenerate(seed, attempts.length + tries, attempts, guide, context);
+                    if (await checkStopped()) break;
                     const gateRes = await acceptIdea(idea, (maxAttempts - attempts.length - 1) + (3 - tries));
+                    if (await checkStopped()) break;
                     if (gateRes.ok) { idea = String(idea).slice(0, 300); gateInfo = gateRes; break; }
                     if (!bestTopical || (gateRes.topic || -1) > (bestTopical.gateRes.topic || -1)) bestTopical = { idea, gateRes };
                     if (gateRes.reason !== 'off_topic' && (!farthest || (gateRes.distPrior || 0) > (farthest.gateRes.distPrior || 0))) farthest = { idea, gateRes };
@@ -10657,6 +10711,7 @@ async function longQuantGrindProcess(rid, req0) {
                     idea = '';
                 }
             }
+            if (status === 'stopped') break;
             const fallback = farthest || bestTopical;
             if (!idea && fallback) {
                 idea = String(fallback.idea || '').slice(0, 300);
@@ -10672,6 +10727,7 @@ async function longQuantGrindProcess(rid, req0) {
             attempts.push(a); await write();
             let group = null, reqRid = '';
             try {
+                if (await checkStopped()) { a.status = 'stopped'; await write(); break; }
                 a.status = 'queued';
                 note = `attempt ${a.k + 1}: generating thumbnails on the app server`;
                 await write();
@@ -10681,28 +10737,39 @@ async function longQuantGrindProcess(rid, req0) {
                     a.status = st.stage === 'reasoning' ? 'prompting' : (st.stage === 'rendering' ? 'rendering' : (st.stage || 'queued'));
                     note = `attempt ${a.k + 1}: app server ${st.stage || 'queued'}${st.done != null && st.n ? ` ${st.done}/${st.n}` : ''}${st.note ? ' — ' + st.note : ''}`;
                     await write();
-                }, { context, sourceVideo });
+                }, { context, sourceVideo, stopRid: rid });
                 reqRid = out.reqRid;
                 group = out.group;
             } catch (e) {
+                if (e && e.code === 'LONGQUANT_STOPPED') {
+                    status = 'stopped';
+                    note = 'stopped by you';
+                    a.status = 'stopped';
+                    await write();
+                    break;
+                }
                 a.status = 'error';
                 a.error = 'thumbnail worker: ' + String(e.message || e).slice(0, 180);
                 await write();
                 continue;
             }
+            if (await checkStopped()) { a.status = 'stopped'; await write(); break; }
             a.status = 'importing';
             a.workerRid = reqRid;
             a.prompts = (group.attempts || []).map(x => x.prompt).filter(Boolean);
             note = `attempt ${a.k + 1}: importing ${group.attempts.length} scored thumbnails from the app-server worker`;
             await write();
             for (let i = 0; i < (group.attempts || []).length; i++) {
+                if (await checkStopped()) { a.status = 'stopped'; await write(); break; }
                 const s = group.attempts[i] || {};
                 const imgId = `${rid}_${a.k}_${i}`;
                 const t = { i, prompt: s.prompt || '', status: 'importing', pct: null, workerRid: reqRid, sourceKey: s.montage_key || `longform/guesses/demo/montages/${reqRid}_${s.k != null ? s.k : i}.jpg` };
                 a.thumbs.push(t); await write();
                 try {
+                    if (await checkStopped()) { t.status = 'stopped'; await write(); break; }
                     const jpg = await cloud.downloadFromR2(t.sourceKey).catch(() => null);
                     if (!jpg) throw new Error('generated image missing');
+                    if (await checkStopped()) { t.status = 'stopped'; await write(); break; }
                     await cloud.uploadToR2(`longform/grind/montages/${imgId}.jpg`, jpg, 'image/jpeg');
                     t.image = imgId;
                     t.status = 'done';
@@ -10716,6 +10783,7 @@ async function longQuantGrindProcess(rid, req0) {
                 }
                 await write();
             }
+            if (status === 'stopped') break;
             a.status = 'done';
             const improved = a.pct != null && (best == null || a.pct > best);
             if (improved) { best = a.pct; sinceBest = 0; }
@@ -10730,9 +10798,12 @@ async function longQuantGrindProcess(rid, req0) {
             await write();
             if (won) { status = 'won'; winner = a.k; note = `threshold cleared: attempt ${a.k + 1} hit ${a.pct}th`; break; }
         }
-    } catch (e) { err = String(e.message || e).slice(0, 220); status = 'error'; }
+    } catch (e) {
+        if (e && e.code === 'LONGQUANT_STOPPED') { status = 'stopped'; note = 'stopped by you'; }
+        else { err = String(e.message || e).slice(0, 220); status = 'error'; }
+    }
     if (status === 'running') status = Date.now() >= deadline ? 'deadline' : 'maxed';
-    if (req0.autosaveBest && !autosaved) {
+    if (status !== 'stopped' && req0.autosaveBest && !autosaved) {
         try {
             let bestHit = null, bestAttempt = null;
             for (const a of attempts) {
@@ -10774,6 +10845,16 @@ async function longQuantGrindQueue() {
     try {
         for (const key of keys) {
             const rid = key.split('/').pop().replace('.json', '');
+            if (await longQuantGrindStopped(rid)) {
+                await cloud.deleteFromR2(key).catch(() => {});
+                let run = { rid, attempts: [], status: 'stopped', note: 'stopped by you', ts: Date.now() };
+                try {
+                    const b = await cloud.downloadFromR2(`longform/grind/runs/${rid}.json`);
+                    if (b) run = { ...run, ...JSON.parse(b.toString('utf8')), status: 'stopped', note: 'stopped by you', ts: Date.now() };
+                } catch (e) {}
+                await cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
+                continue;
+            }
             let req0 = {}; try { req0 = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) {}
             await cloud.deleteFromR2(key).catch(() => {});
             try { await longQuantGrindProcess(rid, req0); } catch (e) { console.warn('longquant grind err:', e.message); }

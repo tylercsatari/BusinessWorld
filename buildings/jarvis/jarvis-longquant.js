@@ -1094,7 +1094,7 @@ const JarvisLongQuant = (function () {
         const inp = window.document.querySelector('[data-lqxgrindidea]'); if (inp) st.lqxGrindIdea = inp.value;
         const th = window.document.querySelector('[data-lqxgrindthreshold]'); if (th) st.lqxGrindThreshold = th.value;
         const ma = window.document.querySelector('[data-lqxgrindmax]'); if (ma) st.lqxGrindMax = ma.value;
-        st.lqxGrindStatus = 'submitting…'; st.lqxGrindRun = null; rtgUpdateLqExp();
+        st.lqxGrindStatus = 'submitting…'; st.lqxGrindRun = null; st.lqxGrindStopping = null; rtgUpdateLqExp();
         try {
             const j = await lqxJson('/api/longquant/grind/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idea: (st.lqxGrindIdea || '').trim(), threshold: st.lqxGrindThreshold || 85, maxAttempts: st.lqxGrindMax || 40, count: st.lqxCount || 5 }) });
             if (!j.ok) { st.lqxGrindStatus = 'error: ' + (j.error || 'request failed'); rtgUpdateLqExp(); return; }
@@ -1105,13 +1105,33 @@ const JarvisLongQuant = (function () {
         if (!st.lqxGrindRid) return; const rid = st.lqxGrindRid;
         lqxJson('/api/longquant/grind/run/' + rid).catch(() => null).then(j => {
             if (st.lqxGrindRid !== rid) return;
-            if (j) { st.lqxGrindRun = j; st.lqxGrindStatus = j.note || j.status || 'running'; rtgUpdateLqExp(); if (['queued', 'running'].includes(j.status)) window.setTimeout(lqxGrindPoll, 5000); }
+            if (j) {
+                st.lqxGrindRun = j;
+                if (j.status === 'stopped') st.lqxGrindStopping = null;
+                st.lqxGrindStatus = st.lqxGrindStopping === rid ? 'stopped — cancel signal sent' : (j.note || j.status || 'running');
+                rtgUpdateLqExp();
+                if (!st.lqxGrindStopping && ['queued', 'running'].includes(j.status)) window.setTimeout(lqxGrindPoll, 5000);
+            }
         }).catch(() => { if (st.lqxGrindRid === rid) window.setTimeout(lqxGrindPoll, 6000); });
     }
     async function lqxGrindStop() {
-        if (!st.lqxGrindRid) return;
-        await fetch('/api/longquant/grind/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rid: st.lqxGrindRid }) }).catch(() => {});
-        st.lqxGrindStatus = 'stopping…'; rtgUpdateLqExp();
+        const rid = st.lqxGrindRid;
+        if (!rid || st.lqxGrindStopping === rid) return;
+        st.lqxGrindStopping = rid;
+        st.lqxGrindStatus = 'stopped — cancel signal sent';
+        if (st.lqxGrindRun && st.lqxGrindRun.rid === rid) st.lqxGrindRun = { ...st.lqxGrindRun, status: 'stopped', note: 'stopped by you' };
+        rtgUpdateLqExp();
+        try {
+            const j = await lqxJson('/api/longquant/grind/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rid }) });
+            if (j && j.run) st.lqxGrindRun = j.run;
+            st.lqxGrindStopping = null;
+            st.lqxGrindStatus = 'stopped by you';
+            lqGrindRunsEnsure(true);
+        } catch (e) {
+            st.lqxGrindStopping = null;
+            st.lqxGrindStatus = 'stop failed: ' + e.message;
+        }
+        rtgUpdateLqExp();
     }
     function renderLqExperiment() {
         lqThumbsEnsure(); lqIdeaRunsEnsure(); lqGrindRunsEnsure();
@@ -1143,9 +1163,10 @@ const JarvisLongQuant = (function () {
         // GRIND card
         const gr = st.lqxGrindRun || {};
         const grAttempts = Array.isArray(gr.attempts) ? gr.attempts : [];
+        const grActive = !!(st.lqxGrindRid && st.lqxGrindStopping !== st.lqxGrindRid && (!gr.status || ['queued', 'running'].includes(gr.status)));
         let grind = `<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:5px">🎯 Grind to threshold</div>
           <div style="font-size:10px;color:${C.mute};margin-bottom:7px">Seed an idea, then let the idea model move outward through embedding space while the thumbnail model makes ${cnt} candidates per idea. If it misses, the required distance grows in proportion to how far the best score is below target; there is no fixed exploration cap.</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input data-lqxgrindidea value="${esc(st.lqxGrindIdea || '')}" placeholder="seed idea; blank = open-ended idea search" style="flex:1;min-width:250px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 10px;font-size:12px"/><input data-lqxgrindthreshold value="${esc(st.lqxGrindThreshold || 85)}" style="width:58px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 8px;font-size:12px"/><span style="font-size:9px;color:${C.mute}">th</span><input data-lqxgrindmax value="${esc(st.lqxGrindMax || 40)}" style="width:58px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 8px;font-size:12px"/><span style="font-size:9px;color:${C.mute}">tries</span><span data-lqxgrindstart style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:7px 14px;font-size:11px;font-weight:800">Start grind</span>${st.lqxGrindRid ? `<span data-lqxgrindstop style="cursor:pointer;border:1px solid ${C.red};color:${C.red};border-radius:6px;padding:7px 10px;font-size:11px;font-weight:800">Stop</span>` : ''}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input data-lqxgrindidea value="${esc(st.lqxGrindIdea || '')}" placeholder="seed idea; blank = open-ended idea search" style="flex:1;min-width:250px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 10px;font-size:12px"/><input data-lqxgrindthreshold value="${esc(st.lqxGrindThreshold || 85)}" style="width:58px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 8px;font-size:12px"/><span style="font-size:9px;color:${C.mute}">th</span><input data-lqxgrindmax value="${esc(st.lqxGrindMax || 40)}" style="width:58px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 8px;font-size:12px"/><span style="font-size:9px;color:${C.mute}">tries</span><span data-lqxgrindstart style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:7px 14px;font-size:11px;font-weight:800">Start grind</span>${grActive ? `<span data-lqxgrindstop style="cursor:pointer;border:1px solid ${C.red};color:${C.red};border-radius:6px;padding:7px 10px;font-size:11px;font-weight:800">Stop</span>` : ''}</div>
           ${st.lqxGrindStatus ? `<div style="font-size:10px;color:${String(st.lqxGrindStatus).indexOf('error') >= 0 || gr.status === 'error' ? C.red : C.amber};margin-top:6px">${esc(st.lqxGrindStatus)}</div>` : ''}`;
         if (grAttempts.length) {
             grind += `<div style="font-size:10px;color:${C.mute};margin:9px 0 6px">best <b style="color:${gr.best >= gr.threshold ? C.green : C.text}">${gr.best == null ? '—' : gr.best + 'th'}</b> · target ${gr.threshold || st.lqxGrindThreshold || 85}th · next min distance ≥ ${gr.gate || '—'}</div>`;

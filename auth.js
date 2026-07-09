@@ -160,6 +160,7 @@ function isPublic(pathname, method) {
     if (pathname.startsWith('/api/longquant/grind/img/')) return true; // grind thumbnails (no data), lets <img> load without a token
     if (pathname.startsWith('/api/longquant/grind/original/')) return true; // source thumbnails scored as grind baselines
     if (pathname === '/api/longquant/grind/runs' || pathname.startsWith('/api/longquant/grind/run/')) return true; // experiment progress/status, no account secrets
+    if (pathname === '/api/longquant/grind/stop') return true; // stop flag (write-only, needs the rid)
     if (pathname.startsWith('/api/hooks/montage/')) return true; // generated hook montages (no data), lets <img> load without a token
     if (pathname.startsWith('/api/hooks/grpo/montage/')) return true; // GRPO per-input attempt montages, lets <img> load without a token
     if (pathname.startsWith('/api/raw/saved-montage/')) return true; // saved-hook montages (no data), lets <img> load without a token
