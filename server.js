@@ -3350,6 +3350,22 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    if (pathname === '/api/longquant/exp/score-key' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const key = String(body.key || '').replace(/^\/+/, '');
+            const okKey = /^longform\/(guesses\/[\w-]+\/montages|grind\/montages|ideas\/[\w-]+\/montages|saved-thumbs)\/[\w-]+\.jpg$/i.test(key);
+            if (!okKey) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"bad key"}'); return; }
+            const jpg = await cloud.downloadFromR2(key).catch(() => null);
+            if (!jpg) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"image not found"}'); return; }
+            const title = String(body.title || '').slice(0, 500).trim();
+            const idea = String(body.idea || title).slice(0, 500).trim();
+            const score = await longQuantScoreImageBuffer(jpg, title, idea);
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify(score));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
     if (pathname === '/api/longquant/grind/start' && req.method === 'POST') {
         const body = await readBody(req);
         const idea = String(body.idea || body.title || '').slice(0, 500).trim();
@@ -3398,16 +3414,21 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const id = 'lt' + Date.now().toString(36) + Math.floor(Math.random() * 1e3).toString(36);
             let jpg = null;
             if (typeof body.image === 'string' && body.image.indexOf('base64,') >= 0) jpg = Buffer.from(body.image.split('base64,').pop(), 'base64');
-            else if (typeof body.montageKey === 'string' && /^longform\/guesses\/[\w\/-]+\.jpg$/.test(body.montageKey)) jpg = await cloud.downloadFromR2(body.montageKey).catch(() => null);
+            else if (typeof body.montageKey === 'string' && /^longform\/(guesses\/[\w-]+\/montages|grind\/montages|ideas\/[\w-]+\/montages|saved-thumbs)\/[\w-]+\.jpg$/i.test(body.montageKey)) jpg = await cloud.downloadFromR2(body.montageKey).catch(() => null);
             if (!jpg) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no image"}'); return; }
             await cloud.uploadToR2(`longform/saved-thumbs/${id}.jpg`, jpg, 'image/jpeg');
             const rec = { id, savedAt: Date.now(), title: String(body.title || '').slice(0, 200), prompt: String(body.prompt || '').slice(0, 800),
-                pctile: (typeof body.pctile === 'number') ? body.pctile : null, relevance: (typeof body.relevance === 'number') ? body.relevance : null };
+                pctile: (typeof body.pctile === 'number') ? body.pctile : null, relevance: (typeof body.relevance === 'number') ? body.relevance : null,
+                source: String(body.source || '').slice(0, 40), montageKey: String(body.montageKey || '').slice(0, 240),
+                score: (body.score && typeof body.score === 'object') ? body.score : null,
+                metrics: (body.metrics && typeof body.metrics === 'object') ? body.metrics : (body.score && body.score.metrics) || null,
+                channels: (body.channels && typeof body.channels === 'object') ? body.channels : (body.score && body.score.channels) || null,
+                emb_preview: (body.emb_preview && typeof body.emb_preview === 'object') ? body.emb_preview : (body.score && body.score.emb_preview) || null };
             await cloud.uploadToR2(`longform/saved-thumbs/${id}.json`, Buffer.from(JSON.stringify(rec)), 'application/json');
             let idx = { thumbs: [] };
             try { const ib = await cloud.downloadFromR2('longform/saved-thumbs/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
             if (!Array.isArray(idx.thumbs)) idx.thumbs = [];
-            idx.thumbs.push(rec);
+            idx.thumbs.push({ id, savedAt: rec.savedAt, title: rec.title, prompt: rec.prompt, pctile: rec.pctile, relevance: rec.relevance, source: rec.source });
             await cloud.uploadToR2('longform/saved-thumbs/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, id }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -3417,6 +3438,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         const b = await cloud.downloadFromR2('longform/saved-thumbs/index.json').catch(() => null);
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
         res.end(b ? b.toString('utf8') : '{"thumbs":[]}'); return;
+    }
+    const ltDetail = pathname.match(/^\/api\/longquant\/thumbs\/detail\/([a-z0-9]{1,32})$/i);
+    if (ltDetail && req.method === 'GET') {
+        const b = await cloud.downloadFromR2(`longform/saved-thumbs/${ltDetail[1]}.json`).catch(() => null);
+        res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(b ? b.toString('utf8') : '{}'); return;
     }
     if (pathname === '/api/longquant/thumbs/delete' && req.method === 'POST') {
         try {
