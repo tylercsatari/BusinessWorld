@@ -3620,7 +3620,16 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const lqGrindRun = pathname.match(/^\/api\/longquant\/grind\/run\/([a-z0-9]+)$/i);
     if (lqGrindRun && req.method === 'GET') {
         const b = await cloud.downloadFromR2(`longform/grind/runs/${lqGrindRun[1]}.json`).catch(() => null);
-        res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json' }); res.end(b ? b.toString('utf8') : '{}'); return;
+        let body = '{}';
+        if (b) {
+            body = b.toString('utf8');
+            try {
+                const run = JSON.parse(body);
+                run.note = longQuantDisplayGrindNote(run.note || '');
+                body = JSON.stringify(run);
+            } catch (e) {}
+        }
+        res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json' }); res.end(body); return;
     }
     if (pathname === '/api/longquant/grind/stop' && req.method === 'POST') {
         const body = await readBody(req); const rid = String(body.rid || '').replace(/[^a-z0-9]/gi, '');
@@ -10537,6 +10546,12 @@ function longQuantPct100(v) {
     const p = longQuantPct01(v);
     return p == null ? null : Math.round(p * 1000) / 10;
 }
+function longQuantDisplayGrindNote(note) {
+    return String(note || '')
+        .replace(/first attempt will generate thumbnails for (?:the )?exact seed/gi, 'first thumbnails will use the exact seed')
+        .replace(/first attempt will render the current video title exactly/gi, 'first thumbnails will use the current video title exactly')
+        .replace(/first attempt will render this original title before exploring variants/gi, 'first thumbnails will use this original title before exploring variants');
+}
 function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
     run = run || {};
     const rid = run.rid || fallbackRid || '';
@@ -10554,7 +10569,7 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
     const limit = Math.max(0, Number(run.thumbTryLimit || run.maxAttempts || 0));
     const overThumbLimit = limit > 0 && thumbTries >= limit;
     const effectiveStatus = overThumbLimit && !longQuantTerminalStatus(run.status) ? 'maxed' : (run.status || '');
-    const effectiveNote = overThumbLimit && !longQuantTerminalStatus(run.status) ? `maxed at ${thumbTries}/${limit} thumbnails` : (run.note || '');
+    const effectiveNote = overThumbLimit && !longQuantTerminalStatus(run.status) ? `maxed at ${thumbTries}/${limit} thumbnails` : longQuantDisplayGrindNote(run.note || '');
     const ts = Number(run.ts) || 0;
     const workerAttached = typeof _lqGrindActive !== 'undefined' && _lqGrindActive.has(rid);
     const queuedRequest = !!(reqIds && reqIds.has(rid));
