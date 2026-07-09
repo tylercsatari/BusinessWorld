@@ -812,8 +812,9 @@ const JarvisLongQuant = (function () {
         return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — what the models generate</div>${statStrip}${selectorsRow}<div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every title the thumbnail model trained on + its generated thumbnails, scored on the CTR+views axis. Click a title to light up its guesses on the map and see them below. Switch the latent space to view the same guesses projected different ways.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">latent space</span>${projPills}</div>${demo}${body}${detail}`, 14);
     }
     // ═══ 🧪 Long-form Experiment: generate thumbnails with the trained model + score uploads + saved bank ═══
-    const LQTHUMBS = [null], LQIDEARUNS = [null], LQGRINDRUNS = [null], LQGRINDDETAILS = {}, LQIDEAIDX = {}, LQIDEAGRP = {}, LQSCORES = {}, LQDETAILS = {}, LQRAW = {}, LQIMGS = {};
+    const LQTHUMBS = [null], LQIDEARUNS = [null], LQGRINDRUNS = [null], LQGRINDSTATUS = [null], LQGRINDDETAILS = {}, LQIDEAIDX = {}, LQIDEAGRP = {}, LQSCORES = {}, LQDETAILS = {}, LQRAW = {}, LQIMGS = {};
     const LQ_REFRESH_MS = 15000;
+    const LQ_LIVE_REFRESH_MS = 6000;
     function rtgUpdateLqExp() { try { const el = window.document.getElementById('rtg-lqexppanel'); if (el) el.innerHTML = renderLqExperiment(); } catch (e) { } }
     // Ideas are CONSOLIDATED into the 🎰 Guesses section — idea data refreshes repaint the guesses panel.
     function rtgUpdateLqIdeas() { rtgUpdateGuessesL(); }
@@ -845,15 +846,27 @@ const JarvisLongQuant = (function () {
     }
     function lqGrindRunsEnsure(force) {
         const cur = LQGRINDRUNS[0], now = Date.now();
-        if (cur && (cur.loading || cur.refreshing) && !force) return;
+        if (cur && (cur.loading || cur.refreshing)) return;
         if (cur && !force && now - (cur._t || 0) < LQ_REFRESH_MS) return;
         LQGRINDRUNS[0] = cur && cur.runs ? { ...cur, refreshing: 1 } : { loading: 1 };
         lqxJson('/api/longquant/grind/runs?limit=120').then(j => { j._t = Date.now(); LQGRINDRUNS[0] = j; rtgUpdateLqExp(); }).catch(e => { LQGRINDRUNS[0] = { runs: (cur && cur.runs) || [], error: e.message || 'could not load grind runs', _t: Date.now() }; rtgUpdateLqExp(); });
     }
+    function lqGrindStatusEnsure(force) {
+        const cur = LQGRINDSTATUS[0], now = Date.now();
+        if (cur && (cur.loading || cur.refreshing)) return;
+        if (cur && !force && now - (cur._t || 0) < LQ_LIVE_REFRESH_MS) return;
+        LQGRINDSTATUS[0] = cur && cur.ok ? { ...cur, refreshing: 1 } : { loading: 1 };
+        lqxJson('/api/longquant/grind/status?limit=180').then(j => {
+            j._t = Date.now(); LQGRINDSTATUS[0] = j; rtgUpdateLqExp();
+        }).catch(e => {
+            LQGRINDSTATUS[0] = { ...(cur && cur.ok ? cur : {}), ok: false, error: e.message || 'could not load live grind status', _t: Date.now() };
+            rtgUpdateLqExp();
+        });
+    }
     function lqGrindDetail(rid, force) {
         if (!rid) return;
         const cur = LQGRINDDETAILS[rid];
-        if (cur && (cur.loading || cur.refreshing) && !force) return;
+        if (cur && (cur.loading || cur.refreshing)) return;
         if (cur && cur.rid && !force) {
             const live = !['won', 'error', 'maxed', 'deadline', 'stopped'].includes(cur.status || '');
             if (!live || Date.now() - (cur._t || 0) < LQ_REFRESH_MS) return;
@@ -868,6 +881,17 @@ const JarvisLongQuant = (function () {
             rtgUpdateLqExp();
         });
     }
+    function lqGrindLiveTick() {
+        try {
+            if (!window.document.getElementById('rtg-lqexppanel')) return;
+            lqGrindStatusEnsure(true);
+            if (!st._lqRunsLiveT || Date.now() - st._lqRunsLiveT > 30000) { st._lqRunsLiveT = Date.now(); lqGrindRunsEnsure(true); }
+            const live = LQGRINDSTATUS[0], active = live && Array.isArray(live.active) ? live.active : [];
+            active.slice(0, 4).forEach(r => { if (r && r.rid) lqGrindDetail(r.rid, true); });
+            if (st.lqxChannelRid) lqGrindDetail(st.lqxChannelRid, true);
+        } catch (e) {}
+    }
+    if (typeof window !== 'undefined' && !window.__lqGrindLivePoll) window.__lqGrindLivePoll = window.setInterval(lqGrindLiveTick, LQ_LIVE_REFRESH_MS);
     function lqIdeaRunsEnsure(force) { if (LQIDEARUNS[0] && !force) return; LQIDEARUNS[0] = LQIDEARUNS[0] || { loading: 1 }; lqxJson('/api/longquant/ideas/runs').then(j => { LQIDEARUNS[0] = j.runs || []; if (!st.ideaRun && LQIDEARUNS[0].length) st.ideaRun = LQIDEARUNS[0][LQIDEARUNS[0].length - 1]; rtgUpdateLqIdeas(); rtgUpdateLqExp(); }).catch(() => { LQIDEARUNS[0] = []; rtgUpdateLqIdeas(); }); }
     function lqIdeaIdx(run) { if (!run || LQIDEAIDX[run]) return; LQIDEAIDX[run] = { loading: 1 }; fetch('/api/longquant/ideas/index?run=' + run).then(r => r.text()).then(t => { LQIDEAIDX[run] = { rows: t.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean) }; rtgUpdateLqIdeas(); rtgUpdateLqExp(); }).catch(() => { LQIDEAIDX[run] = { rows: [] }; rtgUpdateLqIdeas(); }); }
     function lqxScoreKey(id, key, title, idea) {
@@ -1235,7 +1259,7 @@ const JarvisLongQuant = (function () {
         rtgUpdateLqExp();
     }
     function renderLqExperiment() {
-        lqThumbsEnsure(); lqIdeaRunsEnsure(); lqGrindRunsEnsure();
+        lqThumbsEnsure(); lqIdeaRunsEnsure(); lqGrindRunsEnsure(); lqGrindStatusEnsure();
         const cnt = st.lqxCount || 5;
         let lqModalHtml = '';
         const cntPills = [1, 3, 5, 8].map(c => `<span data-lqxcount="${c}" style="cursor:pointer;border:1px solid ${cnt === c ? C.accent : C.border};background:${cnt === c ? C.accent + '1e' : 'transparent'};color:${cnt === c ? C.accent : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${c}</span>`).join('');
@@ -1282,15 +1306,42 @@ const JarvisLongQuant = (function () {
                 if (hit && hit.image) lqModalHtml = lqxModal(lqxFullReadout({ cacheId: 'grind:' + hit.image, title: idea, prompt: hit.prompt || '', img: `/api/longquant/grind/img/${hit.image}`, pctile: hit.pct != null ? hit.pct / 100 : null, score: lqxScoreFor('grind:' + hit.image, `longform/grind/montages/${hit.image}.jpg`, idea, idea, hit.score, true) }));
             }
         }
-        const grBank = LQGRINDRUNS[0], recentRuns = grBank && Array.isArray(grBank.runs) ? grBank.runs : [];
+        const grBank = LQGRINDRUNS[0], grLive = LQGRINDSTATUS[0] || {};
+        const runRank = r => r && r.status === 'running' ? 0 : r && r.status === 'queued' ? 1 : r && r.status === 'won' ? 2 : 3;
+        const recentRuns = grBank && Array.isArray(grBank.runs) ? grBank.runs.slice().sort((a, b) => (runRank(a) - runRank(b)) || ((b.ts || 0) - (a.ts || 0))) : [];
         const channelRuns = recentRuns.filter(r => r && (r.batchId || r.source === 'tyler-channel-overnight' || (r.sourceVideo && r.sourceVideo.id)));
-        const statusCounts = channelRuns.reduce((m, r) => { const k = r.status || 'unknown'; m[k] = (m[k] || 0) + 1; if (r.autosaved && r.autosaved.id) m.saved = (m.saved || 0) + 1; return m; }, {});
-        const runStatusHtml = channelRuns.length ? cardc(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
-          <div><div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">📡 Tyler channel grind status</div><div style="font-size:10px;color:${C.mute}">Auto-refreshes while the Long Quant experiment panel is open.</div></div>
+        const statusCounts = channelRuns.reduce((m, r) => { const k = r.status || 'unknown'; m[k] = (m[k] || 0) + 1; if (r.autosaved && r.autosaved.id) m.saved = (m.saved || 0) + 1; return m; }, { ...(grLive.channelCounts || {}) });
+        if (grLive.channelCounts) Object.keys(grLive.channelCounts).forEach(k => { statusCounts[k] = grLive.channelCounts[k]; });
+        const liveActive = Array.isArray(grLive.active) ? grLive.active : [];
+        const ageTxt = sec => {
+            if (sec == null || !isFinite(Number(sec))) return '—';
+            const s = Math.max(0, Number(sec));
+            if (s < 90) return Math.round(s) + 's ago';
+            if (s < 5400) return Math.round(s / 60) + 'm ago';
+            return Math.round(s / 3600) + 'h ago';
+        };
+        liveActive.slice(0, 4).forEach(r => { if (r && r.rid) lqGrindDetail(r.rid); });
+        const activeCards = liveActive.slice(0, 6).map(r => {
+            const det = r && r.rid ? LQGRINDDETAILS[r.rid] : null;
+            const atts = det && Array.isArray(det.attempts) ? det.attempts : [];
+            const last = atts.length ? atts[atts.length - 1] : null;
+            const thumbs = last && Array.isArray(last.thumbs) ? last.thumbs.slice(-5) : [];
+            const title = (r.sourceVideo && r.sourceVideo.title) || r.idea || r.title || '';
+            const stale = r.status === 'running' && r.lastWriteAgeSec != null && grLive.staleAfterSec && r.lastWriteAgeSec > grLive.staleAfterSec;
+            const col = stale ? C.red : r.status === 'running' ? C.cyan : C.amber;
+            const progress = `${r.n || 0}/${r.maxAttempts || '?'} attempts · ${r.thumbsDone || 0}${r.thumbsTotal ? '/' + r.thumbsTotal : ''} thumbnails`;
+            const thumbRow = thumbs.length ? `<div style="display:flex;gap:6px;overflow:auto;margin-top:7px;padding-bottom:2px">${thumbs.map(t => {
+                const label = t.pct == null ? (t.status || 'working') : t.pct + 'th';
+                return `<div style="flex:0 0 112px;border:1px solid ${t.status === 'error' ? C.red : t.image ? C.border : C.border2};border-radius:6px;overflow:hidden;background:${C.card}">${t.image ? lqxImg(`/api/longquant/grind/img/${t.image}`, `livegrind:${t.image}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000') : `<div style="height:63px;display:flex;align-items:center;justify-content:center;color:${t.status === 'error' ? C.red : C.dim};font-size:9px;text-align:center;padding:5px;box-sizing:border-box">${esc(t.status || 'queued')}</div>`}<div style="font-size:9px;color:${t.status === 'error' ? C.red : C.mute};padding:3px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(label)}</div></div>`;
+            }).join('')}</div>` : `<div style="font-size:9px;color:${C.dim};margin-top:6px">current attempt card will fill as thumbnails are imported</div>`;
+            return `<div style="border:1px solid ${col};background:${col}10;border-radius:8px;padding:8px;min-width:260px;flex:1 1 300px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="min-width:0"><div style="font-size:11px;font-weight:900;color:${C.text};line-height:1.3;max-height:34px;overflow:hidden">${esc(title.slice(0, 120))}</div><div style="font-size:9px;color:${C.mute};margin-top:3px">${esc(r.status || '')} · ${progress} · updated ${ageTxt(r.lastWriteAgeSec)}</div></div><span data-lqxchannelrun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 7px;font-size:9px;font-weight:800;white-space:nowrap">view</span></div>${r.note ? `<div style="font-size:9px;color:${stale ? C.red : C.faint};line-height:1.35;margin-top:5px">${esc(String(r.note).slice(0, 170))}</div>` : ''}${thumbRow}</div>`;
+        }).join('');
+        const runStatusHtml = (channelRuns.length || grLive.loading || grLive.error || grLive.ok) ? cardc(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
+          <div><div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">📡 Tyler channel grind status</div><div style="font-size:10px;color:${C.mute}">${grLive.ok ? `live poll ${grLive.refreshing ? 'refreshing' : 'ok'} · updated ${ageTxt((Date.now() - (grLive._t || Date.now())) / 1000)} · worker ${grLive.workerBusy ? 'busy' : 'idle'} · queue ${grLive.queueDepth == null ? '—' : grLive.queueDepth}` : grLive.loading ? 'loading live worker status…' : `status fetch failed${grLive.error ? ': ' + esc(grLive.error) : ''}`}</div></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">${[
               ['won', 'won', C.green], ['running', 'running', C.cyan], ['queued', 'queued', C.amber], ['saved', 'saved', C.accent], ['error', 'errors', C.red],
           ].map(([k, lab, col]) => `<span style="border:1px solid ${col};background:${col}18;color:${col};border-radius:7px;padding:4px 9px;font-size:10px;font-weight:800">${statusCounts[k] || 0} ${lab}</span>`).join('')}</div>
-        </div>`, 12) : (grBank && grBank.loading ? cardc(`<div style="font-size:11px;color:${C.cyan}">loading Long Quant grind status…</div>`, 12) : (grBank && grBank.error ? cardc(`<div style="font-size:11px;color:${C.red}">Long Quant grind status failed: ${esc(grBank.error)}</div>`, 12) : ''));
+        </div>${grLive.staleRunning ? `<div style="font-size:10px;color:${C.red};margin-top:8px">⚠ ${grLive.staleRunning} running job${grLive.staleRunning === 1 ? '' : 's'} stopped writing and will be recovered/requeued by the worker.</div>` : ''}${activeCards ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${activeCards}</div>` : `<div style="font-size:10px;color:${C.dim};margin-top:8px">No channel grind is actively writing right now. Queued videos will appear here as soon as the worker picks them up.</div>`}`, 12) : '';
         const channelHistoryHtml = channelRuns.length ? (() => {
             const toPct = v => {
                 if (v == null || !isFinite(Number(v))) return null;
@@ -1299,7 +1350,8 @@ const JarvisLongQuant = (function () {
             };
             const thumbPct = t => t && t.pct != null ? toPct(t.pct) : toPct(t && t.score && t.score.pctile);
             const pctCol = p => p == null ? C.dim : p >= 90 ? C.green : p >= 75 ? C.amber : C.text;
-            const selected = (st.lqxChannelRid && channelRuns.find(r => r.rid === st.lqxChannelRid)) || channelRuns.find(r => r.autosaved && r.autosaved.id) || channelRuns[0];
+            const livePick = liveActive.find(r => r && channelRuns.find(c => c.rid === r.rid));
+            const selected = (st.lqxChannelRid && channelRuns.find(r => r.rid === st.lqxChannelRid)) || livePick || channelRuns.find(r => ['running', 'queued'].includes(r.status || '')) || channelRuns.find(r => r.autosaved && r.autosaved.id) || channelRuns[0];
             if (selected && selected.rid && st.lqxChannelRid !== selected.rid) st.lqxChannelRid = selected.rid;
             const selRid = selected && selected.rid;
             if (selRid) lqGrindDetail(selRid);

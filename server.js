@@ -3558,10 +3558,66 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid }));
         return;
     }
+    if (pathname === '/api/longquant/grind/status' && req.method === 'GET') {
+        try {
+            const limit = Math.max(20, Math.min(260, parseInt(url.searchParams.get('limit'), 10) || 180));
+            const [runKeys0, reqKeys0] = await Promise.all([
+                cloud.listR2Keys('longform/grind/runs/').catch(() => []),
+                cloud.listR2Keys('longform/grind/requests/').catch(() => []),
+            ]);
+            const reqKeys = (reqKeys0 || []).filter(k => k.endsWith('.json'));
+            const reqIds = new Set(reqKeys.map(k => k.split('/').pop().replace('.json', '')));
+            const runKeys = (runKeys0 || []).filter(k => k.endsWith('.json')).sort().reverse().slice(0, limit);
+            const runs = [];
+            for (const k of runKeys) {
+                try {
+                    const b = await cloud.downloadFromR2(k);
+                    if (!b) continue;
+                    const raw = JSON.parse(b.toString('utf8'));
+                    runs.push(longQuantCompactGrindRun(raw, k.split('/').pop().replace('.json', ''), reqIds));
+                } catch (e) {}
+            }
+            const channelRuns = runs.filter(r => r && (r.batchId || r.source === 'tyler-channel-overnight' || (r.sourceVideo && r.sourceVideo.id)));
+            const counts = {};
+            const channelCounts = {};
+            for (const r of runs) counts[r.status || 'unknown'] = (counts[r.status || 'unknown'] || 0) + 1;
+            for (const r of channelRuns) channelCounts[r.status || 'unknown'] = (channelCounts[r.status || 'unknown'] || 0) + 1;
+            const active = channelRuns
+                .filter(r => r && !longQuantTerminalStatus(r.status))
+                .sort((a, b) => longQuantActiveSort(a, b))
+                .slice(0, 20);
+            const staleRunning = active.filter(r => r.status === 'running' && r.lastWriteAgeSec > longQuantStaleMs() / 1000).length;
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify({
+                ok: true,
+                serverNow: Date.now(),
+                workerBusy: !!_lqGrindBusy,
+                demoWorkerBusy: !!_lqDemoBusy,
+                queueDepth: reqKeys.length,
+                runCount: runs.length,
+                channelRunCount: channelRuns.length,
+                counts,
+                channelCounts,
+                active,
+                recent: runs.slice(0, 30),
+                staleRunning,
+                staleAfterSec: Math.round(longQuantStaleMs() / 1000),
+            }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
     if (pathname === '/api/longquant/grind/runs' && req.method === 'GET') {
         try {
             const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get('limit'), 10) || 80));
-            let keys = ((await cloud.listR2Keys('longform/grind/runs/')) || []).filter(k => k.endsWith('.json')).sort().reverse().slice(0, limit * 2);
+            const [runKeys0, reqKeys0] = await Promise.all([
+                cloud.listR2Keys('longform/grind/runs/').catch(() => []),
+                cloud.listR2Keys('longform/grind/requests/').catch(() => []),
+            ]);
+            const reqIds = new Set((reqKeys0 || []).filter(k => k.endsWith('.json')).map(k => k.split('/').pop().replace('.json', '')));
+            let keys = (runKeys0 || []).filter(k => k.endsWith('.json')).sort().reverse().slice(0, limit * 2);
             const runs = [];
             for (const k of keys) {
                 if (runs.length >= limit) break;
@@ -3569,21 +3625,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     const b = await cloud.downloadFromR2(k);
                     if (!b) continue;
                     const r = JSON.parse(b.toString('utf8'));
-                    runs.push({
-                        rid: r.rid || k.split('/').pop().replace('.json', ''),
-                        idea: r.idea || r.title || '',
-                        status: r.status || '',
-                        note: r.note || '',
-                        threshold: r.threshold,
-                        best: r.best,
-                        n: r.n || (Array.isArray(r.attempts) ? r.attempts.length : 0),
-                        ts: r.ts || 0,
-                        source: r.source || '',
-                        batchId: r.batchId || '',
-                        sourceVideo: r.sourceVideo || null,
-                        autosaved: r.autosaved || null,
-                        winner: r.winner == null ? null : r.winner,
-                    });
+                    runs.push(longQuantCompactGrindRun(r, k.split('/').pop().replace('.json', ''), reqIds));
                 } catch (e) {}
             }
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
@@ -10415,6 +10457,9 @@ async function longQuantRenderThumb(prompt) {
 const lqDemoStatus = (rid, o) => cloud.uploadToR2(`longform/guesses/demo/status/${rid}.json`, Buffer.from(JSON.stringify({ ...o, ts: Date.now() })), 'application/json').catch(() => {});
 const lqDemoGroupWrite = (rid, group) => cloud.uploadToR2(`longform/guesses/demo/groups/${rid}.json`, Buffer.from(JSON.stringify(group)), 'application/json').catch(() => {});
 const longQuantGrindStopped = rid => rid ? cloud.existsInR2(`longform/grind/stop/${rid}`).catch(() => false) : Promise.resolve(false);
+function longQuantStaleMs() {
+    return Math.max(10 * 60e3, parseInt(process.env.LONGQUANT_GRIND_STALE_MS || String(20 * 60e3), 10));
+}
 function longQuantGrindHours(rawHours, maxAttempts) {
     const explicit = parseFloat(rawHours);
     if (explicit > 0 && isFinite(explicit)) return Math.min(48, Math.max(0.1, explicit));
@@ -10426,6 +10471,19 @@ async function longQuantThrowIfStopped(rid) {
         const e = new Error('stopped by you');
         e.code = 'LONGQUANT_STOPPED';
         throw e;
+    }
+}
+async function longQuantWithHeartbeat(work, beat, intervalMs = 15000) {
+    let closed = false;
+    const timer = setInterval(() => {
+        if (closed || typeof beat !== 'function') return;
+        Promise.resolve().then(beat).catch(() => {});
+    }, Math.max(5000, intervalMs));
+    try {
+        return await work();
+    } finally {
+        closed = true;
+        clearInterval(timer);
     }
 }
 function longQuantPublicScore(score) {
@@ -10443,6 +10501,63 @@ function longQuantPct01(v) {
 function longQuantPct100(v) {
     const p = longQuantPct01(v);
     return p == null ? null : Math.round(p * 1000) / 10;
+}
+function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
+    run = run || {};
+    const rid = run.rid || fallbackRid || '';
+    const attempts = Array.isArray(run.attempts) ? run.attempts : [];
+    const lastAttempt = attempts.length ? attempts[attempts.length - 1] : null;
+    const thumbs = attempts.reduce((xs, a) => xs.concat((a && Array.isArray(a.thumbs)) ? a.thumbs : []), []);
+    const doneThumbs = thumbs.filter(t => t && (t.image || t.status === 'done')).length;
+    const errorThumbs = thumbs.filter(t => t && (t.status === 'error' || t.error)).length;
+    const ts = Number(run.ts) || 0;
+    const activeAttempt = lastAttempt ? {
+        k: lastAttempt.k,
+        idea: lastAttempt.idea || lastAttempt.title || '',
+        status: lastAttempt.status || '',
+        pct: lastAttempt.pct == null ? null : Number(lastAttempt.pct),
+        thumbs: Array.isArray(lastAttempt.thumbs) ? lastAttempt.thumbs.length : 0,
+        thumbsDone: Array.isArray(lastAttempt.thumbs) ? lastAttempt.thumbs.filter(t => t && (t.image || t.status === 'done')).length : 0,
+        thumbsError: Array.isArray(lastAttempt.thumbs) ? lastAttempt.thumbs.filter(t => t && (t.status === 'error' || t.error)).length : 0,
+    } : null;
+    return {
+        rid,
+        idea: run.idea || run.title || '',
+        title: run.title || run.idea || '',
+        status: run.status || '',
+        note: run.note || '',
+        threshold: run.threshold,
+        best: run.best,
+        n: run.n || attempts.length,
+        maxAttempts: run.maxAttempts || null,
+        count: run.count || null,
+        hours: run.hours || null,
+        deadline: run.deadline || null,
+        ts,
+        lastWriteAgeSec: ts ? Math.max(0, Math.round((Date.now() - ts) / 1000)) : null,
+        queuedRequest: !!(reqIds && reqIds.has(rid)),
+        source: run.source || '',
+        batchId: run.batchId || '',
+        sourceVideo: run.sourceVideo || null,
+        contextChars: run.contextChars || (run.context ? String(run.context).length : 0),
+        autosaved: run.autosaved || null,
+        winner: run.winner == null ? null : run.winner,
+        activeAttempt,
+        thumbsTotal: thumbs.length,
+        thumbsDone: doneThumbs,
+        thumbsError: errorThumbs,
+        gate: run.gate,
+        recovered: !!run.recovered,
+        renderModel: run.renderModel || LONGQUANT_RENDER_MODEL,
+        thumbModel: run.thumbModel || longQuantThumbPromptModelLabel(),
+        ideaModel: run.ideaModel || LONGQUANT_IDEA_MODEL,
+    };
+}
+function longQuantActiveSort(a, b) {
+    const rank = s => s === 'running' ? 0 : s === 'queued' ? 1 : 2;
+    const ra = rank(a && a.status), rb = rank(b && b.status);
+    if (ra !== rb) return ra - rb;
+    return (b.ts || 0) - (a.ts || 0);
 }
 function longQuantCompactSourceVideo(v) {
     if (!v || typeof v !== 'object') return null;
@@ -10518,6 +10633,11 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
     const scoreText = longQuantScoreText((sourceVideo && sourceVideo.title) || idea, idea, context, sourceVideo);
     const stopRid = opts.stopRid || opts.grindRid || opts.parentRid || '';
     const checkStop = () => stopRid ? longQuantThrowIfStopped(stopRid) : Promise.resolve();
+    const emitStatus = async o => {
+        const payload = { title: idea, n, ...(o || {}) };
+        await lqDemoStatus(rid, payload);
+        if (typeof opts.onStatus === 'function') await opts.onStatus(rid, payload);
+    };
     const hostedThumb = longQuantHostedModelConfigured('thumb');
     const promptModel = longQuantThumbPromptModelLabel();
     const group = {
@@ -10526,13 +10646,17 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
         promptModel, hosted: hostedThumb, attempts: [], done: false, streaming: true,
     };
     await checkStop();
-    await lqDemoStatus(rid, { stage: 'prompting', title: idea, n, done: 0, note: hostedThumb ? 'trained thumbnail model is writing prompts on the app server' : 'app prompt worker is writing thumbnail prompts from your exact idea' });
+    await emitStatus({ stage: 'prompting', done: 0, note: hostedThumb ? 'trained thumbnail model is writing prompts on the app server' : 'app prompt worker is writing thumbnail prompts from your exact idea' });
     await lqDemoGroupWrite(rid, group);
     await checkStop();
-    const prompts = await longQuantThumbPrompts(idea, n, context);
+    const prompts = await longQuantWithHeartbeat(
+        () => longQuantThumbPrompts(idea, n, context),
+        () => emitStatus({ stage: 'prompting', done: 0, note: 'still waiting for thumbnail prompts from the model' }),
+        12000
+    );
     await checkStop();
     group.n = prompts.length;
-    await lqDemoStatus(rid, { stage: 'rendering', title: idea, n: prompts.length, done: 0, note: 'Flux Pro is rendering thumbnails; each result is scored and embedded as it lands' });
+    await emitStatus({ stage: 'rendering', n: prompts.length, done: 0, note: 'Flux Pro is rendering thumbnails; each result is scored and embedded as it lands' });
     await lqDemoGroupWrite(rid, group);
     for (let k = 0; k < prompts.length; k++) {
         await checkStop();
@@ -10543,14 +10667,22 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
         await lqDemoGroupWrite(rid, group);
         try {
             await checkStop();
-            const jpg = await longQuantRenderThumb(prompt);
+            const jpg = await longQuantWithHeartbeat(
+                () => longQuantRenderThumb(prompt),
+                () => emitStatus({ stage: 'rendering', n: prompts.length, done: k, note: `still rendering thumbnail ${k + 1}/${prompts.length} on Flux Pro` }),
+                15000
+            );
             await checkStop();
             await cloud.uploadToR2(att.montage_key, jpg, 'image/jpeg');
             att.status = 'scoring';
-            await lqDemoStatus(rid, { stage: 'scoring', title: idea, n: prompts.length, done: k, note: `scoring thumbnail ${k + 1}/${prompts.length} on raw-long visual/text/together embeddings` });
+            await emitStatus({ stage: 'scoring', n: prompts.length, done: k, note: `scoring thumbnail ${k + 1}/${prompts.length} on raw-long visual/text/together embeddings` });
             await lqDemoGroupWrite(rid, group);
             await checkStop();
-            const score = longQuantPublicScore(await longQuantScoreImageBuffer(jpg, idea, scoreText || idea));
+            const score = longQuantPublicScore(await longQuantWithHeartbeat(
+                () => longQuantScoreImageBuffer(jpg, idea, scoreText || idea),
+                () => emitStatus({ stage: 'scoring', n: prompts.length, done: k, note: `still scoring thumbnail ${k + 1}/${prompts.length} on raw-long embeddings` }),
+                15000
+            ));
             await checkStop();
             att.score = score;
             att.pctile = score && score.pctile != null ? score.pctile : null;
@@ -10565,13 +10697,13 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
                 group.streaming = false;
                 group.error = 'stopped by you';
                 await lqDemoGroupWrite(rid, group);
-                await lqDemoStatus(rid, { stage: 'stopped', title: idea, n: prompts.length, done: k, note: 'stopped by you' });
+                await emitStatus({ stage: 'stopped', n: prompts.length, done: k, note: 'stopped by you' });
                 throw e;
             }
             att.status = 'error';
             att.error = String(e.message || e).slice(0, 220);
         }
-        await lqDemoStatus(rid, { stage: 'rendering', title: idea, n: prompts.length, done: k + 1, note: `generated ${k + 1}/${prompts.length} thumbnails on the app server` });
+        await emitStatus({ stage: 'rendering', n: prompts.length, done: k + 1, note: `generated ${k + 1}/${prompts.length} thumbnails on the app server` });
         await lqDemoGroupWrite(rid, group);
     }
     group.attempts.sort((a, b) => {
@@ -10586,7 +10718,7 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
     group.done = true;
     group.error = group.attempts.some(a => a.status === 'done') ? '' : (group.attempts[0] && group.attempts[0].error) || 'no thumbnails rendered';
     await lqDemoGroupWrite(rid, group);
-    await lqDemoStatus(rid, { stage: 'done', title: idea, n: group.attempts.length, done: group.attempts.length, best: group.best_pctile, error: group.error || '' });
+    await emitStatus({ stage: 'done', n: group.attempts.length, done: group.attempts.length, best: group.best_pctile, error: group.error || '' });
     if (group.error) throw new Error(group.error);
     return group;
 }
@@ -10609,7 +10741,7 @@ async function longQuantProcessRequest(rid, req) {
 async function longQuantDemoThumbGroup(idea, count, parentRid, attemptK, onStatus, opts = {}) {
     const reqRid = 'g' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
     if (onStatus) await onStatus(reqRid, { stage: 'prompting', note: 'app server is generating thumbnails directly' });
-    const group = await longQuantBuildThumbGroup(reqRid, idea, Math.max(1, Math.min(8, parseInt(count, 10) || 5)), { parentRid, attemptK, ...opts });
+    const group = await longQuantBuildThumbGroup(reqRid, idea, Math.max(1, Math.min(8, parseInt(count, 10) || 5)), { parentRid, attemptK, ...opts, onStatus });
     return { reqRid, group };
 }
 let _lqDemoBusy = false;
@@ -10960,7 +11092,7 @@ async function longQuantRecoverStaleGrinds() {
     const now = Date.now();
     if (now - _lqGrindRecoverAt < 5 * 60e3) return;
     _lqGrindRecoverAt = now;
-    const staleMs = Math.max(10 * 60e3, parseInt(process.env.LONGQUANT_GRIND_STALE_MS || String(45 * 60e3), 10));
+    const staleMs = longQuantStaleMs();
     let runKeys = [], reqKeys = [];
     try {
         [runKeys, reqKeys] = await Promise.all([
