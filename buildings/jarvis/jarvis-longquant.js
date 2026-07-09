@@ -796,7 +796,13 @@ const JarvisLongQuant = (function () {
         if (cur && (cur.loading || cur.refreshing) && !force) return;
         if (cur && !force && now - (cur._t || 0) < LQ_REFRESH_MS) return;
         LQTHUMBS[0] = cur && cur.thumbs ? { ...cur, refreshing: 1 } : { loading: 1 };
-        lqxJson('/api/longquant/thumbs/list').then(j => { j._t = Date.now(); LQTHUMBS[0] = j; rtgUpdateLqExp(); }).catch(e => { LQTHUMBS[0] = { thumbs: (cur && cur.thumbs) || [], error: e.message || 'could not load saved thumbnails', _t: Date.now() }; rtgUpdateLqExp(); });
+        lqxJson('/api/longquant/thumbs/list').then(j => {
+            (j.thumbs || []).forEach(t => {
+                const score = t && (t.score || ((t.channels && t.emb_preview) ? { metrics: t.metrics, channels: t.channels, emb_preview: t.emb_preview, pctile: t.pctile, relevance: t.relevance } : null));
+                if (t && t.id && score && score.channels && score.emb_preview) LQSCORES['saved:' + t.id] = score;
+            });
+            j._t = Date.now(); LQTHUMBS[0] = j; rtgUpdateLqExp();
+        }).catch(e => { LQTHUMBS[0] = { thumbs: (cur && cur.thumbs) || [], error: e.message || 'could not load saved thumbnails', _t: Date.now() }; rtgUpdateLqExp(); });
     }
     function lqGrindRunsEnsure(force) {
         const cur = LQGRINDRUNS[0], now = Date.now();
@@ -817,7 +823,12 @@ const JarvisLongQuant = (function () {
     function lqxSavedDetail(id) {
         if (!id || LQDETAILS[id]) return;
         LQDETAILS[id] = { loading: 1 };
-        lqxJson('/api/longquant/thumbs/detail/' + id).then(j => { LQDETAILS[id] = j; rtgUpdateLqExp(); })
+        lqxJson('/api/longquant/thumbs/detail/' + id).then(j => {
+            const score = j && (j.score || ((j.channels && j.emb_preview) ? { metrics: j.metrics, channels: j.channels, emb_preview: j.emb_preview, pctile: j.pctile, relevance: j.relevance } : null));
+            if (score && score.channels && score.emb_preview) LQSCORES['saved:' + id] = score;
+            LQDETAILS[id] = j;
+            rtgUpdateLqExp();
+        })
             .catch(e => { LQDETAILS[id] = { error: e.message }; rtgUpdateLqExp(); });
     }
     function lqxImgData(url, id) {
@@ -896,6 +907,10 @@ const JarvisLongQuant = (function () {
     }
     function lqxScoreFor(cacheId, key, title, idea, localScore, autoScore) {
         const c = LQSCORES[cacheId];
+        if (localScore && localScore.channels && localScore.emb_preview) {
+            LQSCORES[cacheId] = localScore;
+            return localScore;
+        }
         if (!autoScore && localScore && localScore.metrics) return localScore;
         if (c && c.error && key && autoScore && Date.now() - (c.at || 0) > 5000) { delete LQSCORES[cacheId]; lqxScoreKey(cacheId, key, title, idea); return LQSCORES[cacheId] || c; }
         if (!c && key && autoScore && (!localScore || !localScore.channels || !localScore.emb_preview)) lqxScoreKey(cacheId, key, title, idea);
