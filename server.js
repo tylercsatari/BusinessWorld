@@ -10561,9 +10561,15 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
         await lqDemoStatus(rid, { stage: 'rendering', title: idea, n: prompts.length, done: k + 1, note: `generated ${k + 1}/${prompts.length} thumbnails on the app server` });
         await lqDemoGroupWrite(rid, group);
     }
-    group.attempts.sort((a, b) => ((b.reward != null ? b.reward : b.pctile) || -1) - ((a.reward != null ? a.reward : a.pctile) || -1));
-    group.best_pctile = group.attempts.length ? group.attempts[0].pctile : null;
-    group.best_reward = group.attempts.length ? group.attempts[0].reward : null;
+    group.attempts.sort((a, b) => {
+        const ad = a && a.status === 'done';
+        const bd = b && b.status === 'done';
+        if (ad !== bd) return ad ? -1 : 1;
+        return ((b.reward != null ? b.reward : b.pctile) || -1) - ((a.reward != null ? a.reward : a.pctile) || -1);
+    });
+    const doneAttempts = group.attempts.filter(a => a && a.status === 'done');
+    group.best_pctile = doneAttempts.length ? doneAttempts[0].pctile : null;
+    group.best_reward = doneAttempts.length ? doneAttempts[0].reward : null;
     group.done = true;
     group.error = group.attempts.some(a => a.status === 'done') ? '' : (group.attempts[0] && group.attempts[0].error) || 'no thumbnails rendered';
     await lqDemoGroupWrite(rid, group);
@@ -10804,9 +10810,15 @@ async function longQuantGrindProcess(rid, req0) {
                 const t = { i, prompt: s.prompt || '', status: 'importing', pct: null, workerRid: reqRid, sourceKey: s.montage_key || `longform/guesses/demo/montages/${reqRid}_${s.k != null ? s.k : i}.jpg` };
                 a.thumbs.push(t); await write();
                 try {
+                    if (s.status && s.status !== 'done') {
+                        t.status = s.status === 'stopped' ? 'stopped' : 'error';
+                        t.error = String(s.error || s.status || 'thumbnail was not rendered').slice(0, 160);
+                        t.score = s.score || null;
+                        continue;
+                    }
                     if (await checkStopped()) { t.status = 'stopped'; await write(); break; }
                     const jpg = await cloud.downloadFromR2(t.sourceKey).catch(() => null);
-                    if (!jpg) throw new Error('generated image missing');
+                    if (!jpg) throw new Error('generated image file not found in R2');
                     if (await checkStopped()) { t.status = 'stopped'; await write(); break; }
                     await cloud.uploadToR2(`longform/grind/montages/${imgId}.jpg`, jpg, 'image/jpeg');
                     t.image = imgId;
