@@ -3561,12 +3561,30 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const channelCounts = {};
             for (const r of runs) counts[r.status || 'unknown'] = (counts[r.status || 'unknown'] || 0) + 1;
             for (const r of channelRuns) channelCounts[r.status || 'unknown'] = (channelCounts[r.status || 'unknown'] || 0) + 1;
+            const stateCounts = {};
+            for (const r of channelRuns) stateCounts[r.executionState || 'unknown'] = (stateCounts[r.executionState || 'unknown'] || 0) + 1;
             const active = channelRuns
                 .filter(r => r && !longQuantTerminalStatus(r.status))
                 .sort((a, b) => longQuantActiveSort(a, b))
                 .slice(0, 20);
-            const staleRunning = active.filter(r => r.status === 'running' && r.lastWriteAgeSec > longQuantStaleMs() / 1000).length;
-            const orphanedRunning = active.filter(r => r.orphanedRunning).length;
+            const runningNow = channelRuns
+                .filter(r => r && r.executionState === 'running')
+                .sort((a, b) => longQuantActiveSort(a, b))
+                .slice(0, 20);
+            const recovering = channelRuns
+                .filter(r => r && r.executionState === 'recovering')
+                .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+                .slice(0, 20);
+            const queuedNext = channelRuns
+                .filter(r => r && r.executionState === 'queued')
+                .sort((a, b) => longQuantActiveSort(a, b))
+                .slice(0, 40);
+            const finishedRecent = channelRuns
+                .filter(r => r && r.executionState === 'finished')
+                .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+                .slice(0, 20);
+            const staleRunning = runningNow.filter(r => r.lastWriteAgeSec > longQuantStaleMs() / 1000).length;
+            const orphanedRunning = recovering.length;
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify({
                 ok: true,
@@ -3581,7 +3599,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 channelRunCount: channelRuns.length,
                 counts,
                 channelCounts,
+                stateCounts,
                 active,
+                runningNow,
+                recovering,
+                queuedNext,
+                finishedRecent,
                 recent: runs.slice(0, 30),
                 staleRunning,
                 orphanedRunning,
@@ -10580,6 +10603,13 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
     const workerAttached = typeof _lqGrindActive !== 'undefined' && _lqGrindActive.has(rid);
     const queuedRequest = !!(reqIds && reqIds.has(rid));
     const orphanedRunning = effectiveStatus === 'running' && !workerAttached && !queuedRequest;
+    const terminal = longQuantTerminalStatus(effectiveStatus);
+    const executionState = terminal ? 'finished'
+        : workerAttached ? 'running'
+            : orphanedRunning ? 'recovering'
+                : (queuedRequest || effectiveStatus === 'queued') ? 'queued'
+                    : effectiveStatus === 'running' ? 'recovering'
+                        : 'idle';
     const activeAttempt = lastAttempt ? {
         k: lastAttempt.k,
         idea: lastAttempt.idea || lastAttempt.title || '',
@@ -10595,7 +10625,12 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
         rid,
         idea: run.idea || run.title || '',
         title: run.title || run.idea || '',
+        rawStatus: run.status || '',
         status: effectiveStatus,
+        executionState,
+        actuallyRunning: executionState === 'running',
+        waitingInQueue: executionState === 'queued',
+        finished: executionState === 'finished',
         note: effectiveNote,
         threshold: run.threshold,
         best: run.best,

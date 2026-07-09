@@ -979,20 +979,39 @@ const JarvisLongQuant = (function () {
     }
     function lqxPoll() {
         if (!st.lqxRid) return; const rid = st.lqxRid;
+        const statusText = s => {
+            const el = st.lqxStart ? Math.round((Date.now() - st.lqxStart) / 1000) : 0;
+            const prog = s && s.n ? ` · ${s.done || 0}/${s.n}` : '';
+            const ttl = s && s.title ? ` · idea: ${s.title}` : '';
+            const stage = s && s.stage ? String(s.stage).toUpperCase() : 'RUNNING';
+            return `${stage}${prog}${ttl} — ${s && s.note ? s.note : 'trained longform worker'} (${el}s)`;
+        };
         lqxJson('/api/longquant/guesses/status/' + rid).then(s => {
             if (st.lqxRid !== rid) return;
             if (s && s.stage && s.stage !== 'queued') {
-                const el = st.lqxStart ? Math.round((Date.now() - st.lqxStart) / 1000) : 0;
-                const prog = s.n ? ` · ${s.done || 0}/${s.n}` : '';
-                const ttl = s.title ? ` · idea: ${s.title}` : '';
-                st.lqxStatus = `${s.stage}${prog}${ttl} — ${s.note || 'trained longform worker'} (${el}s)`;
+                st.lqxLastDemoStatus = { ...s, rid };
+                st.lqxStatus = statusText(s);
                 rtgUpdateLqExp();
             }
         }).catch(() => {});
         lqxJson('/api/longquant/guesses/group/demo/' + rid).catch(() => null).then(j => {
             if (st.lqxRid !== rid) return;
-            if (j && j.attempts) { st.lqxResult = j; st.lqxStatus = null; rtgUpdateLqExp(); }
-            else { st.lqxStatus = 'queued — waiting for the app-server Long Quant worker (' + Math.round((Date.now() - st.lqxStart) / 1000) + 's)'; rtgUpdateLqExp(); window.setTimeout(lqxPoll, 3000); }
+            const live = st.lqxLastDemoStatus && st.lqxLastDemoStatus.rid === rid ? st.lqxLastDemoStatus : null;
+            if (j && Array.isArray(j.attempts)) {
+                st.lqxResult = j;
+                if (j.done || j.streaming === false) st.lqxStatus = j.error ? `DONE - worker finished with error: ${j.error}` : null;
+                else {
+                    st.lqxStatus = live && live.stage && live.stage !== 'queued'
+                        ? statusText(live)
+                        : `RUNNING · ${j.attempts.length}/${j.n || j.attempts.length || '?'} thumbnails — app-server worker is still generating (${Math.round((Date.now() - st.lqxStart) / 1000)}s)`;
+                    window.setTimeout(lqxPoll, 3000);
+                }
+                rtgUpdateLqExp();
+            }
+            else {
+                if (!live || live.stage === 'queued') st.lqxStatus = 'QUEUED - not running yet, waiting for the app-server Long Quant worker (' + Math.round((Date.now() - st.lqxStart) / 1000) + 's)';
+                rtgUpdateLqExp(); window.setTimeout(lqxPoll, 3000);
+            }
         }).catch(() => { if (st.lqxRid === rid) window.setTimeout(lqxPoll, 6000); });
     }
     async function lqxSave(payload, flashKey) {
@@ -1380,29 +1399,63 @@ const JarvisLongQuant = (function () {
             const loadTxt = errs ? ` · ${errs} failed` : (loaded && loaded < total ? ` · ${loaded} loaded` : '');
             return `${total}/${max} thumbnails${bestTxt} · target ${target}th${loadTxt}`;
         };
-        liveActive.slice(0, 4).forEach(r => { if (r && r.rid) lqGrindDetail(r.rid); });
-        const activeCards = liveActive.slice(0, 6).map(r => {
+        const terminalLq = r => ['won', 'error', 'maxed', 'deadline', 'stopped', 'archived', 'done'].includes((r && r.status) || '');
+        const grindExecState = r => (r && r.executionState) || (terminalLq(r) ? 'finished' : r && r.workerAttached ? 'running' : r && r.orphanedRunning ? 'recovering' : r && (r.queuedRequest || r.status === 'queued') ? 'queued' : (r && r.status) || 'unknown');
+        const grindStateLabel = r => {
+            const st0 = grindExecState(r);
+            if (st0 === 'running') return 'RUNNING NOW';
+            if (st0 === 'queued') return 'QUEUED - not running';
+            if (st0 === 'recovering') return 'RECOVERING - not running';
+            if (st0 === 'finished') {
+                const s = (r && r.status) || '';
+                if (s === 'won') return 'FINISHED - target hit';
+                if (s === 'maxed') return 'FINISHED - max images';
+                if (s === 'stopped') return 'STOPPED';
+                if (s === 'error') return 'ERROR';
+                return 'FINISHED';
+            }
+            return String(st0 || 'unknown').toUpperCase();
+        };
+        const grindStateColor = r => {
+            const st0 = grindExecState(r);
+            if (st0 === 'running') return C.cyan;
+            if (st0 === 'recovering') return C.amber;
+            if (st0 === 'queued') return C.dim;
+            if ((r && r.status) === 'error') return C.red;
+            if ((r && r.status) === 'won') return C.green;
+            return C.border;
+        };
+        const runningNow = Array.isArray(grLive.runningNow) ? grLive.runningNow : liveActive.filter(r => r && r.workerAttached);
+        const recoveringNow = Array.isArray(grLive.recovering) ? grLive.recovering : liveActive.filter(r => r && r.orphanedRunning);
+        const queuedNext = Array.isArray(grLive.queuedNext) ? grLive.queuedNext : liveActive.filter(r => r && (r.queuedRequest || r.status === 'queued'));
+        [...runningNow, ...recoveringNow, ...queuedNext].slice(0, 6).forEach(r => { if (r && r.rid) lqGrindDetail(r.rid); });
+        const statusCard = r => {
             const det = r && r.rid ? LQGRINDDETAILS[r.rid] : null;
             const atts = det && Array.isArray(det.attempts) ? det.attempts : [];
             const last = atts.length ? atts[atts.length - 1] : null;
             const thumbs = last && Array.isArray(last.thumbs) ? last.thumbs.slice(-5) : [];
             const title = (r.sourceVideo && r.sourceVideo.title) || r.idea || r.title || '';
             const stale = r.status === 'running' && r.lastWriteAgeSec != null && grLive.staleAfterSec && r.lastWriteAgeSec > grLive.staleAfterSec;
-            const shownStatus = r.orphanedRunning ? 'recovering' : (r.workerAttached ? 'running' : (r.status || ''));
-            const col = stale ? C.red : r.orphanedRunning ? C.amber : r.status === 'running' ? C.cyan : C.amber;
+            const shownStatus = grindStateLabel(r);
+            const col = stale ? C.red : grindStateColor(r);
             const progress = grindProgressText(r);
             const thumbRow = thumbs.length ? `<div style="display:flex;gap:6px;overflow:auto;margin-top:7px;padding-bottom:2px">${thumbs.map(t => {
                 const label = t.pct == null ? (t.status || 'working') : t.pct + 'th';
                 return `<div style="flex:0 0 112px;border:1px solid ${t.status === 'error' ? C.red : t.image ? C.border : C.border2};border-radius:6px;overflow:hidden;background:${C.card}">${t.image ? lqxImg(`/api/longquant/grind/img/${t.image}`, `livegrind:${t.image}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000') : `<div style="height:63px;display:flex;align-items:center;justify-content:center;color:${t.status === 'error' ? C.red : C.dim};font-size:9px;text-align:center;padding:5px;box-sizing:border-box">${esc(t.status || 'queued')}</div>`}<div style="font-size:9px;color:${t.status === 'error' ? C.red : C.mute};padding:3px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(label)}</div></div>`;
-            }).join('')}</div>` : `<div style="font-size:9px;color:${C.dim};margin-top:6px">current attempt card will fill as thumbnails are imported</div>`;
-            return `<div style="border:1px solid ${col};background:${col}10;border-radius:8px;padding:8px;min-width:260px;flex:1 1 300px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="min-width:0"><div style="font-size:11px;font-weight:900;color:${C.text};line-height:1.3;max-height:34px;overflow:hidden">${esc(title.slice(0, 120))}</div><div style="font-size:9px;color:${C.mute};margin-top:3px">${esc(shownStatus)} · ${progress} · updated ${ageTxt(r.lastWriteAgeSec)}</div></div><span data-lqxchannelrun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 7px;font-size:9px;font-weight:800;white-space:nowrap">view</span></div>${r.note ? `<div style="font-size:9px;color:${stale ? C.red : C.faint};line-height:1.35;margin-top:5px">${esc(String(r.note).slice(0, 170))}</div>` : ''}${thumbRow}</div>`;
-        }).join('');
+            }).join('')}</div>` : `<div style="font-size:9px;color:${C.dim};margin-top:6px">${grindExecState(r) === 'running' ? 'waiting for the next thumbnail update' : grindExecState(r) === 'queued' ? 'not running yet - waiting for a worker' : grindExecState(r) === 'recovering' ? 'not running - recovery will reattach or queue it' : 'no live thumbnail work'}</div>`;
+            return `<div style="border:1px solid ${col};background:${col}10;border-radius:8px;padding:8px;min-width:260px;flex:1 1 300px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="min-width:0"><div style="font-size:11px;font-weight:900;color:${C.text};line-height:1.3;max-height:34px;overflow:hidden">${esc(title.slice(0, 120))}</div><div style="font-size:9px;color:${col};margin-top:3px;font-weight:900">${esc(shownStatus)}</div><div style="font-size:9px;color:${C.mute};margin-top:2px">${progress} · updated ${ageTxt(r.lastWriteAgeSec)}</div></div><span data-lqxchannelrun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 7px;font-size:9px;font-weight:800;white-space:nowrap">view</span></div>${r.note ? `<div style="font-size:9px;color:${stale ? C.red : C.faint};line-height:1.35;margin-top:5px">${esc(String(r.note).slice(0, 170))}</div>` : ''}${thumbRow}</div>`;
+        };
+        const lane = (label, rows, empty, limit = 6) => {
+            const cards = (rows || []).slice(0, limit).map(statusCard).join('');
+            return `<div style="margin-top:10px"><div style="font-size:10px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:6px">${esc(label)}</div>${cards ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${cards}</div>` : `<div style="font-size:10px;color:${C.dim};border:1px dashed ${C.border};border-radius:8px;padding:8px">${esc(empty)}</div>`}</div>`;
+        };
+        const stateCounts = grLive.stateCounts || {};
         const runStatusHtml = (channelRuns.length || grLive.loading || grLive.error || grLive.ok) ? cardc(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
           <div><div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">📡 Tyler channel grind status</div><div style="font-size:10px;color:${C.mute}">${grLive.ok ? `live poll ${grLive.refreshing ? 'refreshing' : 'ok'} · updated ${ageTxt((Date.now() - (grLive._t || Date.now())) / 1000)} · workers ${grLive.activeWorkers == null ? (grLive.workerBusy ? 1 : 0) : grLive.activeWorkers}/${grLive.workerLimit || 1} · queue ${grLive.queueDepth == null ? '—' : grLive.queueDepth}` : grLive.loading ? 'loading live worker status…' : `status fetch failed${grLive.error ? ': ' + esc(grLive.error) : ''}`}</div></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">${[
-              ['won', 'won', C.green], ['running', 'running', C.cyan], ['queued', 'queued', C.amber], ['saved', 'saved', C.accent], ['archived', 'done', C.dim], ['stopped', 'stopped', C.amber], ['error', 'errors', C.red],
-          ].map(([k, lab, col]) => `<span style="border:1px solid ${col};background:${col}18;color:${col};border-radius:7px;padding:4px 9px;font-size:10px;font-weight:800">${statusCounts[k] || 0} ${lab}</span>`).join('')}</div>
-        </div>${grLive.orphanedRunning ? `<div style="font-size:10px;color:${C.amber};margin-top:8px">${grLive.orphanedRunning} running record${grLive.orphanedRunning === 1 ? ' is' : 's are'} not attached to a live worker; recovery will requeue ${grLive.orphanedRunning === 1 ? 'it' : 'them'} within about 90s.</div>` : ''}${grLive.staleRunning ? `<div style="font-size:10px;color:${C.red};margin-top:8px">⚠ ${grLive.staleRunning} running job${grLive.staleRunning === 1 ? '' : 's'} stopped writing and will be recovered/requeued by the worker.</div>` : ''}${activeCards ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${activeCards}</div>` : `<div style="font-size:10px;color:${C.dim};margin-top:8px">No channel grind is actively writing right now. Queued videos will appear here as soon as the worker picks them up.</div>`}`, 12) : '';
+              ['running', 'running now', C.cyan], ['queued', 'queued', C.dim], ['recovering', 'recovering', C.amber], ['finished', 'finished', C.green], ['saved', 'saved', C.accent], ['error', 'errors', C.red],
+          ].map(([k, lab, col]) => `<span style="border:1px solid ${col};background:${col}18;color:${col};border-radius:7px;padding:4px 9px;font-size:10px;font-weight:800">${k === 'saved' || k === 'error' ? (statusCounts[k] || 0) : (stateCounts[k] || 0)} ${lab}</span>`).join('')}</div>
+        </div>${grLive.orphanedRunning ? `<div style="font-size:10px;color:${C.amber};margin-top:8px">${grLive.orphanedRunning} record${grLive.orphanedRunning === 1 ? ' is' : 's are'} not running right now; recovery will requeue ${grLive.orphanedRunning === 1 ? 'it' : 'them'}.</div>` : ''}${grLive.staleRunning ? `<div style="font-size:10px;color:${C.red};margin-top:8px">${grLive.staleRunning} attached worker${grLive.staleRunning === 1 ? '' : 's'} stopped writing recently and will be recovered.</div>` : ''}${lane(`Running now (${runningNow.length})`, runningNow, 'No attached worker is generating thumbnails right now.')}${recoveringNow.length ? lane(`Recovering - not running (${recoveringNow.length})`, recoveringNow, 'No recovery records.', 4) : ''}${lane(`Queued next - not running (${queuedNext.length})`, queuedNext, 'Nothing is waiting in the queue.', 6)}`, 12) : '';
         const channelHistoryHtml = channelRuns.length ? (() => {
             const toPct = v => {
                 if (v == null || !isFinite(Number(v))) return null;
@@ -1422,7 +1475,7 @@ const JarvisLongQuant = (function () {
                 const pct = toPct(r.best), on = r.rid === st.lqxChannelRid;
                 const title = (r.sourceVideo && r.sourceVideo.title) || r.idea || '';
                 const saved = r.autosaved && r.autosaved.id ? ` · saved ${esc(r.autosaved.id)}` : '';
-                return `<div data-lqxchannelrun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${on ? C.accent : pct >= (r.threshold || 90) ? C.green : C.border};border-radius:8px;background:${on ? C.accent + '18' : C.card2};padding:8px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="font-size:11px;font-weight:800;color:${C.text};line-height:1.3;max-height:36px;overflow:hidden">${esc(title.slice(0, 120))}</div><div style="font-size:11px;font-weight:900;color:${pctCol(pct)};white-space:nowrap">${pct == null ? '—' : pct + 'th'}</div></div><div style="font-size:9px;color:${C.mute};margin-top:4px">${esc(r.status || '')} · ${grindProgressText(r)}${saved}</div></div>`;
+                return `<div data-lqxchannelrun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${on ? C.accent : pct >= (r.threshold || 90) ? C.green : C.border};border-radius:8px;background:${on ? C.accent + '18' : C.card2};padding:8px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="font-size:11px;font-weight:800;color:${C.text};line-height:1.3;max-height:36px;overflow:hidden">${esc(title.slice(0, 120))}</div><div style="font-size:11px;font-weight:900;color:${pctCol(pct)};white-space:nowrap">${pct == null ? '—' : pct + 'th'}</div></div><div style="font-size:9px;color:${C.mute};margin-top:4px">${esc(grindStateLabel(r))} · ${grindProgressText(r)}${saved}</div></div>`;
             }).join('');
             let detailHtml = '';
             if (!det || det.loading) detailHtml = `<div style="min-height:220px;display:flex;align-items:center;justify-content:center;color:${C.cyan};font-size:11px;background:${C.card2};border:1px solid ${C.border};border-radius:8px">loading full thumbnail history…</div>`;
@@ -1457,7 +1510,7 @@ const JarvisLongQuant = (function () {
                 const thumbLimit = det.thumbTryLimit || det.maxAttempts || selected.maxAttempts || 40;
                 const thumbLoaded = Math.max(Number(det.thumbImages || 0), thumbs.length);
                 const thumbErrors = attempts.reduce((s, a) => s + ((a.thumbs || []).filter(t => t && (t.status === 'error' || t.error)).length), 0);
-                detailHtml = `<div><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div><div style="font-size:13px;color:${C.text};font-weight:900;line-height:1.3">${esc(runTitle || 'Selected channel video')}</div><div style="font-size:10px;color:${C.mute};margin-top:3px">${esc(det.status || selected.status || '')} · ${thumbSlots}/${thumbLimit} thumbnails · target ${det.threshold || selected.threshold || 90}th${thumbLoaded && thumbLoaded < thumbSlots ? ' · ' + thumbLoaded + ' loaded' : ''}${thumbErrors ? ' · ' + thumbErrors + ' failed' : ''}</div>${det.note ? `<div style="font-size:9px;color:${C.faint};margin-top:3px">${esc(det.note)}</div>` : ''}</div><div style="font-size:20px;font-weight:900;color:${pctCol(bestPct)};white-space:nowrap">${bestPct == null ? '—' : bestPct + 'th best'}</div></div>${baselineHtml ? `<div style="display:flex;gap:10px;align-items:flex-start;overflow:auto;margin-bottom:10px">${baselineHtml}</div>` : ''}${thumbGrid}</div>`;
+                detailHtml = `<div><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div><div style="font-size:13px;color:${C.text};font-weight:900;line-height:1.3">${esc(runTitle || 'Selected channel video')}</div><div style="font-size:10px;color:${C.mute};margin-top:3px">${esc(grindStateLabel(selected || det))} · ${thumbSlots}/${thumbLimit} thumbnails · target ${det.threshold || selected.threshold || 90}th${thumbLoaded && thumbLoaded < thumbSlots ? ' · ' + thumbLoaded + ' loaded' : ''}${thumbErrors ? ' · ' + thumbErrors + ' failed' : ''}</div>${det.note ? `<div style="font-size:9px;color:${C.faint};margin-top:3px">${esc(det.note)}</div>` : ''}</div><div style="font-size:20px;font-weight:900;color:${pctCol(bestPct)};white-space:nowrap">${bestPct == null ? '—' : bestPct + 'th best'}</div></div>${baselineHtml ? `<div style="display:flex;gap:10px;align-items:flex-start;overflow:auto;margin-bottom:10px">${baselineHtml}</div>` : ''}${thumbGrid}</div>`;
             }
             return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:9px"><div><div style="font-size:12px;font-weight:900;color:${C.text}">🎞 Channel video thumbnail history</div><div style="font-size:10px;color:${C.mute};margin-top:2px">Pick a video to scroll every thumbnail generated during its threshold grind, ranked best to worst.</div></div><div style="font-size:10px;color:${C.dim};font-weight:800">${channelRuns.length} videos</div></div><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div data-lqxscrollkey="channel-runs" style="flex:0 0 280px;max-width:100%;max-height:520px;overflow:auto;padding-right:3px">${runCards}</div><div data-lqxscrollkey="channel-detail" style="flex:1 1 520px;min-width:280px;max-height:640px;overflow:auto;padding-right:3px">${detailHtml}</div></div>`, 12);
         })() : '';
@@ -1466,7 +1519,7 @@ const JarvisLongQuant = (function () {
               const pct = r.best == null ? null : Number(r.best);
               const on = st.lqxGrindRid === r.rid;
               const title = (r.sourceVideo && r.sourceVideo.title) || r.idea || '';
-              return `<div data-lqxrun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${on ? C.accent : pct >= (r.threshold || 90) ? C.green : C.border};border-radius:8px;background:${on ? C.accent + '18' : C.card2};padding:8px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="font-size:11px;font-weight:800;color:${C.text};line-height:1.3;max-height:34px;overflow:hidden">${esc(title.slice(0, 110))}</div><div style="font-size:11px;font-weight:900;color:${pct >= (r.threshold || 90) ? C.green : C.dim};white-space:nowrap">${pct == null ? '—' : pct + 'th'}</div></div><div style="font-size:9px;color:${C.mute};margin-top:4px">${esc(r.status || '')} · ${grindProgressText(r)}${r.autosaved && r.autosaved.id ? ` · saved ${esc(r.autosaved.id)}` : ''}</div></div>`;
+              return `<div data-lqxrun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${on ? C.accent : pct >= (r.threshold || 90) ? C.green : C.border};border-radius:8px;background:${on ? C.accent + '18' : C.card2};padding:8px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="font-size:11px;font-weight:800;color:${C.text};line-height:1.3;max-height:34px;overflow:hidden">${esc(title.slice(0, 110))}</div><div style="font-size:11px;font-weight:900;color:${pct >= (r.threshold || 90) ? C.green : C.dim};white-space:nowrap">${pct == null ? '—' : pct + 'th'}</div></div><div style="font-size:9px;color:${C.mute};margin-top:4px">${esc(grindStateLabel(r))} · ${grindProgressText(r)}${r.autosaved && r.autosaved.id ? ` · saved ${esc(r.autosaved.id)}` : ''}</div></div>`;
           }).join('')}</div>`, 12) : '';
         // BEST IDEAS strip (from the idea model)
         let ideas = '';
