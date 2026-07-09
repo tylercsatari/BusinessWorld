@@ -10915,7 +10915,9 @@ async function longQuantGrindProcess(rid, req0) {
             }
         }
     }
-    const thumbTryCount = () => attempts.reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.length : 0), 0);
+    let spentThumbFloor = priorRun && Number.isFinite(Number(priorRun.thumbTryCount)) ? Number(priorRun.thumbTryCount) : 0;
+    const thumbSlotCount = () => attempts.reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.length : 0), 0);
+    const thumbTryCount = () => Math.max(spentThumbFloor, thumbSlotCount());
     const thumbFinishedCount = () => attempts.reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.filter(t => t && ['done', 'error', 'stopped'].includes(t.status || '')).length : 0), 0);
     const thumbImageCount = () => attempts.reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.filter(t => t && t.image).length : 0), 0);
     const baseGate = seed ? 0.10 : 0.18;
@@ -11013,6 +11015,7 @@ async function longQuantGrindProcess(rid, req0) {
             const batchCount = Math.max(1, Math.min(count, remainingThumbs));
             const thumbStart = usedBefore + 1;
             const thumbEnd = usedBefore + batchCount;
+            spentThumbFloor = Math.max(spentThumbFloor, usedBefore);
             liveThumbProgress = usedBefore;
             let idea = '';
             let gateInfo = {};
@@ -11069,7 +11072,10 @@ async function longQuantGrindProcess(rid, req0) {
                     a.workerRid = _reqRid;
                     a.status = st.stage === 'reasoning' ? 'prompting' : (st.stage === 'rendering' ? 'rendering' : (st.stage || 'queued'));
                     const done = st.done != null && st.n ? Math.min(maxAttempts, usedBefore + Number(st.done || 0)) : null;
-                    if (done != null) liveThumbProgress = done;
+                    if (done != null) {
+                        spentThumbFloor = Math.max(spentThumbFloor, done);
+                        liveThumbProgress = done;
+                    }
                     note = `thumbnails ${thumbStart}-${thumbEnd}/${maxAttempts}: app server ${st.stage || 'queued'}${done != null ? ` ${done}/${maxAttempts}` : ''}${st.note ? ' — ' + st.note : ''}`;
                     await write();
                 }, { context, sourceVideo, stopRid: rid });
@@ -11245,7 +11251,9 @@ async function longQuantRecoverStaleGrinds() {
             await cloud.uploadToR2(key, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
             continue;
         }
-        const thumbTries = (Array.isArray(run.attempts) ? run.attempts : []).reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.length : 0), 0);
+        const slotTries = (Array.isArray(run.attempts) ? run.attempts : []).reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.length : 0), 0);
+        const storedTries = Number(run.thumbTryCount);
+        const thumbTries = Math.max(slotTries, isFinite(storedTries) ? storedTries : 0);
         const req = longQuantRequestFromRun(run, rid);
         if (thumbTries >= req.maxAttempts) {
             run.status = 'maxed';
