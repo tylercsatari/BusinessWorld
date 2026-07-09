@@ -3262,6 +3262,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 steer: (body.steer && typeof body.steer === 'object') ? body.steer : null,
                 channels: (body.channels && typeof body.channels === 'object') ? body.channels : null,
                 emb_preview: (body.emb_preview && typeof body.emb_preview === 'object') ? body.emb_preview : null,
+                input_manifest: (body.input_manifest && typeof body.input_manifest === 'object') ? body.input_manifest : null,
             };
             await cloud.uploadToR2(`raw/saved-hooks/${id}.json`, Buffer.from(JSON.stringify(rec)), 'application/json');
             // keep the fast index in sync (compact record) so the Saved bank shows it immediately
@@ -3270,7 +3271,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 try { const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
                 if (!Array.isArray(idx.hooks)) idx.hooks = [];
                 const g = t => (rec.steer && (rec.steer['together_' + t] || rec.steer['visual_' + t])) || {};
-                idx.hooks.push({ id, title: rec.title, kind: rec.kind, hasMontage, savedAt: rec.savedAt, folder: rec.folder, keep: g('keep').pctile, m: { keep: g('keep').pctile, keep_est: g('keep').est, ret5: g('ret5').pctile, views: g('views').est, sviews: g('realviews').est, gt10M: g('gt10M').est, outlier: g('outlier').pctile } });
+                idx.hooks.push({ id, title: rec.title, kind: rec.kind, hasMontage, savedAt: rec.savedAt, folder: rec.folder, input_manifest: rec.input_manifest, keep: g('keep').pctile, m: { keep: g('keep').pctile, keep_est: g('keep').est, ret5: g('ret5').pctile, views: g('views').est, sviews: g('realviews').est, gt10M: g('gt10M').est, outlier: g('outlier').pctile } });
                 await cloud.uploadToR2('raw/saved-hooks/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
             } catch (e) {}
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, id }));
@@ -3643,7 +3644,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 if (Array.isArray(idx.thumbs)) {
                     const recent = idx.thumbs.slice(-120);
                     await Promise.all(recent.map(async t => {
-                        if (t && t.id && !(t.channels && t.emb_preview)) {
+                        if (t && t.id && (!(t.channels && t.emb_preview) || !t.input_manifest)) {
                             const rb = await cloud.downloadFromR2(`longform/saved-thumbs/${t.id}.json`).catch(() => null);
                             if (rb) {
                                 const rec = JSON.parse(rb.toString('utf8'));
@@ -3651,6 +3652,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                                 t.metrics = t.metrics || rec.metrics || (rec.score && rec.score.metrics) || null;
                                 t.channels = t.channels || rec.channels || (rec.score && rec.score.channels) || null;
                                 t.emb_preview = t.emb_preview || rec.emb_preview || (rec.score && rec.score.emb_preview) || null;
+                                t.input_manifest = t.input_manifest || rec.input_manifest || (rec.score && rec.score.input_manifest) || null;
                             }
                         }
                     }));
@@ -10464,6 +10466,9 @@ async function longQuantSaveThumbRecord(body = {}) {
     const relevance = (typeof body.relevance === 'number') ? body.relevance : (savedScore && savedScore.relevance != null ? Number(savedScore.relevance) : null);
     const sourceVideo = longQuantCompactSourceVideo(body.sourceVideo || (body.meta && body.meta.sourceVideo));
     const meta = (body.meta && typeof body.meta === 'object') ? body.meta : {};
+    const inputManifest = (body.input_manifest && typeof body.input_manifest === 'object')
+        ? body.input_manifest
+        : (savedScore && savedScore.input_manifest && typeof savedScore.input_manifest === 'object' ? savedScore.input_manifest : null);
     const rec = {
         id, savedAt: Date.now(), title, prompt,
         pctile, pct100: longQuantPct100(pctile), relevance,
@@ -10473,6 +10478,7 @@ async function longQuantSaveThumbRecord(body = {}) {
         metrics: (body.metrics && typeof body.metrics === 'object') ? body.metrics : (savedScore && savedScore.metrics) || null,
         channels: (body.channels && typeof body.channels === 'object') ? body.channels : (savedScore && savedScore.channels) || null,
         emb_preview: (body.emb_preview && typeof body.emb_preview === 'object') ? body.emb_preview : (savedScore && savedScore.emb_preview) || null,
+        input_manifest: inputManifest,
         sourceVideo,
         batchId: String(body.batchId || meta.batchId || '').slice(0, 80),
         runRid: String(body.runRid || meta.runRid || '').slice(0, 80),
@@ -10491,7 +10497,7 @@ async function longQuantSaveThumbRecord(body = {}) {
     idx.thumbs.push({
         id, savedAt: rec.savedAt, title: rec.title, prompt: rec.prompt, pctile: rec.pctile, pct100: rec.pct100,
         relevance: rec.relevance, source: rec.source, score: rec.score, metrics: rec.metrics,
-        channels: rec.channels, emb_preview: rec.emb_preview,
+        channels: rec.channels, emb_preview: rec.emb_preview, input_manifest: rec.input_manifest,
         sourceVideo: rec.sourceVideo, batchId: rec.batchId, runRid: rec.runRid,
         attemptK: rec.attemptK, thumbI: rec.thumbI, baseline: rec.baseline,
     });

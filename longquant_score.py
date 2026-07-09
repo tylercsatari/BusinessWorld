@@ -361,6 +361,33 @@ def main():
     headline = pick("ctrviews") or pick("views")
     hp = (headline or {}).get("pctile")
     pctile = round(float(hp) / 100.0, 4) if hp is not None and float(hp) > 1 else (hp or 0)
+    input_manifest = {
+        "domain": "longquant",
+        "scorer": "longquant_score.py",
+        "score_text": title,
+        "display_preference": ["together", "text", "visual"],
+        "note": "Transcript or channel context can guide generation upstream, but scoring embeds only the thumbnail image and the title or idea text shown here.",
+        "channels": {
+            "visual": {
+                "present": ev is not None,
+                "input": "thumbnail image only",
+                "image": "single 16:9 thumbnail image",
+                "text": "",
+            },
+            "text": {
+                "present": et is not None,
+                "input": "title or idea text only",
+                "image": "",
+                "text": title,
+            },
+            "together": {
+                "present": eg is not None,
+                "input": "thumbnail image plus title or idea text",
+                "image": "single 16:9 thumbnail image",
+                "text": title,
+            },
+        },
+    }
     out = {
         "title": title,
         "pctile": pctile,
@@ -378,6 +405,7 @@ def main():
         },
         "channels": channels,
         "emb_preview": {"visual": preview(ev), "text": preview(et), "together": preview(eg)},
+        "input_manifest": input_manifest,
     }
     print(json.dumps(out))
 

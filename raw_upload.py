@@ -288,6 +288,34 @@ def _run():
         if e is None: return None
         a = np.asarray(e, float)
         return [round(float(x), 3) for x in (a[:1536].reshape(48, 32).mean(1) if len(a) >= 1536 else a)]
+    input_manifest = {
+        'domain': 'shorts_raw',
+        'scorer': 'raw_upload.py',
+        'source_window': 'first 5 seconds',
+        'display_preference': ['together', 'text', 'visual'],
+        'transcript_used': bool(good),
+        'duration_s': round(float(dur_s), 3) if dur_s else None,
+        'channels': {
+            'visual': {
+                'present': ev is not None,
+                'input': '5-frame montage only',
+                'image': 'five frames sampled from the first 5 seconds and stitched left to right',
+                'text': '',
+            },
+            'text': {
+                'present': bool(good and et is not None),
+                'input': 'first-5-second transcript only',
+                'image': '',
+                'text': txt if good else '',
+            },
+            'together': {
+                'present': eg is not None,
+                'input': '5-frame montage plus first-5-second transcript' if good else '5-frame montage only because no coherent voiceover was detected',
+                'image': 'five frames sampled from the first 5 seconds and stitched left to right',
+                'text': txt if good else '',
+            },
+        },
+    }
     out = {
         'montage': b64,
         'transcript': txt if good else '',
@@ -296,6 +324,7 @@ def _run():
         'indicators': indicators,
         'steer': steer,
         'emb_preview': {'visual': preview(ev), 'text': preview(et), 'together': preview(eg)},
+        'input_manifest': input_manifest,
         'channels': {
             'visual': {'neighbors': neighbors('visual', ev)} if ev is not None else None,
             'text': ({'neighbors': neighbors('text', et)} if (good and et is not None) else None),

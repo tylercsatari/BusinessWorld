@@ -316,10 +316,47 @@ const JarvisRetention = (function () {
     function steerBest(up, tn) { for (const m of ['together', 'text', 'visual']) { const k = steerOf(up, m, tn); if (k) return { mod: m, ...k }; } return null; }
     function steerDisp(tn, v) { if (v == null) return null; return (tn === 'views' || tn === 'realviews') ? fv(+v) : tn === 'outlier' ? (+v).toFixed(1) + '×' : tn === 'gt10M' ? (+v * 100).toFixed(0) + '%' : (+v).toFixed(0) + '%'; }
     function steerLabel(tn) { return tn === 'realviews' ? 'est. views (your scale)' : tn === 'views' ? 'est. views (library scale)' : tn === 'outlier' ? 'est. outlier' : tn === 'gt10M' ? 'chance >10M' : tn === 'keep' ? 'est. keep-rate' : 'est. past-5s'; }
+    function rawInputChannel(up, ch) {
+        const im = up && up.input_manifest && up.input_manifest.channels && up.input_manifest.channels[ch];
+        if (im) return im;
+        const txt = String((up && (up.transcript || up.text)) || '').trim();
+        const hasText = !!txt && !(up && up.silent);
+        if (ch === 'visual') return { present: !!(up && (up.montage || up.montageDataUrl)), input: '5-frame montage only', image: 'five frames from the first 5 seconds', text: '' };
+        if (ch === 'text') return { present: hasText, input: 'first-5-second transcript only', image: '', text: hasText ? txt : '' };
+        return { present: true, input: hasText ? '5-frame montage plus first-5-second transcript' : '5-frame montage only because no coherent voiceover was detected', image: 'five frames from the first 5 seconds', text: hasText ? txt : '' };
+    }
+    function rawInputLabel(up, ch) {
+        const im = rawInputChannel(up, ch);
+        if (!im || im.present === false) return ch === 'text' ? 'not scored: no coherent first-5-second voiceover' : 'not scored';
+        return im.input || (ch === 'visual' ? '5-frame montage only' : ch === 'text' ? 'first-5-second transcript only' : '5-frame montage plus transcript');
+    }
+    function rawInputManifestData(up) {
+        const txt = String((up && (up.transcript || up.text)) || '').trim();
+        const hasText = !!txt && !(up && up.silent);
+        return {
+            domain: 'shorts_raw',
+            source_window: 'first 5 seconds',
+            display_preference: ['together', 'text', 'visual'],
+            transcript_used: hasText,
+            channels: {
+                visual: rawInputChannel(up, 'visual'),
+                text: rawInputChannel(up, 'text'),
+                together: rawInputChannel(up, 'together'),
+            },
+        };
+    }
+    function rawInputManifestHtml(up) {
+        const rows = ['visual', 'text', 'together'].map(ch => {
+            const im = rawInputChannel(up, ch), txt = im && im.text ? String(im.text) : '';
+            return `<div style="display:grid;grid-template-columns:70px 1fr;gap:8px;margin-bottom:4px"><div style="font-size:9px;color:${C.cyan};font-weight:800;text-transform:uppercase">${ch}</div><div style="font-size:10px;color:${im && im.present === false ? C.faint : C.text};line-height:1.35">${esc(rawInputLabel(up, ch))}${txt ? `<div style="color:${C.mute};font-style:italic;max-height:44px;overflow:auto;margin-top:2px">"${esc(txt)}"</div>` : ''}</div></div>`;
+        }).join('');
+        const pref = ((up && up.input_manifest && up.input_manifest.display_preference) || ['together', 'text', 'visual']).join(' > ');
+        return `<div style="margin-top:8px;background:${C.card};border:1px solid ${C.border};border-radius:7px;padding:8px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;font-weight:800;margin-bottom:5px">embedded inputs by channel</div>${rows}<div style="font-size:9px;color:${C.faint};margin-top:5px">Displayed metric boxes use first available channel in this order: ${esc(pref)}.</div></div>`;
+    }
     function renderRaw() {
         const chan = st.rawChan || 'visual';
         const chanPill = (id, lab) => `<span data-rawchan="${id}" style="cursor:pointer;border:1px solid ${chan === id ? C.purple : C.border};background:${chan === id ? C.purple + '22' : 'transparent'};color:${chan === id ? C.purple : C.dim};border-radius:8px;padding:5px 13px;font-size:12px;font-weight:700">${lab}</span>`;
-        const tabs = `<div style="display:flex;gap:6px;margin-bottom:10px">${chanPill('visual', '🖼 Visual')}${chanPill('text', '🗣 Text')}${chanPill('together', '🔗 Together')}</div>`;
+        const tabs = `<div style="display:flex;gap:6px;margin-bottom:7px">${chanPill('visual', '🖼 Visual')}${chanPill('text', '🗣 Text')}${chanPill('together', '🔗 Together')}</div><div style="font-size:10px;color:${C.mute};margin-bottom:10px">visual = first-5-second 5-frame montage only · text = extracted first-5-second voiceover only · together = montage + voiceover when voiceover exists</div>`;
         const head = h2c('🔬 Raw — hook embeddings', 'The first 5 seconds of every stored video, embedded with Gemini, no labels. Three channels — what it LOOKS like, what is SAID, and both. Steer the projection toward views/outliers (held-out scored) and click any dot to see the exact input.');
         const R = RAW[chan];
         if (!R) { rawEnsure(chan); return head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading ${chan}…</div>`); }
@@ -1069,7 +1106,7 @@ const JarvisRetention = (function () {
             const a = ((GRINDRUN && GRINDRUN.attempts) || []).find(x => x.k === k);
             const score = await fetch('/api/hooks/grind/score/' + rid + '_' + k).then(r => r.ok ? r.json() : null);
             const monUrl = await urlToDataUrl('/api/hooks/grind/montage/' + rid + '_' + k);
-            await saveHook({ kind: 'scored', source: 'grind', title: (a && a.premise) || (GRINDRUN && GRINDRUN.premise) || 'Grind hook', text: (GRINDRUN && GRINDRUN.premise) || '', frames: (a && a.frames) || [], indicators: score && score.indicators, steer: score && score.steer, montage: monUrl });
+            await saveHook({ kind: 'scored', source: 'grind', title: (a && a.premise) || (GRINDRUN && GRINDRUN.premise) || 'Grind hook', text: (GRINDRUN && GRINDRUN.premise) || '', frames: (a && a.frames) || [], indicators: score && score.indicators, steer: score && score.steer, channels: score && score.channels, emb_preview: score && score.emb_preview, input_manifest: score && score.input_manifest, montage: monUrl });
         } catch (e) { st.grindErr = 'save: ' + e.message; rtgUpdateExp(); }
     }
     function grindPanel() {
@@ -1153,7 +1190,7 @@ const JarvisRetention = (function () {
             <div style="font-size:11px;color:${C.cyan};margin-top:8px;font-weight:600">⏳ ${esc(sub)}${cold ? ` <span style="color:${C.mute};font-weight:400">· first run this session spins up the GPU (~2 min), then it's fast</span>` : ''}</div></div>`;
     }
     function renderExperiment() {
-        const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds the hook and scores it on every validated indicator — keep rate, past-5s, est. views — and places it in the embedded space. Save the ones you like.') + pipelineProgress() + expGenPanel() + grindPanel();
+        const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds visual, text, and together when text exists; displayed embedding scores use together first, then text, then visual. Keep-rate can therefore include voiceover words when a coherent first-5-second transcript exists.') + pipelineProgress() + expGenPanel() + grindPanel();
         if (EXPREG === null) { EXPREG = { loading: 1 }; fetch('/api/indicators/registry').then(r => r.json()).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(() => { EXPREG = { error: 1 }; rtgUpdateExp(); }); }
         if (SAVED === null) { SAVED = { loading: 1 }; fetch('/api/raw/saved-hooks').then(r => r.json()).then(j => { SAVED = j; rtgUpdateExp(); }).catch(() => { SAVED = { hooks: [] }; rtgUpdateExp(); }); }
         const CY = '#22d3ee';
@@ -1182,14 +1219,14 @@ const JarvisRetention = (function () {
             return head + controls + cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:4px">${val.length} scorable indicators ready</div><div style="font-size:10px;color:${C.mute};margin-bottom:8px">Generate a hook above (or upload/build one) and it's scored on each of these, fully traceable. Grouped by what they predict:</div>${(EXPREG.meta.targets || []).map(t => byT[t.name] ? `<div style="margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:${C.accent}">${t.label}</span> <span style="font-size:10px;color:${C.mute}">— ${byT[t.name].map(d => d.name.replace('content_', '').replace('nov_', 'nov ')).join(', ')}</span></div>` : '').join('')}`, 12) + savedStrip();
         }
         // ── 1. trace: raw input → embedding ──
-        const embHeat = ch => { const a = up.emb_preview && up.emb_preview[ch]; if (!a) return `<div style="font-size:9px;color:${C.faint}">${ch}: —</div>`; const mn = Math.min(...a), mx = Math.max(...a); return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span style="font-size:9px;color:${C.dim};width:58px">${ch}</span><svg viewBox="0 0 ${a.length * 5} 10" style="height:11px;width:${a.length * 5}px">${a.map((v, i) => `<rect x="${i * 5}" width="4.4" height="10" fill="${rawRamp((v - mn) / ((mx - mn) || 1))}"/>`).join('')}</svg></div>`; };
+        const embHeat = ch => { const a = up.emb_preview && up.emb_preview[ch]; if (!a) return `<div style="font-size:9px;color:${C.faint}">${ch}: ${esc(rawInputLabel(up, ch))}</div>`; const mn = Math.min(...a), mx = Math.max(...a); return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span title="${esc(rawInputLabel(up, ch))}" style="font-size:9px;color:${C.dim};width:58px">${ch}</span><svg viewBox="0 0 ${a.length * 5} 10" style="height:11px;width:${a.length * 5}px">${a.map((v, i) => `<rect x="${i * 5}" width="4.4" height="10" fill="${rawRamp((v - mn) / ((mx - mn) || 1))}"/>`).join('')}</svg><span style="font-size:8px;color:${C.faint};white-space:nowrap">${esc(rawInputLabel(up, ch))}</span></div>`; };
         const trace = cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px">
               <span style="font-size:12px;font-weight:800;color:${C.text}">From raw input to score — every number is traceable</span>
               <span data-savescored style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${st.savedFlash ? '✅ saved' : '💾 Save this hook'}</span></div>
             <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
               <div><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">1 · the 5-frame hook (what gets embedded)</div><img src="data:image/jpeg;base64,${up.montage}" style="width:260px;border-radius:6px;background:#000"/></div>
               <div style="flex:1;min-width:220px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">2 · transcript</div><div style="font-size:11px;font-style:italic;color:${C.text};background:#0f172a;border-radius:6px;padding:8px;margin-bottom:8px">${up.silent ? '(no voiceover — text channel scores as empty)' : '"' + esc(up.transcript || '') + '"'}</div>
-                <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">3 · Gemini embedding (1536-d, pooled to 48 for display)</div>${embHeat('visual')}${embHeat('text')}${embHeat('together')}</div>
+                <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">3 · Gemini embedding (1536-d, pooled to 48 for display)</div>${embHeat('visual')}${embHeat('text')}${embHeat('together')}${rawInputManifestHtml(up)}</div>
             </div>
             <div style="font-size:10px;color:${C.mute};margin-top:7px">4 · each indicator = <b>embedding · (a direction learned toward that metric) + bias → one number</b>, placed on the corpus scatter below.</div>`, 12);
         // ── 2. big clear outputs (ensemble of content probes) ──
@@ -1209,7 +1246,7 @@ const JarvisRetention = (function () {
         const Nmod = { visual: 'visual', text: 'text', together: 'whole' };
         const idNovCache = {};
         const idNov = ch => { if (idNovCache[ch]) return idNovCache[ch]; const m = {}; try { const g = N && N.hook && N.hook.global && N.hook.global[Nmod[ch]]; if (g) N.videos.forEach((v, i) => { m[v.id] = g.nov[i]; }); } catch (e) {} return (idNovCache[ch] = m); };
-        const whatEmbedded = ch => ch === 'visual' ? 'the 5 frames (no text)' : ch === 'text' ? 'the transcript text' : 'the 5 frames + transcript';
+        const whatEmbedded = ch => rawInputLabel(up, ch);
         const cluster = (ch, projName, colorMode) => {
             const R = RAW[ch];
             if (!R || R.loading) return `<div style="height:150px;display:flex;align-items:center;justify-content:center;background:${C.card2};border-radius:6px;font-size:10px;color:${C.dim}">loading ${ch} cluster…</div>`;
@@ -1246,11 +1283,11 @@ const JarvisRetention = (function () {
                 const durTxt = b && b.dur_s ? (b.dur_assumed ? `assumed ${b.dur_s}s` : `${b.dur_s}s video`) : 'median dur';
                 sub = b ? durTxt : '';
                 const vb = steerBest(up, 'views');
-                foot = `keep+5s-ret+<b>duration</b> → your 211's view model <span style="color:${C.green}">(retention deconfounded — held at fixed length)</span>${vb ? ` · library raw: <b>${steerDisp('views', vb.est)}</b>` : ''}`;
+                foot = `displayed channel: <b>${ch}</b> = ${esc(rawInputLabel(up, ch))} · keep+5s-ret+<b>duration</b> → your 211's view model <span style="color:${C.green}">(retention deconfounded — held at fixed length)</span>${vb ? ` · library raw: <b>${steerDisp('views', vb.est)}</b>` : ''}`;
             } else {
                 sub = b && b.pctile != null ? `${b.pctile.toFixed(0)}th pctile` : '';
                 const mods = ['together', 'text', 'visual'].map(m => ({ m, k: steerOf(up, m, tn) })).filter(x => x.k);
-                foot = mods.length ? mods.map(p => `${p.m} ${steerDisp(tn, p.k.est)}`).join(' · ') : 'embed not ready';
+                foot = mods.length ? `displayed channel: <b>${ch}</b> = ${esc(rawInputLabel(up, ch))}<br>${mods.map(p => `${p.m} (${esc(rawInputLabel(up, p.m))}) ${steerDisp(tn, p.k.est)}`).join(' · ')}` : 'embed not ready';
             }
             const tag = tn === 'realviews' ? ` <span style="color:${C.green}">(your scale)</span>` : tn === 'views' ? ` <span style="color:${C.mute}">(library)</span>` : '';
             return cardc(`<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:11px;color:${CY};font-weight:800;text-transform:uppercase">Embedding → ${metShort(tn).replace(' (library)', '').replace(' (your scale)', '')}${tag}</div>${bigNumHTML(big, sub)}${cluster(ch, pj, cm)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${foot} · <span style="color:${C.accent}">open graph →</span></div></div>`, 12);
@@ -3088,7 +3125,7 @@ const JarvisRetention = (function () {
         const gsa = e.target.closest('[data-grindsave]'); if (gsa) { grindSave(+gsa.getAttribute('data-grindsave')); return; }
         const gsc = e.target.closest('[data-genscore]'); if (gsc) { if (!st.rawUploading) { const k = +gsc.getAttribute('data-genscore'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) scoreGenerated(k, a.frame_imgs || [], a.premise || a.caption || ''); } return; }
         const gsv = e.target.closest('[data-gensave]'); if (gsv) { const k = +gsv.getAttribute('data-gensave'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) saveHook({ kind: 'idea', source: 'generated', title: (a.premise || a.caption || 'idea').slice(0, 80), text: a.premise || a.caption || '', frames: a.frames || [], frame_imgs: a.frame_imgs || [], cohesion_mode: a.cohesion_mode || '' }); return; }
-        if (e.target.closest('[data-savescored]')) { const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0]; if (up) saveHook({ kind: 'scored', source: up.source || 'scored', title: up.title || (up.transcript || 'Scored hook').slice(0, 60), text: up.transcript || '', montage: up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : ''), frames: up.genFrames || [], frame_imgs: up.genFrameImgs || [], indicators: up.indicators || null, steer: up.steer || null }); return; }
+        if (e.target.closest('[data-savescored]')) { const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0]; if (up) saveHook({ kind: 'scored', source: up.source || 'scored', title: up.title || (up.transcript || 'Scored hook').slice(0, 60), text: up.transcript || '', montage: up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : ''), frames: up.genFrames || [], frame_imgs: up.genFrameImgs || [], indicators: up.indicators || null, steer: up.steer || null, channels: up.channels || null, emb_preview: up.emb_preview || null, input_manifest: up.input_manifest || rawInputManifestData(up) }); return; }
         const sdel = e.target.closest('[data-savedel]'); if (sdel) { deleteSaved(sdel.getAttribute('data-savedel')); return; }
         if (e.target.closest('[data-savedclose]')) { st.savedSel = null; rtgUpdateExp(); return; }
         const ssort = e.target.closest('[data-savedsort]'); if (ssort) { st.savedSort = ssort.getAttribute('data-savedsort'); rtgUpdateExp(); return; }
@@ -3323,7 +3360,7 @@ const JarvisRetention = (function () {
             const montage = await urlToDataUrl('/api/raw/saved-montage/' + id);
             if (rec && rec.emb_preview && rec.channels) {
                 // INSTANT: full embeddings already stored — build the up-object directly, no re-embed
-                st.rawUploads.push({ montage: montage.split('base64,').pop(), transcript: rec.transcript || rec.text || '', silent: rec.silent, title: rec.title, indicators: rec.indicators, steer: rec.steer, emb_preview: rec.emb_preview, channels: rec.channels, source: 'saved', savedId: id, genFrames: rec.frames || [], montageDataUrl: montage });
+                st.rawUploads.push({ montage: montage.split('base64,').pop(), transcript: rec.transcript || rec.text || '', silent: rec.silent, title: rec.title, indicators: rec.indicators, steer: rec.steer, emb_preview: rec.emb_preview, channels: rec.channels, input_manifest: rec.input_manifest || null, source: 'saved', savedId: id, genFrames: rec.frames || [], montageDataUrl: montage });
                 st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
             } else {
                 // fallback while the storage pass is still running: re-score once
