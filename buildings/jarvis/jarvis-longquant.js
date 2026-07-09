@@ -1428,11 +1428,21 @@ const JarvisLongQuant = (function () {
             return `${total}/${max} thumbnails${bestTxt} · target ${target}th${loadTxt}`;
         };
         const terminalLq = r => ['won', 'error', 'maxed', 'deadline', 'stopped', 'archived', 'done'].includes((r && r.status) || '');
+        const doneStatuses = ['archived', 'done', 'won', 'maxed', 'deadline'];
         // evidence-based fallback mirrors the server: fresh writes = running, stale claims = recovering
         const grindExecState = r => (r && r.executionState) || (terminalLq(r) ? 'finished'
             : r && (r.workerAttached || r.status === 'running') && r.lastWriteAgeSec != null && r.lastWriteAgeSec < ((grLive.staleAfterSec || 120)) ? 'running'
                 : r && (r.workerAttached || r.status === 'running' || r.orphanedRunning) ? 'recovering'
                     : r && (r.queuedRequest || r.status === 'queued') ? 'queued' : (r && r.status) || 'unknown');
+        const channelRunMatches = (r, f) => {
+            f = f || 'all';
+            if (f === 'all') return true;
+            if (f === 'saved') return !!(r && r.autosaved && r.autosaved.id);
+            if (f === 'done') return !!(r && doneStatuses.includes(r.status || ''));
+            if (f === 'stopped') return !!(r && r.status === 'stopped');
+            if (f === 'error') return !!(r && r.status === 'error');
+            return grindExecState(r) === f;
+        };
         const grindStateLabel = r => {
             const st0 = grindExecState(r);
             if (st0 === 'running') return 'RUNNING NOW';
@@ -1470,23 +1480,28 @@ const JarvisLongQuant = (function () {
             const shownStatus = grindStateLabel(r);
             const col = grindStateColor(r);   // one colour per state — RUNNING is always cyan, RECOVERING always amber (stale ex-running runs live there now)
             const progress = grindProgressText(r);
+            const stopping = !!(st.lqxStoppingRuns && st.lqxStoppingRuns[r.rid]);
+            const stopBtn = !terminalLq(r) ? `<span data-lqxstoprun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${stopping ? C.amber : C.red};color:${stopping ? C.amber : C.red};border-radius:5px;padding:2px 7px;font-size:9px;font-weight:900;white-space:nowrap">${stopping ? 'stopping' : 'stop'}</span>` : '';
             const thumbRow = thumbs.length ? `<div style="display:flex;gap:6px;overflow:auto;margin-top:7px;padding-bottom:2px">${thumbs.map(t => {
                 const label = t.pct == null ? (t.status || 'working') : t.pct + 'th';
                 return `<div style="flex:0 0 112px;border:1px solid ${t.status === 'error' ? C.red : t.image ? C.border : C.border2};border-radius:6px;overflow:hidden;background:${C.card}">${t.image ? lqxImg(`/api/longquant/grind/img/${t.image}`, `livegrind:${t.image}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000') : `<div style="height:63px;display:flex;align-items:center;justify-content:center;color:${t.status === 'error' ? C.red : C.dim};font-size:9px;text-align:center;padding:5px;box-sizing:border-box">${esc(t.status || 'queued')}</div>`}<div style="font-size:9px;color:${t.status === 'error' ? C.red : C.mute};padding:3px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(label)}</div></div>`;
             }).join('')}</div>` : `<div style="font-size:9px;color:${C.dim};margin-top:6px">${grindExecState(r) === 'running' ? 'waiting for the next thumbnail update' : grindExecState(r) === 'queued' ? 'not running yet - waiting for a worker' : grindExecState(r) === 'recovering' ? 'not running - recovery will reattach or queue it' : 'no live thumbnail work'}</div>`;
-            return `<div style="border:1px solid ${col};background:${col}10;border-radius:8px;padding:8px;min-width:260px;flex:1 1 300px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="min-width:0"><div style="font-size:11px;font-weight:900;color:${C.text};line-height:1.3;max-height:34px;overflow:hidden">${esc(title.slice(0, 120))}</div><div style="font-size:9px;color:${col};margin-top:3px;font-weight:900">${esc(shownStatus)}</div><div style="font-size:9px;color:${C.mute};margin-top:2px">${progress} · updated ${ageTxt(r.lastWriteAgeSec)}</div></div><span data-lqxchannelrun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 7px;font-size:9px;font-weight:800;white-space:nowrap">view</span></div>${r.note ? `<div style="font-size:9px;color:${C.faint};line-height:1.35;margin-top:5px">${esc(String(r.note).slice(0, 170))}</div>` : ''}${thumbRow}</div>`;
+            return `<div style="border:1px solid ${col};background:${col}10;border-radius:8px;padding:8px;min-width:260px;flex:1 1 300px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="min-width:0"><div style="font-size:11px;font-weight:900;color:${C.text};line-height:1.3;max-height:34px;overflow:hidden">${esc(title.slice(0, 120))}</div><div style="font-size:9px;color:${col};margin-top:3px;font-weight:900">${esc(shownStatus)}</div><div style="font-size:9px;color:${C.mute};margin-top:2px">${progress} · updated ${ageTxt(r.lastWriteAgeSec)}</div></div><div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end">${stopBtn}<span data-lqxchannelrun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 7px;font-size:9px;font-weight:800;white-space:nowrap">view</span></div></div>${r.note ? `<div style="font-size:9px;color:${C.faint};line-height:1.35;margin-top:5px">${esc(String(r.note).slice(0, 170))}</div>` : ''}${thumbRow}</div>`;
         };
         const lane = (label, rows, empty, limit = 6) => {
             const cards = (rows || []).slice(0, limit).map(statusCard).join('');
             return `<div style="margin-top:10px"><div style="font-size:10px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:6px">${esc(label)}</div>${cards ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${cards}</div>` : `<div style="font-size:10px;color:${C.dim};border:1px dashed ${C.border};border-radius:8px;padding:8px">${esc(empty)}</div>`}</div>`;
         };
         const stateCounts = grLive.stateCounts || {};
+        const doneCount = doneStatuses.reduce((sum, k) => sum + Number(statusCounts[k] || 0), 0);
+        const channelFilter = st.lqxChannelFilter || 'all';
+        const chip = (key, lab, n, col) => `<span data-lqxchanfilter="${esc(key)}" style="cursor:pointer;border:1px solid ${channelFilter === key ? col : C.border};background:${channelFilter === key ? col + '24' : col + '12'};color:${channelFilter === key ? col : C.dim};border-radius:7px;padding:4px 9px;font-size:10px;font-weight:900">${n || 0} ${lab}</span>`;
         const runStatusHtml = (channelRuns.length || grLive.loading || grLive.error || grLive.ok) ? cardc(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
           <div><div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">📡 Tyler channel grind status</div><div style="font-size:10px;color:${C.mute}">${grLive.ok ? `live poll ${grLive.refreshing ? 'refreshing' : 'ok'} · updated ${ageTxt((Date.now() - (grLive._t || Date.now())) / 1000)} · workers ${grLive.activeWorkers == null ? (grLive.workerBusy ? 1 : 0) : grLive.activeWorkers}/${grLive.workerLimit || 1} · queue ${grLive.queueDepth == null ? '—' : grLive.queueDepth}` : grLive.loading ? 'loading live worker status…' : `status fetch failed${grLive.error ? ': ' + esc(grLive.error) : ''}`}</div></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">${[
-              ['running', 'running now', C.cyan, runningNow.length], ['queued', 'queued', C.dim, queuedNext.length], ['recovering', 'recovering', C.amber, recoveringNow.length], ['finished', 'finished', C.green, stateCounts.finished || 0], ['saved', 'saved', C.accent, statusCounts.saved || 0], ['error', 'errors', C.red, statusCounts.error || 0],
-          ].map(([k, lab, col, cnt]) => `<span style="border:1px solid ${col};background:${col}18;color:${col};border-radius:7px;padding:4px 9px;font-size:10px;font-weight:800">${cnt} ${lab}</span>`).join('')}</div>
-        </div>${grLive.orphanedRunning ? `<div style="font-size:10px;color:${C.amber};margin-top:8px">${grLive.orphanedRunning} record${grLive.orphanedRunning === 1 ? ' is' : 's are'} not running right now; recovery will requeue ${grLive.orphanedRunning === 1 ? 'it' : 'them'}.</div>` : ''}${grLive.staleRunning ? `<div style="font-size:10px;color:${C.red};margin-top:8px">${grLive.staleRunning} attached worker${grLive.staleRunning === 1 ? '' : 's'} stopped writing recently and will be recovered.</div>` : ''}${lane(`Running now (${runningNow.length})`, runningNow, 'No attached worker is generating thumbnails right now.')}${recoveringNow.length ? lane(`Recovering - not running (${recoveringNow.length})`, recoveringNow, 'No recovery records.', 4) : ''}${lane(`Queued next - not running (${queuedNext.length})`, queuedNext, 'Nothing is waiting in the queue.', 6)}`, 12) : '';
+              ['all', 'all', channelRuns.length, C.border], ['running', 'running now', stateCounts.running || runningNow.length, C.cyan], ['queued', 'queued', stateCounts.queued || queuedNext.length, C.dim], ['recovering', 'recovering', stateCounts.recovering || recoveringNow.length, C.amber], ['saved', 'saved', statusCounts.saved || 0, C.accent], ['done', 'done', doneCount, C.green], ['stopped', 'stopped', statusCounts.stopped || 0, C.amber], ['error', 'errors', statusCounts.error || 0, C.red],
+          ].map(([k, lab, cnt, col]) => chip(k, lab, cnt, col)).join('')}</div>
+        </div>${st.lqxChannelStopStatus ? `<div style="font-size:10px;color:${String(st.lqxChannelStopStatus).indexOf('fail') >= 0 ? C.red : C.amber};margin-top:8px">${esc(st.lqxChannelStopStatus)}</div>` : ''}${grLive.orphanedRunning ? `<div style="font-size:10px;color:${C.amber};margin-top:8px">${grLive.orphanedRunning} record${grLive.orphanedRunning === 1 ? ' is' : 's are'} not running right now; recovery will requeue ${grLive.orphanedRunning === 1 ? 'it' : 'them'}.</div>` : ''}${grLive.staleRunning ? `<div style="font-size:10px;color:${C.red};margin-top:8px">${grLive.staleRunning} attached worker${grLive.staleRunning === 1 ? '' : 's'} stopped writing recently and will be recovered.</div>` : ''}${lane(`Running now (${runningNow.length})`, runningNow, 'No attached worker is generating thumbnails right now.')}${recoveringNow.length ? lane(`Recovering - not running (${recoveringNow.length})`, recoveringNow, 'No recovery records.', 4) : ''}${lane(`Queued next - not running (${queuedNext.length})`, queuedNext, 'Nothing is waiting in the queue.', 6)}`, 12) : '';
         const channelHistoryHtml = channelRuns.length ? (() => {
             const toPct = v => {
                 if (v == null || !isFinite(Number(v))) return null;
@@ -1495,21 +1510,26 @@ const JarvisLongQuant = (function () {
             };
             const thumbPct = t => t && t.pct != null ? toPct(t.pct) : toPct(t && t.score && t.score.pctile);
             const pctCol = p => p == null ? C.dim : p >= 90 ? C.green : p >= 75 ? C.amber : C.text;
-            const livePick = liveActive.find(r => r && channelRuns.find(c => c.rid === r.rid));
-            const selected = (st.lqxChannelRid && channelRuns.find(r => r.rid === st.lqxChannelRid)) || livePick || channelRuns.find(r => ['running', 'queued'].includes(r.status || '')) || channelRuns.find(r => r.autosaved && r.autosaved.id) || channelRuns[0];
+            const filteredChannelRuns = channelRuns.filter(r => channelRunMatches(r, channelFilter));
+            const livePick = liveActive.find(r => r && filteredChannelRuns.find(c => c.rid === r.rid));
+            const selected = (st.lqxChannelRid && filteredChannelRuns.find(r => r.rid === st.lqxChannelRid)) || livePick || filteredChannelRuns.find(r => ['running', 'queued'].includes(r.status || '')) || filteredChannelRuns.find(r => r.autosaved && r.autosaved.id) || filteredChannelRuns[0];
             if (selected && selected.rid && st.lqxChannelRid !== selected.rid) st.lqxChannelRid = selected.rid;
             const selRid = selected && selected.rid;
             if (selRid) lqGrindDetail(selRid);
             const det = selRid ? LQGRINDDETAILS[selRid] : null;
             const runTitle = (selected && selected.sourceVideo && selected.sourceVideo.title) || (det && det.title) || (selected && selected.idea) || '';
-            const runCards = channelRuns.map(r => {
+            const filterLabel = channelFilter === 'all' ? 'all videos' : channelFilter === 'done' ? 'done' : channelFilter;
+            const runCards = filteredChannelRuns.map(r => {
                 const pct = toPct(r.best), on = r.rid === st.lqxChannelRid;
                 const title = (r.sourceVideo && r.sourceVideo.title) || r.idea || '';
                 const saved = r.autosaved && r.autosaved.id ? ` · saved ${esc(r.autosaved.id)}` : '';
-                return `<div data-lqxchannelrun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${on ? C.accent : pct >= (r.threshold || 90) ? C.green : C.border};border-radius:8px;background:${on ? C.accent + '18' : C.card2};padding:8px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="font-size:11px;font-weight:800;color:${C.text};line-height:1.3;max-height:36px;overflow:hidden">${esc(title.slice(0, 120))}</div><div style="font-size:11px;font-weight:900;color:${pctCol(pct)};white-space:nowrap">${pct == null ? '—' : pct + 'th'}</div></div><div style="font-size:9px;color:${C.mute};margin-top:4px">${esc(grindStateLabel(r))} · ${grindProgressText(r)}${saved}</div></div>`;
+                const stopping = !!(st.lqxStoppingRuns && st.lqxStoppingRuns[r.rid]);
+                const stopBtn = !terminalLq(r) ? `<span data-lqxstoprun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${stopping ? C.amber : C.red};color:${stopping ? C.amber : C.red};border-radius:5px;padding:1px 6px;font-size:9px;font-weight:900">${stopping ? 'stopping' : 'stop'}</span>` : '';
+                return `<div data-lqxchannelrun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${on ? C.accent : pct >= (r.threshold || 90) ? C.green : C.border};border-radius:8px;background:${on ? C.accent + '18' : C.card2};padding:8px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="font-size:11px;font-weight:800;color:${C.text};line-height:1.3;max-height:36px;overflow:hidden">${esc(title.slice(0, 120))}</div><div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><div style="font-size:11px;font-weight:900;color:${pctCol(pct)};white-space:nowrap">${pct == null ? '—' : pct + 'th'}</div>${stopBtn}</div></div><div style="font-size:9px;color:${C.mute};margin-top:4px">${esc(grindStateLabel(r))} · ${grindProgressText(r)}${saved}</div></div>`;
             }).join('');
             let detailHtml = '';
-            if (!det || det.loading) detailHtml = `<div style="min-height:220px;display:flex;align-items:center;justify-content:center;color:${C.cyan};font-size:11px;background:${C.card2};border:1px solid ${C.border};border-radius:8px">loading full thumbnail history…</div>`;
+            if (!filteredChannelRuns.length) detailHtml = `<div style="font-size:11px;color:${C.dim};padding:16px;background:${C.card2};border:1px solid ${C.border};border-radius:8px">No channel videos match ${esc(filterLabel)}.</div>`;
+            else if (!det || det.loading) detailHtml = `<div style="min-height:220px;display:flex;align-items:center;justify-content:center;color:${C.cyan};font-size:11px;background:${C.card2};border:1px solid ${C.border};border-radius:8px">loading full thumbnail history…</div>`;
             else if (det.error) detailHtml = `<div style="font-size:11px;color:${C.red};padding:14px;background:${C.card2};border:1px solid ${C.border};border-radius:8px">could not load this grind run: ${esc(det.error)}</div>`;
             else {
                 const attempts = Array.isArray(det.attempts) ? det.attempts : [];
@@ -1543,7 +1563,7 @@ const JarvisLongQuant = (function () {
                 const thumbErrors = attempts.reduce((s, a) => s + ((a.thumbs || []).filter(t => t && (t.status === 'error' || t.error)).length), 0);
                 detailHtml = `<div><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div><div style="font-size:13px;color:${C.text};font-weight:900;line-height:1.3">${esc(runTitle || 'Selected channel video')}</div><div style="font-size:10px;color:${C.mute};margin-top:3px">${esc(grindStateLabel(selected || det))} · ${thumbSlots}/${thumbLimit} thumbnails · target ${det.threshold || selected.threshold || 90}th${thumbLoaded && thumbLoaded < thumbSlots ? ' · ' + thumbLoaded + ' loaded' : ''}${thumbErrors ? ' · ' + thumbErrors + ' failed' : ''}</div>${det.note ? `<div style="font-size:9px;color:${C.faint};margin-top:3px">${esc(det.note)}</div>` : ''}</div><div style="font-size:20px;font-weight:900;color:${pctCol(bestPct)};white-space:nowrap">${bestPct == null ? '—' : bestPct + 'th best'}</div></div>${baselineHtml ? `<div style="display:flex;gap:10px;align-items:flex-start;overflow:auto;margin-bottom:10px">${baselineHtml}</div>` : ''}${thumbGrid}</div>`;
             }
-            return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:9px"><div><div style="font-size:12px;font-weight:900;color:${C.text}">🎞 Channel video thumbnail history</div><div style="font-size:10px;color:${C.mute};margin-top:2px">Pick a video to scroll every thumbnail generated during its threshold grind, ranked best to worst.</div></div><div style="font-size:10px;color:${C.dim};font-weight:800">${channelRuns.length} videos</div></div><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div data-lqxscrollkey="channel-runs" style="flex:0 0 280px;max-width:100%;max-height:520px;overflow:auto;padding-right:3px">${runCards}</div><div data-lqxscrollkey="channel-detail" style="flex:1 1 520px;min-width:280px;max-height:640px;overflow:auto;padding-right:3px">${detailHtml}</div></div>`, 12);
+            return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:9px"><div><div style="font-size:12px;font-weight:900;color:${C.text}">🎞 Channel video thumbnail history</div><div style="font-size:10px;color:${C.mute};margin-top:2px">Filter: <b style="color:${C.text}">${esc(filterLabel)}</b>. Pick a video to scroll every generated thumbnail, ranked best to worst.</div></div><div style="font-size:10px;color:${C.dim};font-weight:800">${filteredChannelRuns.length}/${channelRuns.length} videos</div></div><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div data-lqxscrollkey="channel-runs" style="flex:0 0 280px;max-width:100%;max-height:520px;overflow:auto;padding-right:3px">${runCards || `<div style="font-size:10px;color:${C.dim};padding:10px;border:1px dashed ${C.border};border-radius:8px">No videos in this filter.</div>`}</div><div data-lqxscrollkey="channel-detail" style="flex:1 1 520px;min-width:280px;max-height:640px;overflow:auto;padding-right:3px">${detailHtml}</div></div>`, 12);
         })() : '';
         const runHtml = recentRuns.length ? cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">🧪 Recent grind runs <span style="font-size:10px;color:${C.mute};font-weight:600">— overnight/channel jobs land here, then winners auto-save below</span></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px">${recentRuns.slice(0, 24).map(r => {
@@ -3541,6 +3561,18 @@ const JarvisLongQuant = (function () {
                     meta: { source: det.source || 'channel-grind-history', sourceVideo: det.sourceVideo || null, batchId: det.batchId || '', runRid: det.rid || st.lqxChannelRid || '', attemptK: att && att.k != null ? att.k : null, thumbI: hit.i != null ? hit.i : null, context: det.context || '', baseline: det.baseline || null },
                 }, hit.image);
             }
+            return;
+        }
+        const xfilter = e.target.closest('[data-lqxchanfilter]'); if (xfilter) {
+            st.lqxChannelFilter = xfilter.getAttribute('data-lqxchanfilter') || 'all';
+            st.lqxChannelRid = null;
+            st.lqxOpen = null;
+            st.lqxSavedSel = null;
+            rtgUpdateLqExp();
+            return;
+        }
+        const xstoprun = e.target.closest('[data-lqxstoprun]'); if (xstoprun) {
+            lqxStopRun(xstoprun.getAttribute('data-lqxstoprun'));
             return;
         }
         const xchr = e.target.closest('[data-lqxchannelrun]'); if (xchr) {
