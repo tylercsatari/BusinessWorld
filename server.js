@@ -10574,8 +10574,14 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
     };
 }
 function longQuantActiveSort(a, b) {
-    const rank = s => s === 'running' ? 0 : s === 'queued' ? 1 : 2;
-    const ra = rank(a && a.status), rb = rank(b && b.status);
+    const rank = r => {
+        if (r && r.workerAttached) return 0;
+        if (r && r.status === 'running' && !r.orphanedRunning) return 1;
+        if (r && r.orphanedRunning) return 2;
+        if (r && r.status === 'queued') return 3;
+        return 4;
+    };
+    const ra = rank(a), rb = rank(b);
     if (ra !== rb) return ra - rb;
     return (b.ts || 0) - (a.ts || 0);
 }
