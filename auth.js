@@ -155,8 +155,6 @@ function isPublic(pathname, method) {
     if (pathname.startsWith('/api/longquant/guesses/montage/')) return true; // generated thumbnail guesses (no data), lets <img> load without a token
     if (pathname.startsWith('/api/longquant/ideas/montage/')) return true; // idea-chain thumbnails (no data), lets <img> load without a token
     if (pathname.startsWith('/api/longquant/thumbs/img/')) return true; // saved long-form thumbnails (no data), lets <img> load without a token
-    if (pathname === '/api/longquant/thumbs/list') return true; // compact saved long-form thumbnail index for experiment UI
-    if (pathname.startsWith('/api/longquant/thumbs/detail/')) return true; // saved long-form thumbnail detail for experiment read-out
     if (pathname.startsWith('/api/longquant/grind/img/')) return true; // grind thumbnails (no data), lets <img> load without a token
     if (pathname.startsWith('/api/longquant/grind/original/')) return true; // source thumbnails scored as grind baselines
     if (pathname === '/api/longquant/grind/status' || pathname === '/api/longquant/grind/runs' || pathname.startsWith('/api/longquant/grind/run/')) return true; // experiment progress/status, no account secrets

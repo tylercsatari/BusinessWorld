@@ -3717,6 +3717,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         res.writeHead(404); res.end(); return;
     }
     // ── 💡 Ideas: idea-model training runs (longform/ideas/idea<N>/) ──
+    if (pathname === '/api/longquant/ideas/status' && req.method === 'GET') {
+        const buf = await cloud.downloadFromR2('longform/idea-rl/status.json').catch(() => null);
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(buf ? buf.toString('utf8') : '{}'); return;
+    }
     const ideaGrp = pathname.match(/^\/api\/longquant\/ideas\/group\/([a-z0-9]+)\/([a-z0-9_]+)$/i);
     if (ideaGrp && req.method === 'GET') {
         await serveR2Gz(req, res, `longform/ideas/${ideaGrp[1]}/groups/${ideaGrp[2]}.json`, 2e6, { error: 'no group' }, 404); return;
