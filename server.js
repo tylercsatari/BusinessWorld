@@ -561,6 +561,7 @@ console.log('[raw-upload] using python:', RAW_PYTHON);
 const LONGQUANT_IDEA_MODEL = process.env.LONGQUANT_IDEA_MODEL || 'idea_long_r26';
 const LONGQUANT_THUMB_MODEL = process.env.LONGQUANT_THUMB_MODEL || 'thumb_b10';
 const LONGQUANT_RENDER_MODEL = process.env.LONGQUANT_RENDER_MODEL || 'black-forest-labs/flux-2-pro';
+const LONGQUANT_DEMO_REQUEST_PREFIX = 'longform/guesses/app-requests/';
 const TRIBE_CACHE = process.env.TRIBE_CACHE
     || '/Users/tylercsatari/Desktop/BusinessHub/tribev2/cache';
 
@@ -3409,7 +3410,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         const body = await readBody(req); const title = String(body.title || '').slice(0, 200).trim();
         if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no title"}'); return; }
         const rid = 'd' + Date.now().toString(36);
-        await cloud.uploadToR2(`longform/guesses/requests/${rid}.json`, Buffer.from(JSON.stringify({ title, ts: Date.now() })), 'application/json');
+        await cloud.uploadToR2(`${LONGQUANT_DEMO_REQUEST_PREFIX}${rid}.json`, Buffer.from(JSON.stringify({ title, forceTitle: title, count: 5, ts: Date.now() })), 'application/json');
         res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid })); return;
     }
     // ── Long Quant 🧪 Experiment: generate thumbnails with the trained model + score uploads ──
@@ -3430,7 +3431,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             renderModel: LONGQUANT_RENDER_MODEL,
             scoring: ['ctr', 'ret30', 'views', 'scaled_views', 'realviews', 'gt10m', 'ctrviews'],
         };
-        await cloud.uploadToR2(`longform/guesses/requests/${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
+        try {
+            const pend = ((await cloud.listR2Keys(LONGQUANT_DEMO_REQUEST_PREFIX)) || []).filter(k => k.endsWith('.json'));
+            if (pend.length >= 4) { res.writeHead(429, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'busy — Long Quant has a few generations queued, try again in a moment' })); return; }
+        } catch (e) {}
+        await lqDemoStatus(rid, { stage: 'queued', title: title || '', n: count, done: 0, note: 'queued on the app server' });
+        await cloud.uploadToR2(`${LONGQUANT_DEMO_REQUEST_PREFIX}${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, rid, invent, mode: payload.mode, title, model: payload }));
         return;
@@ -10063,6 +10069,31 @@ async function replicateVersionRun(version, input, timeoutMs = 720000) {
     if (typeof out === 'string') { try { out = JSON.parse(out); } catch (e) {} }
     return out;
 }
+async function replicateModelRun(slug, input, timeoutMs = 720000) {
+    if (!slug) throw new Error('model slug not configured');
+    const out = await replicateRun(slug, input, timeoutMs);
+    if (typeof out === 'string') {
+        try {
+            const r = await fetchT(out, {}, 60000);
+            const txt = await r.text();
+            try { return JSON.parse(txt); } catch (e) { return txt; }
+        } catch (e) {}
+        try { return JSON.parse(out); } catch (e) { return out; }
+    }
+    return out;
+}
+async function replicateLongModelRun(kind, input, timeoutMs = 720000) {
+    const isIdea = kind === 'idea';
+    const version = isIdea
+        ? (process.env.LONGQUANT_IDEA_VERSION || process.env.REPLICATE_LONG_IDEA_VERSION || '')
+        : (process.env.LONGQUANT_THUMB_VERSION || process.env.REPLICATE_LONG_THUMB_VERSION || '');
+    if (version) return replicateVersionRun(version, input, timeoutMs);
+    const slug = isIdea
+        ? (process.env.LONGQUANT_IDEA_MODEL_SLUG || process.env.REPLICATE_LONG_IDEA_MODEL || '')
+        : (process.env.LONGQUANT_THUMB_MODEL_SLUG || process.env.REPLICATE_LONG_THUMB_MODEL || '');
+    if (slug) return replicateModelRun(slug, input, timeoutMs);
+    throw new Error(`${isIdea ? 'LONGQUANT_IDEA_VERSION' : 'LONGQUANT_THUMB_VERSION'} is not configured; set it to the exported ${isIdea ? 'idea' : 'thumbnail prompt'} model version or model slug`);
+}
 function lqStringsFromOutput(out) {
     if (!out) return [];
     if (Array.isArray(out)) return out.flatMap(lqStringsFromOutput);
@@ -10107,7 +10138,7 @@ async function longQuantIdeaBank() {
     return clean;
 }
 async function longQuantIdeaGenerate(seed, attempt, prior, guide = {}) {
-    const ver = process.env.LONGQUANT_IDEA_VERSION || process.env.REPLICATE_LONG_IDEA_VERSION || '';
+    const hosted = !!(process.env.REPLICATE_API_TOKEN && (process.env.LONGQUANT_IDEA_VERSION || process.env.REPLICATE_LONG_IDEA_VERSION || process.env.LONGQUANT_IDEA_MODEL_SLUG || process.env.REPLICATE_LONG_IDEA_MODEL));
     const avoid = (prior || []).slice(-14).map(a => ({
         idea: a.idea || a.title || '',
         distSeed: a.distSeed == null ? null : a.distSeed,
@@ -10122,7 +10153,7 @@ async function longQuantIdeaGenerate(seed, attempt, prior, guide = {}) {
             ? 'Generate inside this semantic ring: stay above the seed-topic similarity floor, but outside the minimum distance from every prior rendered idea. Change the angle/mechanism/stakes, not the core communicated topic.'
             : 'Generate a materially different long-form YouTube video idea from recent candidates.',
     };
-    if (!ver || !process.env.REPLICATE_API_TOKEN) {
+    if (!hosted) {
         if (attempt === 0 && seed) return seed;
         if (seed) {
             const j = await hookLlmJson([
@@ -10136,7 +10167,7 @@ async function longQuantIdeaGenerate(seed, attempt, prior, guide = {}) {
         if (bank.length) return bank[(attempt * 17 + (prior || []).length * 31) % bank.length].idea.slice(0, 300);
         return (seed || 'I attempted an impossible challenge and documented what happened').slice(0, 300);
     }
-    const out = await replicateVersionRun(ver, {
+    const out = await replicateLongModelRun('idea', {
         premise: seed || '',
         idea: seed || '',
         invent: !seed || attempt > 0,
@@ -10155,9 +10186,7 @@ async function longQuantIdeaGenerate(seed, attempt, prior, guide = {}) {
     return xs[0].slice(0, 300);
 }
 async function longQuantThumbPrompts(idea, count) {
-    const ver = process.env.LONGQUANT_THUMB_VERSION || process.env.REPLICATE_LONG_THUMB_VERSION || '';
-    if (!ver) throw new Error('LONGQUANT_THUMB_VERSION is not configured; set it to the exported thumbnail prompt model version');
-    const out = await replicateVersionRun(ver, {
+    const out = await replicateLongModelRun('thumb', {
         title: idea,
         idea,
         count,
@@ -10176,46 +10205,100 @@ async function longQuantRenderThumb(prompt) {
     const out = await replicateRun(model, input, 240000);
     return Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
 }
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const lqDemoStatus = (rid, o) => cloud.uploadToR2(`longform/guesses/demo/status/${rid}.json`, Buffer.from(JSON.stringify({ ...o, ts: Date.now() })), 'application/json').catch(() => {});
+const lqDemoGroupWrite = (rid, group) => cloud.uploadToR2(`longform/guesses/demo/groups/${rid}.json`, Buffer.from(JSON.stringify(group)), 'application/json').catch(() => {});
+function longQuantPublicScore(score) {
+    if (!score || score.error) return score || null;
+    const pct = score.pctile == null ? null : Number(score.pctile);
+    const reward = score.reward != null ? Number(score.reward) : pct;
+    return { ...score, pctile: pct, reward };
+}
+async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
+    const n = Math.max(1, Math.min(opts.maxCount || 12, parseInt(count, 10) || 5));
+    const group = {
+        input_id: rid, title: idea, idea, invented: !!opts.invented, n,
+        model: `${LONGQUANT_THUMB_MODEL} + ${LONGQUANT_RENDER_MODEL.split('/').pop()}`,
+        hosted: true, attempts: [], done: false, streaming: true,
+    };
+    await lqDemoStatus(rid, { stage: 'prompting', title: idea, n, done: 0, note: 'trained thumbnail model is writing prompts on the app server' });
+    await lqDemoGroupWrite(rid, group);
+    const prompts = await longQuantThumbPrompts(idea, n);
+    group.n = prompts.length;
+    await lqDemoStatus(rid, { stage: 'rendering', title: idea, n: prompts.length, done: 0, note: 'Flux Pro is rendering thumbnails; each result is scored and embedded as it lands' });
+    await lqDemoGroupWrite(rid, group);
+    for (let k = 0; k < prompts.length; k++) {
+        const prompt = prompts[k];
+        const id = `${rid}_${k}`;
+        const att = { k, prompt, status: 'rendering', montage_key: `longform/guesses/demo/montages/${id}.jpg` };
+        group.attempts.push(att);
+        await lqDemoGroupWrite(rid, group);
+        try {
+            const jpg = await longQuantRenderThumb(prompt);
+            await cloud.uploadToR2(att.montage_key, jpg, 'image/jpeg');
+            att.status = 'scoring';
+            await lqDemoStatus(rid, { stage: 'scoring', title: idea, n: prompts.length, done: k, note: `scoring thumbnail ${k + 1}/${prompts.length} on raw-long visual/text/together embeddings` });
+            await lqDemoGroupWrite(rid, group);
+            const score = longQuantPublicScore(await longQuantScoreImageBuffer(jpg, idea, idea));
+            att.score = score;
+            att.pctile = score && score.pctile != null ? score.pctile : null;
+            att.relevance = score && score.relevance != null ? score.relevance : null;
+            att.nn_cos = score && score.nn_cos != null ? score.nn_cos : null;
+            att.reward = score && score.reward != null ? score.reward : att.pctile;
+            att.status = 'done';
+        } catch (e) {
+            att.status = 'error';
+            att.error = String(e.message || e).slice(0, 220);
+        }
+        await lqDemoStatus(rid, { stage: 'rendering', title: idea, n: prompts.length, done: k + 1, note: `generated ${k + 1}/${prompts.length} thumbnails on the app server` });
+        await lqDemoGroupWrite(rid, group);
+    }
+    group.attempts.sort((a, b) => ((b.reward != null ? b.reward : b.pctile) || -1) - ((a.reward != null ? a.reward : a.pctile) || -1));
+    group.best_pctile = group.attempts.length ? group.attempts[0].pctile : null;
+    group.best_reward = group.attempts.length ? group.attempts[0].reward : null;
+    group.done = true;
+    group.error = group.attempts.some(a => a.status === 'done') ? '' : (group.attempts[0] && group.attempts[0].error) || 'no thumbnails rendered';
+    await lqDemoGroupWrite(rid, group);
+    await lqDemoStatus(rid, { stage: 'done', title: idea, n: group.attempts.length, done: group.attempts.length, best: group.best_pctile, error: group.error || '' });
+    if (group.error) throw new Error(group.error);
+    return group;
+}
+async function longQuantProcessRequest(rid, req) {
+    const typed = String(req.forceTitle || req.title || req.idea || req.premise || '').trim().slice(0, 500);
+    let idea = typed;
+    try {
+        if (!idea) {
+            await lqDemoStatus(rid, { stage: 'reasoning', n: 1, done: 0, note: 'blank request: selecting an idea from the trained Long Quant idea model/bank' });
+            idea = await longQuantIdeaGenerate('', 0, [], {});
+        }
+        await longQuantBuildThumbGroup(rid, idea, req.count || 5, { invented: !typed });
+    } catch (e) {
+        const msg = String(e.message || e).slice(0, 240);
+        await lqDemoGroupWrite(rid, { input_id: rid, title: idea || typed || '', idea: idea || typed || '', attempts: [], n: 0, done: true, streaming: false, error: msg, model: `${LONGQUANT_THUMB_MODEL} + ${LONGQUANT_RENDER_MODEL}` });
+        await lqDemoStatus(rid, { stage: 'done', title: idea || typed || '', error: msg });
+    }
+}
 async function longQuantDemoThumbGroup(idea, count, parentRid, attemptK, onStatus) {
     const reqRid = 'g' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-    const payload = {
-        title: idea, premise: idea, idea, forceTitle: idea,
-        count: Math.max(1, Math.min(8, parseInt(count, 10) || 5)),
-        invent: false, mode: 'thumbnail_only', source: 'longquant_grind',
-        parentRid, attemptK, ts: Date.now(),
-        instruction: 'Grind request: use this exact idea as the thumbnail model input. Do not invent or rewrite the video idea.',
-        ideaModel: LONGQUANT_IDEA_MODEL,
-        thumbModel: LONGQUANT_THUMB_MODEL,
-        renderModel: LONGQUANT_RENDER_MODEL,
-    };
-    await cloud.uploadToR2(`longform/guesses/requests/${reqRid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
-    const deadline = Date.now() + 25 * 60 * 1000;
-    let last = '';
-    while (Date.now() < deadline) {
-        const gb = await cloud.downloadFromR2(`longform/guesses/demo/groups/${reqRid}.json`).catch(() => null);
-        if (gb) {
-            const group = JSON.parse(gb.toString('utf8'));
-            if (Array.isArray(group.attempts) && group.attempts.length) return { reqRid, group };
-            if (group.error) throw new Error(group.error);
-        }
-        const sb = await cloud.downloadFromR2(`longform/guesses/demo/status/${reqRid}.json`).catch(() => null);
-        if (sb) {
-            let st = null;
-            try { st = JSON.parse(sb.toString('utf8')); } catch (e) {}
-            if (st) {
-                const msg = `${st.stage || 'queued'}${st.done != null && st.n ? ` ${st.done}/${st.n}` : ''}${st.note ? ': ' + st.note : ''}`;
-                if (msg !== last) { last = msg; await onStatus(reqRid, st); }
-                if (st.error) throw new Error(st.error);
-            }
-        } else if (last !== 'queued') {
-            last = 'queued';
-            await onStatus(reqRid, { stage: 'queued' });
-        }
-        await sleep(3000);
-    }
-    throw new Error('thumbnail worker timed out waiting for model-box result');
+    if (onStatus) await onStatus(reqRid, { stage: 'prompting', note: 'app server is generating thumbnails directly' });
+    const group = await longQuantBuildThumbGroup(reqRid, idea, Math.max(1, Math.min(8, parseInt(count, 10) || 5)), { parentRid, attemptK });
+    return { reqRid, group };
 }
+let _lqDemoBusy = false;
+async function longQuantDemoQueue() {
+    if (_lqDemoBusy || !cloud.isR2Ready()) return;
+    let keys; try { keys = ((await cloud.listR2Keys(LONGQUANT_DEMO_REQUEST_PREFIX)) || []).filter(k => k.endsWith('.json')); } catch (e) { return; }
+    if (!keys.length) return;
+    _lqDemoBusy = true;
+    try {
+        for (const key of keys) {
+            const rid = key.split('/').pop().replace('.json', '');
+            let req = {}; try { req = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) {}
+            await cloud.deleteFromR2(key).catch(() => {});
+            await longQuantProcessRequest(rid, req);
+        }
+    } finally { _lqDemoBusy = false; }
+}
+setInterval(() => { longQuantDemoQueue().catch(() => {}); }, 4000);
 function lqScorePct(score) {
     const p = score && score.pctile;
     if (p == null) return null;
@@ -10314,13 +10397,13 @@ async function longQuantGrindProcess(rid, req0) {
             let group = null, reqRid = '';
             try {
                 a.status = 'queued';
-                note = `attempt ${a.k + 1}: queued on the Long Quant model box`;
+                note = `attempt ${a.k + 1}: generating thumbnails on the app server`;
                 await write();
                 const out = await longQuantDemoThumbGroup(idea, count, rid, a.k, async (_reqRid, st) => {
                     reqRid = _reqRid;
                     a.workerRid = _reqRid;
                     a.status = st.stage === 'reasoning' ? 'prompting' : (st.stage === 'rendering' ? 'rendering' : (st.stage || 'queued'));
-                    note = `attempt ${a.k + 1}: model box ${st.stage || 'queued'}${st.done != null && st.n ? ` ${st.done}/${st.n}` : ''}${st.note ? ' — ' + st.note : ''}`;
+                    note = `attempt ${a.k + 1}: app server ${st.stage || 'queued'}${st.done != null && st.n ? ` ${st.done}/${st.n}` : ''}${st.note ? ' — ' + st.note : ''}`;
                     await write();
                 });
                 reqRid = out.reqRid;
@@ -10334,7 +10417,7 @@ async function longQuantGrindProcess(rid, req0) {
             a.status = 'importing';
             a.workerRid = reqRid;
             a.prompts = (group.attempts || []).map(x => x.prompt).filter(Boolean);
-            note = `attempt ${a.k + 1}: importing ${group.attempts.length} scored thumbnails from model box`;
+            note = `attempt ${a.k + 1}: importing ${group.attempts.length} scored thumbnails from the app-server worker`;
             await write();
             for (let i = 0; i < (group.attempts || []).length; i++) {
                 const s = group.attempts[i] || {};
@@ -10343,12 +10426,14 @@ async function longQuantGrindProcess(rid, req0) {
                 a.thumbs.push(t); await write();
                 try {
                     const jpg = await cloud.downloadFromR2(t.sourceKey).catch(() => null);
-                    if (!jpg) throw new Error('model-box image missing');
+                    if (!jpg) throw new Error('generated image missing');
                     await cloud.uploadToR2(`longform/grind/montages/${imgId}.jpg`, jpg, 'image/jpeg');
                     t.image = imgId;
                     t.status = 'done';
                     t.pct = lqScorePct({ pctile: s.pctile });
-                    t.score = { pctile: s.pctile, relevance: s.relevance, nn_cos: s.nn_cos, reward: s.reward, caption: s.caption || null };
+                    t.score = s.score && typeof s.score === 'object'
+                        ? { ...s.score, pctile: s.score.pctile != null ? s.score.pctile : s.pctile, relevance: s.score.relevance != null ? s.score.relevance : s.relevance, nn_cos: s.score.nn_cos != null ? s.score.nn_cos : s.nn_cos, reward: s.score.reward != null ? s.score.reward : s.reward }
+                        : { pctile: s.pctile, relevance: s.relevance, nn_cos: s.nn_cos, reward: s.reward, caption: s.caption || null };
                     if (t.pct != null && (a.pct == null || t.pct > a.pct)) { a.pct = t.pct; a.bestThumb = i; }
                 } catch (e) {
                     t.status = 'error'; t.error = String(e.message || e).slice(0, 160);

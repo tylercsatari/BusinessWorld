@@ -852,7 +852,7 @@ const JarvisLongQuant = (function () {
         lqxJson('/api/longquant/guesses/group/demo/' + rid).catch(() => null).then(j => {
             if (st.lqxRid !== rid) return;
             if (j && j.attempts) { st.lqxResult = j; st.lqxStatus = null; rtgUpdateLqExp(); }
-            else { st.lqxStatus = 'queued — waiting for the trained longform thumbnail worker (' + Math.round((Date.now() - st.lqxStart) / 1000) + 's)'; rtgUpdateLqExp(); window.setTimeout(lqxPoll, 3000); }
+            else { st.lqxStatus = 'queued — waiting for the app-server Long Quant worker (' + Math.round((Date.now() - st.lqxStart) / 1000) + 's)'; rtgUpdateLqExp(); window.setTimeout(lqxPoll, 3000); }
         }).catch(() => { if (st.lqxRid === rid) window.setTimeout(lqxPoll, 6000); });
     }
     async function lqxSave(payload, flashKey) {
@@ -925,7 +925,8 @@ const JarvisLongQuant = (function () {
     function lqxRawRecord(cacheId, score, title, img) {
         if (!score || score.loading || score.error || !score.channels) return null;
         const id = 'longquant:' + (cacheId || lqxHash((title || '') + '|' + (img || '')));
-        return { _lqxId: id, source: 'longquant', title: title || score.title || 'Long Quant thumbnail', transcript: title || score.title || '', imgUrl: img || '', montageDataUrl: img || '', channels: score.channels, emb_preview: score.emb_preview, steer: lqxSteerFromScore(score), lqScore: score };
+        const dataUrl = /^data:image\//.test(String(img || '')) ? img : '';
+        return { _lqxId: id, source: 'longquant', title: title || score.title || 'Long Quant thumbnail', transcript: title || score.title || '', imgUrl: img || '', montageDataUrl: img || '', montage: dataUrl ? dataUrl.split('base64,').pop() : '', channels: score.channels, emb_preview: score.emb_preview, steer: lqxSteerFromScore(score), lqScore: score };
     }
     function lqxAttachRaw(cacheId, score, title, img, select) {
         const rec = lqxRawRecord(cacheId, score, title, img); if (!rec) return -1;
