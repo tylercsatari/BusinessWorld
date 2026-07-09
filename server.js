@@ -3675,6 +3675,53 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         await cloud.uploadToR2(runKey, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
         res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid, run })); return;
     }
+    if (pathname === '/api/longquant/grind/resume' && req.method === 'POST') {
+        const body = await readBody(req); const rid = String(body.rid || '').replace(/[^a-z0-9]/gi, '');
+        if (!rid) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no rid"}'); return; }
+        const runKey = `longform/grind/runs/${rid}.json`;
+        let run = null;
+        try { const b = await cloud.downloadFromR2(runKey); if (b) run = JSON.parse(b.toString('utf8')); } catch (e) {}
+        if (!run) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"no run with that rid"}'); return; }
+        // the stop marker persists in R2 and force-stops any rid that carries it — clear it or nothing can restart
+        await cloud.deleteFromR2(`longform/grind/stop/${rid}`).catch(() => {});
+        const freshRunning = run.status === 'running' && (Date.now() - (Number(run.ts) || 0)) < longQuantStaleMs();
+        if (_lqGrindActive.has(rid) || freshRunning) {
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid, already: true })); return;
+        }
+        const reqPayload = longQuantRequestFromRun(run, rid);
+        const slotTries = (Array.isArray(run.attempts) ? run.attempts : []).reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.length : 0), 0);
+        const storedTries = Number(run.thumbTryCount);
+        const thumbTries = Math.max(slotTries, isFinite(storedTries) ? storedTries : 0);
+        if (thumbTries >= reqPayload.maxAttempts) {
+            // restarting a maxed/complete run means MORE images: extend the cap by one more batch
+            reqPayload.maxAttempts = Math.min(400, thumbTries + Math.max(10, parseInt(run.maxAttempts, 10) || 40));
+            reqPayload.hours = longQuantGrindHours(null, reqPayload.maxAttempts);
+        }
+        reqPayload.urgent = true; reqPayload.recovered = false; reqPayload.resumedByUser = true; reqPayload.ts = Date.now();
+        run.status = 'queued';
+        run.note = `restarted by you — resuming at ${thumbTries}/${reqPayload.maxAttempts} thumbnails`;
+        run.maxAttempts = reqPayload.maxAttempts;
+        run.thumbTryLimit = reqPayload.maxAttempts;
+        run.hours = reqPayload.hours;
+        run.stoppedAt = null;
+        run.ts = Date.now();
+        await cloud.uploadToR2(runKey, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
+        const wantNow = body.now !== false;
+        const forceLimit = Math.max(longQuantGrindWorkerLimit(), Math.min(8, parseInt(process.env.LONGQUANT_GRIND_FORCE_WORKERS || '6', 10) || 6));
+        if (wantNow && _lqGrindActive.size < forceLimit) {
+            // full control: attach a worker immediately instead of waiting for a queue slot
+            await cloud.deleteFromR2(`longform/grind/requests/${rid}.json`).catch(() => {});
+            _lqGrindActive.add(rid);
+            (async () => {
+                try { await longQuantGrindProcess(rid, reqPayload); }
+                catch (e) { console.warn('longquant forced grind err:', e.message); }
+                finally { _lqGrindActive.delete(rid); }
+            })();
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid, started: true, run })); return;
+        }
+        await cloud.uploadToR2(`longform/grind/requests/${rid}.json`, Buffer.from(JSON.stringify(reqPayload)), 'application/json').catch(() => {});
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid, queued: true, run })); return;
+    }
     const lqGrindImg = pathname.match(/^\/api\/longquant\/grind\/img\/([a-z0-9_]+)$/i);
     if (lqGrindImg && (req.method === 'GET' || req.method === 'HEAD')) {
         if (await serveR2ObjectForRequest(req, res, `longform/grind/montages/${lqGrindImg[1]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
@@ -10691,6 +10738,7 @@ function longQuantActiveSort(a, b) {
 }
 function longQuantRequestPriority(req) {
     if (!req || typeof req !== 'object') return 9;
+    if (req.urgent) return -1;   // user clicked "start now" — front of the queue
     if (req.sourceVideo && (req.sourceVideo.id || req.sourceVideo.title)) return 0;
     if (req.batchId) return 0;
     if (/channel|overnight|youtube/i.test(String(req.source || ''))) return 0;
@@ -11245,7 +11293,7 @@ function longQuantTerminalStatus(s) {
 function longQuantRequestFromRun(run, rid) {
     const sourceVideo = longQuantCompactSourceVideo(run && run.sourceVideo);
     const idea = String((run && (run.idea || run.title)) || (sourceVideo && sourceVideo.title) || '').slice(0, 500).trim();
-    const maxAttempts = Math.max(1, Math.min(100, parseInt(run && (run.thumbTryLimit || run.maxAttempts), 10) || 40));
+    const maxAttempts = Math.max(1, Math.min(400, parseInt(run && (run.thumbTryLimit || run.maxAttempts), 10) || 40));
     const source = String((run && run.source) || '').slice(0, 80);
     return {
         rid, idea, title: idea, invent: !idea,
