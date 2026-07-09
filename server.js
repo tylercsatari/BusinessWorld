@@ -3531,12 +3531,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             duration: body.sourceVideo.duration || body.sourceVideo.durationSec || null,
             channel: String(body.sourceVideo.channel || '').slice(0, 120),
         } : null;
+        const maxAttempts = Math.max(1, Math.min(100, parseInt(body.maxAttempts, 10) || 40));
+        const count = Math.max(1, Math.min(8, parseInt(body.count, 10) || 5));
+        const threshold = Math.max(50, Math.min(99, parseInt(body.threshold, 10) || 85));
+        const hours = longQuantGrindHours(body.hours, maxAttempts);
         const payload = {
             rid, idea, title: idea, invent: !idea,
-            threshold: Math.max(50, Math.min(99, parseInt(body.threshold, 10) || 85)),
-            maxAttempts: Math.max(1, Math.min(100, parseInt(body.maxAttempts, 10) || 40)),
-            count: Math.max(1, Math.min(8, parseInt(body.count, 10) || 5)),
-            hours: Math.min(8, Math.max(0.1, parseFloat(body.hours) || 2)),
+            threshold, maxAttempts, count, hours,
             context, transcript30: context, sourceVideo,
             batchId: String(body.batchId || '').slice(0, 80),
             source: String(body.source || '').slice(0, 80),
@@ -3550,7 +3551,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             rid, idea, threshold: payload.threshold, attempts: [], status: 'queued',
             note: idea ? `queued — first attempt will generate thumbnails for your exact idea${context ? ' with transcript context' : ''}` : 'queued — waiting for the idea model to invent the first candidate',
             best: null, ts: Date.now(), context, sourceVideo, batchId: payload.batchId, source: payload.source,
-            contextChars: context.length,
+            contextChars: context.length, maxAttempts, count, hours, autosaveBest: payload.autosaveBest,
             ideaModel: payload.ideaModel, thumbModel: payload.thumbModel, renderModel: payload.renderModel,
         })), 'application/json').catch(() => {});
         await cloud.uploadToR2(`longform/grind/requests/${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
@@ -10414,6 +10415,12 @@ async function longQuantRenderThumb(prompt) {
 const lqDemoStatus = (rid, o) => cloud.uploadToR2(`longform/guesses/demo/status/${rid}.json`, Buffer.from(JSON.stringify({ ...o, ts: Date.now() })), 'application/json').catch(() => {});
 const lqDemoGroupWrite = (rid, group) => cloud.uploadToR2(`longform/guesses/demo/groups/${rid}.json`, Buffer.from(JSON.stringify(group)), 'application/json').catch(() => {});
 const longQuantGrindStopped = rid => rid ? cloud.existsInR2(`longform/grind/stop/${rid}`).catch(() => false) : Promise.resolve(false);
+function longQuantGrindHours(rawHours, maxAttempts) {
+    const explicit = parseFloat(rawHours);
+    if (explicit > 0 && isFinite(explicit)) return Math.min(48, Math.max(0.1, explicit));
+    const tries = Math.max(1, parseInt(maxAttempts, 10) || 40);
+    return Math.min(48, Math.max(2, tries * 0.5));
+}
 async function longQuantThrowIfStopped(rid) {
     if (await longQuantGrindStopped(rid)) {
         const e = new Error('stopped by you');
@@ -10646,6 +10653,11 @@ async function longQuantFetchYoutubeThumb(videoId, url) {
     return null;
 }
 async function longQuantGrindProcess(rid, req0) {
+    let priorRun = null;
+    try {
+        const priorBuf = await cloud.downloadFromR2(`longform/grind/runs/${rid}.json`);
+        if (priorBuf) priorRun = JSON.parse(priorBuf.toString('utf8'));
+    } catch (e) { priorRun = null; }
     const seed = String(req0.idea || req0.title || '').trim().slice(0, 500);
     const context = longQuantCleanContext(req0.context || req0.transcript30 || '');
     const sourceVideo = longQuantCompactSourceVideo(req0.sourceVideo);
@@ -10656,15 +10668,32 @@ async function longQuantGrindProcess(rid, req0) {
     const threshold = Math.max(50, Math.min(99, parseInt(req0.threshold, 10) || 85));
     const maxAttempts = Math.max(1, Math.min(100, parseInt(req0.maxAttempts, 10) || 40));
     const count = Math.max(1, Math.min(8, parseInt(req0.count, 10) || 5));
-    const deadline = Date.now() + Math.min(8, Math.max(0.1, parseFloat(req0.hours) || 2)) * 3600e3;
+    const legacyChannelDefaultHours = (sourceVideo || batchId || /channel/i.test(source)) && parseFloat(req0.hours) <= 2;
+    const hours = longQuantGrindHours(legacyChannelDefaultHours ? null : req0.hours, maxAttempts);
+    const deadline = Date.now() + hours * 3600e3;
     const required = ['GEMINI_API_KEY'];
     for (const k of required) if (!process.env[k]) {
         await cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({ rid, idea: seed, threshold, attempts: [], status: 'error', error: `${k} not configured`, ts: Date.now() })), 'application/json').catch(() => {});
         return;
     }
-    let attempts = [], status = 'running', winner = null, err = '', note = '', best = null, rejected = 0, baseline = null, autosaved = null;
+    let attempts = Array.isArray(priorRun && priorRun.attempts) ? priorRun.attempts : [];
+    let status = 'running', winner = null, err = '', note = '', best = null;
+    let rejected = priorRun && Number.isFinite(Number(priorRun.rejected)) ? Number(priorRun.rejected) : 0;
+    let baseline = priorRun && priorRun.baseline ? priorRun.baseline : null;
+    let autosaved = priorRun && priorRun.autosaved ? priorRun.autosaved : null;
+    if (priorRun && Number.isFinite(Number(priorRun.best))) best = Number(priorRun.best);
+    if (best == null) {
+        for (const a of attempts) {
+            if (a && Number.isFinite(Number(a.pct)) && (best == null || Number(a.pct) > best)) best = Number(a.pct);
+            for (const t of ((a && a.thumbs) || [])) {
+                const tp = Number.isFinite(Number(t.pct)) ? Number(t.pct) : lqScorePct(t.score);
+                if (tp != null && (best == null || tp > best)) best = tp;
+            }
+        }
+    }
     const baseGate = seed ? 0.10 : 0.18;
-    let gate = baseGate, sinceBest = 0;
+    let gate = priorRun && Number.isFinite(Number(priorRun.gate)) ? Math.max(baseGate, Number(priorRun.gate)) : baseGate;
+    let sinceBest = 0;
     const vecs = [];
     let seedQ = null;
     if (seed) {
@@ -10674,12 +10703,18 @@ async function longQuantGrindProcess(rid, req0) {
             vecs.push(seedQ);
         }
     }
+    for (const a of attempts) {
+        const txt = String((a && (a.idea || a.title)) || '').trim();
+        if (!txt) continue;
+        const ae = await geminiTextEmbed(txt).catch(() => null);
+        if (ae) vecs.push(Int8Array.from(ae, x => Math.round(x * 127)));
+    }
     const write = () => cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
         rid, idea: seed, title: sourceTitle || seed, context, sourceVideo, source, batchId,
         contextChars: context.length,
         threshold, count, attempts, n: attempts.length, status, winner, error: err, note,
         best, rejected, gate: Math.round(gate * 1000) / 1000, deadline, ts: Date.now(),
-        baseline, autosaved,
+        baseline, autosaved, maxAttempts, hours, autosaveBest: !!req0.autosaveBest,
         ideaModel: LONGQUANT_IDEA_MODEL, thumbModel: longQuantThumbPromptModelLabel(), renderModel: LONGQUANT_RENDER_MODEL,
     })), 'application/json').catch(() => {});
     const markStopped = async () => {
@@ -10893,8 +10928,80 @@ async function longQuantGrindProcess(rid, req0) {
     await write();
 }
 let _lqGrindBusy = false;
+let _lqGrindRecoverAt = 0;
+function longQuantTerminalStatus(s) {
+    return ['won', 'maxed', 'deadline', 'error', 'stopped'].includes(String(s || ''));
+}
+function longQuantRequestFromRun(run, rid) {
+    const sourceVideo = longQuantCompactSourceVideo(run && run.sourceVideo);
+    const idea = String((run && (run.idea || run.title)) || (sourceVideo && sourceVideo.title) || '').slice(0, 500).trim();
+    const maxAttempts = Math.max(1, Math.min(100, parseInt(run && run.maxAttempts, 10) || 40));
+    const source = String((run && run.source) || '').slice(0, 80);
+    return {
+        rid, idea, title: idea, invent: !idea,
+        threshold: Math.max(50, Math.min(99, parseInt(run && run.threshold, 10) || 90)),
+        maxAttempts,
+        count: Math.max(1, Math.min(8, parseInt(run && run.count, 10) || 5)),
+        hours: longQuantGrindHours(run && run.hours, maxAttempts),
+        context: longQuantCleanContext((run && run.context) || ''),
+        transcript30: longQuantCleanContext((run && run.context) || ''),
+        sourceVideo,
+        batchId: String((run && run.batchId) || '').slice(0, 80),
+        source,
+        autosaveBest: (run && run.autosaveBest != null) ? !!run.autosaveBest : !!(sourceVideo || /channel/i.test(source)),
+        ideaModel: LONGQUANT_IDEA_MODEL,
+        thumbModel: longQuantThumbPromptModelLabel(),
+        renderModel: LONGQUANT_RENDER_MODEL,
+        recovered: true,
+        ts: Date.now(),
+    };
+}
+async function longQuantRecoverStaleGrinds() {
+    const now = Date.now();
+    if (now - _lqGrindRecoverAt < 5 * 60e3) return;
+    _lqGrindRecoverAt = now;
+    const staleMs = Math.max(10 * 60e3, parseInt(process.env.LONGQUANT_GRIND_STALE_MS || String(45 * 60e3), 10));
+    let runKeys = [], reqKeys = [];
+    try {
+        [runKeys, reqKeys] = await Promise.all([
+            cloud.listR2Keys('longform/grind/runs/'),
+            cloud.listR2Keys('longform/grind/requests/'),
+        ]);
+    } catch (e) { return; }
+    const reqIds = new Set((reqKeys || []).filter(k => k.endsWith('.json')).map(k => k.split('/').pop().replace('.json', '')));
+    let recovered = 0;
+    for (const key of (runKeys || []).filter(k => k.endsWith('.json')).sort()) {
+        if (recovered >= 25) break;
+        const rid = key.split('/').pop().replace('.json', '');
+        if (!rid || reqIds.has(rid)) continue;
+        let run = null;
+        try { const b = await cloud.downloadFromR2(key); if (b) run = JSON.parse(b.toString('utf8')); } catch (e) { continue; }
+        if (!run || longQuantTerminalStatus(run.status)) continue;
+        const age = now - (Number(run.ts) || 0);
+        const shouldRecover = run.status === 'queued' || (run.status === 'running' && age > staleMs);
+        if (!shouldRecover) continue;
+        if (await longQuantGrindStopped(rid)) {
+            run.status = 'stopped'; run.note = 'stopped by you'; run.ts = now;
+            await cloud.uploadToR2(key, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
+            continue;
+        }
+        const req = longQuantRequestFromRun(run, rid);
+        run.status = 'queued';
+        run.note = `recovered after Render worker interruption — resuming at attempt ${(Array.isArray(run.attempts) ? run.attempts.length : 0) + 1}`;
+        run.ts = now;
+        run.maxAttempts = req.maxAttempts;
+        run.hours = req.hours;
+        run.autosaveBest = req.autosaveBest;
+        await cloud.uploadToR2(key, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
+        await cloud.uploadToR2(`longform/grind/requests/${rid}.json`, Buffer.from(JSON.stringify(req)), 'application/json').catch(() => {});
+        reqIds.add(rid);
+        recovered++;
+    }
+    if (recovered) console.log(`[longquant] recovered ${recovered} stale grind run(s)`);
+}
 async function longQuantGrindQueue() {
     if (_lqGrindBusy || !cloud.isR2Ready()) return;
+    await longQuantRecoverStaleGrinds().catch(e => console.warn('longquant recover err:', e.message));
     let keys; try { keys = ((await cloud.listR2Keys('longform/grind/requests/')) || []).filter(k => k.endsWith('.json')); } catch (e) { return; }
     if (!keys.length) return;
     _lqGrindBusy = true;
