@@ -10106,15 +10106,28 @@ async function longQuantIdeaBank() {
     _lqIdeaBankCache = { t: now, rows: clean };
     return clean;
 }
-async function longQuantIdeaGenerate(seed, attempt, prior) {
+async function longQuantIdeaGenerate(seed, attempt, prior, guide = {}) {
     const ver = process.env.LONGQUANT_IDEA_VERSION || process.env.REPLICATE_LONG_IDEA_VERSION || '';
+    const avoid = (prior || []).slice(-14).map(a => ({
+        idea: a.idea || a.title || '',
+        distSeed: a.distSeed == null ? null : a.distSeed,
+        distPrior: a.distPrior == null ? null : a.distPrior,
+        bestPctile: a.pct == null ? null : a.pct,
+    })).filter(a => a.idea);
+    const ring = {
+        minDistanceFromAnyPrior: guide.minDistance == null ? null : Number(guide.minDistance),
+        seedTopicSimilarityFloor: guide.topicFloor == null ? null : Number(guide.topicFloor),
+        distanceFromSeedSoFar: (prior || []).map(a => a.distSeed).filter(x => x != null).slice(-10),
+        instruction: seed
+            ? 'Generate inside this semantic ring: stay above the seed-topic similarity floor, but outside the minimum distance from every prior rendered idea. Change the angle/mechanism/stakes, not the core communicated topic.'
+            : 'Generate a materially different long-form YouTube video idea from recent candidates.',
+    };
     if (!ver || !process.env.REPLICATE_API_TOKEN) {
         if (attempt === 0 && seed) return seed;
-        const avoid = (prior || []).slice(-10).map(a => a.idea || a.title || '').filter(Boolean);
         if (seed) {
             const j = await hookLlmJson([
-                { role: 'system', content: 'Return only JSON: {"idea":"..."}. Create one long-form YouTube video idea variant. Preserve the seed idea core subject, audience promise, and communicative intent. Move a meaningful step farther from previous attempts without becoming an unrelated topic.' },
-                { role: 'user', content: JSON.stringify({ seed, attempt, avoid }) }
+                { role: 'system', content: 'Return only JSON: {"idea":"..."}. Create one long-form YouTube video idea variant. Preserve the seed idea core subject, audience promise, and communicative intent. Proactively aim for the requested semantic distance band before writing the idea.' },
+                { role: 'user', content: JSON.stringify({ seed, attempt, semanticRing: ring, avoid }) }
             ]).catch(() => null);
             const idea = String((j && (j.idea || j.title || j.premise)) || '').replace(/\s+/g, ' ').trim();
             if (idea.length >= 8) return idea.slice(0, 300);
@@ -10129,9 +10142,12 @@ async function longQuantIdeaGenerate(seed, attempt, prior) {
         invent: !seed || attempt > 0,
         count: 1,
         attempt,
-        avoid: (prior || []).slice(-8).map(a => a.idea || a.title || '').filter(Boolean),
+        avoid,
+        semantic_ring: ring,
+        min_distance_from_prior: ring.minDistanceFromAnyPrior,
+        seed_topic_similarity_floor: ring.seedTopicSimilarityFloor,
         instruction: seed
-            ? 'Generate one long-form YouTube video idea. Preserve the seed idea core subject, audience promise, and communicative intent, but explore a meaningfully different angle/mechanism. Move farther from prior attempts in embedding space without becoming a different topic.'
+            ? 'Generate one long-form YouTube video idea. Preserve the seed idea core subject, audience promise, and communicative intent. Aim BEFORE writing for the provided semantic_ring: far enough from every avoided prior idea, but still above the seed topic floor. Explore a different angle/mechanism/stakes rather than unrelated virality.'
             : 'Generate one long-form YouTube video idea that is viable for thumbnail scoring.',
     });
     const xs = lqStringsFromOutput(out).map(s => String(s).replace(/\s+/g, ' ').trim()).filter(s => s.length >= 8);
@@ -10264,17 +10280,20 @@ async function longQuantGrindProcess(rid, req0) {
                 note = 'attempt 1: rendering your original idea before exploring variants';
                 await write();
             } else {
-                note = `attempt ${attempts.length + 1}: generating a candidate idea`; await write();
+                const floorNow = topicFloor();
+                const guide = { minDistance: Math.round(gate * 1000) / 1000, topicFloor: floorNow == null ? null : Math.round(floorNow * 1000) / 1000 };
+                note = `attempt ${attempts.length + 1}: generating inside semantic band — prior distance ≥ ${guide.minDistance}${guide.topicFloor == null ? '' : ` · topical ≥ ${guide.topicFloor}`}`;
+                await write();
                 for (let tries = 0; tries < 4; tries++) {
-                    idea = await longQuantIdeaGenerate(seed, attempts.length + tries, attempts);
+                    idea = await longQuantIdeaGenerate(seed, attempts.length + tries, attempts, guide);
                     const gateRes = await acceptIdea(idea, (maxAttempts - attempts.length - 1) + (3 - tries));
                     if (gateRes.ok) { idea = String(idea).slice(0, 300); gateInfo = gateRes; break; }
                     if (!bestTopical || (gateRes.topic || -1) > (bestTopical.gateRes.topic || -1)) bestTopical = { idea, gateRes };
                     if (gateRes.reason !== 'off_topic' && (!farthest || (gateRes.distPrior || 0) > (farthest.gateRes.distPrior || 0))) farthest = { idea, gateRes };
                     rejected++;
                     note = gateRes.reason === 'off_topic'
-                        ? `candidate drifted off the seed topic (topic ${gateRes.topic}, need ≥ ${gateRes.floor}) — regenerating`
-                        : `candidate was too close to a prior rendered idea (dist ${gateRes.distPrior}, need ${gate.toFixed(2)}) — regenerating`;
+                        ? `candidate missed the proactive topic floor (topic ${gateRes.topic}, target ≥ ${gateRes.floor}) — asking for a more topical angle`
+                        : `candidate missed the proactive distance band (dist ${gateRes.distPrior}, target ≥ ${gate.toFixed(2)}) — asking for a wider angle`;
                     await write();
                     idea = '';
                 }

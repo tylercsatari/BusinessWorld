@@ -1007,6 +1007,12 @@ const JarvisLongQuant = (function () {
           ${nbr ? `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin:7px 0 3px">nearest real titles</div>${nbr}` : ''}
         </div>`;
     }
+    function lqxGraphPick(cacheId, kind, val) {
+        st.lqxGraph = st.lqxGraph || {};
+        const r = st.lqxGraph[cacheId] || (st.lqxGraph[cacheId] = {});
+        if (kind) r[kind] = val;
+        return r;
+    }
     function lqxMiniGraph(score, cacheId, title, img) {
         if (!score || score.loading || score.error || !score.channels) return '';
         cacheId = cacheId || ('inline:' + lqxHash((title || '') + '|' + (img || '')));
@@ -1015,7 +1021,7 @@ const JarvisLongQuant = (function () {
             const ns = score.channels[ch] && score.channels[ch].neighbors;
             return Array.isArray(ns) && ns.length;
         });
-        const chan = chans.includes('visual') ? 'visual' : chans[0];
+        const pick = lqxGraphPick(cacheId), chan = (pick.chan && chans.includes(pick.chan)) ? pick.chan : (chans.includes('visual') ? 'visual' : chans[0]);
         if (!chan) return `<div style="font-size:10px;color:${C.amber};margin-top:10px">No nearest-neighbor embedding payload came back for this score yet.</div>`;
         const R = RAW[chan];
         if (!R || R.loading) { rawEnsure(chan); return `<div style="font-size:10px;color:${C.cyan};margin-top:10px">loading ${chan} embedding graph...</div>`; }
@@ -1023,7 +1029,9 @@ const JarvisLongQuant = (function () {
         const ACCT = st.channel || (CHANS && CHANS.active) || 'tyler';
         const accKey = key => (['ctr', 'ret30', 'realviews', 'ctrviews'].includes(key) && R.proj[key + '__' + ACCT]) ? key + '__' + ACCT : key;
         const prefs = ['ctrviews', 'realviews', 'ctr', 'ret30', 'hi10m', 'views', 'both', 'umap', 'pca'];
-        const projId = prefs.find(k => R.proj[accKey(k)] || R.proj[k]) || Object.keys(R.proj)[0];
+        const avail = prefs.filter(k => R.proj[accKey(k)] || R.proj[k]);
+        Object.keys(R.proj || {}).forEach(k => { if (!avail.includes(k) && !k.includes('__')) avail.push(k); });
+        const projId = (pick.proj && (R.proj[accKey(pick.proj)] || R.proj[pick.proj])) ? pick.proj : (avail[0] || Object.keys(R.proj)[0]);
         const P = (R.proj[accKey(projId)] || R.proj[projId] || {}), px = P.x || [], py = P.y || [];
         if (!px.length || !py.length) return `<div style="font-size:10px;color:${C.amber};margin-top:10px">This Raw projection has no coordinates yet.</div>`;
         const W = 620, H = 270, pad = 14, Sg = 1000, X = x => pad + (x / Sg) * (W - 2 * pad), Y = y => H - pad - (y / Sg) * (H - 2 * pad);
@@ -1048,7 +1056,10 @@ const JarvisLongQuant = (function () {
             return `<div style="font-size:10px;color:${C.dim};display:flex;justify-content:space-between;gap:8px"><span>${esc(((i != null && R.title) ? R.title[i] : id) || id).slice(0, 56)}</span><span style="color:${C.mute}">${fmtv(+sim, 2)}</span></div>`;
         }).join('');
         const projLab = { ctrviews: 'CTR + views', realviews: 'realistic views', ctr: 'CTR', ret30: '30s retention', hi10m: '>10M class', views: 'views', both: 'views + outlier', umap: 'UMAP', pca: 'PCA' }[projId] || projId;
+        const chanPills = chans.map(c => `<span data-lqxgraphchan="${esc(cacheId)}|${esc(c)}" style="cursor:pointer;border:1px solid ${chan === c ? C.cyan : C.border};background:${chan === c ? C.cyan + '22' : 'transparent'};color:${chan === c ? C.cyan : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:800">${c}</span>`).join('');
+        const projPills = avail.slice(0, 9).map(pj => `<span data-lqxgraphproj="${esc(cacheId)}|${esc(pj)}" style="cursor:pointer;border:1px solid ${projId === pj ? C.accent : C.border};background:${projId === pj ? C.accent + '1e' : 'transparent'};color:${projId === pj ? C.accent : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${esc(({ ctrviews: 'CTR+views', realviews: 'real views', ctr: 'CTR', ret30: 'ret30', hi10m: '10M', views: 'views', both: 'both', umap: 'UMAP', pca: 'PCA' }[pj] || pj))}</span>`).join('');
         return `<div style="margin-top:10px;border:1px solid ${C.border};border-radius:8px;background:${C.card};padding:9px">
+          <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">embedding</span>${chanPills}<span style="width:8px"></span><span style="font-size:9px;color:${C.mute};text-transform:uppercase">project</span>${projPills}</div>
           <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px"><div style="font-size:10px;color:${C.mute};line-height:1.4"><b style="color:${C.cyan}">${chan}</b> embedding graph - same Raw placement method on <b style="color:${C.text}">${esc(projLab)}</b>${used ? ` · ${used} neighbors used` : ''}</div><span data-lqxraw="${esc(cacheId)}" data-lqxrawchan="${esc(chan)}" data-lqxrawproj="${esc(projId)}" style="cursor:pointer;border:1px solid ${C.cyan};background:${C.cyan}18;color:${C.cyan};border-radius:6px;padding:4px 9px;font-size:10px;font-weight:800;white-space:nowrap">open full graph</span></div>
           <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:7px">${bg}${marker}</svg>
           ${nbr ? `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin:7px 0 3px">nearest embedded videos</div>${nbr}` : ''}
@@ -1159,9 +1170,9 @@ const JarvisLongQuant = (function () {
                     lqIdeaGrp(irun, sel.id);
                     const G = LQIDEAGRP[irun + '/' + sel.id];
                     const thumbs = G && G.thumbs ? G.thumbs.slice().sort((a, b) => (b.pctile || 0) - (a.pctile || 0)) : [];
-                    ideaDetail = `<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px"><div style="font-size:13px;color:${C.text};font-weight:800;line-height:1.35">${esc(sel.idea || '')}</div><div style="font-size:10px;color:${C.mute};margin:3px 0 8px">visual ctrviews <b style="color:${C.green}">${((sel.pctile || 0) * 100).toFixed(0)}th</b> · text ${sel.text_pct != null ? (sel.text_pct * 100).toFixed(0) + 'th' : '—'} · novelty ${sel.novelty != null ? sel.novelty.toFixed(2) : '—'}</div>${lqxIdeaMiniGraph(sel, 'bestidea:' + irun + ':' + sel.id)}${G && G.loading ? `<div style="font-size:11px;color:${C.cyan}">loading thumbnails…</div>` : thumbs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${thumbs.map(t => {
-                        const cid = `${sel.id}_${t.k}`, key = `longform/ideas/${irun}/montages/${cid}.jpg`, sc2 = lqxScoreFor('idea:' + irun + ':' + cid, key, sel.idea || '', sel.idea || '', t.score, false);
-                        return `<div data-lqxopen="idea:${irun}:${cid}" style="cursor:pointer;border:1px solid ${(t.pctile || 0) >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/ideas/montage/${irun}/${cid}`, `ideaimg:${irun}:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:6px 8px"><div style="font-size:10px;font-weight:800;color:${(t.pctile || 0) >= 0.8 ? C.green : C.text}">${((t.pctile || 0) * 100).toFixed(0)}th · rel ${t.rel != null ? t.rel.toFixed(2) : '—'}</div>${lqxMetricHtml(sc2 || t)}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:36px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 120))}</div></div></div>`;
+                    ideaDetail = `<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px"><div style="font-size:13px;color:${C.text};font-weight:800;line-height:1.35">${esc(sel.idea || '')}</div><div style="font-size:10px;color:${C.mute};margin:3px 0 8px">visual ctrviews <b style="color:${C.green}">${((sel.pctile || 0) * 100).toFixed(0)}th</b> · text ${sel.text_pct != null ? (sel.text_pct * 100).toFixed(0) + 'th' : '—'} · novelty ${sel.novelty != null ? sel.novelty.toFixed(2) : '—'}</div>${lqxIdeaMiniGraph(sel, 'bestidea:' + irun + ':' + sel.id)}${G && G.loading ? `<div style="font-size:11px;color:${C.cyan}">loading thumbnails…</div>` : thumbs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px">${thumbs.map(t => {
+                        const cid = `${sel.id}_${t.k}`, key = `longform/ideas/${irun}/montages/${cid}.jpg`, cardId = 'idea:' + irun + ':' + cid, sc2 = lqxScoreFor(cardId, key, sel.idea || '', sel.idea || '', t.score, true);
+                        return `<div data-lqxopen="idea:${irun}:${cid}" style="cursor:pointer;border:1px solid ${(t.pctile || 0) >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/ideas/montage/${irun}/${cid}`, `ideaimg:${irun}:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:6px 8px"><div style="font-size:10px;font-weight:800;color:${(t.pctile || 0) >= 0.8 ? C.green : C.text}">${((t.pctile || 0) * 100).toFixed(0)}th · rel ${t.rel != null ? t.rel.toFixed(2) : '—'}</div>${lqxMetricHtml(sc2 || t)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">embedding visual · text · together…</div>` : ''}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:36px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 120))}</div>${sc2 && sc2.channels ? lqxMiniGraph(sc2, cardId, sel.idea || '', lqxImgData(`/api/longquant/ideas/montage/${irun}/${cid}`, `ideaimg:${irun}:${cid}`) || `/api/longquant/ideas/montage/${irun}/${cid}`) : ''}</div></div>`;
                     }).join('')}</div>` : `<div style="font-size:11px;color:${C.dim}">no thumbnail group found for this idea yet</div>`}</div>`;
                     if (st.lqxOpen && String(st.lqxOpen).indexOf('idea:' + irun + ':') === 0) {
                         const cid = st.lqxOpen.split(':').slice(2).join(':'), t = thumbs.find(x => cid === `${sel.id}_${x.k}`);
@@ -3781,6 +3792,16 @@ const JarvisLongQuant = (function () {
         }
         if (e.target.closest('[data-lqxsaveupload]')) {
             if (st.lqxScoreImg && st.lqxScore && !st.lqxScore.error) lqxSave({ title: st.lqxScoreTitle || '', prompt: '', pctile: st.lqxScore.pctile, relevance: st.lqxScore.relevance, image: st.lqxScoreImg, source: 'upload', score: st.lqxScore }, 'upload');
+            return;
+        }
+        const xgch = e.target.closest('[data-lqxgraphchan]'); if (xgch) {
+            const raw = xgch.getAttribute('data-lqxgraphchan') || '', p = raw.split('|'), id = p[0], ch = p[1];
+            if (id && ch) { lqxGraphPick(id, 'chan', ch); rtgUpdateLqExp(); }
+            return;
+        }
+        const xgp = e.target.closest('[data-lqxgraphproj]'); if (xgp) {
+            const raw = xgp.getAttribute('data-lqxgraphproj') || '', p = raw.split('|'), id = p[0], pj = p[1];
+            if (id && pj) { lqxGraphPick(id, 'proj', pj); rtgUpdateLqExp(); }
             return;
         }
         const xo = e.target.closest('[data-lqxopen]'); if (xo) { const id = xo.getAttribute('data-lqxopen'); st.lqxOpen = st.lqxOpen === id ? null : id; rtgUpdateLqExp(); return; }
