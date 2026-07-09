@@ -868,7 +868,7 @@ const JarvisLongQuant = (function () {
         const cur = LQGRINDDETAILS[rid];
         if (cur && (cur.loading || cur.refreshing)) return;
         if (cur && cur.rid && !force) {
-            const live = !['won', 'error', 'maxed', 'deadline', 'stopped'].includes(cur.status || '');
+            const live = !['won', 'error', 'maxed', 'deadline', 'stopped', 'archived', 'done'].includes(cur.status || '');
             if (!live || Date.now() - (cur._t || 0) < LQ_REFRESH_MS) return;
         }
         LQGRINDDETAILS[rid] = cur && cur.rid ? { ...cur, refreshing: 1 } : { loading: 1 };
@@ -1343,7 +1343,7 @@ const JarvisLongQuant = (function () {
         const runStatusHtml = (channelRuns.length || grLive.loading || grLive.error || grLive.ok) ? cardc(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
           <div><div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">📡 Tyler channel grind status</div><div style="font-size:10px;color:${C.mute}">${grLive.ok ? `live poll ${grLive.refreshing ? 'refreshing' : 'ok'} · updated ${ageTxt((Date.now() - (grLive._t || Date.now())) / 1000)} · workers ${grLive.activeWorkers == null ? (grLive.workerBusy ? 1 : 0) : grLive.activeWorkers}/${grLive.workerLimit || 1} · queue ${grLive.queueDepth == null ? '—' : grLive.queueDepth}` : grLive.loading ? 'loading live worker status…' : `status fetch failed${grLive.error ? ': ' + esc(grLive.error) : ''}`}</div></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">${[
-              ['won', 'won', C.green], ['running', 'running', C.cyan], ['queued', 'queued', C.amber], ['saved', 'saved', C.accent], ['error', 'errors', C.red],
+              ['won', 'won', C.green], ['running', 'running', C.cyan], ['queued', 'queued', C.amber], ['saved', 'saved', C.accent], ['archived', 'done', C.dim], ['stopped', 'stopped', C.amber], ['error', 'errors', C.red],
           ].map(([k, lab, col]) => `<span style="border:1px solid ${col};background:${col}18;color:${col};border-radius:7px;padding:4px 9px;font-size:10px;font-weight:800">${statusCounts[k] || 0} ${lab}</span>`).join('')}</div>
         </div>${grLive.orphanedRunning ? `<div style="font-size:10px;color:${C.amber};margin-top:8px">${grLive.orphanedRunning} running record${grLive.orphanedRunning === 1 ? ' is' : 's are'} not attached to a live worker; recovery will requeue ${grLive.orphanedRunning === 1 ? 'it' : 'them'} within about 90s.</div>` : ''}${grLive.staleRunning ? `<div style="font-size:10px;color:${C.red};margin-top:8px">⚠ ${grLive.staleRunning} running job${grLive.staleRunning === 1 ? '' : 's'} stopped writing and will be recovered/requeued by the worker.</div>` : ''}${activeCards ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${activeCards}</div>` : `<div style="font-size:10px;color:${C.dim};margin-top:8px">No channel grind is actively writing right now. Queued videos will appear here as soon as the worker picks them up.</div>`}`, 12) : '';
         const channelHistoryHtml = channelRuns.length ? (() => {

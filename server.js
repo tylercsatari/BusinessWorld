@@ -3520,42 +3520,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     if (pathname === '/api/longquant/grind/start' && req.method === 'POST') {
         const body = await readBody(req);
-        const idea = String(body.idea || body.title || '').slice(0, 500).trim();
-        const rid = 'lqg' + Date.now().toString(36);
-        const context = longQuantCleanContext(body.context || body.transcript30);
-        const sourceVideo = (body.sourceVideo && typeof body.sourceVideo === 'object') ? {
-            id: String(body.sourceVideo.id || body.sourceVideo.videoId || '').slice(0, 40),
-            title: String(body.sourceVideo.title || body.title || idea || '').slice(0, 220),
-            url: String(body.sourceVideo.url || '').slice(0, 300),
-            thumbnail: String(body.sourceVideo.thumbnail || body.sourceVideo.thumb || '').slice(0, 500),
-            duration: body.sourceVideo.duration || body.sourceVideo.durationSec || null,
-            channel: String(body.sourceVideo.channel || '').slice(0, 120),
-        } : null;
-        const maxAttempts = Math.max(1, Math.min(100, parseInt(body.maxAttempts, 10) || 40));
-        const count = Math.max(1, Math.min(8, parseInt(body.count, 10) || 5));
-        const threshold = Math.max(50, Math.min(99, parseInt(body.threshold, 10) || 85));
-        const hours = longQuantGrindHours(body.hours, maxAttempts);
-        const payload = {
-            rid, idea, title: idea, invent: !idea,
-            threshold, maxAttempts, count, hours,
-            context, transcript30: context, sourceVideo,
-            batchId: String(body.batchId || '').slice(0, 80),
-            source: String(body.source || '').slice(0, 80),
-            autosaveBest: !!body.autosaveBest,
-            ideaModel: LONGQUANT_IDEA_MODEL,
-            thumbModel: longQuantThumbPromptModelLabel(),
-            renderModel: LONGQUANT_RENDER_MODEL,
-            ts: Date.now(),
-        };
-        await cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
-            rid, idea, threshold: payload.threshold, attempts: [], status: 'queued',
-            note: idea ? `queued — first attempt will generate thumbnails for your exact idea${context ? ' with transcript context' : ''}` : 'queued — waiting for the idea model to invent the first candidate',
-            best: null, ts: Date.now(), context, sourceVideo, batchId: payload.batchId, source: payload.source,
-            contextChars: context.length, maxAttempts, count, hours, autosaveBest: payload.autosaveBest,
-            ideaModel: payload.ideaModel, thumbModel: payload.thumbModel, renderModel: payload.renderModel,
-        })), 'application/json').catch(() => {});
-        await cloud.uploadToR2(`longform/grind/requests/${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid }));
+        const out = await longQuantCreateGrind(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid: out.rid }));
         return;
     }
     if (pathname === '/api/longquant/grind/status' && req.method === 'GET') {
@@ -10471,6 +10437,52 @@ function longQuantGrindHours(rawHours, maxAttempts) {
     const tries = Math.max(1, parseInt(maxAttempts, 10) || 40);
     return Math.min(48, Math.max(2, tries * 0.5));
 }
+function longQuantNewGrindRid() {
+    return 'lqg' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+}
+function longQuantGrindEnvelope(body = {}, opts = {}) {
+    const sourceVideo = longQuantCompactSourceVideo(body.sourceVideo);
+    const idea = String(body.idea || body.title || (sourceVideo && sourceVideo.title) || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+    const title = String(body.title || (sourceVideo && sourceVideo.title) || idea || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+    const rid = String(opts.rid || body.rid || longQuantNewGrindRid()).replace(/[^a-z0-9]/gi, '') || longQuantNewGrindRid();
+    const context = longQuantCleanContext(body.context || body.transcript30 || '');
+    const maxAttempts = Math.max(1, Math.min(100, parseInt(body.maxAttempts, 10) || 40));
+    const count = Math.max(1, Math.min(8, parseInt(body.count, 10) || 5));
+    const threshold = Math.max(50, Math.min(99, parseInt(body.threshold, 10) || 85));
+    const hours = longQuantGrindHours(body.hours, maxAttempts);
+    const source = String(body.source || '').slice(0, 80);
+    const batchId = String(body.batchId || '').slice(0, 80);
+    const autosaveBest = body.autosaveBest != null ? !!body.autosaveBest : !!(sourceVideo || batchId || /channel|youtube/i.test(source));
+    const now = Date.now();
+    const payload = {
+        rid, idea, title, invent: !idea,
+        threshold, maxAttempts, count, hours,
+        context, transcript30: context, contextChars: context.length,
+        contextStatus: String(body.contextStatus || (context ? 'ok' : 'missing')).slice(0, 40),
+        sourceVideo, batchId, source, autosaveBest,
+        ideaModel: LONGQUANT_IDEA_MODEL,
+        thumbModel: longQuantThumbPromptModelLabel(),
+        renderModel: LONGQUANT_RENDER_MODEL,
+        ts: now,
+    };
+    const run = {
+        rid, idea, title, threshold, count, maxAttempts, hours,
+        attempts: [], status: 'queued',
+        note: String(body.note || (idea
+            ? `queued — first attempt will generate thumbnails for the exact seed${context ? ' with transcript context' : ''}`
+            : 'queued — waiting for the idea model to invent the first candidate')).slice(0, 320),
+        best: null, ts: now, context, transcript30: context, contextChars: context.length,
+        contextStatus: payload.contextStatus, sourceVideo, source, batchId, autosaveBest,
+        ideaModel: payload.ideaModel, thumbModel: payload.thumbModel, renderModel: payload.renderModel,
+    };
+    return { rid, payload, run };
+}
+async function longQuantCreateGrind(body = {}, opts = {}) {
+    const out = longQuantGrindEnvelope(body, opts);
+    await cloud.uploadToR2(`longform/grind/runs/${out.rid}.json`, Buffer.from(JSON.stringify(out.run)), 'application/json').catch(() => {});
+    await cloud.uploadToR2(`longform/grind/requests/${out.rid}.json`, Buffer.from(JSON.stringify(out.payload)), 'application/json');
+    return out;
+}
 async function longQuantThrowIfStopped(rid) {
     if (await longQuantGrindStopped(rid)) {
         const e = new Error('stopped by you');
@@ -11099,7 +11111,7 @@ function longQuantGrindWorkerLimit() {
     return Math.max(1, Math.min(4, parseInt(process.env.LONGQUANT_GRIND_WORKERS || String(fallback), 10) || fallback));
 }
 function longQuantTerminalStatus(s) {
-    return ['won', 'maxed', 'deadline', 'error', 'stopped'].includes(String(s || ''));
+    return ['won', 'maxed', 'deadline', 'error', 'stopped', 'archived', 'done'].includes(String(s || ''));
 }
 function longQuantRequestFromRun(run, rid) {
     const sourceVideo = longQuantCompactSourceVideo(run && run.sourceVideo);
