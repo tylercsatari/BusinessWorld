@@ -10602,14 +10602,19 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
     const ts = Number(run.ts) || 0;
     const workerAttached = typeof _lqGrindActive !== 'undefined' && _lqGrindActive.has(rid);
     const queuedRequest = !!(reqIds && reqIds.has(rid));
-    const orphanedRunning = effectiveStatus === 'running' && !workerAttached && !queuedRequest;
     const terminal = longQuantTerminalStatus(effectiveStatus);
+    // EVIDENCE-BASED state: the in-memory worker set wipes on every deploy, so "is a worker attached"
+    // lies right after restarts. A run that WROTE RECENTLY is running, whatever the memory set says;
+    // a run that claims running but has gone quiet is recovering. Fixes "generating but shown not-running"
+    // and keeps the count chips consistent with what the lanes display.
+    const freshWrite = ts && (Date.now() - ts) < longQuantStaleMs();
+    const claimsRunning = effectiveStatus === 'running' || workerAttached;
     const executionState = terminal ? 'finished'
-        : workerAttached ? 'running'
-            : orphanedRunning ? 'recovering'
+        : claimsRunning && freshWrite ? 'running'
+            : claimsRunning ? 'recovering'
                 : (queuedRequest || effectiveStatus === 'queued') ? 'queued'
-                    : effectiveStatus === 'running' ? 'recovering'
-                        : 'idle';
+                    : 'idle';
+    const orphanedRunning = executionState === 'recovering';
     const activeAttempt = lastAttempt ? {
         k: lastAttempt.k,
         idea: lastAttempt.idea || lastAttempt.title || '',
