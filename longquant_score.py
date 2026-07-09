@@ -279,12 +279,12 @@ def main():
     b64 = base64.b64encode(open(args.image, "rb").read()).decode()
     ev = embed([img_part(b64)])
     et = embed([{"text": title}]) if title else None
-    eg = embed([img_part(b64), {"text": title}]) if title else ev
+    eg = embed([img_part(b64), {"text": title}]) if title else None
 
     channels = {"visual": channel_score("visual", ev)}
     if et is not None:
         channels["text"] = channel_score("text", et)
-    channels["together"] = channel_score("together", eg)
+        channels["together"] = channel_score("together", eg)
 
     exact = visual_ctrviews_exact(ev)
     if exact and channels.get("visual"):

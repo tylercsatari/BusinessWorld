@@ -220,21 +220,49 @@ function sendJsonGz(req, res, data, statusCode) {
 // only the GZIPPED bytes are kept (~10× smaller, tiny RAM on the 2GB box), refreshed
 // from the source at most once per TTL, with an ETag so a browser's repeat open is a
 // bodyless 304. `fill` produces the fresh bytes (R2 download, disk read, or a build).
-const _gzCache = new Map();   // cacheKey → {t, gz, etag}
+const _gzCache = new Map();   // cacheKey → {t, gz, etag, bytes}
+const _gzInflight = new Map();
+let _gzCacheBytes = 0;
+const GZ_CACHE_MAX_BYTES = Math.max(8 * 1024 * 1024, parseInt(process.env.GZ_CACHE_MAX_BYTES || (IS_RENDER ? 48 * 1024 * 1024 : 160 * 1024 * 1024), 10));
+const GZ_CACHE_MAX_ENTRY = Math.max(2 * 1024 * 1024, parseInt(process.env.GZ_CACHE_MAX_ENTRY || Math.floor(GZ_CACHE_MAX_BYTES / 2), 10));
 const _gzipP = b => new Promise((ok, no) => zlib.gzip(b, (e, z) => e ? no(e) : ok(z)));
 const _gunzipP = b => new Promise((ok, no) => zlib.gunzip(b, (e, z) => e ? no(e) : ok(z)));
+function gzCacheSet(cacheKey, entry) {
+    const old = _gzCache.get(cacheKey);
+    if (old && old.bytes) _gzCacheBytes -= old.bytes;
+    if (entry.bytes <= GZ_CACHE_MAX_ENTRY) {
+        _gzCache.set(cacheKey, entry);
+        _gzCacheBytes += entry.bytes;
+        while (_gzCacheBytes > GZ_CACHE_MAX_BYTES && _gzCache.size) {
+            const k = _gzCache.keys().next().value;
+            if (k === cacheKey && _gzCache.size === 1) break;
+            const v = _gzCache.get(k);
+            _gzCache.delete(k);
+            if (v && v.bytes) _gzCacheBytes -= v.bytes;
+        }
+    } else if (old) {
+        _gzCache.delete(cacheKey);
+    }
+}
 async function serveGzCached(req, res, cacheKey, ttlMs, fill, fallback, fallbackStatus) {
     let e = _gzCache.get(cacheKey);
     const now = Date.now();
     if (!e || now - e.t > ttlMs) {
-        let buf = null;
-        try { buf = await fill(); } catch (err) {}
-        if (buf) {
-            if (typeof buf === 'string') buf = Buffer.from(buf, 'utf8');
-            e = { t: now, gz: await _gzipP(buf), etag: '"' + require('crypto').createHash('md5').update(buf).digest('hex') + '"' };
-            _gzCache.set(cacheKey, e);
-            if (_gzCache.size > 48) _gzCache.delete(_gzCache.keys().next().value);   // bound the cache
-        } else if (e) { e.t = now; }   // source hiccup → keep serving the stale copy
+        let p = _gzInflight.get(cacheKey);
+        if (!p) {
+            p = (async () => {
+                let buf = null;
+                try { buf = await fill(); } catch (err) {}
+                if (!buf) return null;
+                if (typeof buf === 'string') buf = Buffer.from(buf, 'utf8');
+                const gz = await _gzipP(buf);
+                return { t: Date.now(), gz, bytes: gz.length, etag: '"' + require('crypto').createHash('md5').update(buf).digest('hex') + '"' };
+            })().finally(() => _gzInflight.delete(cacheKey));
+            _gzInflight.set(cacheKey, p);
+        }
+        const fresh = await p.catch(() => null);
+        if (fresh) { e = fresh; gzCacheSet(cacheKey, e); }
+        else if (e) { e.t = now; }   // source hiccup → keep serving the stale copy
     }
     if (!e) { res.writeHead(fallbackStatus || 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); res.end(JSON.stringify(fallback || { error: 'not found' })); return; }
     const hdr = { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'ETag': e.etag, 'Vary': 'Accept-Encoding' };
@@ -244,7 +272,46 @@ async function serveGzCached(req, res, cacheKey, ttlMs, fill, fallback, fallback
 }
 const serveR2Gz = (req, res, r2key, ttlMs, fallback, fallbackStatus) =>
     serveGzCached(req, res, r2key, ttlMs, () => cloud.downloadFromR2(r2key), fallback, fallbackStatus);
-const gzCacheInvalidate = key => _gzCache.delete(key);
+const gzCacheInvalidate = key => {
+    const e = _gzCache.get(key);
+    if (e && e.bytes) _gzCacheBytes -= e.bytes;
+    _gzCache.delete(key);
+};
+
+async function redirectR2Object(res, key, opts = {}) {
+    if (opts.checkExists !== false) {
+        const ok = await cloud.existsInR2(key).catch(() => false);
+        if (!ok) return false;
+    }
+    const signed = await cloud.getR2SignedUrl(key, opts.expiresIn || 3600);
+    res.writeHead(302, {
+        'Location': signed,
+        'Cache-Control': opts.cacheControl || 'public, max-age=3600',
+    });
+    res.end();
+    return true;
+}
+
+const _limiters = new Map();
+function runLimited(name, limit, fn) {
+    limit = Math.max(1, parseInt(limit, 10) || 1);
+    let q = _limiters.get(name);
+    if (!q) { q = { active: 0, waiters: [] }; _limiters.set(name, q); }
+    return new Promise((resolve, reject) => {
+        const run = () => {
+            q.active++;
+            Promise.resolve().then(fn).then(resolve, reject).finally(() => {
+                q.active--;
+                const next = q.waiters.shift();
+                if (next) next();
+            });
+        };
+        if (q.active < limit) run();
+        else q.waiters.push(run);
+    });
+}
+const HEAVY_SCORE_LIMIT = Math.max(1, parseInt(process.env.HEAVY_SCORE_LIMIT || (IS_RENDER ? 1 : 2), 10));
+const runHeavyScore = fn => runLimited('heavy-score', HEAVY_SCORE_LIMIT, fn);
 
 function compactIndicator(ind) {
     if (!ind) return ind;
@@ -463,7 +530,12 @@ const TRIBE_PYTHON = process.env.TRIBE_PYTHON
 // TEST-IMPORT the deps in each candidate and pick the first that actually has them.
 // Override with RAW_PYTHON. PYTHONHOME/PYTHONPATH are stripped so the chosen
 // interpreter resolves its OWN site-packages (a leaked PYTHONHOME can hide numpy).
-const RAW_PY_ENV = (() => { const e = { ...process.env }; delete e.PYTHONHOME; delete e.PYTHONPATH; return e; })();
+const RAW_PY_ENV = (() => {
+    const e = { ...process.env };
+    delete e.PYTHONHOME; delete e.PYTHONPATH;
+    e.OMP_NUM_THREADS = e.OPENBLAS_NUM_THREADS = e.MKL_NUM_THREADS = e.NUMEXPR_NUM_THREADS = '1';
+    return e;
+})();
 const RAW_PYTHON = (() => {
     const { execSync } = require('child_process');
     const cands = [process.env.RAW_PYTHON, '/Users/tylercsatari/miniforge3/bin/python3',
@@ -486,7 +558,7 @@ async function longQuantScoreImageBuffer(buf, title, idea) {
     const tmp = path.join(os.tmpdir(), `lqscore_${Date.now()}_${Math.round(Math.random() * 1e6)}.jpg`);
     fs.writeFileSync(tmp, buf);
     try {
-        return await new Promise((ok, no) => {
+        return await runHeavyScore(() => new Promise((ok, no) => {
             const py = spawn(RAW_PYTHON, [
                 path.join(__dirname, 'longquant_score.py'),
                 '--image', tmp,
@@ -507,7 +579,7 @@ async function longQuantScoreImageBuffer(buf, title, idea) {
                 } catch (e) { return no(e); }
             });
             py.on('error', e => { clearTimeout(t); no(e); });
-        });
+        }));
     } finally {
         try { fs.unlinkSync(tmp); } catch (e) {}
     }
@@ -1460,21 +1532,30 @@ const server = http.createServer(async (req, res) => {
         req.on('end', () => {
             if (done) return;
             if (size === 0) return fail(400, 'empty upload');
-            ws.end(() => {
+            ws.end(async () => {
                 const script = path.join(__dirname, 'raw_upload.py');
                 const pyArgs = [script, '--file', tmp, '--title', title];
                 if (durH > 0 && isFinite(durH)) pyArgs.push('--duration', String(Math.round(durH)));
-                const py = spawn(RAW_PYTHON, pyArgs, { env: RAW_PY_ENV });
-                let out = '', err = '';
-                py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 240000);
-                py.on('close', () => {
-                    clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (e) {}
-                    const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
-                    if (!line) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'embedding produced no result — ' + (err.trim().split('\n').pop() || 'no output').slice(-160), stderr: err.slice(-600) })); return; }
+                try {
+                    const line = await runHeavyScore(() => new Promise((ok, no) => {
+                        const py = spawn(RAW_PYTHON, pyArgs, { env: RAW_PY_ENV });
+                        let out = '', err = '';
+                        py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
+                        const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout')); }, 240000);
+                        py.on('close', () => {
+                            clearTimeout(timer);
+                            const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+                            if (!line) return no(new Error('embedding produced no result — ' + (err.trim().split('\n').pop() || 'no output').slice(-160)));
+                            ok(line);
+                        });
+                        py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
+                    }));
                     res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(line);
-                });
-                py.on('error', e => { clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (_) {} res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'spawn failed: ' + e.message })); });
+                } catch (e) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message }));
+                } finally {
+                    try { fs.unlinkSync(tmp); } catch (_) {}
+                }
             });
         });
         return;
@@ -1491,7 +1572,7 @@ const server = http.createServer(async (req, res) => {
             if (size > MAX) { tooBig = true; body = ''; return; }
             body += c;
         });
-        req.on('end', () => {
+        req.on('end', async () => {
             if (tooBig) { res.writeHead(413, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'montage too large (max 25MB)' })); return; }
             let j; try { j = JSON.parse(body); } catch (e) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'bad json' })); return; }
             const m = (j.montage || '').toString().replace(/^data:image\/\w+;base64,/, '');
@@ -1501,17 +1582,26 @@ const server = http.createServer(async (req, res) => {
             try { fs.writeFileSync(tmp, Buffer.from(m, 'base64')); }
             catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write failed: ' + e.message })); return; }
             const script = path.join(__dirname, 'raw_upload.py');
-            const py = spawn(RAW_PYTHON, [script, '--image', tmp, '--text', (j.text || '').toString().slice(0, 2000), '--title', (j.title || 'Built hook').toString().slice(0, 80)], { env: RAW_PY_ENV });
-            let out = '', err = '';
-            py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-            const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 120000);
-            py.on('close', () => {
-                clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (e) {}
-                const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
-                if (!line) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'embedding produced no result — ' + (err.trim().split('\n').pop() || 'no output').slice(-160) })); return; }
+            try {
+                const line = await runHeavyScore(() => new Promise((ok, no) => {
+                    const py = spawn(RAW_PYTHON, [script, '--image', tmp, '--text', (j.text || '').toString().slice(0, 2000), '--title', (j.title || 'Built hook').toString().slice(0, 80)], { env: RAW_PY_ENV });
+                    let out = '', err = '';
+                    py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
+                    const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout')); }, 120000);
+                    py.on('close', () => {
+                        clearTimeout(timer);
+                        const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+                        if (!line) return no(new Error('embedding produced no result — ' + (err.trim().split('\n').pop() || 'no output').slice(-160)));
+                        ok(line);
+                    });
+                    py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
+                }));
                 res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(line);
-            });
-            py.on('error', e => { clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (_) {} res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'spawn failed: ' + e.message })); });
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message }));
+            } finally {
+                try { fs.unlinkSync(tmp); } catch (_) {}
+            }
         });
         req.on('error', () => { if (res.headersSent) return; res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'upload stream error' })); });
         return;
@@ -3079,8 +3169,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if (rawLongThumb && req.method === 'GET') {
         const vid = rawLongThumb[1];
         try {
-            let buf = await cloud.downloadFromR2(`longform/thumbs/${vid}.jpg`);   // crawled corpus thumbnails
-            if (!buf) {
+            if (await redirectR2Object(res, `longform/thumbs/${vid}.jpg`, { cacheControl: 'public, max-age=86400' })) return;
+            let buf = null;
+            {
                 // owned account videos aren't in the corpus store — serve the exact input we embedded
                 // (their YouTube thumbnail) straight from the CDN so the panel always shows the thumbnail.
                 for (const nm of ['maxresdefault', 'hqdefault']) {
@@ -3195,9 +3286,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const savedMon = pathname.match(/^\/api\/raw\/saved-montage\/([a-z0-9]{1,32})$/);
     if (savedMon && req.method === 'GET') {
         try {
-            const buf = await cloud.downloadFromR2(`raw/saved-hooks/${savedMon[1]}.jpg`);
-            if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600' }); res.end(buf); }
-            else { res.writeHead(404); res.end(); }
+            if (await redirectR2Object(res, `raw/saved-hooks/${savedMon[1]}.jpg`, { cacheControl: 'public, max-age=3600' })) return;
+            res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
         return;
     }
@@ -3300,9 +3390,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const lgMon = pathname.match(/^\/api\/longquant\/guesses\/montage\/([a-z0-9]+)\/([a-z0-9_]+)$/i);
     if (lgMon && req.method === 'GET') {
-        const buf = await cloud.downloadFromR2(`longform/guesses/${lgMon[1]}/montages/${lgMon[2]}.jpg`).catch(() => null);
-        if (!buf) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return; }
-        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); return;
+        if (await redirectR2Object(res, `longform/guesses/${lgMon[1]}/montages/${lgMon[2]}.jpg`, { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
+        res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return;
     }
     if (pathname === '/api/longquant/guesses/request' && req.method === 'POST') {
         const body = await readBody(req); const title = String(body.title || '').slice(0, 200).trim();
@@ -3407,9 +3496,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const lqGrindImg = pathname.match(/^\/api\/longquant\/grind\/img\/([a-z0-9_]+)$/i);
     if (lqGrindImg && req.method === 'GET') {
-        const buf = await cloud.downloadFromR2(`longform/grind/montages/${lqGrindImg[1]}.jpg`).catch(() => null);
-        if (!buf) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return; }
-        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); return;
+        if (await redirectR2Object(res, `longform/grind/montages/${lqGrindImg[1]}.jpg`, { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
+        res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return;
     }
     // ── Saved long-form thumbnails bank (longform/saved-thumbs/) ──
     if (pathname === '/api/longquant/thumbs/save' && req.method === 'POST') {
@@ -3466,9 +3554,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const ltImg = pathname.match(/^\/api\/longquant\/thumbs\/img\/([a-z0-9]{1,32})$/);
     if (ltImg && req.method === 'GET') {
-        const buf = await cloud.downloadFromR2(`longform/saved-thumbs/${ltImg[1]}.jpg`).catch(() => null);
-        if (!buf) { res.writeHead(404); res.end(); return; }
-        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); return;
+        if (await redirectR2Object(res, `longform/saved-thumbs/${ltImg[1]}.jpg`, { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
+        res.writeHead(404); res.end(); return;
     }
     // ── 💡 Ideas: idea-model training runs (longform/ideas/idea<N>/) ──
     const ideaGrp = pathname.match(/^\/api\/longquant\/ideas\/group\/([a-z0-9]+)\/([a-z0-9_]+)$/i);
@@ -3477,9 +3564,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const ideaMon = pathname.match(/^\/api\/longquant\/ideas\/montage\/([a-z0-9]+)\/([a-z0-9_]+)$/i);
     if (ideaMon && req.method === 'GET') {
-        const buf = await cloud.downloadFromR2(`longform/ideas/${ideaMon[1]}/montages/${ideaMon[2]}.jpg`).catch(() => null);
-        if (!buf) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return; }
-        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); return;
+        if (await redirectR2Object(res, `longform/ideas/${ideaMon[1]}/montages/${ideaMon[2]}.jpg`, { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
+        res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return;
     }
     if (pathname === '/api/longquant/ideas/runs' && req.method === 'GET') {
         const cands = Array.from({ length: 30 }, (_, i) => 'idea' + (i + 1));
@@ -3493,9 +3579,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const rawMon = pathname.match(/^\/api\/raw\/montage\/([\w-]{6,16})$/);
     if (rawMon && req.method === 'GET') {
         try {
-            const buf = await cloud.downloadFromR2(`raw/montage/${rawMon[1]}.jpg`);
-            if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); }
-            else { res.writeHead(404); res.end(); }
+            if (await redirectR2Object(res, `raw/montage/${rawMon[1]}.jpg`, { cacheControl: 'public, max-age=86400' })) return;
+            res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
         return;
     }
@@ -3529,9 +3614,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if (hookMon && req.method === 'GET') {
         try {
             const base = (hookMon[1].indexOf('grpo') === 0 || hookMon[1].indexOf('discover') === 0) ? `hooks/grpo/${hookMon[1]}/montages` : `hooks/runs/${hookMon[1]}/montages`;
-            const buf = await cloud.downloadFromR2(`${base}/${hookMon[2]}.jpg`);
-            if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600' }); res.end(buf); }
-            else { res.writeHead(404); res.end(); }
+            if (await redirectR2Object(res, `${base}/${hookMon[2]}.jpg`, { cacheControl: 'public, max-age=3600' })) return;
+            res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
         return;
     }
@@ -3588,9 +3672,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const grindMon = pathname.match(/^\/api\/hooks\/grind\/montage\/([\w-]{1,48})$/);
     if (grindMon && req.method === 'GET') {
         try {
-            const buf = await cloud.downloadFromR2(`hooks/grind/montages/${grindMon[1]}.jpg`);
-            if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); }
-            else { res.writeHead(404); res.end(); }
+            if (await redirectR2Object(res, `hooks/grind/montages/${grindMon[1]}.jpg`, { cacheControl: 'public, max-age=86400' })) return;
+            res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
         return;
     }
@@ -3726,9 +3809,8 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
     const grpoMon = pathname.match(/^\/api\/hooks\/grpo\/montage\/([a-z0-9_]{1,24})\/([\w-]{1,40})$/);
     if (grpoMon && req.method === 'GET') {
         try {
-            const buf = await cloud.downloadFromR2(`hooks/grpo/${grpoMon[1]}/montages/${grpoMon[2]}.jpg`);
-            if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600' }); res.end(buf); }
-            else { res.writeHead(404); res.end(); }
+            if (await redirectR2Object(res, `hooks/grpo/${grpoMon[1]}/montages/${grpoMon[2]}.jpg`, { cacheControl: 'public, max-age=3600' })) return;
+            res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
         return;
     }
@@ -9818,14 +9900,14 @@ async function scoreMontage(buf, text, title) {
     const tmp = path.join(os.tmpdir(), `grindmon_${Date.now()}_${Math.round(Math.random() * 1e6)}.jpg`);
     fs.writeFileSync(tmp, buf);
     try {
-        return await new Promise((ok, no) => {
+        return await runHeavyScore(() => new Promise((ok, no) => {
             const py = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--image', tmp, '--text', String(text || '').slice(0, 2000), '--title', String(title || 'grind').slice(0, 80)], { env: RAW_PY_ENV });
             let out = '', err2 = '';
             py.stdout.on('data', d => out += d); py.stderr.on('data', d => err2 += d);
             const t = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 150000);
             py.on('close', () => { clearTimeout(t); const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop(); if (!line) return no(new Error('scorer: ' + (err2.trim().split('\n').pop() || 'no output').slice(-140))); try { const j = JSON.parse(line); j.error ? no(new Error(j.error)) : ok(j); } catch (e) { no(e); } });
             py.on('error', no);
-        });
+        }));
     } finally { try { fs.unlinkSync(tmp); } catch (e) {} }
 }
 // best-modality percentile for the metric — same preference order as the UI's steerBest

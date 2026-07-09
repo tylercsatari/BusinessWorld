@@ -862,10 +862,10 @@ const JarvisLongQuant = (function () {
         }).filter(Boolean).join('');
         return cells ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px">${cells}</div>` : '';
     }
-    function lqxScoreFor(cacheId, key, title, idea, localScore) {
-        if (localScore && localScore.metrics) return localScore;
+    function lqxScoreFor(cacheId, key, title, idea, localScore, autoScore) {
         const c = LQSCORES[cacheId];
-        if (!c && key) lqxScoreKey(cacheId, key, title, idea);
+        if (!autoScore && localScore && localScore.metrics) return localScore;
+        if (!c && key && autoScore && (!localScore || !localScore.channels || !localScore.emb_preview)) lqxScoreKey(cacheId, key, title, idea);
         return c || localScore || null;
     }
     function lqxEmbHeat(score) {
@@ -946,12 +946,12 @@ const JarvisLongQuant = (function () {
             const R = st.lqxResult, rid = st.lqxRid;
             gen += `<div style="font-size:10px;color:${C.mute};margin:9px 0 6px">${R.attempts.length} thumbnails for <b style="color:${C.text}">${esc(R.title || '')}</b> — ranked by score</div>
               <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${R.attempts.map(a => {
-                  const fk = rid + '_' + a.k, mk = `longform/guesses/demo/montages/${fk}.jpg`, sc2 = lqxScoreFor('gen:' + fk, mk, R.title || st.lqxTitle || '', R.title || st.lqxTitle || '', a.score);
+                  const fk = rid + '_' + a.k, mk = `longform/guesses/demo/montages/${fk}.jpg`, sc2 = lqxScoreFor('gen:' + fk, mk, R.title || st.lqxTitle || '', R.title || st.lqxTitle || '', a.score, false);
                   return `<div data-lqxopen="gen:${fk}" style="cursor:pointer;border:1px solid ${a.pctile >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}"><img src="/api/longquant/guesses/montage/demo/${fk}" loading="lazy" style="width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}"/><div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;align-items:center;font-size:10px"><span style="font-weight:800;color:${a.pctile >= 0.9 ? C.green : a.pctile >= 0.8 ? C.green : C.text}">${((a.pctile || 0) * 100).toFixed(0)}th pctile</span><span data-lqxsave="${a.k}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === fk ? C.green : C.accent};color:${st.lqxSaveFlash === fk ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-weight:700">${st.lqxSaveFlash === fk ? '✅ Saved' : '💾 Save'}</span></div>${lqxMetricHtml(sc2 || a)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">scoring full embeddings…</div>` : ''}<div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:40px;overflow:hidden">${esc((a.prompt || '').slice(0, 130))}</div></div></div>`;
               }).join('')}</div>`;
             if (st.lqxOpen && String(st.lqxOpen).indexOf('gen:') === 0) {
                 const fk = st.lqxOpen.slice(4), a = R.attempts.find(x => fk === rid + '_' + x.k), mk = `longform/guesses/demo/montages/${fk}.jpg`;
-                if (a) gen += lqxFullReadout({ title: R.title || st.lqxTitle || '', prompt: a.prompt || '', img: `/api/longquant/guesses/montage/demo/${fk}`, pctile: a.pctile, score: lqxScoreFor('gen:' + fk, mk, R.title || st.lqxTitle || '', R.title || st.lqxTitle || '', a.score) });
+                if (a) gen += lqxFullReadout({ title: R.title || st.lqxTitle || '', prompt: a.prompt || '', img: `/api/longquant/guesses/montage/demo/${fk}`, pctile: a.pctile, score: lqxScoreFor('gen:' + fk, mk, R.title || st.lqxTitle || '', R.title || st.lqxTitle || '', a.score, true) });
             }
         }
         // SCORE-AN-UPLOAD card
@@ -969,14 +969,14 @@ const JarvisLongQuant = (function () {
         if (grAttempts.length) {
             grind += `<div style="font-size:10px;color:${C.mute};margin:9px 0 6px">best <b style="color:${gr.best >= gr.threshold ? C.green : C.text}">${gr.best == null ? '—' : gr.best + 'th'}</b> · target ${gr.threshold || st.lqxGrindThreshold || 85}th · next min distance ≥ ${gr.gate || '—'}</div>`;
             grind += grAttempts.slice().reverse().map(a => `<div style="border:1px solid ${a.pct >= (gr.threshold || 85) ? C.green : C.border};border-radius:8px;padding:8px;background:${C.card2};margin-top:8px"><div style="display:flex;justify-content:space-between;gap:10px"><div style="font-size:12px;color:${C.text};font-weight:800">${esc((a.idea || '').slice(0, 140))}</div><div style="font-size:12px;color:${a.pct >= (gr.threshold || 85) ? C.green : C.dim};font-weight:900;white-space:nowrap">${a.pct == null ? '—' : a.pct + 'th'}</div></div><div style="font-size:9px;color:${C.mute};margin:3px 0 6px">seed dist ${a.distSeed == null ? '—' : a.distSeed} · prior dist ${a.distPrior == null ? '—' : a.distPrior} · topical ${a.topic == null ? '—' : a.topic}${a.topicFloor == null ? '' : ' / floor ' + a.topicFloor} · ${esc(a.status || '')}</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">${(a.thumbs || []).map(t => {
-                const cid = t.image || `${a.k}_${t.i}`, key = t.image ? `longform/grind/montages/${t.image}.jpg` : '', sc2 = t.image ? lqxScoreFor('grind:' + cid, key, a.idea || gr.idea || '', a.idea || gr.idea || '', t.score) : (t.score || t);
+                const cid = t.image || `${a.k}_${t.i}`, key = t.image ? `longform/grind/montages/${t.image}.jpg` : '', sc2 = t.image ? lqxScoreFor('grind:' + cid, key, a.idea || gr.idea || '', a.idea || gr.idea || '', t.score, false) : (t.score || t);
                 return `<div data-lqxopen="grind:${cid}" style="cursor:${t.image ? 'pointer' : 'default'};border:1px solid ${t.pct >= (gr.threshold || 85) ? C.green : C.border};border-radius:7px;overflow:hidden;background:${C.card}">${t.image ? `<img src="/api/longquant/grind/img/${t.image}" loading="lazy" style="width:100%;aspect-ratio:16/9;object-fit:cover;background:#000"/>` : `<div style="aspect-ratio:16/9;background:${C.card};display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px">${esc(t.status || 'queued')}</div>`}<div style="padding:5px 6px"><div style="display:flex;justify-content:space-between;gap:4px;align-items:center"><div style="font-size:10px;font-weight:800;color:${t.pct >= (gr.threshold || 85) ? C.green : C.text}">${t.pct == null ? esc(t.status || '') : t.pct + 'th'}</div>${t.image ? `<span data-lqxgrindsave="${cid}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:4px;padding:1px 5px;font-size:8px;font-weight:800">save</span>` : ''}</div>${lqxMetricHtml(sc2 || t)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">scoring…</div>` : ''}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:34px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 110))}</div>${t.error ? `<div style="font-size:9px;color:${C.red};margin-top:3px">${esc(t.error)}</div>` : ''}</div></div>`;
             }).join('')}</div>${a.error ? `<div style="font-size:10px;color:${C.red};margin-top:5px">${esc(a.error)}</div>` : ''}</div>`).join('');
             if (st.lqxOpen && String(st.lqxOpen).indexOf('grind:') === 0) {
                 const cid = st.lqxOpen.slice(6);
                 let hit = null, idea = '';
                 grAttempts.forEach(a => (a.thumbs || []).forEach(t => { if ((t.image || `${a.k}_${t.i}`) === cid) { hit = t; idea = a.idea || gr.idea || ''; } }));
-                if (hit && hit.image) grind += lqxFullReadout({ title: idea, prompt: hit.prompt || '', img: `/api/longquant/grind/img/${hit.image}`, pctile: hit.pct != null ? hit.pct / 100 : null, score: lqxScoreFor('grind:' + hit.image, `longform/grind/montages/${hit.image}.jpg`, idea, idea, hit.score) });
+                if (hit && hit.image) grind += lqxFullReadout({ title: idea, prompt: hit.prompt || '', img: `/api/longquant/grind/img/${hit.image}`, pctile: hit.pct != null ? hit.pct / 100 : null, score: lqxScoreFor('grind:' + hit.image, `longform/grind/montages/${hit.image}.jpg`, idea, idea, hit.score, true) });
             }
         }
         // BEST IDEAS strip (from the idea model)
@@ -992,12 +992,12 @@ const JarvisLongQuant = (function () {
                     const G = LQIDEAGRP[irun + '/' + sel.id];
                     const thumbs = G && G.thumbs ? G.thumbs.slice().sort((a, b) => (b.pctile || 0) - (a.pctile || 0)) : [];
                     ideaDetail = `<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px"><div style="font-size:13px;color:${C.text};font-weight:800;line-height:1.35">${esc(sel.idea || '')}</div><div style="font-size:10px;color:${C.mute};margin:3px 0 8px">visual ctrviews <b style="color:${C.green}">${((sel.pctile || 0) * 100).toFixed(0)}th</b> · text ${sel.text_pct != null ? (sel.text_pct * 100).toFixed(0) + 'th' : '—'} · novelty ${sel.novelty != null ? sel.novelty.toFixed(2) : '—'}</div>${G && G.loading ? `<div style="font-size:11px;color:${C.cyan}">loading thumbnails…</div>` : thumbs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${thumbs.map(t => {
-                        const cid = `${sel.id}_${t.k}`, key = `longform/ideas/${irun}/montages/${cid}.jpg`, sc2 = lqxScoreFor('idea:' + irun + ':' + cid, key, sel.idea || '', sel.idea || '', t.score);
+                        const cid = `${sel.id}_${t.k}`, key = `longform/ideas/${irun}/montages/${cid}.jpg`, sc2 = lqxScoreFor('idea:' + irun + ':' + cid, key, sel.idea || '', sel.idea || '', t.score, false);
                         return `<div data-lqxopen="idea:${irun}:${cid}" style="cursor:pointer;border:1px solid ${(t.pctile || 0) >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}"><img src="/api/longquant/ideas/montage/${irun}/${cid}" loading="lazy" style="width:100%;aspect-ratio:16/9;object-fit:cover;background:#000"/><div style="padding:6px 8px"><div style="font-size:10px;font-weight:800;color:${(t.pctile || 0) >= 0.8 ? C.green : C.text}">${((t.pctile || 0) * 100).toFixed(0)}th · rel ${t.rel != null ? t.rel.toFixed(2) : '—'}</div>${lqxMetricHtml(sc2 || t)}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:36px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 120))}</div></div></div>`;
                     }).join('')}</div>` : `<div style="font-size:11px;color:${C.dim}">no thumbnail group found for this idea yet</div>`}</div>`;
                     if (st.lqxOpen && String(st.lqxOpen).indexOf('idea:' + irun + ':') === 0) {
                         const cid = st.lqxOpen.split(':').slice(2).join(':'), t = thumbs.find(x => cid === `${sel.id}_${x.k}`);
-                        if (t) ideaDetail += lqxFullReadout({ title: sel.idea || '', prompt: t.prompt || '', img: `/api/longquant/ideas/montage/${irun}/${cid}`, pctile: t.pctile, score: lqxScoreFor('idea:' + irun + ':' + cid, `longform/ideas/${irun}/montages/${cid}.jpg`, sel.idea || '', sel.idea || '', t.score) });
+                        if (t) ideaDetail += lqxFullReadout({ title: sel.idea || '', prompt: t.prompt || '', img: `/api/longquant/ideas/montage/${irun}/${cid}`, pctile: t.pctile, score: lqxScoreFor('idea:' + irun + ':' + cid, `longform/ideas/${irun}/montages/${cid}.jpg`, sel.idea || '', sel.idea || '', t.score, true) });
                     }
                 }
                 ideas = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:6px">💡 Best ideas so far <span style="font-size:10px;color:${C.mute};font-weight:600">— click one to see its rendered thumbnails + full scores</span></div>${best.map(r => `<div data-lqxidea="${esc(r.id || '')}" data-lqxidearun="${esc(irun || '')}" style="cursor:pointer;display:flex;justify-content:space-between;gap:10px;padding:5px 7px;border-radius:6px;border:1px solid ${st.lqxIdeaSel === r.id ? C.accent : C.border};background:${st.lqxIdeaSel === r.id ? C.accent + '18' : 'transparent'};margin-bottom:4px"><span style="font-size:12px;color:${C.text}">${esc(r.idea || '')}</span><span style="font-size:11px;font-weight:800;color:${C.green};white-space:nowrap">${((r.pctile || 0) * 100).toFixed(0)}th</span></div>`).join('')}${ideaDetail}`, 12);
@@ -1013,7 +1013,7 @@ const JarvisLongQuant = (function () {
             if (d && d.loading) savedDetail = `<div style="font-size:11px;color:${C.cyan};margin-top:10px">loading saved thumbnail…</div>`;
             else if (d && !d.error) {
                 const key = `longform/saved-thumbs/${st.lqxSavedSel}.jpg`;
-                const sc2 = d.score || (d.metrics ? d : lqxScoreFor('saved:' + st.lqxSavedSel, key, d.title || row.title || '', d.title || row.title || '', null));
+                const sc2 = lqxScoreFor('saved:' + st.lqxSavedSel, key, d.title || row.title || '', d.title || row.title || '', d.score || (d.metrics ? d : null), true);
                 savedDetail = lqxFullReadout({ title: d.title || row.title || '', prompt: d.prompt || row.prompt || '', img: `/api/longquant/thumbs/img/${st.lqxSavedSel}`, pctile: d.pctile != null ? d.pctile : row.pctile, score: sc2 });
             }
         }
