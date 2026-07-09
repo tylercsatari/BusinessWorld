@@ -10474,7 +10474,7 @@ function longQuantGrindEnvelope(body = {}, opts = {}) {
     const now = Date.now();
     const payload = {
         rid, idea, title, invent: !idea,
-        threshold, maxAttempts, count, hours,
+        threshold, maxAttempts, thumbTryLimit: maxAttempts, count, hours,
         context, transcript30: context, contextChars: context.length,
         contextStatus: String(body.contextStatus || (context ? 'ok' : 'missing')).slice(0, 40),
         sourceVideo, batchId, source, autosaveBest,
@@ -10484,10 +10484,10 @@ function longQuantGrindEnvelope(body = {}, opts = {}) {
         ts: now,
     };
     const run = {
-        rid, idea, title, threshold, count, maxAttempts, hours,
+        rid, idea, title, threshold, count, maxAttempts, thumbTryLimit: maxAttempts, hours,
         attempts: [], status: 'queued',
         note: String(body.note || (idea
-            ? `queued — first attempt will generate thumbnails for the exact seed${context ? ' with transcript context' : ''}`
+            ? `queued — first thumbnails will use the exact seed${context ? ' with transcript context' : ''}`
             : 'queued — waiting for the idea model to invent the first candidate')).slice(0, 320),
         best: null, ts: now, context, transcript30: context, contextChars: context.length,
         contextStatus: payload.contextStatus, sourceVideo, source, batchId, autosaveBest,
@@ -10546,7 +10546,10 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
     const imageThumbs = thumbs.filter(t => t && t.image).length;
     const doneThumbs = thumbs.filter(t => t && t.status === 'done').length;
     const errorThumbs = thumbs.filter(t => t && (t.status === 'error' || t.error)).length;
+    const stoppedThumbs = thumbs.filter(t => t && t.status === 'stopped').length;
     const doneAttempts = attempts.filter(a => a && ['done', 'error', 'stopped'].includes(a.status || '')).length;
+    const thumbTries = thumbs.length;
+    const finishedThumbTries = doneThumbs + errorThumbs + stoppedThumbs;
     const ts = Number(run.ts) || 0;
     const workerAttached = typeof _lqGrindActive !== 'undefined' && _lqGrindActive.has(rid);
     const queuedRequest = !!(reqIds && reqIds.has(rid));
@@ -10570,8 +10573,9 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
         note: run.note || '',
         threshold: run.threshold,
         best: run.best,
-        n: run.n || attempts.length,
-        maxAttempts: run.maxAttempts || null,
+        n: thumbTries,
+        maxAttempts: run.thumbTryLimit || run.maxAttempts || null,
+        thumbTryLimit: run.thumbTryLimit || run.maxAttempts || null,
         count: run.count || null,
         hours: run.hours || null,
         deadline: run.deadline || null,
@@ -10587,8 +10591,12 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
         autosaved: run.autosaved || null,
         winner: run.winner == null ? null : run.winner,
         activeAttempt,
-        attemptsStarted: attempts.length,
-        attemptsFinished: doneAttempts,
+        attemptsStarted: thumbTries,
+        attemptsFinished: finishedThumbTries,
+        ideaRounds: attempts.length,
+        ideaRoundsStarted: attempts.length,
+        ideaRoundsFinished: doneAttempts,
+        thumbTryCount: thumbTries,
         thumbSlots: thumbs.length,
         thumbImages: imageThumbs,
         thumbDone: doneThumbs,
@@ -10886,6 +10894,9 @@ async function longQuantGrindProcess(rid, req0) {
             }
         }
     }
+    const thumbTryCount = () => attempts.reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.length : 0), 0);
+    const thumbFinishedCount = () => attempts.reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.filter(t => t && ['done', 'error', 'stopped'].includes(t.status || '')).length : 0), 0);
+    const thumbImageCount = () => attempts.reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.filter(t => t && t.image).length : 0), 0);
     const baseGate = seed ? 0.10 : 0.18;
     let gate = priorRun && Number.isFinite(Number(priorRun.gate)) ? Math.max(baseGate, Number(priorRun.gate)) : baseGate;
     let sinceBest = 0;
@@ -10907,7 +10918,9 @@ async function longQuantGrindProcess(rid, req0) {
     const write = () => cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
         rid, idea: seed, title: sourceTitle || seed, context, sourceVideo, source, batchId,
         contextChars: context.length,
-        threshold, count, attempts, n: attempts.length, status, winner, error: err, note,
+        threshold, count, attempts, n: thumbTryCount(), thumbTryCount: thumbTryCount(), thumbTryLimit: maxAttempts,
+        thumbImages: thumbImageCount(), thumbFinished: thumbFinishedCount(), ideaRounds: attempts.length,
+        status, winner, error: err, note,
         best, rejected, gate: Math.round(gate * 1000) / 1000, deadline, ts: Date.now(),
         baseline, autosaved, maxAttempts, hours, autosaveBest: !!req0.autosaveBest,
         ideaModel: LONGQUANT_IDEA_MODEL, thumbModel: longQuantThumbPromptModelLabel(), renderModel: LONGQUANT_RENDER_MODEL,
@@ -10959,26 +10972,32 @@ async function longQuantGrindProcess(rid, req0) {
             }
         }
         await write();
-        while (attempts.length < maxAttempts && Date.now() < deadline && status === 'running') {
+        while (thumbTryCount() < maxAttempts && Date.now() < deadline && status === 'running') {
             if (await checkStopped()) break;
+            const usedBefore = thumbTryCount();
+            const remainingThumbs = maxAttempts - usedBefore;
+            if (remainingThumbs <= 0) break;
+            const batchCount = Math.max(1, Math.min(count, remainingThumbs));
+            const thumbStart = usedBefore + 1;
+            const thumbEnd = usedBefore + batchCount;
             let idea = '';
             let gateInfo = {};
             let farthest = null, bestTopical = null;
             if (seed && attempts.length === 0) {
                 idea = seed.slice(0, 300);
                 gateInfo = { distSeed: 0, distPrior: null, topic: 1, floor: topicFloor() == null ? null : Math.round(topicFloor() * 1000) / 1000 };
-                note = `attempt 1: rendering your original title before exploring variants${context ? ' — transcript context is constraining thumbnail prompts' : ''}`;
+                note = `thumbnails ${thumbStart}-${thumbEnd}/${maxAttempts}: rendering your original title before exploring variants${context ? ' — transcript context is constraining thumbnail prompts' : ''}`;
                 await write();
             } else {
                 const floorNow = topicFloor();
                 const guide = { minDistance: Math.round(gate * 1000) / 1000, topicFloor: floorNow == null ? null : Math.round(floorNow * 1000) / 1000 };
-                note = `attempt ${attempts.length + 1}: generating inside semantic band — prior distance ≥ ${guide.minDistance}${guide.topicFloor == null ? '' : ` · topical ≥ ${guide.topicFloor}`}`;
+                note = `thumbnails ${thumbStart}-${thumbEnd}/${maxAttempts}: choosing the next topical idea angle — prior distance ≥ ${guide.minDistance}${guide.topicFloor == null ? '' : ` · topical ≥ ${guide.topicFloor}`}`;
                 await write();
                 for (let tries = 0; tries < 4; tries++) {
                     if (await checkStopped()) break;
                     idea = await longQuantIdeaGenerate(seed, attempts.length + tries, attempts, guide, context);
                     if (await checkStopped()) break;
-                    const gateRes = await acceptIdea(idea, (maxAttempts - attempts.length - 1) + (3 - tries));
+                    const gateRes = await acceptIdea(idea, Math.max(0, maxAttempts - usedBefore - batchCount) + (3 - tries));
                     if (await checkStopped()) break;
                     if (gateRes.ok) { idea = String(idea).slice(0, 300); gateInfo = gateRes; break; }
                     if (!bestTopical || (gateRes.topic || -1) > (bestTopical.gateRes.topic || -1)) bestTopical = { idea, gateRes };
@@ -11003,19 +11022,20 @@ async function longQuantGrindProcess(rid, req0) {
                 await write();
             }
             if (!idea) { rejected++; continue; }
-            const a = { k: attempts.length, idea, title: idea, status: 'prompting', thumbs: [], pct: null, distSeed: gateInfo.distSeed, distPrior: gateInfo.distPrior, topic: gateInfo.topic, topicFloor: gateInfo.floor, ts: Date.now() };
+            const a = { k: attempts.length, idea, title: idea, status: 'prompting', thumbs: [], pct: null, distSeed: gateInfo.distSeed, distPrior: gateInfo.distPrior, topic: gateInfo.topic, topicFloor: gateInfo.floor, thumbStart, thumbEnd, batchCount, ts: Date.now() };
             attempts.push(a); await write();
             let group = null, reqRid = '';
             try {
                 if (await checkStopped()) { a.status = 'stopped'; await write(); break; }
                 a.status = 'queued';
-                note = `attempt ${a.k + 1}: generating thumbnails on the app server`;
+                note = `thumbnails ${thumbStart}-${thumbEnd}/${maxAttempts}: generating ${batchCount} thumbnail${batchCount === 1 ? '' : 's'} on the app server`;
                 await write();
-                const out = await longQuantDemoThumbGroup(idea, count, rid, a.k, async (_reqRid, st) => {
+                const out = await longQuantDemoThumbGroup(idea, batchCount, rid, a.k, async (_reqRid, st) => {
                     reqRid = _reqRid;
                     a.workerRid = _reqRid;
                     a.status = st.stage === 'reasoning' ? 'prompting' : (st.stage === 'rendering' ? 'rendering' : (st.stage || 'queued'));
-                    note = `attempt ${a.k + 1}: app server ${st.stage || 'queued'}${st.done != null && st.n ? ` ${st.done}/${st.n}` : ''}${st.note ? ' — ' + st.note : ''}`;
+                    const done = st.done != null && st.n ? Math.min(maxAttempts, usedBefore + Number(st.done || 0)) : null;
+                    note = `thumbnails ${thumbStart}-${thumbEnd}/${maxAttempts}: app server ${st.stage || 'queued'}${done != null ? ` ${done}/${maxAttempts}` : ''}${st.note ? ' — ' + st.note : ''}`;
                     await write();
                 }, { context, sourceVideo, stopRid: rid });
                 reqRid = out.reqRid;
@@ -11037,7 +11057,7 @@ async function longQuantGrindProcess(rid, req0) {
             a.status = 'importing';
             a.workerRid = reqRid;
             a.prompts = (group.attempts || []).map(x => x.prompt).filter(Boolean);
-            note = `attempt ${a.k + 1}: importing ${group.attempts.length} scored thumbnails from the app-server worker`;
+            note = `thumbnails ${thumbStart}-${Math.min(maxAttempts, thumbStart + (group.attempts || []).length - 1)}/${maxAttempts}: importing ${(group.attempts || []).length} scored thumbnail${(group.attempts || []).length === 1 ? '' : 's'} from the app-server worker`;
             await write();
             for (let i = 0; i < (group.attempts || []).length; i++) {
                 if (await checkStopped()) { a.status = 'stopped'; await write(); break; }
@@ -11080,15 +11100,18 @@ async function longQuantGrindProcess(rid, req0) {
                 const step = (0.012 + 0.075 * miss) * (1 + 0.15 * sinceBest);
                 gate += step;
             }
-            note = a.pct != null ? `attempt ${a.k + 1} best thumbnail scored ${a.pct}th (target ${threshold}) — next distance ≥ ${gate.toFixed(2)}` : `attempt ${a.k + 1} finished without a score — next distance ≥ ${gate.toFixed(2)}`;
+            note = a.pct != null ? `thumbnails ${a.thumbStart || thumbStart}-${a.thumbEnd || thumbEnd}/${maxAttempts}: best scored ${a.pct}th (target ${threshold}) — next distance ≥ ${gate.toFixed(2)}` : `thumbnails ${a.thumbStart || thumbStart}-${a.thumbEnd || thumbEnd}/${maxAttempts}: finished without a score — next distance ≥ ${gate.toFixed(2)}`;
             await write();
-            if (won) { status = 'won'; winner = a.k; note = `threshold cleared: attempt ${a.k + 1} hit ${a.pct}th`; break; }
+            if (won) { status = 'won'; winner = a.k; note = `threshold cleared: thumbnails ${a.thumbStart || thumbStart}-${a.thumbEnd || thumbEnd}/${maxAttempts} hit ${a.pct}th`; break; }
         }
     } catch (e) {
         if (e && e.code === 'LONGQUANT_STOPPED') { status = 'stopped'; note = 'stopped by you'; }
         else { err = String(e.message || e).slice(0, 220); status = 'error'; }
     }
-    if (status === 'running') status = Date.now() >= deadline ? 'deadline' : 'maxed';
+    if (status === 'running') {
+        status = Date.now() >= deadline ? 'deadline' : 'maxed';
+        if (status === 'maxed') note = `maxed at ${thumbTryCount()}/${maxAttempts} thumbnails without clearing ${threshold}th`;
+    }
     if (status !== 'stopped' && req0.autosaveBest && !autosaved) {
         try {
             let bestHit = null, bestAttempt = null;
@@ -11134,7 +11157,7 @@ function longQuantTerminalStatus(s) {
 function longQuantRequestFromRun(run, rid) {
     const sourceVideo = longQuantCompactSourceVideo(run && run.sourceVideo);
     const idea = String((run && (run.idea || run.title)) || (sourceVideo && sourceVideo.title) || '').slice(0, 500).trim();
-    const maxAttempts = Math.max(1, Math.min(100, parseInt(run && run.maxAttempts, 10) || 40));
+    const maxAttempts = Math.max(1, Math.min(100, parseInt(run && (run.thumbTryLimit || run.maxAttempts), 10) || 40));
     const source = String((run && run.source) || '').slice(0, 80);
     return {
         rid, idea, title: idea, invent: !idea,
@@ -11188,9 +11211,11 @@ async function longQuantRecoverStaleGrinds() {
         }
         const req = longQuantRequestFromRun(run, rid);
         run.status = 'queued';
-        run.note = `recovered after Render worker interruption — resuming at attempt ${(Array.isArray(run.attempts) ? run.attempts.length : 0) + 1}`;
+        const thumbTries = (Array.isArray(run.attempts) ? run.attempts : []).reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.length : 0), 0);
+        run.note = `recovered after Render worker interruption — resuming at ${thumbTries}/${req.maxAttempts} thumbnails`;
         run.ts = now;
         run.maxAttempts = req.maxAttempts;
+        run.thumbTryLimit = req.maxAttempts;
         run.hours = req.hours;
         run.autosaveBest = req.autosaveBest;
         await cloud.uploadToR2(key, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
