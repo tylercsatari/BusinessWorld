@@ -10585,6 +10585,13 @@ function longQuantActiveSort(a, b) {
     if (ra !== rb) return ra - rb;
     return (b.ts || 0) - (a.ts || 0);
 }
+function longQuantRequestPriority(req) {
+    if (!req || typeof req !== 'object') return 9;
+    if (req.sourceVideo && (req.sourceVideo.id || req.sourceVideo.title)) return 0;
+    if (req.batchId) return 0;
+    if (/channel|overnight|youtube/i.test(String(req.source || ''))) return 0;
+    return 5;
+}
 function longQuantCompactSourceVideo(v) {
     if (!v || typeof v !== 'object') return null;
     return {
@@ -11170,9 +11177,18 @@ async function longQuantGrindQueue() {
     if (_lqGrindActive.size >= limit) return;
     let keys; try { keys = ((await cloud.listR2Keys('longform/grind/requests/')) || []).filter(k => k.endsWith('.json')); } catch (e) { return; }
     if (!keys.length) return;
+    const candidates = [];
     for (const key of keys.sort()) {
-        if (_lqGrindActive.size >= limit) break;
         const rid = key.split('/').pop().replace('.json', '');
+        if (!rid || _lqGrindActive.has(rid)) continue;
+        let req0 = {};
+        try { req0 = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) {}
+        candidates.push({ key, rid, req0, priority: longQuantRequestPriority(req0) });
+    }
+    candidates.sort((a, b) => (a.priority - b.priority) || a.key.localeCompare(b.key));
+    for (const item of candidates) {
+        if (_lqGrindActive.size >= limit) break;
+        const { key, rid, req0 } = item;
         if (!rid || _lqGrindActive.has(rid)) continue;
         _lqGrindActive.add(rid);
         (async () => {
@@ -11187,7 +11203,6 @@ async function longQuantGrindQueue() {
                 await cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
                 return;
             }
-            let req0 = {}; try { req0 = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) {}
             await cloud.deleteFromR2(key).catch(() => {});
             try { await longQuantGrindProcess(rid, req0); } catch (e) { console.warn('longquant grind err:', e.message); }
             } finally {
