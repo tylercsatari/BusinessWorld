@@ -10035,8 +10035,17 @@ async function longQuantGrindProcess(rid, req0) {
         return;
     }
     let attempts = [], status = 'running', winner = null, err = '', note = '', best = null, rejected = 0;
-    let gate = seed ? 0.10 : 0.18, sinceBest = 0;
+    const baseGate = seed ? 0.10 : 0.18;
+    let gate = baseGate, sinceBest = 0;
     const vecs = [];
+    let seedQ = null;
+    if (seed) {
+        const se = await geminiTextEmbed(seed).catch(() => null);
+        if (se) {
+            seedQ = Int8Array.from(se, x => Math.round(x * 127));
+            vecs.push(seedQ);
+        }
+    }
     const write = () => cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
         rid, idea: seed, threshold, count, attempts, n: attempts.length, status, winner, error: err, note,
         best, rejected, gate: Math.round(gate * 1000) / 1000, deadline, ts: Date.now(),
@@ -10045,16 +10054,12 @@ async function longQuantGrindProcess(rid, req0) {
     const acceptIdea = async (idea, spare) => {
         const emb = await geminiTextEmbed(idea);
         if (!emb) return { ok: true, distSeed: null, distPrior: null };
-        let distSeed = null;
-        if (seed && idea !== seed) {
-            const se = await geminiTextEmbed(seed);
-            if (se) distSeed = Math.round((1 - genCos(Int8Array.from(emb, x => Math.round(x * 127)), Int8Array.from(se, x => Math.round(x * 127)))) * 1000) / 1000;
-        }
         const q = Int8Array.from(emb, x => Math.round(x * 127));
+        let distSeed = seedQ ? Math.round((1 - genCos(q, seedQ)) * 1000) / 1000 : null;
         let m = -1;
         for (const v of vecs) { const c = genCos(q, v); if (c > m) m = c; }
         const distPrior = vecs.length ? Math.round((1 - m) * 1000) / 1000 : 1;
-        if (vecs.length && distPrior < gate && spare > 0) return { ok: false, distSeed, distPrior };
+        if (vecs.length && distPrior < gate && spare > 0) return { ok: false, distSeed, distPrior, q };
         vecs.push(q);
         return { ok: true, distSeed, distPrior };
     };
@@ -10065,12 +10070,21 @@ async function longQuantGrindProcess(rid, req0) {
             note = `attempt ${attempts.length + 1}: generating a candidate idea`; await write();
             let idea = '';
             let gateInfo = {};
+            let farthest = null;
             for (let tries = 0; tries < 4; tries++) {
                 idea = await longQuantIdeaGenerate(seed, attempts.length + tries, attempts);
                 const gateRes = await acceptIdea(idea, (maxAttempts - attempts.length - 1) + (3 - tries));
                 if (gateRes.ok) { idea = String(idea).slice(0, 300); gateInfo = gateRes; break; }
+                if (!farthest || (gateRes.distPrior || 0) > (farthest.gateRes.distPrior || 0)) farthest = { idea, gateRes };
                 rejected++; note = `candidate was too close to a prior idea (dist ${gateRes.distPrior}, need ${gate.toFixed(2)}) — regenerating`; await write();
                 idea = '';
+            }
+            if (!idea && farthest) {
+                idea = String(farthest.idea || '').slice(0, 300);
+                gateInfo = farthest.gateRes || {};
+                if (gateInfo.q) vecs.push(gateInfo.q);
+                note = `all candidates were inside the current distance target; taking the farthest available (dist ${gateInfo.distPrior}, target ${gate.toFixed(2)}) so exploration keeps moving`;
+                await write();
             }
             if (!idea) { rejected++; continue; }
             const a = { k: attempts.length, idea, title: idea, status: 'prompting', thumbs: [], pct: null, distSeed: gateInfo.distSeed, distPrior: gateInfo.distPrior, ts: Date.now() };
@@ -10096,11 +10110,18 @@ async function longQuantGrindProcess(rid, req0) {
                 await write();
             }
             a.status = 'done';
-            if (a.pct != null && (best == null || a.pct > best)) { best = a.pct; sinceBest = 0; gate = seed ? 0.10 : 0.18; }
-            else { sinceBest++; gate = Math.min(0.34, (seed ? 0.10 : 0.18) + 0.03 * sinceBest); }
-            note = a.pct != null ? `attempt ${a.k + 1} best thumbnail scored ${a.pct}th (target ${threshold})` : `attempt ${a.k + 1} finished without a score`;
+            const improved = a.pct != null && (best == null || a.pct > best);
+            if (improved) { best = a.pct; sinceBest = 0; }
+            else sinceBest++;
+            const won = a.pct != null && a.pct >= threshold;
+            if (!won) {
+                const miss = best == null ? 1 : Math.max(0, (threshold - best) / Math.max(1, threshold));
+                const step = (0.012 + 0.075 * miss) * (1 + 0.15 * sinceBest);
+                gate += step;
+            }
+            note = a.pct != null ? `attempt ${a.k + 1} best thumbnail scored ${a.pct}th (target ${threshold}) — next distance ≥ ${gate.toFixed(2)}` : `attempt ${a.k + 1} finished without a score — next distance ≥ ${gate.toFixed(2)}`;
             await write();
-            if (a.pct != null && a.pct >= threshold) { status = 'won'; winner = a.k; note = `threshold cleared: attempt ${a.k + 1} hit ${a.pct}th`; break; }
+            if (won) { status = 'won'; winner = a.k; note = `threshold cleared: attempt ${a.k + 1} hit ${a.pct}th`; break; }
         }
     } catch (e) { err = String(e.message || e).slice(0, 220); status = 'error'; }
     if (status === 'running') status = Date.now() >= deadline ? 'deadline' : 'maxed';
