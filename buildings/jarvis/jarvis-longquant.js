@@ -926,6 +926,65 @@ const JarvisLongQuant = (function () {
         st.rawUpShow = true; st.rawUpSel = idx; st.rawSel = null;
         return idx;
     }
+    function lqxIdeaNbrs(row) {
+        return ((row && (row.nbr || row.neighbors)) || []).map(nb => ({ id: String(nb.id != null ? nb.id : nb[0]), sim: +(nb.sim != null ? nb.sim : nb[1]) })).filter(nb => nb.id);
+    }
+    function lqxAttachIdeaRaw(cacheId, row) {
+        const ns = lqxIdeaNbrs(row); if (!ns.length) return -1;
+        const pct = row.text_pct != null ? row.text_pct : row.pctile;
+        const pct100 = pct == null ? null : Math.round((pct <= 1 ? pct * 100 : pct) * 10) / 10;
+        const rec = {
+            _lqxId: 'longquant-idea:' + (cacheId || row.id || lqxHash(row.idea || '')),
+            source: 'longquant',
+            title: row.idea || 'Long Quant idea',
+            transcript: row.idea || '',
+            channels: { text: { neighbors: ns, metrics: { views: { pctile: pct100 } } } },
+            steer: pct100 == null ? {} : { text_views: { est: null, pctile: pct100, kind: 'longquant_idea' } },
+            lqIdea: row,
+        };
+        st.rawUploads = st.rawUploads || [];
+        let idx = st.rawUploads.findIndex(u => u && u._lqxId === rec._lqxId);
+        if (idx < 0) { st.rawUploads.push(rec); idx = st.rawUploads.length - 1; }
+        else st.rawUploads[idx] = Object.assign({}, st.rawUploads[idx], rec);
+        st.rawUpShow = true; st.rawUpSel = idx; st.rawSel = null;
+        return idx;
+    }
+    function lqxIdeaMiniGraph(row, cacheId) {
+        const ns = lqxIdeaNbrs(row);
+        if (!ns.length) return `<div style="font-size:10px;color:${C.amber};margin:8px 0">This idea row does not have nearest-neighbor text embedding data attached yet. Its rendered thumbnails below still get full visual/text/together embedding when opened.</div>`;
+        cacheId = cacheId || ('idea-row:' + (row.id || lqxHash(row.idea || '')));
+        LQRAW[cacheId] = { ideaRow: row };
+        const R = RAW.text;
+        if (!R || R.loading) { rawEnsure('text'); return `<div style="font-size:10px;color:${C.cyan};margin:8px 0">loading text embedding graph...</div>`; }
+        if (!R.n || !R.proj) return `<div style="font-size:10px;color:${C.amber};margin:8px 0">The text Raw map is not available yet.</div>`;
+        const prefs = ['views', 'ctrviews', 'ctr', 'ret30', 'realviews', 'outlier', 'umap', 'pca'];
+        const projId = prefs.find(k => R.proj[k]) || Object.keys(R.proj)[0];
+        const P = R.proj[projId] || {}, px = P.x || [], py = P.y || [];
+        if (!px.length || !py.length) return `<div style="font-size:10px;color:${C.amber};margin:8px 0">This text projection has no coordinates yet.</div>`;
+        const W = 620, H = 250, pad = 14, Sg = 1000, X = x => pad + (x / Sg) * (W - 2 * pad), Y = y => H - pad - (y / Sg) * (H - 2 * pad);
+        const id2i = {}; (R.id || []).forEach((id, i) => { id2i[String(id)] = i; });
+        let bg = '', step = Math.max(1, Math.ceil(px.length / 1600));
+        for (let i = 0; i < px.length; i += step) if (px[i] != null && py[i] != null) bg += `<circle cx="${X(px[i]).toFixed(1)}" cy="${Y(py[i]).toFixed(1)}" r="1.35" fill="${C.border2}" opacity="0.55"/>`;
+        let sx = 0, sy = 0, sw = 0, used = 0;
+        ns.forEach(nb => {
+            const i = id2i[nb.id]; if (i == null || px[i] == null || py[i] == null) return;
+            const w = Math.max(0.001, isFinite(nb.sim) ? nb.sim : 0.001); sx += px[i] * w; sy += py[i] * w; sw += w; used++;
+        });
+        const marker = sw > 0 ? (() => {
+            const x = X(sx / sw).toFixed(1), y = Y(sy / sw).toFixed(1);
+            return `<line x1="${x}" y1="${(+y - 11).toFixed(1)}" x2="${x}" y2="${(+y + 11).toFixed(1)}" stroke="${C.purple}" stroke-width="1.4" opacity="0.85"/><line x1="${(+x - 11).toFixed(1)}" y1="${y}" x2="${(+x + 11).toFixed(1)}" y2="${y}" stroke="${C.purple}" stroke-width="1.4" opacity="0.85"/><circle cx="${x}" cy="${y}" r="8" fill="${C.purple}" stroke="#fff" stroke-width="2"><title>${esc(row.idea || 'Long Quant idea')} - placed from ${used} text neighbors</title></circle>`;
+        })() : '';
+        const nbr = ns.slice(0, 4).map(nb => {
+            const i = id2i[nb.id];
+            return `<div style="font-size:10px;color:${C.dim};display:flex;justify-content:space-between;gap:8px"><span>${esc(((i != null && R.title) ? R.title[i] : nb.id) || nb.id).slice(0, 58)}</span><span style="color:${C.mute}">${fmtv(nb.sim, 2)}</span></div>`;
+        }).join('');
+        const projLab = { views: 'views', ctrviews: 'CTR + views', ctr: 'CTR', ret30: '30s retention', realviews: 'realistic views', outlier: 'outlier', umap: 'UMAP', pca: 'PCA' }[projId] || projId;
+        return `<div style="margin:8px 0 10px;border:1px solid ${C.border};border-radius:8px;background:${C.card};padding:9px">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px"><div style="font-size:10px;color:${C.mute};line-height:1.4"><b style="color:${C.purple}">idea text</b> embedding graph - placed on <b style="color:${C.text}">${esc(projLab)}</b> from nearest real-title neighbors${used ? ` · ${used} neighbors used` : ''}</div><span data-lqxidearaw="${esc(cacheId)}" style="cursor:pointer;border:1px solid ${C.purple};background:${C.purple}18;color:${C.purple};border-radius:6px;padding:4px 9px;font-size:10px;font-weight:800;white-space:nowrap">open full graph</span></div>
+          <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:7px">${bg}${marker}</svg>
+          ${nbr ? `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin:7px 0 3px">nearest real titles</div>${nbr}` : ''}
+        </div>`;
+    }
     function lqxMiniGraph(score, cacheId, title, img) {
         if (!score || score.loading || score.error || !score.channels) return '';
         cacheId = cacheId || ('inline:' + lqxHash((title || '') + '|' + (img || '')));
@@ -1003,7 +1062,7 @@ const JarvisLongQuant = (function () {
         try {
             const j = await lqxJson('/api/longquant/grind/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idea: (st.lqxGrindIdea || '').trim(), threshold: st.lqxGrindThreshold || 85, maxAttempts: st.lqxGrindMax || 40, count: st.lqxCount || 5 }) });
             if (!j.ok) { st.lqxGrindStatus = 'error: ' + (j.error || 'request failed'); rtgUpdateLqExp(); return; }
-            st.lqxGrindRid = j.rid; st.lqxGrindStatus = 'queued'; window.setTimeout(lqxGrindPoll, 1500); rtgUpdateLqExp();
+            st.lqxGrindRid = j.rid; st.lqxGrindStatus = (st.lqxGrindIdea || '').trim() ? 'queued — first attempt will generate thumbnails for your exact idea' : 'queued — waiting for the idea model to invent the first candidate'; window.setTimeout(lqxGrindPoll, 1500); rtgUpdateLqExp();
         } catch (e) { st.lqxGrindStatus = 'error: ' + e.message; rtgUpdateLqExp(); }
     }
     function lqxGrindPoll() {
@@ -1076,7 +1135,7 @@ const JarvisLongQuant = (function () {
                     lqIdeaGrp(irun, sel.id);
                     const G = LQIDEAGRP[irun + '/' + sel.id];
                     const thumbs = G && G.thumbs ? G.thumbs.slice().sort((a, b) => (b.pctile || 0) - (a.pctile || 0)) : [];
-                    ideaDetail = `<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px"><div style="font-size:13px;color:${C.text};font-weight:800;line-height:1.35">${esc(sel.idea || '')}</div><div style="font-size:10px;color:${C.mute};margin:3px 0 8px">visual ctrviews <b style="color:${C.green}">${((sel.pctile || 0) * 100).toFixed(0)}th</b> · text ${sel.text_pct != null ? (sel.text_pct * 100).toFixed(0) + 'th' : '—'} · novelty ${sel.novelty != null ? sel.novelty.toFixed(2) : '—'}</div>${G && G.loading ? `<div style="font-size:11px;color:${C.cyan}">loading thumbnails…</div>` : thumbs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${thumbs.map(t => {
+                    ideaDetail = `<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px"><div style="font-size:13px;color:${C.text};font-weight:800;line-height:1.35">${esc(sel.idea || '')}</div><div style="font-size:10px;color:${C.mute};margin:3px 0 8px">visual ctrviews <b style="color:${C.green}">${((sel.pctile || 0) * 100).toFixed(0)}th</b> · text ${sel.text_pct != null ? (sel.text_pct * 100).toFixed(0) + 'th' : '—'} · novelty ${sel.novelty != null ? sel.novelty.toFixed(2) : '—'}</div>${lqxIdeaMiniGraph(sel, 'bestidea:' + irun + ':' + sel.id)}${G && G.loading ? `<div style="font-size:11px;color:${C.cyan}">loading thumbnails…</div>` : thumbs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${thumbs.map(t => {
                         const cid = `${sel.id}_${t.k}`, key = `longform/ideas/${irun}/montages/${cid}.jpg`, sc2 = lqxScoreFor('idea:' + irun + ':' + cid, key, sel.idea || '', sel.idea || '', t.score, false);
                         return `<div data-lqxopen="idea:${irun}:${cid}" style="cursor:pointer;border:1px solid ${(t.pctile || 0) >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}"><img src="/api/longquant/ideas/montage/${irun}/${cid}" loading="lazy" style="width:100%;aspect-ratio:16/9;object-fit:cover;background:#000"/><div style="padding:6px 8px"><div style="font-size:10px;font-weight:800;color:${(t.pctile || 0) >= 0.8 ? C.green : C.text}">${((t.pctile || 0) * 100).toFixed(0)}th · rel ${t.rel != null ? t.rel.toFixed(2) : '—'}</div>${lqxMetricHtml(sc2 || t)}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:36px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 120))}</div></div></div>`;
                     }).join('')}</div>` : `<div style="font-size:11px;color:${C.dim}">no thumbnail group found for this idea yet</div>`}</div>`;
@@ -3712,6 +3771,18 @@ const JarvisLongQuant = (function () {
                 st.sec = 'raw';
                 st.rawChan = xraw.getAttribute('data-lqxrawchan') || 'visual';
                 st.rawProj = xraw.getAttribute('data-lqxrawproj') || 'ctrviews';
+                st.rawColor = 'cluster';
+                render();
+            }
+            return;
+        }
+        const xidearaw = e.target.closest('[data-lqxidearaw]'); if (xidearaw) {
+            const id = xidearaw.getAttribute('data-lqxidearaw'), rec = LQRAW[id];
+            if (rec && rec.ideaRow) {
+                lqxAttachIdeaRaw(id, rec.ideaRow);
+                st.sec = 'raw';
+                st.rawChan = 'text';
+                st.rawProj = 'views';
                 st.rawColor = 'cluster';
                 render();
             }

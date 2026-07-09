@@ -3477,7 +3477,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         };
         await cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
             rid, idea, threshold: payload.threshold, attempts: [], status: 'queued',
-            note: 'queued — waiting for the Long Quant model worker', best: null, ts: Date.now(),
+            note: idea ? 'queued — first attempt will generate thumbnails for your exact idea' : 'queued — waiting for the idea model to invent the first candidate',
+            best: null, ts: Date.now(),
             ideaModel: payload.ideaModel, thumbModel: payload.thumbModel, renderModel: payload.renderModel,
         })), 'application/json').catch(() => {});
         await cloud.uploadToR2(`longform/grind/requests/${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
