@@ -3509,7 +3509,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const b64 = img.indexOf('base64,') >= 0 ? img.split('base64,').pop() : img;
             if (!b64 || b64.length < 100) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no image"}'); return; }
             if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
-            const score = await longQuantScoreImageBuffer(Buffer.from(b64, 'base64'), '', '');
+            const score = longQuantPublicScore(await longQuantScoreImageBuffer(Buffer.from(b64, 'base64'), '', ''));
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(score));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -3525,7 +3525,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (!jpg) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"image not found"}'); return; }
             const title = String(body.title || '').slice(0, 500).trim();
             const idea = String(body.idea || title).slice(0, 500).trim();
-            const score = await longQuantScoreImageBuffer(jpg, title, idea);
+            const score = longQuantPublicScore(await longQuantScoreImageBuffer(jpg, title, idea));
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify(score));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -3630,7 +3630,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         if (b) {
             body = b.toString('utf8');
             try {
-                const run = JSON.parse(body);
+                const run = longQuantNormalizeRunScores(JSON.parse(body));
                 const slotTries = (Array.isArray(run.attempts) ? run.attempts : []).reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.length : 0), 0);
                 const thumbTries = slotTries;
                 run.legacyReportedThumbTryCount = Number.isFinite(Number(run.thumbTryCount)) ? Number(run.thumbTryCount) : null;
@@ -3761,6 +3761,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                                 t.input_manifest = t.input_manifest || rec.input_manifest || (rec.score && rec.score.input_manifest) || null;
                             }
                         }
+                        if (t && t.score && !t.score.error) {
+                            t.score = longQuantPublicScore(t.score);
+                            t.pctile = t.score.pctile;
+                            t.pct100 = longQuantPct100(t.score.pctile);
+                            t.metrics = t.score.metrics;
+                            t.channels = t.score.channels || t.channels || null;
+                            t.emb_preview = t.score.emb_preview || t.emb_preview || null;
+                            t.input_manifest = t.score.input_manifest;
+                        }
                     }));
                     b = Buffer.from(JSON.stringify(idx));
                 }
@@ -3771,7 +3780,22 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const ltDetail = pathname.match(/^\/api\/longquant\/thumbs\/detail\/([a-z0-9]{1,32})$/i);
     if (ltDetail && req.method === 'GET') {
-        const b = await cloud.downloadFromR2(`longform/saved-thumbs/${ltDetail[1]}.json`).catch(() => null);
+        let b = await cloud.downloadFromR2(`longform/saved-thumbs/${ltDetail[1]}.json`).catch(() => null);
+        if (b) {
+            try {
+                const rec = JSON.parse(b.toString('utf8'));
+                if (rec.score && !rec.score.error) {
+                    rec.score = longQuantPublicScore(rec.score);
+                    rec.pctile = rec.score.pctile;
+                    rec.pct100 = longQuantPct100(rec.score.pctile);
+                    rec.metrics = rec.score.metrics;
+                    rec.channels = rec.score.channels || rec.channels || null;
+                    rec.emb_preview = rec.score.emb_preview || rec.emb_preview || null;
+                    rec.input_manifest = rec.score.input_manifest;
+                }
+                b = Buffer.from(JSON.stringify(rec));
+            } catch (e) {}
+        }
         res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
         res.end(b ? b.toString('utf8') : '{}'); return;
     }
@@ -10564,6 +10588,7 @@ function longQuantGrindEnvelope(body = {}, opts = {}) {
     const payload = {
         rid, idea, title, invent: !idea,
         threshold, maxAttempts, thumbTryLimit: maxAttempts, count, hours,
+        scoreAxis: 'visual_thumbnail_only_ctrviews', thresholdChannel: 'visual', packagingAffectsThreshold: false,
         context, transcript30: context, contextChars: context.length,
         contextStatus: String(body.contextStatus || (context ? 'ok' : 'missing')).slice(0, 40),
         sourceVideo, batchId, source, autosaveBest,
@@ -10574,6 +10599,7 @@ function longQuantGrindEnvelope(body = {}, opts = {}) {
     };
     const run = {
         rid, idea, title, threshold, count, maxAttempts, thumbTryLimit: maxAttempts, hours,
+        scoreAxis: payload.scoreAxis, thresholdChannel: payload.thresholdChannel, packagingAffectsThreshold: false,
         attempts: [], status: 'queued',
         note: String(body.note || (idea
             ? `queued — first thumbnails will use the exact seed${context ? ' with transcript context' : ''}`
@@ -10610,11 +10636,95 @@ async function longQuantWithHeartbeat(work, beat, intervalMs = 15000) {
         clearInterval(timer);
     }
 }
+const LONGQUANT_RELEVANCE_FLOOR = 0.35;
+// Exact deterministic calibration used by thumb-rl/harness_long.py over the
+// frozen raw-long visual corpus. Keep this paired with longquant_score.py.
+const LONGQUANT_DENSITY_FLOOR = 0.7598260641098022;
 function longQuantPublicScore(score) {
     if (!score || score.error) return score || null;
-    const pct = score.pctile == null ? null : Number(score.pctile);
-    const reward = score.reward != null ? Number(score.reward) : pct;
-    return { ...score, pctile: pct, reward };
+    const visual = score.channels && score.channels.visual;
+    const visualMetrics = visual && visual.metrics;
+    const visualCtrViews = visualMetrics && visualMetrics.ctrviews;
+    const pctRaw = score.visual_pctile != null ? score.visual_pctile
+        : score.thumbnail_potential != null ? score.thumbnail_potential
+            : visualCtrViews && visualCtrViews.pctile != null ? visualCtrViews.pctile
+                : score.pctile;
+    const pct = longQuantPct01(pctRaw);
+    const relevance = score.relevance == null || !isFinite(Number(score.relevance)) ? null : Number(score.relevance);
+    const neighbor = visual && Array.isArray(visual.neighbors) && visual.neighbors.length ? visual.neighbors[0] : null;
+    const nnRaw = score.nn_cos != null ? score.nn_cos : visual && visual.nn_cos != null ? visual.nn_cos : neighbor && neighbor.sim;
+    const nnCos = nnRaw == null || !isFinite(Number(nnRaw)) ? null : Number(nnRaw);
+    const relevancePenalty = relevance == null ? null : Math.max(0, LONGQUANT_RELEVANCE_FLOOR - relevance) * 2;
+    const densityPenalty = nnCos == null ? null : Math.max(0, LONGQUANT_DENSITY_FLOOR - nnCos) * 1.5;
+    const computedIdeaReward = pct == null || relevancePenalty == null ? null : pct - relevancePenalty;
+    const computedThumbReward = computedIdeaReward == null || densityPenalty == null ? null : computedIdeaReward - densityPenalty;
+    const priorIdeaReward = score.idea_model_reward == null || !isFinite(Number(score.idea_model_reward)) ? null : Number(score.idea_model_reward);
+    const priorThumbRaw = score.thumbnail_model_reward != null ? score.thumbnail_model_reward : score.training_reward;
+    const priorThumbReward = priorThumbRaw == null || !isFinite(Number(priorThumbRaw)) ? null : Number(priorThumbRaw);
+    const priorReward = score.reward == null || !isFinite(Number(score.reward)) ? null : Number(score.reward);
+    const ideaReward = computedIdeaReward == null ? priorIdeaReward : computedIdeaReward;
+    const thumbReward = computedThumbReward == null ? priorThumbReward : computedThumbReward;
+    const reward = thumbReward != null ? thumbReward : priorReward != null ? priorReward : pct;
+    const inputManifest = {
+        ...(score.input_manifest && typeof score.input_manifest === 'object' ? score.input_manifest : {}),
+        embedding_model: 'gemini-embedding-2',
+        embedding_dimensions: 1536,
+        display_preference: ['visual', 'together', 'text'],
+        primary_score: 'visual image-only ctrviews percentile on the frozen generator-training ladder',
+        threshold_uses: 'visual only',
+        note: 'Transcript or channel context can guide generation upstream. The threshold score embeds only the thumbnail image. Title text is embedded separately for relevance and diagnostic text/together maps; the together embedding never changes thumbnail potential.',
+    };
+    return {
+        ...score,
+        pctile: pct,
+        visual_pctile: pct,
+        thumbnail_potential: pct,
+        reward,
+        training_reward: thumbReward,
+        thumbnail_model_reward: thumbReward,
+        idea_model_reward: ideaReward,
+        relevance,
+        nn_cos: nnCos,
+        metrics: visualMetrics || score.metrics || null,
+        input_manifest: inputManifest,
+        channel_roles: {
+            visual: 'primary thumbnail-only performance score and default metric maps',
+            text: 'title or idea diagnostic only',
+            together: 'title plus thumbnail packaging diagnostic only',
+        },
+        reward_trace: {
+            ...((score.reward_trace && typeof score.reward_trace === 'object') ? score.reward_trace : {}),
+            visual_pctile: pct,
+            relevance,
+            relevance_floor: LONGQUANT_RELEVANCE_FLOOR,
+            relevance_penalty: relevancePenalty,
+            density: nnCos,
+            density_floor: LONGQUANT_DENSITY_FLOOR,
+            density_penalty: densityPenalty,
+            idea_model_reward: ideaReward,
+            thumbnail_model_reward: thumbReward,
+            threshold_score: pct,
+            threshold_channel: 'visual',
+            together_used_for_threshold: false,
+        },
+    };
+}
+function longQuantNormalizeRunScores(run) {
+    if (!run || typeof run !== 'object') return run;
+    run.scoreAxis = 'visual_thumbnail_only_ctrviews';
+    run.thresholdChannel = 'visual';
+    run.packagingAffectsThreshold = false;
+    for (const attempt of (Array.isArray(run.attempts) ? run.attempts : [])) {
+        for (const thumb of (attempt && Array.isArray(attempt.thumbs) ? attempt.thumbs : [])) {
+            if (!thumb || !thumb.score || thumb.score.error) continue;
+            thumb.score = longQuantPublicScore(thumb.score);
+            thumb.reward = thumb.score && thumb.score.reward != null ? thumb.score.reward : thumb.reward;
+        }
+    }
+    if (run.baseline && run.baseline.score && !run.baseline.score.error) {
+        run.baseline.score = longQuantPublicScore(run.baseline.score);
+    }
+    return run;
 }
 function longQuantPct01(v) {
     if (v == null) return null;
@@ -10694,6 +10804,9 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
         finished: executionState === 'finished',
         note: effectiveNote,
         threshold: run.threshold,
+        scoreAxis: run.scoreAxis || 'visual_thumbnail_only_ctrviews',
+        thresholdChannel: 'visual',
+        packagingAffectsThreshold: false,
         best: run.best,
         n: thumbTries,
         maxAttempts: run.thumbTryLimit || run.maxAttempts || null,
@@ -10847,7 +10960,7 @@ async function longQuantSaveThumbRecord(body = {}) {
     } else {
         savedScore = longQuantPublicScore(savedScore);
     }
-    const pctile = longQuantPct01(body.pctile != null ? body.pctile : (savedScore && savedScore.pctile));
+    const pctile = longQuantPct01(savedScore && savedScore.pctile != null ? savedScore.pctile : body.pctile);
     const relevance = (typeof body.relevance === 'number') ? body.relevance : (savedScore && savedScore.relevance != null ? Number(savedScore.relevance) : null);
     const sourceVideo = longQuantCompactSourceVideo(body.sourceVideo || (body.meta && body.meta.sourceVideo));
     const meta = (body.meta && typeof body.meta === 'object') ? body.meta : {};
@@ -10857,6 +10970,9 @@ async function longQuantSaveThumbRecord(body = {}) {
     const rec = {
         id, savedAt: Date.now(), title, prompt,
         pctile, pct100: longQuantPct100(pctile), relevance,
+        reward: savedScore && savedScore.reward != null ? Number(savedScore.reward) : pctile,
+        training_reward: savedScore && savedScore.training_reward != null ? Number(savedScore.training_reward) : null,
+        idea_model_reward: savedScore && savedScore.idea_model_reward != null ? Number(savedScore.idea_model_reward) : null,
         source: String(body.source || meta.source || '').slice(0, 80),
         montageKey: String(body.montageKey || '').slice(0, 260),
         score: savedScore,
@@ -10881,7 +10997,8 @@ async function longQuantSaveThumbRecord(body = {}) {
     idx.thumbs = idx.thumbs.filter(t => t && t.id !== id);
     idx.thumbs.push({
         id, savedAt: rec.savedAt, title: rec.title, prompt: rec.prompt, pctile: rec.pctile, pct100: rec.pct100,
-        relevance: rec.relevance, source: rec.source, score: rec.score, metrics: rec.metrics,
+        relevance: rec.relevance, reward: rec.reward, training_reward: rec.training_reward,
+        idea_model_reward: rec.idea_model_reward, source: rec.source, score: rec.score, metrics: rec.metrics,
         channels: rec.channels, emb_preview: rec.emb_preview, input_manifest: rec.input_manifest,
         sourceVideo: rec.sourceVideo, batchId: rec.batchId, runRid: rec.runRid,
         attemptK: rec.attemptK, thumbI: rec.thumbI, baseline: rec.baseline,
@@ -10976,8 +11093,10 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
         return ((b.reward != null ? b.reward : b.pctile) || -1) - ((a.reward != null ? a.reward : a.pctile) || -1);
     });
     const doneAttempts = group.attempts.filter(a => a && a.status === 'done');
-    group.best_pctile = doneAttempts.length ? doneAttempts[0].pctile : null;
-    group.best_reward = doneAttempts.length ? doneAttempts[0].reward : null;
+    const potentialValues = doneAttempts.map(a => Number(a.pctile)).filter(Number.isFinite);
+    const rewardValues = doneAttempts.map(a => Number(a.reward)).filter(Number.isFinite);
+    group.best_pctile = potentialValues.length ? Math.max(...potentialValues) : null;
+    group.best_reward = rewardValues.length ? Math.max(...rewardValues) : null;
     group.done = true;
     group.error = group.attempts.some(a => a.status === 'done') ? '' : (group.attempts[0] && group.attempts[0].error) || 'no thumbnails rendered';
     await lqDemoGroupWrite(rid, group);
@@ -11024,7 +11143,10 @@ async function longQuantDemoQueue() {
 }
 setInterval(() => { longQuantDemoQueue().catch(() => {}); }, 4000);
 function lqScorePct(score) {
-    const p = score && score.pctile;
+    const visualMetric = score && score.channels && score.channels.visual && score.channels.visual.metrics && score.channels.visual.metrics.ctrviews;
+    const p = score && (score.visual_pctile != null ? score.visual_pctile
+        : score.thumbnail_potential != null ? score.thumbnail_potential
+            : visualMetric && visualMetric.pctile != null ? visualMetric.pctile : score.pctile);
     if (p == null) return null;
     const n = Number(p);
     return n <= 1 ? Math.round(n * 1000) / 10 : Math.round(n * 10) / 10;
@@ -11135,6 +11257,7 @@ async function longQuantGrindProcess(rid, req0) {
             rid, idea: seed, title: sourceTitle || seed, context, sourceVideo, source, batchId,
             contextChars: context.length,
             threshold, count, attempts, n: liveThumbs, thumbTryCount: liveThumbs, thumbTryLimit: maxAttempts,
+            scoreAxis: 'visual_thumbnail_only_ctrviews', thresholdChannel: 'visual', packagingAffectsThreshold: false,
             thumbImages: thumbImageCount(), thumbFinished: thumbFinishedCount(), ideaRounds: attempts.length,
             status, winner, error: err, note,
             best, rejected, gate: Math.round(gate * 1000) / 1000, deadline, ts: Date.now(),

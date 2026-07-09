@@ -7,6 +7,9 @@ const source = fs.readFileSync(require('path').join(__dirname, '..', 'server.js'
 const helperStart = source.indexOf('function longQuantCompactGrindRun');
 const helperEnd = source.indexOf('function longQuantActiveSort', helperStart);
 if (helperStart < 0 || helperEnd < 0) throw new Error('Long Quant helper source not found');
+const scoreStart = source.indexOf('const LONGQUANT_RELEVANCE_FLOOR');
+const scoreEnd = source.indexOf('function longQuantDisplayGrindNote', scoreStart);
+if (scoreStart < 0 || scoreEnd < 0) throw new Error('Long Quant scoring contract source not found');
 
 let downloads = 0;
 const startedAt = Date.now();
@@ -51,12 +54,51 @@ vm.runInContext(
         + '\nthis.auditApi = { longQuantCompactGrindRun, longQuantGrindRunObjects, longQuantReadCompactGrindRuns };',
     context
 );
+const scoreContext = {};
+vm.createContext(scoreContext);
+vm.runInContext(
+    source.slice(scoreStart, scoreEnd)
+        + '\nthis.scoreApi = { longQuantPublicScore, longQuantNormalizeRunScores };',
+    scoreContext
+);
 
 function assert(condition, message) {
     if (!condition) throw new Error(message);
 }
 
 async function main() {
+    const legacyScore = {
+        pctile: 0.41,
+        reward: 0.41,
+        relevance: 0.30,
+        metrics: { ctr: { pctile: 8 } },
+        channels: {
+            visual: {
+                metrics: { ctrviews: { pctile: 92 }, ctr: { pctile: 70 } },
+                neighbors: [{ sim: 0.70 }],
+            },
+            together: { metrics: { ctr: { pctile: 8 } } },
+            text: { metrics: { ctr: { pctile: 12 } } },
+        },
+        input_manifest: { display_preference: ['together', 'text', 'visual'] },
+    };
+    const aligned = scoreContext.scoreApi.longQuantPublicScore(legacyScore);
+    const expectedIdeaReward = 0.92 - (0.35 - 0.30) * 2;
+    const expectedThumbReward = expectedIdeaReward - (0.7598260641098022 - 0.70) * 1.5;
+    assert(Math.abs(aligned.pctile - 0.92) < 1e-9, 'combined score overrode visual thumbnail potential');
+    assert(Math.abs(aligned.idea_model_reward - expectedIdeaReward) < 1e-9, 'idea-model reward does not match training leash');
+    assert(Math.abs(aligned.thumbnail_model_reward - expectedThumbReward) < 1e-9, 'thumbnail-model reward does not match training guards');
+    assert(aligned.metrics.ctr.pctile === 70, 'default metrics did not stay on the visual channel');
+    assert(aligned.input_manifest.display_preference.join(',') === 'visual,together,text', 'UI channel preference is not visual-first');
+    assert(aligned.reward_trace.together_used_for_threshold === false, 'packaging embedding can affect threshold');
+
+    const run = scoreContext.scoreApi.longQuantNormalizeRunScores({
+        attempts: [{ thumbs: [{ score: legacyScore }] }],
+        baseline: { score: legacyScore },
+    });
+    assert(run.attempts[0].thumbs[0].score.pctile === 0.92, 'stored run scores are not normalized on read');
+    assert(run.baseline.score.thumbnail_model_reward != null, 'stored baseline reward trace is missing');
+
     const firstList = await context.auditApi.longQuantGrindRunObjects();
     const firstRows = await context.auditApi.longQuantReadCompactGrindRuns(firstList, 82, new Set());
     assert(firstRows.length === 82 && downloads === 82, 'cold cache mismatch');
@@ -119,6 +161,13 @@ async function main() {
         },
         heartbeat: { fresh: active.executionState, stale: stale.executionState },
         cap: maxed.status,
+        scoring: {
+            thumbnailPotential: aligned.pctile,
+            ideaModelReward: aligned.idea_model_reward,
+            thumbnailModelReward: aligned.thumbnail_model_reward,
+            thresholdChannel: aligned.reward_trace.threshold_channel,
+            packagingUsedForThreshold: aligned.reward_trace.together_used_for_threshold,
+        },
     }, null, 2));
 }
 

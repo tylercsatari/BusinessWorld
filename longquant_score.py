@@ -11,8 +11,9 @@ plus title, so the comparable Gemini channels are:
 The raw-long maps contain projections and per-video outcomes, not a single
 deployable model bundle for every metric. For uploads and live generated
 thumbnails, we place the new embedding into the raw-long manifold by nearest
-neighbors, then estimate each metric from those neighbors. The visual
-ctrviews reward still uses the frozen thumbnail scorer ladder exactly.
+neighbors, then estimate each metric from those neighbors. The primary score
+is always the frozen image-only ctrviews ladder used to train the generators.
+Text and together channels are diagnostics and never replace that score.
 """
 import argparse
 import base64
@@ -39,6 +40,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DIM = 1536
 EMB_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent"
 CHANS = ("visual", "text", "together")
+REL_FLOOR = 0.35
+# Exact p10 real-real nearest-neighbor cosine produced by harness_long.py's
+# deterministic density calibration over the frozen raw-long visual corpus.
+DENSITY_FLOOR = 0.7598260641098022
 
 
 def env(k):
@@ -285,7 +290,11 @@ def channel_score(chan, emb):
             "title": titles[ii] if ii < len(titles) else "",
             "views": views[ii] if ii < len(views) else None,
         })
-    return {"metrics": metrics, "neighbors": neighbors}
+    return {
+        "metrics": metrics,
+        "neighbors": neighbors,
+        "nn_cos": round(float(sims[0]), 6) if len(sims) else None,
+    }
 
 
 def visual_ctrviews_exact(ev):
@@ -351,22 +360,39 @@ def main():
     if et is not None:
         relevance = float(norm(ev) @ norm(et))
 
-    def pick(metric):
-        for c in ("together", "text", "visual"):
+    def pick(metric, order=("visual", "together", "text")):
+        for c in order:
             m = ((channels.get(c) or {}).get("metrics") or {}).get(metric)
             if m and m.get("pctile") is not None:
                 return m
         return None
 
-    headline = pick("ctrviews") or pick("views")
+    # This is the exact generator-training performance axis. A title can be
+    # evaluated beside it, but can never suppress or inflate thumbnail potential.
+    headline = pick("ctrviews", ("visual",)) or pick("views", ("visual",))
     hp = (headline or {}).get("pctile")
     pctile = round(float(hp) / 100.0, 4) if hp is not None and float(hp) > 1 else (hp or 0)
+    visual_nn = (channels.get("visual") or {}).get("nn_cos")
+    relevance_penalty = None if relevance is None else max(0.0, REL_FLOOR - relevance) * 2.0
+    density_penalty = None if visual_nn is None else max(0.0, DENSITY_FLOOR - float(visual_nn)) * 1.5
+    # Idea validation used visual potential plus only the relevance leash.
+    idea_model_reward = None if relevance_penalty is None else float(pctile) - relevance_penalty
+    # Thumbnail DPO used the same visual potential, relevance leash, and
+    # real-thumbnail-manifold density guard.
+    thumbnail_model_reward = None
+    if idea_model_reward is not None and density_penalty is not None:
+        thumbnail_model_reward = idea_model_reward - density_penalty
+    reward = thumbnail_model_reward if thumbnail_model_reward is not None else float(pctile)
     input_manifest = {
         "domain": "longquant",
         "scorer": "longquant_score.py",
+        "embedding_model": "gemini-embedding-2",
+        "embedding_dimensions": DIM,
         "score_text": title,
-        "display_preference": ["together", "text", "visual"],
-        "note": "Transcript or channel context can guide generation upstream, but scoring embeds only the thumbnail image and the title or idea text shown here.",
+        "display_preference": ["visual", "together", "text"],
+        "primary_score": "visual image-only ctrviews percentile on the frozen generator-training ladder",
+        "threshold_uses": "visual only",
+        "note": "Transcript or channel context can guide generation upstream. The threshold score embeds only the thumbnail image. Title text is embedded separately for relevance and diagnostic text/together maps; the together embedding never changes thumbnail potential.",
         "channels": {
             "visual": {
                 "present": ev is not None,
@@ -391,17 +417,43 @@ def main():
     out = {
         "title": title,
         "pctile": pctile,
+        "visual_pctile": pctile,
+        "thumbnail_potential": pctile,
+        "reward": round(float(reward), 4),
+        "training_reward": round(float(thumbnail_model_reward), 4) if thumbnail_model_reward is not None else None,
+        "thumbnail_model_reward": round(float(thumbnail_model_reward), 4) if thumbnail_model_reward is not None else None,
+        "idea_model_reward": round(float(idea_model_reward), 4) if idea_model_reward is not None else None,
         "proj": exact.get("proj") if exact else None,
         "p90": exact.get("p90") if exact else None,
         "relevance": round(relevance, 4) if relevance is not None else None,
+        "nn_cos": round(float(visual_nn), 6) if visual_nn is not None else None,
+        "reward_trace": {
+            "visual_pctile": round(float(pctile), 4),
+            "relevance": round(relevance, 4) if relevance is not None else None,
+            "relevance_floor": REL_FLOOR,
+            "relevance_penalty": round(float(relevance_penalty), 4) if relevance_penalty is not None else None,
+            "density": round(float(visual_nn), 6) if visual_nn is not None else None,
+            "density_floor": round(DENSITY_FLOOR, 6),
+            "density_penalty": round(float(density_penalty), 4) if density_penalty is not None else None,
+            "idea_model_reward": round(float(idea_model_reward), 4) if idea_model_reward is not None else None,
+            "thumbnail_model_reward": round(float(thumbnail_model_reward), 4) if thumbnail_model_reward is not None else None,
+            "threshold_score": round(float(pctile), 4),
+            "threshold_channel": "visual",
+            "together_used_for_threshold": False,
+        },
+        "channel_roles": {
+            "visual": "primary thumbnail-only performance score and default metric maps",
+            "text": "title or idea diagnostic only",
+            "together": "title plus thumbnail packaging diagnostic only",
+        },
         "metrics": {
-            "ctr": pick("ctr"),
-            "ret30": pick("ret30"),
-            "views": pick("views"),
-            "scaled_views": pick("scaled_views"),
-            "realviews": pick("realviews"),
-            "gt10m": pick("gt10m"),
-            "ctrviews": pick("ctrviews"),
+            "ctr": pick("ctr", ("visual",)),
+            "ret30": pick("ret30", ("visual",)),
+            "views": pick("views", ("visual",)),
+            "scaled_views": pick("scaled_views", ("visual",)),
+            "realviews": pick("realviews", ("visual",)),
+            "gt10m": pick("gt10m", ("visual",)),
+            "ctrviews": pick("ctrviews", ("visual",)),
         },
         "channels": channels,
         "emb_preview": {"visual": preview(ev), "text": preview(et), "together": preview(eg)},
