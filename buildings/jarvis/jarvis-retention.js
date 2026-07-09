@@ -3159,7 +3159,10 @@ const JarvisRetention = (function () {
             let video; try { video = window.document.createElement('video'); } catch (e) { return done(null); }
             const url = URL.createObjectURL(file);
             const cleanup = () => { try { URL.revokeObjectURL(url); } catch (e) {} try { video.pause(); video.src = ''; } catch (e) {} };
-            video.muted = false; video.volume = 0; video.playsInline = true; video.preload = 'auto';
+            // captureStream() records the media element's playback stream in some browsers.
+            // Keep audio live here; muting or volume=0 can produce a trimmed upload whose
+            // audio track is literally silent, which then looks like "no voiceover".
+            video.muted = false; video.volume = 1; video.playsInline = true; video.preload = 'auto';
             video.onerror = () => { cleanup(); done(null); };
             const guard = window.setTimeout(() => { cleanup(); done(null); }, (seconds + 12) * 1000);   // never hang the UI
             video.onloadedmetadata = () => {
