@@ -10551,10 +10551,14 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
     const storedThumbTryCount = Number(run.thumbTryCount);
     const thumbTries = Math.max(thumbs.length, isFinite(storedThumbTryCount) ? storedThumbTryCount : 0);
     const finishedThumbTries = doneThumbs + errorThumbs + stoppedThumbs;
+    const limit = Math.max(0, Number(run.thumbTryLimit || run.maxAttempts || 0));
+    const overThumbLimit = limit > 0 && thumbTries >= limit;
+    const effectiveStatus = overThumbLimit && !longQuantTerminalStatus(run.status) ? 'maxed' : (run.status || '');
+    const effectiveNote = overThumbLimit && !longQuantTerminalStatus(run.status) ? `maxed at ${thumbTries}/${limit} thumbnails` : (run.note || '');
     const ts = Number(run.ts) || 0;
     const workerAttached = typeof _lqGrindActive !== 'undefined' && _lqGrindActive.has(rid);
     const queuedRequest = !!(reqIds && reqIds.has(rid));
-    const orphanedRunning = run.status === 'running' && !workerAttached && !queuedRequest;
+    const orphanedRunning = effectiveStatus === 'running' && !workerAttached && !queuedRequest;
     const activeAttempt = lastAttempt ? {
         k: lastAttempt.k,
         idea: lastAttempt.idea || lastAttempt.title || '',
@@ -10570,8 +10574,8 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
         rid,
         idea: run.idea || run.title || '',
         title: run.title || run.idea || '',
-        status: run.status || '',
-        note: run.note || '',
+        status: effectiveStatus,
+        note: effectiveNote,
         threshold: run.threshold,
         best: run.best,
         n: thumbTries,
@@ -10959,6 +10963,12 @@ async function longQuantGrindProcess(rid, req0) {
     };
     try {
         if (await checkStopped()) return;
+        if (thumbTryCount() >= maxAttempts) {
+            status = 'maxed';
+            note = `maxed at ${thumbTryCount()}/${maxAttempts} thumbnails without clearing ${threshold}th`;
+            await write();
+            return;
+        }
         if (sourceVideo && sourceVideo.id) {
             note = 'scoring the current source thumbnail as a baseline';
             await write();
@@ -11220,9 +11230,20 @@ async function longQuantRecoverStaleGrinds() {
             await cloud.uploadToR2(key, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
             continue;
         }
-        const req = longQuantRequestFromRun(run, rid);
-        run.status = 'queued';
         const thumbTries = (Array.isArray(run.attempts) ? run.attempts : []).reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.length : 0), 0);
+        const req = longQuantRequestFromRun(run, rid);
+        if (thumbTries >= req.maxAttempts) {
+            run.status = 'maxed';
+            run.note = `maxed at ${thumbTries}/${req.maxAttempts} thumbnails without clearing ${req.threshold}th`;
+            run.n = thumbTries;
+            run.thumbTryCount = thumbTries;
+            run.thumbTryLimit = req.maxAttempts;
+            run.ts = now;
+            await cloud.uploadToR2(key, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
+            await cloud.deleteFromR2(`longform/grind/requests/${rid}.json`).catch(() => {});
+            continue;
+        }
+        run.status = 'queued';
         run.note = `recovered after Render worker interruption — resuming at ${thumbTries}/${req.maxAttempts} thumbnails`;
         run.ts = now;
         run.maxAttempts = req.maxAttempts;
