@@ -11435,8 +11435,10 @@ async function longQuantGrindProcess(rid, req0) {
 const _lqGrindActive = new Set();
 let _lqGrindRecoverAt = 0;
 function longQuantGrindWorkerLimit() {
-    const fallback = IS_RENDER ? 2 : 2;
-    return Math.max(1, Math.min(4, parseInt(process.env.LONGQUANT_GRIND_WORKERS || String(fallback), 10) || fallback));
+    // grind orchestration is HTTP-bound (Replicate renders + Gemini scoring run elsewhere),
+    // so parallel runs cost the server almost nothing — 3 by default, LONGQUANT_GRIND_WORKERS up to 8
+    const fallback = 3;
+    return Math.max(1, Math.min(8, parseInt(process.env.LONGQUANT_GRIND_WORKERS || String(fallback), 10) || fallback));
 }
 function longQuantTerminalStatus(s) {
     return ['won', 'maxed', 'deadline', 'error', 'stopped', 'archived', 'done'].includes(String(s || ''));
