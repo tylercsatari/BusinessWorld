@@ -165,13 +165,15 @@ def serve_once():
             except Exception:
                 req = {}
             H.s3.delete_object(Bucket=H.BUCKET, Key=key)
-            title = str(req.get("title") or req.get("idea") or req.get("premise") or "").strip()
+            # Typed BusinessWorld requests set forceTitle/mode=thumbnail_only. Prefer that
+            # explicit field so a user-supplied idea can never be rewritten by the idea path.
+            title = str(req.get("forceTitle") or req.get("title") or req.get("idea") or req.get("premise") or "").strip()
             invented = False
             if not title:
                 title = sample_idea()
                 invented = True
             count = max(1, min(12, int(req.get("count") or COUNT_DEFAULT)))
-            print("[demo] serving %s x%d invented=%s" % (rid, count, invented), flush=True)
+            print("[demo] serving %s x%d invented=%s mode=%s title=%s" % (rid, count, invented, req.get("mode") or "", title[:100]), flush=True)
             process_request(rid, title, count, invented)
     except Exception as e:
         print("[demo] poll err", str(e)[:120], flush=True)

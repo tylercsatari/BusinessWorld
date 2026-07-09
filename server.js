@@ -3317,8 +3317,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         const title = String(body.title || '').slice(0, 200).trim();
         const count = Math.max(1, Math.min(12, parseInt(body.count, 10) || 5));
         const rid = 'd' + Date.now().toString(36);
+        const invent = !title;
         const payload = {
-            title, premise: title, idea: title, count, invent: !title, ts: Date.now(),
+            title, premise: title, idea: title, forceTitle: title, count, invent, mode: invent ? 'idea_plus_thumbnail' : 'thumbnail_only',
+            instruction: invent
+                ? 'Blank request: use the trained idea model/accepted idea bank first, then generate thumbnails.'
+                : 'Typed request: DO NOT invent or rewrite the video idea. Use this exact title/idea as the thumbnail model input.',
+            ts: Date.now(),
             ideaModel: LONGQUANT_IDEA_MODEL,
             thumbModel: LONGQUANT_THUMB_MODEL,
             renderModel: LONGQUANT_RENDER_MODEL,
@@ -3326,7 +3331,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         };
         await cloud.uploadToR2(`longform/guesses/requests/${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, rid, invent: !title, model: payload }));
+        res.end(JSON.stringify({ ok: true, rid, invent, mode: payload.mode, title, model: payload }));
         return;
     }
     if (pathname === '/api/longquant/exp/scorer' && req.method === 'GET') {
@@ -3343,8 +3348,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const b64 = img.indexOf('base64,') >= 0 ? img.split('base64,').pop() : img;
             if (!b64 || b64.length < 100) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no image"}'); return; }
             if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
-            const title = String(body.title || '').slice(0, 200).trim();
-            const score = await longQuantScoreImageBuffer(Buffer.from(b64, 'base64'), title, title);
+            const score = await longQuantScoreImageBuffer(Buffer.from(b64, 'base64'), '', '');
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(score));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -9989,7 +9993,9 @@ async function longQuantIdeaGenerate(seed, attempt, prior) {
         count: 1,
         attempt,
         avoid: (prior || []).slice(-8).map(a => a.idea || a.title || '').filter(Boolean),
-        instruction: 'Generate one long-form YouTube video idea. If a seed is present, move quantifiably farther from it in a new direction while staying viable for thumbnail scoring.',
+        instruction: seed
+            ? 'Generate one long-form YouTube video idea. Preserve the seed idea core subject, audience promise, and communicative intent, but explore a meaningfully different angle/mechanism. Move farther from prior attempts in embedding space without becoming a different topic.'
+            : 'Generate one long-form YouTube video idea that is viable for thumbnail scoring.',
     });
     const xs = lqStringsFromOutput(out).map(s => String(s).replace(/\s+/g, ' ').trim()).filter(s => s.length >= 8);
     if (!xs.length) throw new Error('idea model produced no usable idea');
@@ -10051,17 +10057,22 @@ async function longQuantGrindProcess(rid, req0) {
         best, rejected, gate: Math.round(gate * 1000) / 1000, deadline, ts: Date.now(),
         ideaModel: LONGQUANT_IDEA_MODEL, thumbModel: LONGQUANT_THUMB_MODEL, renderModel: LONGQUANT_RENDER_MODEL,
     })), 'application/json').catch(() => {});
+    const topicFloor = () => seedQ ? Math.max(0.22, 0.62 - gate * 0.35) : null;
     const acceptIdea = async (idea, spare) => {
         const emb = await geminiTextEmbed(idea);
-        if (!emb) return { ok: true, distSeed: null, distPrior: null };
+        if (!emb) return { ok: true, distSeed: null, distPrior: null, topic: null };
         const q = Int8Array.from(emb, x => Math.round(x * 127));
-        let distSeed = seedQ ? Math.round((1 - genCos(q, seedQ)) * 1000) / 1000 : null;
+        const seedSim = seedQ ? genCos(q, seedQ) : null;
+        let distSeed = seedSim != null ? Math.round((1 - seedSim) * 1000) / 1000 : null;
         let m = -1;
         for (const v of vecs) { const c = genCos(q, v); if (c > m) m = c; }
         const distPrior = vecs.length ? Math.round((1 - m) * 1000) / 1000 : 1;
-        if (vecs.length && distPrior < gate && spare > 0) return { ok: false, distSeed, distPrior, q };
+        const topic = seedSim != null ? Math.round(seedSim * 1000) / 1000 : null;
+        const floor = topicFloor();
+        if (floor != null && seedSim < floor && spare > 0) return { ok: false, reason: 'off_topic', distSeed, distPrior, topic, floor: Math.round(floor * 1000) / 1000, q };
+        if (vecs.length && distPrior < gate && spare > 0) return { ok: false, reason: 'too_close', distSeed, distPrior, topic, floor: floor == null ? null : Math.round(floor * 1000) / 1000, q };
         vecs.push(q);
-        return { ok: true, distSeed, distPrior };
+        return { ok: true, distSeed, distPrior, topic, floor: floor == null ? null : Math.round(floor * 1000) / 1000 };
     };
     try {
         await write();
@@ -10070,24 +10081,32 @@ async function longQuantGrindProcess(rid, req0) {
             note = `attempt ${attempts.length + 1}: generating a candidate idea`; await write();
             let idea = '';
             let gateInfo = {};
-            let farthest = null;
+            let farthest = null, bestTopical = null;
             for (let tries = 0; tries < 4; tries++) {
                 idea = await longQuantIdeaGenerate(seed, attempts.length + tries, attempts);
                 const gateRes = await acceptIdea(idea, (maxAttempts - attempts.length - 1) + (3 - tries));
                 if (gateRes.ok) { idea = String(idea).slice(0, 300); gateInfo = gateRes; break; }
-                if (!farthest || (gateRes.distPrior || 0) > (farthest.gateRes.distPrior || 0)) farthest = { idea, gateRes };
-                rejected++; note = `candidate was too close to a prior idea (dist ${gateRes.distPrior}, need ${gate.toFixed(2)}) — regenerating`; await write();
+                if (!bestTopical || (gateRes.topic || -1) > (bestTopical.gateRes.topic || -1)) bestTopical = { idea, gateRes };
+                if (gateRes.reason !== 'off_topic' && (!farthest || (gateRes.distPrior || 0) > (farthest.gateRes.distPrior || 0))) farthest = { idea, gateRes };
+                rejected++;
+                note = gateRes.reason === 'off_topic'
+                    ? `candidate drifted off the seed topic (topic ${gateRes.topic}, need ≥ ${gateRes.floor}) — regenerating`
+                    : `candidate was too close to a prior idea (dist ${gateRes.distPrior}, need ${gate.toFixed(2)}) — regenerating`;
+                await write();
                 idea = '';
             }
-            if (!idea && farthest) {
-                idea = String(farthest.idea || '').slice(0, 300);
-                gateInfo = farthest.gateRes || {};
+            const fallback = farthest || bestTopical;
+            if (!idea && fallback) {
+                idea = String(fallback.idea || '').slice(0, 300);
+                gateInfo = fallback.gateRes || {};
                 if (gateInfo.q) vecs.push(gateInfo.q);
-                note = `all candidates were inside the current distance target; taking the farthest available (dist ${gateInfo.distPrior}, target ${gate.toFixed(2)}) so exploration keeps moving`;
+                note = farthest
+                    ? `all topical candidates were inside the current distance target; taking the farthest topical candidate (dist ${gateInfo.distPrior}, target ${gate.toFixed(2)}) so exploration keeps moving`
+                    : `all candidates drifted too far from the seed; taking the most topical candidate (topic ${gateInfo.topic}, floor ${gateInfo.floor}) instead of chasing unrelated viral ideas`;
                 await write();
             }
             if (!idea) { rejected++; continue; }
-            const a = { k: attempts.length, idea, title: idea, status: 'prompting', thumbs: [], pct: null, distSeed: gateInfo.distSeed, distPrior: gateInfo.distPrior, ts: Date.now() };
+            const a = { k: attempts.length, idea, title: idea, status: 'prompting', thumbs: [], pct: null, distSeed: gateInfo.distSeed, distPrior: gateInfo.distPrior, topic: gateInfo.topic, topicFloor: gateInfo.floor, ts: Date.now() };
             attempts.push(a); await write();
             let prompts = [];
             try { prompts = await longQuantThumbPrompts(idea, count); }
