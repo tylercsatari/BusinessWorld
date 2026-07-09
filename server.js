@@ -3591,7 +3591,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             res.end(JSON.stringify({
                 ok: true,
                 serverNow: Date.now(),
-                workerBusy: !!_lqGrindBusy,
+                workerBusy: _lqGrindActive.size > 0,
+                activeWorkers: _lqGrindActive.size,
+                workerLimit: longQuantGrindWorkerLimit(),
+                activeWorkerRids: Array.from(_lqGrindActive),
                 demoWorkerBusy: !!_lqDemoBusy,
                 queueDepth: reqKeys.length,
                 runCount: runs.length,
@@ -10508,8 +10511,10 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
     const attempts = Array.isArray(run.attempts) ? run.attempts : [];
     const lastAttempt = attempts.length ? attempts[attempts.length - 1] : null;
     const thumbs = attempts.reduce((xs, a) => xs.concat((a && Array.isArray(a.thumbs)) ? a.thumbs : []), []);
-    const doneThumbs = thumbs.filter(t => t && (t.image || t.status === 'done')).length;
+    const imageThumbs = thumbs.filter(t => t && t.image).length;
+    const doneThumbs = thumbs.filter(t => t && t.status === 'done').length;
     const errorThumbs = thumbs.filter(t => t && (t.status === 'error' || t.error)).length;
+    const doneAttempts = attempts.filter(a => a && ['done', 'error', 'stopped'].includes(a.status || '')).length;
     const ts = Number(run.ts) || 0;
     const activeAttempt = lastAttempt ? {
         k: lastAttempt.k,
@@ -10517,7 +10522,9 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
         status: lastAttempt.status || '',
         pct: lastAttempt.pct == null ? null : Number(lastAttempt.pct),
         thumbs: Array.isArray(lastAttempt.thumbs) ? lastAttempt.thumbs.length : 0,
-        thumbsDone: Array.isArray(lastAttempt.thumbs) ? lastAttempt.thumbs.filter(t => t && (t.image || t.status === 'done')).length : 0,
+        thumbSlots: Array.isArray(lastAttempt.thumbs) ? lastAttempt.thumbs.length : 0,
+        thumbImages: Array.isArray(lastAttempt.thumbs) ? lastAttempt.thumbs.filter(t => t && t.image).length : 0,
+        thumbsDone: Array.isArray(lastAttempt.thumbs) ? lastAttempt.thumbs.filter(t => t && t.status === 'done').length : 0,
         thumbsError: Array.isArray(lastAttempt.thumbs) ? lastAttempt.thumbs.filter(t => t && (t.status === 'error' || t.error)).length : 0,
     } : null;
     return {
@@ -10543,6 +10550,12 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
         autosaved: run.autosaved || null,
         winner: run.winner == null ? null : run.winner,
         activeAttempt,
+        attemptsStarted: attempts.length,
+        attemptsFinished: doneAttempts,
+        thumbSlots: thumbs.length,
+        thumbImages: imageThumbs,
+        thumbDone: doneThumbs,
+        thumbErrors: errorThumbs,
         thumbsTotal: thumbs.length,
         thumbsDone: doneThumbs,
         thumbsError: errorThumbs,
@@ -11059,8 +11072,12 @@ async function longQuantGrindProcess(rid, req0) {
     }
     await write();
 }
-let _lqGrindBusy = false;
+const _lqGrindActive = new Set();
 let _lqGrindRecoverAt = 0;
+function longQuantGrindWorkerLimit() {
+    const fallback = IS_RENDER ? 2 : 2;
+    return Math.max(1, Math.min(4, parseInt(process.env.LONGQUANT_GRIND_WORKERS || String(fallback), 10) || fallback));
+}
 function longQuantTerminalStatus(s) {
     return ['won', 'maxed', 'deadline', 'error', 'stopped'].includes(String(s || ''));
 }
@@ -11106,6 +11123,7 @@ async function longQuantRecoverStaleGrinds() {
         if (recovered >= 25) break;
         const rid = key.split('/').pop().replace('.json', '');
         if (!rid || reqIds.has(rid)) continue;
+        if (_lqGrindActive.has(rid)) continue;
         let run = null;
         try { const b = await cloud.downloadFromR2(key); if (b) run = JSON.parse(b.toString('utf8')); } catch (e) { continue; }
         if (!run || longQuantTerminalStatus(run.status)) continue;
@@ -11132,14 +11150,19 @@ async function longQuantRecoverStaleGrinds() {
     if (recovered) console.log(`[longquant] recovered ${recovered} stale grind run(s)`);
 }
 async function longQuantGrindQueue() {
-    if (_lqGrindBusy || !cloud.isR2Ready()) return;
+    if (!cloud.isR2Ready()) return;
     await longQuantRecoverStaleGrinds().catch(e => console.warn('longquant recover err:', e.message));
+    const limit = longQuantGrindWorkerLimit();
+    if (_lqGrindActive.size >= limit) return;
     let keys; try { keys = ((await cloud.listR2Keys('longform/grind/requests/')) || []).filter(k => k.endsWith('.json')); } catch (e) { return; }
     if (!keys.length) return;
-    _lqGrindBusy = true;
-    try {
-        for (const key of keys) {
-            const rid = key.split('/').pop().replace('.json', '');
+    for (const key of keys.sort()) {
+        if (_lqGrindActive.size >= limit) break;
+        const rid = key.split('/').pop().replace('.json', '');
+        if (!rid || _lqGrindActive.has(rid)) continue;
+        _lqGrindActive.add(rid);
+        (async () => {
+            try {
             if (await longQuantGrindStopped(rid)) {
                 await cloud.deleteFromR2(key).catch(() => {});
                 let run = { rid, attempts: [], status: 'stopped', note: 'stopped by you', ts: Date.now() };
@@ -11148,13 +11171,19 @@ async function longQuantGrindQueue() {
                     if (b) run = { ...run, ...JSON.parse(b.toString('utf8')), status: 'stopped', note: 'stopped by you', ts: Date.now() };
                 } catch (e) {}
                 await cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
-                continue;
+                return;
             }
             let req0 = {}; try { req0 = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) {}
             await cloud.deleteFromR2(key).catch(() => {});
             try { await longQuantGrindProcess(rid, req0); } catch (e) { console.warn('longquant grind err:', e.message); }
-        }
-    } finally { _lqGrindBusy = false; }
+            } finally {
+                _lqGrindActive.delete(rid);
+            }
+        })().catch(e => {
+            _lqGrindActive.delete(rid);
+            console.warn('longquant grind worker err:', e.message);
+        });
+    }
 }
 setInterval(() => { longQuantGrindQueue().catch(() => {}); }, 5000);
 
