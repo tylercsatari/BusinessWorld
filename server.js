@@ -1576,7 +1576,7 @@ const server = http.createServer(async (req, res) => {
 
     // RAW build-a-hook — a montage (5 frames stitched in the browser) + user-set text.
     // No ffmpeg/transcription: just embed visual/text/together and locate by neighbours.
-    if (pathname === '/api/raw/embed-montage' && req.method === 'POST') {
+    if ((pathname === '/api/raw/embed-montage' || pathname === '/api/raw-long/embed-montage') && req.method === 'POST') {
         let body = ''; let size = 0, tooBig = false; const MAX = 25 * 1024 * 1024;
         // Over cap: stop buffering and drain to end, then reply 413 (see /api/qrd/predict).
         req.on('data', c => {
@@ -3200,7 +3200,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
     // ── Saved hooks: generated ideas / scored hooks the user wants to keep (R2 raw/saved-hooks/) ──
-    if (pathname === '/api/raw/hook-save' && req.method === 'POST') {
+    if ((pathname === '/api/raw/hook-save' || pathname === '/api/raw-long/hook-save') && req.method === 'POST') {
         try {
             const body = (await readBody(req)) || {};
             const id = 'hk' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
@@ -3221,7 +3221,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 cohesion_mode: String(body.cohesion_mode || '').slice(0, 40),
                 hasMontage,
                 indicators: (body.indicators && typeof body.indicators === 'object') ? body.indicators : null,
-                steer: (body.steer && typeof body.steer === 'object') ? body.steer : null
+                steer: (body.steer && typeof body.steer === 'object') ? body.steer : null,
+                channels: (body.channels && typeof body.channels === 'object') ? body.channels : null,
+                emb_preview: (body.emb_preview && typeof body.emb_preview === 'object') ? body.emb_preview : null,
             };
             await cloud.uploadToR2(`raw/saved-hooks/${id}.json`, Buffer.from(JSON.stringify(rec)), 'application/json');
             // keep the fast index in sync (compact record) so the Saved bank shows it immediately
@@ -3237,7 +3239,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
-    if (pathname === '/api/raw/saved-hooks' && req.method === 'GET') {
+    if ((pathname === '/api/raw/saved-hooks' || pathname === '/api/raw-long/saved-hooks') && req.method === 'GET') {
         try {
             // Fast path: a prebuilt compact index (one object) — scales to thousands of saved hooks.
             let idx = null;
@@ -3260,7 +3262,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
     // Folders for saved hooks: create a folder / move a hook into one / delete a folder. Stored in the index.
-    if ((pathname === '/api/raw/folder-create' || pathname === '/api/raw/hook-move' || pathname === '/api/raw/folder-delete') && req.method === 'POST') {
+    if ((pathname === '/api/raw/folder-create' || pathname === '/api/raw/hook-move' || pathname === '/api/raw/folder-delete' || pathname === '/api/raw-long/folder-create' || pathname === '/api/raw-long/hook-move' || pathname === '/api/raw-long/folder-delete') && req.method === 'POST') {
         try {
             const body = (await readBody(req)) || {};
             let idx = { hooks: [], folders: [] };
@@ -3268,13 +3270,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (!Array.isArray(idx.hooks)) idx.hooks = [];
             if (!Array.isArray(idx.folders)) idx.folders = [];
             const out = { ok: true };
-            if (pathname === '/api/raw/folder-create') {
+            if (pathname === '/api/raw/folder-create' || pathname === '/api/raw-long/folder-create') {
                 const name = String(body.name || '').slice(0, 60).trim();
                 if (!name) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no name"}'); return; }
                 let f = idx.folders.find(x => (x.name || '').toLowerCase() === name.toLowerCase());
                 if (!f) { f = { id: 'f' + Date.now().toString(36), name }; idx.folders.push(f); }
                 out.id = f.id; out.name = f.name;
-            } else if (pathname === '/api/raw/hook-move') {
+            } else if (pathname === '/api/raw/hook-move' || pathname === '/api/raw-long/hook-move') {
                 const id = String(body.id || ''); const folder = body.folder ? String(body.folder).slice(0, 40) : null;
                 const h = idx.hooks.find(x => x.id === id); if (h) h.folder = folder;
                 try { const rb = await cloud.downloadFromR2(`raw/saved-hooks/${id}.json`); if (rb) { const rec = JSON.parse(rb.toString('utf8')); rec.folder = folder; await cloud.uploadToR2(`raw/saved-hooks/${id}.json`, Buffer.from(JSON.stringify(rec)), 'application/json'); } } catch (e) {}
@@ -3287,7 +3289,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
-    if (pathname === '/api/raw/hook-delete' && req.method === 'POST') {
+    if ((pathname === '/api/raw/hook-delete' || pathname === '/api/raw-long/hook-delete') && req.method === 'POST') {
         try {
             const body = (await readBody(req)) || {};
             const id = String(body.id || '').replace(/[^a-z0-9]/gi, '');
@@ -3296,7 +3298,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
-    const savedMon = pathname.match(/^\/api\/raw\/saved-montage\/([a-z0-9]{1,32})$/);
+    const savedMon = pathname.match(/^\/api\/raw(?:-long)?\/saved-montage\/([a-z0-9]{1,32})$/);
     if (savedMon && req.method === 'GET') {
         try {
             if (await redirectR2Object(res, `raw/saved-hooks/${savedMon[1]}.jpg`, { cacheControl: 'public, max-age=3600' })) return;
@@ -3304,7 +3306,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500); res.end(); }
         return;
     }
-    const savedOne = pathname.match(/^\/api\/raw\/saved-hook\/([a-z0-9]{1,32})$/);
+    const savedOne = pathname.match(/^\/api\/raw(?:-long)?\/saved-hook\/([a-z0-9]{1,32})$/);
     if (savedOne && req.method === 'GET') {
         try {
             const b = await cloud.downloadFromR2(`raw/saved-hooks/${savedOne[1]}.json`);
@@ -3539,14 +3541,35 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             let idx = { thumbs: [] };
             try { const ib = await cloud.downloadFromR2('longform/saved-thumbs/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
             if (!Array.isArray(idx.thumbs)) idx.thumbs = [];
-            idx.thumbs.push({ id, savedAt: rec.savedAt, title: rec.title, prompt: rec.prompt, pctile: rec.pctile, relevance: rec.relevance, source: rec.source });
+            idx.thumbs.push({ id, savedAt: rec.savedAt, title: rec.title, prompt: rec.prompt, pctile: rec.pctile, relevance: rec.relevance, source: rec.source, score: rec.score, metrics: rec.metrics, channels: rec.channels, emb_preview: rec.emb_preview });
             await cloud.uploadToR2('longform/saved-thumbs/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, id }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
     if (pathname === '/api/longquant/thumbs/list' && req.method === 'GET') {
-        const b = await cloud.downloadFromR2('longform/saved-thumbs/index.json').catch(() => null);
+        let b = await cloud.downloadFromR2('longform/saved-thumbs/index.json').catch(() => null);
+        if (b) {
+            try {
+                const idx = JSON.parse(b.toString('utf8'));
+                if (Array.isArray(idx.thumbs)) {
+                    const recent = idx.thumbs.slice(-120);
+                    await Promise.all(recent.map(async t => {
+                        if (t && t.id && !(t.channels && t.emb_preview)) {
+                            const rb = await cloud.downloadFromR2(`longform/saved-thumbs/${t.id}.json`).catch(() => null);
+                            if (rb) {
+                                const rec = JSON.parse(rb.toString('utf8'));
+                                t.score = t.score || rec.score || null;
+                                t.metrics = t.metrics || rec.metrics || (rec.score && rec.score.metrics) || null;
+                                t.channels = t.channels || rec.channels || (rec.score && rec.score.channels) || null;
+                                t.emb_preview = t.emb_preview || rec.emb_preview || (rec.score && rec.score.emb_preview) || null;
+                            }
+                        }
+                    }));
+                    b = Buffer.from(JSON.stringify(idx));
+                }
+            } catch (e) {}
+        }
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
         res.end(b ? b.toString('utf8') : '{"thumbs":[]}'); return;
     }

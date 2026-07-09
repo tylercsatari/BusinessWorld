@@ -158,6 +158,7 @@ function isPublic(pathname, method) {
     if (pathname.startsWith('/api/hooks/montage/')) return true; // generated hook montages (no data), lets <img> load without a token
     if (pathname.startsWith('/api/hooks/grpo/montage/')) return true; // GRPO per-input attempt montages, lets <img> load without a token
     if (pathname.startsWith('/api/raw/saved-montage/')) return true; // saved-hook montages (no data), lets <img> load without a token
+    if (pathname.startsWith('/api/raw-long/saved-montage/')) return true; // saved-hook montages via raw-long alias
     if (pathname.startsWith('/api/hooks/demo/status/')) return true; // demo generation progress (no data), pollable without a token
     if (pathname === '/api/hooks/generate') return true;            // "Generate a hook" button — own Gemini+Flux, rate-guarded server-side
     if (pathname === '/api/hooks/warmup') return true;              // GPU pre-warm on intent — server-side guard caps spend
