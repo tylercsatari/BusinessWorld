@@ -798,7 +798,7 @@ const JarvisLongQuant = (function () {
         LQSCORES[id] = { loading: 1 };
         lqxJson('/api/longquant/exp/score-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, title: title || '', idea: idea || title || '' }) })
             .then(j => { LQSCORES[id] = j; rtgUpdateLqExp(); rtgUpdateGuessesL(); })
-            .catch(e => { LQSCORES[id] = { error: e.message }; rtgUpdateLqExp(); rtgUpdateGuessesL(); });
+            .catch(e => { LQSCORES[id] = { error: e.message, at: Date.now(), key, title: title || '', idea: idea || title || '' }; rtgUpdateLqExp(); rtgUpdateGuessesL(); });
     }
     function lqxSavedDetail(id) {
         if (!id || LQDETAILS[id]) return;
@@ -811,10 +811,12 @@ const JarvisLongQuant = (function () {
         if (/^data:image\//.test(url)) return url;
         const k = id || url, rec = LQIMGS[k];
         if (rec && rec.data) return rec.data;
-        if (!rec) {
-            LQIMGS[k] = { loading: 1, url };
-            urlToDataUrl(url).then(d => { LQIMGS[k] = { data: d, url }; rtgUpdateLqExp(); rtgUpdateGuessesL(); rtgUpdateRaw(); })
-                .catch(e => { LQIMGS[k] = { error: String(e.message || e).slice(0, 120), url }; rtgUpdateLqExp(); rtgUpdateGuessesL(); });
+        const now = Date.now();
+        if (rec && rec.loading) return '';
+        if (!rec || (rec.error && now - (rec.at || 0) > 2500)) {
+            LQIMGS[k] = { loading: 1, url, at: now };
+            urlToDataUrl(url).then(d => { LQIMGS[k] = { data: d, url, at: Date.now() }; rtgUpdateLqExp(); rtgUpdateGuessesL(); rtgUpdateRaw(); })
+                .catch(e => { LQIMGS[k] = { error: String(e.message || e).slice(0, 120), url, at: Date.now() }; window.setTimeout(() => { if (LQIMGS[k] && LQIMGS[k].error) { delete LQIMGS[k]; rtgUpdateLqExp(); rtgUpdateGuessesL(); } }, 3500); rtgUpdateLqExp(); rtgUpdateGuessesL(); });
         }
         return '';
     }
@@ -822,8 +824,8 @@ const JarvisLongQuant = (function () {
         const d = lqxImgData(url, id);
         if (d) return `<img src="${d}" loading="lazy" style="${style}"/>`;
         const rec = LQIMGS[id || url];
-        const msg = rec && rec.error ? `image failed: ${esc(rec.error)}` : 'loading image...';
-        return `<div style="${style};display:flex;align-items:center;justify-content:center;color:${rec && rec.error ? C.red : C.mute};font-size:10px;text-align:center;padding:8px;box-sizing:border-box">${msg}</div>`;
+        const msg = rec && rec.error ? 'syncing image...' : 'loading image...';
+        return `<div style="${style};display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px;text-align:center;padding:8px;box-sizing:border-box">${msg}</div>`;
     }
     async function lqxGenerate() {
         const inp = window.document.querySelector('[data-lqxtitle]'); if (inp) st.lqxTitle = inp.value;
@@ -884,6 +886,7 @@ const JarvisLongQuant = (function () {
     function lqxScoreFor(cacheId, key, title, idea, localScore, autoScore) {
         const c = LQSCORES[cacheId];
         if (!autoScore && localScore && localScore.metrics) return localScore;
+        if (c && c.error && key && autoScore && Date.now() - (c.at || 0) > 5000) { delete LQSCORES[cacheId]; lqxScoreKey(cacheId, key, title, idea); return LQSCORES[cacheId] || c; }
         if (!c && key && autoScore && (!localScore || !localScore.channels || !localScore.emb_preview)) lqxScoreKey(cacheId, key, title, idea);
         return c || localScore || null;
     }

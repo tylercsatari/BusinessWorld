@@ -291,6 +291,17 @@ async function redirectR2Object(res, key, opts = {}) {
     res.end();
     return true;
 }
+async function serveR2Object(res, key, contentType, opts = {}) {
+    const buf = await cloud.downloadFromR2(key).catch(() => null);
+    if (!buf) return false;
+    res.writeHead(200, {
+        'Content-Type': contentType || 'application/octet-stream',
+        'Content-Length': buf.length,
+        'Cache-Control': opts.cacheControl || 'public, max-age=3600',
+    });
+    res.end(buf);
+    return true;
+}
 
 const _limiters = new Map();
 function runLimited(name, limit, fn) {
@@ -3391,7 +3402,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const lgMon = pathname.match(/^\/api\/longquant\/guesses\/montage\/([a-z0-9]+)\/([a-z0-9_]+)$/i);
     if (lgMon && req.method === 'GET') {
-        if (await redirectR2Object(res, `longform/guesses/${lgMon[1]}/montages/${lgMon[2]}.jpg`, { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
+        if (await serveR2Object(res, `longform/guesses/${lgMon[1]}/montages/${lgMon[2]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
         res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return;
     }
     if (pathname === '/api/longquant/guesses/request' && req.method === 'POST') {
@@ -3498,7 +3509,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const lqGrindImg = pathname.match(/^\/api\/longquant\/grind\/img\/([a-z0-9_]+)$/i);
     if (lqGrindImg && req.method === 'GET') {
-        if (await redirectR2Object(res, `longform/grind/montages/${lqGrindImg[1]}.jpg`, { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
+        if (await serveR2Object(res, `longform/grind/montages/${lqGrindImg[1]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
         res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return;
     }
     // ── Saved long-form thumbnails bank (longform/saved-thumbs/) ──
@@ -3556,7 +3567,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const ltImg = pathname.match(/^\/api\/longquant\/thumbs\/img\/([a-z0-9]{1,32})$/);
     if (ltImg && req.method === 'GET') {
-        if (await redirectR2Object(res, `longform/saved-thumbs/${ltImg[1]}.jpg`, { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
+        if (await serveR2Object(res, `longform/saved-thumbs/${ltImg[1]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
         res.writeHead(404); res.end(); return;
     }
     // ── 💡 Ideas: idea-model training runs (longform/ideas/idea<N>/) ──
@@ -3566,7 +3577,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const ideaMon = pathname.match(/^\/api\/longquant\/ideas\/montage\/([a-z0-9]+)\/([a-z0-9_]+)$/i);
     if (ideaMon && req.method === 'GET') {
-        if (await redirectR2Object(res, `longform/ideas/${ideaMon[1]}/montages/${ideaMon[2]}.jpg`, { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
+        if (await serveR2Object(res, `longform/ideas/${ideaMon[1]}/montages/${ideaMon[2]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
         res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return;
     }
     if (pathname === '/api/longquant/ideas/runs' && req.method === 'GET') {
