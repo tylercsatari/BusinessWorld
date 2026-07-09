@@ -29,7 +29,11 @@ import zipfile
 
 import boto3
 import numpy as np
-import requests
+
+try:
+    import requests
+except Exception:
+    requests = None
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIM = 1536
@@ -75,15 +79,25 @@ def embed(parts, tries=4):
     last = ""
     for a in range(tries):
         try:
-            r = requests.post(
-                EMB_URL,
-                headers={"Content-Type": "application/json", "x-goog-api-key": KEY},
-                json=body,
-                timeout=35,
-            )
-            if r.ok:
-                return np.asarray(r.json()["embedding"]["values"], np.float32)
-            last = f"http {r.status_code}: {r.text[:120]}"
+            if requests is not None:
+                r = requests.post(
+                    EMB_URL,
+                    headers={"Content-Type": "application/json", "x-goog-api-key": KEY},
+                    json=body,
+                    timeout=35,
+                )
+                if r.ok:
+                    return np.asarray(r.json()["embedding"]["values"], np.float32)
+                last = f"http {r.status_code}: {r.text[:120]}"
+            else:
+                req = urllib.request.Request(
+                    EMB_URL,
+                    data=json.dumps(body).encode(),
+                    method="POST",
+                    headers={"Content-Type": "application/json", "x-goog-api-key": KEY},
+                )
+                with urllib.request.urlopen(req, timeout=35) as r:
+                    return np.asarray(json.loads(r.read())["embedding"]["values"], np.float32)
         except Exception as e:
             last = str(e)[:160]
         if a < tries - 1:
