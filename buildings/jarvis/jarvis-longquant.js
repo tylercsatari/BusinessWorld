@@ -951,7 +951,12 @@ const JarvisLongQuant = (function () {
     }
     function lqxImg(url, id, style) {
         if (!url) return '';
-        return `<img src="${esc(url)}" loading="lazy" style="${style}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'image unavailable',style:'${String(style || '').replace(/'/g, "\\'")};display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px;text-align:center;padding:8px;box-sizing:border-box'}))"/>`;
+        const cached = lqxImgData(url, id);
+        const src = cached || url;
+        const retryUrl = String(url).replace(/"/g, '&quot;');
+        const fallbackStyle = String(style || '').replace(/'/g, "\\'");
+        const onerr = `const n=+(this.dataset.lqxretry||0);if(n<5){this.dataset.lqxretry=n+1;this.style.opacity=.45;this.alt='image loading';setTimeout(()=>{this.src='${retryUrl}${retryUrl.indexOf('?')>=0?'&':'?'}retry='+(n+1)+'&t='+Date.now();this.style.opacity=1},900*(n+1));}else{this.replaceWith(Object.assign(document.createElement('div'),{textContent:'image still syncing…',style:'${fallbackStyle};display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px;text-align:center;padding:8px;box-sizing:border-box'}))}`;
+        return `<img src="${esc(src)}" loading="lazy" decoding="async" style="${style}" onerror="${onerr}"/>`;
     }
     async function lqxGenerate() {
         const inp = window.document.querySelector('[data-lqxtitle]'); if (inp) st.lqxTitle = inp.value;
