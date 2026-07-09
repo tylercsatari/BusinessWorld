@@ -3336,7 +3336,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const savedMon = pathname.match(/^\/api\/raw(?:-long)?\/saved-montage\/([a-z0-9]{1,32})$/);
     if (savedMon && req.method === 'GET') {
         try {
-            if (await redirectR2Object(res, `raw/saved-hooks/${savedMon[1]}.jpg`, { cacheControl: 'public, max-age=3600' })) return;
+            if (await serveR2Object(res, `raw/saved-hooks/${savedMon[1]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=3600' }).catch(() => false)) return;
             res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
         return;

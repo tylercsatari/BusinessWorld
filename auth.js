@@ -155,12 +155,16 @@ function isPublic(pathname, method) {
     if (pathname.startsWith('/api/longquant/guesses/montage/')) return true; // generated thumbnail guesses (no data), lets <img> load without a token
     if (pathname.startsWith('/api/longquant/ideas/montage/')) return true; // idea-chain thumbnails (no data), lets <img> load without a token
     if (pathname.startsWith('/api/longquant/thumbs/img/')) return true; // saved long-form thumbnails (no data), lets <img> load without a token
+    if (pathname === '/api/longquant/thumbs/list') return true; // compact saved long-form thumbnail index for experiment UI
+    if (pathname.startsWith('/api/longquant/thumbs/detail/')) return true; // saved long-form thumbnail detail for experiment read-out
     if (pathname.startsWith('/api/longquant/grind/img/')) return true; // grind thumbnails (no data), lets <img> load without a token
     if (pathname.startsWith('/api/longquant/grind/original/')) return true; // source thumbnails scored as grind baselines
+    if (pathname === '/api/longquant/grind/runs' || pathname.startsWith('/api/longquant/grind/run/')) return true; // experiment progress/status, no account secrets
     if (pathname.startsWith('/api/hooks/montage/')) return true; // generated hook montages (no data), lets <img> load without a token
     if (pathname.startsWith('/api/hooks/grpo/montage/')) return true; // GRPO per-input attempt montages, lets <img> load without a token
     if (pathname.startsWith('/api/raw/saved-montage/')) return true; // saved-hook montages (no data), lets <img> load without a token
     if (pathname.startsWith('/api/raw-long/saved-montage/')) return true; // saved-hook montages via raw-long alias
+    if (pathname.startsWith('/api/raw/saved-hook/') || pathname.startsWith('/api/raw-long/saved-hook/')) return true; // saved-hook detail for full experiment read-out
     if (pathname.startsWith('/api/hooks/demo/status/')) return true; // demo generation progress (no data), pollable without a token
     if (pathname === '/api/hooks/generate') return true;            // "Generate a hook" button — own Gemini+Flux, rate-guarded server-side
     if (pathname === '/api/hooks/warmup') return true;              // GPU pre-warm on intent — server-side guard caps spend
