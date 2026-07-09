@@ -289,6 +289,7 @@ function buildGrindPayload(rid, video, context, opts) {
         invent: false,
         threshold,
         maxAttempts,
+        thumbTryLimit: maxAttempts,
         count,
         hours,
         context: cleanContext,
@@ -318,6 +319,7 @@ function initialRunFromPayload(payload, note) {
         threshold: payload.threshold,
         count: payload.count,
         maxAttempts: payload.maxAttempts,
+        thumbTryLimit: payload.thumbTryLimit || payload.maxAttempts,
         hours: payload.hours,
         attempts: [],
         status: 'queued',
@@ -367,7 +369,7 @@ async function normalizePendingRun(rec, opts, dryRun) {
             contextStatus: payload.contextStatus,
             sourceVideo: payload.sourceVideo,
             status: 'queued',
-            note: run.note || 'queued as unanalyzed channel work — first attempt will render this original title before exploring variants',
+            note: run.note || 'queued as unanalyzed channel work — first thumbnails will use this original title before exploring variants',
             threshold: payload.threshold,
             maxAttempts: payload.maxAttempts,
             count: payload.count,
@@ -456,7 +458,7 @@ async function main() {
         const contextStatus = context ? 'ok' : 'missing';
         const rid = 'lqg' + Date.now().toString(36) + i.toString(36).padStart(2, '0');
         const payload = buildGrindPayload(rid, v, context, { ...opts, contextStatus });
-        const note = `queued by Tyler channel unanalyzed batch — first attempt will render the current video title exactly${context ? ' with transcript context' : ' (transcript missing)'}`;
+        const note = `queued by Tyler channel unanalyzed batch — first thumbnails will use the current video title exactly${context ? ' with transcript context' : ' (transcript missing)'}`;
         queued.push({ rid, video: v, transcriptChars: context.length, contextStatus, requestKey: `longform/grind/requests/${rid}.json` });
         await queuePayload(payload, note, dryRun);
         console.log(`${dryRun ? 'would queue' : 'queued'} ${queued.length}: ${v.id} ${v.title} (${context.length} context chars, ${contextStatus})`);

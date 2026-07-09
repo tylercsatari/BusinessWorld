@@ -10548,7 +10548,8 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
     const errorThumbs = thumbs.filter(t => t && (t.status === 'error' || t.error)).length;
     const stoppedThumbs = thumbs.filter(t => t && t.status === 'stopped').length;
     const doneAttempts = attempts.filter(a => a && ['done', 'error', 'stopped'].includes(a.status || '')).length;
-    const thumbTries = thumbs.length;
+    const storedThumbTryCount = Number(run.thumbTryCount);
+    const thumbTries = Math.max(thumbs.length, isFinite(storedThumbTryCount) ? storedThumbTryCount : 0);
     const finishedThumbTries = doneThumbs + errorThumbs + stoppedThumbs;
     const ts = Number(run.ts) || 0;
     const workerAttached = typeof _lqGrindActive !== 'undefined' && _lqGrindActive.has(rid);
@@ -10597,7 +10598,7 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
         ideaRoundsStarted: attempts.length,
         ideaRoundsFinished: doneAttempts,
         thumbTryCount: thumbTries,
-        thumbSlots: thumbs.length,
+        thumbSlots: thumbTries,
         thumbImages: imageThumbs,
         thumbDone: doneThumbs,
         thumbErrors: errorThumbs,
@@ -10884,6 +10885,7 @@ async function longQuantGrindProcess(rid, req0) {
     let rejected = priorRun && Number.isFinite(Number(priorRun.rejected)) ? Number(priorRun.rejected) : 0;
     let baseline = priorRun && priorRun.baseline ? priorRun.baseline : null;
     let autosaved = priorRun && priorRun.autosaved ? priorRun.autosaved : null;
+    let liveThumbProgress = priorRun && Number.isFinite(Number(priorRun.thumbTryCount)) ? Number(priorRun.thumbTryCount) : null;
     if (priorRun && Number.isFinite(Number(priorRun.best))) best = Number(priorRun.best);
     if (best == null) {
         for (const a of attempts) {
@@ -10915,16 +10917,22 @@ async function longQuantGrindProcess(rid, req0) {
         const ae = await geminiTextEmbed(txt).catch(() => null);
         if (ae) vecs.push(Int8Array.from(ae, x => Math.round(x * 127)));
     }
-    const write = () => cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
-        rid, idea: seed, title: sourceTitle || seed, context, sourceVideo, source, batchId,
-        contextChars: context.length,
-        threshold, count, attempts, n: thumbTryCount(), thumbTryCount: thumbTryCount(), thumbTryLimit: maxAttempts,
-        thumbImages: thumbImageCount(), thumbFinished: thumbFinishedCount(), ideaRounds: attempts.length,
-        status, winner, error: err, note,
-        best, rejected, gate: Math.round(gate * 1000) / 1000, deadline, ts: Date.now(),
-        baseline, autosaved, maxAttempts, hours, autosaveBest: !!req0.autosaveBest,
-        ideaModel: LONGQUANT_IDEA_MODEL, thumbModel: longQuantThumbPromptModelLabel(), renderModel: LONGQUANT_RENDER_MODEL,
-    })), 'application/json').catch(() => {});
+    const write = () => {
+        const storedThumbs = thumbTryCount();
+        const liveThumbs = liveThumbProgress != null && isFinite(Number(liveThumbProgress))
+            ? Math.max(storedThumbs, Math.min(maxAttempts, Number(liveThumbProgress)))
+            : storedThumbs;
+        return cloud.uploadToR2(`longform/grind/runs/${rid}.json`, Buffer.from(JSON.stringify({
+            rid, idea: seed, title: sourceTitle || seed, context, sourceVideo, source, batchId,
+            contextChars: context.length,
+            threshold, count, attempts, n: liveThumbs, thumbTryCount: liveThumbs, thumbTryLimit: maxAttempts,
+            thumbImages: thumbImageCount(), thumbFinished: thumbFinishedCount(), ideaRounds: attempts.length,
+            status, winner, error: err, note,
+            best, rejected, gate: Math.round(gate * 1000) / 1000, deadline, ts: Date.now(),
+            baseline, autosaved, maxAttempts, hours, autosaveBest: !!req0.autosaveBest,
+            ideaModel: LONGQUANT_IDEA_MODEL, thumbModel: longQuantThumbPromptModelLabel(), renderModel: LONGQUANT_RENDER_MODEL,
+        })), 'application/json').catch(() => {});
+    };
     const markStopped = async () => {
         status = 'stopped';
         note = 'stopped by you';
@@ -10980,6 +10988,7 @@ async function longQuantGrindProcess(rid, req0) {
             const batchCount = Math.max(1, Math.min(count, remainingThumbs));
             const thumbStart = usedBefore + 1;
             const thumbEnd = usedBefore + batchCount;
+            liveThumbProgress = usedBefore;
             let idea = '';
             let gateInfo = {};
             let farthest = null, bestTopical = null;
@@ -11035,6 +11044,7 @@ async function longQuantGrindProcess(rid, req0) {
                     a.workerRid = _reqRid;
                     a.status = st.stage === 'reasoning' ? 'prompting' : (st.stage === 'rendering' ? 'rendering' : (st.stage || 'queued'));
                     const done = st.done != null && st.n ? Math.min(maxAttempts, usedBefore + Number(st.done || 0)) : null;
+                    if (done != null) liveThumbProgress = done;
                     note = `thumbnails ${thumbStart}-${thumbEnd}/${maxAttempts}: app server ${st.stage || 'queued'}${done != null ? ` ${done}/${maxAttempts}` : ''}${st.note ? ' — ' + st.note : ''}`;
                     await write();
                 }, { context, sourceVideo, stopRid: rid });
@@ -11089,6 +11099,7 @@ async function longQuantGrindProcess(rid, req0) {
                 }
                 await write();
             }
+            liveThumbProgress = thumbTryCount();
             if (status === 'stopped') break;
             a.status = 'done';
             const improved = a.pct != null && (best == null || a.pct > best);
