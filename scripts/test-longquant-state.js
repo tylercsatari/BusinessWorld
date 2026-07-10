@@ -55,10 +55,14 @@ vm.runInContext(
     context
 );
 const scoreContext = {};
+scoreContext.longQuantScoreImageBuffer = async (buf, title, idea) => {
+    scoreContext.lastScoreArgs = { buf, title, idea };
+    return scoreContext.scoreFixture;
+};
 vm.createContext(scoreContext);
 vm.runInContext(
     source.slice(scoreStart, scoreEnd)
-        + '\nthis.scoreApi = { longQuantPublicScore, longQuantNormalizeRunScores };',
+        + '\nthis.scoreApi = { longQuantOutputContract, longQuantPublicScore, longQuantScoreThumbnail, longQuantNormalizeRunScores };',
     scoreContext
 );
 
@@ -91,6 +95,34 @@ async function main() {
     assert(aligned.metrics.ctr.pctile === 70, 'default metrics did not stay on the visual channel');
     assert(aligned.input_manifest.display_preference.join(',') === 'visual,together,text', 'UI channel preference is not visual-first');
     assert(aligned.reward_trace.together_used_for_threshold === false, 'packaging embedding can affect threshold');
+    assert(aligned.output_contract.complete === false && aligned.output_contract.missing.includes('together.ctrviews'), 'incomplete legacy score was not identified');
+
+    const completeMetrics = () => ({
+        ctrviews: { pctile: 91 }, ctr: { pctile: 72 }, ret30: { pctile: 68 },
+        views: { pctile: 77 }, realviews: { pctile: 74 }, gt10m: { pctile: 12 },
+    });
+    scoreContext.scoreFixture = {
+        pctile: 0.91,
+        relevance: 0.8,
+        channels: {
+            visual: { metrics: completeMetrics(), neighbors: [{ sim: 0.9 }] },
+            together: { metrics: completeMetrics(), neighbors: [{ sim: 0.85 }] },
+        },
+    };
+    const twelve = await scoreContext.scoreApi.longQuantScoreThumbnail('image-buffer', 'Real video title', 'Real video idea');
+    assert(twelve.output_contract.complete && twelve.output_contract.expected === 12, 'shared scorer did not enforce 12 complete outputs');
+    assert(twelve.output_contract.channels.join(',') === 'visual,together', 'shared scorer channel contract drifted');
+    assert(scoreContext.lastScoreArgs.title === 'Real video title' && scoreContext.lastScoreArgs.idea === 'Real video idea', 'shared scorer dropped its text input');
+    await scoreContext.scoreApi.longQuantScoreThumbnail('image-buffer', '', '').then(
+        () => { throw new Error('shared scorer accepted blank together-channel input'); },
+        error => assert(/title or idea is required/i.test(error.message), 'blank-input error was not explicit')
+    );
+    const rawScoreCalls = (source.match(/longQuantScoreImageBuffer\(/g) || []).length;
+    assert(rawScoreCalls === 2, `found ${Math.max(0, rawScoreCalls - 2)} direct high-level scorer call(s) outside the shared contract`);
+    const groupSource = source.slice(source.indexOf('async function longQuantBuildThumbGroup'), source.indexOf('async function longQuantHandleDemo'));
+    assert(groupSource.includes('longQuantScoreThumbnail('), 'generate/grind thumbnail groups bypass the shared scorer');
+    const uploadSource = source.slice(source.indexOf("pathname === '/api/longquant/exp/score-upload'"), source.indexOf("pathname === '/api/longquant/exp/score-key'"));
+    assert(uploadSource.includes('longQuantScoreThumbnail(') && uploadSource.includes('body.title'), 'manual score bypasses the shared scorer or drops its title');
 
     const run = scoreContext.scoreApi.longQuantNormalizeRunScores({
         attempts: [{ thumbs: [{ score: legacyScore }] }],
@@ -167,6 +199,8 @@ async function main() {
             thumbnailModelReward: aligned.thumbnail_model_reward,
             thresholdChannel: aligned.reward_trace.threshold_channel,
             packagingUsedForThreshold: aligned.reward_trace.together_used_for_threshold,
+            outputContract: twelve.output_contract,
+            directHighLevelScorerCalls: rawScoreCalls - 2,
         },
     }, null, 2));
 }

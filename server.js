@@ -3507,9 +3507,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const body = await readBody(req);
             const img = String(body.image || '');
             const b64 = img.indexOf('base64,') >= 0 ? img.split('base64,').pop() : img;
+            const title = String(body.title || body.idea || '').slice(0, 500).trim();
+            const idea = String(body.idea || title).slice(0, 500).trim();
             if (!b64 || b64.length < 100) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no image"}'); return; }
+            if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"Enter the video title or idea so visual and together embeddings can both be scored"}'); return; }
             if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
-            const score = longQuantPublicScore(await longQuantScoreImageBuffer(Buffer.from(b64, 'base64'), '', ''));
+            const score = await longQuantScoreThumbnail(Buffer.from(b64, 'base64'), title, idea);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(score));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -3525,7 +3528,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (!jpg) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"image not found"}'); return; }
             const title = String(body.title || '').slice(0, 500).trim();
             const idea = String(body.idea || title).slice(0, 500).trim();
-            const score = longQuantPublicScore(await longQuantScoreImageBuffer(jpg, title, idea));
+            const score = await longQuantScoreThumbnail(jpg, title, idea);
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify(score));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -10640,6 +10643,36 @@ const LONGQUANT_RELEVANCE_FLOOR = 0.35;
 // Exact deterministic calibration used by thumb-rl/harness_long.py over the
 // frozen raw-long visual corpus. Keep this paired with longquant_score.py.
 const LONGQUANT_DENSITY_FLOOR = 0.7598260641098022;
+const LONGQUANT_OUTPUT_CHANNELS = Object.freeze(['visual', 'together']);
+const LONGQUANT_OUTPUT_METRICS = Object.freeze(['ctrviews', 'ctr', 'ret30', 'views', 'realviews', 'gt10m']);
+function longQuantOutputContract(score) {
+    const missing = [];
+    for (const channelName of LONGQUANT_OUTPUT_CHANNELS) {
+        const channel = score && score.channels && score.channels[channelName];
+        if (!channel) {
+            missing.push(`${channelName}.embedding`);
+            continue;
+        }
+        for (const metricName of LONGQUANT_OUTPUT_METRICS) {
+            const metric = channel.metrics && channel.metrics[metricName];
+            if (!metric || metric.pctile == null || !isFinite(Number(metric.pctile))) {
+                missing.push(`${channelName}.${metricName}`);
+            }
+        }
+    }
+    return {
+        version: 1,
+        channels: [...LONGQUANT_OUTPUT_CHANNELS],
+        channel_inputs: {
+            visual: 'thumbnail image only',
+            together: 'thumbnail image plus title or idea',
+        },
+        metrics: [...LONGQUANT_OUTPUT_METRICS],
+        expected: LONGQUANT_OUTPUT_CHANNELS.length * LONGQUANT_OUTPUT_METRICS.length,
+        complete: missing.length === 0,
+        missing,
+    };
+}
 function longQuantPublicScore(score) {
     if (!score || score.error) return score || null;
     const visual = score.channels && score.channels.visual;
@@ -10687,6 +10720,7 @@ function longQuantPublicScore(score) {
         nn_cos: nnCos,
         metrics: visualMetrics || score.metrics || null,
         input_manifest: inputManifest,
+        output_contract: longQuantOutputContract(score),
         channel_roles: {
             visual: 'primary thumbnail-only performance score and default metric maps',
             text: 'title or idea diagnostic only',
@@ -10708,6 +10742,17 @@ function longQuantPublicScore(score) {
             together_used_for_threshold: false,
         },
     };
+}
+async function longQuantScoreThumbnail(buf, title, idea) {
+    const scoreTitle = String(title || idea || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+    const scoreIdea = String(idea || scoreTitle).replace(/\s+/g, ' ').trim().slice(0, 500);
+    if (!scoreTitle) throw new Error('Video title or idea is required for the 12-output Long Quant score');
+    const score = longQuantPublicScore(await longQuantScoreImageBuffer(buf, scoreTitle, scoreIdea));
+    if (!score || !score.output_contract || !score.output_contract.complete) {
+        const missing = score && score.output_contract && score.output_contract.missing;
+        throw new Error(`Long Quant 12-output score incomplete${missing && missing.length ? `: ${missing.join(', ')}` : ''}`);
+    }
+    return score;
 }
 function longQuantNormalizeRunScores(run) {
     if (!run || typeof run !== 'object') return run;
@@ -10955,10 +11000,9 @@ async function longQuantSaveThumbRecord(body = {}) {
     const context = longQuantCleanContext(body.context || body.transcript30 || (body.meta && (body.meta.context || body.meta.transcript30)) || '');
     const scoreText = String(body.scoreText || longQuantScoreText(title, body.idea || title, context, body.sourceVideo || (body.meta && body.meta.sourceVideo)) || body.idea || context || title || '').slice(0, LONGQUANT_SCORE_TEXT_CHARS);
     let savedScore = (body.score && typeof body.score === 'object' && !body.score.loading && !body.score.error) ? body.score : null;
-    if (!savedScore || !savedScore.channels || !savedScore.emb_preview) {
-        savedScore = longQuantPublicScore(await longQuantScoreImageBuffer(jpg, title, scoreText || title));
-    } else {
-        savedScore = longQuantPublicScore(savedScore);
+    if (savedScore) savedScore = longQuantPublicScore(savedScore);
+    if (!savedScore || !savedScore.channels || !savedScore.emb_preview || !savedScore.output_contract || !savedScore.output_contract.complete) {
+        savedScore = await longQuantScoreThumbnail(jpg, title, scoreText || title);
     }
     const pctile = longQuantPct01(savedScore && savedScore.pctile != null ? savedScore.pctile : body.pctile);
     const relevance = (typeof body.relevance === 'number') ? body.relevance : (savedScore && savedScore.relevance != null ? Number(savedScore.relevance) : null);
@@ -11058,11 +11102,11 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
             await emitStatus({ stage: 'scoring', n: prompts.length, done: k, note: `scoring thumbnail ${k + 1}/${prompts.length} on raw-long visual/text/together embeddings` });
             await lqDemoGroupWrite(rid, group);
             await checkStop();
-            const score = longQuantPublicScore(await longQuantWithHeartbeat(
-                () => longQuantScoreImageBuffer(jpg, idea, scoreText || idea),
+            const score = await longQuantWithHeartbeat(
+                () => longQuantScoreThumbnail(jpg, idea, scoreText || idea),
                 () => emitStatus({ stage: 'scoring', n: prompts.length, done: k, note: `still scoring thumbnail ${k + 1}/${prompts.length} on raw-long embeddings` }),
                 15000
-            ));
+            );
             await checkStop();
             att.score = score;
             att.pctile = score && score.pctile != null ? score.pctile : null;
@@ -11325,7 +11369,7 @@ async function longQuantGrindProcess(rid, req0) {
             if (jpg) {
                 await cloud.uploadToR2(`longform/grind/originals/${rid}.jpg`, jpg, 'image/jpeg').catch(() => {});
                 if (await checkStopped()) { clearInterval(hb); return; }
-                const sc = longQuantPublicScore(await longQuantScoreImageBuffer(jpg, sourceTitle || seed, scoreText || sourceTitle || seed).catch(e => ({ error: e.message })));
+                const sc = await longQuantScoreThumbnail(jpg, sourceTitle || seed, scoreText || sourceTitle || seed).catch(e => ({ error: e.message }));
                 if (await checkStopped()) { clearInterval(hb); return; }
                 baseline = {
                     image: rid,

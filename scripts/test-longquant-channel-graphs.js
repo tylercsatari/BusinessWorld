@@ -56,7 +56,7 @@ const context = {
 vm.createContext(context);
 vm.runInContext(
     source.slice(helperStart, helperEnd)
-        + '\nthis.graphApi = { LQ_COMPARE_METRICS, lqxMetricForChannel, lqxChannelMetricHtml, lqxGraphGrid };',
+        + '\nthis.graphApi = { LQ_COMPARE_METRICS, lqxMetricForChannel, lqxStoredOutputCount, lqxHasTwelveOutputs, lqxChannelMetricHtml, lqxGraphGrid };',
     context
 );
 
@@ -77,23 +77,34 @@ assert(visualCtr && visualCtr.kind === 'neighbor_axis_percentile', 'missing cali
 
 const html = context.graphApi.lqxGraphGrid(score, 'fixture-thumb');
 const summary = context.graphApi.lqxChannelMetricHtml(score);
+const compactSummary = context.graphApi.lqxChannelMetricHtml(score, true);
 const visualBindings = (html.match(/data-lqxrawchan="visual"/g) || []).length;
 const togetherBindings = (html.match(/data-lqxrawchan="together"/g) || []).length;
 const visualSummary = (summary.match(/title="visual embedding:/g) || []).length;
 const togetherSummary = (summary.match(/title="together embedding:/g) || []).length;
 assert(context.graphApi.LQ_COMPARE_METRICS.length === 6, 'expected six metrics per channel');
+assert(context.graphApi.lqxStoredOutputCount(score) < 12 && !context.graphApi.lqxHasTwelveOutputs(score), 'partial stored score was mistaken for 12/12');
+const completeScore = { channels: { visual: channel(true), together: channel(true) } };
+assert(context.graphApi.lqxStoredOutputCount(completeScore) === 12 && context.graphApi.lqxHasTwelveOutputs(completeScore), 'complete stored score was not recognized');
 assert(visualBindings === 6, `expected 6 visual graph bindings, got ${visualBindings}`);
 assert(togetherBindings === 6, `expected 6 together graph bindings, got ${togetherBindings}`);
 assert(visualSummary === 6 && togetherSummary === 6, '12-output summary is not grouped 6+6 by input');
+assert(compactSummary.includes('12 embedding outputs') && compactSummary.includes('12/12'), 'compact cards do not expose the shared 12-output contract');
 assert(!html.includes('data-lqxrawchan="text"'), 'text channel leaked into the requested 12-graph comparison');
 assert(html.includes('12 independent embedding outputs by input'), '12-output heading missing');
 assert(context.graphApi.lqxGraphGrid(score, 'fixture-thumb') === html, 'ready graph HTML was not cached');
+assert(!source.includes('function lqxMetricHtml('), 'legacy mixed-channel renderer still exists');
+const compactCalls = (source.match(/lqxChannelMetricHtml\([^\n]+, true\)/g) || []).length;
+assert(compactCalls >= 7, `expected shared compact 12-output renderer across thumbnail surfaces, got ${compactCalls}`);
+assert(source.includes('data-lqxscoretitle') && source.includes('JSON.stringify({ image: st.lqxScoreImg, title, idea: title })'), 'manual scoring does not send the together-channel input');
 
 console.log(JSON.stringify({
     ok: true,
     metricsPerChannel: context.graphApi.LQ_COMPARE_METRICS.length,
     graphBindings: { visual: visualBindings, together: togetherBindings, total: visualBindings + togetherBindings },
     summaryOutputs: { visual: visualSummary, together: togetherSummary, total: visualSummary + togetherSummary },
+    compactSummary: '12/12',
+    sharedCompactRendererCalls: compactCalls,
     togetherCtrViews,
     visualCtrFallback: visualCtr,
     cached: true,
