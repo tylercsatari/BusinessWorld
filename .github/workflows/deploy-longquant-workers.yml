@@ -9,7 +9,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     steps:
       - name: Free build disk
         uses: jlumbroso/free-disk-space@v1.3.1
@@ -52,12 +52,23 @@ jobs:
           REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
         run: echo "$REPLICATE_API_TOKEN" | docker login r8.im -u tylercsatari --password-stdin
 
-      - name: Import managed Qwen weights
+      - name: Import or verify managed Qwen weights
         working-directory: buildings/jarvis/longquant-cog
         run: |
           df -h /
-          cog weights import
+          if [[ -f weights.lock ]]; then
+            cog weights status --json
+          else
+            cog weights import
+          fi
           df -h /
+
+      - name: Preserve managed-weight lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: longquant-weights-lock
+          path: buildings/jarvis/longquant-cog/weights.lock
+          retention-days: 1
 
       - name: Build and push private model
         working-directory: buildings/jarvis/longquant-cog
