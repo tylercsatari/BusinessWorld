@@ -110,6 +110,22 @@ function assert(condition, message) {
 }
 
 async function main() {
+    const providerStart = source.indexOf('async function replicateLongVersionRun');
+    const providerEnd = source.indexOf('async function longQuantRenderThumb', providerStart);
+    const providerSource = source.slice(providerStart, providerEnd);
+    assert(providerStart >= 0 && providerEnd > providerStart, 'trained Long Quant provider path is missing');
+    assert(providerSource.includes('LONGQUANT_WORKER_VERSION') && providerSource.includes('replicateLongVersionRun'), 'Long Quant is not pinned to its direct Replicate worker version');
+    assert(providerSource.includes("https://api.replicate.com/v1/predictions") && providerSource.includes('version: LONGQUANT_WORKER_VERSION'), 'Long Quant does not use the Shorts-style direct version endpoint');
+    assert(providerSource.includes("task: kind") && providerSource.includes('longQuantRunModelExclusive'), 'idea/thumb adapters do not share the serialized trained worker');
+    assert(providerSource.includes("replicateLongModelRun('idea'") && providerSource.includes("replicateLongModelRun('thumb'"), 'both trained adapters are not wired');
+    assert(providerSource.includes('invent: !seed'), 'seeded grind ideas are being treated as unseeded inventions');
+    for (const forbidden of ['/deployments/', 'LONGQUANT_WORKER_DEPLOYMENT', 'hookLlmJson', 'FIREWORKS', 'OPENAI', 'ThumbPromptsFallback', 'TemplateThumbPrompts', 'IdeaBank']) {
+        assert(!providerSource.includes(forbidden), `Long Quant provider path still contains fallback ${forbidden}`);
+    }
+    const cogSource = fs.readFileSync(require('path').join(__dirname, '..', 'buildings', 'jarvis', 'longquant-cog', 'predict.py'), 'utf8');
+    assert(cogSource.includes('idea_long_r26') && cogSource.includes('thumb_b10'), 'Cog worker does not contain both finalized adapter identities');
+    assert(cogSource.includes('enable_thinking=False'), 'Cog worker drifted from the non-thinking mode used during training');
+
     const legacyScore = {
         pctile: 0.41,
         reward: 0.41,
@@ -270,6 +286,7 @@ async function main() {
             outputContract: twelve.output_contract,
             directHighLevelScorerCalls: rawScoreCalls - 2,
         },
+        models: { provider: 'replicate', idea: 'idea_long_r26', thumbnail: 'thumb_b10', fallback: false },
     }, null, 2));
 }
 

@@ -576,8 +576,7 @@ const LONGQUANT_THUMB_MODEL = process.env.LONGQUANT_THUMB_MODEL || 'thumb_b10';
 const LONGQUANT_RENDER_MODEL = process.env.LONGQUANT_RENDER_MODEL || 'black-forest-labs/flux-2-pro';
 // One Replicate image serves both finalized LoRA adapters on their shared Qwen3 base.
 // The immutable version is pinned after Cog deployment, matching Shorts Quant's model contract.
-const LONGQUANT_WORKER_VERSION = process.env.LONGQUANT_WORKER_VERSION || '638f8140d31eae61f90a929e8335563e4b9d3c69364c3e48f9704422ff1fac22';
-const LONGQUANT_WORKER_DEPLOYMENT = process.env.LONGQUANT_WORKER_DEPLOYMENT || 'tylercsatari/longquant-workers';
+const LONGQUANT_WORKER_VERSION = process.env.LONGQUANT_WORKER_VERSION || '86c2fae6493e4b37cb5f3b6433ce6ea8069f0545da9ff9c8a7ebfb56ed0d678f';
 const LONGQUANT_CONTEXT_CHARS = Math.max(1600, Math.min(12000, parseInt(process.env.LONGQUANT_CONTEXT_CHARS, 10) || 6000));
 const LONGQUANT_PROMPT_CONTEXT_CHARS = Math.min(6000, LONGQUANT_CONTEXT_CHARS);
 const LONGQUANT_SCORE_TEXT_CHARS = Math.min(6000, LONGQUANT_CONTEXT_CHARS);
@@ -10364,27 +10363,13 @@ async function grindQueue() {
 setInterval(() => { grindQueue().catch(() => {}); }, 5000);
 
 // ── Long Quant GRIND: idea model → thumbnail model → Flux Pro → raw-long scorer ────────────
-let _longQuantDeploymentVerifiedAt = 0;
-async function replicateLongDeploymentRun(input, timeoutMs = 1800000) {
+async function replicateLongVersionRun(input, timeoutMs = 1800000) {
     const token = process.env.REPLICATE_API_TOKEN;
     if (!token) throw new Error('REPLICATE_API_TOKEN not configured');
-    if (Date.now() - _longQuantDeploymentVerifiedAt > 300000) {
-        const cfg = await fetchT(`https://api.replicate.com/v1/deployments/${LONGQUANT_WORKER_DEPLOYMENT}`, {
-            headers: { 'Authorization': 'Bearer ' + token },
-        }, 30000);
-        const deployment = await cfg.json().catch(() => null);
-        const release = deployment && deployment.current_release;
-        if (!cfg.ok || !release || release.version !== LONGQUANT_WORKER_VERSION) {
-            throw new Error(`Long Quant deployment version mismatch; expected ${LONGQUANT_WORKER_VERSION.slice(0, 12)}`);
-        }
-        const maxInstances = Number(release.configuration && release.configuration.max_instances);
-        if (maxInstances < 1) throw new Error('Long Quant Replicate deployment is disabled; refusing to fall back');
-        _longQuantDeploymentVerifiedAt = Date.now();
-    }
-    const r = await fetchT(`https://api.replicate.com/v1/deployments/${LONGQUANT_WORKER_DEPLOYMENT}/predictions`, {
+    const r = await fetchT('https://api.replicate.com/v1/predictions', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input })
+        body: JSON.stringify({ version: LONGQUANT_WORKER_VERSION, input })
     }, 60000);
     let p = await r.json().catch(() => null);
     if (!p || r.status >= 400 || !p.id) throw new Error('replicate create http ' + r.status + ': ' + String((p && (p.detail || p.title || p.error)) || '').slice(0, 180));
@@ -10437,7 +10422,7 @@ async function replicateLongModelRun(kind, input, timeoutMs = 1800000) {
         seed: Math.max(1, Math.min(2147483647, parseInt(src.seed, 10) || longQuantStableSeed(kind, src.premise, src.idea, src.attempt))),
     };
     // A shared queue prevents concurrent channel grinds from cold-booting duplicate 58 GB bases.
-    return longQuantRunModelExclusive(() => replicateLongDeploymentRun(modelInput, timeoutMs));
+    return longQuantRunModelExclusive(() => replicateLongVersionRun(modelInput, timeoutMs));
 }
 function longQuantHostedModelConfigured() {
     return !!(process.env.REPLICATE_API_TOKEN && /^[a-f0-9]{64}$/i.test(LONGQUANT_WORKER_VERSION));
