@@ -574,9 +574,10 @@ console.log('[raw-upload] using python:', RAW_PYTHON);
 const LONGQUANT_IDEA_MODEL = process.env.LONGQUANT_IDEA_MODEL || 'idea_long_r26';
 const LONGQUANT_THUMB_MODEL = process.env.LONGQUANT_THUMB_MODEL || 'thumb_b10';
 const LONGQUANT_RENDER_MODEL = process.env.LONGQUANT_RENDER_MODEL || 'black-forest-labs/flux-2-pro';
-// One Replicate image serves both finalized LoRA adapters on their shared Qwen3 base.
-// The immutable version is pinned after Cog deployment, matching Shorts Quant's model contract.
-const LONGQUANT_WORKER_VERSION = process.env.LONGQUANT_WORKER_VERSION || '86c2fae6493e4b37cb5f3b6433ce6ea8069f0545da9ff9c8a7ebfb56ed0d678f';
+// One scale-to-zero worker serves both finalized LoRAs on their shared pinned Qwen3 base.
+const LONGQUANT_WORKER_URL = process.env.LONGQUANT_WORKER_URL || 'https://tylercsatari--longquant-trained-worker-model-predict.modal.run';
+const LONGQUANT_WORKER_VERSION = process.env.LONGQUANT_WORKER_VERSION || 'qwen3-ad44e777+idea_long_r26+thumb_b10';
+const LONGQUANT_MODEL_PROVIDER = 'modal';
 const LONGQUANT_CONTEXT_CHARS = Math.max(1600, Math.min(12000, parseInt(process.env.LONGQUANT_CONTEXT_CHARS, 10) || 6000));
 const LONGQUANT_PROMPT_CONTEXT_CHARS = Math.min(6000, LONGQUANT_CONTEXT_CHARS);
 const LONGQUANT_SCORE_TEXT_CHARS = Math.min(6000, LONGQUANT_CONTEXT_CHARS);
@@ -3524,7 +3525,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             ideaModel: LONGQUANT_IDEA_MODEL,
             thumbModel: longQuantThumbPromptModelLabel(),
             renderModel: LONGQUANT_RENDER_MODEL,
-            modelProvider: 'replicate',
+            modelProvider: LONGQUANT_MODEL_PROVIDER,
             workerVersion: LONGQUANT_WORKER_VERSION,
             scoring: ['ctr', 'ret30', 'views', 'scaled_views', 'realviews', 'gt10m', 'ctrviews'],
         };
@@ -3562,7 +3563,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
     if (pathname === '/api/longquant/hooks/index' && req.method === 'GET') {
-        await serveGzCached(req, res, 'lq:hook-embeds-index', 300e3, async () => {
+        await serveGzCached(req, res, 'lq:hook-embeds-index', 10e3, async () => {
             const b = await cloud.downloadFromR2('longform/hook-embeds/index.json').catch(() => null);
             return b ? b.toString('utf8') : '{"rows":[]}';
         }, {});
@@ -10377,25 +10378,17 @@ async function grindQueue() {
 setInterval(() => { grindQueue().catch(() => {}); }, 5000);
 
 // ── Long Quant GRIND: idea model → thumbnail model → Flux Pro → raw-long scorer ────────────
-async function replicateLongVersionRun(input, timeoutMs = 1800000) {
-    const token = process.env.REPLICATE_API_TOKEN;
-    if (!token) throw new Error('REPLICATE_API_TOKEN not configured');
-    const r = await fetchT('https://api.replicate.com/v1/predictions', {
+async function longQuantHostedRun(input, timeoutMs = 1800000) {
+    const secret = process.env.R2_SECRET_ACCESS_KEY;
+    if (!LONGQUANT_WORKER_URL || !secret) throw new Error('trained Long Quant worker is not configured');
+    const token = require('crypto').createHash('sha256').update(secret + ':longquant-worker').digest('hex');
+    const r = await fetchT(LONGQUANT_WORKER_URL, {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ version: LONGQUANT_WORKER_VERSION, input })
-    }, 60000);
-    let p = await r.json().catch(() => null);
-    if (!p || r.status >= 400 || !p.id) throw new Error('replicate create http ' + r.status + ': ' + String((p && (p.detail || p.title || p.error)) || '').slice(0, 180));
-    const getUrl = (p.urls && p.urls.get) || ('https://api.replicate.com/v1/predictions/' + p.id);
-    const deadline = Date.now() + timeoutMs;
-    while (p && ['starting', 'processing'].includes(p.status) && Date.now() < deadline) {
-        await new Promise(res => setTimeout(res, 2500));
-        p = await (await fetchT(getUrl, { headers: { 'Authorization': 'Bearer ' + token } }, 30000)).json().catch(() => p);
-    }
-    if (!p || p.status !== 'succeeded') throw new Error('replicate ' + ((p && p.status) || 'unknown') + (p && p.error ? ': ' + String(p.error).slice(0, 180) : ''));
-    let out = p.output;
-    if (typeof out === 'string') { try { out = JSON.parse(out); } catch (e) {} }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, input })
+    }, timeoutMs);
+    const out = await r.json().catch(() => null);
+    if (!r.ok || !out || out.error) throw new Error('trained Long Quant worker http ' + r.status + ': ' + String((out && out.error) || '').slice(0, 180));
     return out;
 }
 let _longQuantModelTail = Promise.resolve();
@@ -10416,10 +10409,10 @@ function longQuantRunModelExclusive(fn) {
     _longQuantModelTail = run.catch(() => {});
     return run;
 }
-async function replicateLongModelRun(kind, input, timeoutMs = 1800000) {
+async function longQuantModelRun(kind, input, timeoutMs = 1800000) {
     if (!['idea', 'thumb'].includes(kind)) throw new Error(`unknown Long Quant model kind: ${kind}`);
-    if (!process.env.REPLICATE_API_TOKEN || !/^[a-f0-9]{64}$/i.test(LONGQUANT_WORKER_VERSION)) {
-        throw new Error('trained Long Quant Replicate worker is not configured; refusing to fall back to a general LLM');
+    if (!LONGQUANT_WORKER_URL || !process.env.R2_SECRET_ACCESS_KEY) {
+        throw new Error('trained Long Quant worker is not configured; refusing to fall back to a general LLM');
     }
     const src = input && typeof input === 'object' ? input : {};
     const modelInput = {
@@ -10436,10 +10429,10 @@ async function replicateLongModelRun(kind, input, timeoutMs = 1800000) {
         seed: Math.max(1, Math.min(2147483647, parseInt(src.seed, 10) || longQuantStableSeed(kind, src.premise, src.idea, src.attempt))),
     };
     // A shared queue prevents concurrent channel grinds from cold-booting duplicate 58 GB bases.
-    return longQuantRunModelExclusive(() => replicateLongVersionRun(modelInput, timeoutMs));
+    return longQuantRunModelExclusive(() => longQuantHostedRun(modelInput, timeoutMs));
 }
 function longQuantHostedModelConfigured() {
-    return !!(process.env.REPLICATE_API_TOKEN && /^[a-f0-9]{64}$/i.test(LONGQUANT_WORKER_VERSION));
+    return !!(LONGQUANT_WORKER_URL && process.env.R2_SECRET_ACCESS_KEY);
 }
 function longQuantThumbPromptModelLabel() {
     return LONGQUANT_THUMB_MODEL;
@@ -10500,7 +10493,7 @@ async function longQuantIdeaGenerate(seed, attempt, prior, guide = {}, context =
             ? 'Generate inside this semantic ring: stay above the seed-topic similarity floor, but outside the minimum distance from every prior rendered idea. Change the angle/mechanism/stakes, not the core communicated topic.'
             : 'Generate a materially different long-form YouTube video idea from recent candidates.',
     };
-    const out = await replicateLongModelRun('idea', {
+    const out = await longQuantModelRun('idea', {
         premise: seed || '',
         idea: seed || '',
         // A seeded grind is always the same actual video, even on later iterations.
@@ -10531,7 +10524,7 @@ function longQuantCleanThumbPrompt(s) {
 }
 async function longQuantThumbPrompts(idea, count, context = '', opts = {}) {
     const videoReality = longQuantRealityContext(idea, context);
-    const out = await replicateLongModelRun('thumb', {
+    const out = await longQuantModelRun('thumb', {
         title: idea,
         idea,
         context: videoReality,
@@ -10604,7 +10597,7 @@ function longQuantGrindEnvelope(body = {}, opts = {}) {
         ideaModel: LONGQUANT_IDEA_MODEL,
         thumbModel: longQuantThumbPromptModelLabel(),
         renderModel: LONGQUANT_RENDER_MODEL,
-        modelProvider: 'replicate',
+        modelProvider: LONGQUANT_MODEL_PROVIDER,
         workerVersion: LONGQUANT_WORKER_VERSION,
         ts: now,
     };
@@ -11097,11 +11090,11 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
         input_id: rid, title: idea, idea, invented: !!opts.invented, n, context, contextChars: context.length, sourceVideo,
         model: `${promptModel} + ${LONGQUANT_RENDER_MODEL.split('/').pop()}`,
         promptModel, ideaModel: LONGQUANT_IDEA_MODEL, hosted: true, workerReady: hostedThumb,
-        modelProvider: 'replicate', workerVersion: LONGQUANT_WORKER_VERSION,
+        modelProvider: LONGQUANT_MODEL_PROVIDER, workerVersion: LONGQUANT_WORKER_VERSION,
         attempts: [], done: false, streaming: true,
     };
     await checkStop();
-    await emitStatus({ stage: 'prompting', done: 0, note: 'trained thumb_b10 is writing thumbnail prompts on Replicate' });
+    await emitStatus({ stage: 'prompting', done: 0, note: 'trained thumb_b10 is writing thumbnail prompts on the model worker' });
     await lqDemoGroupWrite(rid, group);
     await checkStop();
     const prompts = await longQuantWithHeartbeat(
@@ -11109,7 +11102,7 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
             attempt: opts.attemptK,
             seed: longQuantStableSeed(rid, 'thumb', idea, opts.attemptK || 0),
         }),
-        () => emitStatus({ stage: 'prompting', done: 0, note: 'still waiting for trained thumb_b10 on Replicate' }),
+        () => emitStatus({ stage: 'prompting', done: 0, note: 'still waiting for trained thumb_b10 on the model worker' }),
         12000
     );
     await checkStop();
@@ -11188,7 +11181,7 @@ async function longQuantProcessRequest(rid, req) {
     let idea = typed;
     try {
         if (!idea) {
-            await lqDemoStatus(rid, { stage: 'reasoning', n: 1, done: 0, note: 'blank request: trained idea_long_r26 is inventing the video on Replicate' });
+            await lqDemoStatus(rid, { stage: 'reasoning', n: 1, done: 0, note: 'blank request: trained idea_long_r26 is inventing the video' });
             idea = await longQuantIdeaGenerate('', 0, [], { runKey: rid }, context);
         }
         await longQuantBuildThumbGroup(rid, idea, req.count || 5, { invented: !typed, context, sourceVideo: req.sourceVideo, attemptK: 0 });
@@ -11199,14 +11192,14 @@ async function longQuantProcessRequest(rid, req) {
             done: true, streaming: false, error: msg,
             model: `${longQuantThumbPromptModelLabel()} + ${LONGQUANT_RENDER_MODEL}`,
             promptModel: LONGQUANT_THUMB_MODEL, ideaModel: LONGQUANT_IDEA_MODEL,
-            modelProvider: 'replicate', workerVersion: LONGQUANT_WORKER_VERSION,
+            modelProvider: LONGQUANT_MODEL_PROVIDER, workerVersion: LONGQUANT_WORKER_VERSION,
         });
         await lqDemoStatus(rid, { stage: 'done', title: idea || typed || '', error: msg });
     }
 }
 async function longQuantDemoThumbGroup(idea, count, parentRid, attemptK, onStatus, opts = {}) {
     const reqRid = 'g' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-    if (onStatus) await onStatus(reqRid, { stage: 'prompting', note: 'trained thumb_b10 is generating prompts on Replicate' });
+    if (onStatus) await onStatus(reqRid, { stage: 'prompting', note: 'trained thumb_b10 is generating prompts on the model worker' });
     const group = await longQuantBuildThumbGroup(reqRid, idea, Math.max(1, Math.min(8, parseInt(count, 10) || 5)), { parentRid, attemptK, ...opts, onStatus });
     return { reqRid, group };
 }
@@ -11335,7 +11328,7 @@ async function longQuantGrindProcess(rid, req0) {
             baseline, autosaved, maxAttempts, hours, autosaveBest: !!req0.autosaveBest,
             progressContract: 2, lifecycleVersion: 3,
             ideaModel: LONGQUANT_IDEA_MODEL, thumbModel: longQuantThumbPromptModelLabel(), renderModel: LONGQUANT_RENDER_MODEL,
-            modelProvider: 'replicate', workerVersion: LONGQUANT_WORKER_VERSION,
+            modelProvider: LONGQUANT_MODEL_PROVIDER, workerVersion: LONGQUANT_WORKER_VERSION,
         }));
         // Heartbeats and progress callbacks can land together. Coalesce them and serialize
         // R2 writes so an older, slower upload can never overwrite newer progress.
@@ -11678,7 +11671,7 @@ function longQuantRequestFromRun(run, rid) {
         ideaModel: LONGQUANT_IDEA_MODEL,
         thumbModel: longQuantThumbPromptModelLabel(),
         renderModel: LONGQUANT_RENDER_MODEL,
-        modelProvider: 'replicate',
+        modelProvider: LONGQUANT_MODEL_PROVIDER,
         workerVersion: LONGQUANT_WORKER_VERSION,
         lifecycleVersion: 3,
         recovered: true,

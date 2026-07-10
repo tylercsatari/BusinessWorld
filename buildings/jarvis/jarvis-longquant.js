@@ -1551,10 +1551,19 @@ const JarvisLongQuant = (function () {
     // 🪝 Shorts hook embeddings: every posted short's spoken hook, cut at a complete thought
     // near ~5s, embedded text-only in the LONG-form text space (built by hook_embed_batch.py).
     function lqHookEmbEnsure(force) {
-        if (LQHOOKEMB[0] && !force) return;
-        LQHOOKEMB[0] = { loading: 1 };
-        lqxJson('/api/longquant/hooks/index').then(j => { LQHOOKEMB[0] = { ...(j || {}), _t: Date.now() }; rtgUpdateLqExp(); })
-            .catch(e => { LQHOOKEMB[0] = { rows: [], error: e.message || String(e), _t: Date.now() }; rtgUpdateLqExp(); });
+        const cur = LQHOOKEMB[0];
+        if (cur && cur.loading) return;
+        // LIVE: while a re-cut pass is running (index.recut.active), refresh every 15s so the tab
+        // shows each newly applied hook as it lands; otherwise the dataset is static — fetch once.
+        const liveStale = cur && cur.recut && cur.recut.active && Date.now() - (cur._t || 0) > 15000;
+        if (cur && !force && !liveStale) return;
+        LQHOOKEMB[0] = { ...(cur || {}), loading: 1 };
+        lqxJson('/api/longquant/hooks/index').then(j => {
+            LQHOOKEMB[0] = { ...(j || {}), _t: Date.now() };
+            Object.keys(LQHOOKDET).forEach(k => delete LQHOOKDET[k]);   // details re-fetch fresh after re-cuts
+            rtgUpdateLqExp();
+            if (j && j.recut && j.recut.active) window.setTimeout(() => { try { lqHookEmbEnsure(); } catch (e) { } }, 16000);
+        }).catch(e => { LQHOOKEMB[0] = { rows: (cur && cur.rows) || [], error: e.message || String(e), _t: Date.now() }; rtgUpdateLqExp(); });
     }
     function lqHookDetail(id) {
         if (!id || LQHOOKDET[id]) return;
@@ -1986,11 +1995,12 @@ const JarvisLongQuant = (function () {
         else if (!hkRows.length) hookEmb += `<div style="font-size:11px;color:${C.dim}">No hook-embedding dataset yet — the batch may still be running.</div>`;
         else {
             const hkErrs = hkRows.length - hkOk.length;
+            if (HK.recut && (HK.recut.active || (HK.recut.done || 0) < (HK.recut.total || 0))) hookEmb += `<div style="font-size:10px;color:${HK.recut.active ? C.cyan : C.amber};border:1px solid ${HK.recut.active ? C.cyan : C.amber}44;border-radius:6px;padding:5px 9px;margin-bottom:8px;font-weight:700">${HK.recut.active ? '⏳ LIVE — Claude is re-cutting the hooks right now' : 'Re-cut paused'}: ${HK.recut.done || 0}/${HK.recut.total || 0} hooks re-picked · rows update automatically${HK.loading ? ' · refreshing…' : ''}</div>`;
             hookEmb += `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span style="font-size:10px;color:${C.mute}">${hkOk.length} hooks scored${hkErrs ? ` · ${hkErrs} without transcript/score` : ''} · sort</span>${hkPill('pct', 'text score')}${hkPill('views', 'views')}${hkPill('keep', 'keep rate')}${hkPill('end', 'hook length')}</div>`;
             hookEmb += hkSorted.slice(0, hkShow).map(r => {
                 const on = st.lqxHookSel === r.id;
                 const p = hkPct(r.pctile);
-                let row = `<div data-lqxhooksel="${esc(r.id)}" style="cursor:pointer;border:1px solid ${on ? C.amber : C.border};border-radius:8px;background:${on ? C.amber + '10' : C.card2};padding:9px;margin-bottom:7px"><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1 1 320px;min-width:0"><div style="font-size:12px;color:${C.text};font-weight:800;line-height:1.35">“${esc(r.hookText || '')}”</div><div style="font-size:9px;color:${C.faint};margin-top:3px">${esc(r.title || '')}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;font-size:9px"><span style="border:1px solid ${p >= 80 ? C.green : C.amber}66;border-radius:5px;padding:2px 6px;color:${p >= 80 ? C.green : C.amber};font-weight:900">${p == null ? '—' : p + 'th'} text</span><span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">${fv(Number(r.views || 0))} views</span>${r.keep_rate != null ? `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">keep ${Number(r.keep_rate).toFixed(1)}%</span>` : ''}${r.swiped != null ? `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">swiped ${Number(r.swiped).toFixed(1)}%</span>` : ''}<span style="border:1px solid ${C.amber}55;border-radius:5px;padding:2px 6px;color:${C.amber}">hook ends ${r.hookEndSec}s</span></div></div><div style="flex:0 1 260px;min-width:200px">${lqxRetGraph(r.curve, r.hookEndPct, r.hookEndSec, false)}</div></div>`;
+                let row = `<div data-lqxhooksel="${esc(r.id)}" style="cursor:pointer;border:1px solid ${on ? C.amber : C.border};border-radius:8px;background:${on ? C.amber + '10' : C.card2};padding:9px;margin-bottom:7px"><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1 1 320px;min-width:0"><div style="font-size:12px;color:${C.text};font-weight:800;line-height:1.35">“${esc(r.hookText || '')}”</div><div style="font-size:9px;color:${C.faint};margin-top:3px">${esc(r.title || '')}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;font-size:9px"><span style="border:1px solid ${p >= 80 ? C.green : C.amber}66;border-radius:5px;padding:2px 6px;color:${p >= 80 ? C.green : C.amber};font-weight:900">${p == null ? '—' : p + 'th'} text</span><span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">${fv(Number(r.views || 0))} views</span>${r.keep_rate != null ? `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">keep ${Number(r.keep_rate).toFixed(1)}%</span>` : ''}${r.swiped != null ? `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">swiped ${Number(r.swiped).toFixed(1)}%</span>` : ''}<span style="border:1px solid ${C.amber}55;border-radius:5px;padding:2px 6px;color:${C.amber}">hook ends ${r.hookEndSec}s</span>${r.cutBy === 'claude' ? `<span style="border:1px solid ${C.green}55;border-radius:5px;padding:2px 6px;color:${C.green}">✂ cut by Claude</span>` : `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.faint}">✂ re-cut pending</span>`}</div></div><div style="flex:0 1 260px;min-width:200px">${lqxRetGraph(r.curve, r.hookEndPct, r.hookEndSec, false)}</div></div>`;
                 if (on) {
                     const det = LQHOOKDET[r.id] || {};
                     const S3 = det.score;
