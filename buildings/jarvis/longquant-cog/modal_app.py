@@ -98,7 +98,7 @@ image = (
 
 @app.cls(
     image=image,
-    gpu=["H100", "A100-80GB"],
+    gpu=["H200", "H100", "A100-80GB"],
     secrets=[r2_secret],
     min_containers=0,
     buffer_containers=0,

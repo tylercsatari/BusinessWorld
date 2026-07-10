@@ -134,7 +134,7 @@ async function main() {
     assert(modalSource.indexOf('.add_local_python_source("worker_core"') > modalSource.indexOf('.run_function(_download_adapters'), 'worker source invalidates the expensive immutable weight layers');
     assert(modalSource.includes('HF_ENABLE_PARALLEL_LOADING') && modalSource.includes('HF_HUB_OFFLINE'), 'worker image does not use local parallel weight loading');
     assert(modalSource.includes('HF_PARALLEL_LOADING_WORKERS": "4"') && modalSource.includes('peft==0.19.1'), 'worker loading concurrency or adapter runtime version drifted');
-    assert(modalSource.includes('gpu=["H100", "A100-80GB"]'), 'worker lacks a full-memory GPU fallback for faster allocation');
+    assert(modalSource.includes('gpu=["H200", "H100", "A100-80GB"]'), 'worker lacks full-memory GPU fallbacks for faster allocation');
     assert(modalSource.includes('min_containers=0') && modalSource.includes('buffer_containers=0') && modalSource.includes('scaledown_window=45'), 'worker does not have an explicit scale-to-zero policy');
     assert(providerSource.includes("task: 'health'") && providerSource.includes('longQuantKeepWorkerWarm'), 'active grinds do not bridge image-rendering gaps without an always-on worker');
 
