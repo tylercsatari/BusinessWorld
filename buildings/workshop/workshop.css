@@ -505,6 +505,17 @@
 .wsp-stage-video.wsp-ready { border-color: #27ae60; background: linear-gradient(180deg, rgba(39,174,96,0.12), rgba(39,174,96,0.04)); box-shadow: 0 0 0 1px rgba(39,174,96,0.35); }
 .wsp-stage-video.wsp-ready .wsp-stage-video-head:hover { background: rgba(39,174,96,0.08); }
 .wsp-ready-badge { margin-left: 8px; font-size: 10.5px; font-weight: 800; color: #1e8c4f; background: rgba(39,174,96,0.16); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+/* Owner 🔥 priority: immediate-attention videos glow orange and sort first.
+   Declared AFTER .wsp-ready so priority wins when a row is both. */
+.wsp-stage-video.wsp-priority { border-color: #e67e22; background: linear-gradient(180deg, rgba(230,126,34,0.16), rgba(230,126,34,0.05)); box-shadow: 0 0 0 1px rgba(230,126,34,0.45); }
+.wsp-stage-video.wsp-priority .wsp-stage-video-head:hover { background: rgba(230,126,34,0.09); }
+.wsp-prio-badge { font-size: 12px; }
+.wsp-prio-btn { border: 1px solid #d8d2c6; background: #fff; border-radius: 6px; padding: 2px 7px; cursor: pointer; font-size: 12px; opacity: 0.4; transition: opacity .12s; }
+.wsp-prio-btn:hover { opacity: 1; }
+.wsp-prio-btn.active { opacity: 1; border-color: #e67e22; background: rgba(230,126,34,0.16); box-shadow: 0 0 0 1px rgba(230,126,34,0.35); font-weight: 700; color: #b35c12; }
+/* ⏭ skip-ahead: renders as a tiny icon button; the options list shows all stages */
+.wsp-skip-select { width: 44px; border: 1px solid #d8d2c6; border-radius: 6px; background: #fff; font-size: 12px; padding: 2px 2px; cursor: pointer; color: #7a7466; }
+.wsp-skip-select:hover { border-color: #b7ad99; color: #333; }
 /* Priority-sequence "after <video>" chip — amber while the previous video isn't
    done, calm grey once it is. */
 .wsp-after-chip { font-size: 11px; font-weight: 700; color: #9a6a1b; background: rgba(232,160,32,0.16); padding: 1px 8px; border-radius: 6px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

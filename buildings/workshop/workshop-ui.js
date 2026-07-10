@@ -1209,11 +1209,20 @@ const WorkshopUI = (() => {
                 actions = `<button class="wsp-mini-btn done" data-node-done="${v.id}" data-node-stage="${stage.id}" title="Done">✓ Done</button>`;
             }
         }
-        return `<div class="wsp-stage-video${expanded ? ' expanded' : ''}${ready ? ' wsp-ready' : ''}" data-id="${v.id}">
+        // Owner-only row controls: 🔥 priority highlight + ⏭ skip-ahead (move to
+        // any stage with no asset/deliverable gates and no confirm dialogs).
+        const ownerCtl = isOwnerUser() ? `
+            <button class="wsp-prio-btn${v.priority ? ' active' : ''}" data-prio="${v.id}" title="${v.priority ? 'Unmark priority' : 'Mark as priority — highlights it orange so it\'s easy to spot'}">🔥</button>
+            <select class="wsp-skip-select" data-skip-stage="${v.id}" title="Skip ahead — move this video to any stage, assets or not (owner only)">
+                <option value="">⏭</option>
+                ${PS().STAGES.map(s => `<option value="${s.id}">${s.icon} ${escHtml(s.label)}</option>`).join('')}
+            </select>` : '';
+        const prio = isOwnerUser() && v.priority;
+        return `<div class="wsp-stage-video${expanded ? ' expanded' : ''}${ready ? ' wsp-ready' : ''}${prio ? ' wsp-priority' : ''}" data-id="${v.id}">
             <div class="wsp-stage-video-head" data-expand="${v.id}">
                 <span class="wsp-caret">${expanded ? '▾' : '▸'}</span>
                 <div class="wsp-stage-video-main">
-                    <div class="wsp-stage-video-name">${flagOrDot(v.project)} ${escHtml(v.name)} ${blockedBadge(v)}${ready ? '<span class="wsp-ready-badge">✓ ready — press Done</span>' : ''}</div>
+                    <div class="wsp-stage-video-name">${prio ? '<span class="wsp-prio-badge" title="Priority">🔥</span> ' : ''}${flagOrDot(v.project)} ${escHtml(v.name)} ${blockedBadge(v)}${ready ? '<span class="wsp-ready-badge">✓ ready — press Done</span>' : ''}</div>
                     <div class="wsp-stage-video-meta">
                         ${!stage ? frontierChips(v, 3) : `<span class="wsp-deliv-need" title="What needs to be finished">📋 ${escHtml(STAGE_DELIVERABLE[stage.id] || stage.label)}</span>`}
                         ${(() => { if (!v.previousVideoId) return ''; const p = VideoService.getById(v.previousVideoId); if (!p) return ''; const posted = isVideoPosted(p); return `<span class="wsp-after-chip${posted ? ' clear' : ''}" title="Priority sequence — ${posted ? 'its previous video is done' : 'do its previous video first'}">▶ after ${escHtml(p.name)}${posted ? ' ✓' : ''}</span>`; })()}
@@ -1222,7 +1231,7 @@ const WorkshopUI = (() => {
                         ${sp ? `<span class="wsp-sponsor-chip">💰 ${escHtml(sp)}</span>` : ''}
                     </div>
                 </div>
-                <div class="wsp-stage-video-actions">${stage ? workerControlHtml('video', v.id, v, stage.id) : ''}${actions}</div>
+                <div class="wsp-stage-video-actions">${ownerCtl}${stage ? workerControlHtml('video', v.id, v, stage.id) : ''}${actions}</div>
             </div>
             ${expanded ? stageVideoBodyHtml(v, stage) : ''}
         </div>`;
@@ -1386,6 +1395,25 @@ const WorkshopUI = (() => {
         // The per-node DONE button lives on every stage row (and in the expanded
         // editor) — bind them all here so a collapsed row's Done works too.
         panel.querySelectorAll('[data-node-done]').forEach(b => b.addEventListener('click', (ev) => { ev.stopPropagation(); pushNodeForward(b.dataset.nodeDone, b.dataset.nodeStage); }));
+        // Owner-only: 🔥 toggle the priority highlight on a row.
+        panel.querySelectorAll('[data-prio]').forEach(b => b.addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const v = VideoService.getById(b.dataset.prio);
+            if (!v) return;
+            await VideoService.update(v.id, { priority: !v.priority });
+            renderTab();
+        }));
+        // Owner-only: ⏭ skip ahead — jump the video to any stage, no gates, no dialogs.
+        panel.querySelectorAll('[data-skip-stage]').forEach(sel => sel.addEventListener('change', async (ev) => {
+            ev.stopPropagation();
+            const target = sel.value;
+            sel.value = '';
+            if (!target) return;
+            const v = VideoService.getById(sel.dataset.skipStage);
+            if (!v) return;
+            const moved = await moveVideoToStage(v, target, { quick: true });
+            if (moved) renderTab();
+        }));
         // Add another person to a row (video or component) — multiple allowed.
         panel.querySelectorAll('.wsp-worker-add').forEach(sel => sel.addEventListener('change', async (ev) => {
             ev.stopPropagation();
@@ -1631,7 +1659,7 @@ const WorkshopUI = (() => {
             </div>
             <div class="wsp-stage-panel-list">
                 ${total === 0 ? '<div class="workshop-empty">Nothing matches the current filters. Queue an idea from the Library to feed the pipeline!</div>' : ''}
-                ${vids.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.video}">${icon('video', 'wsp-sec-ic')} Videos in the pipeline</div>${vids.map(v => stageVideoRowHtml(v, null)).join('')}` : ''}
+                ${vids.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.video}">${icon('video', 'wsp-sec-ic')} Videos in the pipeline</div>${(isOwnerUser() ? [...vids].sort((a, b) => (b.priority === true) - (a.priority === true)) : vids).map(v => stageVideoRowHtml(v, null)).join('')}` : ''}
                 ${comps.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.component}">${icon('component', 'wsp-sec-ic')} Components being built</div>${comps.map(c => componentRowHtml(c)).join('')}` : ''}
                 ${tasks.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.task}">${icon('propdesign', 'wsp-sec-ic')} Tasks / errands</div>${tasks.map(c => componentRowHtml(c)).join('')}` : ''}
                 ${orders.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.order}">${icon('order', 'wsp-sec-ic')} Open orders</div>${orders.map(orderRowHtml).join('')}` : ''}
@@ -1707,7 +1735,7 @@ const WorkshopUI = (() => {
             </div>
             <div class="wsp-stage-panel-list">
                 ${e.videos.length === 0 && !compRows && !taskRows && e.orders.length === 0 ? '<div class="workshop-empty">Nothing at this stage (with current filters).</div>' : ''}
-                ${e.videos.map(v => stageVideoRowHtml(v, stage)).join('')}
+                ${(isOwnerUser() ? [...e.videos].sort((a, b) => (b.priority === true) - (a.priority === true)) : e.videos).map(v => stageVideoRowHtml(v, stage)).join('')}
                 ${compRows ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.component}">${icon('component', 'wsp-sec-ic')} Components being worked here</div>${compRows}` : ''}
                 ${taskRows ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.task}">${icon('propdesign', 'wsp-sec-ic')} Tasks / errands</div>${taskRows}` : ''}
                 ${e.orders.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.order}">${icon('order', 'wsp-sec-ic')} Open orders</div>${e.orders.map(orderRowHtml).join('')}` : ''}
@@ -2567,7 +2595,8 @@ const WorkshopUI = (() => {
                 <div class="wsp-progress-head">
                     <label>Pipeline Progress</label>
                     <div class="wsp-progress-head-actions">
-                        ${isOwnerUser() ? `<select id="wsp-move-stage" class="wsp-inline-select" title="Owner only: move this video to any stage — everything before it is marked done, that stage and after reset to pending. Forces the move regardless of deliverables.">
+                        ${isOwnerUser() ? `<button id="wsp-prio-toggle" class="wsp-prio-btn${v.priority ? ' active' : ''}" title="${v.priority ? 'Unmark priority' : 'Mark as priority — highlights it orange so it\'s easy to spot'}">🔥 ${v.priority ? 'Priority' : 'Mark priority'}</button>
+                        <select id="wsp-move-stage" class="wsp-inline-select" title="Owner only: move this video to any stage — everything before it is marked done, that stage and after reset to pending. Forces the move regardless of deliverables.">
                             <option value="">⇄ Move to stage…</option>
                             ${PS().STAGES.map(s => `<option value="${s.id}">${escHtml(s.label)}</option>`).join('')}
                         </select>` : ''}
@@ -2737,6 +2766,13 @@ const WorkshopUI = (() => {
 
         // Branch decisions removed — a video's build branches are derived from its
         // components' needs (see effectiveState/branchActive).
+
+        // Owner-only: 🔥 toggle the priority highlight
+        get('wsp-prio-toggle')?.addEventListener('click', async () => {
+            const fresh = VideoService.getById(v.id) || v;
+            await VideoService.update(v.id, { priority: !fresh.priority });
+            rerender();
+        });
 
         // Owner-only: force-move the video to any stage (for organization)
         get('wsp-move-stage')?.addEventListener('change', async (e) => {
@@ -4480,11 +4516,14 @@ const WorkshopUI = (() => {
             return await uploadDirectToDropbox(destPath, file, onProgress);
         } catch (e) {
             if (!e || !e.directUpload) throw e;
-            if (file.size > DBX_SIMPLE_MAX) {
-                throw new Error(`Fast Dropbox direct upload failed: ${e.message}. Slow Render relay is disabled for large videos so uploads do not crawl.`);
-            }
-            console.warn('Direct Dropbox upload failed; retrying through server proxy:', e.message);
-            if (onStatus) onStatus('Render relay fallback');
+            // Fast browser→Dropbox path failed (CORS blip, expired token, dropped
+            // socket). Fall back to the server relay for ANY size. For large files
+            // the relay is the CHUNKED proxy, which streams one chunk at a time
+            // through the server (it never buffers the whole file), so multi-GB
+            // uploads stay memory-safe on the 2 GB Render box — just slower than
+            // the direct path. A slow upload that succeeds beats a hard dead-end.
+            console.warn('Direct Dropbox upload failed; falling back to server relay:', e.message);
+            if (onStatus) onStatus(file.size > DBX_SIMPLE_MAX ? 'Render relay fallback · chunked (slower)' : 'Render relay fallback');
             if (onProgress) onProgress(0, file.size || 1);
             return uploadViaProxyToDropbox(destPath, file, onProgress);
         }
@@ -5500,7 +5539,12 @@ const WorkshopUI = (() => {
     // only the FIELD gates the move would skip over (hook text, script text,
     // linked voiceover) — components/branches are NOT mandatory here, this
     // is the escape hatch for pre-pipeline videos.
-    async function moveVideoToStage(v, targetId) {
+    // opts.quick (owner only): skip the confirm dialogs entirely — the fast
+    // "skip ahead" triage path for organizing many videos into the right
+    // stage regardless of missing assets/deliverables. A mis-move is cheap:
+    // only stageState changes (fields/files untouched), so moving it back
+    // fully undoes it.
+    async function moveVideoToStage(v, targetId, opts = {}) {
         const target = PS().get(targetId);
         if (!v || !target) return false;
         // A profile can only move work INTO a stage it has write access to.
@@ -5508,6 +5552,7 @@ const WorkshopUI = (() => {
             alert(`You don't have write access to ${target.label}, so you can't move work there.`);
             return false;
         }
+        const quick = !!opts.quick && isOwnerUser();
 
         const anc = new Set(PS().ancestorsOf(targetId));
         const missing = [];
@@ -5525,8 +5570,8 @@ const WorkshopUI = (() => {
             }
             // Owner override: skip the gates and move anyway, marking the skipped
             // stages done even though their fields are empty.
-            if (!confirm(`⚠️ Override — move "${v.name}" to ${target.label} anyway?\n\nThese mandatory fields are still empty and will be skipped (their stages marked done):\n\n${missing.join('\n')}\n\nThis is an owner-only override. Move it anyways?`)) return false;
-        } else if (!confirm(`Move "${v.name}" to ${target.icon} ${target.label}?\nEverything before it will be marked done; ${target.label} and everything after reset to pending.`)) {
+            if (!quick && !confirm(`⚠️ Override — move "${v.name}" to ${target.label} anyway?\n\nThese mandatory fields are still empty and will be skipped (their stages marked done):\n\n${missing.join('\n')}\n\nThis is an owner-only override. Move it anyways?`)) return false;
+        } else if (!quick && !confirm(`Move "${v.name}" to ${target.icon} ${target.label}?\nEverything before it will be marked done; ${target.label} and everything after reset to pending.`)) {
             return false;
         }
 

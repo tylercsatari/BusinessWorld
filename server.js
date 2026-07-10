@@ -574,6 +574,10 @@ console.log('[raw-upload] using python:', RAW_PYTHON);
 const LONGQUANT_IDEA_MODEL = process.env.LONGQUANT_IDEA_MODEL || 'idea_long_r26';
 const LONGQUANT_THUMB_MODEL = process.env.LONGQUANT_THUMB_MODEL || 'thumb_b10';
 const LONGQUANT_RENDER_MODEL = process.env.LONGQUANT_RENDER_MODEL || 'black-forest-labs/flux-2-pro';
+// One Replicate image serves both finalized LoRA adapters on their shared Qwen3 base.
+// The immutable version is pinned after Cog deployment, matching Shorts Quant's model contract.
+const LONGQUANT_WORKER_VERSION = process.env.LONGQUANT_WORKER_VERSION || '638f8140d31eae61f90a929e8335563e4b9d3c69364c3e48f9704422ff1fac22';
+const LONGQUANT_WORKER_DEPLOYMENT = process.env.LONGQUANT_WORKER_DEPLOYMENT || 'tylercsatari/longquant-workers';
 const LONGQUANT_CONTEXT_CHARS = Math.max(1600, Math.min(12000, parseInt(process.env.LONGQUANT_CONTEXT_CHARS, 10) || 6000));
 const LONGQUANT_PROMPT_CONTEXT_CHARS = Math.min(6000, LONGQUANT_CONTEXT_CHARS);
 const LONGQUANT_SCORE_TEXT_CHARS = Math.min(6000, LONGQUANT_CONTEXT_CHARS);
@@ -3471,25 +3475,27 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if (pathname === '/api/longquant/exp/generate' && req.method === 'POST') {
         const body = await readBody(req);
         const title = String(body.title || '').slice(0, 200).trim();
-        const count = Math.max(1, Math.min(12, parseInt(body.count, 10) || 5));
+        const count = Math.max(1, Math.min(8, parseInt(body.count, 10) || 5));
         const rid = 'd' + Date.now().toString(36);
         const invent = !title;
         const payload = {
             title, premise: title, idea: title, forceTitle: title, count, invent, mode: invent ? 'idea_plus_thumbnail' : 'thumbnail_only',
             instruction: invent
-                ? 'Blank request: use the trained idea model/accepted idea bank first, then generate thumbnails.'
+                ? 'Blank request: run idea_long_r26 first, then run thumb_b10.'
                 : 'Typed request: DO NOT invent or rewrite the video idea. Use this exact title/idea as the thumbnail model input.',
             ts: Date.now(),
             ideaModel: LONGQUANT_IDEA_MODEL,
             thumbModel: longQuantThumbPromptModelLabel(),
             renderModel: LONGQUANT_RENDER_MODEL,
+            modelProvider: 'replicate',
+            workerVersion: LONGQUANT_WORKER_VERSION,
             scoring: ['ctr', 'ret30', 'views', 'scaled_views', 'realviews', 'gt10m', 'ctrviews'],
         };
         try {
             const pend = ((await cloud.listR2Keys(LONGQUANT_DEMO_REQUEST_PREFIX)) || []).filter(k => k.endsWith('.json'));
             if (pend.length >= 4) { res.writeHead(429, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'busy — Long Quant has a few generations queued, try again in a moment' })); return; }
         } catch (e) {}
-        await lqDemoStatus(rid, { stage: 'queued', title: title || '', n: count, done: 0, note: 'queued on the app server' });
+        await lqDemoStatus(rid, { stage: 'queued', title: title || '', n: count, done: 0, note: 'queued for the trained Long Quant models' });
         await cloud.uploadToR2(`${LONGQUANT_DEMO_REQUEST_PREFIX}${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, rid, invent, mode: payload.mode, title, model: payload }));
@@ -10308,14 +10314,27 @@ async function grindQueue() {
 setInterval(() => { grindQueue().catch(() => {}); }, 5000);
 
 // ── Long Quant GRIND: idea model → thumbnail model → Flux Pro → raw-long scorer ────────────
-async function replicateVersionRun(version, input, timeoutMs = 720000) {
+let _longQuantDeploymentVerifiedAt = 0;
+async function replicateLongDeploymentRun(input, timeoutMs = 1800000) {
     const token = process.env.REPLICATE_API_TOKEN;
     if (!token) throw new Error('REPLICATE_API_TOKEN not configured');
-    if (!version) throw new Error('model version not configured');
-    const r = await fetchT('https://api.replicate.com/v1/predictions', {
+    if (Date.now() - _longQuantDeploymentVerifiedAt > 300000) {
+        const cfg = await fetchT(`https://api.replicate.com/v1/deployments/${LONGQUANT_WORKER_DEPLOYMENT}`, {
+            headers: { 'Authorization': 'Bearer ' + token },
+        }, 30000);
+        const deployment = await cfg.json().catch(() => null);
+        const release = deployment && deployment.current_release;
+        if (!cfg.ok || !release || release.version !== LONGQUANT_WORKER_VERSION) {
+            throw new Error(`Long Quant deployment version mismatch; expected ${LONGQUANT_WORKER_VERSION.slice(0, 12)}`);
+        }
+        const maxInstances = Number(release.configuration && release.configuration.max_instances);
+        if (maxInstances < 1) throw new Error('Long Quant Replicate deployment is disabled; refusing to fall back');
+        _longQuantDeploymentVerifiedAt = Date.now();
+    }
+    const r = await fetchT(`https://api.replicate.com/v1/deployments/${LONGQUANT_WORKER_DEPLOYMENT}/predictions`, {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ version, input })
+        body: JSON.stringify({ input })
     }, 60000);
     let p = await r.json().catch(() => null);
     if (!p || r.status >= 400 || !p.id) throw new Error('replicate create http ' + r.status + ': ' + String((p && (p.detail || p.title || p.error)) || '').slice(0, 180));
@@ -10330,43 +10349,51 @@ async function replicateVersionRun(version, input, timeoutMs = 720000) {
     if (typeof out === 'string') { try { out = JSON.parse(out); } catch (e) {} }
     return out;
 }
-async function replicateModelRun(slug, input, timeoutMs = 720000) {
-    if (!slug) throw new Error('model slug not configured');
-    const out = await replicateRun(slug, input, timeoutMs);
-    if (typeof out === 'string') {
-        try {
-            const r = await fetchT(out, {}, 60000);
-            const txt = await r.text();
-            try { return JSON.parse(txt); } catch (e) { return txt; }
-        } catch (e) {}
-        try { return JSON.parse(out); } catch (e) { return out; }
+let _longQuantModelTail = Promise.resolve();
+function longQuantStableSeed(...parts) {
+    let h = 2166136261;
+    for (const ch of parts.map(v => String(v == null ? '' : v)).join('\x1f')) {
+        h ^= ch.codePointAt(0);
+        h = Math.imul(h, 16777619);
     }
-    return out;
+    return ((h >>> 0) & 0x7fffffff) || 1;
 }
-async function replicateLongModelRun(kind, input, timeoutMs = 720000) {
-    const isIdea = kind === 'idea';
-    const version = isIdea
-        ? (process.env.LONGQUANT_IDEA_VERSION || process.env.REPLICATE_LONG_IDEA_VERSION || '')
-        : (process.env.LONGQUANT_THUMB_VERSION || process.env.REPLICATE_LONG_THUMB_VERSION || '');
-    if (version) return replicateVersionRun(version, input, timeoutMs);
-    const slug = isIdea
-        ? (process.env.LONGQUANT_IDEA_MODEL_SLUG || process.env.REPLICATE_LONG_IDEA_MODEL || '')
-        : (process.env.LONGQUANT_THUMB_MODEL_SLUG || process.env.REPLICATE_LONG_THUMB_MODEL || '');
-    if (slug) return replicateModelRun(slug, input, timeoutMs);
-    throw new Error(`${isIdea ? 'LONGQUANT_IDEA_VERSION' : 'LONGQUANT_THUMB_VERSION'} is not configured; set it to the exported ${isIdea ? 'idea' : 'thumbnail prompt'} model version or model slug`);
+function longQuantJsonInput(value, fallback) {
+    try { return JSON.stringify(value == null ? fallback : value).slice(0, 12000); }
+    catch (e) { return JSON.stringify(fallback); }
 }
-function longQuantHostedModelConfigured(kind) {
-    const isIdea = kind === 'idea';
-    const version = isIdea
-        ? (process.env.LONGQUANT_IDEA_VERSION || process.env.REPLICATE_LONG_IDEA_VERSION || '')
-        : (process.env.LONGQUANT_THUMB_VERSION || process.env.REPLICATE_LONG_THUMB_VERSION || '');
-    const slug = isIdea
-        ? (process.env.LONGQUANT_IDEA_MODEL_SLUG || process.env.REPLICATE_LONG_IDEA_MODEL || '')
-        : (process.env.LONGQUANT_THUMB_MODEL_SLUG || process.env.REPLICATE_LONG_THUMB_MODEL || '');
-    return !!(process.env.REPLICATE_API_TOKEN && (version || slug));
+function longQuantRunModelExclusive(fn) {
+    const run = _longQuantModelTail.then(fn, fn);
+    _longQuantModelTail = run.catch(() => {});
+    return run;
+}
+async function replicateLongModelRun(kind, input, timeoutMs = 1800000) {
+    if (!['idea', 'thumb'].includes(kind)) throw new Error(`unknown Long Quant model kind: ${kind}`);
+    if (!process.env.REPLICATE_API_TOKEN || !/^[a-f0-9]{64}$/i.test(LONGQUANT_WORKER_VERSION)) {
+        throw new Error('trained Long Quant Replicate worker is not configured; refusing to fall back to a general LLM');
+    }
+    const src = input && typeof input === 'object' ? input : {};
+    const modelInput = {
+        task: kind,
+        premise: String(src.premise || src.title || '').slice(0, 500),
+        idea: String(src.idea || src.title || src.premise || '').slice(0, 500),
+        context: String(src.video_reality_context || src.opening_transcript_context || src.context || '').slice(0, 6000),
+        instruction: String(src.instruction || '').slice(0, 1200),
+        avoid_json: longQuantJsonInput(src.avoid, []),
+        semantic_ring_json: longQuantJsonInput(src.semantic_ring, {}),
+        invent: !!src.invent,
+        attempt: Math.max(0, Math.min(10000, parseInt(src.attempt, 10) || 0)),
+        count: Math.max(1, Math.min(8, parseInt(src.count, 10) || 1)),
+        seed: Math.max(1, Math.min(2147483647, parseInt(src.seed, 10) || longQuantStableSeed(kind, src.premise, src.idea, src.attempt))),
+    };
+    // A shared queue prevents concurrent channel grinds from cold-booting duplicate 58 GB bases.
+    return longQuantRunModelExclusive(() => replicateLongDeploymentRun(modelInput, timeoutMs));
+}
+function longQuantHostedModelConfigured() {
+    return !!(process.env.REPLICATE_API_TOKEN && /^[a-f0-9]{64}$/i.test(LONGQUANT_WORKER_VERSION));
 }
 function longQuantThumbPromptModelLabel() {
-    return longQuantHostedModelConfigured('thumb') ? LONGQUANT_THUMB_MODEL : `${LONGQUANT_THUMB_MODEL} app prompt worker`;
+    return LONGQUANT_THUMB_MODEL;
 }
 function lqStringsFromOutput(out) {
     if (!out) return [];
@@ -10408,40 +10435,8 @@ function longQuantScoreText(title, idea, context, sourceVideo) {
         reality ? `Authoritative video context: ${reality}` : '',
     ].filter(Boolean).join('\n').slice(0, LONGQUANT_SCORE_TEXT_CHARS);
 }
-let _lqIdeaBankCache = { t: 0, rows: [] };
-async function longQuantIdeaBank() {
-    const now = Date.now();
-    if (_lqIdeaBankCache.rows.length && now - _lqIdeaBankCache.t < 600000) return _lqIdeaBankCache.rows;
-    const rows = [];
-    for (let n = 30; n >= 20 && rows.length < 500; n--) {
-        for (const key of [`longform/ideas/idea${n}/accepted.jsonl`, `longform/ideas/idea${n}/index.jsonl`]) {
-            const b = await cloud.downloadFromR2(key).catch(() => null);
-            if (!b) continue;
-            for (const line of b.toString('utf8').split('\n')) {
-                if (!line.trim()) continue;
-                try {
-                    const r = JSON.parse(line);
-                    const idea = String(r.idea || r.title || '').replace(/\s+/g, ' ').trim();
-                    if (idea.length >= 8) rows.push({ idea, pctile: Number(r.pctile || r.vis_pctile || 0), novelty: r.novelty });
-                } catch (e) {}
-            }
-            if (rows.length) break;
-        }
-    }
-    const seen = new Set(), clean = [];
-    rows.sort((a, b) => (b.pctile || 0) - (a.pctile || 0));
-    for (const r of rows) {
-        const k = r.idea.toLowerCase().replace(/\W+/g, '').slice(0, 100);
-        if (seen.has(k)) continue;
-        seen.add(k); clean.push(r);
-        if (clean.length >= 500) break;
-    }
-    _lqIdeaBankCache = { t: now, rows: clean };
-    return clean;
-}
 async function longQuantIdeaGenerate(seed, attempt, prior, guide = {}, context = '') {
     const videoReality = longQuantRealityContext(seed, context);
-    const hosted = !!(process.env.REPLICATE_API_TOKEN && (process.env.LONGQUANT_IDEA_VERSION || process.env.REPLICATE_LONG_IDEA_VERSION || process.env.LONGQUANT_IDEA_MODEL_SLUG || process.env.REPLICATE_LONG_IDEA_MODEL));
     const avoid = (prior || []).slice(-14).map(a => ({
         idea: a.idea || a.title || '',
         distSeed: a.distSeed == null ? null : a.distSeed,
@@ -10456,26 +10451,14 @@ async function longQuantIdeaGenerate(seed, attempt, prior, guide = {}, context =
             ? 'Generate inside this semantic ring: stay above the seed-topic similarity floor, but outside the minimum distance from every prior rendered idea. Change the angle/mechanism/stakes, not the core communicated topic.'
             : 'Generate a materially different long-form YouTube video idea from recent candidates.',
     };
-    if (!hosted) {
-        if (attempt === 0 && seed) return seed;
-        if (seed) {
-            const j = await hookLlmJson([
-                { role: 'system', content: 'Return only JSON: {"idea":"..."}. Create one title/idea angle for the same actual YouTube video, not a new video concept. The video reality context is authoritative: preserve the specific object built/tested, people, setting, constraints, and outcome. You may change hook angle, stakes, framing, title language, or curiosity gap. Proactively aim for the requested semantic distance band before writing the idea.' },
-                { role: 'user', content: JSON.stringify({ seedTitle: seed, videoRealityContext: videoReality, attempt, semanticRing: ring, avoid }) }
-            ]).catch(() => null);
-            const idea = String((j && (j.idea || j.title || j.premise)) || '').replace(/\s+/g, ' ').trim();
-            if (idea.length >= 8) return idea.slice(0, 300);
-        }
-        const bank = await longQuantIdeaBank();
-        if (bank.length) return bank[(attempt * 17 + (prior || []).length * 31) % bank.length].idea.slice(0, 300);
-        return (seed || 'I attempted an impossible challenge and documented what happened').slice(0, 300);
-    }
     const out = await replicateLongModelRun('idea', {
         premise: seed || '',
         idea: seed || '',
-        invent: !seed || attempt > 0,
+        // A seeded grind is always the same actual video, even on later iterations.
+        invent: !seed,
         count: 1,
         attempt,
+        seed: longQuantStableSeed(guide.runKey || '', 'idea', seed, attempt, JSON.stringify(ring), JSON.stringify(avoid)),
         avoid,
         semantic_ring: ring,
         opening_transcript_context: videoReality,
@@ -10497,45 +10480,7 @@ function longQuantCleanThumbPrompt(s) {
         .trim()
         .slice(0, 1100);
 }
-function longQuantTemplateThumbPrompts(idea, count, context = '') {
-    const core = String(idea || 'an impossible long-form challenge').replace(/\s+/g, ' ').trim().slice(0, 240);
-    const ctx = longQuantRealityContext(core, context).replace(/\s+/g, ' ').trim().slice(0, 900);
-    const rel = ctx ? ` Actual video context is authoritative: "${ctx}". Depict only real objects, actions, builds, people, settings, and stakes supported by that context; do not swap in a different weapon, suit, challenge, or premise.` : '';
-    const bases = [
-        `Photorealistic 16:9 YouTube thumbnail for the video idea "${core}".${rel} Show the central moment literally and instantly: the main subject in the foreground, the clearest object or danger from the idea beside them, high emotional tension, strong depth, crisp natural lighting, saturated but realistic color, no logos, no readable text.`,
-        `Cinematic documentary-style 16:9 thumbnail for "${core}".${rel} Frame the most extreme visual proof of the idea in one readable image, close foreground subject, dramatic background context, shocked or determined expression if a person is involved, high contrast, realistic camera perspective, no text overlay, no watermark.`,
-        `High-CTR photoreal 16:9 thumbnail for "${core}".${rel} Compose a before-the-click mystery: one unmistakable visual contradiction from the idea, large subject silhouette, clear scale cue, clean negative space for title copy, vivid color separation, sharp focus, no fake UI, no readable text.`,
-        `Real YouTube long-form thumbnail, 16:9, based exactly on "${core}".${rel} Make the stakes visible without adding a new premise: main action frozen at the peak moment, foreground detail, recognizable setting, dramatic but believable lighting, professional editorial color grade, no text, no logos.`,
-        `Photorealistic 16:9 thumbnail concept for "${core}".${rel} Wide cinematic composition with a huge environmental cue, the subject small enough to show scale but clear enough to read, intense anticipation, crisp shadows, realistic lens, strong teal/red/yellow accents where natural, no typography.`,
-        `Ultra-realistic 16:9 thumbnail for "${core}".${rel} Focus on the single most clickable object/action in the idea, put it near camera, show a visible consequence or threat behind it, clean composition, bright daylight or controlled studio lighting as appropriate, no written words.`,
-        `Long-form YouTube thumbnail, photoreal 16:9, for "${core}".${rel} Use a split-depth composition with the human reaction or main subject foreground and the payoff/stakes background, emotionally legible, bold color contrast, realistic scene details, no text overlay.`,
-        `Documentary challenge thumbnail, 16:9, for "${core}".${rel} Capture the decisive second before the outcome, believable real-world physics, tactile details, cinematic contrast, strong negative space, recognizable subject, no extra premise, no readable text.`,
-    ];
-    const out = [];
-    for (let i = 0; i < Math.max(1, count); i++) out.push(bases[i % bases.length]);
-    return out;
-}
-async function longQuantThumbPromptsFallback(idea, count, context = '') {
-    const n = Math.max(1, Math.min(12, parseInt(count, 10) || 5));
-    const videoReality = longQuantRealityContext(idea, context);
-    const j = await hookLlmJson([
-        { role: 'system', content: 'Return only JSON: {"prompts":["..."]}. Write photorealistic 16:9 YouTube thumbnail prompts for the same actual video. The video reality context is authoritative. Do not invent a different build, object, weapon, suit, challenge, person, setting, or outcome. Vary only composition, framing, emotion, scale, lighting, visual proof, and curiosity. Avoid readable text/logos/watermarks.' },
-        { role: 'user', content: JSON.stringify({ idea: String(idea || '').slice(0, 500), videoRealityContext: videoReality, count: n }) }
-    ]).catch(() => null);
-    let xs = lqStringsFromOutput(j).map(longQuantCleanThumbPrompt).filter(s => s.length >= 24);
-    xs = Array.from(new Set(xs)).slice(0, n);
-    if (xs.length < n) {
-        for (const p of longQuantTemplateThumbPrompts(idea, n, context)) {
-            if (xs.length >= n) break;
-            const q = longQuantCleanThumbPrompt(p);
-            if (q && !xs.includes(q)) xs.push(q);
-        }
-    }
-    if (!xs.length) throw new Error('thumbnail prompt worker produced no usable prompts');
-    return xs.slice(0, n);
-}
-async function longQuantThumbPrompts(idea, count, context = '') {
-    if (!longQuantHostedModelConfigured('thumb')) return longQuantThumbPromptsFallback(idea, count, context);
+async function longQuantThumbPrompts(idea, count, context = '', opts = {}) {
     const videoReality = longQuantRealityContext(idea, context);
     const out = await replicateLongModelRun('thumb', {
         title: idea,
@@ -10544,10 +10489,12 @@ async function longQuantThumbPrompts(idea, count, context = '') {
         opening_transcript_context: videoReality,
         video_reality_context: videoReality,
         count,
+        attempt: Math.max(0, parseInt(opts.attempt, 10) || 0),
+        seed: Math.max(1, parseInt(opts.seed, 10) || longQuantStableSeed('thumb', idea, context, opts.attempt)),
         aspect_ratio: '16:9',
         instruction: 'Write high-performing photoreal YouTube thumbnail prompts for this same actual long-form video. The video_reality_context is authoritative; do not invent a different object, weapon, suit, build, challenge, setting, person, or outcome. You may vary only composition, scale, emotion, lighting, framing, and visual proof.',
     });
-    let xs = lqStringsFromOutput(out).map(s => String(s).replace(/\s+/g, ' ').trim()).filter(s => s.length >= 12);
+    let xs = lqStringsFromOutput(out).map(longQuantCleanThumbPrompt).filter(s => s.length >= 12);
     xs = Array.from(new Set(xs)).slice(0, count);
     if (!xs.length) throw new Error('thumbnail model produced no usable prompts');
     return xs;
@@ -10608,6 +10555,8 @@ function longQuantGrindEnvelope(body = {}, opts = {}) {
         ideaModel: LONGQUANT_IDEA_MODEL,
         thumbModel: longQuantThumbPromptModelLabel(),
         renderModel: LONGQUANT_RENDER_MODEL,
+        modelProvider: 'replicate',
+        workerVersion: LONGQUANT_WORKER_VERSION,
         ts: now,
     };
     const run = {
@@ -10620,6 +10569,7 @@ function longQuantGrindEnvelope(body = {}, opts = {}) {
         best: null, ts: now, context, transcript30: context, contextChars: context.length,
         contextStatus: payload.contextStatus, sourceVideo, source, batchId, autosaveBest, lifecycleVersion: 3,
         ideaModel: payload.ideaModel, thumbModel: payload.thumbModel, renderModel: payload.renderModel,
+        modelProvider: payload.modelProvider, workerVersion: payload.workerVersion,
     };
     return { rid, payload, run };
 }
@@ -11081,7 +11031,7 @@ async function longQuantSaveThumbRecord(body = {}) {
     return { id, rec };
 }
 async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
-    const n = Math.max(1, Math.min(opts.maxCount || 12, parseInt(count, 10) || 5));
+    const n = Math.max(1, Math.min(opts.maxCount || 8, parseInt(count, 10) || 5));
     const context = longQuantCleanContext(opts.context || opts.transcript30 || '');
     const sourceVideo = longQuantCompactSourceVideo(opts.sourceVideo);
     const scoreText = longQuantScoreText((sourceVideo && sourceVideo.title) || idea, idea, context, sourceVideo);
@@ -11097,15 +11047,20 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
     const group = {
         input_id: rid, title: idea, idea, invented: !!opts.invented, n, context, contextChars: context.length, sourceVideo,
         model: `${promptModel} + ${LONGQUANT_RENDER_MODEL.split('/').pop()}`,
-        promptModel, hosted: hostedThumb, attempts: [], done: false, streaming: true,
+        promptModel, ideaModel: LONGQUANT_IDEA_MODEL, hosted: true, workerReady: hostedThumb,
+        modelProvider: 'replicate', workerVersion: LONGQUANT_WORKER_VERSION,
+        attempts: [], done: false, streaming: true,
     };
     await checkStop();
-    await emitStatus({ stage: 'prompting', done: 0, note: hostedThumb ? 'trained thumbnail model is writing prompts on the app server' : 'app prompt worker is writing thumbnail prompts from your exact idea' });
+    await emitStatus({ stage: 'prompting', done: 0, note: 'trained thumb_b10 is writing thumbnail prompts on Replicate' });
     await lqDemoGroupWrite(rid, group);
     await checkStop();
     const prompts = await longQuantWithHeartbeat(
-        () => longQuantThumbPrompts(idea, n, context),
-        () => emitStatus({ stage: 'prompting', done: 0, note: 'still waiting for thumbnail prompts from the model' }),
+        () => longQuantThumbPrompts(idea, n, context, {
+            attempt: opts.attemptK,
+            seed: longQuantStableSeed(rid, 'thumb', idea, opts.attemptK || 0),
+        }),
+        () => emitStatus({ stage: 'prompting', done: 0, note: 'still waiting for trained thumb_b10 on Replicate' }),
         12000
     );
     await checkStop();
@@ -11157,7 +11112,7 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
             att.status = 'error';
             att.error = String(e.message || e).slice(0, 220);
         }
-        await emitStatus({ stage: 'rendering', n: prompts.length, done: k + 1, note: `generated ${k + 1}/${prompts.length} thumbnails on the app server` });
+        await emitStatus({ stage: 'rendering', n: prompts.length, done: k + 1, note: `generated ${k + 1}/${prompts.length} thumbnails with thumb_b10 + Flux Pro` });
         await lqDemoGroupWrite(rid, group);
     }
     group.attempts.sort((a, b) => {
@@ -11184,19 +11139,25 @@ async function longQuantProcessRequest(rid, req) {
     let idea = typed;
     try {
         if (!idea) {
-            await lqDemoStatus(rid, { stage: 'reasoning', n: 1, done: 0, note: 'blank request: selecting an idea from the trained Long Quant idea model/bank' });
-            idea = await longQuantIdeaGenerate('', 0, [], {}, context);
+            await lqDemoStatus(rid, { stage: 'reasoning', n: 1, done: 0, note: 'blank request: trained idea_long_r26 is inventing the video on Replicate' });
+            idea = await longQuantIdeaGenerate('', 0, [], { runKey: rid }, context);
         }
-        await longQuantBuildThumbGroup(rid, idea, req.count || 5, { invented: !typed, context, sourceVideo: req.sourceVideo });
+        await longQuantBuildThumbGroup(rid, idea, req.count || 5, { invented: !typed, context, sourceVideo: req.sourceVideo, attemptK: 0 });
     } catch (e) {
         const msg = String(e.message || e).slice(0, 240);
-        await lqDemoGroupWrite(rid, { input_id: rid, title: idea || typed || '', idea: idea || typed || '', attempts: [], n: 0, done: true, streaming: false, error: msg, model: `${longQuantThumbPromptModelLabel()} + ${LONGQUANT_RENDER_MODEL}` });
+        await lqDemoGroupWrite(rid, {
+            input_id: rid, title: idea || typed || '', idea: idea || typed || '', attempts: [], n: 0,
+            done: true, streaming: false, error: msg,
+            model: `${longQuantThumbPromptModelLabel()} + ${LONGQUANT_RENDER_MODEL}`,
+            promptModel: LONGQUANT_THUMB_MODEL, ideaModel: LONGQUANT_IDEA_MODEL,
+            modelProvider: 'replicate', workerVersion: LONGQUANT_WORKER_VERSION,
+        });
         await lqDemoStatus(rid, { stage: 'done', title: idea || typed || '', error: msg });
     }
 }
 async function longQuantDemoThumbGroup(idea, count, parentRid, attemptK, onStatus, opts = {}) {
     const reqRid = 'g' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-    if (onStatus) await onStatus(reqRid, { stage: 'prompting', note: 'app server is generating thumbnails directly' });
+    if (onStatus) await onStatus(reqRid, { stage: 'prompting', note: 'trained thumb_b10 is generating prompts on Replicate' });
     const group = await longQuantBuildThumbGroup(reqRid, idea, Math.max(1, Math.min(8, parseInt(count, 10) || 5)), { parentRid, attemptK, ...opts, onStatus });
     return { reqRid, group };
 }
@@ -11325,6 +11286,7 @@ async function longQuantGrindProcess(rid, req0) {
             baseline, autosaved, maxAttempts, hours, autosaveBest: !!req0.autosaveBest,
             progressContract: 2, lifecycleVersion: 3,
             ideaModel: LONGQUANT_IDEA_MODEL, thumbModel: longQuantThumbPromptModelLabel(), renderModel: LONGQUANT_RENDER_MODEL,
+            modelProvider: 'replicate', workerVersion: LONGQUANT_WORKER_VERSION,
         }));
         // Heartbeats and progress callbacks can land together. Coalesce them and serialize
         // R2 writes so an older, slower upload can never overwrite newer progress.
@@ -11432,7 +11394,11 @@ async function longQuantGrindProcess(rid, req0) {
                 await write();
             } else {
                 const floorNow = topicFloor();
-                const guide = { minDistance: Math.round(gate * 1000) / 1000, topicFloor: floorNow == null ? null : Math.round(floorNow * 1000) / 1000 };
+                const guide = {
+                    minDistance: Math.round(gate * 1000) / 1000,
+                    topicFloor: floorNow == null ? null : Math.round(floorNow * 1000) / 1000,
+                    runKey: rid,
+                };
                 note = `thumbnails ${thumbStart}-${thumbEnd}/${maxAttempts}: choosing the next topical idea angle — prior distance ≥ ${guide.minDistance}${guide.topicFloor == null ? '' : ` · topical ≥ ${guide.topicFloor}`}`;
                 await write();
                 for (let tries = 0; tries < 4; tries++) {
@@ -11470,7 +11436,7 @@ async function longQuantGrindProcess(rid, req0) {
             try {
                 if (await checkStopped()) { a.status = 'stopped'; await write(); break; }
                 a.status = 'queued';
-                note = `thumbnails ${thumbStart}-${thumbEnd}/${maxAttempts}: generating ${batchCount} thumbnail${batchCount === 1 ? '' : 's'} on the app server`;
+                note = `thumbnails ${thumbStart}-${thumbEnd}/${maxAttempts}: trained thumb_b10 is generating ${batchCount} prompt${batchCount === 1 ? '' : 's'} before Flux Pro rendering`;
                 await write();
                 const out = await longQuantDemoThumbGroup(idea, batchCount, rid, a.k, async (_reqRid, st) => {
                     reqRid = _reqRid;
@@ -11497,7 +11463,7 @@ async function longQuantGrindProcess(rid, req0) {
                         }
                     }
                     const done = st.done != null && advertised ? usedBefore + Math.min(advertised, Number(st.done || 0)) : null;
-                    note = `thumbnails ${thumbStart}-${a.thumbEnd || thumbEnd}/${maxAttempts}: app server ${st.stage || 'queued'}${done != null ? ` ${done}/${maxAttempts}` : ''}${st.note ? ' — ' + st.note : ''}`;
+                    note = `thumbnails ${thumbStart}-${a.thumbEnd || thumbEnd}/${maxAttempts}: ${st.stage || 'queued'}${done != null ? ` ${done}/${maxAttempts}` : ''}${st.note ? ' — ' + st.note : ''}`;
                     await write();
                 }, { context, sourceVideo, stopRid: rid });
                 reqRid = out.reqRid;
@@ -11663,6 +11629,8 @@ function longQuantRequestFromRun(run, rid) {
         ideaModel: LONGQUANT_IDEA_MODEL,
         thumbModel: longQuantThumbPromptModelLabel(),
         renderModel: LONGQUANT_RENDER_MODEL,
+        modelProvider: 'replicate',
+        workerVersion: LONGQUANT_WORKER_VERSION,
         lifecycleVersion: 3,
         recovered: true,
         ts: Date.now(),
