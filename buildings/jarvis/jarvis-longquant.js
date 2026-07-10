@@ -826,13 +826,33 @@ const JarvisLongQuant = (function () {
     const LQTHUMBS = [null], LQIDEARUNS = [null], LQGRINDRUNS = [null], LQGRINDSTATUS = [null], LQGRINDDETAILS = {}, LQIDEAIDX = {}, LQIDEAGRP = {}, LQSCORES = {}, LQDETAILS = {}, LQRAW = {}, LQIMGS = {}, LQGRAPHHTML = {};
     const LQ_REFRESH_MS = 15000;
     const LQ_LIVE_REFRESH_MS = 6000;
+    let _lqExpPaintAt = 0, _lqExpPaintTimer = null;
     function rtgUpdateLqExp() {
+        // THROTTLE: polls, detail fetches, and score arrivals each request a repaint — coalesce
+        // bursts into at most ~1 paint per 600ms so the panel stops "constantly reloading".
+        const now = Date.now();
+        if (now - _lqExpPaintAt < 600) {
+            if (!_lqExpPaintTimer) _lqExpPaintTimer = window.setTimeout(() => { _lqExpPaintTimer = null; rtgUpdateLqExp(); }, Math.max(60, 650 - (now - _lqExpPaintAt)));
+            return;
+        }
+        _lqExpPaintAt = now;
         try {
             const el = window.document.getElementById('rtg-lqexppanel');
             if (!el) return;
-            const win = window;
+            const win = window, doc = window.document;
+            // TYPING GUARD: innerHTML replacement destroys the focused input — capture which input
+            // has focus (by its data-lqx* attribute), its value, and caret, and restore all three
+            // after the repaint so typing is never interrupted and focus never jumps away.
+            const ae = doc.activeElement;
+            let focusSel = null, focusVal = null, selStart = null, selEnd = null;
+            if (ae && el.contains(ae) && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) {
+                const attr = Array.prototype.find.call(ae.attributes || [], a => a.name.indexOf('data-lqx') === 0);
+                focusSel = attr ? `[${attr.name}]` : (ae.id ? '#' + ae.id : null);
+                focusVal = ae.value;
+                try { selStart = ae.selectionStart; selEnd = ae.selectionEnd; } catch (e2) { }
+            }
             const beforeTop = el.getBoundingClientRect ? el.getBoundingClientRect().top : 0;
-            const beforeY = win.scrollY || window.document.documentElement.scrollTop || 0;
+            const beforeY = win.scrollY || doc.documentElement.scrollTop || 0;
             const innerScroll = {};
             el.querySelectorAll('[data-lqxscrollkey]').forEach(n => {
                 const k = n.getAttribute('data-lqxscrollkey');
@@ -843,6 +863,16 @@ const JarvisLongQuant = (function () {
                 const k = n.getAttribute('data-lqxscrollkey'), p = k && innerScroll[k];
                 if (p) { n.scrollTop = p.top; n.scrollLeft = p.left; }
             });
+            if (focusSel) {
+                const n = el.querySelector(focusSel);
+                if (n) {
+                    if (focusVal != null && n.value !== focusVal) n.value = focusVal;
+                    try {
+                        n.focus({ preventScroll: true });
+                        if (selStart != null && n.setSelectionRange) n.setSelectionRange(selStart, selEnd == null ? selStart : selEnd);
+                    } catch (e2) { }
+                }
+            }
             const afterTop = el.getBoundingClientRect ? el.getBoundingClientRect().top : beforeTop;
             const nextY = Math.max(0, beforeY + (afterTop - beforeTop));
             if (Math.abs(nextY - beforeY) > 1 || Math.abs((win.scrollY || 0) - beforeY) > 1) {
