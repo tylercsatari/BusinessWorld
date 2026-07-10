@@ -823,7 +823,7 @@ const JarvisLongQuant = (function () {
         return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — what the models generate</div>${statStrip}${selectorsRow}<div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every title the thumbnail model trained on + its generated thumbnails, scored on the CTR+views axis. Click a title to light up its guesses on the map and see them below. Switch the latent space to view the same guesses projected different ways.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">latent space</span>${projPills}</div>${demo}${body}${detail}`, 14);
     }
     // ═══ 🧪 Long-form Experiment: generate thumbnails with the trained model + score uploads + saved bank ═══
-    const LQTHUMBS = [null], LQIDEARUNS = [null], LQGRINDRUNS = [null], LQGRINDSTATUS = [null], LQGRINDDETAILS = {}, LQIDEAIDX = {}, LQIDEAGRP = {}, LQSCORES = {}, LQDETAILS = {}, LQRAW = {}, LQIMGS = {}, LQGRAPHHTML = {};
+    const LQTHUMBS = [null], LQIDEARUNS = [null], LQGRINDRUNS = [null], LQGRINDSTATUS = [null], LQGRINDDETAILS = {}, LQIDEAIDX = {}, LQIDEAGRP = {}, LQSCORES = {}, LQDETAILS = {}, LQRAW = {}, LQIMGS = {}, LQGRAPHHTML = {}, LQHOOKEMB = [null], LQHOOKDET = {};
     const LQ_REFRESH_MS = 15000;
     const LQ_LIVE_REFRESH_MS = 6000;
     let _lqExpPaintAt = 0, _lqExpPaintTimer = null;
@@ -1548,6 +1548,38 @@ const JarvisLongQuant = (function () {
             rtgUpdateLqExp();
         }
     }
+    // 🪝 Shorts hook embeddings: every posted short's spoken hook, cut at a complete thought
+    // near ~5s, embedded text-only in the LONG-form text space (built by hook_embed_batch.py).
+    function lqHookEmbEnsure(force) {
+        if (LQHOOKEMB[0] && !force) return;
+        LQHOOKEMB[0] = { loading: 1 };
+        lqxJson('/api/longquant/hooks/index').then(j => { LQHOOKEMB[0] = { ...(j || {}), _t: Date.now() }; rtgUpdateLqExp(); })
+            .catch(e => { LQHOOKEMB[0] = { rows: [], error: e.message || String(e), _t: Date.now() }; rtgUpdateLqExp(); });
+    }
+    function lqHookDetail(id) {
+        if (!id || LQHOOKDET[id]) return;
+        LQHOOKDET[id] = { loading: 1 };
+        lqxJson('/api/longquant/hooks/video/' + encodeURIComponent(id)).then(j => { LQHOOKDET[id] = j || { error: 'empty' }; rtgUpdateLqExp(); })
+            .catch(e => { LQHOOKDET[id] = { error: e.message || String(e) }; rtgUpdateLqExp(); });
+    }
+    // retention curve (100 bins across the video) + amber marker at the exact second the hook ends
+    function lqxRetGraph(curve, hookEndPct, hookEndSec, big) {
+        if (!Array.isArray(curve) || curve.length < 5) return '';
+        const W = big ? 560 : 260, H = big ? 130 : 64, pad = 4;
+        const vals = curve.map(Number);
+        const mx = Math.max.apply(null, vals.filter(isFinite).concat([1e-6]));
+        const X = i => pad + i / (vals.length - 1) * (W - 2 * pad);
+        const Y = v => H - pad - Math.max(0, v) / mx * (H - 2 * pad);
+        let d = '';
+        vals.forEach((v, i) => { d += (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(isFinite(v) ? v : 0).toFixed(1); });
+        let mark = '';
+        if (hookEndPct != null && isFinite(Number(hookEndPct))) {
+            const hx = X(Math.max(0, Math.min(vals.length - 1, Number(hookEndPct) / 100 * (vals.length - 1))));
+            mark = `<line x1="${hx.toFixed(1)}" y1="${pad}" x2="${hx.toFixed(1)}" y2="${H - pad}" stroke="${C.amber}" stroke-width="1.4" stroke-dasharray="3 2"/>` +
+                (big ? `<text x="${Math.min(hx + 4, W - 96).toFixed(1)}" y="${pad + 10}" fill="${C.amber}" font-size="9" font-weight="700">hook ends ${hookEndSec}s</text>` : '');
+        }
+        return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block;background:${C.card2};border-radius:6px"><path d="${d}" fill="none" stroke="${C.cyan}" stroke-width="1.6"/>${mark}</svg>`;
+    }
     // 🔤 Title test: embed JUST the text and place it in the raw-long TEXT latent space — the same
     // corpus and metric projections the visual maps use, no thumbnail involved.
     async function lqxScoreTitle(title) {
@@ -1935,8 +1967,67 @@ const JarvisLongQuant = (function () {
                 </div>`;
             }
         }
+        // ── 🪝 Shorts hooks embedded in the long-form text space ──
+        lqHookEmbEnsure();
+        const HK = LQHOOKEMB[0] || {};
+        const hkRows = Array.isArray(HK.rows) ? HK.rows : [];
+        const hkOk = hkRows.filter(r => !r.error && r.pctile != null);
+        const hkSort = st.lqxHookSort || 'pct';
+        const hkSorted = hkOk.slice().sort((a, b) => hkSort === 'views' ? (b.views || 0) - (a.views || 0)
+            : hkSort === 'keep' ? (Number(b.keep_rate) || 0) - (Number(a.keep_rate) || 0)
+                : hkSort === 'end' ? (a.hookEndSec || 99) - (b.hookEndSec || 99)
+                    : (b.pctile || 0) - (a.pctile || 0));
+        const hkShow = st.lqxHookShow || 30;
+        const hkPill = (k, lab) => `<span data-lqxhooksort="${k}" style="cursor:pointer;border:1px solid ${hkSort === k ? C.amber : C.border};background:${hkSort === k ? C.amber + '1e' : 'transparent'};color:${hkSort === k ? C.amber : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
+        const hkPct = v => v == null ? null : Math.round(Number(v) <= 1 ? Number(v) * 100 : Number(v));
+        let hookEmb = `<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:5px">🪝 Shorts hooks in the long-form text space <span style="font-size:10px;color:${C.mute};font-weight:600">— the spoken hook of every posted short (cut at a complete thought nearest ~5s), embedded text-only exactly like the 🔤 Title test</span></div>`;
+        if (HK.loading) hookEmb += `<div style="font-size:11px;color:${C.cyan}">loading hook embeddings…</div>`;
+        else if (HK.error) hookEmb += `<div style="font-size:11px;color:${C.red}">${esc(String(HK.error).slice(0, 200))}</div>`;
+        else if (!hkRows.length) hookEmb += `<div style="font-size:11px;color:${C.dim}">No hook-embedding dataset yet — the batch may still be running.</div>`;
+        else {
+            const hkErrs = hkRows.length - hkOk.length;
+            hookEmb += `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span style="font-size:10px;color:${C.mute}">${hkOk.length} hooks scored${hkErrs ? ` · ${hkErrs} without transcript/score` : ''} · sort</span>${hkPill('pct', 'text score')}${hkPill('views', 'views')}${hkPill('keep', 'keep rate')}${hkPill('end', 'hook length')}</div>`;
+            hookEmb += hkSorted.slice(0, hkShow).map(r => {
+                const on = st.lqxHookSel === r.id;
+                const p = hkPct(r.pctile);
+                let row = `<div data-lqxhooksel="${esc(r.id)}" style="cursor:pointer;border:1px solid ${on ? C.amber : C.border};border-radius:8px;background:${on ? C.amber + '10' : C.card2};padding:9px;margin-bottom:7px"><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1 1 320px;min-width:0"><div style="font-size:12px;color:${C.text};font-weight:800;line-height:1.35">“${esc(r.hookText || '')}”</div><div style="font-size:9px;color:${C.faint};margin-top:3px">${esc(r.title || '')}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;font-size:9px"><span style="border:1px solid ${p >= 80 ? C.green : C.amber}66;border-radius:5px;padding:2px 6px;color:${p >= 80 ? C.green : C.amber};font-weight:900">${p == null ? '—' : p + 'th'} text</span><span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">${fv(Number(r.views || 0))} views</span>${r.keep_rate != null ? `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">keep ${Number(r.keep_rate).toFixed(1)}%</span>` : ''}${r.swiped != null ? `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">swiped ${Number(r.swiped).toFixed(1)}%</span>` : ''}<span style="border:1px solid ${C.amber}55;border-radius:5px;padding:2px 6px;color:${C.amber}">hook ends ${r.hookEndSec}s</span></div></div><div style="flex:0 1 260px;min-width:200px">${lqxRetGraph(r.curve, r.hookEndPct, r.hookEndSec, false)}</div></div>`;
+                if (on) {
+                    const det = LQHOOKDET[r.id] || {};
+                    const S3 = det.score;
+                    if (det.loading) row += `<div style="font-size:10px;color:${C.cyan};margin-top:8px">loading full embedding read-out…</div>`;
+                    else if (det.error) row += `<div style="font-size:10px;color:${C.red};margin-top:8px">${esc(String(det.error).slice(0, 180))}</div>`;
+                    else if (S3 && S3.channels) {
+                        if (!RAW.text) rawEnsure('text');
+                        const cacheId = 'hookemb:' + r.id;
+                        LQRAW[cacheId] = { score: S3, title: r.hookText || '', img: '' };
+                        lqxAttachRaw(cacheId, S3, r.hookText || '', '', false);
+                        const chips2 = LQ_COMPARE_METRICS.map(([metric, label]) => {
+                            const m = lqxMetricForChannel(S3, 'text', metric);
+                            const pc = m ? lqxMetricPct(m) : null, est = m ? lqxMetricEstimate(metric, m) : '';
+                            return `<span style="border:1px solid ${C.purple}66;border-radius:6px;padding:3px 6px;background:${C.card};font-size:9px;color:${C.dim}"><b style="color:${C.text}">${esc(label)}</b> ${pc == null ? '—' : pc + 'th'}${est ? ` · ${esc(est)}` : ''}</span>`;
+                        }).join('');
+                        const nb2 = ((S3.channels || {}).text || {}).neighbors || [];
+                        row += `<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px">
+                          <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">exact embedding input (${esc(det.transcriptSource || '')} · cut by ${esc(det.cutBy || '')})</div>
+                          <div style="font-size:11px;color:${C.text};background:${C.card};border:1px solid ${C.border};border-radius:6px;padding:7px 9px;line-height:1.4">${esc(det.hookText || r.hookText || '')}</div>
+                          ${det.cutReason ? `<div style="font-size:9px;color:${C.faint};margin-top:3px">cut: ${esc(String(det.cutReason).slice(0, 160))}</div>` : ''}
+                          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;font-size:9px;color:${C.dim}"><span>published ${esc(det.published || '—')}</span><span>· duration ${det.duration_s || '—'}s</span><span>· avg retention ${det.avg_retention != null ? det.avg_retention + '%' : '—'}</span><a href="${esc(det.url || '#')}" target="_blank" style="color:${C.cyan}">· watch ↗</a></div>
+                          <div style="margin-top:9px">${lqxRetGraph(det.curve || r.curve, det.hookEndPct || r.hookEndPct, det.hookEndSec || r.hookEndSec, true)}<div style="font-size:8.5px;color:${C.mute};margin-top:3px">audience retention across the video · amber line = the exact second the embedded hook ends (${det.hookEndSec || r.hookEndSec}s)</div></div>
+                          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:9px">${chips2}</div>
+                          <section style="margin-top:11px"><div style="font-size:11px;font-weight:900;color:${C.purple};text-transform:uppercase;margin-bottom:6px">text channel — six latent projections</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:10px">${LQ_COMPARE_METRICS.map(([k, lab]) => lqxMetricGraph(S3, k, lab, 'text', cacheId)).join('')}</div></section>
+                          ${nb2.length ? `<div style="margin-top:9px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">nearest long-form corpus titles</div>${nb2.slice(0, 8).map(x => `<div style="display:flex;justify-content:space-between;gap:10px;font-size:10px;padding:3px 0;border-bottom:1px solid ${C.border}"><span style="color:${C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc((x.title || x.id || '').slice(0, 110))}</span><span style="color:${C.dim};white-space:nowrap">${x.views != null ? fv(Number(x.views)) + ' views · ' : ''}cos ${Number(x.sim).toFixed(3)}</span></div>`).join('')}</div>` : ''}
+                          <span data-lqxraw="${esc(cacheId)}" data-lqxrawchan="text" data-lqxrawproj="ctrviews" style="cursor:pointer;display:inline-block;border:1px solid ${C.purple};background:${C.purple}18;color:${C.purple};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:800;margin-top:9px">open in text Raw map</span>
+                        </div>`;
+                    }
+                }
+                return row + '</div>';
+            }).join('');
+            if (hkSorted.length > hkShow) hookEmb += `<div style="text-align:center;margin-top:6px"><span data-lqxhookmore style="cursor:pointer;border:1px solid ${C.amber};background:${C.amber}18;color:${C.amber};border-radius:8px;padding:5px 16px;font-size:11px;font-weight:700">Show 40 more · ${hkSorted.length - hkShow} left</span></div>`;
+            const hkBad = hkRows.filter(r => r.error);
+            if (hkBad.length) hookEmb += `<div style="font-size:9px;color:${C.faint};margin-top:8px">${hkBad.length} without a score: ${hkBad.slice(0, 6).map(r => esc(r.id)).join(', ')}${hkBad.length > 6 ? '…' : ''}</div>`;
+        }
         return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🧪 Experiment — long-form quant generation</div><div style="font-size:11px;color:${C.mute};margin-bottom:10px">Powered by the trained long-form idea model, the thumbnail prompt model, Flux Pro renders, and one shared raw-long scorer. Generate, manual score, grind, history, ideas, and saved thumbnails all use the same 12-output contract: six visual image-only embeddings plus six together image-and-title embeddings.</div>`, 14)
-            + cardc(gen, 12) + cardc(sc, 12) + cardc(titleTest, 12) + cardc(grind, 12) + runStatusHtml + channelHistoryHtml + runHtml + ideas + savedHtml + lqModalHtml;
+            + cardc(gen, 12) + cardc(sc, 12) + cardc(titleTest, 12) + cardc(hookEmb, 12) + cardc(grind, 12) + runStatusHtml + channelHistoryHtml + runHtml + ideas + savedHtml + lqModalHtml;
     }
     // ═══ 💡 Ideas: the long-form idea model's training output ═══
     function lqIdeaEraOf(run, rows) {
@@ -3930,6 +4021,15 @@ const JarvisLongQuant = (function () {
             rtgUpdateLqExp();
             return;
         }
+        const xhk = e.target.closest('[data-lqxhooksel]'); if (xhk) {
+            const id = xhk.getAttribute('data-lqxhooksel');
+            st.lqxHookSel = st.lqxHookSel === id ? null : id;
+            if (st.lqxHookSel) lqHookDetail(id);
+            rtgUpdateLqExp();
+            return;
+        }
+        const xhks = e.target.closest('[data-lqxhooksort]'); if (xhks) { st.lqxHookSort = xhks.getAttribute('data-lqxhooksort'); rtgUpdateLqExp(); return; }
+        if (e.target.closest('[data-lqxhookmore]')) { st.lqxHookShow = (st.lqxHookShow || 30) + 40; rtgUpdateLqExp(); return; }
         if (e.target.closest('[data-lqxgrindstart]')) { lqxGrindStart(); return; }
         if (e.target.closest('[data-lqxgrindstop]')) { lqxGrindStop(); return; }
         const xd = e.target.closest('[data-lqxdel]'); if (xd) { fetch('/api/longquant/thumbs/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: xd.getAttribute('data-lqxdel') }) }).then(() => lqThumbsEnsure(true)).catch(() => { }); return; }

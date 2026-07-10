@@ -3561,6 +3561,20 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    if (pathname === '/api/longquant/hooks/index' && req.method === 'GET') {
+        await serveGzCached(req, res, 'lq:hook-embeds-index', 300e3, async () => {
+            const b = await cloud.downloadFromR2('longform/hook-embeds/index.json').catch(() => null);
+            return b ? b.toString('utf8') : '{"rows":[]}';
+        }, {});
+        return;
+    }
+    const lqHookVid = pathname.match(/^\/api\/longquant\/hooks\/video\/([\w-]+)$/);
+    if (lqHookVid && req.method === 'GET') {
+        const b = await cloud.downloadFromR2(`longform/hook-embeds/${lqHookVid[1]}.json`).catch(() => null);
+        res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(b ? b.toString('utf8') : '{"error":"not found"}');
+        return;
+    }
     if (pathname === '/api/longquant/exp/score-title' && req.method === 'POST') {
         try {
             const body = await readBody(req);
