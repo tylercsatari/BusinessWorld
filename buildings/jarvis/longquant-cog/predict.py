@@ -82,7 +82,9 @@ class Predictor(BasePredictor):
         from vllm import LLM, SamplingParams
         from vllm.lora.request import LoRARequest
 
-        self.tokenizer = AutoTokenizer.from_pretrained(BASE_DIR)
+        # Both finalized adapters saved the same tokenizer/template; use that
+        # training artifact rather than inheriting a potentially changed base copy.
+        self.tokenizer = AutoTokenizer.from_pretrained(ADAPTER_DIRS["idea"])
         gpu_count = max(1, torch.cuda.device_count())
         self.llm = LLM(
             model=BASE_DIR,
