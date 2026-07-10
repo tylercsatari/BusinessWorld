@@ -1571,6 +1571,15 @@ const JarvisLongQuant = (function () {
         lqxJson('/api/longquant/hooks/video/' + encodeURIComponent(id)).then(j => { LQHOOKDET[id] = j || { error: 'empty' }; rtgUpdateLqExp(); })
             .catch(e => { LQHOOKDET[id] = { error: e.message || String(e) }; rtgUpdateLqExp(); });
     }
+    // retention value (%) at an exact second, linearly interpolated from the 100-bin curve
+    function lqxRetAt(curve, durationS, t) {
+        if (!Array.isArray(curve) || curve.length < 2 || !durationS || t == null || !isFinite(Number(t))) return null;
+        const x = Math.max(0, Math.min(curve.length - 1, Number(t) / Number(durationS) * (curve.length - 1)));
+        const i = Math.floor(x), f = x - i;
+        const a = Number(curve[i]), b = Number(curve[Math.min(curve.length - 1, i + 1)]);
+        if (!isFinite(a) || !isFinite(b)) return null;
+        return Math.round((a + (b - a) * f) * 1000) / 10;
+    }
     // retention curve (100 bins across the video) + amber marker at the exact second the hook ends
     function lqxRetGraph(curve, hookEndPct, hookEndSec, big) {
         if (!Array.isArray(curve) || curve.length < 5) return '';
@@ -1588,6 +1597,27 @@ const JarvisLongQuant = (function () {
                 (big ? `<text x="${Math.min(hx + 4, W - 96).toFixed(1)}" y="${pad + 10}" fill="${C.amber}" font-size="9" font-weight="700">hook ends ${hookEndSec}s</text>` : '');
         }
         return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block;background:${C.card2};border-radius:6px"><path d="${d}" fill="none" stroke="${C.cyan}" stroke-width="1.6"/>${mark}</svg>`;
+    }
+    // ✏️ hook editing: highlight the hook in the transcript and/or type the exact text, then
+    // save — the server re-embeds it text-only and it re-lands on every latent projection.
+    async function lqxHookEditSave(det) {
+        const ed = st.lqxHookEdit;
+        if (!ed || !ed.id || ed.saving) return;
+        const text = String(ed.text || '').replace(/\s+/g, ' ').trim();
+        if (text.length < 4) { ed.error = 'hook text is too short'; rtgUpdateLqExp(); return; }
+        let endSec = det && det.hookEndSec;
+        const words = (det && det.words) || [];
+        if (ed.selEnd != null && words[ed.selEnd]) endSec = Math.round((words[ed.selEnd].t + (words[ed.selEnd].d || 0.3)) * 100) / 100;
+        ed.saving = true; ed.error = null; rtgUpdateLqExp();
+        try {
+            const j = await lqxJson('/api/longquant/hooks/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: ed.id, hookText: text, hookEndSec: endSec }) });
+            if (j && j.rec) LQHOOKDET[ed.id] = j.rec;
+            st.lqxHookEdit = null;
+            lqHookEmbEnsure(true);
+        } catch (e) {
+            ed.saving = false; ed.error = String((e && e.message) || e);
+        }
+        rtgUpdateLqExp();
     }
     // 🔤 Title test: embed JUST the text and place it in the raw-long TEXT latent space — the same
     // corpus and metric projections the visual maps use, no thumbnail involved.
@@ -2002,7 +2032,7 @@ const JarvisLongQuant = (function () {
             hookEmb += hkSorted.slice(0, hkShow).map(r => {
                 const on = st.lqxHookSel === r.id;
                 const p = hkPct(r.pctile);
-                let row = `<div data-lqxhooksel="${esc(r.id)}" style="cursor:pointer;border:1px solid ${on ? C.amber : C.border};border-radius:8px;background:${on ? C.amber + '10' : C.card2};padding:9px;margin-bottom:7px"><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1 1 320px;min-width:0"><div style="font-size:12px;color:${C.text};font-weight:800;line-height:1.35">“${esc(r.hookText || '')}”</div><div style="font-size:9px;color:${C.faint};margin-top:3px">${esc(r.title || '')}</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;font-size:9px">${LQ_COMPARE_METRICS.map(([mk, mlab]) => { const m = r.metrics && r.metrics[mk]; const pc = m ? lqxMetricPct(m) : null; const est = m ? lqxMetricEstimate(mk, m) : ''; return `<span title="text-space output: ${esc(mlab)}${est ? ' · est ' + esc(est) : ''}" style="border:1px solid ${pc != null && pc >= 80 ? C.green : C.purple}55;border-radius:5px;padding:2px 6px;background:${C.card};color:${C.dim}">${esc(mlab)} <b style="color:${pc != null && pc >= 80 ? C.green : C.text}">${pc == null ? '—' : pc + 'th'}</b></span>`; }).join('')}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;font-size:9px"><span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">${fv(Number(r.views || 0))} views</span>${r.keep_rate != null ? `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">keep ${Number(r.keep_rate).toFixed(1)}%</span>` : ''}${r.swiped != null ? `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">swiped ${Number(r.swiped).toFixed(1)}%</span>` : ''}<span style="border:1px solid ${C.amber}55;border-radius:5px;padding:2px 6px;color:${C.amber}">hook ends ${r.hookEndSec}s</span>${r.cutBy === 'claude' ? `<span style="border:1px solid ${C.green}55;border-radius:5px;padding:2px 6px;color:${C.green}">✂ cut by Claude</span>` : `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.faint}">✂ re-cut pending</span>`}</div></div><div style="flex:0 1 260px;min-width:200px">${lqxRetGraph(r.curve, r.hookEndPct, r.hookEndSec, false)}</div></div>`;
+                let row = `<div data-lqxhooksel="${esc(r.id)}" style="cursor:pointer;border:1px solid ${on ? C.amber : C.border};border-radius:8px;background:${on ? C.amber + '10' : C.card2};padding:9px;margin-bottom:7px"><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1 1 320px;min-width:0"><div style="font-size:12px;color:${C.text};font-weight:800;line-height:1.35">“${esc(r.hookText || '')}”</div><div style="font-size:9px;color:${C.faint};margin-top:3px">${esc(r.title || '')}</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;font-size:9px">${LQ_COMPARE_METRICS.map(([mk, mlab]) => { const m = r.metrics && r.metrics[mk]; const pc = m ? lqxMetricPct(m) : null; const est = m ? lqxMetricEstimate(mk, m) : ''; return `<span title="text-space output: ${esc(mlab)}${est ? ' · est ' + esc(est) : ''}" style="border:1px solid ${pc != null && pc >= 80 ? C.green : C.purple}55;border-radius:5px;padding:2px 6px;background:${C.card};color:${C.dim}">${esc(mlab)} <b style="color:${pc != null && pc >= 80 ? C.green : C.text}">${pc == null ? '—' : pc + 'th'}</b></span>`; }).join('')}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;font-size:9px"><span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">${fv(Number(r.views || 0))} views</span>${r.keep_rate != null ? `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">keep ${Number(r.keep_rate).toFixed(1)}%</span>` : ''}${r.swiped != null ? `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.dim}">swiped ${Number(r.swiped).toFixed(1)}%</span>` : ''}<span style="border:1px solid ${C.amber}55;border-radius:5px;padding:2px 6px;color:${C.amber}">hook ends ${r.hookEndSec}s</span>${(() => { const r5 = lqxRetAt(r.curve, r.duration_s, 5), rh = lqxRetAt(r.curve, r.duration_s, r.hookEndSec); return `${r5 != null ? `<span title="audience retention at the 5-second mark" style="border:1px solid ${C.cyan}55;border-radius:5px;padding:2px 6px;color:${C.cyan}">ret@5s ${r5}%</span>` : ''}${rh != null ? `<span title="audience retention at the exact second the hook ends (${r.hookEndSec}s)" style="border:1px solid ${C.cyan}55;border-radius:5px;padding:2px 6px;color:${C.cyan}">ret@hook ${rh}%</span>` : ''}`; })()}${r.cutBy === 'claude' ? `<span style="border:1px solid ${C.green}55;border-radius:5px;padding:2px 6px;color:${C.green}">✂ cut by Claude</span>` : r.cutBy === 'tyler' ? `<span style="border:1px solid ${C.accent}55;border-radius:5px;padding:2px 6px;color:${C.accent}">✂ edited by you</span>` : `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;color:${C.faint}">✂ re-cut pending</span>`}</div></div><div style="flex:0 1 260px;min-width:200px">${lqxRetGraph(r.curve, r.hookEndPct, r.hookEndSec, false)}</div></div>`;
                 if (on) {
                     const det = LQHOOKDET[r.id] || {};
                     const S3 = det.score;
@@ -2023,7 +2053,29 @@ const JarvisLongQuant = (function () {
                           <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">exact embedding input (${esc(det.transcriptSource || '')} · cut by ${esc(det.cutBy || '')})</div>
                           <div style="font-size:11px;color:${C.text};background:${C.card};border:1px solid ${C.border};border-radius:6px;padding:7px 9px;line-height:1.4">${esc(det.hookText || r.hookText || '')}</div>
                           ${det.cutReason ? `<div style="font-size:9px;color:${C.faint};margin-top:3px">cut: ${esc(String(det.cutReason).slice(0, 160))}</div>` : ''}
-                          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;font-size:9px;color:${C.dim}"><span>published ${esc(det.published || '—')}</span><span>· duration ${det.duration_s || '—'}s</span><span>· avg retention ${det.avg_retention != null ? det.avg_retention + '%' : '—'}</span><a href="${esc(det.url || '#')}" target="_blank" style="color:${C.cyan}">· watch ↗</a></div>
+                          ${(() => {
+                              const ed = st.lqxHookEdit && st.lqxHookEdit.id === r.id ? st.lqxHookEdit : null;
+                              if (!ed) return `<div style="margin-top:7px"><span data-lqxhookedit="${esc(r.id)}" style="cursor:pointer;border:1px solid ${C.amber};background:${C.amber}18;color:${C.amber};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:800">✏️ edit hook — highlight the transcript or retype it</span></div>`;
+                              const words = det.words || [];
+                              const inSel = i => ed.selStart != null && i >= ed.selStart && i <= (ed.selEnd != null ? ed.selEnd : ed.selStart);
+                              let marks = '', seen5 = false;
+                              const toks = words.map((w, i) => {
+                                  let pre = '';
+                                  if (!seen5 && w.t >= 5) { seen5 = true; pre = `<span style="color:${C.amber};font-size:8px;font-weight:900;margin:0 2px">|5s|</span>`; }
+                                  return pre + `<span data-lqxhookword="${i}" title="${w.t.toFixed(2)}s" style="cursor:pointer;display:inline-block;margin:1px;padding:1px 3px;border-radius:4px;background:${inSel(i) ? C.purple + '40' : 'transparent'};border:1px solid ${inSel(i) ? C.purple : 'transparent'};color:${inSel(i) ? C.text : C.dim};font-size:11px;line-height:1.5">${esc(w.w)}</span>`;
+                              }).join('');
+                              const endW = ed.selEnd != null && words[ed.selEnd] ? words[ed.selEnd] : null;
+                              const endTxt = endW ? (endW.t + (endW.d || 0.3)).toFixed(2) + 's (from your highlight)' : (det.hookEndSec + 's (unchanged — highlight words to move it)');
+                              return `<div data-lqxhookeditbox style="margin-top:9px;border:1px solid ${C.amber}66;border-radius:8px;padding:9px;background:${C.card}">
+                                <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">transcript — click the FIRST word of the hook, then the LAST word; the marker follows your highlight</div>
+                                <div style="max-height:130px;overflow:auto;background:${C.card2};border-radius:6px;padding:6px">${toks || `<span style="font-size:10px;color:${C.dim}">no transcript window stored for this video — type the hook below instead</span>`}</div>
+                                <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin:8px 0 3px">exact text to embed — edit freely (typos, trims, additions)</div>
+                                <textarea data-lqxhookedittext rows="2" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:12px;font-family:inherit;resize:vertical">${esc(ed.text || '')}</textarea>
+                                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:7px"><span style="font-size:9px;color:${C.amber}">hook ends: ${esc(endTxt)}</span><span style="flex:1"></span><span data-lqxhookeditcancel style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">cancel</span><span data-lqxhookeditsave="${esc(r.id)}" style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:4px 12px;font-size:10px;font-weight:900">${ed.saving ? '⏳ re-embedding…' : '💾 save + re-embed'}</span></div>
+                                ${ed.error ? `<div style="font-size:10px;color:${C.red};margin-top:5px">${esc(ed.error)}</div>` : ''}
+                              </div>`;
+                          })()}
+                          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;font-size:9px;color:${C.dim}"><span>published ${esc(det.published || '—')}</span><span>· duration ${det.duration_s || '—'}s</span><span>· avg retention ${det.avg_retention != null ? det.avg_retention + '%' : '—'}</span><span>· ret@5s ${lqxRetAt(det.curve || r.curve, det.duration_s, 5) != null ? lqxRetAt(det.curve || r.curve, det.duration_s, 5) + '%' : '—'}</span><span>· ret@hook-end ${lqxRetAt(det.curve || r.curve, det.duration_s, det.hookEndSec) != null ? lqxRetAt(det.curve || r.curve, det.duration_s, det.hookEndSec) + '%' : '—'}</span><a href="${esc(det.url || '#')}" target="_blank" style="color:${C.cyan}">· watch ↗</a></div>
                           <div style="margin-top:9px">${lqxRetGraph(det.curve || r.curve, det.hookEndPct || r.hookEndPct, det.hookEndSec || r.hookEndSec, true)}<div style="font-size:8.5px;color:${C.mute};margin-top:3px">audience retention across the video · amber line = the exact second the embedded hook ends (${det.hookEndSec || r.hookEndSec}s)</div></div>
                           <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:9px">${chips2}</div>
                           <section style="margin-top:11px"><div style="font-size:11px;font-weight:900;color:${C.purple};text-transform:uppercase;margin-bottom:6px">text channel — six latent projections</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:10px">${LQ_COMPARE_METRICS.map(([k, lab]) => lqxMetricGraph(S3, k, lab, 'text', cacheId)).join('')}</div></section>
@@ -4033,6 +4085,31 @@ const JarvisLongQuant = (function () {
             rtgUpdateLqExp();
             return;
         }
+        const xhe = e.target.closest('[data-lqxhookedit]'); if (xhe) {
+            const id = xhe.getAttribute('data-lqxhookedit'), det = LQHOOKDET[id] || {};
+            st.lqxHookEdit = { id, text: det.hookText || '', selStart: null, selEnd: null };
+            rtgUpdateLqExp();
+            return;
+        }
+        const xhw = e.target.closest('[data-lqxhookword]'); if (xhw) {
+            const ed = st.lqxHookEdit;
+            if (ed) {
+                const i = parseInt(xhw.getAttribute('data-lqxhookword'), 10);
+                const det = LQHOOKDET[ed.id] || {}, words = det.words || [];
+                if (ed.selStart == null || ed.selEnd !== ed.selStart) { ed.selStart = i; ed.selEnd = i; }   // first click (or restart): start of the hook
+                else { const a = Math.min(ed.selStart, i), b = Math.max(ed.selStart, i); ed.selStart = a; ed.selEnd = b; }   // second click: end of the hook
+                ed.text = words.slice(ed.selStart, (ed.selEnd != null ? ed.selEnd : ed.selStart) + 1).map(w => w.w).join(' ').replace(/\s+/g, ' ').trim();
+                rtgUpdateLqExp();
+            }
+            return;
+        }
+        const xhsv = e.target.closest('[data-lqxhookeditsave]'); if (xhsv) {
+            const id = xhsv.getAttribute('data-lqxhookeditsave');
+            lqxHookEditSave(LQHOOKDET[id] || {});
+            return;
+        }
+        if (e.target.closest('[data-lqxhookeditcancel]')) { st.lqxHookEdit = null; rtgUpdateLqExp(); return; }
+        if (e.target.closest('[data-lqxhookeditbox]')) return;   // clicks inside the editor never collapse the row
         const xhk = e.target.closest('[data-lqxhooksel]'); if (xhk) {
             const id = xhk.getAttribute('data-lqxhooksel');
             st.lqxHookSel = st.lqxHookSel === id ? null : id;
@@ -4098,6 +4175,7 @@ const JarvisLongQuant = (function () {
         if (e.target.hasAttribute && e.target.hasAttribute('data-pf')) { st.pvals = st.pvals || {}; st.pvals[e.target.getAttribute('data-pf')] = +e.target.value; updatePredict(); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxtitle')) { st.lqxTitle = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxtitletestinput')) { st.lqxTitleTestInput = e.target.value; return; }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-lqxhookedittext')) { if (st.lqxHookEdit) st.lqxHookEdit.text = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxscoretitle')) { st.lqxScoreTitle = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxgrindidea')) { st.lqxGrindIdea = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxgrindthreshold')) { st.lqxGrindThreshold = e.target.value; return; }

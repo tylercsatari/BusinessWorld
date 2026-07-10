@@ -3562,6 +3562,52 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    if (pathname === '/api/longquant/hooks/edit' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const id = String(body.id || '').replace(/[^\w-]/g, '');
+            const hookText = String(body.hookText || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+            const endSec = Number(body.hookEndSec);
+            if (!id || hookText.length < 4) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"need id and hook text"}'); return; }
+            const key = `longform/hook-embeds/${id}.json`;
+            const b = await cloud.downloadFromR2(key).catch(() => null);
+            if (!b) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"no record for that video"}'); return; }
+            const rec = JSON.parse(b.toString('utf8'));
+            const score = await longQuantScoreTitleText(hookText);   // re-embed + re-place in the text latent space
+            rec.hookText = hookText;
+            rec.score = { ...score, title: hookText };
+            if (isFinite(endSec) && endSec > 0 && endSec < 300) {
+                rec.hookEndSec = Math.round(endSec * 100) / 100;
+                rec.hookEndPct = rec.duration_s ? Math.round(10000 * rec.hookEndSec / Number(rec.duration_s)) / 100 : rec.hookEndPct;
+            }
+            rec.cutBy = 'tyler';
+            rec.cutReason = 'edited by you in the Experiment tab';
+            rec.ts = Date.now();
+            await cloud.uploadToR2(key, Buffer.from(JSON.stringify(rec)), 'application/json');
+            // patch the one row in the index (cheap) instead of rebuilding all 211
+            try {
+                const ib = await cloud.downloadFromR2('longform/hook-embeds/index.json');
+                const idx = JSON.parse(ib.toString('utf8'));
+                const rowsArr = Array.isArray(idx.rows) ? idx.rows : [];
+                const compact = {
+                    id: rec.id, title: rec.title, url: rec.url, published: rec.published,
+                    views: rec.views, keep_rate: rec.keep_rate, swiped: rec.swiped,
+                    avg_retention: rec.avg_retention, duration_s: rec.duration_s, curve: rec.curve,
+                    hookText: rec.hookText, hookEndSec: rec.hookEndSec, hookEndPct: rec.hookEndPct,
+                    transcriptSource: rec.transcriptSource, cutBy: rec.cutBy, cutReason: rec.cutReason,
+                    pctile: rec.score.pctile, metrics: rec.score.metrics, nn_cos: rec.score.nn_cos, ts: rec.ts,
+                };
+                const at = rowsArr.findIndex(r => r && r.id === id);
+                if (at >= 0) rowsArr[at] = compact; else rowsArr.push(compact);
+                rowsArr.sort((a, b) => ((b.pctile == null ? -1 : b.pctile) - (a.pctile == null ? -1 : a.pctile)));
+                idx.builtAt = Date.now();
+                await cloud.uploadToR2('longform/hook-embeds/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
+            } catch (e) { console.warn('hook edit index patch:', e.message); }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, rec }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
     if (pathname === '/api/longquant/hooks/index' && req.method === 'GET') {
         await serveGzCached(req, res, 'lq:hook-embeds-index', 10e3, async () => {
             const b = await cloud.downloadFromR2('longform/hook-embeds/index.json').catch(() => null);
@@ -10391,6 +10437,18 @@ async function longQuantHostedRun(input, timeoutMs = 1800000) {
     if (!r.ok || !out || out.error) throw new Error('trained Long Quant worker http ' + r.status + ': ' + String((out && out.error) || '').slice(0, 180));
     return out;
 }
+let _longQuantWarmPing = null;
+let _longQuantWarmPingAt = 0;
+function longQuantKeepWorkerWarm() {
+    const now = Date.now();
+    if (_longQuantWarmPing) return _longQuantWarmPing;
+    if (now - _longQuantWarmPingAt < 20000) return Promise.resolve();
+    _longQuantWarmPingAt = now;
+    _longQuantWarmPing = longQuantHostedRun({ task: 'health' }, 180000)
+        .catch(() => null)
+        .finally(() => { _longQuantWarmPing = null; });
+    return _longQuantWarmPing;
+}
 let _longQuantModelTail = Promise.resolve();
 function longQuantStableSeed(...parts) {
     let h = 2166136261;
@@ -11080,6 +11138,9 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
     const stopRid = opts.stopRid || opts.grindRid || opts.parentRid || '';
     const checkStop = () => stopRid ? longQuantThrowIfStopped(stopRid) : Promise.resolve();
     const emitStatus = async o => {
+        if (stopRid && ['rendering', 'scoring'].includes(String(o && o.stage || ''))) {
+            longQuantKeepWorkerWarm().catch(() => {});
+        }
         const payload = { title: idea, n, ...(o || {}) };
         await lqDemoStatus(rid, payload);
         if (typeof opts.onStatus === 'function') await opts.onStatus(rid, payload);
