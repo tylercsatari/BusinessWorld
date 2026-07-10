@@ -84,15 +84,18 @@ class Predictor(BasePredictor):
                 raise RuntimeError(f"missing trained adapter {name}: {required}")
 
         from transformers import AutoTokenizer
+        import torch
         from vllm import LLM, SamplingParams
         from vllm.lora.request import LoRARequest
 
         self.tokenizer = AutoTokenizer.from_pretrained(BASE_DIR)
+        gpu_count = max(1, torch.cuda.device_count())
         self.llm = LLM(
             model=BASE_DIR,
             dtype="bfloat16",
             max_model_len=4096,
             gpu_memory_utilization=0.90,
+            tensor_parallel_size=2 if gpu_count >= 2 else 1,
             trust_remote_code=True,
             enforce_eager=True,
             enable_lora=True,
