@@ -19,9 +19,9 @@ ADAPTER_DIRS = {
 }
 
 IDEA_INVENT_SYSTEM = (
-    "Invent ONE new viral long-form YouTube video idea, especially an engineering, build, "
-    "challenge, experiment, or documentary story that could earn millions of views. Be specific, "
-    'concrete, and filmable. Return ONLY JSON: {"idea":"<one-line title/concept>"}.'
+    "Invent ONE new viral long-form YouTube video idea (the kind of engineering/build/challenge/story "
+    "video that earns millions of views). Be SPECIFIC and concrete - a real, filmable video. "
+    'Return ONLY JSON: {"idea":"<the video title/concept, one line>"}'
 )
 IDEA_STEER_SYSTEM = (
     "Create ONE alternate title/idea angle for the SAME actual YouTube video. The video reality "
@@ -30,11 +30,10 @@ IDEA_STEER_SYSTEM = (
     'the requested semantic ring. Return ONLY JSON: {"idea":"<one-line title/concept>"}.'
 )
 THUMB_SYSTEM = (
-    "Design the single most click-worthy YouTube thumbnail for the supplied long-form video. The "
-    "video reality context is authoritative; never invent a different object, build, challenge, "
-    "person, setting, or outcome. Think about the strongest visual concept, then return ONLY JSON: "
-    '{"prompt":"<one detailed photorealistic horizontal 16:9 thumbnail description>"}. '
-    "Use one striking image with no on-screen text, logo, watermark, or fake interface."
+    "Design the single most click-worthy YouTube thumbnail for a long-form video with the given title. "
+    "Think about the strongest possible thumbnail concept for THIS specific title, then return ONLY JSON: "
+    '{"prompt":"<one detailed photorealistic thumbnail description>"}. '
+    "The prompt: concrete, photorealistic, horizontal 16:9, no on-screen text, describes one striking image."
 )
 
 
@@ -114,7 +113,7 @@ class Predictor(BasePredictor):
         keys = ("idea", "title", "premise") if task == "idea" else ("prompt", "thumbnail_prompt")
         temperature = 1.15 if task == "idea" else 1.0
         top_p = 0.97 if task == "idea" else 0.95
-        max_tokens = 220 if task == "idea" else 420
+        max_tokens = 200 if task == "idea" else 350
 
         for round_index in range(2):
             needed = count - len(values)
@@ -171,7 +170,10 @@ class Predictor(BasePredictor):
             }
             messages = [
                 {"role": "system", "content": IDEA_STEER_SYSTEM if seeded else IDEA_INVENT_SYSTEM},
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=True)},
+                {
+                    "role": "user",
+                    "content": json.dumps(payload, ensure_ascii=True) if seeded else "Invent a new idea now.",
+                },
             ]
         else:
             if not idea and not premise:
@@ -182,9 +184,12 @@ class Predictor(BasePredictor):
                 "attempt": int(attempt),
                 "instruction": instruction[:1200],
             }
+            thumb_input = idea or premise
+            if context:
+                thumb_input += "\n\nAuthoritative video context (depict this exact video): " + context
             messages = [
                 {"role": "system", "content": THUMB_SYSTEM},
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=True)},
+                {"role": "user", "content": thumb_input},
             ]
 
         request_seed = _stable_seed(task, payload, seed)
