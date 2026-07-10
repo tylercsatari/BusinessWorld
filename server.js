@@ -653,6 +653,44 @@ async function longQuantScoreImageBuffer(buf, title, idea) {
     }
 }
 
+// Title-only scoring: embed JUST the text and read it against the raw-long TEXT latent space —
+// same corpus, same neighbor placement, same metric projections as the visual maps.
+async function longQuantScoreTitleText(title) {
+    const os = require('os');
+    const embTmp = path.join(os.tmpdir(), `lqscore_${Date.now()}_${Math.round(Math.random() * 1e6)}.emb.json`);
+    try {
+        return await runHeavyScore(async () => {
+            const et = await longQuantGeminiEmbed([{ text: String(title || '').slice(0, 500) }]);
+            fs.writeFileSync(embTmp, JSON.stringify({ text: et }));
+            return await new Promise((ok, no) => {
+                const py = spawn(RAW_PYTHON, [
+                    path.join(__dirname, 'longquant_score.py'),
+                    '--text-only',
+                    '--title', String(title || '').slice(0, 500),
+                    '--emb-json', embTmp,
+                ], { env: RAW_PY_ENV });
+                let out = '', err = '';
+                py.stdout.on('data', d => out += d);
+                py.stderr.on('data', d => err += d);
+                const scoreTimeout = Math.max(240000, parseInt(process.env.LONGQUANT_SCORE_TIMEOUT_MS || '600000', 10));
+                const t = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('longquant scorer timeout')); }, scoreTimeout);
+                py.on('close', () => {
+                    clearTimeout(t);
+                    const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+                    if (!line) return no(new Error('longquant scorer: ' + (err.trim().split('\n').pop() || 'no output').slice(-180)));
+                    try {
+                        const j = JSON.parse(line);
+                        return j.error ? no(new Error(j.error)) : ok(j);
+                    } catch (e) { return no(e); }
+                });
+                py.on('error', e => { clearTimeout(t); no(e); });
+            });
+        });
+    } finally {
+        try { fs.unlinkSync(embTmp); } catch (e) {}
+    }
+}
+
 function _tribeStartJob(videoId, videoPath) {
     if (_tribeJobs[videoId] && (_tribeJobs[videoId].status === 'running' || _tribeJobs[videoId].status === 'queued')) {
         return _tribeJobs[videoId];
@@ -3520,6 +3558,18 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
             const score = await longQuantScoreThumbnail(Buffer.from(b64, 'base64'), title, idea);
             res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(score));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    if (pathname === '/api/longquant/exp/score-title' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const title = String(body.title || body.idea || '').slice(0, 500).trim();
+            if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type a title to embed"}'); return; }
+            if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
+            const score = await longQuantScoreTitleText(title);
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify(score));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;

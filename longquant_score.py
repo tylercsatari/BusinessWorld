@@ -334,17 +334,89 @@ def visual_ctrviews_exact(ev):
     }
 
 
+def text_only_score(title, emb_json):
+    """Title-only scoring: embed JUST the text and place it in the raw-long TEXT latent space —
+    the same corpus, neighbor placement, and metric projections the visual channel uses, so a
+    title can be read on every latent projection with no thumbnail involved."""
+    et = None
+    if emb_json:
+        try:
+            ej = json.load(open(emb_json))
+            cand = np.asarray(ej.get("text") or [], np.float32)
+            if cand.size == DIM:
+                et = cand
+        except Exception:
+            et = None
+    if et is None:
+        et = embed([{"text": title}])
+    ch = channel_score("text", et)
+    channels = {"text": ch}
+
+    def pick(metric):
+        m = ((ch or {}).get("metrics") or {}).get(metric)
+        return m if m and m.get("pctile") is not None else None
+
+    headline = pick("ctrviews") or pick("views")
+    hp = (headline or {}).get("pctile")
+    pctile = round(float(hp) / 100.0, 4) if hp is not None and float(hp) > 1 else (hp or 0)
+    out = {
+        "title": title,
+        "pctile": pctile,
+        "text_pctile": pctile,
+        "primary_channel": "text",
+        "nn_cos": (ch or {}).get("nn_cos"),
+        "channel_roles": {
+            "text": "title text only — every metric comes from the text latent space; no thumbnail was embedded",
+        },
+        "metrics": {
+            "ctr": pick("ctr"),
+            "ret30": pick("ret30"),
+            "views": pick("views"),
+            "scaled_views": pick("scaled_views"),
+            "realviews": pick("realviews"),
+            "gt10m": pick("gt10m"),
+            "ctrviews": pick("ctrviews"),
+        },
+        "channels": channels,
+        "emb_preview": {"visual": None, "text": preview(et), "together": None},
+        "input_manifest": {
+            "domain": "longquant",
+            "scorer": "longquant_score.py --text-only",
+            "embedding_model": "gemini-embedding-2",
+            "embedding_dimensions": DIM,
+            "score_text": title,
+            "display_preference": ["text"],
+            "primary_score": "text-channel ctrviews neighbor percentile in the raw-long text latent space",
+            "threshold_uses": "text only",
+            "note": "Title text embedded on its own — the same corpus and metric projections as the visual maps, but nothing visual was scored. This never feeds the thumbnail threshold.",
+            "channels": {
+                "visual": {"present": False, "input": "", "image": "", "text": ""},
+                "text": {"present": True, "input": "title or idea text only", "image": "", "text": title},
+                "together": {"present": False, "input": "", "image": "", "text": ""},
+            },
+        },
+    }
+    print(json.dumps(out))
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--image", required=True)
+    ap.add_argument("--image", default="")
     ap.add_argument("--title", default="")
     ap.add_argument("--idea", default="")
     ap.add_argument("--emb-json", default="")
+    ap.add_argument("--text-only", action="store_true")
     args = ap.parse_args()
+    title = (args.title or args.idea or "").strip()[:500]
+    if args.text_only or not args.image:
+        if not title:
+            print(json.dumps({"error": "no title"}))
+            return
+        text_only_score(title, args.emb_json)
+        return
     if not os.path.exists(args.image):
         print(json.dumps({"error": "no image"}))
         return
-    title = (args.title or args.idea or "").strip()[:500]
     b64 = base64.b64encode(open(args.image, "rb").read()).decode()
     if args.emb_json:
         ej = json.load(open(args.emb_json))

@@ -1255,8 +1255,8 @@ const JarvisLongQuant = (function () {
         const R = RAW[ch], pj = R && R.proj && R.proj[projName];
         const pct = m && m.pctile != null ? lqxMetricPct(m) : null;
         const est = lqxMetricEstimate(metric, m);
-        const input = ch === 'visual' ? 'thumbnail image only' : 'thumbnail image + title/idea';
-        const accent = ch === 'visual' ? C.green : C.accent;
+        const input = ch === 'visual' ? 'thumbnail image only' : ch === 'text' ? 'title text only' : 'thumbnail image + title/idea';
+        const accent = ch === 'visual' ? C.green : ch === 'text' ? C.purple : C.accent;
         const attrs = cacheId ? ` data-lqxraw="${esc(cacheId)}" data-lqxrawchan="${esc(ch)}" data-lqxrawproj="${esc(projName)}"` : '';
         const frame = inner => `<div${attrs} style="cursor:${cacheId ? 'pointer' : 'default'};background:${C.card};border:1px solid ${accent}55;border-radius:8px;padding:10px;min-width:0">${inner}</div>`;
         const heading = `<div style="font-size:10px;color:${accent};font-weight:900;text-transform:uppercase">${esc(ch)} embedding → ${esc(label)}</div><div style="font-size:8.5px;color:${C.faint};margin-top:1px">${esc(input)}</div><div style="font-size:24px;font-weight:900;color:${C.text};line-height:1.1;margin:4px 0">${pct == null ? '—' : pct + 'th'}${est ? ` <span style="font-size:10px;color:${C.mute};font-weight:600">${esc(est)}</span>` : ''}</div>`;
@@ -1517,6 +1517,28 @@ const JarvisLongQuant = (function () {
             st.lqxStartingRuns = next;
             rtgUpdateLqExp();
         }
+    }
+    // 🔤 Title test: embed JUST the text and place it in the raw-long TEXT latent space — the same
+    // corpus and metric projections the visual maps use, no thumbnail involved.
+    async function lqxScoreTitle(title) {
+        title = String(title || '').trim().slice(0, 500);
+        if (!title) return;
+        const id = 'tt' + lqxHash(title.toLowerCase());
+        st.lqxTitleTests = st.lqxTitleTests || [];
+        st.lqxTitleSel = id;
+        let row = st.lqxTitleTests.find(r => r.id === id);
+        if (row && row.score && !row.score.error) { rtgUpdateLqExp(); return; }   // already embedded this exact title
+        if (!row) { row = { id, title }; st.lqxTitleTests.unshift(row); }
+        row.loading = true; row.error = null;
+        rtgUpdateLqExp();
+        try {
+            const j = await lqxJson('/api/longquant/exp/score-title', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) });
+            row.score = j; row.loading = false;
+            lqxAttachRaw('titletest:' + id, j, title, '', false);   // makes "open in Raw map" work
+        } catch (e) {
+            row.loading = false; row.error = String((e && e.message) || e);
+        }
+        rtgUpdateLqExp();
     }
     function renderLqExperiment() {
         lqThumbsEnsure(); lqIdeaRunsEnsure(); lqGrindRunsEnsure(); lqGrindStatusEnsure();
@@ -1849,8 +1871,42 @@ const JarvisLongQuant = (function () {
               return `<div data-lqxsaved="${t.id}" style="cursor:pointer;border:1px solid ${st.lqxSavedSel === t.id ? C.accent : (sp != null && sp >= 0.8) ? C.green : C.border};border-radius:8px;padding:6px;background:${st.lqxSavedSel === t.id ? C.accent + '18' : C.card2};width:210px;position:relative"><span data-lqxdel="${t.id}" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer;z-index:2">✕</span>${lqxImg(`/api/longquant/thumbs/img/${t.id}`, `savedimg:${t.id}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:5px;background:#000')}<div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;margin-top:5px"><div style="font-size:10px;color:${C.text};font-weight:800;max-height:32px;overflow:hidden;line-height:1.3;flex:1">${esc((t.title || '').slice(0, 78))}</div>${sp != null ? `<div style="font-size:10px;font-weight:900;color:${sp >= 0.8 ? C.green : C.dim};white-space:nowrap">${(sp * 100).toFixed(0)}th</div>` : ''}</div>${src}${lqxChannelMetricHtml(score || t, true)}${score && score.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">embedding visual · together…</div>` : ''}${score && score.channels ? lqxRawButton(score, 'saved:' + t.id, t.title || '', `/api/longquant/thumbs/img/${t.id}`) : ''}</div>`;
           }).join('')}</div>
           ${saved.length > show ? `<div style="text-align:center;margin-top:10px"><span data-lqxmore style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:8px;padding:5px 16px;font-size:11px;font-weight:700">Load 30 more · ${saved.length - show} left</span></div>` : ''}${savedDetail}`, 12) : '';
+        // ── 🔤 Title test: text-only embedding on every latent projection ──
+        const ttRows = st.lqxTitleTests || [];
+        const ttSel = ttRows.find(r => r.id === st.lqxTitleSel) || ttRows[0] || null;
+        let titleTest = `<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:5px">🔤 Title test — text-only embedding</div>
+          <div style="font-size:10px;color:${C.mute};margin-bottom:7px">Type a title and it is embedded on its own — no thumbnail — then placed in the raw-long <b style="color:${C.purple}">text</b> latent space by nearest neighbors, the same way thumbnails are placed in the visual space. Every latent projection below is the text space recoloured by that metric.</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input data-lqxtitletestinput value="${esc(st.lqxTitleTestInput || '')}" placeholder="type a video title to embed just the text…" style="flex:1;min-width:230px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 10px;font-size:12px"/><span data-lqxtitletest style="cursor:pointer;border:1px solid ${C.purple};background:${C.purple}22;color:${C.purple};border-radius:6px;padding:7px 14px;font-size:11px;font-weight:800;white-space:nowrap">🔤 Embed title</span></div>`;
+        if (ttRows.length > 1 || (ttRows.length === 1 && ttSel !== ttRows[0])) titleTest += `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${ttRows.slice(0, 20).map(r => {
+            const p = r.score && !r.score.error ? lqxMetricPct((r.score.metrics || {}).ctrviews) : null;
+            const on = ttSel && r.id === ttSel.id;
+            return `<span data-lqxtitlesel="${esc(r.id)}" style="cursor:pointer;border:1px solid ${on ? C.purple : C.border};background:${on ? C.purple + '1e' : C.card};color:${on ? C.purple : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p != null ? `<b>${p}th</b> · ` : r.loading ? '⏳ ' : r.error ? '⚠ ' : ''}${esc(r.title.slice(0, 90))}</span>`;
+        }).join('')}</div>`;
+        if (ttSel) {
+            if (ttSel.loading) titleTest += `<div style="font-size:11px;color:${C.cyan};margin-top:10px">embedding “${esc(ttSel.title.slice(0, 90))}” and placing it on every text-space projection…</div>`;
+            else if (ttSel.error || (ttSel.score && ttSel.score.error)) titleTest += `<div style="font-size:11px;color:${C.red};margin-top:10px">${esc(String(ttSel.error || ttSel.score.error).slice(0, 220))}</div>`;
+            else if (ttSel.score) {
+                const S2 = ttSel.score, cacheId = 'titletest:' + ttSel.id;
+                if (!RAW.text) rawEnsure('text');
+                LQRAW[cacheId] = { score: S2, title: ttSel.title, img: '' };   // graph tiles + button open the TEXT Raw map
+                const hp = lqxMetricPct((S2.metrics || {}).ctrviews);
+                const nb = ((S2.channels || {}).text || {}).neighbors || [];
+                const chips = LQ_COMPARE_METRICS.map(([metric, label]) => {
+                    const m = lqxMetricForChannel(S2, 'text', metric);
+                    const pct = m ? lqxMetricPct(m) : null, est = m ? lqxMetricEstimate(metric, m) : '';
+                    return `<span title="text embedding: title text only" style="border:1px solid ${C.purple}66;border-radius:6px;padding:3px 6px;background:${C.card};font-size:9px;color:${C.dim}"><b style="color:${C.text}">${esc(label)}</b> ${pct == null ? '—' : pct + 'th'}${est ? ` · ${esc(est)}` : ''}</span>`;
+                }).join('');
+                titleTest += `<div style="margin-top:12px;border-top:1px solid ${C.border};padding-top:10px">
+                  <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:0"><div style="font-size:13px;font-weight:900;color:${C.text};line-height:1.3">${esc(ttSel.title)}</div><div style="font-size:9px;color:${C.faint};margin-top:2px">text channel only · never feeds the thumbnail threshold</div></div><div style="font-size:22px;font-weight:900;color:${hp != null && hp >= 80 ? C.green : C.purple};white-space:nowrap">${hp == null ? '—' : hp + 'th'} <span style="font-size:10px;color:${C.mute};font-weight:600">text → CTR+views</span></div></div>
+                  <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:7px">${chips}</div>
+                  <section style="margin-top:12px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:end;margin-bottom:7px"><div><div style="font-size:12px;font-weight:900;color:${C.purple};text-transform:uppercase">text channel</div><div style="font-size:9px;color:${C.mute};margin-top:2px">title text only — one placement, six outcome projections</div></div><div style="font-size:9px;color:${C.faint};font-weight:800">6 independent outputs</div></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:10px">${LQ_COMPARE_METRICS.map(([k, lab]) => lqxMetricGraph(S2, k, lab, 'text', cacheId)).join('')}</div></section>
+                  ${nb.length ? `<div style="margin-top:10px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">nearest corpus titles in the text space</div>${nb.slice(0, 8).map(x => `<div style="display:flex;justify-content:space-between;gap:10px;font-size:10px;padding:3px 0;border-bottom:1px solid ${C.border}"><span style="color:${C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc((x.title || x.id || '').slice(0, 110))}</span><span style="color:${C.dim};white-space:nowrap">${x.views != null ? fv(Number(x.views)) + ' views · ' : ''}cos ${Number(x.sim).toFixed(3)}</span></div>`).join('')}</div>` : ''}
+                  ${lqxEmbHeat(S2)}<span data-lqxraw="${esc(cacheId)}" data-lqxrawchan="text" data-lqxrawproj="ctrviews" style="cursor:pointer;display:inline-block;border:1px solid ${C.purple};background:${C.purple}18;color:${C.purple};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:800;margin-top:8px">open in text Raw map</span>
+                </div>`;
+            }
+        }
         return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🧪 Experiment — long-form quant generation</div><div style="font-size:11px;color:${C.mute};margin-bottom:10px">Powered by the trained long-form idea model, the thumbnail prompt model, Flux Pro renders, and one shared raw-long scorer. Generate, manual score, grind, history, ideas, and saved thumbnails all use the same 12-output contract: six visual image-only embeddings plus six together image-and-title embeddings.</div>`, 14)
-            + cardc(gen, 12) + cardc(sc, 12) + cardc(grind, 12) + runStatusHtml + channelHistoryHtml + runHtml + ideas + savedHtml + lqModalHtml;
+            + cardc(gen, 12) + cardc(sc, 12) + cardc(titleTest, 12) + cardc(grind, 12) + runStatusHtml + channelHistoryHtml + runHtml + ideas + savedHtml + lqModalHtml;
     }
     // ═══ 💡 Ideas: the long-form idea model's training output ═══
     function lqIdeaEraOf(run, rows) {
@@ -3834,6 +3890,16 @@ const JarvisLongQuant = (function () {
         if (e.target.closest('[data-lqxmodalclose]')) { st.lqxOpen = null; st.lqxSavedSel = null; rtgUpdateLqExp(); return; }
         const xo = e.target.closest('[data-lqxopen]'); if (xo) { const id = xo.getAttribute('data-lqxopen'); st.lqxOpen = st.lqxOpen === id ? null : id; st.lqxSavedSel = null; rtgUpdateLqExp(); return; }
         if (e.target.closest('[data-lqxscore]')) { lqxScoreUpload(); return; }
+        if (e.target.closest('[data-lqxtitletest]')) {
+            const inp = window.document.querySelector('[data-lqxtitletestinput]'); if (inp) st.lqxTitleTestInput = inp.value;
+            lqxScoreTitle(st.lqxTitleTestInput || '');
+            return;
+        }
+        const xttsel = e.target.closest('[data-lqxtitlesel]'); if (xttsel) {
+            st.lqxTitleSel = xttsel.getAttribute('data-lqxtitlesel');
+            rtgUpdateLqExp();
+            return;
+        }
         if (e.target.closest('[data-lqxgrindstart]')) { lqxGrindStart(); return; }
         if (e.target.closest('[data-lqxgrindstop]')) { lqxGrindStop(); return; }
         const xd = e.target.closest('[data-lqxdel]'); if (xd) { fetch('/api/longquant/thumbs/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: xd.getAttribute('data-lqxdel') }) }).then(() => lqThumbsEnsure(true)).catch(() => { }); return; }
@@ -3889,6 +3955,7 @@ const JarvisLongQuant = (function () {
         if (e.target.hasAttribute && e.target.hasAttribute('data-framedesc')) { const i = +e.target.getAttribute('data-framedesc'); st.rawFrameDesc = (st.rawFrameDesc || ['', '', '', '', '']).slice(); st.rawFrameDesc[i] = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-pf')) { st.pvals = st.pvals || {}; st.pvals[e.target.getAttribute('data-pf')] = +e.target.value; updatePredict(); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxtitle')) { st.lqxTitle = e.target.value; return; }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-lqxtitletestinput')) { st.lqxTitleTestInput = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxscoretitle')) { st.lqxScoreTitle = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxgrindidea')) { st.lqxGrindIdea = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxgrindthreshold')) { st.lqxGrindThreshold = e.target.value; return; }
