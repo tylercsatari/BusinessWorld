@@ -19,9 +19,9 @@ def main():
         "outlier": [1, 2, 3],
         "proj": {
             "ctrviews": {"x": [100, 500, 900], "y": [120, 520, 920]},
-            "ctr": {"est": [1, 2, 3]},
-            "ret30": {"est": [10, 20, 30]},
-            "realviews": {"est": [110, 1_100, 11_000]},
+            "ctr": {"x": [120, 520, 920], "y": [100, 500, 900]},
+            "ret30": {"x": [140, 540, 940], "y": [100, 500, 900]},
+            "realviews": {"x": [160, 560, 960], "y": [100, 500, 900]},
         },
     }
     neighbors = (
@@ -36,6 +36,7 @@ def main():
     assert ctrviews["kind"] == "neighbor_axis_percentile"
     assert ctrviews["projection"] == "ctrviews"
     assert ctrviews["pctile"] is not None
+    assert all(result["metrics"][name]["kind"] == "neighbor_axis_percentile" for name in ("ctr", "ret30", "realviews"))
     assert result["nn_cos"] == 0.9
     print(json.dumps({
         "ok": True,

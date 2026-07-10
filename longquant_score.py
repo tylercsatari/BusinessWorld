@@ -280,9 +280,9 @@ def channel_score(chan, emb):
             }
         return None
 
-    metrics["ctr"] = from_proj("ctr")
-    metrics["ret30"] = from_proj("ret30", ("retention",))
-    metrics["realviews"] = from_proj("realviews")
+    metrics["ctr"] = from_proj("ctr") or from_axis("ctr")
+    metrics["ret30"] = from_proj("ret30", ("retention",)) or from_axis("ret30", ("retention",))
+    metrics["realviews"] = from_proj("realviews") or from_axis("realviews")
     metrics["ctrviews"] = from_proj("ctrviews") or from_axis("ctrviews")
 
     vest = wavg(views, idx, weights)

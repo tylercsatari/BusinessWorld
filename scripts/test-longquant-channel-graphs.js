@@ -28,13 +28,13 @@ const rawChannel = {
     },
 };
 const metric = pctile => ({ est: pctile, pctile, kind: 'fixture' });
-const channel = (withCtrViews) => ({
+const channel = (withCtrViews, missingCalibrated) => ({
     metrics: {
         ctrviews: withCtrViews ? metric(91) : null,
-        ctr: metric(72),
-        ret30: metric(68),
+        ctr: missingCalibrated ? null : metric(72),
+        ret30: missingCalibrated ? null : metric(68),
         views: metric(77),
-        realviews: metric(74),
+        realviews: missingCalibrated ? null : metric(74),
         gt10m: { est: 0.12, pctile: 12, kind: 'fixture' },
     },
     neighbors: [{ id: 'a', sim: 0.9 }, { id: 'b', sim: 0.8 }],
@@ -66,12 +66,14 @@ function assert(condition, message) {
 
 const score = {
     channels: {
-        visual: channel(true),
+        visual: channel(true, true),
         together: channel(false),
     },
 };
 const togetherCtrViews = context.graphApi.lqxMetricForChannel(score, 'together', 'ctrviews');
+const visualCtr = context.graphApi.lqxMetricForChannel(score, 'visual', 'ctr');
 assert(togetherCtrViews && togetherCtrViews.kind === 'neighbor_axis_percentile', 'together CTR+views did not derive from its own projection');
+assert(visualCtr && visualCtr.kind === 'neighbor_axis_percentile', 'missing calibrated visual metric did not derive from its own projection');
 
 const html = context.graphApi.lqxGraphGrid(score, 'fixture-thumb');
 const summary = context.graphApi.lqxChannelMetricHtml(score);
@@ -93,5 +95,6 @@ console.log(JSON.stringify({
     graphBindings: { visual: visualBindings, together: togetherBindings, total: visualBindings + togetherBindings },
     summaryOutputs: { visual: visualSummary, together: togetherSummary, total: visualSummary + togetherSummary },
     togetherCtrViews,
+    visualCtrFallback: visualCtr,
     cached: true,
 }, null, 2));

@@ -1215,7 +1215,7 @@ const JarvisLongQuant = (function () {
     function lqxMetricForChannel(score, ch, metric) {
         const m = score && score.channels && score.channels[ch] && score.channels[ch].metrics && score.channels[ch].metrics[metric];
         if (m && m.pctile != null) return m;
-        return metric === 'ctrviews' ? (lqxProjectedAxisMetric(score, ch, metric) || m || null) : (m || null);
+        return lqxProjectedAxisMetric(score, ch, metric) || m || null;
     }
     function lqxMetricPick(score, metric) {
         if (!score) return null;
