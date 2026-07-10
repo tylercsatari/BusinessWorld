@@ -3615,6 +3615,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         }, {});
         return;
     }
+    if (pathname === '/api/longquant/gratification/report' && req.method === 'GET') {
+        await serveGzCached(req, res, 'lq:gratification-report', 60e3, async () => {
+            const b = await cloud.downloadFromR2('longform/gratification/report.json').catch(() => null);
+            return b ? b.toString('utf8') : '{"meta":{"status":"not-built"},"experiments":[],"videos":[]}';
+        }, {});
+        return;
+    }
     const lqHookVid = pathname.match(/^\/api\/longquant\/hooks\/video\/([\w-]+)$/);
     if (lqHookVid && req.method === 'GET') {
         const b = await cloud.downloadFromR2(`longform/hook-embeds/${lqHookVid[1]}.json`).catch(() => null);

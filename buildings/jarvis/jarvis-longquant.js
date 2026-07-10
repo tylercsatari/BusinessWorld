@@ -10,11 +10,11 @@ const JarvisLongQuant = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', amber: '#f59e0b', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, FUSION = null, NOV = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
+    let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, GRAT = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, FUSION = null, NOV = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['ctr', 'retention', 'ret30', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['ctr', 'retention', 'ret30', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', gratFamily: 'candidate', gratRep: 'promise_delta', gratAdj: 'idea_visual', gratModel: 'ridge_axis', gratExp: null, gratVideo: null, hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -3851,6 +3851,169 @@ const JarvisLongQuant = (function () {
         return h;
     }
 
+    // Dedicated hook-level Reference to Gratification study. This is intentionally separate
+    // from Principles/RTG, which models second-by-second reference -> payoff links inside videos.
+    function lqGratEnsure(force) {
+        if (GRAT && GRAT.loading) return;
+        if (GRAT && !force) return;
+        GRAT = { loading: 1 };
+        lqxJson('/api/longquant/gratification/report').then(j => {
+            GRAT = j || { meta: { status: 'empty' }, experiments: [], videos: [] };
+            rtgUpdateGratification();
+        }).catch(e => {
+            GRAT = { error: String((e && e.message) || e), experiments: [], videos: [] };
+            rtgUpdateGratification();
+        });
+    }
+    function rtgUpdateGratification() {
+        try {
+            const el = window.document.getElementById('rtg-gratpanel');
+            if (el) el.innerHTML = renderGratification();
+        } catch (e) { }
+    }
+    function gratSelectExperiment(id) {
+        const exp = GRAT && (GRAT.experiments || []).find(x => x.id === id);
+        st.gratExp = id || null;
+        if (exp) {
+            st.gratFamily = exp.family;
+            st.gratRep = exp.representation;
+            st.gratAdj = exp.adjustment;
+            st.gratModel = exp.model;
+        }
+        rtgUpdateGratification();
+    }
+    function gratSelectedExperiment(R) {
+        const all = R.experiments || [];
+        const exact = st.gratExp && all.find(x => x.id === st.gratExp);
+        if (exact) return exact;
+        const fallback = all.find(x => x.id === (R.meta || {}).defaultExperimentId);
+        if (!st.gratInitialized && fallback) {
+            st.gratInitialized = true;
+            st.gratExp = fallback.id;
+            st.gratFamily = fallback.family;
+            st.gratRep = fallback.representation;
+            st.gratAdj = fallback.adjustment;
+            st.gratModel = fallback.model;
+            return fallback;
+        }
+        const filtered = all.filter(x =>
+            (st.gratFamily === 'all' || x.family === st.gratFamily) &&
+            (st.gratRep === 'all' || x.representation === st.gratRep) &&
+            (st.gratAdj === 'all' || x.adjustment === st.gratAdj) &&
+            (st.gratModel === 'all' || x.model === st.gratModel));
+        const picked = filtered[0] || fallback || all[0] || null;
+        if (picked) st.gratExp = picked.id;
+        return picked;
+    }
+    function gratPill(attr, id, label, selected, color) {
+        color = color || C.cyan;
+        return `<button ${attr}="${id}" style="background:${selected ? color + '20' : 'transparent'};border:1px solid ${selected ? color : C.border};color:${selected ? color : C.dim};border-radius:7px;padding:4px 9px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${label}</button>`;
+    }
+    function gratColor(t) {
+        t = Math.max(0, Math.min(1, Number(t) || 0));
+        if (t < .5) {
+            const u = t * 2;
+            return `rgb(${Math.round(34 + 18 * u)},${Math.round(211 + 8 * u)},${Math.round(238 - 85 * u)})`;
+        }
+        const u = (t - .5) * 2;
+        return `rgb(${Math.round(52 + 199 * u)},${Math.round(211 - 65 * u)},${Math.round(153 - 93 * u)})`;
+    }
+    function gratCurveShape(loadings, times, color) {
+        const W = 330, H = 86, pad = 12, values = (loadings || []).map(Number);
+        if (!values.length) return '';
+        const mx = Math.max(...values.map(Math.abs), .01), X = i => pad + i / Math.max(1, values.length - 1) * (W - pad * 2), Y = v => H / 2 - v / mx * (H / 2 - pad);
+        const path = values.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(' ');
+        return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block"><line x1="${pad}" y1="${H / 2}" x2="${W - pad}" y2="${H / 2}" stroke="${C.border2}"/><path d="${path}" fill="none" stroke="${color}" stroke-width="2"/>${values.map((v, i) => `<circle cx="${X(i)}" cy="${Y(v)}" r="2" fill="${color}"><title>${times[i] >= 0 ? '+' : ''}${times[i]}s: loading ${fmtv(v, 3)}</title></circle>`).join('')}</svg>`;
+    }
+    function gratScatter(R, exp, selected) {
+        const plot = exp.plot || {}, xs = plot.x || [], ys = plot.y || [], actual = plot.actual || [], videos = R.videos || [];
+        const W = 760, H = 430, pl = 42, pr = 16, pt = 16, pb = 40;
+        const X = v => pl + (Number(v) || 0) / 100 * (W - pl - pr), Y = v => H - pb - (Number(v) || 0) / 100 * (H - pt - pb);
+        const vals = actual.filter(v => v != null && isFinite(v)).map(Number).sort((a, b) => a - b);
+        const lo = vals.length ? vals[Math.floor(vals.length * .1)] : 0, hi = vals.length ? vals[Math.floor(vals.length * .9)] : 1;
+        const norm = v => v == null || !isFinite(v) ? .5 : Math.max(0, Math.min(1, (Number(v) - lo) / (hi - lo || 1)));
+        let body = '';
+        [0, 25, 50, 75, 100].forEach(t => {
+            body += `<line x1="${X(t)}" y1="${pt}" x2="${X(t)}" y2="${H - pb}" stroke="${C.border}" stroke-dasharray="3 4"/><line x1="${pl}" y1="${Y(t)}" x2="${W - pr}" y2="${Y(t)}" stroke="${C.border}" stroke-dasharray="3 4"/><text x="${X(t)}" y="${H - 18}" text-anchor="middle" fill="${C.mute}" font-size="8">${t}</text>`;
+        });
+        for (let i = 0; i < Math.min(xs.length, videos.length); i++) {
+            if (xs[i] == null || ys[i] == null) continue;
+            const video = videos[i], on = selected === i, color = gratColor(norm(actual[i]));
+            body += `<circle data-gratvideo="${i}" cx="${X(xs[i]).toFixed(1)}" cy="${Y(ys[i]).toFixed(1)}" r="${on ? 6 : 3.4}" fill="${color}" opacity="${on ? 1 : .78}" stroke="${on ? '#fff' : '#07111f'}" stroke-width="${on ? 2 : .7}" style="cursor:pointer"><title>${esc(video.title || video.id)} · ${actual[i] == null ? 'missing outcome' : fmtv(actual[i], 2)} · axis ${fmtv(xs[i], 0)}</title></circle>`;
+        }
+        return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block;background:${C.card2};border:1px solid ${C.border};border-radius:8px">${body}<text x="${(pl + W - pr) / 2}" y="${H - 4}" text-anchor="middle" fill="${C.dim}" font-size="10">learned ${esc(exp.target)} direction (descriptive full-data rotation) -></text><text x="12" y="${(pt + H - pb) / 2}" text-anchor="middle" fill="${C.dim}" font-size="10" transform="rotate(-90 12 ${(pt + H - pb) / 2})">largest orthogonal text variation</text></svg>`;
+    }
+    function gratVideoDetail(R, exp, idx) {
+        const video = (R.videos || [])[idx];
+        if (!video) return '';
+        const target = (R.targets || []).find(x => x.id === exp.target) || {};
+        const adjusted = exp.plot && exp.plot.actual ? exp.plot.actual[idx] : null;
+        const raw = (video.values || {})[exp.target];
+        const oof = exp.plot && exp.plot.oof ? exp.plot.oof[idx] : null;
+        const axisX = exp.plot && exp.plot.x ? exp.plot.x[idx] : null;
+        const hp = video.duration ? 100 * Number(video.hookEndSec || 0) / Number(video.duration) : null;
+        const metricLabels = { ctrviews: 'CTR+views', ctr: 'CTR', ret30: '30s retention', views: 'views', realviews: 'realistic views', gt10m: '>10M class', scaled_views: 'scaled views' };
+        const metrics = Object.keys(metricLabels).map(k => `<span style="border:1px solid ${C.border};border-radius:5px;padding:3px 6px;font-size:9px;color:${C.dim}">${metricLabels[k]} <b style="color:${C.text}">${(video.longQuantText || {})[k] == null ? '—' : fmtv(video.longQuantText[k], 0) + 'th'}</b></span>`).join('');
+        const probes = Object.entries(video.languageProbes || {}).filter(([, v]) => v && v !== 0).map(([k, v]) => `<span style="font-size:9px;color:${C.purple};border:1px solid ${C.purple}55;border-radius:5px;padding:2px 6px">${esc(k.replace(/_/g, ' '))}${v > 1 ? ' ' + v : ''}</span>`).join('');
+        return `<div style="border-top:1px solid ${C.border};padding-top:12px;margin-top:12px">
+            <div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:800;color:${C.text}">${esc(video.title || video.id)}</div><div style="font-size:10px;color:${C.mute};margin-top:2px">${fmtv(video.hookEndSec, 2)}s hook · ${video.hookWordCount || 0} words · ${fmtv(video.duration, 0)}s video · ${fv(video.views)} views</div></div>${video.url ? `<a href="${esc(video.url)}" target="_blank" style="font-size:10px;color:${C.accent};text-decoration:none;border:1px solid ${C.accent};border-radius:6px;padding:4px 8px">open video</a>` : ''}</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:10px">
+              <div style="min-width:0"><div style="font-size:9px;text-transform:uppercase;color:${C.mute};font-weight:800">title anchor input</div><div style="font-size:12px;color:${C.dim};line-height:1.45;margin:3px 0 10px">${esc(video.title || '')}</div><div style="font-size:9px;text-transform:uppercase;color:${C.cyan};font-weight:800">spoken hook input</div><div style="font-size:13px;color:${C.text};font-weight:700;line-height:1.5;margin-top:3px">${esc(video.hookText || '')}</div></div>
+              <div>${lqxRetGraph(video.curve || [], hp, video.hookEndSec, true)}<div style="font-size:9px;color:${C.mute};margin-top:4px">amber = exact final word of the stored hook; curve remains the unmodified Studio source.</div></div>
+            </div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px">${statc('raw ' + (target.label || exp.target), raw == null ? '—' : fmtv(raw, 2), C.green)}${statc(exp.adjustment + ' outcome', adjusted == null ? '—' : fmtv(adjusted, 2), C.cyan)}${statc('held-out prediction', oof == null ? '—' : fmtv(oof, 2), C.purple)}${statc('selected axis x', axisX == null ? '—' : fmtv(axisX, 0) + ' / 100', C.orange)}</div>
+            <div style="font-size:9px;text-transform:uppercase;color:${C.mute};font-weight:800;margin:11px 0 5px">same Long Quant title-space placements</div><div style="display:flex;gap:5px;flex-wrap:wrap">${metrics}</div>
+            ${probes ? `<div style="font-size:9px;text-transform:uppercase;color:${C.mute};font-weight:800;margin:11px 0 5px">transparent language probes (descriptive, not labels)</div><div style="display:flex;gap:5px;flex-wrap:wrap">${probes}</div>` : ''}
+          </div>`;
+    }
+    function renderGratification() {
+        if (!GRAT) { lqGratEnsure(); return `<div style="padding:34px;text-align:center;color:${C.dim}">Loading the hook/title geometry and validation report...</div>`; }
+        if (GRAT.loading) return `<div style="padding:34px;text-align:center;color:${C.dim}">Loading 1,536-dimensional study...</div>`;
+        if (GRAT.error) return `<div style="padding:28px;color:${C.red}">${esc(GRAT.error)}</div>`;
+        const R = GRAT, meta = R.meta || {};
+        if (meta.status !== 'complete' || !(R.experiments || []).length) return `<div style="padding:30px;color:${C.amber}">The study artifact has not finished publishing yet. <button data-gratreload style="margin-left:8px;background:transparent;border:1px solid ${C.amber};color:${C.amber};border-radius:6px;padding:4px 9px;cursor:pointer">check again</button></div>`;
+        const exp = gratSelectedExperiment(R);
+        if (!exp) return `<div style="padding:30px;color:${C.red}">No valid experiments in the report.</div>`;
+        const target = (R.targets || []).find(x => x.id === exp.target) || {};
+        const xs = (exp.plot || {}).x || [];
+        if (st.gratVideo == null || !(R.videos || [])[st.gratVideo]) {
+            let best = 0; for (let i = 1; i < xs.length; i++) if ((xs[i] || 0) > (xs[best] || 0)) best = i;
+            st.gratVideo = best;
+        }
+        const familyDefs = [['all', 'all outcomes'], ['candidate', 'candidate proxy'], ['hook-aligned', 'hook aligned'], ['timing', 'timing'], ['traditional', 'traditional'], ['discovered', 'discovered shapes']];
+        const repDefs = [['all', 'all'], ['hook', 'spoken hook'], ['title', 'title anchor'], ['promise_delta', 'hook - title'], ['hook_beyond_title', 'hook beyond title']];
+        const adjDefs = [['all', 'all'], ['raw', 'raw'], ['timing', 'timing adjusted'], ['idea_visual', 'idea + visual adjusted']];
+        const modelDefs = [['all', 'all'], ['ridge_axis', 'hook-local ridge'], ['title_corpus_ridge', 'all-title ridge'], ['prototype', 'high-low prototype'], ['pls_axis', 'PLS rotation']];
+        const filtered = (R.experiments || []).filter(x =>
+            (st.gratFamily === 'all' || x.family === st.gratFamily) &&
+            (st.gratRep === 'all' || x.representation === st.gratRep) &&
+            (st.gratAdj === 'all' || x.adjustment === st.gratAdj) &&
+            (st.gratModel === 'all' || x.model === st.gratModel));
+        const ci = exp.clusterBootstrap95 || [null, null], q = exp.q, perm = exp.permutationP, familyPerm = exp.familyPermutationP;
+        const pass = exp.rho > .2 && ci[0] != null && ci[0] > 0;
+        const build = String(meta.builtAt || '').replace('T', ' ').slice(0, 19);
+        const topLine = `<div style="display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;border-bottom:1px solid ${C.border};padding-bottom:12px;margin-bottom:12px"><div><div style="font-size:19px;font-weight:900;color:${C.text}">Reference to Gratification Lab</div><div style="font-size:11px;color:${C.dim};line-height:1.55;max-width:880px;margin-top:4px">Searches for a repeatable <b style="color:${C.cyan}">promise/framing direction</b> in the same long-form title embedding space already used by Long Quant. It does not assume that retention, views, or a hand-written phrase list is the definition.</div></div><div style="font-size:10px;color:${C.mute};text-align:right"><b style="color:${C.green}">${meta.n}</b> complete hooks<br>${meta.experimentCount} held-out rotations · ${meta.scalarProbeCount} scalar screens<br>${esc(build)} UTC</div></div>`;
+        const provenance = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid ${C.border};padding-bottom:10px;margin-bottom:12px;font-size:10px;color:${C.dim}"><span style="color:${C.mute};font-weight:800;text-transform:uppercase">embedded inputs</span><span style="border:1px solid ${C.cyan};color:${C.cyan};border-radius:5px;padding:3px 7px">hook text only · ${R.embedding.dimensions}d ${esc(R.embedding.model)}</span><span style="border:1px solid ${C.purple};color:${C.purple};border-radius:5px;padding:3px 7px">published title only · same model + space</span><span style="border:1px solid ${C.orange};color:${C.orange};border-radius:5px;padding:3px 7px">delta = hook - title</span>${R.embedding.titleCorpusVectors ? `<span style="border:1px solid ${C.green};color:${C.green};border-radius:5px;padding:3px 7px">global basis · ${Number(R.embedding.titleCorpusVectors).toLocaleString()} Long Quant titles</span>` : ''}<span style="margin-left:auto">${R.validation.outerSplit}</span></div>`;
+        const controls = `<div style="border-bottom:1px solid ${C.border};padding-bottom:11px;margin-bottom:12px"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px"><div><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">outcome family</div><div style="display:flex;gap:4px;flex-wrap:wrap">${familyDefs.map(([id, l]) => gratPill('data-gratfamily', id, l, st.gratFamily === id, C.green)).join('')}</div></div><div><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">embedded representation</div><div style="display:flex;gap:4px;flex-wrap:wrap">${repDefs.map(([id, l]) => gratPill('data-gratrep', id, l, st.gratRep === id, C.cyan)).join('')}</div></div><div><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">outcome adjustment</div><div style="display:flex;gap:4px;flex-wrap:wrap">${adjDefs.map(([id, l]) => gratPill('data-gratadj', id, l, st.gratAdj === id, C.orange)).join('')}</div></div><div><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">rotation method</div><div style="display:flex;gap:4px;flex-wrap:wrap">${modelDefs.map(([id, l]) => gratPill('data-gratmodel', id, l, st.gratModel === id, C.purple)).join('')}</div></div></div></div>`;
+        const verdict = pass ? `<b style="color:${C.green}">This direction is stable enough to investigate.</b>` : `<b style="color:${C.amber}">This is exploratory, not a stable RTG score yet.</b>`;
+        const headline = `<div style="border-left:3px solid ${pass ? C.green : C.amber};padding:8px 12px;margin-bottom:12px;background:${pass ? C.green : C.amber}0d"><div style="display:flex;gap:14px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:14px;font-weight:900;color:${C.text}">${esc(target.label || exp.target)}</div><div style="font-size:10px;color:${C.dim};line-height:1.5;max-width:760px;margin-top:3px">${esc(target.description || '')}</div></div><div style="font-size:10px;color:${C.mute};text-align:right">${esc(exp.representation)} · ${esc(exp.adjustment)} · ${esc(exp.model)}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">${statc('held-out Spearman', sgn(exp.rho, 3), pass ? C.green : C.amber)}${statc('cluster bootstrap 95%', ci[0] == null ? 'not top-60' : fmtv(ci[0], 2) + ' to ' + fmtv(ci[1], 2), C.cyan)}${statc('held-out R2', sgn(exp.r2, 3), exp.r2 > 0 ? C.green : C.red)}${statc('FDR q', q == null ? '—' : fmtv(q, 4), q != null && q <= .1 ? C.green : C.dim)}${statc('axis-wise perm p', perm == null ? 'not audited' : fmtv(perm, 4), C.cyan)}${familyPerm != null ? statc('searched-family perm p', fmtv(familyPerm, 4), familyPerm <= .05 ? C.green : C.amber) : ''}${statc('positive folds', Math.round((exp.signStability || 0) * 100) + '%', C.purple)}</div><div style="font-size:11px;color:${C.dim};margin-top:8px">${verdict} Full-data coordinates draw the map; every number above comes from predictions made for semantic clusters the model did not train on. Axis-wise permutation tests one chosen rotation; searched-family permutation repeats the entire candidate search and is the stricter read.</div></div>`;
+        const mapDetail = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px;align-items:start"><div>${gratScatter(R, exp, st.gratVideo)}<div style="display:flex;gap:10px;align-items:center;font-size:9px;color:${C.mute};margin-top:5px"><span>low ${esc(target.label || exp.target)}</span><span style="width:140px;height:6px;background:linear-gradient(90deg,${gratColor(0)},${gratColor(.5)},${gratColor(1)});border-radius:3px"></span><span>high</span><span style="margin-left:auto">click any point</span></div></div><div style="background:${C.card2};border:1px solid ${C.border};border-radius:8px;padding:11px;max-height:485px;overflow:auto">${gratVideoDetail(R, exp, st.gratVideo)}</div></div>`;
+        const rows = filtered.slice(0, 120).map(x => {
+            const on = x.id === exp.id, xci = x.clusterBootstrap95 || [];
+            return `<tr data-gratexp="${x.id}" style="cursor:pointer;background:${on ? C.accent + '18' : 'transparent'};border-bottom:1px solid ${C.border}"><td style="padding:6px 7px;color:${on ? C.accent : C.text};font-size:10px;font-weight:700">${esc(((R.targets || []).find(t => t.id === x.target) || {}).label || x.target)}</td><td style="padding:6px 7px;color:${C.dim};font-size:9px">${esc(x.representation)}</td><td style="padding:6px 7px;color:${C.dim};font-size:9px">${esc(x.adjustment)}</td><td style="padding:6px 7px;color:${C.dim};font-size:9px">${esc(x.model)}</td><td style="padding:6px 7px;color:${x.rho >= .2 ? C.green : x.rho > 0 ? C.text : C.red};font-size:10px;font-weight:800;text-align:right">${sgn(x.rho, 3)}</td><td style="padding:6px 7px;color:${C.mute};font-size:9px;text-align:right">${xci[0] == null ? '—' : fmtv(xci[0], 2) + '..' + fmtv(xci[1], 2)}</td><td style="padding:6px 7px;color:${x.q != null && x.q <= .1 ? C.green : C.mute};font-size:9px;text-align:right">${x.q == null ? '—' : fmtv(x.q, 3)}</td><td style="padding:6px 7px;color:${C.dim};font-size:9px;text-align:right">${sgn(x.r2, 2)}</td></tr>`;
+        }).join('');
+        const experimentTable = `<div style="border-top:1px solid ${C.border};margin-top:16px;padding-top:13px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:end;margin-bottom:7px"><div><div style="font-size:13px;font-weight:900;color:${C.text}">Experiment ledger</div><div style="font-size:10px;color:${C.mute}">${filtered.length} matching rotations · ranked by held-out correlation and fold consistency</div></div><div style="font-size:9px;color:${C.mute}">click a row to redraw everything above</div></div><div style="max-height:390px;overflow:auto;border:1px solid ${C.border};border-radius:7px"><table style="width:100%;border-collapse:collapse;min-width:760px"><thead style="position:sticky;top:0;background:${C.card2};z-index:1"><tr>${['outcome','input','adjustment','rotation','OOF rho','cluster CI','FDR q','OOF R2'].map((h, i) => `<th style="padding:6px 7px;color:${C.mute};font-size:8px;text-transform:uppercase;text-align:${i >= 4 ? 'right' : 'left'}">${h}</th>`).join('')}</tr></thead><tbody>${rows || `<tr><td colspan="8" style="padding:18px;text-align:center;color:${C.mute}">No experiment matches all four filters.</td></tr>`}</tbody></table></div></div>`;
+        const probes = (R.scalarProbes || []).filter(x => x.target === exp.target).slice(0, 14);
+        const confounds = (R.confoundAudit || []).filter(x => x.target === exp.target).sort((a, b) => Math.abs(b.rho) - Math.abs(a.rho));
+        const probesPanel = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;border-top:1px solid ${C.border};margin-top:16px;padding-top:13px"><div><div style="font-size:12px;font-weight:900;color:${C.text};margin-bottom:6px">Existing projections + language probes</div><div style="font-size:9px;color:${C.mute};margin-bottom:7px">Univariate screens against the raw selected outcome. They explain an axis; they never define RTG.</div>${probes.map(p => `<div style="display:flex;gap:8px;align-items:center;margin:3px 0;font-size:10px"><span style="width:190px;color:${p.probe.indexOf('longquant_') === 0 ? C.cyan : C.purple};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.probe.replace(/^longquant_|^language_/, '').replace(/_/g, ' '))}</span><span style="flex:1;height:5px;background:${C.border};border-radius:3px"><span style="display:block;width:${Math.min(100, Math.abs(p.rho) * 250)}%;height:5px;background:${p.rho >= 0 ? C.green : C.red};border-radius:3px"></span></span><b style="width:45px;text-align:right;color:${C.text}">${sgn(p.rho, 2)}</b><span style="width:48px;text-align:right;color:${p.q != null && p.q <= .1 ? C.green : C.mute}">q ${p.q == null ? '—' : fmtv(p.q, 2)}</span></div>`).join('')}</div><div><div style="font-size:12px;font-weight:900;color:${C.text};margin-bottom:6px">Confound audit</div><div style="font-size:9px;color:${C.mute};margin-bottom:7px">Raw rank relationship with the selected outcome. The adjusted experiment removes these out of fold.</div>${confounds.map(p => `<div style="display:grid;grid-template-columns:140px 55px 1fr;gap:8px;margin:4px 0;font-size:10px"><span style="color:${C.orange}">${esc(p.confound.replace(/_/g, ' '))}</span><b style="color:${p.rho >= 0 ? C.green : C.red};text-align:right">${sgn(p.rho, 2)}</b><span style="color:${p.q != null && p.q <= .1 ? C.green : C.mute}">${p.q != null && p.q <= .1 ? 'survives FDR' : 'not FDR-stable'}</span></div>`).join('')}</div></div>`;
+        const curvePanels = (R.curveShapes && R.curveShapes.loadings || []).map((load, i) => `<div style="border-right:${i < 2 ? '1px solid ' + C.border : '0'};padding-right:10px"><div style="font-size:10px;font-weight:800;color:${[C.cyan, C.green, C.orange][i]}">curve PC${i + 1} · ${fmtv((R.curveShapes.explainedVariance || [])[i] * 100, 1)}%</div>${gratCurveShape(load, R.curveShapes.relativeTimes || [], [C.cyan, C.green, C.orange][i])}</div>`).join('');
+        const curves = `<div style="border-top:1px solid ${C.border};margin-top:16px;padding-top:13px"><div style="font-size:12px;font-weight:900;color:${C.text}">Outcome discovery without naming gratification first</div><div style="font-size:9px;color:${C.mute};margin:3px 0 8px">PCA of each curve from 3s before to 15s after the exact hook endpoint, normalized to hook-end retention. These three shapes are also prediction targets.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">${curvePanels}</div></div>`;
+        const pairRows = (R.pairs || []).slice(0, 20).map(p => { const a = R.videos[p.a] || {}, b = R.videos[p.b] || {}; return `<div style="display:grid;grid-template-columns:1fr 62px 1fr;gap:8px;align-items:center;border-bottom:1px solid ${C.border};padding:7px 0"><button data-gratvideo="${p.a}" style="background:transparent;border:0;text-align:left;color:${C.text};font-size:10px;line-height:1.35;cursor:pointer">${esc((a.hookText || '').slice(0, 105))}</button><div style="text-align:center;font-size:8px;color:${C.mute}"><b style="color:${C.cyan}">${fmtv(p.titleCosine, 2)}</b><br>title cos<br><span style="color:${p.consensusDelta >= 0 ? C.green : C.red}">${sgn(p.consensusDelta, 2)}</span></div><button data-gratvideo="${p.b}" style="background:transparent;border:0;text-align:left;color:${C.dim};font-size:10px;line-height:1.35;cursor:pointer">${esc((b.hookText || '').slice(0, 105))}</button></div>`; }).join('');
+        const pairs = `<details style="border-top:1px solid ${C.border};margin-top:16px;padding-top:12px"><summary style="cursor:pointer;color:${C.text};font-size:12px;font-weight:900">Nearest-title matched comparisons <span style="font-size:9px;color:${C.mute};font-weight:400">same-ish idea anchors, different spoken promises</span></summary><div style="font-size:9px;color:${C.mute};margin:7px 0">These are approximate nearest neighbors, not randomized pairs. The center delta is post-hook hold consensus A minus B.</div>${pairRows}</details>`;
+        const limits = `<details style="border-top:1px solid ${C.border};margin-top:16px;padding-top:12px"><summary style="cursor:pointer;color:${C.text};font-size:12px;font-weight:900">Method, inputs, and hard limits</summary><div style="font-size:10px;color:${C.dim};line-height:1.65;margin-top:8px"><b style="color:${C.cyan}">What is rotated:</b> ${esc((R.methodology.representations || {})[exp.representation] || '')}<br><b style="color:${C.orange}">What is adjusted:</b> ${esc((R.methodology.adjustments || {})[exp.adjustment] || '')}<br><b style="color:${C.purple}">How it is fit:</b> ${esc((R.methodology.models || {})[exp.model] || '')}<br>${(R.methodology.hardLimits || []).map(x => `<div style="margin-top:4px">- ${esc(x)}</div>`).join('')}</div></details>`;
+        return topLine + provenance + note(`<b>The key separation:</b> the published title approximates the base idea; the spoken hook is the delivered pitch; <b>hook - title</b> asks what extra promise/framing was added. Every result is available raw and after removing hook duration, speech rate, starting retention, keep rate, age, and title-space idea variation.`, C.cyan) + controls + headline + mapDetail + experimentTable + probesPanel + curves + pairs + limits;
+    }
+
     // switch the active channel → reload its retention table into DATA (or merge all → pooled)
     async function loadChannel(id) {
         st.channel = id;
@@ -3877,7 +4040,7 @@ const JarvisLongQuant = (function () {
         //  • PER-CHANNEL  — analyses of the selected account's own videos (scoped by the channel bar)
         //  • CORPUS       — built on ALL videos (your 211 + the 11k library); account-independent
         const PERCHAN = [['data', '📋 Data'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict']];
-        const CORPUS = [['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment']];   // 💡 Ideas consolidated into 🎰 Guesses (phase dropdown)
+        const CORPUS = [['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['gratification', '🎯 Gratification']];   // 💡 Ideas consolidated into 🎰 Guesses (phase dropdown)
         const SECLBL = Object.fromEntries([...PERCHAN, ...CORPUS]);
         const isPer = PERCHAN.some(([id]) => id === st.sec);
         const btn = ([id, l]) => `<button data-rs="${id}" style="background:${st.sec === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.sec === id ? C.accent : C.border};color:${st.sec === id ? C.accent : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`;
@@ -3913,7 +4076,7 @@ const JarvisLongQuant = (function () {
         if (isPer && st.sec !== 'data' && !S) {
             sec = cardc(`<div style="padding:26px;text-align:center"><div style="font-size:14px;font-weight:800;color:${C.text};margin-bottom:6px">${SECLBL[st.sec]} — not computed for ${chName} yet</div><div style="font-size:11px;color:${C.mute};line-height:1.7;max-width:580px;margin:0 auto">${active === 'all' ? 'Pooled analysis isn\'t built yet — switch to a single channel.' : `This per-channel analysis hasn't been run for <b>${chName}</b>. It has <b style="color:${C.green}">${nKeep}</b> videos with retention — open <b>📋 Data</b>, or run <code>build_study.py ${active}</code>.`}</div></div>`, 16);
         } else {
-            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderLongGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-lqexppanel">${renderLqExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
+            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderLongGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-lqexppanel">${renderLqExperiment()}</div>` : st.sec === 'gratification' ? `<div id="rtg-gratpanel">${renderGratification()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         }
         const bgNote = BGPEND > 0 ? `<div style="font-size:10px;color:${C.cyan};margin:-4px 0 8px;font-weight:600">⏳ heavy corpus data still streaming in (${BGPEND} file${BGPEND > 1 ? 's' : ''} left) — sections light up as their data lands</div>` : '';
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
@@ -3925,6 +4088,13 @@ const JarvisLongQuant = (function () {
     }
 
     function onClick(e) {
+        if (e.target.closest('[data-gratreload]')) { GRAT = null; st.gratInitialized = false; st.gratExp = null; lqGratEnsure(true); rtgUpdateGratification(); return; }
+        const ge = e.target.closest('[data-gratexp]'); if (ge) { gratSelectExperiment(ge.getAttribute('data-gratexp')); return; }
+        const gv = e.target.closest('[data-gratvideo]'); if (gv && !e.target.closest('a')) { st.gratVideo = +gv.getAttribute('data-gratvideo'); rtgUpdateGratification(); return; }
+        const gf = e.target.closest('[data-gratfamily]'); if (gf) { st.gratFamily = gf.getAttribute('data-gratfamily'); st.gratExp = null; rtgUpdateGratification(); return; }
+        const gr = e.target.closest('[data-gratrep]'); if (gr) { st.gratRep = gr.getAttribute('data-gratrep'); st.gratExp = null; rtgUpdateGratification(); return; }
+        const ga = e.target.closest('[data-gratadj]'); if (ga) { st.gratAdj = ga.getAttribute('data-gratadj'); st.gratExp = null; rtgUpdateGratification(); return; }
+        const gm = e.target.closest('[data-gratmodel]'); if (gm) { st.gratModel = gm.getAttribute('data-gratmodel'); st.gratExp = null; rtgUpdateGratification(); return; }
         const ps = e.target.closest('[data-pred-scale]'); if (ps) { st.predScale = ps.getAttribute('data-pred-scale'); render(); return; }
         const pfeat = e.target.closest('[data-predfeat]'); if (pfeat) { const f = pfeat.getAttribute('data-predfeat'); st.predFeats = (st.predFeats || ['ctr', 'retention', 'ret30', 'log_dur']); st.predFeats = st.predFeats.includes(f) ? st.predFeats.filter(x => x !== f) : st.predFeats.concat([f]); render(); return; }
         const pset = e.target.closest('[data-predset]'); if (pset) { st.predFeats = pset.getAttribute('data-predset').split('+'); render(); return; }
