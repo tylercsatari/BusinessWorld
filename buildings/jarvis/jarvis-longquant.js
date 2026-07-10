@@ -823,7 +823,7 @@ const JarvisLongQuant = (function () {
         return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — what the models generate</div>${statStrip}${selectorsRow}<div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every title the thumbnail model trained on + its generated thumbnails, scored on the CTR+views axis. Click a title to light up its guesses on the map and see them below. Switch the latent space to view the same guesses projected different ways.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">latent space</span>${projPills}</div>${demo}${body}${detail}`, 14);
     }
     // ═══ 🧪 Long-form Experiment: generate thumbnails with the trained model + score uploads + saved bank ═══
-    const LQTHUMBS = [null], LQIDEARUNS = [null], LQGRINDRUNS = [null], LQGRINDSTATUS = [null], LQGRINDDETAILS = {}, LQIDEAIDX = {}, LQIDEAGRP = {}, LQSCORES = {}, LQDETAILS = {}, LQRAW = {}, LQIMGS = {};
+    const LQTHUMBS = [null], LQIDEARUNS = [null], LQGRINDRUNS = [null], LQGRINDSTATUS = [null], LQGRINDDETAILS = {}, LQIDEAIDX = {}, LQIDEAGRP = {}, LQSCORES = {}, LQDETAILS = {}, LQRAW = {}, LQIMGS = {}, LQGRAPHHTML = {};
     const LQ_REFRESH_MS = 15000;
     const LQ_LIVE_REFRESH_MS = 6000;
     function rtgUpdateLqExp() {
@@ -1192,57 +1192,123 @@ const JarvisLongQuant = (function () {
         };
         return `<div style="margin-top:8px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">Gemini embedding preview</div>${row('visual')}${row('text')}${row('together')}</div>`;
     }
+    const LQ_COMPARE_METRICS = [['ctrviews', 'CTR + views'], ['ctr', 'CTR'], ['ret30', '30s retention'], ['views', 'views'], ['realviews', 'realistic views'], ['gt10m', '>10M class']];
+    const lqxProjName = metric => ({ ctrviews: 'ctrviews', ctr: 'ctr', ret30: 'ret30', views: 'views', realviews: 'realviews', gt10m: 'hi10m' }[metric] || metric);
+    function lqxProjectedAxisMetric(score, ch, metric) {
+        const R = RAW[ch], pj = R && R.proj && R.proj[lqxProjName(metric)];
+        const src = score && score.channels && score.channels[ch];
+        if (!R || !pj || !Array.isArray(pj.x) || !src || !Array.isArray(src.neighbors)) return null;
+        const ids = R.id || [], xs = pj.x || [];
+        let sx = 0, sw = 0;
+        for (const nn of src.neighbors) {
+            const idx = ids.indexOf(nn.id);
+            if (idx < 0 || xs[idx] == null) continue;
+            const w = Math.pow(Math.max(0.001, Number(nn.sim) || 0.001), 8);
+            sx += Number(xs[idx]) * w; sw += w;
+        }
+        if (!sw) return null;
+        const axisX = sx / sw, valid = xs.filter(Number.isFinite);
+        if (!valid.length) return null;
+        const pctile = Math.round(1000 * valid.reduce((n, x) => n + (Number(x) <= axisX ? 1 : 0), 0) / valid.length) / 10;
+        return { est: null, pctile, kind: 'neighbor_axis_percentile', axis_x: Math.round(axisX * 100) / 100, projection: lqxProjName(metric) };
+    }
+    function lqxMetricForChannel(score, ch, metric) {
+        const m = score && score.channels && score.channels[ch] && score.channels[ch].metrics && score.channels[ch].metrics[metric];
+        if (m && m.pctile != null) return m;
+        return metric === 'ctrviews' ? (lqxProjectedAxisMetric(score, ch, metric) || m || null) : (m || null);
+    }
     function lqxMetricPick(score, metric) {
         if (!score) return null;
         score = lqxNormalizeScore(score);
         for (const ch of ['visual', 'together', 'text']) {
-            const v = score.channels && score.channels[ch] && score.channels[ch].metrics && score.channels[ch].metrics[metric];
+            const v = lqxMetricForChannel(score, ch, metric);
             if (v) return { metric, channel: ch, value: v };
         }
         const direct = score.metrics && score.metrics[metric];
         if (direct) return { metric, channel: 'score', value: direct };
         return null;
     }
-    function lqxMetricGraph(score, metric, label) {
+    function lqxMetricEstimate(metric, m) {
+        if (!m || m.est == null || !isFinite(Number(m.est)) || metric === 'ctrviews') return '';
+        const n = Number(m.est);
+        if (metric === 'views' || metric === 'realviews') return n.toLocaleString();
+        if (metric === 'gt10m') return `${(n * 100).toFixed(1)}% chance`;
+        return n.toFixed(2);
+    }
+    function lqxChannelMetricHtml(score) {
+        score = lqxNormalizeScore(score);
         if (!score || !score.channels) return '';
-        const projMap = { ctrviews: 'ctrviews', ctr: 'ctr', ret30: 'ret30', views: 'views', scaled_views: 'outlier', realviews: 'realviews', gt10m: 'hi10m' };
-        const projName = projMap[metric] || metric;
-        const picked = lqxMetricPick(score, metric), m = picked && picked.value;
-        for (const ch0 of ['visual', 'together', 'text']) if (!RAW[ch0]) rawEnsure(ch0);
-        let ch = picked && picked.channel && picked.channel !== 'score' ? picked.channel : '';
-        if (!(ch && score.channels[ch] && RAW[ch] && RAW[ch].proj && RAW[ch].proj[projName] && score.channels[ch].neighbors)) ch = ['visual', 'together', 'text'].find(c => score.channels[c] && RAW[c] && RAW[c].proj && RAW[c].proj[projName] && score.channels[c].neighbors);
-        if (!ch) ch = ['visual', 'together', 'text'].find(c => score.channels[c] && score.channels[c].neighbors) || 'visual';
-        const R = RAW[ch], pj = R && R.proj && (R.proj[projName] || R.proj.views || R.proj.ctrviews);
+        for (const ch of ['visual', 'together']) if (!RAW[ch]) rawEnsure(ch);
+        const row = ch => {
+            const input = ch === 'visual' ? 'thumbnail image only' : 'thumbnail image + title/idea';
+            const cells = LQ_COMPARE_METRICS.map(([metric, label]) => {
+                const m = lqxMetricForChannel(score, ch, metric);
+                if (!m) return `<span style="border:1px solid ${C.border};border-radius:6px;padding:3px 6px;background:${C.card};font-size:9px;color:${C.faint}"><b>${esc(label)}</b> loading</span>`;
+                const pct = lqxMetricPct(m), est = lqxMetricEstimate(metric, m);
+                return `<span title="${esc(ch + ' embedding: ' + input)}" style="border:1px solid ${ch === 'visual' ? C.green + '66' : C.accent + '66'};border-radius:6px;padding:3px 6px;background:${C.card};font-size:9px;color:${C.dim}"><b style="color:${C.text}">${esc(label)}</b> ${pct == null ? '—' : pct + 'th'}${est ? ` · ${esc(est)}` : ''}</span>`;
+            }).join('');
+            return `<div style="display:grid;grid-template-columns:76px 1fr;gap:7px;align-items:start;margin-top:6px"><div><div style="font-size:9px;color:${ch === 'visual' ? C.green : C.accent};font-weight:900;text-transform:uppercase">${ch}</div><div style="font-size:8px;color:${C.faint};line-height:1.25">${esc(input)}</div></div><div style="display:flex;gap:4px;flex-wrap:wrap">${cells}</div></div>`;
+        };
+        return `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="font-size:9px;color:${C.mute};font-weight:900;text-transform:uppercase">12 outputs grouped by embedded input</div>${row('visual')}${row('together')}</div>`;
+    }
+    function lqxMetricGraph(score, metric, label, ch, cacheId) {
+        if (!score || !score.channels || !score.channels[ch]) return '';
+        const projName = lqxProjName(metric), m = lqxMetricForChannel(score, ch, metric);
+        if (!RAW[ch]) rawEnsure(ch);
+        const R = RAW[ch], pj = R && R.proj && R.proj[projName];
         const pct = m && m.pctile != null ? lqxMetricPct(m) : null;
-        const est = m && m.est != null ? (metric.indexOf('views') >= 0 || metric === 'views' ? Number(m.est).toLocaleString() : Number(m.est).toFixed(metric === 'gt10m' ? 2 : 2)) : '';
-        if (!R || !pj || !pj.x) return cardc(`<div><div style="font-size:11px;color:${C.cyan};font-weight:800;text-transform:uppercase">Embedding → ${esc(label)}</div><div style="font-size:26px;font-weight:900;color:${C.text};line-height:1.1;margin:3px 0">${pct == null ? '—' : pct + 'th'}</div><div style="height:120px;background:${C.card2};border-radius:6px;display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px">loading ${esc(ch)} map…</div><div style="font-size:8.5px;color:${C.mute};margin-top:4px">${esc(ch)} input: ${esc(lqxInputLabel(score, ch))}</div></div>`, 12);
+        const est = lqxMetricEstimate(metric, m);
+        const input = ch === 'visual' ? 'thumbnail image only' : 'thumbnail image + title/idea';
+        const accent = ch === 'visual' ? C.green : C.accent;
+        const attrs = cacheId ? ` data-lqxraw="${esc(cacheId)}" data-lqxrawchan="${esc(ch)}" data-lqxrawproj="${esc(projName)}"` : '';
+        const frame = inner => `<div${attrs} style="cursor:${cacheId ? 'pointer' : 'default'};background:${C.card};border:1px solid ${accent}55;border-radius:8px;padding:10px;min-width:0">${inner}</div>`;
+        const heading = `<div style="font-size:10px;color:${accent};font-weight:900;text-transform:uppercase">${esc(ch)} embedding → ${esc(label)}</div><div style="font-size:8.5px;color:${C.faint};margin-top:1px">${esc(input)}</div><div style="font-size:24px;font-weight:900;color:${C.text};line-height:1.1;margin:4px 0">${pct == null ? '—' : pct + 'th'}${est ? ` <span style="font-size:10px;color:${C.mute};font-weight:600">${esc(est)}</span>` : ''}</div>`;
+        if (!R || R.loading || !pj || !Array.isArray(pj.x)) return frame(`${heading}<div style="height:120px;background:${C.card2};border-radius:6px;display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px">loading ${esc(ch)} ${esc(projName)} map…</div>`);
         const W = 250, H = 150, pad = 8, S = 1000, X = x => pad + x / S * (W - 2 * pad), Y = y => pad + (1 - y / S) * (H - 2 * pad);
         const xs = pj.x || [], ys = pj.y || [], n = Math.min(xs.length, ys.length, R.n || xs.length);
-        const step = Math.max(1, Math.ceil(n / 1800));
+        const step = Math.max(1, Math.ceil(n / 900));
         let dots = '';
         const vals = (pj.est || R.views || []).map(v => Number(v));
         const ok = vals.filter(Number.isFinite), lo = ok.length ? Math.min(...ok) : 0, hi = ok.length ? Math.max(...ok) : 1;
         const col = i => Number.isFinite(vals[i]) ? rawRamp((vals[i] - lo) / ((hi - lo) || 1)) : '#334155';
-        for (let i = 0; i < n; i += step) if (xs[i] != null && ys[i] != null) dots += `<circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(ys[i]).toFixed(1)}" r="1.4" fill="${col(i)}" opacity="0.55"/>`;
+        for (let i = 0; i < n; i += step) if (xs[i] != null && ys[i] != null) dots += `<circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(ys[i]).toFixed(1)}" r="1.5" fill="${col(i)}" opacity="0.58"/>`;
         let mark = '';
-        const ids = R.id || [], nb = (score.channels[ch] && score.channels[ch].neighbors) || [];
+        const ids = R.id || [], nb = score.channels[ch].neighbors || [];
         let sx = 0, sy = 0, sw = 0;
         for (const nn of nb) {
             const idx = ids.indexOf(nn.id);
             if (idx < 0 || xs[idx] == null || ys[idx] == null) continue;
-            const w = Math.max(0.001, Number(nn.sim) || 0.001);
+            const w = Math.pow(Math.max(0.001, Number(nn.sim) || 0.001), 8);
             sx += xs[idx] * w; sy += ys[idx] * w; sw += w;
         }
         if (sw > 0) {
             const hx = X(sx / sw), hy = Y(sy / sw);
-            mark = `<line x1="${hx.toFixed(1)}" y1="${(hy - 9).toFixed(1)}" x2="${hx.toFixed(1)}" y2="${(hy + 9).toFixed(1)}" stroke="${C.cyan}" stroke-width="1"/><line x1="${(hx - 9).toFixed(1)}" y1="${hy.toFixed(1)}" x2="${(hx + 9).toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${C.cyan}" stroke-width="1"/><circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="5" fill="${C.cyan}" stroke="#fff" stroke-width="1.5"/>`;
+            mark = `<line x1="${hx.toFixed(1)}" y1="${(hy - 9).toFixed(1)}" x2="${hx.toFixed(1)}" y2="${(hy + 9).toFixed(1)}" stroke="${accent}" stroke-width="1"/><line x1="${(hx - 9).toFixed(1)}" y1="${hy.toFixed(1)}" x2="${(hx + 9).toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${accent}" stroke-width="1"/><circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="5" fill="${accent}" stroke="#fff" stroke-width="1.5"/>`;
         }
-        return cardc(`<div><div style="font-size:11px;color:${C.cyan};font-weight:800;text-transform:uppercase">Embedding → ${esc(label)}</div><div style="font-size:26px;font-weight:900;color:${C.text};line-height:1.1;margin:3px 0">${pct == null ? '—' : pct + 'th'}${est ? ` <span style="font-size:11px;color:${C.mute};font-weight:600">${esc(est)}</span>` : ''}</div><svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:6px">${dots}${mark}</svg><div style="font-size:8.5px;color:${C.mute};margin-top:4px">${esc(ch)} input: ${esc(lqxInputLabel(score, ch))} · ${esc(projName)} projection · marker from nearest neighbors</div></div>`, 12);
+        return frame(`${heading}<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block;background:${C.card2};border-radius:6px">${dots}${mark}</svg><div style="font-size:8.5px;color:${C.mute};margin-top:4px">${esc(projName)} projection · ${cacheId ? 'open ' + ch + ' Raw map' : 'nearest-neighbor placement'}</div>`);
     }
-    function lqxGraphGrid(score) {
+    function lqxGraphGrid(score, cacheId) {
         if (!score || score.loading || score.error || !score.channels) return '';
-        const defs = [['ctrviews', 'CTR + views'], ['ctr', 'CTR'], ['ret30', '30s retention'], ['views', 'views'], ['realviews', 'realistic views'], ['gt10m', '>10M class']];
-        return `<div style="margin-top:12px"><div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">6 independent embedding outputs — same Raw map framework</div><div style="font-size:9px;color:${C.mute};margin-bottom:8px">Every box is a Long Quant metric projected onto the same visual/text/together embedding maps. visual = thumbnail only · text = title/idea only · together = thumbnail + title/idea. The cyan marker is this thumbnail.</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:12px">${defs.map(([k, lab]) => lqxMetricGraph(score, k, lab)).join('')}</div></div>`;
+        for (const ch of ['visual', 'together']) if (!RAW[ch]) rawEnsure(ch);
+        const ready = ['visual', 'together'].every(ch => RAW[ch] && RAW[ch].n && RAW[ch].proj);
+        const sig = ['visual', 'together'].map(ch => {
+            const src = score.channels[ch] || {}, metrics = src.metrics || {}, nn = (src.neighbors || [])[0] || {};
+            return `${ch}:${LQ_COMPARE_METRICS.map(([k]) => (metrics[k] && metrics[k].pctile) == null ? '' : metrics[k].pctile).join(',')}:${nn.id || ''}:${nn.sim || ''}`;
+        }).join('|');
+        const graphKey = `${cacheId || 'inline'}|${sig}|${ready ? 'ready' : 'loading'}`;
+        if (ready && LQGRAPHHTML[graphKey]) return LQGRAPHHTML[graphKey];
+        const section = ch => {
+            const input = ch === 'visual' ? 'thumbnail image only' : 'thumbnail image + title/idea';
+            const accent = ch === 'visual' ? C.green : C.accent;
+            return `<section style="margin-top:12px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:end;margin-bottom:7px"><div><div style="font-size:12px;font-weight:900;color:${accent};text-transform:uppercase">${ch} channel</div><div style="font-size:9px;color:${C.mute};margin-top:2px">${esc(input)}</div></div><div style="font-size:9px;color:${C.faint};font-weight:800">6 independent outputs</div></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:10px">${LQ_COMPARE_METRICS.map(([k, lab]) => lqxMetricGraph(score, k, lab, ch, cacheId)).join('')}</div></section>`;
+        };
+        const html = `<div style="margin-top:12px;border-top:1px solid ${C.border};padding-top:10px"><div style="font-size:13px;font-weight:900;color:${C.text}">12 independent embedding outputs by input</div><div style="font-size:9px;color:${C.mute};margin-top:2px">Visual and together are rendered separately for the same six outcome projections.</div>${section('visual')}${section('together')}</div>`;
+        if (ready) {
+            LQGRAPHHTML[graphKey] = html;
+            const keys = Object.keys(LQGRAPHHTML);
+            while (keys.length > 20) delete LQGRAPHHTML[keys.shift()];
+        }
+        return html;
     }
     function lqxHash(s) {
         let h = 2166136261; s = String(s || '');
@@ -1344,10 +1410,10 @@ const JarvisLongQuant = (function () {
             <div style="flex:1;min-width:260px">
               <div style="display:flex;justify-content:space-between;gap:10px;align-items:start"><div style="font-size:13px;font-weight:800;color:${C.text};line-height:1.35">${esc(o.title || (score && score.title) || 'Thumbnail')}</div>${p != null ? `<div style="text-align:right;white-space:nowrap"><div style="font-size:24px;font-weight:900;color:${col}">${(p * 100).toFixed(0)}<span style="font-size:12px">th</span></div><div style="font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase">thumbnail only</div></div>` : ''}</div>
               ${o.prompt ? `<div style="font-size:10px;color:${C.mute};line-height:1.45;margin-top:5px;max-height:90px;overflow:auto">${esc(o.prompt)}</div>` : ''}
-              ${score ? `${lqxInputSummary(score, o.title || (score && score.title) || '', imgSrc || o.img || '', o.prompt || '')}${lqxScoreContract(score)}${lqxMetricHtml(score)}<div style="font-size:10px;color:${C.faint};margin-top:4px">visual axis projection ${score.proj == null ? '—' : fmtv(score.proj, 3)} · frozen 90th threshold ${score.p90 == null ? '—' : fmtv(score.p90, 3)}</div>${lqxEmbHeat(score)}` : `<div style="font-size:10px;color:${C.mute};margin-top:6px">fast worker score only — opening this card triggers the full raw-long score.</div>`}
+              ${score ? `${lqxInputSummary(score, o.title || (score && score.title) || '', imgSrc || o.img || '', o.prompt || '')}${lqxScoreContract(score)}${lqxChannelMetricHtml(score)}<div style="font-size:10px;color:${C.faint};margin-top:4px">visual axis projection ${score.proj == null ? '—' : fmtv(score.proj, 3)} · frozen 90th threshold ${score.p90 == null ? '—' : fmtv(score.p90, 3)}</div>${lqxEmbHeat(score)}` : `<div style="font-size:10px;color:${C.mute};margin-top:6px">fast worker score only — opening this card triggers the full raw-long score.</div>`}
             </div>
           </div>
-          ${lqxGraphGrid(score)}
+          ${lqxGraphGrid(score, cacheId)}
           ${rawBtn}
         </div>`;
     }

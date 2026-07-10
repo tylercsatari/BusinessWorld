@@ -262,10 +262,28 @@ def channel_score(chan, emb):
                 return metric_obj(est, rank_pct(p["est"], est), key)
         return None
 
+    def from_axis(name, aliases=()):
+        """Place a new embedding on a stored projection when it has geometry but no scalar estimate."""
+        for key in (name,) + tuple(aliases):
+            p = proj.get(key)
+            if not isinstance(p, dict) or not isinstance(p.get("x"), list):
+                continue
+            axis_x = wavg(p["x"], idx, weights)
+            if axis_x is None:
+                continue
+            return {
+                "est": None,
+                "pctile": rank_pct(p["x"], axis_x),
+                "kind": "neighbor_axis_percentile",
+                "axis_x": round(float(axis_x), 2),
+                "projection": key,
+            }
+        return None
+
     metrics["ctr"] = from_proj("ctr")
     metrics["ret30"] = from_proj("ret30", ("retention",))
     metrics["realviews"] = from_proj("realviews")
-    metrics["ctrviews"] = from_proj("ctrviews")
+    metrics["ctrviews"] = from_proj("ctrviews") or from_axis("ctrviews")
 
     vest = wavg(views, idx, weights)
     metrics["views"] = metric_obj(vest, rank_pct(views, vest), "neighbor_views")
