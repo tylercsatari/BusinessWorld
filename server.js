@@ -3557,6 +3557,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             for (const r of channelRuns) channelCounts[r.status || 'unknown'] = (channelCounts[r.status || 'unknown'] || 0) + 1;
             const stateCounts = {};
             for (const r of channelRuns) stateCounts[r.executionState || 'unknown'] = (stateCounts[r.executionState || 'unknown'] || 0) + 1;
+            const queuedRequests = runs.filter(r => r && r.queuedRequest && r.executionState === 'queued');
+            const resumeRequests = runs.filter(r => r && r.queuedRequest && r.executionState === 'recovering');
+            const channelQueuedRequests = channelRuns.filter(r => r && r.queuedRequest && r.executionState === 'queued');
+            const channelResumeRequests = channelRuns.filter(r => r && r.queuedRequest && r.executionState === 'recovering');
             const active = channelRuns
                 .filter(r => r && !longQuantTerminalStatus(r.status))
                 .sort((a, b) => longQuantActiveSort(a, b))
@@ -3590,7 +3594,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 workerLimit: longQuantGrindWorkerLimit(),
                 activeWorkerRids: Array.from(_lqGrindActive),
                 demoWorkerBusy: !!_lqDemoBusy,
-                queueDepth: reqKeys.length,
+                requestDepth: reqKeys.length,
+                queueDepth: queuedRequests.length,
+                resumeDepth: resumeRequests.length,
+                channelQueueDepth: channelQueuedRequests.length,
+                channelResumeDepth: channelResumeRequests.length,
                 runCount: runs.length,
                 channelRunCount: channelRuns.length,
                 counts,
@@ -3690,16 +3698,18 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid, already: true })); return;
         }
         const reqPayload = longQuantRequestFromRun(run, rid);
-        const slotTries = (Array.isArray(run.attempts) ? run.attempts : []).reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.length : 0), 0);
-        const thumbTries = slotTries;
+        const progress = longQuantGrindProgress(run);
+        const thumbTries = progress.thumbTries;
         if (thumbTries >= reqPayload.maxAttempts) {
             // restarting a maxed/complete run means MORE images: extend the cap by one more batch
             reqPayload.maxAttempts = Math.min(400, thumbTries + Math.max(10, parseInt(run.maxAttempts, 10) || 40));
             reqPayload.hours = longQuantGrindHours(null, reqPayload.maxAttempts);
         }
-        reqPayload.urgent = true; reqPayload.recovered = false; reqPayload.resumedByUser = true; reqPayload.ts = Date.now();
-        run.status = 'queued';
-        run.note = `restarted by you — resuming at ${thumbTries}/${reqPayload.maxAttempts} thumbnails`;
+        reqPayload.urgent = true; reqPayload.resume = progress.started; reqPayload.recovered = false; reqPayload.resumedByUser = true; reqPayload.ts = Date.now();
+        run.status = progress.started ? 'recovering' : 'queued';
+        run.note = progress.started
+            ? `resume requested by you — continuing at ${thumbTries}/${reqPayload.maxAttempts} thumbnails`
+            : 'queued by you — waiting for its first worker';
         run.maxAttempts = reqPayload.maxAttempts;
         run.thumbTryLimit = reqPayload.maxAttempts;
         run.hours = reqPayload.hours;
@@ -3720,7 +3730,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid, started: true, run })); return;
         }
         await cloud.uploadToR2(`longform/grind/requests/${rid}.json`, Buffer.from(JSON.stringify(reqPayload)), 'application/json').catch(() => {});
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid, queued: true, run })); return;
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid, queued: !progress.started, resuming: progress.started, run })); return;
     }
     const lqGrindImg = pathname.match(/^\/api\/longquant\/grind\/img\/([a-z0-9_]+)$/i);
     if (lqGrindImg && (req.method === 'GET' || req.method === 'HEAD')) {
@@ -10594,7 +10604,7 @@ function longQuantGrindEnvelope(body = {}, opts = {}) {
         scoreAxis: 'visual_thumbnail_only_ctrviews', thresholdChannel: 'visual', packagingAffectsThreshold: false,
         context, transcript30: context, contextChars: context.length,
         contextStatus: String(body.contextStatus || (context ? 'ok' : 'missing')).slice(0, 40),
-        sourceVideo, batchId, source, autosaveBest,
+        sourceVideo, batchId, source, autosaveBest, lifecycleVersion: 3,
         ideaModel: LONGQUANT_IDEA_MODEL,
         thumbModel: longQuantThumbPromptModelLabel(),
         renderModel: LONGQUANT_RENDER_MODEL,
@@ -10608,7 +10618,7 @@ function longQuantGrindEnvelope(body = {}, opts = {}) {
             ? `queued — first thumbnails will use the exact seed${context ? ' with transcript context' : ''}`
             : 'queued — waiting for the idea model to invent the first candidate')).slice(0, 320),
         best: null, ts: now, context, transcript30: context, contextChars: context.length,
-        contextStatus: payload.contextStatus, sourceVideo, source, batchId, autosaveBest,
+        contextStatus: payload.contextStatus, sourceVideo, source, batchId, autosaveBest, lifecycleVersion: 3,
         ideaModel: payload.ideaModel, thumbModel: payload.thumbModel, renderModel: payload.renderModel,
     };
     return { rid, payload, run };
@@ -10790,22 +10800,35 @@ function longQuantDisplayGrindNote(note, thumbTries, limit) {
         .replace(/first attempt will render this original title before exploring variants/gi, 'first thumbnails will use this original title before exploring variants')
         .replace(/resuming at 0\/(\d+) thumbnails/gi, (m, n) => (tries > 0 ? `resuming at ${tries}/${cap > 0 ? cap : n} thumbnails` : m));
 }
+function longQuantGrindProgress(run) {
+    const attempts = Array.isArray(run && run.attempts) ? run.attempts : [];
+    const thumbs = attempts.reduce((xs, attempt) => xs.concat((attempt && Array.isArray(attempt.thumbs)) ? attempt.thumbs : []), []);
+    const imageThumbs = thumbs.filter(thumb => thumb && thumb.image).length;
+    const doneThumbs = thumbs.filter(thumb => thumb && thumb.status === 'done').length;
+    const errorThumbs = thumbs.filter(thumb => thumb && (thumb.status === 'error' || thumb.error)).length;
+    const stoppedThumbs = thumbs.filter(thumb => thumb && thumb.status === 'stopped').length;
+    return {
+        attempts,
+        thumbs,
+        thumbTries: thumbs.length,
+        imageThumbs,
+        doneThumbs,
+        errorThumbs,
+        stoppedThumbs,
+        finishedThumbTries: doneThumbs + errorThumbs + stoppedThumbs,
+        started: attempts.length > 0 || thumbs.length > 0,
+    };
+}
 function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
     run = run || {};
     const rid = run.rid || fallbackRid || '';
-    const attempts = Array.isArray(run.attempts) ? run.attempts : [];
+    const progress = longQuantGrindProgress(run);
+    const { attempts, thumbs, thumbTries, imageThumbs, doneThumbs, errorThumbs, stoppedThumbs, finishedThumbTries } = progress;
     const lastAttempt = attempts.length ? attempts[attempts.length - 1] : null;
-    const thumbs = attempts.reduce((xs, a) => xs.concat((a && Array.isArray(a.thumbs)) ? a.thumbs : []), []);
-    const imageThumbs = thumbs.filter(t => t && t.image).length;
-    const doneThumbs = thumbs.filter(t => t && t.status === 'done').length;
-    const errorThumbs = thumbs.filter(t => t && (t.status === 'error' || t.error)).length;
-    const stoppedThumbs = thumbs.filter(t => t && t.status === 'stopped').length;
     const doneAttempts = attempts.filter(a => a && ['done', 'error', 'stopped'].includes(a.status || '')).length;
     const storedThumbTryCount = Number(run.thumbTryCount);
     // The attempt slots are the durable contract. A progress callback can disappear in a
     // deploy, but it must never spend invisible budget that the user cannot inspect.
-    const thumbTries = thumbs.length;
-    const finishedThumbTries = doneThumbs + errorThumbs + stoppedThumbs;
     const limit = Math.max(0, Number(run.thumbTryLimit || run.maxAttempts || 0));
     const overThumbLimit = limit > 0 && thumbTries >= limit && finishedThumbTries >= thumbTries;
     const effectiveStatus = overThumbLimit && !longQuantTerminalStatus(run.status) ? 'maxed' : (run.status || '');
@@ -10820,11 +10843,15 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
     // and keeps the count chips consistent with what the lanes display.
     const freshWrite = ts && (Date.now() - ts) < longQuantHeartbeatFreshMs();
     const claimsRunning = effectiveStatus === 'running' || workerAttached;
+    // Once a run owns durable attempt/image progress it can only finish, run, or resume.
+    // A request file for such a run is a resume ticket, never a fresh queue entry.
+    const waitingToResume = effectiveStatus === 'recovering' || (progress.started && !claimsRunning);
     const executionState = terminal ? 'finished'
         : claimsRunning && freshWrite ? 'running'
-            : claimsRunning ? 'recovering'
+            : (claimsRunning || waitingToResume) ? 'recovering'
                 : (queuedRequest || effectiveStatus === 'queued') ? 'queued'
                     : 'idle';
+    const publicStatus = executionState === 'recovering' ? 'recovering' : effectiveStatus;
     const orphanedRunning = executionState === 'recovering';
     const activeAttempt = lastAttempt ? {
         k: lastAttempt.k,
@@ -10842,10 +10869,12 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
         idea: run.idea || run.title || '',
         title: run.title || run.idea || '',
         rawStatus: run.status || '',
-        status: effectiveStatus,
+        status: publicStatus,
         executionState,
         actuallyRunning: executionState === 'running',
         waitingInQueue: executionState === 'queued',
+        resumePending: executionState === 'recovering' && queuedRequest,
+        hasStarted: progress.started,
         finished: executionState === 'finished',
         note: effectiveNote,
         threshold: run.threshold,
@@ -10889,6 +10918,7 @@ function longQuantCompactGrindRun(run, fallbackRid, reqIds) {
         thumbsStopped: stoppedThumbs,
         gate: run.gate,
         recovered: !!run.recovered,
+        lifecycleVersion: run.lifecycleVersion || (progress.started ? 2 : 1),
         renderModel: run.renderModel || LONGQUANT_RENDER_MODEL,
         thumbModel: run.thumbModel || longQuantThumbPromptModelLabel(),
         ideaModel: run.ideaModel || LONGQUANT_IDEA_MODEL,
@@ -10973,8 +11003,8 @@ function longQuantActiveSort(a, b) {
 }
 function longQuantRequestPriority(req) {
     if (!req || typeof req !== 'object') return 9;
-    if (req.urgent) return -1;     // user clicked "start now" — front of the queue
-    if (req.resume) return -0.5;   // interrupted mid-run — finish it before starting fresh queued runs
+    if (req.resume) return req.urgent ? -3 : -2; // interrupted work always resumes before untouched work
+    if (req.urgent) return -1;     // user clicked "start now" on a fresh run
     if (req.sourceVideo && (req.sourceVideo.id || req.sourceVideo.title)) return 0;
     if (req.batchId) return 0;
     if (/channel|overnight|youtube/i.test(String(req.source || ''))) return 0;
@@ -11280,19 +11310,6 @@ async function longQuantGrindProcess(rid, req0) {
     let sinceBest = 0;
     const vecs = [];
     let seedQ = null;
-    if (seed) {
-        const se = await geminiTextEmbed(scoreText || seed).catch(() => null);
-        if (se) {
-            seedQ = Int8Array.from(se, x => Math.round(x * 127));
-            vecs.push(seedQ);
-        }
-    }
-    for (const a of attempts) {
-        const txt = String((a && (a.idea || a.title)) || '').trim();
-        if (!txt) continue;
-        const ae = await geminiTextEmbed(txt).catch(() => null);
-        if (ae) vecs.push(Int8Array.from(ae, x => Math.round(x * 127)));
-    }
     let queuedWritePayload = null;
     let writeInFlight = null;
     const write = () => {
@@ -11306,7 +11323,7 @@ async function longQuantGrindProcess(rid, req0) {
             status, winner, error: err, note,
             best, rejected, gate: Math.round(gate * 1000) / 1000, deadline, ts: Date.now(),
             baseline, autosaved, maxAttempts, hours, autosaveBest: !!req0.autosaveBest,
-            progressContract: 2,
+            progressContract: 2, lifecycleVersion: 3,
             ideaModel: LONGQUANT_IDEA_MODEL, thumbModel: longQuantThumbPromptModelLabel(), renderModel: LONGQUANT_RENDER_MODEL,
         }));
         // Heartbeats and progress callbacks can land together. Coalesce them and serialize
@@ -11334,6 +11351,22 @@ async function longQuantGrindProcess(rid, req0) {
     // yanked runs that were still running back into the queue mid-flight. Touch the run every 20s
     // unconditionally; only a worker that has genuinely died goes quiet now.
     const hb = setInterval(() => { if (status === 'running') write(); }, 20000);
+    if (await checkStopped()) { clearInterval(hb); return; }
+    const resumingProgress = longQuantGrindProgress(priorRun);
+    note = resumingProgress.started
+        ? `worker reattached — rebuilding prior idea-distance context at ${resumingProgress.thumbTries}/${maxAttempts} thumbnails`
+        : 'worker attached — preparing the first thumbnail batch';
+    await write();
+    if (seed) {
+        const se = await geminiTextEmbed(scoreText || seed).catch(() => null);
+        if (se) {
+            seedQ = Int8Array.from(se, x => Math.round(x * 127));
+            vecs.push(seedQ);
+        }
+    }
+    const priorIdeaTexts = attempts.map(a => String((a && (a.idea || a.title)) || '').trim()).filter(Boolean);
+    const priorEmbeddings = await longQuantMapLimit(priorIdeaTexts, 3, txt => geminiTextEmbed(txt).catch(() => null));
+    for (const emb of priorEmbeddings) if (emb) vecs.push(Int8Array.from(emb, x => Math.round(x * 127)));
     const topicFloor = () => seedQ ? Math.max(0.22, 0.62 - gate * 0.35) : null;
     const acceptIdea = async (idea, spare) => {
         const emb = await geminiTextEmbed(idea);
@@ -11630,6 +11663,7 @@ function longQuantRequestFromRun(run, rid) {
         ideaModel: LONGQUANT_IDEA_MODEL,
         thumbModel: longQuantThumbPromptModelLabel(),
         renderModel: LONGQUANT_RENDER_MODEL,
+        lifecycleVersion: 3,
         recovered: true,
         ts: Date.now(),
     };
@@ -11639,8 +11673,8 @@ async function longQuantRecoverStaleGrinds() {
     if (now - _lqGrindRecoverAt < 60e3) return;
     _lqGrindRecoverAt = now;
     const staleMs = longQuantStaleMs();
-    // Heartbeats make a live run unambiguous. Requeue after the recovery grace window,
-    // rather than leaving deploy-interrupted work parked for many minutes.
+    // Heartbeats make a live run unambiguous. Interrupted work gets a durable resume
+    // ticket; it never returns to the never-started queue state.
     const orphanMs = longQuantOrphanMs();
     let runKeys = [], reqKeys = [];
     try {
@@ -11654,23 +11688,37 @@ async function longQuantRecoverStaleGrinds() {
     for (const key of (runKeys || []).filter(k => k.endsWith('.json')).sort()) {
         if (recovered >= 25) break;
         const rid = key.split('/').pop().replace('.json', '');
-        if (!rid || reqIds.has(rid)) continue;
-        if (_lqGrindActive.has(rid)) continue;
+        if (!rid || _lqGrindActive.has(rid)) continue;
+        const hasRequest = reqIds.has(rid);
+        let existingReq = null;
+        if (hasRequest) {
+            try {
+                const b = await cloud.downloadFromR2(`longform/grind/requests/${rid}.json`);
+                if (b) existingReq = JSON.parse(b.toString('utf8'));
+            } catch (e) {}
+            // Fresh queue requests have no progress to reconcile. Their small request
+            // payload is enough to skip downloading the much larger run snapshot.
+            if (!existingReq || existingReq.resume !== true) continue;
+        }
         let run = null;
         try { const b = await cloud.downloadFromR2(key); if (b) run = JSON.parse(b.toString('utf8')); } catch (e) { continue; }
         if (!run || longQuantTerminalStatus(run.status)) continue;
+        const progress = longQuantGrindProgress(run);
         const age = now - (Number(run.ts) || 0);
-        const shouldRecover = run.status === 'queued' || (run.status === 'running' && age > Math.min(staleMs, orphanMs));
+        const shouldRecover = run.status === 'queued'
+            || run.status === 'recovering'
+            || (run.status === 'running' && age > Math.min(staleMs, orphanMs))
+            || (progress.started && run.status !== 'running');
         if (!shouldRecover) continue;
         if (await longQuantGrindStopped(rid)) {
             run.status = 'stopped'; run.note = 'stopped by you'; run.ts = now;
             await cloud.uploadToR2(key, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
+            await cloud.deleteFromR2(`longform/grind/requests/${rid}.json`).catch(() => {});
             continue;
         }
-        const slotTries = (Array.isArray(run.attempts) ? run.attempts : []).reduce((sum, a) => sum + ((a && Array.isArray(a.thumbs)) ? a.thumbs.length : 0), 0);
-        const thumbTries = slotTries;
+        const thumbTries = progress.thumbTries;
         const req = longQuantRequestFromRun(run, rid);
-        req.resume = thumbTries > 0;   // finish interrupted work before fresh queued runs
+        req.resume = progress.started;
         if (thumbTries >= req.maxAttempts) {
             run.status = 'maxed';
             run.note = `maxed at ${thumbTries}/${req.maxAttempts} thumbnails without clearing ${req.threshold}th`;
@@ -11682,13 +11730,32 @@ async function longQuantRecoverStaleGrinds() {
             await cloud.deleteFromR2(`longform/grind/requests/${rid}.json`).catch(() => {});
             continue;
         }
-        run.status = 'queued';
-        run.note = `recovered after Render worker interruption — resuming at ${thumbTries}/${req.maxAttempts} thumbnails`;
-        run.ts = now;
+        const waitingStatus = progress.started ? 'recovering' : 'queued';
+        const waitingNote = progress.started
+            ? `worker interrupted — resuming from ${thumbTries}/${req.maxAttempts} thumbnails before new queue items`
+            : 'queued — waiting for its first worker';
+        let changed = false;
+        if (run.status !== waitingStatus) {
+            run.status = waitingStatus;
+            run.note = waitingNote;
+            run.ts = now;
+            changed = true;
+        }
         run.maxAttempts = req.maxAttempts;
         run.thumbTryLimit = req.maxAttempts;
         run.hours = req.hours;
         run.autosaveBest = req.autosaveBest;
+        run.lifecycleVersion = 3;
+        if (hasRequest) {
+            if (changed) {
+                await cloud.uploadToR2(key, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
+                recovered++;
+            }
+            continue;
+        }
+        run.note = waitingNote;
+        run.ts = now;
+        req.lifecycleVersion = 3;
         await cloud.uploadToR2(key, Buffer.from(JSON.stringify(run)), 'application/json').catch(() => {});
         await cloud.uploadToR2(`longform/grind/requests/${rid}.json`, Buffer.from(JSON.stringify(req)), 'application/json').catch(() => {});
         reqIds.add(rid);

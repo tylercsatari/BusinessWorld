@@ -1567,7 +1567,10 @@ const JarvisLongQuant = (function () {
             }
         }
         const grBank = LQGRINDRUNS[0], grLive = LQGRINDSTATUS[0] || {};
-        const runRank = r => r && r.status === 'running' ? 0 : r && r.status === 'queued' ? 1 : r && r.status === 'won' ? 2 : 3;
+        const runRank = r => {
+            const state = r && (r.executionState || r.status);
+            return state === 'running' ? 0 : state === 'recovering' ? 1 : state === 'queued' ? 2 : r && r.status === 'won' ? 3 : 4;
+        };
         const recentRuns = grBank && Array.isArray(grBank.runs) ? grBank.runs.slice().sort((a, b) => (runRank(a) - runRank(b)) || ((b.ts || 0) - (a.ts || 0))) : [];
         const channelRuns = recentRuns.filter(r => r && (r.batchId || r.source === 'tyler-channel-overnight' || (r.sourceVideo && r.sourceVideo.id)));
         const statusCounts = channelRuns.reduce((m, r) => { const k = r.status || 'unknown'; m[k] = (m[k] || 0) + 1; if (r.autosaved && r.autosaved.id) m.saved = (m.saved || 0) + 1; return m; }, { ...(grLive.channelCounts || {}) });
@@ -1614,7 +1617,7 @@ const JarvisLongQuant = (function () {
         // evidence-based fallback mirrors the server: fresh writes = running, stale claims = recovering
         const grindExecState = r => (r && r.executionState) || (terminalLq(r) ? 'finished'
             : r && (r.workerAttached || r.status === 'running') && r.lastWriteAgeSec != null && r.lastWriteAgeSec < ((grLive.staleAfterSec || 120)) ? 'running'
-                : r && (r.workerAttached || r.status === 'running' || r.orphanedRunning) ? 'recovering'
+                : r && (r.workerAttached || r.status === 'running' || r.status === 'recovering' || r.orphanedRunning || r.hasStarted) ? 'recovering'
                     : r && (r.queuedRequest || r.status === 'queued') ? 'queued' : (r && r.status) || 'unknown');
         const channelRunMatches = (r, f) => {
             f = f || 'all';
@@ -1628,8 +1631,8 @@ const JarvisLongQuant = (function () {
         const grindStateLabel = r => {
             const st0 = grindExecState(r);
             if (st0 === 'running') return 'RUNNING NOW';
-            if (st0 === 'queued') return 'QUEUED - not running';
-            if (st0 === 'recovering') return 'RECOVERING - not running';
+            if (st0 === 'queued') return 'QUEUED - never started';
+            if (st0 === 'recovering') return 'RESUMING - waiting for worker';
             if (st0 === 'finished') {
                 const s = (r && r.status) || '';
                 if (s === 'won') return 'FINISHED - target hit';
@@ -1660,13 +1663,14 @@ const JarvisLongQuant = (function () {
             const stopBtn = `<span data-lqxstoprun="${esc(rid)}" style="cursor:pointer;border:1px solid ${stopping ? C.amber : C.red};color:${stopping ? C.amber : C.red};border-radius:5px;padding:2px 7px;font-size:9px;font-weight:900;white-space:nowrap">${stopping ? 'stopping' : 'stop'}</span>`;
             const startBtn = lbl => `<span data-lqxstartrun="${esc(rid)}" style="cursor:pointer;border:1px solid ${starting ? C.amber : C.green};color:${starting ? C.amber : C.green};border-radius:5px;padding:2px 7px;font-size:9px;font-weight:900;white-space:nowrap">${starting ? 'starting…' : lbl}</span>`;
             if (stx === 'running') return stopBtn;
-            if (stx === 'queued' || stx === 'recovering') return startBtn('▶ start now') + stopBtn;
+            if (stx === 'queued') return startBtn('▶ start now') + stopBtn;
+            if (stx === 'recovering') return startBtn('▶ resume now') + stopBtn;
             if (['stopped', 'error', 'maxed', 'deadline'].includes((r && r.status) || '')) return startBtn('▶ restart');
             return '';
         };
-        const runningNow = Array.isArray(grLive.runningNow) ? grLive.runningNow : liveActive.filter(r => r && r.workerAttached);
-        const recoveringNow = Array.isArray(grLive.recovering) ? grLive.recovering : liveActive.filter(r => r && r.orphanedRunning);
-        const queuedNext = Array.isArray(grLive.queuedNext) ? grLive.queuedNext : liveActive.filter(r => r && (r.queuedRequest || r.status === 'queued'));
+        const runningNow = Array.isArray(grLive.runningNow) ? grLive.runningNow : liveActive.filter(r => grindExecState(r) === 'running');
+        const recoveringNow = Array.isArray(grLive.recovering) ? grLive.recovering : liveActive.filter(r => grindExecState(r) === 'recovering');
+        const queuedNext = Array.isArray(grLive.queuedNext) ? grLive.queuedNext : liveActive.filter(r => grindExecState(r) === 'queued');
         [...runningNow, ...recoveringNow, ...queuedNext].slice(0, 6).forEach(r => { if (r && r.rid) lqGrindDetail(r.rid); });
         const statusCard = r => {
             const det = r && r.rid ? LQGRINDDETAILS[r.rid] : null;
@@ -1681,7 +1685,7 @@ const JarvisLongQuant = (function () {
             const thumbRow = thumbs.length ? `<div style="display:flex;gap:6px;overflow:auto;margin-top:7px;padding-bottom:2px">${thumbs.map(t => {
                 const label = t.pct == null ? (t.status || 'working') : t.pct + 'th';
                 return `<div style="flex:0 0 112px;border:1px solid ${t.status === 'error' ? C.red : t.image ? C.border : C.border2};border-radius:6px;overflow:hidden;background:${C.card}">${t.image ? lqxImg(`/api/longquant/grind/img/${t.image}`, `livegrind:${t.image}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000') : `<div style="height:63px;display:flex;align-items:center;justify-content:center;color:${t.status === 'error' ? C.red : C.dim};font-size:9px;text-align:center;padding:5px;box-sizing:border-box">${esc(t.status || 'queued')}</div>`}<div style="font-size:9px;color:${t.status === 'error' ? C.red : C.mute};padding:3px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(label)}</div></div>`;
-            }).join('')}</div>` : `<div style="font-size:9px;color:${C.dim};margin-top:6px">${grindExecState(r) === 'running' ? 'waiting for the next thumbnail update' : grindExecState(r) === 'queued' ? 'not running yet - waiting for a worker' : grindExecState(r) === 'recovering' ? 'not running - recovery will reattach or queue it' : 'no live thumbnail work'}</div>`;
+            }).join('')}</div>` : `<div style="font-size:9px;color:${C.dim};margin-top:6px">${grindExecState(r) === 'running' ? 'waiting for the next thumbnail update' : grindExecState(r) === 'queued' ? 'never started - waiting for its first worker' : grindExecState(r) === 'recovering' ? 'started earlier - resume ticket is ahead of fresh queue work' : 'no live thumbnail work'}</div>`;
             return `<div style="border:1px solid ${col};background:${col}10;border-radius:8px;padding:8px;min-width:260px;flex:1 1 300px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="min-width:0"><div style="font-size:11px;font-weight:900;color:${C.text};line-height:1.3;max-height:34px;overflow:hidden">${esc(title.slice(0, 120))}</div><div style="font-size:9px;color:${col};margin-top:3px;font-weight:900">${esc(shownStatus)}</div><div style="font-size:9px;color:${C.mute};margin-top:2px">${progress} · updated ${ageTxt(r.lastWriteAgeSec)}</div></div><div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end">${stopBtn}<span data-lqxchannelrun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 7px;font-size:9px;font-weight:800;white-space:nowrap">view</span></div></div>${r.note ? `<div style="font-size:9px;color:${C.faint};line-height:1.35;margin-top:5px">${esc(String(r.note).slice(0, 170))}</div>` : ''}${thumbRow}</div>`;
         };
         const lane = (label, rows, empty, limit = 6) => {
@@ -1692,14 +1696,16 @@ const JarvisLongQuant = (function () {
         const doneCount = doneStatuses.reduce((sum, k) => sum + Number(statusCounts[k] || 0), 0);
         const generatingNow = grLive.runningWorkerCount == null ? runningNow.length : Number(grLive.runningWorkerCount || 0);
         const localWorkers = grLive.localActiveWorkers == null ? (grLive.activeWorkers == null ? (grLive.workerBusy ? 1 : 0) : grLive.activeWorkers) : grLive.localActiveWorkers;
+        const queuedCount = Number(grLive.channelQueueDepth == null ? (stateCounts.queued || queuedNext.length) : grLive.channelQueueDepth);
+        const resumeCount = Number(grLive.channelResumeDepth == null ? (stateCounts.recovering || recoveringNow.length) : grLive.channelResumeDepth);
         const channelFilter = st.lqxChannelFilter || 'all';
         const chip = (key, lab, n, col) => `<span data-lqxchanfilter="${esc(key)}" style="cursor:pointer;border:1px solid ${channelFilter === key ? col : C.border};background:${channelFilter === key ? col + '24' : col + '12'};color:${channelFilter === key ? col : C.dim};border-radius:7px;padding:4px 9px;font-size:10px;font-weight:900">${n || 0} ${lab}</span>`;
         const runStatusHtml = (channelRuns.length || grLive.loading || grLive.error || grLive.ok) ? cardc(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
-          <div><div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">📡 Tyler channel grind status</div><div style="font-size:10px;color:${C.mute}">${grLive.ok ? `live poll ${grLive.refreshing ? 'refreshing' : 'ok'} · updated ${ageTxt((Date.now() - (grLive._t || Date.now())) / 1000)} · ${generatingNow} generating now · this instance ${localWorkers}/${grLive.workerLimit || 1} worker slots · ${grLive.queueDepth == null ? '—' : grLive.queueDepth} queued` : grLive.loading ? 'loading live worker status…' : `status fetch failed${grLive.error ? ': ' + esc(grLive.error) : ''}`}</div></div>
+          <div><div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:3px">📡 Tyler channel grind status</div><div style="font-size:10px;color:${C.mute}">${grLive.ok ? `live poll ${grLive.refreshing ? 'refreshing' : 'ok'} · updated ${ageTxt((Date.now() - (grLive._t || Date.now())) / 1000)} · ${generatingNow} generating now · this instance ${localWorkers}/${grLive.workerLimit || 1} worker slots · ${resumeCount} resuming · ${queuedCount} never-started queued` : grLive.loading ? 'loading live worker status…' : `status fetch failed${grLive.error ? ': ' + esc(grLive.error) : ''}`}</div></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">${[
-              ['all', 'all', channelRuns.length, C.border], ['running', 'running now', stateCounts.running || runningNow.length, C.cyan], ['queued', 'queued', stateCounts.queued || queuedNext.length, C.dim], ['recovering', 'recovering', stateCounts.recovering || recoveringNow.length, C.amber], ['saved', 'saved', statusCounts.saved || 0, C.accent], ['done', 'done', doneCount, C.green], ['stopped', 'stopped', statusCounts.stopped || 0, C.amber], ['error', 'errors', statusCounts.error || 0, C.red],
+              ['all', 'all', channelRuns.length, C.border], ['running', 'running now', stateCounts.running || runningNow.length, C.cyan], ['recovering', 'resuming', stateCounts.recovering || recoveringNow.length, C.amber], ['queued', 'never-started queued', stateCounts.queued || queuedNext.length, C.dim], ['saved', 'saved', statusCounts.saved || 0, C.accent], ['done', 'done', doneCount, C.green], ['stopped', 'stopped', statusCounts.stopped || 0, C.amber], ['error', 'errors', statusCounts.error || 0, C.red],
           ].map(([k, lab, cnt, col]) => chip(k, lab, cnt, col)).join('')}</div>
-        </div>${st.lqxChannelStopStatus ? `<div style="font-size:10px;color:${String(st.lqxChannelStopStatus).indexOf('fail') >= 0 ? C.red : C.amber};margin-top:8px">${esc(st.lqxChannelStopStatus)}</div>` : ''}${grLive.orphanedRunning ? `<div style="font-size:10px;color:${C.amber};margin-top:8px">${grLive.orphanedRunning} record${grLive.orphanedRunning === 1 ? ' is' : 's are'} not running right now; recovery will requeue ${grLive.orphanedRunning === 1 ? 'it' : 'them'}.</div>` : ''}${grLive.staleRunning ? `<div style="font-size:10px;color:${C.red};margin-top:8px">${grLive.staleRunning} attached worker${grLive.staleRunning === 1 ? '' : 's'} stopped writing recently and will be recovered.</div>` : ''}${lane(`Running now (${runningNow.length})`, runningNow, 'No attached worker is generating thumbnails right now.')}${recoveringNow.length ? lane(`Recovering - not running (${recoveringNow.length})`, recoveringNow, 'No recovery records.', 4) : ''}${lane(`Queued next - not running (${queuedNext.length})`, queuedNext, 'Nothing is waiting in the queue.', 6)}`, 12) : '';
+        </div>${st.lqxChannelStopStatus ? `<div style="font-size:10px;color:${String(st.lqxChannelStopStatus).indexOf('fail') >= 0 ? C.red : C.amber};margin-top:8px">${esc(st.lqxChannelStopStatus)}</div>` : ''}${grLive.orphanedRunning ? `<div style="font-size:10px;color:${C.amber};margin-top:8px">${grLive.orphanedRunning} interrupted run${grLive.orphanedRunning === 1 ? ' is' : 's are'} waiting to resume ahead of untouched queue work.</div>` : ''}${grLive.staleRunning ? `<div style="font-size:10px;color:${C.red};margin-top:8px">${grLive.staleRunning} attached worker${grLive.staleRunning === 1 ? '' : 's'} stopped writing recently and will be resumed.</div>` : ''}${lane(`Running now (${runningNow.length})`, runningNow, 'No attached worker is generating thumbnails right now.')}${recoveringNow.length ? lane(`Resuming interrupted runs (${recoveringNow.length})`, recoveringNow, 'No interrupted runs are waiting.', 6) : ''}${lane(`Never-started queue (${queuedNext.length})`, queuedNext, 'Nothing untouched is waiting for its first worker.', 6)}`, 12) : '';
         const channelHistoryHtml = channelRuns.length ? (() => {
             const toPct = v => {
                 if (v == null || !isFinite(Number(v))) return null;

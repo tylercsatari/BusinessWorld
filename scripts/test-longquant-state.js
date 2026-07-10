@@ -4,12 +4,15 @@ const fs = require('fs');
 const vm = require('vm');
 
 const source = fs.readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
-const helperStart = source.indexOf('function longQuantCompactGrindRun');
-const helperEnd = source.indexOf('function longQuantActiveSort', helperStart);
+const helperStart = source.indexOf('function longQuantGrindProgress');
+const helperEnd = source.indexOf('function longQuantCompactSourceVideo', helperStart);
 if (helperStart < 0 || helperEnd < 0) throw new Error('Long Quant helper source not found');
 const scoreStart = source.indexOf('const LONGQUANT_RELEVANCE_FLOOR');
 const scoreEnd = source.indexOf('function longQuantDisplayGrindNote', scoreStart);
 if (scoreStart < 0 || scoreEnd < 0) throw new Error('Long Quant scoring contract source not found');
+const recoveryStart = source.indexOf('async function longQuantRecoverStaleGrinds');
+const recoveryEnd = source.indexOf('async function longQuantGrindQueue', recoveryStart);
+if (recoveryStart < 0 || recoveryEnd < 0) throw new Error('Long Quant recovery source not found');
 
 let downloads = 0;
 const startedAt = Date.now();
@@ -51,7 +54,7 @@ const context = {
 vm.createContext(context);
 vm.runInContext(
     source.slice(helperStart, helperEnd)
-        + '\nthis.auditApi = { longQuantCompactGrindRun, longQuantGrindRunObjects, longQuantReadCompactGrindRuns };',
+        + '\nthis.auditApi = { longQuantGrindProgress, longQuantCompactGrindRun, longQuantGrindRunObjects, longQuantReadCompactGrindRuns, longQuantRequestPriority };',
     context
 );
 const scoreContext = {};
@@ -64,6 +67,42 @@ vm.runInContext(
     source.slice(scoreStart, scoreEnd)
         + '\nthis.scoreApi = { longQuantOutputContract, longQuantPublicScore, longQuantScoreThumbnail, longQuantNormalizeRunScores };',
     scoreContext
+);
+const recoveryRuns = new Map([
+    ['longform/grind/runs/partial.json', { rid: 'partial', status: 'queued', ts: Date.now() - 180_000, maxAttempts: 40, attempts: [{ thumbs: [{ status: 'done', image: 'a' }] }] }],
+    ['longform/grind/runs/fresh.json', { rid: 'fresh', status: 'queued', ts: Date.now() - 180_000, maxAttempts: 40, attempts: [] }],
+]);
+const recoveryRequests = new Map([
+    ['longform/grind/requests/partial.json', { rid: 'partial', resume: true, maxAttempts: 40 }],
+    ['longform/grind/requests/fresh.json', { rid: 'fresh', resume: false, maxAttempts: 40 }],
+]);
+const recoveryUploads = new Map();
+let recoveryRunDownloads = 0;
+const recoveryContext = {
+    console,
+    Buffer,
+    _lqGrindRecoverAt: 0,
+    _lqGrindActive: new Set(),
+    longQuantStaleMs: () => 120_000,
+    longQuantOrphanMs: () => 120_000,
+    longQuantTerminalStatus: status => ['won', 'maxed', 'deadline', 'error', 'stopped', 'archived', 'done'].includes(String(status || '')),
+    longQuantGrindProgress: context.auditApi.longQuantGrindProgress,
+    longQuantGrindStopped: async () => false,
+    longQuantRequestFromRun: (run, rid) => ({ rid, maxAttempts: Number(run.maxAttempts) || 40, threshold: 90, hours: 20, autosaveBest: true }),
+    cloud: {
+        listR2Keys: async prefix => prefix.endsWith('/runs/') ? Array.from(recoveryRuns.keys()) : Array.from(recoveryRequests.keys()),
+        downloadFromR2: async key => {
+            if (recoveryRuns.has(key)) { recoveryRunDownloads++; return Buffer.from(JSON.stringify(recoveryRuns.get(key))); }
+            return recoveryRequests.has(key) ? Buffer.from(JSON.stringify(recoveryRequests.get(key))) : null;
+        },
+        uploadToR2: async (key, buf) => { recoveryUploads.set(key, JSON.parse(Buffer.from(buf).toString('utf8'))); },
+        deleteFromR2: async key => { recoveryRequests.delete(key); },
+    },
+};
+vm.createContext(recoveryContext);
+vm.runInContext(
+    source.slice(recoveryStart, recoveryEnd) + '\nthis.recoveryApi = { longQuantRecoverStaleGrinds };',
+    recoveryContext
 );
 
 function assert(condition, message) {
@@ -181,6 +220,34 @@ async function main() {
     }, 'stale', new Set());
     assert(stale.executionState === 'recovering', 'missed heartbeats still appear running');
 
+    const partialQueued = context.auditApi.longQuantCompactGrindRun({
+        rid: 'partial',
+        status: 'queued',
+        ts: Date.now() - 20_000,
+        maxAttempts: 40,
+        attempts: [{ status: 'done', thumbs: [{ status: 'done', image: 'saved-image' }] }],
+    }, 'partial', new Set(['partial']));
+    assert(partialQueued.executionState === 'recovering' && partialQueued.status === 'recovering', 'started work fell back into the fresh queue');
+    assert(partialQueued.hasStarted && partialQueued.resumePending && !partialQueued.waitingInQueue, 'partial-run resume flags are inconsistent');
+
+    const freshQueued = context.auditApi.longQuantCompactGrindRun({
+        rid: 'fresh', status: 'queued', ts: Date.now() - 20_000, maxAttempts: 40, attempts: [],
+    }, 'fresh', new Set(['fresh']));
+    assert(freshQueued.executionState === 'queued' && freshQueued.waitingInQueue && !freshQueued.hasStarted, 'never-started work is not queued');
+    assert(context.auditApi.longQuantRequestPriority({ resume: true }) < context.auditApi.longQuantRequestPriority({ urgent: true }), 'resume work does not outrank fresh urgent work');
+
+    const recoverySource = source.slice(source.indexOf('async function longQuantRecoverStaleGrinds'), source.indexOf('async function longQuantGrindQueue'));
+    assert(recoverySource.includes("progress.started ? 'recovering' : 'queued'"), 'recovery does not preserve the started-vs-fresh lifecycle');
+    assert(source.includes('channelQueueDepth') && source.includes('channelResumeDepth'), 'queue and resume depths are not separated');
+    const processSource = source.slice(source.indexOf('async function longQuantGrindProcess'), source.indexOf('const _lqGrindActive'));
+    assert(processSource.indexOf('const hb = setInterval') < processSource.indexOf('const priorIdeaTexts'), 'resume heartbeat starts after prior-idea embedding rebuild');
+    assert(processSource.includes('await longQuantMapLimit(priorIdeaTexts, 3'), 'prior-idea rebuild is not bounded and parallel');
+    await recoveryContext.recoveryApi.longQuantRecoverStaleGrinds();
+    const migratedPartial = recoveryUploads.get('longform/grind/runs/partial.json');
+    assert(migratedPartial && migratedPartial.status === 'recovering', 'persisted partial run was not migrated out of queued');
+    assert(!recoveryUploads.has('longform/grind/runs/fresh.json'), 'fresh queued run was needlessly rewritten');
+    assert(recoveryRunDownloads === 1, `recovery downloaded ${recoveryRunDownloads} full run snapshots instead of only resumable work`);
+
     console.log(JSON.stringify({
         ok: true,
         cache: { coldDownloads: 82, warmDownloads: 0, changedDownloads: 1 },
@@ -192,6 +259,7 @@ async function main() {
             rendering: active.thumbTryCount - active.thumbImages - active.thumbErrors - active.thumbStopped,
         },
         heartbeat: { fresh: active.executionState, stale: stale.executionState },
+        lifecycle: { partial: partialQueued.executionState, fresh: freshQueued.executionState, persistedMigration: migratedPartial.status, resumeBeforeFresh: true, fullRunDownloads: recoveryRunDownloads },
         cap: maxed.status,
         scoring: {
             thumbnailPotential: aligned.pctile,
