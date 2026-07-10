@@ -12,7 +12,6 @@ import os
 import re
 
 
-BASE_MODEL = "Qwen/Qwen3-30B-A3B"
 BASE_DIR = "/weights/qwen3-30b-a3b"
 ADAPTER_DIRS = {
     "idea": "/src/adapters/idea_long_r26",
@@ -71,12 +70,8 @@ def _stable_seed(task, payload, requested):
 
 class Predictor(BasePredictor):
     def setup(self):
-        os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
-        from huggingface_hub import snapshot_download
-
         if not os.path.exists(os.path.join(BASE_DIR, "model.safetensors.index.json")):
-            os.makedirs(BASE_DIR, exist_ok=True)
-            snapshot_download(BASE_MODEL, local_dir=BASE_DIR, max_workers=16)
+            raise RuntimeError(f"managed Qwen base is not mounted at {BASE_DIR}")
 
         for name, adapter_dir in ADAPTER_DIRS.items():
             required = os.path.join(adapter_dir, "adapter_model.safetensors")

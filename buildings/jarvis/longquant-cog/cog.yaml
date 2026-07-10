@@ -1,9 +1,19 @@
+model: "r8.im/tylercsatari/longquant-workers"
+
 build:
   gpu: true
   cuda: "12.8"
   python_version: "3.12"
   python_packages:
     - "vllm==0.23.0"
-    - "huggingface_hub[hf_xet]>=0.36.0"
 predict: "predict.py:Predictor"
-image: "r8.im/tylercsatari/longquant-workers"
+
+weights:
+  - name: qwen3-30b-a3b
+    source:
+      uri: "hf://Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39"
+      exclude:
+        - ".gitattributes"
+        - "LICENSE"
+        - "README.md"
+    target: /weights/qwen3-30b-a3b

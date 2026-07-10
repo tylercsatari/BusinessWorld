@@ -52,6 +52,13 @@ jobs:
           REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
         run: echo "$REPLICATE_API_TOKEN" | docker login r8.im -u tylercsatari --password-stdin
 
+      - name: Import managed Qwen weights
+        working-directory: buildings/jarvis/longquant-cog
+        run: |
+          df -h /
+          cog weights import
+          df -h /
+
       - name: Build and push private model
         working-directory: buildings/jarvis/longquant-cog
-        run: cog push r8.im/tylercsatari/longquant-workers
+        run: cog push
