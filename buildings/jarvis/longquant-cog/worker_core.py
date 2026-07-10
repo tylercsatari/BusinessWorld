@@ -68,7 +68,10 @@ class LongQuantEngine:
         from transformers import AutoModelForCausalLM, AutoTokenizer
         import torch
 
-        self.tokenizer = AutoTokenizer.from_pretrained(adapter_dirs["idea"])
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            adapter_dirs["idea"],
+            local_files_only=True,
+        )
         self.backend = backend
         if backend == "transformers":
             from peft import PeftModel
@@ -78,6 +81,8 @@ class LongQuantEngine:
                 torch_dtype=torch.bfloat16,
                 device_map="cuda",
                 low_cpu_mem_usage=True,
+                local_files_only=True,
+                use_safetensors=True,
             )
             base.config.output_router_logits = False
             base.config.use_cache = True

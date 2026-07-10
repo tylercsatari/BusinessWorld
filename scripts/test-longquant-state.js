@@ -127,8 +127,16 @@ async function main() {
     const modalSource = fs.readFileSync(require('path').join(__dirname, '..', 'buildings', 'jarvis', 'longquant-cog', 'modal_app.py'), 'utf8');
     assert(coreSource.includes('idea_long_r26') && coreSource.includes('thumb_b10'), 'shared worker core does not contain both finalized adapter identities');
     assert(coreSource.includes('enable_thinking=False'), 'shared worker core drifted from the non-thinking mode used during training');
+    assert(coreSource.includes('local_files_only=True') && coreSource.includes('use_safetensors=True'), 'worker can still make avoidable network reads while loading weights');
     assert(cogSource.includes('LongQuantEngine') && modalSource.includes('LongQuantEngine'), 'Cog and Modal do not share one inference implementation');
     assert(modalSource.includes('56f3a4c46b2fe38') && modalSource.includes('2152f0e8fd27311d'), 'Modal worker does not verify both finalized adapter hashes');
+    assert(modalSource.includes('.run_function(_download_adapters, secrets=[r2_secret])'), 'finalized adapters are not baked into the immutable worker image');
+    assert(modalSource.indexOf('.add_local_python_source("worker_core"') > modalSource.indexOf('.run_function(_download_adapters'), 'worker source invalidates the expensive immutable weight layers');
+    assert(modalSource.includes('HF_ENABLE_PARALLEL_LOADING') && modalSource.includes('HF_HUB_OFFLINE'), 'worker image does not use local parallel weight loading');
+    assert(modalSource.includes('HF_PARALLEL_LOADING_WORKERS": "4"') && modalSource.includes('peft==0.19.1'), 'worker loading concurrency or adapter runtime version drifted');
+    assert(modalSource.includes('gpu=["H100", "A100-80GB"]'), 'worker lacks a full-memory GPU fallback for faster allocation');
+    assert(modalSource.includes('min_containers=0') && modalSource.includes('buffer_containers=0') && modalSource.includes('scaledown_window=45'), 'worker does not have an explicit scale-to-zero policy');
+    assert(providerSource.includes("task: 'health'") && providerSource.includes('longQuantKeepWorkerWarm'), 'active grinds do not bridge image-rendering gaps without an always-on worker');
 
     const legacyScore = {
         pctile: 0.41,

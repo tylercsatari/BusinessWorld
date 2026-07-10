@@ -4,10 +4,9 @@ import hashlib
 import hmac
 import json
 import os
+import time
 
 import modal
-
-from worker_core import LongQuantEngine
 
 
 APP_NAME = "longquant-trained-worker"
@@ -23,30 +22,14 @@ ADAPTER_HASHES = {
     "thumb": "2152f0e8fd27311da1820c9e7923a78406d402b58cc63a1640ca65a1dccc7799",
 }
 
+app = modal.App(APP_NAME)
+r2_secret = modal.Secret.from_name("hook-r2")
+
 
 def _download_base():
     from huggingface_hub import snapshot_download
 
     snapshot_download(BASE_MODEL, revision=BASE_REVISION, local_dir=BASE_DIR)
-
-
-image = (
-    modal.Image.debian_slim(python_version="3.12")
-    .pip_install("huggingface_hub==0.36.0", "hf_xet")
-    .add_local_python_source("worker_core", copy=True)
-    .run_function(_download_base)
-    .pip_install(
-        "torch==2.5.1",
-        "transformers==4.53.2",
-        "peft==0.16.0",
-        "accelerate==1.1.1",
-        "boto3==1.35.0",
-        "fastapi[standard]==0.115.5",
-    )
-)
-
-app = modal.App(APP_NAME)
-r2_secret = modal.Secret.from_name("hook-r2")
 
 
 def _sha256(path):
@@ -88,20 +71,56 @@ def _download_adapters():
             json.dump(config, handle)
 
 
+image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .pip_install("huggingface_hub==0.36.0", "hf_xet")
+    .run_function(_download_base)
+    .pip_install(
+        "torch==2.5.1",
+        "transformers==4.53.2",
+        "peft==0.19.1",
+        "accelerate==1.1.1",
+        "boto3==1.35.0",
+        "fastapi[standard]==0.115.5",
+    )
+    .run_function(_download_adapters, secrets=[r2_secret])
+    .env({
+        "HF_ENABLE_PARALLEL_LOADING": "true",
+        "HF_PARALLEL_LOADING_WORKERS": "4",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TOKENIZERS_PARALLELISM": "false",
+    })
+    # Keep source last so inference-code edits never invalidate the 61 GB weight layers.
+    .add_local_python_source("worker_core", copy=True)
+)
+
+
 @app.cls(
     image=image,
-    gpu="H100",
+    gpu=["H100", "A100-80GB"],
     secrets=[r2_secret],
-    scaledown_window=300,
+    min_containers=0,
+    buffer_containers=0,
+    scaledown_window=45,
     timeout=1800,
+    startup_timeout=600,
     max_containers=1,
 )
 class Model:
     @modal.enter()
     def load(self):
-        _download_adapters()
+        from worker_core import LongQuantEngine
+
+        started = time.monotonic()
         self.engine = LongQuantEngine()
         self.engine.setup(BASE_DIR, ADAPTER_DIRS, tensor_parallel_size=1, backend="transformers")
+        self.startup_seconds = round(time.monotonic() - started, 3)
+        self.gpu_name = self.engine.torch.cuda.get_device_name(0)
+        print(
+            f"[longquant] finalized models ready in {self.startup_seconds}s on {self.gpu_name}",
+            flush=True,
+        )
 
     @modal.fastapi_endpoint(method="POST")
     def predict(self, data: dict):
@@ -113,6 +132,14 @@ class Model:
             return {"error": "unauthorized"}
 
         source = data.get("input") if isinstance(data.get("input"), dict) else data
+        if source.get("task") == "health":
+            return {
+                "ready": True,
+                "models": ["idea_long_r26", "thumb_b10"],
+                "base": BASE_REVISION,
+                "startup_seconds": self.startup_seconds,
+                "gpu": self.gpu_name,
+            }
         allowed = {
             "task",
             "premise",
@@ -127,4 +154,7 @@ class Model:
             "seed",
         }
         payload = {key: value for key, value in source.items() if key in allowed}
-        return self.engine.predict(**payload)
+        result = self.engine.predict(**payload)
+        result["worker_startup_seconds"] = self.startup_seconds
+        result["worker_gpu"] = self.gpu_name
+        return result
