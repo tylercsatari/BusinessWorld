@@ -25,11 +25,16 @@ def main() -> None:
     assert artifact["newClusteringFit"] is False
     assert artifact["outcomesUsed"] is False
     assert artifact["manualPhrasesUsed"] is False
+    assert artifact["saved"] is True
     assert artifact["reconstruction"]["storedProjectionReproduced"] is True
     assert artifact["reconstruction"]["labelsSha256"] == expected_hash
     assert artifact["reconstruction"]["clusterCounts"] == np.bincount(
         labels, minlength=int(cluster_map["clusterCount"])
     ).astype(int).tolist()
+    point_index = artifact["frozenPointIndex"]
+    assert point_index["labels"] == labels.astype(int).tolist()
+    assert point_index["spanIds"] == [row["id"] for row in atlas["spans"]]
+    assert len(set(point_index["spanIds"])) == len(labels)
     methods = artifact["methods"]
     assert {row["id"] for row in methods} == {"pca12", "fisher", "maxmin"}
     for method in methods:

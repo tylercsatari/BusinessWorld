@@ -4,12 +4,15 @@
     window.createLongQuantPromiseLab = function createLongQuantPromiseLab(deps) {
         const C = deps.colors;
         const esc = deps.escape;
+        const projectionMethodKey = 'promiseLab.savedProjectionMethod';
+        let savedProjectionMethod = 'maxmin';
+        try { savedProjectionMethod = window.localStorage.getItem(projectionMethodKey) || 'maxmin'; } catch (_) { /* Storage is optional. */ }
         const state = {
             view: 'overview', data: {}, loading: {}, errors: {},
             hookId: null, hook: null, componentId: null, representation: 'influence',
             mapIndex: 0, mapPage: 0, metric: 'ctrviews', sourceId: null, source: null,
             axisIndex: 0, registryPage: 0, hookQuery: '', registryQuery: '', registryStage: 'all',
-            atlasScope: 'supported', focusedCluster: null, projectionMethod: 'maxmin',
+            atlasScope: 'supported', focusedCluster: null, projectionMethod: savedProjectionMethod,
         };
         let progressTimer = null;
         let resizeTimer = null;
@@ -109,6 +112,10 @@
             load('manifest');
             load('progress');
             if (state.view === 'overview') { load('findings'); load('manualProbe', api('manual-probe')); }
+            if (state.view === 'saved') {
+                load('manualProbe', api('manual-probe'));
+                load('manualProjection', api('manual-projection'));
+            }
             if (state.view === 'hooks' || state.view === 'boundaries') load('discovery');
             if (state.view === 'components' || state.view === 'clusters') {
                 if (state.atlasScope === 'all') load('allSpanAtlas', api('all-span-atlas'));
@@ -134,7 +141,7 @@
             const progress = state.data.progress || {};
             const views = [
                 ['overview', 'Results'], ['hooks', 'Hooks'], ['boundaries', 'Boundaries'],
-                ['components', 'Embeddings'], ['clusters', 'Cluster atlas'], ['swaps', 'Swaps'],
+                ['components', 'Embeddings'], ['clusters', 'Cluster atlas'], ['saved', 'Saved embedding'], ['swaps', 'Swaps'],
                 ['axes', 'Outcome axes'], ['registry', 'Registry'],
             ];
             return `<div style="display:flex;align-items:flex-start;gap:12px;justify-content:space-between;margin-bottom:11px;flex-wrap:wrap">
@@ -195,7 +202,7 @@
             return card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
                 <div style="min-width:250px;flex:1"><div style="font-size:9px;color:${C.amber};font-weight:900;text-transform:uppercase">Manual post-hoc overfit probe</div><div style="font-size:14px;color:${C.text};font-weight:900;margin-top:3px">Closest existing category: cluster ${winner.cluster}</div><div style="font-size:9px;color:${C.dim};margin-top:3px">${esc(winner.representation)} · ${esc(winner.geometry)} · ${winner.pcaDimensions}D · k=${winner.clusterCount} · map ${esc(String(winner.mapId || '').slice(0, 10))}</div><div style="font-size:9px;color:${C.mute};line-height:1.5;margin-top:6px">Yes: this is the strongest of ${Number(counts.frozenMapsCompared || 0).toLocaleString()} frozen map/cluster comparisons under the declared information-contribution measure. It is a descriptive overfit, not a discovered semantic name or scientific validation.</div></div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">${stat('selected recall', pct(Number(winner.manualRecall || 0) * 100), C.green)}${stat('atlas base rate', pct(Number(winner.atlasBaseRate || 0) * 100), C.dim)}${stat('concentration', `${fmt(winner.enrichment, 2)}x`, C.cyan)}${stat('information', `${fmt(winner.globalInformationContributionBits, 3)} bits`, C.purple)}</div>
-                <div style="min-width:230px"><div style="font-size:9px;color:${C.text};line-height:1.5">${winner.manualPhrasesInCluster || 0}/${counts.manualPhrases || 0} selected phrases · ${winner.manualHooksInCluster || 0}/${counts.manualHooks || 0} source hooks<br>same cluster in ${pct(Number(bootstrap.sameClusterWithinWinningMapRate || 0) * 100)} of grouped bootstraps · exact map/cluster in ${pct(Number(bootstrap.exactMapAndClusterSelectionRate || 0) * 100)}<br>length NMI ${fmt(winner.lengthNMI, 3)} · position NMI ${fmt(winner.positionNMI, 3)}</div><div style="margin-top:7px">${button(active ? 'Winning cluster isolated' : 'Open and isolate winning cluster', 'data-pl-open-manual-probe', active)}</div></div>
+                <div style="min-width:230px"><div style="font-size:9px;color:${C.text};line-height:1.5">${winner.manualPhrasesInCluster || 0}/${counts.manualPhrases || 0} selected phrases · ${winner.manualHooksInCluster || 0}/${counts.manualHooks || 0} source hooks<br>same cluster in ${pct(Number(bootstrap.sameClusterWithinWinningMapRate || 0) * 100)} of grouped bootstraps · exact map/cluster in ${pct(Number(bootstrap.exactMapAndClusterSelectionRate || 0) * 100)}<br>length NMI ${fmt(winner.lengthNMI, 3)} · position NMI ${fmt(winner.positionNMI, 3)}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:7px">${button(state.view === 'saved' ? 'Saved embedding open' : 'Open saved embedding', 'data-pl-view="saved"', state.view === 'saved')}${button(active ? 'Winning cluster isolated' : 'Isolate source cluster', 'data-pl-open-manual-probe', active)}</div></div>
             </div>`, 'margin-bottom:10px;border-color:' + C.amber + '55');
         }
 
@@ -227,20 +234,19 @@
                 </div>`, 'margin-bottom:10px');
         }
 
-        function manualProjectionPanel(selectedMap) {
+        function manualProjectionPanel() {
             const experiment = state.data.manualProjection;
             if (!experiment) {
                 if (state.errors.manualProjection) return card(`<div style="font-size:9px;color:${C.red}">${esc(state.errors.manualProjection)}</div>`, 'margin-bottom:10px');
                 return '';
             }
-            if (!selectedMap || selectedMap.id !== experiment.mapId) return '';
             const methods = experiment.methods || [];
             const selected = methods.find(row => row.id === state.projectionMethod)
                 || methods.find(row => row.id === experiment.selectedMethod) || methods[0];
             if (!selected) return '';
             const metrics = selected.metrics || {}, baseline = methods.find(row => row.id === 'pca12') || {};
             const baselineMetrics = baseline.metrics || {}, improvement = experiment.improvementOverPca || {};
-            return card(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">Fixed-label 4D → 2D projection experiment</div><div style="font-size:8px;color:${C.mute};line-height:1.5">All ${Number((experiment.reconstruction || {}).rows || 0).toLocaleString()} cluster assignments remain byte-for-byte frozen. Translation only recenters a picture and rotation inside an existing 2D plane preserves every distance; the useful operation is selecting a different two-dimensional subspace from the exact four-dimensional clustering input.</div></div><div style="font-size:8px;color:${C.green};font-weight:900">0 labels changed · 0 clusters refit · 0 outcomes used</div></div>
+            return card(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div style="min-width:260px;flex:1"><div style="font-size:9px;color:${C.green};font-weight:900;text-transform:uppercase">Saved embedding · persistent artifact</div><div style="font-size:14px;font-weight:900;color:${C.text};margin-top:2px">${esc(experiment.savedName || 'Frozen k=4 projection')}</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:3px">All ${Number((experiment.reconstruction || {}).rows || 0).toLocaleString()} cluster assignments remain byte-for-byte frozen. Translation only recenters a picture and rotation inside an existing 2D plane preserves every distance; the useful operation is selecting a different two-dimensional subspace from the exact four-dimensional clustering input.</div></div><div style="text-align:right"><div style="font-size:8px;color:${C.green};font-weight:900;margin-bottom:6px">Saved to R2 · available on every load<br>0 labels changed · 0 clusters refit · 0 outcomes used</div>${button('Restore exact map + cluster', 'data-pl-open-manual-probe')}</div></div>
                 <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">${methods.map(row => button(row.label, `data-pl-projection-method="${row.id}"`, selected.id === row.id)).join('')}</div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:7px">${stat('weakest pair', fmt(metrics.worstPairSeparation, 3), C.green)}${stat('2D label recovery', pct(Number(metrics.nearestCentroidAgreement || 0) * 100), C.cyan)}${stat('silhouette', fmt(metrics.silhouetteSampled, 3), C.purple)}${stat('DB overlap', fmt(metrics.daviesBouldin, 3), C.amber)}${stat('Fisher ratio', fmt(metrics.fisherTraceRatio, 3), C.dim)}</div>
                 <div style="font-size:9px;color:${C.dim};line-height:1.5;margin-bottom:6px"><b style="color:${selected.id === experiment.selectedMethod ? C.green : C.text}">${esc(selected.label)}</b>: ${esc(selected.description)} ${selected.usesFrozenLabelsToChoosePlane ? 'The frozen labels choose this browse-only plane.' : 'The labels do not choose this plane; they only score it.'}</div>
@@ -250,6 +256,12 @@
                 <div><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:4px">Result against PCA axes 1-2</div><div style="font-size:9px;color:${C.dim};line-height:1.55">Weakest pair ${fmt(baselineMetrics.worstPairSeparation, 3)} → ${fmt((methods.find(row => row.id === experiment.selectedMethod) || selected).metrics.worstPairSeparation, 3)} (${signed(Number(improvement.worstPairSeparationRelative || 0) * 100, 1)}%)<br>2D label recovery ${pct(Number(baselineMetrics.nearestCentroidAgreement || 0) * 100)} → ${pct(Number((methods.find(row => row.id === experiment.selectedMethod) || selected).metrics.nearestCentroidAgreement || 0) * 100)}<br>Silhouette ${fmt(baselineMetrics.silhouetteSampled, 3)} → ${fmt((methods.find(row => row.id === experiment.selectedMethod) || selected).metrics.silhouetteSampled, 3)}<br>Davies-Bouldin ${fmt(baselineMetrics.daviesBouldin, 3)} → ${fmt((methods.find(row => row.id === experiment.selectedMethod) || selected).metrics.daviesBouldin, 3)} (${pct(Number(improvement.daviesBouldinRelativeReduction || 0) * 100)} less overlap)</div></div>
                 <div><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:4px">All six pairwise standardized separations</div><div style="display:grid;grid-template-columns:repeat(3,minmax(90px,1fr));gap:5px">${(metrics.pairwise || []).map(row => `<div style="border-left:2px solid ${clusterColor(row.left)};padding:3px 6px;font-size:8px;color:${C.dim}"><b style="color:${C.text}">${row.left} ↔ ${row.right}</b><br>${fmt(row.standardizedSeparation, 3)}</div>`).join('')}</div><div style="font-size:8px;color:${C.mute};margin-top:6px">Primary objective: maximize the smallest of these six values. Higher means cluster centroids are farther apart relative to their pooled within-cluster spread.</div></div>
                 </div>`, 'margin-bottom:10px;border-color:' + C.cyan + '55');
+        }
+
+        function renderSavedProjection() {
+            if (!state.data.manualProbe) return loading('manualProbe');
+            if (!state.data.manualProjection) return loading('manualProjection');
+            return `${manualProjectionPanel()}${manualMetricGlossary()}${manualProbeSummary()}`;
         }
 
         function renderOverview() {
@@ -394,7 +406,6 @@
             const persistence = selected.crossScopeBestARI == null ? '' : ` · best supported-atlas ARI ${fmt(selected.crossScopeBestARI, 3)} (${esc(selected.crossScopeBestRepresentation || '')}) · boundary enrichment ${fmt(selected.boundarySupportWeightedEnrichment, 3)}`;
             return `${atlasScopeControls(atlas)}${manualProbeSummary()}${manualMetricGlossary()}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px">${stat('registered experiments', Number(atlas.experimentCount || 0).toLocaleString(), C.green)}${stat('maps retained', maps.length, C.cyan)}${stat(state.atlasScope === 'all' ? 'all spans' : 'candidates', atlasCount(atlas).toLocaleString(), C.purple)}${stat('outcomes used', '0', C.amber)}</div>
             ${card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">${esc(selected.representation || '')} · ${esc(selected.geometry || '')} · ${selected.pcaDimensions || '-'}D · k=${selected.clusterCount || '-'}${state.focusedCluster == null ? '' : ` · isolated cluster ${state.focusedCluster}`}</div><div style="font-size:9px;color:${C.mute}">margin above null ${fmt(selected.marginAboveNull, 3)} · held-out-hook margin ${fmt(selected.heldoutHookMargin, 3)} · seed ARI ${fmt(selected.seedStabilityARI, 3)} · entropy ${fmt(selected.entropy, 3)}${diagnostics}${persistence} · ${selected.pareto ? 'Pareto front' : 'ranked sensitivity map'}</div></div>${state.focusedCluster == null ? '' : button('Show all clusters', 'data-pl-clear-cluster-focus')}</div><canvas data-pl-canvas="cluster" style="width:100%;height:520px;display:block"></canvas>`)}
-            ${manualProjectionPanel(selected)}
             ${manualProbeDetail(selected)}
             ${clusterSummaries.length ? card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:2px">Cluster composition and representative observed spans</div><div style="font-size:8px;color:${C.mute};margin-bottom:7px">Representatives are nearest the cluster centroid in this displayed 2D projection, with distinct source hooks selected first; they never enter fitting.</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(245px,1fr));gap:7px;max-height:620px;overflow:auto">${clusterSummaries.map(summary => `<div style="border-left:3px solid ${clusterColor(summary.label)};background:${C.card2};padding:7px"><div style="display:flex;justify-content:space-between;gap:6px;font-size:8px;color:${C.mute};margin-bottom:5px"><b style="color:${clusterColor(summary.label)}">cluster ${summary.label}</b><span>${Number(summary.size || 0).toLocaleString()} spans · ${summary.hookCount || 0} hooks · median ${fmt(summary.medianTokenCount, 1)} tokens${summary.boundarySupportedFraction == null ? '' : ` · ${pct(summary.boundarySupportedFraction * 100)} boundary-supported`}</span></div>${(summary.representativeIndices || []).map(index => { const row = rows[index] || {}; return `<button data-pl-component="${esc(row.id || '')}" data-pl-open-components style="display:block;width:100%;text-align:left;border:0;border-top:1px solid ${C.border};background:transparent;color:${C.text};font-size:8.5px;padding:4px 0;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.text || '')}</button>`; }).join('')}</div>`).join('')}</div>`) : ''}
             ${card(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">All retained clustering maps</div><div style="font-size:8px;color:${C.mute}">${maps.length ? `${start + 1}-${Math.min(maps.length, start + pageSize)} of ${maps.length}` : '0 maps'}</div></div><div style="display:flex;gap:5px">${button('Previous', 'data-pl-map-page="-1"')}${button('Next', 'data-pl-map-page="1"')}</div></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:7px">${maps.slice(start, start + pageSize).map((row, offset) => { const index = start + offset; return `<button data-pl-map="${index}" style="text-align:left;background:${index === state.mapIndex ? C.cyan + '12' : C.card2};border:1px solid ${index === state.mapIndex ? C.cyan : C.border};border-radius:6px;padding:5px;cursor:pointer"><div style="font-size:8px;color:${C.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.representation)} · ${esc(row.geometry)} · ${row.pcaDimensions}D · k${row.clusterCount}</div><canvas data-pl-canvas="cluster-mini" data-pl-map-index="${index}" style="width:100%;height:88px;display:block"></canvas><div style="font-size:8px;color:${C.mute}">ARI ${fmt(row.seedStabilityARI, 2)} · null lift ${fmt(row.marginAboveNull, 2)}${row.lengthNMI == null ? '' : ` · length NMI ${fmt(row.lengthNMI, 2)}`}</div></button>`; }).join('')}</div>`)} `;
@@ -449,7 +460,7 @@
         function body() {
             return {
                 overview: renderOverview, hooks: renderHooks, boundaries: renderBoundaries,
-                components: renderComponents, clusters: renderClusters, swaps: renderSwaps,
+                components: renderComponents, clusters: renderClusters, saved: renderSavedProjection, swaps: renderSwaps,
                 axes: renderAxes, registry: renderRegistry,
             }[state.view]();
         }
@@ -527,11 +538,28 @@
                 const interactiveKinds = new Set(['components', 'hook-map', 'cluster', 'manual-projection']);
                 const kind = canvas.dataset.plCanvas;
                 const atlas = kind === 'hook-map' ? state.data.atlas : activeAtlas();
-                if (!atlas || !interactiveKinds.has(kind)) return;
+                if (!interactiveKinds.has(kind) || (kind !== 'manual-projection' && !atlas)) return;
                 const rect = canvas.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top;
                 let best = -1, distance = Infinity;
                 projected.forEach((point, index) => { const d = (point[0] - x) ** 2 + (point[1] - y) ** 2; if (d < distance) { distance = d; best = index; } });
-                if (best >= 0 && distance < 225) { const originalIndex = visible[best].index; state.componentId = atlasRows(atlas)[originalIndex].id; if (state.view !== 'components') state.view = 'components'; paint(); }
+                if (best < 0 || distance >= 225) return;
+                const originalIndex = visible[best].index;
+                if (kind === 'manual-projection') {
+                    const pointIndex = ((state.data.manualProjection || {}).frozenPointIndex || {});
+                    const spanId = (pointIndex.spanIds || [])[originalIndex];
+                    if (!spanId) return;
+                    state.atlasScope = 'all';
+                    state.componentId = spanId;
+                    state.view = 'components';
+                    load('allSpanAtlas', api('all-span-atlas'));
+                    paint();
+                    return;
+                }
+                const row = atlasRows(atlas)[originalIndex];
+                if (!row) return;
+                state.componentId = row.id;
+                if (state.view !== 'components') state.view = 'components';
+                paint();
             };
         }
 
@@ -582,13 +610,18 @@
                     return scatter(canvas, points, colors, selectedIds, alphas);
                 }
                 if (kind === 'manual-projection') {
-                    const experiment = state.data.manualProjection, atlas = activeAtlas();
-                    if (!experiment || !atlas) return;
+                    const experiment = state.data.manualProjection;
+                    if (!experiment) return;
                     const method = (experiment.methods || []).find(row => row.id === state.projectionMethod)
                         || (experiment.methods || []).find(row => row.id === experiment.selectedMethod);
-                    const map = (atlas.maps || []).find(row => row.id === experiment.mapId);
-                    if (!method || !map) return;
-                    const labels = map.labels || [];
+                    const pointIndex = experiment.frozenPointIndex || {};
+                    let labels = pointIndex.labels || [];
+                    if (!labels.length) {
+                        const atlas = state.data.allSpanAtlas || activeAtlas();
+                        const map = atlas && (atlas.maps || []).find(row => row.id === experiment.mapId);
+                        labels = (map && map.labels) || [];
+                    }
+                    if (!method || !labels.length) return;
                     const colors = labels.map(clusterColor);
                     const alphas = labels.map(() => .58);
                     const selectedIds = new Set((((state.data.manualProbe || {}).winnerDetail || {}).matches || [])
@@ -634,7 +667,7 @@
             const component = target.closest('[data-pl-component]'); if (component) { state.componentId = component.dataset.plComponent; if (component.hasAttribute('data-pl-open-components')) state.view = 'components'; paint(); return true; }
             const map = target.closest('[data-pl-map]'); if (map) { state.mapIndex = Number(map.dataset.plMap); state.focusedCluster = null; paint(); return true; }
             const mapPage = target.closest('[data-pl-map-page]'); if (mapPage) { const maps = ((activeAtlas() || {}).maps || []); const max = Math.max(0, Math.ceil(maps.length / 24) - 1); state.mapPage = Math.max(0, Math.min(max, state.mapPage + Number(mapPage.dataset.plMapPage))); state.mapIndex = Math.min(Math.max(0, maps.length - 1), state.mapPage * 24); state.focusedCluster = null; paint(); return true; }
-            const projectionMethod = target.closest('[data-pl-projection-method]'); if (projectionMethod) { state.projectionMethod = projectionMethod.dataset.plProjectionMethod; paint(); return true; }
+            const projectionMethod = target.closest('[data-pl-projection-method]'); if (projectionMethod) { state.projectionMethod = projectionMethod.dataset.plProjectionMethod; try { window.localStorage.setItem(projectionMethodKey, state.projectionMethod); } catch (_) { /* Storage is optional. */ } paint(); return true; }
             const metric = target.closest('[data-pl-metric]'); if (metric) { state.metric = metric.dataset.plMetric; paint(); return true; }
             const source = target.closest('[data-pl-source]'); if (source) { if (source.hasAttribute('data-pl-open-swaps')) { state.view = 'swaps'; load('swaps'); } loadSource(source.dataset.plSource); return true; }
             const axis = target.closest('[data-pl-axis]'); if (axis) { state.axisIndex = Number(axis.dataset.plAxis); paint(); return true; }

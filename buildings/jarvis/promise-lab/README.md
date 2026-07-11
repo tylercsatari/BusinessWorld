@@ -78,4 +78,7 @@ axes. The output is `.cache/manual-probe.json` and is published separately as
 Fisher plane, and an orthonormal max-min plane for the same frozen `k=4` labels.
 The max-min search optimizes the weakest of all six pairwise standardized
 cluster separations. It is a post-hoc visualization experiment: it never refits
-k-means, changes membership, or enters scientific discovery evidence.
+k-means, changes membership, or enters scientific discovery evidence. The
+artifact also carries its frozen labels and exact span IDs so the dedicated
+Saved embedding tab can render independently of the full 82 MB atlas; the atlas
+is loaded only when a plotted span is opened for inspection.

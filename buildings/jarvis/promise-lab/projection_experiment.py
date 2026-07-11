@@ -276,10 +276,15 @@ def run_projection_experiment(
         })
     selected = max(methods, key=lambda row: row["metrics"]["worstPairSeparation"])
     pca_method = next(row for row in methods if row["id"] == "pca12")
+    span_ids = [str(row["id"]) for row in atlas.get("spans", [])]
+    if len(span_ids) != len(labels):
+        raise ValueError("the frozen projection needs one span ID per cluster label")
     return {
         "version": 1,
         "status": "complete",
         "stage": "fixed-label viewing-plane experiment",
+        "saved": True,
+        "savedName": "Reference-to-gratification candidate",
         "mapId": map_id,
         "scope": map_row.get("scope"),
         "labelsChanged": False,
@@ -303,6 +308,10 @@ def run_projection_experiment(
             ),
         },
         "reconstruction": verification,
+        "frozenPointIndex": {
+            "labels": labels.astype(int).tolist(),
+            "spanIds": span_ids,
+        },
         "optimization": optimization,
         "selectedMethod": selected["id"],
         "selectionRule": "largest worstPairSeparation; no outcome or manual phrase enters selection",

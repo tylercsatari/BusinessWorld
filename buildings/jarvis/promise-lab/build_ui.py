@@ -288,6 +288,8 @@ def main() -> None:
         },
         "manualProjection": {
             "status": manual_projection.get("status"),
+            "saved": manual_projection.get("saved"),
+            "savedName": manual_projection.get("savedName"),
             "mapId": manual_projection.get("mapId"),
             "selectedMethod": manual_projection.get("selectedMethod"),
             "improvementOverPca": manual_projection.get("improvementOverPca"),
@@ -341,6 +343,7 @@ def main() -> None:
                 (manual_probe.get("counts") or {}).get("frozenMapsCompared", 0)
             ),
             "manualProjectionMethods": len(manual_projection.get("methods") or []),
+            "savedEmbeddings": int(bool(manual_projection.get("saved"))),
         },
         "separation": {
             "discoveryInputs": "hook text, token order, Gemini text vectors, exact deletion counterfactuals",
