@@ -3595,12 +3595,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         discovery: 'discovery-summary.json.gz',
         atlas: 'atlas.json.gz',
         'all-span-atlas': 'all-span-atlas.json.gz',
+        'manual-probe': 'manual-probe.json.gz',
         'cross-scope': 'cross-scope.json.gz',
         swaps: 'swaps/summary.json.gz',
         axes: 'axes.json.gz',
         registry: 'registry.json.gz',
     };
-    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|cross-scope|swaps|axes|registry)$/);
+    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|manual-probe|cross-scope|swaps|axes|registry)$/);
     if (promiseArtifact && req.method === 'GET') {
         const ok = await serveR2GzipJsonStream(res,
             `longform/promise-lab-v4/${promiseArtifacts[promiseArtifact[1]]}`);

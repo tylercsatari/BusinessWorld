@@ -23,7 +23,7 @@ def main() -> None:
     parser.add_argument("--from-stage", choices=(
         "interventions", "discovery", "atlas", "all-spans", "verify-all-spans",
         "all-span-atlas", "cross-scope", "swaps", "verify-swaps", "axes",
-        "verify-axes", "ui",
+        "verify-axes", "manual-probe", "ui",
     ),
                         default="interventions")
     parser.add_argument("--no-upload", action="store_true")
@@ -40,6 +40,7 @@ def main() -> None:
         ("verify-swaps", "verify_swap_outputs.py"),
         ("axes", "run_axes.py"),
         ("verify-axes", "verify_axis_outputs.py"),
+        ("manual-probe", "run_manual_probe.py"),
         ("ui", "build_ui.py"),
     ]
     start = next(index for index, item in enumerate(order) if item[0] == args.from_stage)

@@ -130,6 +130,7 @@ def main() -> None:
             )
     swaps = load_json("swaps.json", {})
     axes = load_json("axes.json", {})
+    manual_probe = load_json("manual-probe.json", {})
     boundary_registry = load_jsonl_gz("boundary-experiments.jsonl.gz")
     cluster_registry = load_jsonl_gz("cluster-experiments.jsonl.gz")
     all_span_cluster_registry = load_jsonl_gz("all-span-cluster-experiments.jsonl.gz")
@@ -274,6 +275,16 @@ def main() -> None:
                 "observed YouTube outcomes."
             ),
         },
+        "manualProbe": {
+            "status": manual_probe.get("status"),
+            "policy": manual_probe.get("policy"),
+            "counts": manual_probe.get("counts"),
+            "winner": manual_probe.get("winner"),
+            "interpretation": (
+                "A manual post-hoc overfit probe over frozen maps only. It does not enter "
+                "discovery, clustering, or outcome-axis fitting."
+            ),
+        },
     }
     (CACHE / "findings.json").write_text(json.dumps(json_ready(findings), separators=(",", ":"),
                                                     allow_nan=False),
@@ -314,6 +325,9 @@ def main() -> None:
             "crossScopeExperiments": len(cross_scope_registry),
             "swapRows": swaps.get("swapRows", 0),
             "axisExperiments": len(axis_registry),
+            "manualProbeMapsCompared": (
+                (manual_probe.get("counts") or {}).get("frozenMapsCompared", 0)
+            ),
         },
         "separation": {
             "discoveryInputs": "hook text, token order, Gemini text vectors, exact deletion counterfactuals",
@@ -322,6 +336,9 @@ def main() -> None:
             "allSpanTransforms": "primitive embeddings, algebraic contrasts, categorical nuisance residuals, and equal-block multiview concatenation",
             "outcomesJoinAfterDiscovery": True,
             "measuredAndPredictedEvidenceSeparated": True,
+            "manualProbeSeparated": (
+                "manual interpretation is post-hoc, creates zero maps, and never enters discovery"
+            ),
         },
         "artifacts": {
             "findings": "/api/longquant/promise-lab/findings",
@@ -329,6 +346,7 @@ def main() -> None:
             "discovery": "/api/longquant/promise-lab/discovery",
             "atlas": "/api/longquant/promise-lab/atlas",
             "allSpanAtlas": "/api/longquant/promise-lab/all-span-atlas",
+            "manualProbe": "/api/longquant/promise-lab/manual-probe",
             "crossScope": "/api/longquant/promise-lab/cross-scope",
             "swaps": "/api/longquant/promise-lab/swaps",
             "axes": "/api/longquant/promise-lab/axes",
@@ -350,6 +368,7 @@ def main() -> None:
         ("discovery-summary.json", "discovery-summary.json.gz"),
         ("atlas.json", "atlas.json.gz"),
         ("all-span-atlas.json", "all-span-atlas.json.gz"),
+        ("manual-probe.json", "manual-probe.json.gz"),
         ("cross-scope.json", "cross-scope.json.gz"),
         ("swaps.json", "swaps/summary.json.gz"),
         ("axes.json", "axes.json.gz"),

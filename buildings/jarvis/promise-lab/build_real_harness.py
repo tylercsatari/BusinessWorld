@@ -36,6 +36,7 @@ def main() -> None:
         "all-span-atlas": read(
             "all-span-atlas.json", {"spans": [], "maps": [], "projections": {}}
         ),
+        "manual-probe": read("manual-probe.json", None),
         "cross-scope": read("cross-scope.json", {}),
         "swaps": read("swaps.json", None),
         "axes": read("axes.json", None),

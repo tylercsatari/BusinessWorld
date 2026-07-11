@@ -9,7 +9,7 @@
             hookId: null, hook: null, componentId: null, representation: 'influence',
             mapIndex: 0, mapPage: 0, metric: 'ctrviews', sourceId: null, source: null,
             axisIndex: 0, registryPage: 0, hookQuery: '', registryQuery: '', registryStage: 'all',
-            atlasScope: 'supported',
+            atlasScope: 'supported', focusedCluster: null,
         };
         let progressTimer = null;
         let hookRequest = 0;
@@ -106,11 +106,12 @@
         function ensureView() {
             load('manifest');
             load('progress');
-            if (state.view === 'overview') load('findings');
+            if (state.view === 'overview') { load('findings'); load('manualProbe', api('manual-probe')); }
             if (state.view === 'hooks' || state.view === 'boundaries') load('discovery');
             if (state.view === 'components' || state.view === 'clusters') {
                 if (state.atlasScope === 'all') load('allSpanAtlas', api('all-span-atlas'));
                 else load('atlas');
+                if (state.view === 'clusters') load('manualProbe', api('manual-probe'));
             }
             if (state.view === 'swaps') load('swaps');
             if (state.view === 'axes') load('axes');
@@ -158,6 +159,54 @@
             </div>`;
         }
 
+        async function openManualProbe() {
+            const probe = state.data.manualProbe || await load('manualProbe', api('manual-probe'));
+            if (!probe || !probe.winner) return;
+            const winner = probe.winner;
+            state.view = 'clusters';
+            state.atlasScope = winner.scope === 'all-contiguous-spans' ? 'all' : 'supported';
+            state.componentId = null;
+            const atlas = state.atlasScope === 'all'
+                ? (state.data.allSpanAtlas || await load('allSpanAtlas', api('all-span-atlas')))
+                : (state.data.atlas || await load('atlas'));
+            if (!atlas) return;
+            const found = (atlas.maps || []).findIndex(row => row.id === winner.mapId);
+            state.mapIndex = found >= 0 ? found : Number(winner.mapIndex || 0);
+            state.mapPage = Math.floor(state.mapIndex / 24);
+            state.focusedCluster = Number(winner.cluster);
+            state.representation = winner.representation || state.representation;
+            paint();
+        }
+
+        function manualProbeSummary() {
+            const probe = state.data.manualProbe;
+            if (!probe || !probe.winner) return '';
+            const winner = probe.winner, counts = probe.counts || {}, bootstrap = winner.bootstrap || {};
+            const active = state.view === 'clusters'
+                && ((state.atlasScope === 'all') === (winner.scope === 'all-contiguous-spans'))
+                && ((activeAtlas() || {}).maps || [])[state.mapIndex]?.id === winner.mapId
+                && state.focusedCluster === Number(winner.cluster);
+            return card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
+                <div style="min-width:250px;flex:1"><div style="font-size:9px;color:${C.amber};font-weight:900;text-transform:uppercase">Manual post-hoc overfit probe</div><div style="font-size:14px;color:${C.text};font-weight:900;margin-top:3px">Closest existing category: cluster ${winner.cluster}</div><div style="font-size:9px;color:${C.dim};margin-top:3px">${esc(winner.representation)} · ${esc(winner.geometry)} · ${winner.pcaDimensions}D · k=${winner.clusterCount} · map ${esc(String(winner.mapId || '').slice(0, 10))}</div><div style="font-size:9px;color:${C.mute};line-height:1.5;margin-top:6px">Yes: this is the strongest of ${Number(counts.frozenMapsCompared || 0).toLocaleString()} frozen map/cluster comparisons under the declared information-contribution measure. It is a descriptive overfit, not a discovered semantic name or scientific validation.</div></div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">${stat('selected recall', pct(Number(winner.manualRecall || 0) * 100), C.green)}${stat('atlas base rate', pct(Number(winner.atlasBaseRate || 0) * 100), C.dim)}${stat('concentration', `${fmt(winner.enrichment, 2)}x`, C.cyan)}${stat('information', `${fmt(winner.globalInformationContributionBits, 3)} bits`, C.purple)}</div>
+                <div style="min-width:230px"><div style="font-size:9px;color:${C.text};line-height:1.5">${winner.manualPhrasesInCluster || 0}/${counts.manualPhrases || 0} selected phrases · ${winner.manualHooksInCluster || 0}/${counts.manualHooks || 0} source hooks<br>same cluster in ${pct(Number(bootstrap.sameClusterWithinWinningMapRate || 0) * 100)} of grouped bootstraps · exact map/cluster in ${pct(Number(bootstrap.exactMapAndClusterSelectionRate || 0) * 100)}<br>length NMI ${fmt(winner.lengthNMI, 3)} · position NMI ${fmt(winner.positionNMI, 3)}</div><div style="margin-top:7px">${button(active ? 'Winning cluster isolated' : 'Open and isolate winning cluster', 'data-pl-open-manual-probe', active)}</div></div>
+            </div>`, 'margin-bottom:10px;border-color:' + C.amber + '55');
+        }
+
+        function manualProbeDetail(selectedMap) {
+            const probe = state.data.manualProbe, detail = probe && probe.winnerDetail;
+            if (!probe || !detail || !selectedMap || selectedMap.id !== probe.winner.mapId
+                || state.focusedCluster !== Number(probe.winner.cluster)) return '';
+            const matches = detail.matches || [], misses = detail.misses || [], neighbors = detail.nearestMembers || [];
+            const rowButton = (row, label, suffix = '') => `<button data-pl-component="${esc(row.spanId || row.id || '')}" data-pl-open-components style="display:block;width:100%;text-align:left;border:0;border-bottom:1px solid ${C.border};background:transparent;color:${C.text};padding:5px 0;font-size:8.5px;cursor:pointer"><b>${esc(label)}</b>${suffix ? `<br><span style="color:${C.mute}">${esc(suffix)}</span>` : ''}</button>`;
+            return card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:8px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">Study the winning category</div><div style="font-size:8px;color:${C.mute}">Cyan points are your selected spans. Colored points are every member of cluster ${detail.cluster}; dim points are the other three categories. Click any row to inspect its exact embedding input.</div></div>${button('Show all clusters', 'data-pl-clear-cluster-focus')}</div>
+                <div class="pl-split" style="display:grid;grid-template-columns:minmax(250px,1fr) minmax(230px,.7fr) minmax(280px,1.1fr);gap:12px">
+                <div><div style="font-size:9px;font-weight:900;color:${C.green};margin-bottom:4px">Inside · ${matches.length} manual phrases</div><div style="max-height:390px;overflow:auto">${matches.map(row => rowButton(row, row.manualPhrase, row.observedSpanText === row.manualPhrase ? '' : `observed: ${row.observedSpanText}`)).join('')}</div></div>
+                <div><div style="font-size:9px;font-weight:900;color:${C.amber};margin-bottom:4px">Outside · ${misses.length} manual phrases</div><div style="max-height:390px;overflow:auto">${misses.map(row => rowButton(row, row.manualPhrase, `observed: ${row.observedSpanText} · landed in cluster ${row.winningMapCluster}`)).join('')}</div></div>
+                <div><div style="font-size:9px;font-weight:900;color:${C.cyan};margin-bottom:4px">Nearest unlabeled members · ${neighbors.length}</div><div style="font-size:8px;color:${C.mute};margin-bottom:4px">Nearest the displayed cluster median, one source hook each before repeats. Unlabeled means unreviewed, not negative.</div><div style="max-height:390px;overflow:auto">${neighbors.map(row => rowButton(row, row.text, `distance ${fmt(row.distanceToDisplayedCentroid, 4)}${(row.manualPhraseIndices || []).length ? ' · manually selected' : ''}`)).join('')}</div></div>
+                </div>`, 'margin-bottom:10px;border-color:' + clusterColor(detail.cluster) + '66');
+        }
+
         function renderOverview() {
             const manifest = state.data.manifest;
             const findings = state.data.findings;
@@ -173,7 +222,7 @@
                 ${stat('complete hooks', counts.hooks || 0, C.cyan)}${stat('embedding texts', Number(counts.embeddingTexts || 0).toLocaleString(), C.purple)}
                 ${stat('boundary runs', Number(counts.boundaryExperiments || 0).toLocaleString(), C.amber)}${stat('cluster runs', Number(counts.clusterExperiments || 0).toLocaleString(), C.green)}
                 ${stat('cluster maps', Number(counts.clusterMaps || 0) + Number(counts.allSpanClusterMaps || 0), C.orange)}${stat('all spans', Number(counts.allContiguousSpans || 0).toLocaleString(), C.purple)}${stat('swap rows', Number(counts.swapRows || 0).toLocaleString(), C.cyan)}${stat('axis runs', Number(counts.axisExperiments || 0).toLocaleString(), C.purple)}
-            </div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:9px;margin-bottom:10px">
+            </div>${manualProbeSummary()}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:9px;margin-bottom:10px">
                 ${card(`<div style="font-size:11px;font-weight:900;color:${C.amber};margin-bottom:5px">Boundary evidence</div><div style="font-size:24px;font-weight:900;color:${C.text}">${boundary.supportedMultiSegmentHooks || 0}</div><div style="font-size:10px;color:${C.dim}">hooks with search-wide support for more than one semantic unit</div><div style="font-size:9px;color:${C.mute};margin-top:5px">${boundary.noSeparableComponentEvidence || 0} returned no separable component evidence. Nothing is forced.</div>`)}
                 ${card(`<div style="font-size:11px;font-weight:900;color:${C.green};margin-bottom:5px">Two outcome-blind atlases</div><div style="font-size:24px;font-weight:900;color:${C.text}">${Number(cluster.experiments || 0).toLocaleString()} + ${Number(cluster.allContiguousExperiments || 0).toLocaleString()}</div><div style="font-size:10px;color:${C.dim}">evidence-supported candidates plus every contiguous span across 12 semantic and residual views</div><div style="font-size:9px;color:${C.mute};margin-top:5px">${Number(cluster.mapsVisible || 0) + Number(cluster.allContiguousMapsVisible || 0)} maps are inspectable · cross-scope consensus rho ${fmt(consensusAgreement.spearman, 3)}. Families remain unnamed.</div>`)}
                 ${card(`<div style="font-size:11px;font-weight:900;color:${C.cyan};margin-bottom:5px">Crossed transfer surface</div><div style="font-size:24px;font-weight:900;color:${C.text}">${Number(swap.rows || 0).toLocaleString()}</div><div style="font-size:10px;color:${C.dim}">source-component by target-hook recompositions</div><div style="font-size:9px;color:${C.mute};margin-top:5px">Model-predicted Long Quant evidence is kept separate from observed YouTube outcomes.</div>`)}
@@ -293,11 +342,14 @@
             const maps = atlas.maps || [];
             const selected = maps[Math.max(0, Math.min(state.mapIndex, maps.length - 1))] || {};
             const pageSize = 24, start = state.mapPage * pageSize;
-            const clusterSummaries = selected.clusterSummaries || [], rows = atlasRows(atlas);
+            const clusterSummaries = (selected.clusterSummaries || []).filter(summary =>
+                state.focusedCluster == null || Number(summary.label) === Number(state.focusedCluster));
+            const rows = atlasRows(atlas);
             const diagnostics = selected.lengthNMI == null ? '' : ` · length NMI ${fmt(selected.lengthNMI, 3)} · position NMI ${fmt(selected.positionNMI, 3)} · cross-hook generality ${fmt(selected.crossHookGenerality, 3)}`;
             const persistence = selected.crossScopeBestARI == null ? '' : ` · best supported-atlas ARI ${fmt(selected.crossScopeBestARI, 3)} (${esc(selected.crossScopeBestRepresentation || '')}) · boundary enrichment ${fmt(selected.boundarySupportWeightedEnrichment, 3)}`;
-            return `${atlasScopeControls(atlas)}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px">${stat('registered experiments', Number(atlas.experimentCount || 0).toLocaleString(), C.green)}${stat('maps retained', maps.length, C.cyan)}${stat(state.atlasScope === 'all' ? 'all spans' : 'candidates', atlasCount(atlas).toLocaleString(), C.purple)}${stat('outcomes used', '0', C.amber)}</div>
-            ${card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">${esc(selected.representation || '')} · ${esc(selected.geometry || '')} · ${selected.pcaDimensions || '-'}D · k=${selected.clusterCount || '-'}</div><div style="font-size:9px;color:${C.mute}">margin above null ${fmt(selected.marginAboveNull, 3)} · held-out-hook margin ${fmt(selected.heldoutHookMargin, 3)} · seed ARI ${fmt(selected.seedStabilityARI, 3)} · entropy ${fmt(selected.entropy, 3)}${diagnostics}${persistence} · ${selected.pareto ? 'Pareto front' : 'ranked sensitivity map'}</div></div></div><canvas data-pl-canvas="cluster" style="width:100%;height:520px;display:block"></canvas>`)}
+            return `${atlasScopeControls(atlas)}${manualProbeSummary()}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px">${stat('registered experiments', Number(atlas.experimentCount || 0).toLocaleString(), C.green)}${stat('maps retained', maps.length, C.cyan)}${stat(state.atlasScope === 'all' ? 'all spans' : 'candidates', atlasCount(atlas).toLocaleString(), C.purple)}${stat('outcomes used', '0', C.amber)}</div>
+            ${card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">${esc(selected.representation || '')} · ${esc(selected.geometry || '')} · ${selected.pcaDimensions || '-'}D · k=${selected.clusterCount || '-'}${state.focusedCluster == null ? '' : ` · isolated cluster ${state.focusedCluster}`}</div><div style="font-size:9px;color:${C.mute}">margin above null ${fmt(selected.marginAboveNull, 3)} · held-out-hook margin ${fmt(selected.heldoutHookMargin, 3)} · seed ARI ${fmt(selected.seedStabilityARI, 3)} · entropy ${fmt(selected.entropy, 3)}${diagnostics}${persistence} · ${selected.pareto ? 'Pareto front' : 'ranked sensitivity map'}</div></div>${state.focusedCluster == null ? '' : button('Show all clusters', 'data-pl-clear-cluster-focus')}</div><canvas data-pl-canvas="cluster" style="width:100%;height:520px;display:block"></canvas>`)}
+            ${manualProbeDetail(selected)}
             ${clusterSummaries.length ? card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:2px">Cluster composition and representative observed spans</div><div style="font-size:8px;color:${C.mute};margin-bottom:7px">Representatives are nearest the cluster centroid in this displayed 2D projection, with distinct source hooks selected first; they never enter fitting.</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(245px,1fr));gap:7px;max-height:620px;overflow:auto">${clusterSummaries.map(summary => `<div style="border-left:3px solid ${clusterColor(summary.label)};background:${C.card2};padding:7px"><div style="display:flex;justify-content:space-between;gap:6px;font-size:8px;color:${C.mute};margin-bottom:5px"><b style="color:${clusterColor(summary.label)}">cluster ${summary.label}</b><span>${Number(summary.size || 0).toLocaleString()} spans · ${summary.hookCount || 0} hooks · median ${fmt(summary.medianTokenCount, 1)} tokens${summary.boundarySupportedFraction == null ? '' : ` · ${pct(summary.boundarySupportedFraction * 100)} boundary-supported`}</span></div>${(summary.representativeIndices || []).map(index => { const row = rows[index] || {}; return `<button data-pl-component="${esc(row.id || '')}" data-pl-open-components style="display:block;width:100%;text-align:left;border:0;border-top:1px solid ${C.border};background:transparent;color:${C.text};font-size:8.5px;padding:4px 0;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.text || '')}</button>`; }).join('')}</div>`).join('')}</div>`) : ''}
             ${card(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">All retained clustering maps</div><div style="font-size:8px;color:${C.mute}">${maps.length ? `${start + 1}-${Math.min(maps.length, start + pageSize)} of ${maps.length}` : '0 maps'}</div></div><div style="display:flex;gap:5px">${button('Previous', 'data-pl-map-page="-1"')}${button('Next', 'data-pl-map-page="1"')}</div></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:7px">${maps.slice(start, start + pageSize).map((row, offset) => { const index = start + offset; return `<button data-pl-map="${index}" style="text-align:left;background:${index === state.mapIndex ? C.cyan + '12' : C.card2};border:1px solid ${index === state.mapIndex ? C.cyan : C.border};border-radius:6px;padding:5px;cursor:pointer"><div style="font-size:8px;color:${C.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.representation)} · ${esc(row.geometry)} · ${row.pcaDimensions}D · k${row.clusterCount}</div><canvas data-pl-canvas="cluster-mini" data-pl-map-index="${index}" style="width:100%;height:88px;display:block"></canvas><div style="font-size:8px;color:${C.mute}">ARI ${fmt(row.seedStabilityARI, 2)} · null lift ${fmt(row.marginAboveNull, 2)}${row.lengthNMI == null ? '' : ` · length NMI ${fmt(row.lengthNMI, 2)}`}</div></button>`; }).join('')}</div>`)} `;
         }
@@ -386,15 +438,19 @@
             return [sorted[Math.floor(sorted.length * .01)], sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * .99))]];
         }
 
-        function scatter(canvas, points, colors, selectedIds) {
+        function scatter(canvas, points, colors, selectedIds, alphas) {
             if (!points || !points.length) return;
             let visible = points.map((point, index) => ({ point, index })).filter(row =>
                 Array.isArray(row.point) && Number.isFinite(row.point[0]) && Number.isFinite(row.point[1]));
             const maximum = canvas.dataset.plCanvas === 'cluster-mini' ? 2400 : 30000;
             if (visible.length > maximum) {
-                const stride = Math.ceil(visible.length / maximum);
-                const sampled = visible.filter((row, index) => index % stride === 0 || (selectedIds && selectedIds.has(row.index)));
-                visible = sampled.slice(0, maximum);
+                const selectedRows = selectedIds ? visible.filter(row => selectedIds.has(row.index)) : [];
+                const selectedRowIds = new Set(selectedRows.map(row => row.index));
+                const remaining = visible.filter(row => !selectedRowIds.has(row.index));
+                const budget = Math.max(0, maximum - selectedRows.length);
+                const stride = Math.max(1, Math.ceil(remaining.length / Math.max(1, budget)));
+                visible = remaining.filter((_, index) => index % stride === 0).slice(0, budget)
+                    .concat(selectedRows).sort((left, right) => left.index - right.index);
             }
             if (!visible.length) { canvasContext(canvas); return; }
             const { context, width, height } = canvasContext(canvas);
@@ -404,9 +460,10 @@
             projected.forEach((point, visibleIndex) => {
                 const originalIndex = visible[visibleIndex].index;
                 const selected = selectedIds && selectedIds.has(originalIndex);
-                context.globalAlpha = selected ? 1 : .42;
-                context.fillStyle = colors ? colors[originalIndex] : C.cyan;
-                context.beginPath(); context.arc(point[0], point[1], selected ? 4 : 1.8, 0, Math.PI * 2); context.fill();
+                context.globalAlpha = selected ? 1 : alphas ? Number(alphas[originalIndex] ?? .42) : .42;
+                context.fillStyle = selected ? C.cyan : colors ? colors[originalIndex] : C.cyan;
+                const radius = selected ? 4 : alphas && Number(alphas[originalIndex]) > .5 ? 2.1 : 1.6;
+                context.beginPath(); context.arc(point[0], point[1], radius, 0, Math.PI * 2); context.fill();
             });
             context.globalAlpha = 1;
             canvas.onclick = event => {
@@ -454,8 +511,18 @@
                     const index = kind === 'cluster' ? state.mapIndex : Number(canvas.dataset.plMapIndex || 0);
                     const map = (atlas.maps || [])[index]; if (!map) return;
                     const points = (atlas.projections || {})[map.representation] || [];
-                    const colors = (map.labels || []).map(clusterColor);
-                    return scatter(canvas, points, colors, null);
+                    const labels = map.labels || [];
+                    let colors = labels.map(clusterColor), selectedIds = null, alphas = null;
+                    if (kind === 'cluster' && state.focusedCluster != null) {
+                        colors = labels.map(label => Number(label) === Number(state.focusedCluster) ? clusterColor(label) : C.faint);
+                        alphas = labels.map(label => Number(label) === Number(state.focusedCluster) ? .72 : .07);
+                        const probe = state.data.manualProbe, winner = probe && probe.winner;
+                        if (winner && winner.mapId === map.id) {
+                            const field = winner.scope === 'all-contiguous-spans' ? 'allSpanIndex' : 'candidateIndex';
+                            selectedIds = new Set(((probe.winnerDetail || {}).matches || []).map(row => Number(row[field])));
+                        }
+                    }
+                    return scatter(canvas, points, colors, selectedIds, alphas);
                 }
                 if (kind === 'axis' || kind === 'axis-oof') {
                     const axes = state.data.axes, map = axes && (axes.maps || [])[state.axisIndex]; if (!map) return;
@@ -486,14 +553,16 @@
         function handleClick(event) {
             const target = event.target;
             const view = target.closest('[data-pl-view]'); if (view) { state.view = view.dataset.plView; ensureView(); paint(); return true; }
-            if (target.closest('[data-pl-refresh]')) { Object.keys(state.data).forEach(key => delete state.data[key]); state.hook = null; state.source = null; ensureView(); return true; }
+            if (target.closest('[data-pl-refresh]')) { Object.keys(state.data).forEach(key => delete state.data[key]); state.hook = null; state.source = null; state.focusedCluster = null; ensureView(); return true; }
+            if (target.closest('[data-pl-open-manual-probe]')) { openManualProbe(); return true; }
+            if (target.closest('[data-pl-clear-cluster-focus]')) { state.focusedCluster = null; paint(); return true; }
             if (target.closest('[data-pl-apply-query]')) { state.registryPage = 0; paint(); return true; }
             const hook = target.closest('[data-pl-hook]'); if (hook) { if (hook.hasAttribute('data-pl-open-hooks')) state.view = 'hooks'; load('atlas'); loadHook(hook.dataset.plHook); return true; }
-            const atlasScope = target.closest('[data-pl-atlas-scope]'); if (atlasScope) { state.atlasScope = atlasScope.dataset.plAtlasScope; state.componentId = null; state.mapIndex = 0; state.mapPage = 0; state.representation = 'influence'; if (state.atlasScope === 'all') load('allSpanAtlas', api('all-span-atlas')); else load('atlas'); paint(); return true; }
+            const atlasScope = target.closest('[data-pl-atlas-scope]'); if (atlasScope) { state.atlasScope = atlasScope.dataset.plAtlasScope; state.componentId = null; state.mapIndex = 0; state.mapPage = 0; state.focusedCluster = null; state.representation = 'influence'; if (state.atlasScope === 'all') load('allSpanAtlas', api('all-span-atlas')); else load('atlas'); paint(); return true; }
             const rep = target.closest('[data-pl-rep]'); if (rep) { state.representation = rep.dataset.plRep; paint(); return true; }
             const component = target.closest('[data-pl-component]'); if (component) { state.componentId = component.dataset.plComponent; if (component.hasAttribute('data-pl-open-components')) state.view = 'components'; paint(); return true; }
-            const map = target.closest('[data-pl-map]'); if (map) { state.mapIndex = Number(map.dataset.plMap); paint(); return true; }
-            const mapPage = target.closest('[data-pl-map-page]'); if (mapPage) { const maps = ((activeAtlas() || {}).maps || []); const max = Math.max(0, Math.ceil(maps.length / 24) - 1); state.mapPage = Math.max(0, Math.min(max, state.mapPage + Number(mapPage.dataset.plMapPage))); state.mapIndex = Math.min(Math.max(0, maps.length - 1), state.mapPage * 24); paint(); return true; }
+            const map = target.closest('[data-pl-map]'); if (map) { state.mapIndex = Number(map.dataset.plMap); state.focusedCluster = null; paint(); return true; }
+            const mapPage = target.closest('[data-pl-map-page]'); if (mapPage) { const maps = ((activeAtlas() || {}).maps || []); const max = Math.max(0, Math.ceil(maps.length / 24) - 1); state.mapPage = Math.max(0, Math.min(max, state.mapPage + Number(mapPage.dataset.plMapPage))); state.mapIndex = Math.min(Math.max(0, maps.length - 1), state.mapPage * 24); state.focusedCluster = null; paint(); return true; }
             const metric = target.closest('[data-pl-metric]'); if (metric) { state.metric = metric.dataset.plMetric; paint(); return true; }
             const source = target.closest('[data-pl-source]'); if (source) { if (source.hasAttribute('data-pl-open-swaps')) { state.view = 'swaps'; load('swaps'); } loadSource(source.dataset.plSource); return true; }
             const axis = target.closest('[data-pl-axis]'); if (axis) { state.axisIndex = Number(axis.dataset.plAxis); paint(); return true; }

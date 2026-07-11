@@ -27,7 +27,9 @@ Stages:
    span universe using equal-scope outcome-blind atlas consensus.
 8. `run_axes.py`: held-out directions for model-predicted transfer plus observed
    views, keep rate, retention levels, windows, slopes, and post-hook hold.
-9. `build_ui.py`: browser artifacts, cluster representatives, findings, and the
+9. `run_manual_probe.py`: a separated post-hoc comparison of manual selections
+   against already-retained map and cluster IDs; it creates no new maps.
+10. `build_ui.py`: browser artifacts, cluster representatives, findings, and the
    complete experiment registry.
 
 `verify_all_span_store.py`, `verify_swap_outputs.py`, and
@@ -57,3 +59,12 @@ are reused on restart; a completed pass clears that transient cache.
 48-coordinate preview stored by the existing Long Quant scorer. Tests use
 planted numerical structure and do not contain phrases from the user's
 examples.
+
+## Manual overfit probe
+
+`manual-reference-probe.json` is a deliberately post-hoc interpretation layer.
+`run_manual_probe.py` aligns the dictated phrases to observed contiguous spans,
+then compares all already-retained maps and clusters using equal-hook-weighted KL
+information contribution. It creates no embeddings, clusters, maps, or outcome
+axes. The output is `.cache/manual-probe.json` and is published separately as
+`manual-probe.json.gz`, so the discovery artifacts remain unchanged.
