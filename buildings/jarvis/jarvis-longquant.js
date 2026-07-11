@@ -883,16 +883,28 @@ const JarvisLongQuant = (function () {
     // Ideas are CONSOLIDATED into the 🎰 Guesses section — idea data refreshes repaint the guesses panel.
     function rtgUpdateLqIdeas() { rtgUpdateGuessesL(); }
     async function lqxJson(url, opts) {
-        const r = await fetch(url, opts || {});
-        const txt = await r.text();
-        let j = null;
-        try { j = txt ? JSON.parse(txt) : null; }
-        catch (e) {
-            const isHtml = /^\s*</.test(txt);
-            throw new Error(`${r.status || ''} ${isHtml ? 'server returned HTML instead of JSON' : 'bad JSON'}${txt ? ': ' + txt.replace(/\s+/g, ' ').slice(0, 120) : ''}`);
+        // A proxy-level 502/503/504 (or an HTML error page) means the app NEVER processed the
+        // request — Render is restarting mid-deploy. That makes retrying safe for every request,
+        // including POSTs. Ride the deploy window out instead of surfacing raw HTML to the user.
+        let lastErr = null;
+        for (let attempt = 0; attempt < 4; attempt++) {
+            if (attempt) await new Promise(res => window.setTimeout(res, [3000, 8000, 15000][attempt - 1] || 15000));
+            let r, txt;
+            try { r = await fetch(url, opts || {}); txt = await r.text(); }
+            catch (e) { lastErr = new Error('network: ' + (e.message || e)); continue; }
+            const proxyDown = [502, 503, 504].includes(r.status);
+            let j = null;
+            try { j = txt ? JSON.parse(txt) : null; }
+            catch (e) {
+                const isHtml = /^\s*</.test(txt);
+                if (proxyDown || isHtml) { lastErr = new Error('server is restarting (HTTP ' + r.status + ') — retried ' + (attempt + 1) + '×'); continue; }
+                throw new Error(`${r.status || ''} bad JSON${txt ? ': ' + txt.replace(/\s+/g, ' ').slice(0, 120) : ''}`);
+            }
+            if (proxyDown) { lastErr = new Error('server is restarting (HTTP ' + r.status + ') — retried ' + (attempt + 1) + '×'); continue; }
+            if (!r.ok) throw new Error((j && j.error) || (`HTTP ${r.status}`));
+            return j;
         }
-        if (!r.ok) throw new Error((j && j.error) || (`HTTP ${r.status}`));
-        return j;
+        throw new Error((lastErr && lastErr.message ? lastErr.message : 'server unavailable') + ' — likely a redeploy; try again in a minute');
     }
     function lqxFormatBytes(bytes) {
         const n = Number(bytes) || 0;
