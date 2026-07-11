@@ -80,5 +80,6 @@ The max-min search optimizes the weakest of all six pairwise standardized
 cluster separations. It is a post-hoc visualization experiment: it never refits
 k-means, changes membership, or enters scientific discovery evidence. The
 artifact also carries its frozen labels and exact span IDs so the dedicated
-Saved embedding tab can render independently of the full 82 MB atlas; the atlas
-is loaded only when a plotted span is opened for inspection.
+Saved embedding tab can render independently of the full 82 MB atlas. Compact
+span text, source-hook, and offset arrays keep point inspection inline as well,
+so clicking the graph neither changes views nor fetches the full atlas.

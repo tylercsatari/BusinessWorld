@@ -13,6 +13,7 @@
             mapIndex: 0, mapPage: 0, metric: 'ctrviews', sourceId: null, source: null,
             axisIndex: 0, registryPage: 0, hookQuery: '', registryQuery: '', registryStage: 'all',
             atlasScope: 'supported', focusedCluster: null, projectionMethod: savedProjectionMethod,
+            savedPointIndex: null,
         };
         let progressTimer = null;
         let resizeTimer = null;
@@ -234,6 +235,29 @@
                 </div>`, 'margin-bottom:10px');
         }
 
+        function savedPointInspector(experiment, method) {
+            const pointIndex = experiment.frozenPointIndex || {};
+            const index = Number(state.savedPointIndex);
+            if (state.savedPointIndex == null || !Number.isInteger(index) || index < 0 || index >= (pointIndex.spanIds || []).length) {
+                return `<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;color:${C.mute};font-size:10px;line-height:1.55"><div><b style="color:${C.text};font-size:12px">Point inspector</b><br>Click any point in the saved embedding. Its exact text, source hook, offsets, frozen cluster, and displayed coordinates will appear here without leaving this view.</div></div>`;
+            }
+            const hookIndex = Number((pointIndex.hookIndices || [])[index]);
+            const hook = (pointIndex.hooks || [])[hookIndex] || {};
+            const hookText = String(hook.text || '');
+            const charStart = Number((pointIndex.charStarts || [])[index]);
+            const charEnd = Number((pointIndex.charEnds || [])[index]);
+            const hasOffsets = Number.isFinite(charStart) && Number.isFinite(charEnd)
+                && charStart >= 0 && charEnd >= charStart && charEnd <= hookText.length;
+            const highlighted = hasOffsets
+                ? `${esc(hookText.slice(0, charStart))}<mark style="background:${C.cyan}2a;color:${C.text};padding:1px 2px">${esc(hookText.slice(charStart, charEnd))}</mark>${esc(hookText.slice(charEnd))}`
+                : esc(hookText);
+            const coordinates = ((method || {}).points || [])[index] || [];
+            const label = Number((pointIndex.labels || [])[index]);
+            const manual = new Set((((state.data.manualProbe || {}).winnerDetail || {}).matches || [])
+                .map(row => Number(row.allSpanIndex))).has(index);
+            return `<div style="padding:12px;height:100%;overflow:auto"><div style="font-size:8px;color:${clusterColor(label)};font-weight:900;text-transform:uppercase">Frozen cluster ${label}${manual ? ' · manual selection' : ''}</div><div style="font-size:14px;color:${C.text};font-weight:900;line-height:1.35;margin:5px 0">${esc((pointIndex.texts || [])[index] || '')}</div><div style="font-size:8px;color:${C.mute};margin-bottom:3px">source video</div><div style="font-size:10px;color:${C.text};font-weight:800">${esc(hook.title || hook.videoId || '')}</div><div style="font-size:8px;color:${C.faint};margin-top:2px">${esc(hook.videoId || '')} · hook ${hookIndex} · tokens ${Number((pointIndex.starts || [])[index])}-${Number((pointIndex.ends || [])[index])} · characters ${charStart}-${charEnd}</div><div style="height:1px;background:${C.border};margin:10px 0"></div><div style="font-size:8px;color:${C.mute};margin-bottom:3px">exact source hook</div><div style="font-size:9px;color:${C.dim};line-height:1.55">${highlighted}</div><div style="height:1px;background:${C.border};margin:10px 0"></div><div style="font-size:8px;color:${C.mute};margin-bottom:3px">embedding input and current coordinates</div><div style="font-size:9px;color:${C.text};line-height:1.55"><b>Gemini text input:</b> ${esc((pointIndex.texts || [])[index] || '')}<br><b>representation:</b> source-hook fixed effect removed → unit normalized → first four PCA coordinates → variance normalized<br><b>${esc((method || {}).label || '')}:</b> x ${fmt(coordinates[0], 5)} · y ${fmt(coordinates[1], 5)}<br><b>point index:</b> ${index.toLocaleString()} · <b>span ID:</b> <span style="font-family:monospace">${esc((pointIndex.spanIds || [])[index] || '')}</span></div></div>`;
+        }
+
         function manualProjectionPanel() {
             const experiment = state.data.manualProjection;
             if (!experiment) {
@@ -246,12 +270,11 @@
             if (!selected) return '';
             const metrics = selected.metrics || {}, baseline = methods.find(row => row.id === 'pca12') || {};
             const baselineMetrics = baseline.metrics || {}, improvement = experiment.improvementOverPca || {};
-            return card(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div style="min-width:260px;flex:1"><div style="font-size:9px;color:${C.green};font-weight:900;text-transform:uppercase">Saved embedding · persistent artifact</div><div style="font-size:14px;font-weight:900;color:${C.text};margin-top:2px">${esc(experiment.savedName || 'Frozen k=4 projection')}</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:3px">All ${Number((experiment.reconstruction || {}).rows || 0).toLocaleString()} cluster assignments remain byte-for-byte frozen. Translation only recenters a picture and rotation inside an existing 2D plane preserves every distance; the useful operation is selecting a different two-dimensional subspace from the exact four-dimensional clustering input.</div></div><div style="text-align:right"><div style="font-size:8px;color:${C.green};font-weight:900;margin-bottom:6px">Saved to R2 · available on every load<br>0 labels changed · 0 clusters refit · 0 outcomes used</div>${button('Restore exact map + cluster', 'data-pl-open-manual-probe')}</div></div>
+            return card(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div style="min-width:260px;flex:1"><div style="font-size:9px;color:${C.green};font-weight:900;text-transform:uppercase">Saved embedding · persistent artifact</div><div style="font-size:14px;font-weight:900;color:${C.text};margin-top:2px">${esc(experiment.savedName || 'Frozen k=4 projection')}</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:3px">All ${Number((experiment.reconstruction || {}).rows || 0).toLocaleString()} cluster assignments remain byte-for-byte frozen. Translation only recenters a picture and rotation inside an existing 2D plane preserves every distance; the useful operation is selecting a different two-dimensional subspace from the exact four-dimensional clustering input.</div></div><div style="font-size:8px;color:${C.green};font-weight:900;text-align:right">Saved to R2 · available on every load<br>0 labels changed · 0 clusters refit · 0 outcomes used</div></div>
                 <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">${methods.map(row => button(row.label, `data-pl-projection-method="${row.id}"`, selected.id === row.id)).join('')}</div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:7px">${stat('weakest pair', fmt(metrics.worstPairSeparation, 3), C.green)}${stat('2D label recovery', pct(Number(metrics.nearestCentroidAgreement || 0) * 100), C.cyan)}${stat('silhouette', fmt(metrics.silhouetteSampled, 3), C.purple)}${stat('DB overlap', fmt(metrics.daviesBouldin, 3), C.amber)}${stat('Fisher ratio', fmt(metrics.fisherTraceRatio, 3), C.dim)}</div>
                 <div style="font-size:9px;color:${C.dim};line-height:1.5;margin-bottom:6px"><b style="color:${selected.id === experiment.selectedMethod ? C.green : C.text}">${esc(selected.label)}</b>: ${esc(selected.description)} ${selected.usesFrozenLabelsToChoosePlane ? 'The frozen labels choose this browse-only plane.' : 'The labels do not choose this plane; they only score it.'}</div>
-                <canvas data-pl-canvas="manual-projection" style="width:100%;height:520px;display:block"></canvas>
-                <div style="font-size:8px;color:${C.mute};margin:5px 0 9px">Equal x/y unit scale. Cyan points are your manual selections; the four other colors are the unchanged k-means labels. Click a point to inspect its exact source span.</div>
+                <div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1.55fr) minmax(270px,.45fr);gap:10px;margin-bottom:9px"><div><canvas data-pl-canvas="manual-projection" style="width:100%;height:520px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:5px">Equal x/y unit scale. Cyan points are your manual selections; the four other colors are the unchanged k-means labels. Click points freely; the inspector updates without navigating away.</div></div><aside data-pl-saved-point-inspector data-pl-saved-point-index="${state.savedPointIndex == null ? '' : state.savedPointIndex}" style="min-height:520px;max-height:520px;background:${C.card2};border-left:2px solid ${C.cyan};overflow:hidden">${savedPointInspector(experiment, selected)}</aside></div>
                 <div class="pl-split" style="display:grid;grid-template-columns:minmax(260px,.8fr) minmax(0,1.2fr);gap:12px">
                 <div><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:4px">Result against PCA axes 1-2</div><div style="font-size:9px;color:${C.dim};line-height:1.55">Weakest pair ${fmt(baselineMetrics.worstPairSeparation, 3)} → ${fmt((methods.find(row => row.id === experiment.selectedMethod) || selected).metrics.worstPairSeparation, 3)} (${signed(Number(improvement.worstPairSeparationRelative || 0) * 100, 1)}%)<br>2D label recovery ${pct(Number(baselineMetrics.nearestCentroidAgreement || 0) * 100)} → ${pct(Number((methods.find(row => row.id === experiment.selectedMethod) || selected).metrics.nearestCentroidAgreement || 0) * 100)}<br>Silhouette ${fmt(baselineMetrics.silhouetteSampled, 3)} → ${fmt((methods.find(row => row.id === experiment.selectedMethod) || selected).metrics.silhouetteSampled, 3)}<br>Davies-Bouldin ${fmt(baselineMetrics.daviesBouldin, 3)} → ${fmt((methods.find(row => row.id === experiment.selectedMethod) || selected).metrics.daviesBouldin, 3)} (${pct(Number(improvement.daviesBouldinRelativeReduction || 0) * 100)} less overlap)</div></div>
                 <div><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:4px">All six pairwise standardized separations</div><div style="display:grid;grid-template-columns:repeat(3,minmax(90px,1fr));gap:5px">${(metrics.pairwise || []).map(row => `<div style="border-left:2px solid ${clusterColor(row.left)};padding:3px 6px;font-size:8px;color:${C.dim}"><b style="color:${C.text}">${row.left} ↔ ${row.right}</b><br>${fmt(row.standardizedSeparation, 3)}</div>`).join('')}</div><div style="font-size:8px;color:${C.mute};margin-top:6px">Primary objective: maximize the smallest of these six values. Higher means cluster centroids are farther apart relative to their pooled within-cluster spread.</div></div>
@@ -261,7 +284,7 @@
         function renderSavedProjection() {
             if (!state.data.manualProbe) return loading('manualProbe');
             if (!state.data.manualProjection) return loading('manualProjection');
-            return `${manualProjectionPanel()}${manualMetricGlossary()}${manualProbeSummary()}`;
+            return `${manualProjectionPanel()}${manualMetricGlossary()}`;
         }
 
         function renderOverview() {
@@ -495,7 +518,7 @@
             return [sorted[Math.floor(sorted.length * .01)], sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * .99))]];
         }
 
-        function scatter(canvas, points, colors, selectedIds, alphas, equalScale = false) {
+        function scatter(canvas, points, colors, selectedIds, alphas, equalScale = false, focusedId = null) {
             if (!points || !points.length) return;
             let visible = points.map((point, index) => ({ point, index })).filter(row =>
                 Array.isArray(row.point) && Number.isFinite(row.point[0]) && Number.isFinite(row.point[1]));
@@ -528,10 +551,16 @@
             projected.forEach((point, visibleIndex) => {
                 const originalIndex = visible[visibleIndex].index;
                 const selected = selectedIds && selectedIds.has(originalIndex);
-                context.globalAlpha = selected ? 1 : alphas ? Number(alphas[originalIndex] ?? .42) : .42;
+                const focused = Number.isInteger(focusedId) && focusedId === originalIndex;
+                context.globalAlpha = selected || focused ? 1 : alphas ? Number(alphas[originalIndex] ?? .42) : .42;
                 context.fillStyle = selected ? C.cyan : colors ? colors[originalIndex] : C.cyan;
-                const radius = selected ? 4 : alphas && Number(alphas[originalIndex]) > .5 ? 2.1 : 1.6;
+                const radius = focused ? 5 : selected ? 4 : alphas && Number(alphas[originalIndex]) > .5 ? 2.1 : 1.6;
                 context.beginPath(); context.arc(point[0], point[1], radius, 0, Math.PI * 2); context.fill();
+                if (focused) {
+                    context.strokeStyle = C.text;
+                    context.lineWidth = 2;
+                    context.beginPath(); context.arc(point[0], point[1], radius + 2, 0, Math.PI * 2); context.stroke();
+                }
             });
             context.globalAlpha = 1;
             canvas.onclick = event => {
@@ -548,11 +577,10 @@
                     const pointIndex = ((state.data.manualProjection || {}).frozenPointIndex || {});
                     const spanId = (pointIndex.spanIds || [])[originalIndex];
                     if (!spanId) return;
-                    state.atlasScope = 'all';
-                    state.componentId = spanId;
-                    state.view = 'components';
-                    load('allSpanAtlas', api('all-span-atlas'));
+                    const scrollX = window.scrollX, scrollY = window.scrollY;
+                    state.savedPointIndex = originalIndex;
                     paint();
+                    window.scrollTo(scrollX, scrollY);
                     return;
                 }
                 const row = atlasRows(atlas)[originalIndex];
@@ -626,7 +654,7 @@
                     const alphas = labels.map(() => .58);
                     const selectedIds = new Set((((state.data.manualProbe || {}).winnerDetail || {}).matches || [])
                         .map(row => Number(row.allSpanIndex)));
-                    return scatter(canvas, method.points || [], colors, selectedIds, alphas, true);
+                    return scatter(canvas, method.points || [], colors, selectedIds, alphas, true, state.savedPointIndex);
                 }
                 if (kind === 'axis' || kind === 'axis-oof') {
                     const axes = state.data.axes, map = axes && (axes.maps || [])[state.axisIndex]; if (!map) return;

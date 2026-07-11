@@ -35,6 +35,12 @@ def main() -> None:
     assert point_index["labels"] == labels.astype(int).tolist()
     assert point_index["spanIds"] == [row["id"] for row in atlas["spans"]]
     assert len(set(point_index["spanIds"])) == len(labels)
+    for field, source in (
+        ("hookIndices", "hookIndex"), ("starts", "start"), ("ends", "end"),
+        ("charStarts", "charStart"), ("charEnds", "charEnd"), ("texts", "text"),
+    ):
+        assert point_index[field] == [row[source] for row in atlas["spans"]]
+    assert len(point_index["hooks"]) == int(atlas["hookCount"])
     methods = artifact["methods"]
     assert {row["id"] for row in methods} == {"pca12", "fisher", "maxmin"}
     for method in methods:

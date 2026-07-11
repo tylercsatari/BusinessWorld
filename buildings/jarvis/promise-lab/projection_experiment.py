@@ -276,8 +276,9 @@ def run_projection_experiment(
         })
     selected = max(methods, key=lambda row: row["metrics"]["worstPairSeparation"])
     pca_method = next(row for row in methods if row["id"] == "pca12")
-    span_ids = [str(row["id"]) for row in atlas.get("spans", [])]
-    if len(span_ids) != len(labels):
+    span_rows = atlas.get("spans", [])
+    span_ids = [str(row["id"]) for row in span_rows]
+    if len(span_rows) != len(labels):
         raise ValueError("the frozen projection needs one span ID per cluster label")
     return {
         "version": 1,
@@ -311,6 +312,13 @@ def run_projection_experiment(
         "frozenPointIndex": {
             "labels": labels.astype(int).tolist(),
             "spanIds": span_ids,
+            "hookIndices": [int(row["hookIndex"]) for row in span_rows],
+            "starts": [int(row["start"]) for row in span_rows],
+            "ends": [int(row["end"]) for row in span_rows],
+            "charStarts": [int(row["charStart"]) for row in span_rows],
+            "charEnds": [int(row["charEnd"]) for row in span_rows],
+            "texts": [str(row["text"]) for row in span_rows],
+            "hooks": manifest.get("hooks", []),
         },
         "optimization": optimization,
         "selectedMethod": selected["id"],
