@@ -11,6 +11,7 @@ const JarvisLongQuant = (function () {
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', amber: '#f59e0b', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
     let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, FUSION = null, NOV = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
+    let PROMISE_UI = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
@@ -1654,6 +1655,22 @@ const JarvisLongQuant = (function () {
             .catch(e => { LQCRTG[name] = { error: (e && e.message) || String(e) }; rtgUpdateCrtg(); });
         return null;
     }
+    async function crtgScorePromise(text) {
+        text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+        if (!text || text.length < 4) return;
+        st.crtgScores = st.crtgScores || [];
+        const id = 'p' + lqxHash(text.toLowerCase());
+        st.crtgPSel = id;
+        let row = st.crtgScores.find(r => r.id === id);
+        if (row && row.axes) { rtgUpdateCrtg(); return; }
+        if (!row) { row = { id, text }; st.crtgScores.unshift(row); }
+        row.loading = true; row.error = null; rtgUpdateCrtg();
+        try {
+            const j = await lqxJson('/api/longquant/claudertg/score-promise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+            row.axes = j.axes; row.loading = false;
+        } catch (e) { row.loading = false; row.error = String((e && e.message) || e); }
+        rtgUpdateCrtg();
+    }
     function rtgUpdateCrtg() { try { const el = window.document.getElementById('lq-crtg-panel'); if (el) el.innerHTML = renderClaudeRTG(); } catch (e) { } }
     const CRTG_PAL = ['#38bdf8', '#a78bfa', '#34d399', '#fbbf24', '#f87171', '#f472b6', '#22d3ee', '#a3e635', '#fb923c', '#e879f9', '#4ade80', '#facc15', '#60a5fa', '#c084fc', '#2dd4bf', '#f43f5e', '#94a3b8', '#eab308', '#818cf8', '#10b981', '#fda4af', '#7dd3fc', '#bef264', '#fdba74'];
     function crtgScatter(coords, assign, W, H, sel, clickable) {
@@ -1674,6 +1691,47 @@ const JarvisLongQuant = (function () {
         let out = cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🤖 Claude RTG — promise components, discovered not assumed</div>
           <div style="font-size:11px;color:${C.mute};line-height:1.55">Every hook from the 🪝 dataset is chunked structurally (no labels), each chunk embedded <b style="color:${C.text}">alone</b> and as an <b style="color:${C.text}">in-context contribution</b> (emb(full) − emb(full − chunk) — the attention-aware meaning of the chunk in its sentence), clustered dozens of ways, tied to REAL outcomes (keep · ret@5s · ret@hook · avg retention · log views) with cross-validation and permutation baselines, then components are spliced into other hooks and the WHOLE recombined text re-embedded and scored. Clusters are candidate components — what they mean is for the data to say.</div>
           ${meta && meta.builtAt ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:10px">${[['hooks', meta.nHooks], ['chunks', meta.nChunks], ['clusterings', meta.nConfigs], ['best silhouette', meta.bestSil]].map(([l, v]) => `<span style="border:1px solid ${C.border};border-radius:6px;padding:3px 8px;color:${C.dim}"><b style="color:${C.text}">${v}</b> ${l}</span>`).join('')}</div><div style="font-size:9px;color:${C.faint};margin-top:6px">${esc(meta.honest || '')}</div>` : meta && meta.error ? `<div style="font-size:11px;color:${C.red};margin-top:8px">${esc(String(meta.error))}</div>` : `<div style="font-size:11px;color:${C.cyan};margin-top:8px">⏳ the discovery pipeline is computing (chunk → embed → 30 clusterings → CV axes → swaps) — <span data-crtgreload style="cursor:pointer;text-decoration:underline">check again</span></div>`}`, 14);
+        // ── ⚗️ PROMISE AXES: frozen supervised directions (the thumbnail recipe on text) ──
+        const pax = crtgEnsure('promise_axes');
+        if (pax && Array.isArray(pax.axes) && pax.axes.length) {
+            const trusted = a => a.permP <= 0.05 && a.heldout_spearman >= 0.15;
+            const sorted = pax.axes.slice().sort((a, b) => b.heldout_spearman - a.heldout_spearman);
+            const selId = st.crtgPAxis || (sorted[0] && sorted[0].id);
+            const SPLBL = { full: 'whole hook', chunk: 'mean clause', resid: 'topic-removed structure', skel: 'delexicalized skeleton' };
+            const rows = sorted.map(a => `<div data-crtgpaxis="${esc(a.id)}" style="cursor:pointer;display:grid;grid-template-columns:1fr 90px 70px 60px;gap:8px;padding:5px 7px;border:1px solid ${selId === a.id ? C.cyan : C.border};border-radius:7px;margin-bottom:4px;background:${selId === a.id ? C.cyan + '10' : 'transparent'}"><span style="font-size:10.5px;color:${C.text}"><b>${esc(a.outcome)}</b> on ${esc(SPLBL[a.space] || a.space)}</span><span style="font-size:9px;color:${C.dim}">${esc(a.method)}</span><span style="font-size:10.5px;font-weight:900;color:${trusted(a) ? C.green : C.dim}">ρ ${a.heldout_spearman}</span><span style="font-size:9px;color:${C.faint}">p ${a.permP}</span></div>`).join('');
+            const a0 = sorted.find(a => a.id === selId) || sorted[0];
+            let detail = '';
+            if (a0 && Array.isArray(a0.emergence)) {
+                const pts = a0.emergence.filter(e2 => e2.actual != null);
+                const ys = pts.map(e2 => e2.actual);
+                const y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+                const W = 480, Hh = 170, padL = 6;
+                const dots = pts.map(e2 => `<circle cx="${(padL + e2.pct / 100 * (W - 2 * padL)).toFixed(1)}" cy="${(Hh - 8 - (e2.actual - y0) / ((y1 - y0) || 1) * (Hh - 16)).toFixed(1)}" r="2.6" fill="${C.cyan}" opacity="0.6"><title>${esc(e2.text)} · ${e2.pct}th → ${e2.actual}</title></circle>`).join('');
+                detail = `<div style="margin-top:9px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">emergence — axis percentile (x) vs the REAL ${esc(a0.outcome)} (y) · held-out ρ ${a0.heldout_spearman} · hover any dot</div><svg viewBox="0 0 ${W} ${Hh}" style="width:100%;display:block;background:${C.card2};border-radius:8px">${dots}</svg>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-top:8px">
+                  <div><div style="font-size:9px;color:${C.green};text-transform:uppercase;font-weight:900;margin-bottom:3px">top of the axis</div>${(a0.topHooks || []).map(t => `<div style="font-size:10px;color:${C.dim};padding:2px 0;border-bottom:1px solid ${C.border}">“${esc(t.text)}” <span style="color:${C.faint}">${t.pct}th · actual ${t.actual == null ? '—' : t.actual}</span></div>`).join('')}</div>
+                  <div><div style="font-size:9px;color:${C.red};text-transform:uppercase;font-weight:900;margin-bottom:3px">bottom of the axis</div>${(a0.bottomHooks || []).map(t => `<div style="font-size:10px;color:${C.dim};padding:2px 0;border-bottom:1px solid ${C.border}">“${esc(t.text)}” <span style="color:${C.faint}">${t.pct}th · actual ${t.actual == null ? '—' : t.actual}</span></div>`).join('')}</div>
+                </div></div>`;
+            }
+            out += cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">⚗️ Promise axes <span style="font-size:10px;color:${C.mute};font-weight:600">— frozen directions in the 1536-d space along which the REAL metric emerges (blend + ladder, exactly like the thumbnail ctrviews scorer) · green = held-out ρ ≥ 0.15 and beats permutation</span></div><div style="font-size:9px;color:${C.faint};margin-bottom:7px">${esc(pax.note || '')}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px"><div>${rows}</div><div>${detail}</div></div>`, 12);
+            // ── 🎯 interactive scoring: type promise variants, compare on the axes ──
+            const hist = st.crtgScores || [];
+            const selS = hist.find(h2 => h2.id === st.crtgPSel) || hist[0];
+            let scoreHtml = `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input data-crtgpscoreinput value="${esc(st.crtgPInput || '')}" placeholder="type a promise line — e.g. a closer variant — and score it on every axis…" style="flex:1;min-width:240px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 10px;font-size:12px"/><span data-crtgpscorego style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:7px 14px;font-size:11px;font-weight:800;white-space:nowrap">🎯 Score</span></div>`;
+            if (hist.length) scoreHtml += `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${hist.slice(0, 16).map(h2 => { const best = (h2.axes || []).find(x => x.id === 'full_rethook'); return `<span data-crtgpsel="${esc(h2.id)}" style="cursor:pointer;border:1px solid ${selS && selS.id === h2.id ? C.green : C.border};background:${selS && selS.id === h2.id ? C.green + '1e' : C.card};color:${selS && selS.id === h2.id ? C.green : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h2.loading ? '⏳ ' : best ? `<b>${best.pct}th</b> · ` : ''}${esc(h2.text.slice(0, 80))}</span>`; }).join('')}</div>`;
+            if (selS) {
+                if (selS.loading) scoreHtml += `<div style="font-size:11px;color:${C.cyan};margin-top:9px">embedding and projecting onto ${pax.axes.length} axes…</div>`;
+                else if (selS.error) scoreHtml += `<div style="font-size:11px;color:${C.red};margin-top:9px">${esc(String(selS.error).slice(0, 200))}</div>`;
+                else if (selS.axes) {
+                    const tr = selS.axes.filter(x => x.trusted).sort((a, b) => b.heldout_spearman - a.heldout_spearman);
+                    const rest = selS.axes.filter(x => !x.trusted);
+                    scoreHtml += `<div style="margin-top:10px;font-size:12px;font-weight:800;color:${C.text}">“${esc(selS.text)}”</div>
+                      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">${tr.map(x => `<span title="held-out ρ ${x.heldout_spearman} · p ${x.permP}" style="border:1px solid ${x.pct >= 80 ? C.green : C.cyan}66;border-radius:6px;padding:4px 8px;font-size:10px;color:${C.dim}">${esc(x.outcome)} · ${esc(SPLBL[x.space] || x.space)} <b style="color:${x.pct >= 80 ? C.green : C.text};font-size:13px">${x.pct}th</b></span>`).join('')}</div>
+                      ${rest.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;opacity:0.55">${rest.map(x => `<span title="NOT trusted (ρ ${x.heldout_spearman}, p ${x.permP})" style="border:1px dashed ${C.border};border-radius:5px;padding:2px 6px;font-size:9px;color:${C.faint}">${esc(x.id)} ${x.pct}th</span>`).join('')}</div>` : ''}`;
+                }
+            }
+            out += cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">🎯 Score a promise line <span style="font-size:10px;color:${C.mute};font-weight:600">— the thumbnail-threshold workflow for text: type variants of a promise and compare where each lands on the emerged axes</span></div>${scoreHtml}`, 12);
+        }
         if (!clus || !Array.isArray(clus.configs) || !clus.configs.length) return out;
         const CRTG_EMB_LABELS = { alone: 'raw (topic-heavy baseline)', context: 'in-context contribution', resid: 'topic-removed (vs own hook)', residsib: 'vs sibling chunks', skeleton: 'delexicalized skeleton', pc10: 'top-10 PCs removed', pc20: 'top-20 PCs removed' };
         const embKeys = Object.keys(clus.coords || {});
@@ -3966,6 +4024,17 @@ const JarvisLongQuant = (function () {
         return h;
     }
 
+    function promiseUI() {
+        if (!PROMISE_UI && typeof window !== 'undefined' && window.createLongQuantPromiseLab) {
+            PROMISE_UI = window.createLongQuantPromiseLab({ colors: C, escape: esc });
+        }
+        return PROMISE_UI;
+    }
+    function renderPromiseLab() {
+        const ui = promiseUI();
+        return ui ? ui.render() : cardc(`<div style="padding:24px;color:${C.red}">Promise Lab UI module did not load.</div>`);
+    }
+
     // switch the active channel → reload its retention table into DATA (or merge all → pooled)
     async function loadChannel(id) {
         st.channel = id;
@@ -3992,7 +4061,7 @@ const JarvisLongQuant = (function () {
         //  • PER-CHANNEL  — analyses of the selected account's own videos (scoped by the channel bar)
         //  • CORPUS       — built on ALL videos (your 211 + the 11k library); account-independent
         const PERCHAN = [['data', '📋 Data'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict']];
-        const CORPUS = [['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['claudertg', '🤖 Claude RTG']];   // 💡 Ideas consolidated into 🎰 Guesses (phase dropdown)
+        const CORPUS = [['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['promise', 'Promise Lab'], ['claudertg', '🤖 Claude RTG']];   // 💡 Ideas consolidated into 🎰 Guesses (phase dropdown)
         const SECLBL = Object.fromEntries([...PERCHAN, ...CORPUS]);
         const isPer = PERCHAN.some(([id]) => id === st.sec);
         const btn = ([id, l]) => `<button data-rs="${id}" style="background:${st.sec === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.sec === id ? C.accent : C.border};color:${st.sec === id ? C.accent : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`;
@@ -4028,7 +4097,7 @@ const JarvisLongQuant = (function () {
         if (isPer && st.sec !== 'data' && !S) {
             sec = cardc(`<div style="padding:26px;text-align:center"><div style="font-size:14px;font-weight:800;color:${C.text};margin-bottom:6px">${SECLBL[st.sec]} — not computed for ${chName} yet</div><div style="font-size:11px;color:${C.mute};line-height:1.7;max-width:580px;margin:0 auto">${active === 'all' ? 'Pooled analysis isn\'t built yet — switch to a single channel.' : `This per-channel analysis hasn't been run for <b>${chName}</b>. It has <b style="color:${C.green}">${nKeep}</b> videos with retention — open <b>📋 Data</b>, or run <code>build_study.py ${active}</code>.`}</div></div>`, 16);
         } else {
-            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderLongGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-lqexppanel">${renderLqExperiment()}</div>` : st.sec === 'claudertg' ? `<div id="lq-crtg-panel">${renderClaudeRTG()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
+            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderLongGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-lqexppanel">${renderLqExperiment()}</div>` : st.sec === 'promise' ? `<div id="lq-promise-panel">${renderPromiseLab()}</div>` : st.sec === 'claudertg' ? `<div id="lq-crtg-panel">${renderClaudeRTG()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         }
         const bgNote = BGPEND > 0 ? `<div style="font-size:10px;color:${C.cyan};margin:-4px 0 8px;font-weight:600">⏳ heavy corpus data still streaming in (${BGPEND} file${BGPEND > 1 ? 's' : ''} left) — sections light up as their data lands</div>` : '';
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
@@ -4037,9 +4106,11 @@ const JarvisLongQuant = (function () {
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><span style="font-size:9px;color:${C.green};text-transform:uppercase;font-weight:800;letter-spacing:.3px">📊 this channel</span>${PERCHAN.map(btn).join('')}${isPer ? badge : ''}</div>${pooledNote}
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px"><span style="font-size:9px;color:${C.purple};text-transform:uppercase;font-weight:800;letter-spacing:.3px">🌐 corpus · all videos</span>${CORPUS.map(btn).join('')}<span style="font-size:9px;color:${C.faint}">— not affected by the channel selector</span></div>${sec}</div>`;
         try { rtgAfterRender(); } catch (e) { }
+        try { if (st.sec === 'promise' && promiseUI()) promiseUI().afterRender(); } catch (e) { }
     }
 
     function onClick(e) {
+        if (e.target.closest('#lq-promise-panel') && promiseUI() && promiseUI().handleClick(e)) return;
         const ps = e.target.closest('[data-pred-scale]'); if (ps) { st.predScale = ps.getAttribute('data-pred-scale'); render(); return; }
         const pfeat = e.target.closest('[data-predfeat]'); if (pfeat) { const f = pfeat.getAttribute('data-predfeat'); st.predFeats = (st.predFeats || ['ctr', 'retention', 'ret30', 'log_dur']); st.predFeats = st.predFeats.includes(f) ? st.predFeats.filter(x => x !== f) : st.predFeats.concat([f]); render(); return; }
         const pset = e.target.closest('[data-predset]'); if (pset) { st.predFeats = pset.getAttribute('data-predset').split('+'); render(); return; }
@@ -4054,6 +4125,13 @@ const JarvisLongQuant = (function () {
         const xcf = e.target.closest('[data-crtgcfg]'); if (xcf) { const [em, sp, kk] = xcf.getAttribute('data-crtgcfg').split('|'); st.crtgEmb = em; st.crtgSpace = sp; st.crtgK = parseInt(kk, 10); st.crtgCluster = null; rtgUpdateCrtg(); try { xcf.closest('#lq-crtg-panel').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e2) { } return; }
         const xca = e.target.closest('[data-crtgaxis]'); if (xca) { st.crtgAxis = xca.getAttribute('data-crtgaxis'); rtgUpdateCrtg(); return; }
         const xcl = e.target.closest('[data-crtgslot]'); if (xcl) { st.crtgSlot = xcl.getAttribute('data-crtgslot'); st.crtgComp = null; rtgUpdateCrtg(); return; }
+        const xpa = e.target.closest('[data-crtgpaxis]'); if (xpa) { st.crtgPAxis = xpa.getAttribute('data-crtgpaxis'); rtgUpdateCrtg(); return; }
+        if (e.target.closest('[data-crtgpscorego]')) {
+            const inp = window.document.querySelector('[data-crtgpscoreinput]'); if (inp) st.crtgPInput = inp.value;
+            crtgScorePromise(st.crtgPInput || '');
+            return;
+        }
+        const xps = e.target.closest('[data-crtgpsel]'); if (xps) { st.crtgPSel = xps.getAttribute('data-crtgpsel'); rtgUpdateCrtg(); return; }
         const xcp = e.target.closest('[data-crtgcomp]'); if (xcp) { const ci = parseInt(xcp.getAttribute('data-crtgcomp'), 10); st.crtgComp = st.crtgComp === ci ? null : ci; rtgUpdateCrtg(); return; }
         const tbt = e.target.closest('[data-tribetgt]'); if (tbt) { st.tribeTarget = tbt.getAttribute('data-tribetgt'); rtgUpdateTribe(); return; }
         const tbf = e.target.closest('[data-tribefeat]'); if (tbf) { st.tribeFeat = tbf.getAttribute('data-tribefeat'); rtgUpdateTribe(); return; }
@@ -4290,6 +4368,7 @@ const JarvisLongQuant = (function () {
         if (tr) { const id = tr.getAttribute('data-row'); st.open = st.open === id ? null : id; render(); }
     }
     function onInput(e) {
+        if (e.target.closest('#lq-promise-panel') && promiseUI() && promiseUI().handleInput(e)) return;
         if (e.target.id === 'rtg-minstr') { st.rtgMinStr = +e.target.value; rtgUpdateThresh(); return; }
         if (e.target.id === 'rtg-hazA') { st.hazA = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-hazB') { st.hazB = +e.target.value; rtgUpdateHazCompare(); return; }
@@ -4301,6 +4380,7 @@ const JarvisLongQuant = (function () {
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxtitle')) { st.lqxTitle = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxtitletestinput')) { st.lqxTitleTestInput = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxhookedittext')) { if (st.lqxHookEdit) st.lqxHookEdit.text = e.target.value; return; }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-crtgpscoreinput')) { st.crtgPInput = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxscoretitle')) { st.lqxScoreTitle = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxgrindidea')) { st.lqxGrindIdea = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-lqxgrindthreshold')) { st.lqxGrindThreshold = e.target.value; return; }
@@ -4308,6 +4388,7 @@ const JarvisLongQuant = (function () {
         if (e.target.closest('[data-q]')) { st.q = e.target.value; render(); }
     }
     function onChange(e) {
+        if (e.target.closest('#lq-promise-panel') && promiseUI() && promiseUI().handleChange(e)) return;
         if (e.target.hasAttribute && e.target.hasAttribute('data-guessphase')) { st.gPhase = e.target.value; st.ideaSel = null; st.lgSel = null; rtgUpdateGuessesL(); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-guessrunsel')) {
             const v = e.target.value;

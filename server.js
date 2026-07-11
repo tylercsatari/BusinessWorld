@@ -291,6 +291,19 @@ async function redirectR2Object(res, key, opts = {}) {
     res.end();
     return true;
 }
+async function serveR2GzipJsonStream(res, key, cacheControl = 'private, max-age=300') {
+    const stream = await cloud.getR2Stream(key).catch(() => null);
+    if (!stream) return false;
+    res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Encoding': 'gzip',
+        'Cache-Control': cacheControl,
+        'Vary': 'Accept-Encoding',
+    });
+    stream.on('error', () => { try { res.destroy(); } catch (e) {} });
+    stream.pipe(res);
+    return true;
+}
 async function serveR2Object(res, key, contentType, opts = {}) {
     const buf = await cloud.downloadFromR2(key).catch(() => null);
     if (!buf) return false;
@@ -3562,12 +3575,86 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
-    const lqCrtg = pathname.match(/^\/api\/longquant\/claudertg\/(meta|chunks|clusterings|axes|swaps)$/);
+    if (pathname === '/api/longquant/claudertg/score-promise' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const text = String(body.text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+            if (text.length < 4) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type a promise line to score"}'); return; }
+            if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
+            const out = await runHeavyScore(() => new Promise((ok, no) => {
+                const py = spawn(RAW_PYTHON, [path.join(__dirname, 'claude_rtg_score.py'), '--text', text], { env: RAW_PY_ENV });
+                let so = '', se = '';
+                py.stdout.on('data', d => so += d);
+                py.stderr.on('data', d => se += d);
+                const t = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('promise scorer timeout')); }, 120000);
+                py.on('close', () => {
+                    clearTimeout(t);
+                    const line = so.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+                    if (!line) return no(new Error('promise scorer: ' + (se.trim().split('\n').pop() || 'no output').slice(-160)));
+                    try { const j = JSON.parse(line); return j.error ? no(new Error(j.error)) : ok(j); } catch (e) { no(e); }
+                });
+                py.on('error', e => { clearTimeout(t); no(e); });
+            }));
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify(out));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    const lqCrtg = pathname.match(/^\/api\/longquant\/claudertg\/(meta|chunks|clusterings|axes|swaps|promise_axes)$/);
     if (lqCrtg && req.method === 'GET') {
         await serveGzCached(req, res, 'lq:crtg-' + lqCrtg[1], 60e3, async () => {
             const b = await cloud.downloadFromR2(`longform/claude-rtg/${lqCrtg[1]}.json`).catch(() => null);
             return b ? b.toString('utf8') : '{}';
         }, {});
+        return;
+    }
+    if (pathname === '/api/longquant/promise-lab/manifest' && req.method === 'GET') {
+        await serveR2Gz(req, res, 'longform/promise-lab-v4/manifest.json', 30e3,
+            { version: 4, status: 'building', counts: {}, artifacts: {} });
+        return;
+    }
+    if (pathname === '/api/longquant/promise-lab/progress' && req.method === 'GET') {
+        await serveR2Gz(req, res, 'longform/promise-lab-v4/progress.json', 5e3,
+            { version: 4, status: 'building', stage: 'waiting for first artifact' });
+        return;
+    }
+    const promiseArtifacts = {
+        findings: 'findings.json.gz',
+        corpus: 'corpus.json.gz',
+        discovery: 'discovery-summary.json.gz',
+        atlas: 'atlas.json.gz',
+        swaps: 'swaps/summary.json.gz',
+        axes: 'axes.json.gz',
+        registry: 'registry.json.gz',
+    };
+    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|swaps|axes|registry)$/);
+    if (promiseArtifact && req.method === 'GET') {
+        const ok = await serveR2GzipJsonStream(res,
+            `longform/promise-lab-v4/${promiseArtifacts[promiseArtifact[1]]}`);
+        if (!ok) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end('{"error":"Promise Lab artifact is still building"}');
+        }
+        return;
+    }
+    const promiseHook = pathname.match(/^\/api\/longquant\/promise-lab\/hook\/([\w-]+)$/);
+    if (promiseHook && req.method === 'GET') {
+        const ok = await serveR2GzipJsonStream(res,
+            `longform/promise-lab-v4/discovery/${promiseHook[1]}.json.gz`);
+        if (!ok) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end('{"error":"hook discovery artifact is not built"}');
+        }
+        return;
+    }
+    const promiseSource = pathname.match(/^\/api\/longquant\/promise-lab\/swap-source\/([a-f0-9]{20})$/);
+    if (promiseSource && req.method === 'GET') {
+        const ok = await serveR2GzipJsonStream(res,
+            `longform/promise-lab-v4/swaps/by-source/${promiseSource[1]}.json.gz`);
+        if (!ok) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end('{"error":"source swap surface is not built"}');
+        }
         return;
     }
     if (pathname === '/api/longquant/hooks/edit' && req.method === 'POST') {
