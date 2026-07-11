@@ -1,0 +1,59 @@
+# Promise Lab
+
+Promise Lab asks a discovery question: does the embedded hook corpus contain
+stable, context-sensitive semantic units whose transfer across video ideas
+predicts stronger outcomes?
+
+It does not begin with a definition of a promise, gratification, component,
+slot, phrase family, or boundary. The pipeline enumerates the observable
+sequence lattice, measures counterfactual influence in the exact Long Quant
+text space, discovers candidate boundaries without outcomes, and keeps every
+method and parameter choice in an experiment registry.
+
+The source corpus is the existing `longform/hook-embeds/` collection. All text
+vectors use `gemini-embedding-2` at 1536 dimensions, matching Long Quant.
+
+Stages:
+
+1. `run_interventions.py`: exhaustive span and token-pair counterfactuals.
+2. `run_discovery.py`: boundary ensembles, nulls, and component candidates.
+3. `run_atlas.py`: clustering sweeps over boundary-supported candidates.
+4. `run_all_spans.py`: exact, resumable materialization of every contiguous span.
+5. `run_all_span_atlas.py`: twelve primitive, contrast, residual, and joint
+   multiview sweeps over the complete span lattice, with no semantic labels.
+6. `run_cross_scope.py`: candidate-versus-exhaustive family persistence,
+   consensus agreement, and post-fit boundary-enrichment audits.
+7. `run_swaps.py`: evidence-supported sources routed into the complete target
+   span universe using equal-scope outcome-blind atlas consensus.
+8. `run_axes.py`: held-out directions for model-predicted transfer plus observed
+   views, keep rate, retention levels, windows, slopes, and post-hook hold.
+9. `build_ui.py`: browser artifacts, cluster representatives, findings, and the
+   complete experiment registry.
+
+`verify_all_span_store.py`, `verify_swap_outputs.py`, and
+`verify_axis_outputs.py` are hard gates in the orchestrated build. They check
+exact character slices, complete lattice/subset identity, vector finiteness and
+normalization, crossed-design completeness, per-source artifacts, zero-error
+self-span controls, one predeclared-confound selection per target, and exact
+agreement among the axis registry, maps, out-of-fold rows, and direction tensors.
+
+Every expensive stage is resumable. The exhaustive span store preallocates
+float16 primitive matrices and processes one hook at a time, so API volume does
+not become resident application memory. Swap scoring deduplicates the complete
+crossed surface by exact recomposed text, embeds each unique string once, and
+scatters the result back to every matching source-by-target cell. Generated
+data lives in `.cache/`; browser-facing artifacts are mirrored to
+`longform/promise-lab-v4/` in R2. Large binary intermediates are local unless
+`--upload-intermediates` is explicitly requested.
+
+The pipeline is invoked on demand and has no resident GPU or always-on model
+worker. Its defaults use eight concurrent Gemini requests, the API's 100-text
+batch size, and resumable 8,192-text scoring checkpoints; environment variables
+can lower those values when an account has tighter request quotas. Successful
+requests inside an interrupted checkpoint remain in the exact-text cache and
+are reused on restart; a completed pass clears that transient cache.
+
+`verify_embedding_parity.py` compares a local full-hook tensor with the pooled
+48-coordinate preview stored by the existing Long Quant scorer. Tests use
+planted numerical structure and do not contain phrases from the user's
+examples.

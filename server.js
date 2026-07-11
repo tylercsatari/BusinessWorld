@@ -3575,39 +3575,6 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
-    if (pathname === '/api/longquant/claudertg/score-promise' && req.method === 'POST') {
-        try {
-            const body = await readBody(req);
-            const text = String(body.text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
-            if (text.length < 4) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type a promise line to score"}'); return; }
-            if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
-            const out = await runHeavyScore(() => new Promise((ok, no) => {
-                const py = spawn(RAW_PYTHON, [path.join(__dirname, 'claude_rtg_score.py'), '--text', text], { env: RAW_PY_ENV });
-                let so = '', se = '';
-                py.stdout.on('data', d => so += d);
-                py.stderr.on('data', d => se += d);
-                const t = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('promise scorer timeout')); }, 120000);
-                py.on('close', () => {
-                    clearTimeout(t);
-                    const line = so.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
-                    if (!line) return no(new Error('promise scorer: ' + (se.trim().split('\n').pop() || 'no output').slice(-160)));
-                    try { const j = JSON.parse(line); return j.error ? no(new Error(j.error)) : ok(j); } catch (e) { no(e); }
-                });
-                py.on('error', e => { clearTimeout(t); no(e); });
-            }));
-            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify(out));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
-        return;
-    }
-    const lqCrtg = pathname.match(/^\/api\/longquant\/claudertg\/(meta|chunks|clusterings|axes|swaps|promise_axes)$/);
-    if (lqCrtg && req.method === 'GET') {
-        await serveGzCached(req, res, 'lq:crtg-' + lqCrtg[1], 60e3, async () => {
-            const b = await cloud.downloadFromR2(`longform/claude-rtg/${lqCrtg[1]}.json`).catch(() => null);
-            return b ? b.toString('utf8') : '{}';
-        }, {});
-        return;
-    }
     if (pathname === '/api/longquant/promise-lab/manifest' && req.method === 'GET') {
         await serveR2Gz(req, res, 'longform/promise-lab-v4/manifest.json', 30e3,
             { version: 4, status: 'building', counts: {}, artifacts: {} });
@@ -3623,11 +3590,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         corpus: 'corpus.json.gz',
         discovery: 'discovery-summary.json.gz',
         atlas: 'atlas.json.gz',
+        'all-span-atlas': 'all-span-atlas.json.gz',
+        'cross-scope': 'cross-scope.json.gz',
         swaps: 'swaps/summary.json.gz',
         axes: 'axes.json.gz',
         registry: 'registry.json.gz',
     };
-    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|swaps|axes|registry)$/);
+    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|cross-scope|swaps|axes|registry)$/);
     if (promiseArtifact && req.method === 'GET') {
         const ok = await serveR2GzipJsonStream(res,
             `longform/promise-lab-v4/${promiseArtifacts[promiseArtifact[1]]}`);
