@@ -272,41 +272,6 @@ async function serveGzCached(req, res, cacheKey, ttlMs, fill, fallback, fallback
 }
 const serveR2Gz = (req, res, r2key, ttlMs, fallback, fallbackStatus) =>
     serveGzCached(req, res, r2key, ttlMs, () => cloud.downloadFromR2(r2key), fallback, fallbackStatus);
-async function serveR2PreGzip(req, res, r2key, ttlMs, contentType = 'application/json') {
-    const cacheKey = `pre-gzip:${r2key}`;
-    let entry = _gzCache.get(cacheKey);
-    const now = Date.now();
-    if (!entry || now - entry.t > ttlMs) {
-        const compressed = await cloud.downloadFromR2(r2key).catch(() => null);
-        if (compressed) {
-            entry = {
-                t: now,
-                gz: compressed,
-                bytes: compressed.length,
-                etag: '"' + require('crypto').createHash('md5').update(compressed).digest('hex') + '"',
-            };
-            gzCacheSet(cacheKey, entry);
-        }
-    }
-    if (!entry) {
-        res.writeHead(404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end('{"error":"not built"}');
-        return;
-    }
-    const headers = { 'Content-Type': contentType, 'Cache-Control': 'no-cache', 'ETag': entry.etag, 'Vary': 'Accept-Encoding' };
-    if (req.headers['if-none-match'] === entry.etag) {
-        res.writeHead(304, headers);
-        res.end();
-        return;
-    }
-    if ((req.headers['accept-encoding'] || '').includes('gzip')) {
-        res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip' });
-        res.end(entry.gz);
-    } else {
-        res.writeHead(200, headers);
-        res.end(await _gunzipP(entry.gz));
-    }
-}
 const gzCacheInvalidate = key => {
     const e = _gzCache.get(key);
     if (e && e.bytes) _gzCacheBytes -= e.bytes;
@@ -3597,6 +3562,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    const lqCrtg = pathname.match(/^\/api\/longquant\/claudertg\/(meta|chunks|clusterings|axes|swaps)$/);
+    if (lqCrtg && req.method === 'GET') {
+        await serveGzCached(req, res, 'lq:crtg-' + lqCrtg[1], 60e3, async () => {
+            const b = await cloud.downloadFromR2(`longform/claude-rtg/${lqCrtg[1]}.json`).catch(() => null);
+            return b ? b.toString('utf8') : '{}';
+        }, {});
+        return;
+    }
     if (pathname === '/api/longquant/hooks/edit' && req.method === 'POST') {
         try {
             const body = await readBody(req);
@@ -3648,44 +3621,6 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const b = await cloud.downloadFromR2('longform/hook-embeds/index.json').catch(() => null);
             return b ? b.toString('utf8') : '{"rows":[]}';
         }, {});
-        return;
-    }
-    if (pathname === '/api/longquant/gratification/report' && req.method === 'GET') {
-        await serveGzCached(req, res, 'lq:gratification-report', 60e3, async () => {
-            const b = await cloud.downloadFromR2('longform/gratification/report.json').catch(() => null);
-            return b ? b.toString('utf8') : '{"meta":{"status":"not-built"},"experiments":[],"videos":[]}';
-        }, {});
-        return;
-    }
-    if (pathname === '/api/longquant/gratification/v2/report' && req.method === 'GET') {
-        await serveR2Gz(req, res, 'longform/gratification/v2/report.json', 60e3, { meta: { version: 2, status: 'not-built' } });
-        return;
-    }
-    if (pathname === '/api/longquant/gratification/v2/progress' && req.method === 'GET') {
-        await serveR2Gz(req, res, 'longform/gratification/v2/progress.json', 5e3, { version: 2, status: 'not-built' });
-        return;
-    }
-    if (pathname === '/api/longquant/gratification/v2/components' && req.method === 'GET') {
-        await serveR2PreGzip(req, res, 'longform/gratification/v2/components.json.gz', 300e3);
-        return;
-    }
-    if (pathname === '/api/longquant/gratification/v2/relationship-matrices' && req.method === 'GET') {
-        await serveR2PreGzip(req, res, 'longform/gratification/v2/relationship_matrices.json.gz', 300e3);
-        return;
-    }
-    if (pathname === '/api/longquant/gratification/v2/visualizations' && req.method === 'GET') {
-        await serveR2PreGzip(req, res, 'longform/gratification/v2/visualizations.json.gz', 300e3);
-        return;
-    }
-    if (pathname === '/api/longquant/gratification/v2/experiments' && req.method === 'GET') {
-        const redirected = await redirectR2Object(res, 'longform/gratification/v2/experiments.jsonl.gz', {
-            expiresIn: 3600,
-            cacheControl: 'private, max-age=300',
-        });
-        if (!redirected) {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end('{"error":"experiment registry not built"}');
-        }
         return;
     }
     const lqHookVid = pathname.match(/^\/api\/longquant\/hooks\/video\/([\w-]+)$/);
