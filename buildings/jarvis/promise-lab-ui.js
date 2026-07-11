@@ -30,11 +30,100 @@
         const fmt = (value, digits = 2) => value == null || !isFinite(value) ? '-' : Number(value).toFixed(digits);
         const pct = value => value == null || !isFinite(value) ? '-' : `${Number(value).toFixed(1)}%`;
         const signed = (value, digits = 2) => value == null || !isFinite(value) ? '-' : `${value >= 0 ? '+' : ''}${Number(value).toFixed(digits)}`;
+        const numeric = value => value == null || value === '' ? NaN : Number(value);
         const metricLabel = name => ({
             ctrviews: 'CTR + views', ctr: 'CTR', ret30: '30-second retention',
             views: 'views', scaled_views: 'scaled views', realviews: 'realistic views',
             gt10m: '10M-view class',
         })[name] || name;
+        const outcomePalette = {
+            low: 'rgb(56,189,248)', middle: 'rgb(152,151,181)', high: 'rgb(248,113,113)',
+        };
+        const outcomeFamilyDefinition = family => ({
+            performance: {
+                label: 'Video-level outcome',
+                summary: 'One outcome belongs to the source video. Every span from that video inherits it; the axis tests whether wording inside this frozen cluster aligns with a higher outcome after surface, timing, and hook-context confounds are removed.',
+                direction: 'Blue is a lower outcome and red is a higher outcome. This is a continuous metric color, not a cluster label.',
+            },
+            'raw-slope': {
+                label: 'Raw retention slope',
+                summary: 'A least-squares line is fitted to the observed audience-retention curve across the exact spoken phrase interval, shifted forward by the selected processing lag.',
+                direction: 'Blue is a more negative slope, meaning faster viewer loss. Red is a higher slope, meaning flatter loss or a rise. Zero means flat retention.',
+            },
+            'normalized-slope': {
+                label: 'Endpoint-normalized retention slope',
+                summary: 'The same phrase window is measured after each video curve is mapped from entry = 1 to terminal retention = 0, reducing differences caused by starting level and rewatch-linked entry.',
+                direction: 'Blue is a steeper normalized loss. Red is flatter or rising normalized retention. Zero means flat after endpoint normalization.',
+            },
+            'residual-slope': {
+                label: 'Unexpected retention slope',
+                summary: 'The endpoint-normalized phrase slope minus the grouped out-of-fold slope expected from phrase timing, phrase duration, video duration, entry, terminal retention, amplitude, and entry-minus-expected-entry.',
+                direction: 'Blue is worse than the timing/endpoints predict. Red is better than predicted. Zero means exactly the out-of-fold expectation.',
+            },
+        })[family] || { label: family || 'Outcome', summary: '', direction: 'Blue is the lower value and red is the higher value.' };
+        const formatCompactNumber = value => {
+            if (!Number.isFinite(Number(value))) return '-';
+            const absolute = Math.abs(Number(value));
+            if (absolute >= 1e9) return `${fmt(Number(value) / 1e9, 2)}B`;
+            if (absolute >= 1e6) return `${fmt(Number(value) / 1e6, 2)}M`;
+            if (absolute >= 1e3) return `${fmt(Number(value) / 1e3, 1)}K`;
+            return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+        };
+        function formatOutcomeValue(value, target, meta, compact = false) {
+            value = numeric(value);
+            if (!Number.isFinite(value)) return 'not measured';
+            if (target === 'views_raw' || target === 'realistic_views') {
+                return compact ? formatCompactNumber(value) : `${Math.round(value).toLocaleString()} ${meta.unit || 'views'}`;
+            }
+            if (target === 'views_log') {
+                const raw = 10 ** value;
+                return compact ? fmt(value, 2) : `${fmt(value, 3)} log10 views (about ${formatCompactNumber(raw)} views)`;
+            }
+            if (target === 'class_10m') return value >= .5 ? '1 (10M+ views)' : '0 (under 10M views)';
+            if (target === 'swipe_ratio') return `${fmt(value, compact ? 1 : 2)}% viewed`;
+            if (target === 'retention_5s') return compact ? `${fmt(value * 100, 1)}%` : `${fmt(value * 100, 2)}% retained (${fmt(value, 4)} ratio)`;
+            if (meta.family === 'raw-slope') {
+                return compact ? `${signed(value * 100, 2)} pp/s` : `${signed(value * 100, 3)} retention percentage points/second (${signed(value, 5)} ratio/second)`;
+            }
+            if (meta.family === 'normalized-slope' || meta.family === 'residual-slope') {
+                return compact ? `${signed(value, 4)}/s` : `${signed(value, 5)} normalized retention units/second`;
+            }
+            return `${signed(value, compact ? 2 : 4)}${meta.unit ? ` ${meta.unit}` : ''}`;
+        }
+        function outcomeScale(detail) {
+            const values = (((detail || {}).points || {}).target || []).map(numeric);
+            const finite = values.filter(Number.isFinite);
+            const [low, high] = bounds(finite);
+            const middle = (low + high) / 2;
+            return {
+                values, low, middle, high,
+                measured: finite.length,
+                missing: values.length - finite.length,
+                color(value) {
+                    if (!Number.isFinite(Number(value))) return C.faint;
+                    const t = Math.max(0, Math.min(1, (Number(value) - low) / ((high - low) || 1)));
+                    return `rgb(${Math.round(56 + 192 * t)},${Math.round(189 - 76 * t)},${Math.round(248 - 135 * t)})`;
+                },
+            };
+        }
+        function outcomeMetricLegend(detail) {
+            const meta = detail.targetMeta || {}, family = outcomeFamilyDefinition(meta.family);
+            const scale = outcomeScale(detail), target = detail.target || '';
+            const offset = Number(meta.offsetSeconds || 0);
+            const window = meta.family === 'performance'
+                ? 'Video-level value; no phrase-time window is used.'
+                : `For every span spoken from start to end, measure start + ${offset}s through end + ${offset}s.`;
+            const zeroPosition = scale.low < 0 && scale.high > 0
+                ? Math.max(0, Math.min(100, (0 - scale.low) / ((scale.high - scale.low) || 1) * 100))
+                : null;
+            return `<div data-pl-outcome-metric-contract style="background:${C.card2};border:1px solid ${C.border2};padding:10px;margin:9px 0 10px">
+                <div style="display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap"><div style="min-width:260px;flex:1"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">Selected point-color metric</div><div style="font-size:13px;color:${C.text};font-weight:900;margin-top:2px">Color = ${esc(meta.label || target)}</div><div style="font-size:9px;color:${C.dim};line-height:1.55;margin-top:3px">${esc(family.summary)}</div></div><div style="min-width:230px;font-size:8.5px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Data source:</b> ${esc(meta.channel || 'not declared')}<br><b style="color:${C.text}">Unit:</b> ${esc(meta.unit || 'not declared')}<br><b style="color:${C.text}">Window:</b> ${esc(window)}<br><b style="color:${C.text}">Metric key:</b> <span style="font-family:monospace">${esc(target)}</span></div></div>
+                <div style="margin-top:9px"><div role="img" aria-label="Blue is the low ${esc(meta.label || target)} value and red is the high value" style="height:10px;border:1px solid ${C.border};background:linear-gradient(90deg,${outcomePalette.low},${outcomePalette.middle},${outcomePalette.high});position:relative">${zeroPosition == null ? '' : `<span title="zero" style="position:absolute;left:${zeroPosition}%;top:-3px;width:1px;height:16px;background:${C.text}"></span>`}</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:3px;font-size:8px"><div style="color:${outcomePalette.low}"><b>BLUE · LOW</b><br>${esc(formatOutcomeValue(scale.low, target, meta, true))}</div><div style="color:${C.dim};text-align:center"><b>COLOR MIDPOINT</b><br>${esc(formatOutcomeValue(scale.middle, target, meta, true))}</div><div style="color:${outcomePalette.high};text-align:right"><b>RED · HIGH</b><br>${esc(formatOutcomeValue(scale.high, target, meta, true))}</div></div></div>
+                <div style="font-size:8.5px;color:${C.text};line-height:1.55;margin-top:7px"><b>${esc(family.direction)}</b> The color range uses the measured 1st-to-99th percentiles (${esc(formatOutcomeValue(scale.low, target, meta, true))} to ${esc(formatOutcomeValue(scale.high, target, meta, true))}); values beyond them saturate. ${scale.missing ? `${scale.missing.toLocaleString()} ${scale.missing === 1 ? 'span' : 'spans'} without this measurement ${scale.missing === 1 ? 'is' : 'are'} gray.` : 'Every displayed span has this measurement.'}</div>
+                <div class="pl-metric-channels" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px;font-size:8.5px;line-height:1.5"><div style="border-left:2px solid ${outcomePalette.high};padding-left:7px"><b style="color:${C.text}">COLOR</b><br><span style="color:${C.dim}">Observed/model target before confound removal. It does not show cluster membership.</span></div><div style="border-left:2px solid ${C.cyan};padding-left:7px"><b style="color:${C.text}">LEFT → RIGHT</b><br><span style="color:${C.dim}">Learned semantic score. Moving right predicts a higher confound-adjusted target.</span></div><div style="border-left:2px solid ${C.faint};padding-left:7px"><b style="color:${C.text}">DOWN → UP</b><br><span style="color:${C.dim}">Orthogonal semantic background coordinate. It is not an outcome metric.</span></div></div>
+                <div style="font-size:8px;color:${C.mute};margin-top:7px">Population shown: frozen cluster ${Number(detail.cluster)} only. Cluster identity is fixed before outcomes are joined; blue and red are values within that one cluster.</div>
+            </div>`;
+        }
         const representationLabel = name => ({
             raw: 'raw source span', influence: 'deletion influence',
             nonadditive: 'non-additive source span', context: 'retained hook context',
@@ -360,11 +449,13 @@
                 : esc(hookText);
             const meta = detail.targetMeta || {};
             const offset = Number(meta.offsetSeconds || 0);
-            const spokenStart = Number((points.spanStartSeconds || [])[localIndex]);
-            const spokenEnd = Number((points.spanEndSeconds || [])[localIndex]);
-            const rawTarget = Number((points.target || [])[localIndex]);
-            const residualTarget = Number((points.targetResidual || [])[localIndex]);
-            return `<div style="padding:12px;height:100%;overflow:auto"><div style="font-size:8px;color:${clusterColor(detail.cluster)};font-weight:900;text-transform:uppercase">cluster ${detail.cluster} · ${esc(meta.label || detail.target || '')}</div><div style="font-size:14px;color:${C.text};font-weight:900;line-height:1.35;margin:5px 0">${esc((pointIndex.texts || [])[globalIndex] || '')}</div><div style="font-size:8px;color:${C.mute};margin-bottom:3px">source video</div><div style="font-size:10px;color:${C.text};font-weight:800">${esc(hook.title || hook.videoId || '')}</div><div style="font-size:8px;color:${C.faint};margin-top:2px">${esc(hook.videoId || '')} · global span ${globalIndex.toLocaleString()} · frozen cluster ${Number((pointIndex.labels || [])[globalIndex])}</div><div style="height:1px;background:${C.border};margin:10px 0"></div><div style="font-size:8px;color:${C.mute};margin-bottom:3px">exact source hook</div><div style="font-size:9px;color:${C.dim};line-height:1.55">${highlighted}</div><div style="height:1px;background:${C.border};margin:10px 0"></div><div style="font-size:8px;color:${C.mute};margin-bottom:3px">visible input → output trace</div><div style="font-size:9px;color:${C.text};line-height:1.6"><b>embedded text:</b> ${esc((pointIndex.texts || [])[globalIndex] || '')}<br><b>semantic representation:</b> ${esc((detail.selectedExperiment || {}).representation || '')} · ${(detail.selectedExperiment || {}).pcaDimensions || '-'}D · ridge alpha ${fmt((detail.selectedExperiment || {}).ridgeAlpha, 2)}<br><b>measured/model target:</b> ${fmt(rawTarget, 6)} ${esc(meta.unit || '')}<br><b>target after fold-declared confounds:</b> ${fmt(residualTarget, 6)}<br><b>outcome axis:</b> ${fmt((points.x || [])[localIndex], 5)} · <b>background axis:</b> ${fmt((points.y || [])[localIndex], 5)}<br><b>spoken interval:</b> ${fmt(spokenStart, 3)}s → ${fmt(spokenEnd, 3)}s${meta.family === 'performance' ? '' : `<br><b>measured slope window:</b> ${fmt(spokenStart + offset, 3)}s → ${fmt(spokenEnd + offset, 3)}s · offset +${offset}s`}</div></div>`;
+            const spokenStart = numeric((points.spanStartSeconds || [])[localIndex]);
+            const spokenEnd = numeric((points.spanEndSeconds || [])[localIndex]);
+            const rawTarget = numeric((points.target || [])[localIndex]);
+            const residualTarget = numeric((points.targetResidual || [])[localIndex]);
+            const scale = outcomeScale(detail);
+            const color = scale.color(rawTarget);
+            return `<div style="padding:12px;height:100%;overflow:auto"><div style="font-size:8px;color:${clusterColor(detail.cluster)};font-weight:900;text-transform:uppercase">cluster ${detail.cluster} · ${esc(meta.label || detail.target || '')}</div><div style="font-size:14px;color:${C.text};font-weight:900;line-height:1.35;margin:5px 0">${esc((pointIndex.texts || [])[globalIndex] || '')}</div><div style="font-size:8px;color:${C.mute};margin-bottom:3px">source video</div><div style="font-size:10px;color:${C.text};font-weight:800">${esc(hook.title || hook.videoId || '')}</div><div style="font-size:8px;color:${C.faint};margin-top:2px">${esc(hook.videoId || '')} · global span ${globalIndex.toLocaleString()} · frozen cluster ${Number((pointIndex.labels || [])[globalIndex])}</div><div style="height:1px;background:${C.border};margin:10px 0"></div><div style="font-size:8px;color:${C.mute};margin-bottom:3px">exact source hook</div><div style="font-size:9px;color:${C.dim};line-height:1.55">${highlighted}</div><div style="height:1px;background:${C.border};margin:10px 0"></div><div style="font-size:8px;color:${C.mute};margin-bottom:3px">visible input → output trace</div><div style="font-size:9px;color:${C.text};line-height:1.6"><b>embedded text:</b> ${esc((pointIndex.texts || [])[globalIndex] || '')}<br><b>semantic representation:</b> ${esc((detail.selectedExperiment || {}).representation || '')} · ${(detail.selectedExperiment || {}).pcaDimensions || '-'}D · ridge alpha ${fmt((detail.selectedExperiment || {}).ridgeAlpha, 2)}<br><span style="display:inline-block;width:8px;height:8px;background:${color};border:1px solid ${C.border};margin-right:4px"></span><b>point color (${esc(meta.label || detail.target || '')}):</b> ${esc(formatOutcomeValue(rawTarget, detail.target, meta))}<br><b>axis-fitting target after fold-declared confounds:</b> ${esc(formatOutcomeValue(residualTarget, detail.target, meta))}<br><b>horizontal semantic score:</b> ${fmt((points.x || [])[localIndex], 5)} · <b>vertical background coordinate:</b> ${fmt((points.y || [])[localIndex], 5)}<br><b>spoken interval:</b> ${fmt(spokenStart, 3)}s → ${fmt(spokenEnd, 3)}s${meta.family === 'performance' ? '<br><b>measurement scope:</b> source-video value; no phrase window' : `<br><b>measured slope window:</b> ${fmt(spokenStart + offset, 3)}s → ${fmt(spokenEnd + offset, 3)}s · processing offset +${offset}s`}</div></div>`;
         }
 
         function clusterOutcomeMatrix(summary) {
@@ -372,7 +463,8 @@
             const familyTargets = Object.keys(definitions).filter(
                 name => definitions[name].family === state.clusterOutcomeFamily
             );
-            return card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap;margin-bottom:7px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">Four-cluster held-out result matrix</div><div style="font-size:8px;color:${C.mute}">Every cell is a separate axis learned only within that frozen category. rho is source-video held-out Spearman; q corrects the full 100-family selection.</div></div><div style="display:flex;gap:4px;flex-wrap:wrap">${[['performance', 'Performance'], ['raw-slope', 'Raw slope'], ['normalized-slope', 'Normalized slope'], ['residual-slope', 'Unexpected slope']].map(([id, label]) => button(label, `data-pl-outcome-family="${id}"`, state.clusterOutcomeFamily === id)).join('')}</div></div><div style="overflow:auto"><div style="min-width:${Math.max(620, 104 + familyTargets.length * 122)}px">${(summary.clusters || []).map(cluster => { const byTarget = Object.fromEntries((cluster.targets || []).map(row => [row.target, row])); return `<div style="display:grid;grid-template-columns:96px repeat(${familyTargets.length},minmax(112px,1fr));gap:4px;margin-bottom:4px"><button data-pl-outcome-cluster="${cluster.label}" style="border:1px solid ${Number(cluster.label) === Number(state.clusterOutcomeCluster) ? clusterColor(cluster.label) : C.border};background:${C.card2};color:${clusterColor(cluster.label)};font-size:10px;font-weight:900;cursor:pointer;text-align:left;padding:7px;border-radius:5px;${Number(cluster.label) === Number(state.clusterOutcomeCluster) ? `box-shadow:inset 3px 0 ${clusterColor(cluster.label)}` : ''}">cluster ${cluster.label}<br><span style="font-size:8px;color:${C.mute}">${Number(cluster.spanInstances || 0).toLocaleString()} spans</span></button>${familyTargets.map(name => { const row = byTarget[name] || {}, active = Number(cluster.label) === Number(state.clusterOutcomeCluster) && name === state.clusterOutcomeTarget, validated = row.status === 'validated'; return `<button data-pl-outcome-target="${esc(name)}" data-pl-outcome-cluster="${cluster.label}" style="min-width:0;border:1px solid ${active ? C.cyan : validated ? C.green + '88' : C.border};background:${active ? C.cyan + '18' : C.card2};color:${C.text};padding:6px;border-radius:5px;text-align:left;cursor:pointer"><div style="font-size:8px;color:${validated ? C.green : C.dim};font-weight:900;white-space:normal">${esc((definitions[name] || {}).label || name)}</div><div style="font-size:11px;font-weight:900;margin-top:2px">rho ${fmt(row.heldoutSpearman, 3)}</div><div style="font-size:8px;color:${C.mute}">q ${fmt(row.searchWideQ, 3)} · ${esc(row.representation || '')}</div></button>`; }).join('')}</div>`; }).join('')}</div></div>`, 'margin-bottom:10px');
+            const family = outcomeFamilyDefinition(state.clusterOutcomeFamily);
+            return card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap;margin-bottom:7px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">Four-cluster held-out result matrix</div><div style="font-size:8px;color:${C.mute}">Every cell is a separate axis learned only within that frozen category. rho is source-video held-out Spearman; q corrects the full 100-family selection.</div></div><div style="display:flex;gap:4px;flex-wrap:wrap">${[['performance', 'Video outcomes'], ['raw-slope', 'Raw retention slope'], ['normalized-slope', 'Normalized slope'], ['residual-slope', 'Unexpected slope']].map(([id, label]) => button(label, `data-pl-outcome-family="${id}"`, state.clusterOutcomeFamily === id)).join('')}</div></div><div style="border-left:2px solid ${C.cyan};padding:5px 8px;margin:6px 0 9px;font-size:8.5px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">Viewing: ${esc(family.label)}.</b> ${esc(family.summary)} Click a cell to load that cluster and metric; the detailed color legend appears directly below.</div><div style="overflow:auto"><div style="min-width:${Math.max(620, 104 + familyTargets.length * 122)}px">${(summary.clusters || []).map(cluster => { const byTarget = Object.fromEntries((cluster.targets || []).map(row => [row.target, row])); return `<div style="display:grid;grid-template-columns:96px repeat(${familyTargets.length},minmax(112px,1fr));gap:4px;margin-bottom:4px"><button data-pl-outcome-cluster="${cluster.label}" style="border:1px solid ${Number(cluster.label) === Number(state.clusterOutcomeCluster) ? clusterColor(cluster.label) : C.border};background:${C.card2};color:${clusterColor(cluster.label)};font-size:10px;font-weight:900;cursor:pointer;text-align:left;padding:7px;border-radius:5px;${Number(cluster.label) === Number(state.clusterOutcomeCluster) ? `box-shadow:inset 3px 0 ${clusterColor(cluster.label)}` : ''}">cluster ${cluster.label}<br><span style="font-size:8px;color:${C.mute}">${Number(cluster.spanInstances || 0).toLocaleString()} spans</span></button>${familyTargets.map(name => { const row = byTarget[name] || {}, definition = definitions[name] || {}, active = Number(cluster.label) === Number(state.clusterOutcomeCluster) && name === state.clusterOutcomeTarget, validated = row.status === 'validated'; return `<button title="${esc(definition.definition || '')}" data-pl-outcome-target="${esc(name)}" data-pl-outcome-cluster="${cluster.label}" style="min-width:0;border:1px solid ${active ? C.cyan : validated ? C.green + '88' : C.border};background:${active ? C.cyan + '18' : C.card2};color:${C.text};padding:6px;border-radius:5px;text-align:left;cursor:pointer"><div style="font-size:8px;color:${validated ? C.green : C.dim};font-weight:900;white-space:normal">${esc(definition.label || name)}</div><div style="font-size:7.5px;color:${C.faint};white-space:normal;margin-top:1px">${esc(definition.unit || '')}</div><div style="font-size:11px;font-weight:900;margin-top:2px">rho ${fmt(row.heldoutSpearman, 3)}</div><div style="font-size:8px;color:${C.mute}">q ${fmt(row.searchWideQ, 3)} · ${esc(row.representation || '')}</div></button>`; }).join('')}</div>`; }).join('')}</div></div>`, 'margin-bottom:10px');
         }
 
         function clusterOutcomeDetailPanel(summary) {
@@ -385,11 +477,12 @@
             const cluster = (summary.clusters || []).find(row => Number(row.label) === Number(detail.cluster)) || {};
             const baseline = (cluster.slopeBaselineAudits || {})[String(offset)] || detail.normalizationAudit || {};
             const extremes = detail.extremes || {};
-            const extremeColumn = (title, rows, color) => `<div><div style="font-size:9px;color:${color};font-weight:900;margin-bottom:4px">${esc(title)}</div>${(rows || []).map(row => `<button data-pl-outcome-global-index="${row.globalIndex}" style="display:block;width:100%;text-align:left;border:0;border-top:1px solid ${C.border};background:transparent;color:${C.text};padding:5px 0;font-size:8.5px;cursor:pointer"><b>${esc(row.text || '')}</b><br><span style="color:${C.mute}">axis ${fmt(row.axis, 3)} · target ${fmt(row.target, 3)}</span></button>`).join('')}</div>`;
-            return `${card(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:7px"><div style="min-width:270px;flex:1"><div style="font-size:9px;color:${clusterColor(detail.cluster)};font-weight:900;text-transform:uppercase">frozen cluster ${detail.cluster} · ${esc(meta.family || '')}</div><div style="font-size:15px;color:${C.text};font-weight:900;margin-top:2px">${esc(meta.label || detail.target)}</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:3px">${esc(meta.definition || '')}</div><div style="font-size:8px;color:${C.mute};margin-top:4px">input: exact contiguous span text · representation: ${esc(experiment.representation || '')} · ${experiment.pcaDimensions || '-'} PCA dimensions · alpha ${fmt(experiment.ridgeAlpha, 2)} · confounds: ${esc(experiment.confounds || '')}</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${stat('held-out rho', fmt(experiment.heldoutSpearman, 3), experiment.status === 'validated' ? C.green : C.text)}${stat('search p', fmt(experiment.searchWideP, 4), C.cyan)}${stat('family q', fmt(experiment.searchWideQ, 4), experiment.status === 'validated' ? C.green : C.amber)}${stat('audit rows', Number(experiment.n || 0).toLocaleString(), C.purple)}</div></div><div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(290px,.7fr);gap:10px"><div><canvas data-pl-canvas="cluster-outcome-axis" style="width:100%;height:430px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px">Horizontal is the final cluster-specific semantic outcome axis; vertical is an orthogonal background coordinate. Color is the target value. Click any point without leaving this view.</div></div><aside data-pl-outcome-inspector style="height:430px;background:${C.card2};border-left:2px solid ${clusterColor(detail.cluster)};overflow:hidden">${clusterOutcomePointInspector(detail)}</aside></div>`, 'margin-bottom:10px;border-color:' + clusterColor(detail.cluster))}
-            <div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:10px;color:${C.green};font-weight:900;margin-bottom:3px">Held-out prediction check</div><canvas data-pl-canvas="cluster-outcome-oof" style="width:100%;height:270px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px">Horizontal is prediction from a fold that never saw this source video; vertical is the adjusted observed target. Four deterministic audit spans per source are shown.</div>`)}${card(`<div style="font-size:10px;color:${C.purple};font-weight:900;margin-bottom:3px">Offset response · cluster ${detail.cluster}</div><canvas data-pl-canvas="cluster-outcome-offsets" style="width:100%;height:270px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px">The same frozen cluster measured at aligned 0s and forward processing offsets 1-5s. Raw, endpoint-normalized, and unexpected-slope families stay separate.</div>`)}</div>
-            <div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.75fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:10px;color:${C.cyan};font-weight:900;margin-bottom:3px">Entry / terminal normalization diagnostic</div><canvas data-pl-canvas="cluster-outcome-entry" style="width:100%;height:260px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px">Out-of-fold expected entry from terminal retention and duration: Pearson ${fmt(((summary.normalization || {}).entryTerminalDiagnostic || {}).oofPearson, 3)} · Spearman ${fmt(((summary.normalization || {}).entryTerminalDiagnostic || {}).oofSpearman, 3)} · R2 ${fmt(((summary.normalization || {}).entryTerminalDiagnostic || {}).oofR2, 3)}. This measured relationship adjusts the rewatch-linked starting level.</div>`)}${card(`<div style="font-size:10px;color:${C.text};font-weight:900;margin-bottom:5px">What was adjusted</div><div style="font-size:9px;color:${C.dim};line-height:1.6">Endpoint normalization: <b style="color:${C.text}">(retention - terminal) / (entry - terminal)</b>.<br>Terminal is the mean of the final 5% of curve points, minimum three.<br>Natural-drop residual is grouped out of sample from exact span timing, phrase duration, video duration, entry, terminal, amplitude, and entry minus expected entry.<br>${meta.family === 'performance' ? 'This target is video-level, so no phrase-slope window is used.' : `Selected phrase window offset: <b style="color:${C.text}">+${offset}s</b>. Baseline OOF rho ${fmt(baseline.oofSpearman, 3)} · R2 ${fmt(baseline.oofR2, 3)}.`}</div>`)}</div>
-            ${card(`<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">${extremeColumn('Highest axis spans', extremes.high, C.green)}${extremeColumn('Lowest axis spans', extremes.low, C.red)}</div>`, 'margin-bottom:10px')}`;
+            const family = outcomeFamilyDefinition(meta.family);
+            const extremeColumn = (title, rows, color) => `<div><div style="font-size:9px;color:${color};font-weight:900;margin-bottom:4px">${esc(title)}</div>${(rows || []).map(row => `<button data-pl-outcome-global-index="${row.globalIndex}" style="display:block;width:100%;text-align:left;border:0;border-top:1px solid ${C.border};background:transparent;color:${C.text};padding:5px 0;font-size:8.5px;cursor:pointer"><b>${esc(row.text || '')}</b><br><span style="color:${C.mute}">semantic score ${fmt(row.axis, 3)} · color metric ${esc(formatOutcomeValue(row.target, detail.target, meta, true))}</span></button>`).join('')}</div>`;
+            return `${card(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:7px"><div style="min-width:270px;flex:1"><div style="font-size:9px;color:${clusterColor(detail.cluster)};font-weight:900;text-transform:uppercase">frozen cluster ${detail.cluster} · ${esc(family.label)}</div><div style="font-size:15px;color:${C.text};font-weight:900;margin-top:2px">${esc(meta.label || detail.target)}</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:3px">${esc(meta.definition || '')}</div><div style="font-size:8px;color:${C.mute};margin-top:4px">embedded input: exact contiguous span text · representation: ${esc(experiment.representation || '')} · ${experiment.pcaDimensions || '-'} PCA dimensions · ridge alpha ${fmt(experiment.ridgeAlpha, 2)} · removed confound set: ${esc(experiment.confounds || '')}</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${stat('held-out rho', fmt(experiment.heldoutSpearman, 3), experiment.status === 'validated' ? C.green : C.text)}${stat('search p', fmt(experiment.searchWideP, 4), C.cyan)}${stat('family q', fmt(experiment.searchWideQ, 4), experiment.status === 'validated' ? C.green : C.amber)}${stat('audit rows', Number(experiment.n || 0).toLocaleString(), C.purple)}</div></div>${outcomeMetricLegend(detail)}<div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(290px,.7fr);gap:10px"><div><div style="display:flex;justify-content:space-between;gap:8px;font-size:8px;margin-bottom:3px"><span style="color:${C.cyan}">← lower predicted ${esc(meta.label || detail.target)}</span><b style="color:${C.text}">semantic outcome axis</b><span style="color:${outcomePalette.high}">higher predicted ${esc(meta.label || detail.target)} →</span></div><canvas data-pl-canvas="cluster-outcome-axis" aria-label="Semantic outcome axis colored from low blue to high red by ${esc(meta.label || detail.target)}" style="width:100%;height:430px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px">Click any point without leaving this view. Its inspector reports the exact embedded phrase, raw color metric, confound-adjusted axis target, spoken interval, and coordinates.</div></div><aside data-pl-outcome-inspector style="height:455px;background:${C.card2};border-left:2px solid ${clusterColor(detail.cluster)};overflow:hidden">${clusterOutcomePointInspector(detail)}</aside></div>`, 'margin-bottom:10px;border-color:' + clusterColor(detail.cluster))}
+            <div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:10px;color:${C.green};font-weight:900;margin-bottom:3px">Held-out prediction check · ${esc(meta.label || detail.target)}</div><canvas data-pl-canvas="cluster-outcome-oof" aria-label="Out-of-fold predicted versus observed adjusted ${esc(meta.label || detail.target)}" style="width:100%;height:270px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px"><b style="color:${C.text}">X:</b> prediction from a fold that never saw the source video. <b style="color:${C.text}">Y:</b> observed ${esc(meta.label || detail.target)} after the declared confounds. <b style="color:${clusterColor(detail.cluster)}">Point color:</b> fixed cluster ${detail.cluster}, not a metric. Four deterministic audit spans per source are shown.</div>`)}${card(`<div style="font-size:10px;color:${C.purple};font-weight:900;margin-bottom:3px">Processing-lag comparison · cluster ${detail.cluster}</div><canvas data-pl-canvas="cluster-outcome-offsets" aria-label="Held-out Spearman correlation by processing offset" style="width:100%;height:270px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px"><b style="color:${C.text}">X:</b> phrase-window offset from +0 to +5 seconds. <b style="color:${C.text}">Y:</b> held-out Spearman rho between the learned semantic score and adjusted slope target, not the retention slope itself. Cyan = raw, purple = endpoint-normalized, green = unexpected slope.</div>`)}</div>
+            <div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.75fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:10px;color:${C.cyan};font-weight:900;margin-bottom:3px">Entry / terminal normalization diagnostic</div><canvas data-pl-canvas="cluster-outcome-entry" aria-label="Predicted versus observed entry retention ratio" style="width:100%;height:260px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px"><b style="color:${C.text}">X:</b> out-of-fold predicted entry retention ratio from terminal retention and duration. <b style="color:${C.text}">Y:</b> observed entry retention ratio. Pearson ${fmt(((summary.normalization || {}).entryTerminalDiagnostic || {}).oofPearson, 3)} · Spearman ${fmt(((summary.normalization || {}).entryTerminalDiagnostic || {}).oofSpearman, 3)} · R2 ${fmt(((summary.normalization || {}).entryTerminalDiagnostic || {}).oofR2, 3)}. This measured relationship adjusts the rewatch-linked starting level.</div>`)}${card(`<div style="font-size:10px;color:${C.text};font-weight:900;margin-bottom:5px">What was adjusted</div><div style="font-size:9px;color:${C.dim};line-height:1.6">Endpoint normalization: <b style="color:${C.text}">(retention - terminal) / (entry - terminal)</b>.<br>Terminal is the mean of the final 5% of curve points, minimum three.<br>Natural-drop residual is grouped out of sample from exact span timing, phrase duration, video duration, entry, terminal, amplitude, and entry minus expected entry.<br>${meta.family === 'performance' ? 'This target is video-level, so no phrase-slope window is used.' : `Selected phrase window offset: <b style="color:${C.text}">+${offset}s</b>. Baseline OOF rho ${fmt(baseline.oofSpearman, 3)} · R2 ${fmt(baseline.oofR2, 3)}.`}</div>`)}</div>
+            ${card(`<div style="font-size:8px;color:${C.mute};line-height:1.5;margin-bottom:5px">These lists rank the learned horizontal semantic score, not the raw color metric. “High” means wording the model associates with a higher confound-adjusted ${esc(meta.label || detail.target)}.</div><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">${extremeColumn('Highest semantic-score spans', extremes.high, C.green)}${extremeColumn('Lowest semantic-score spans', extremes.low, C.red)}</div>`, 'margin-bottom:10px')}`;
         }
 
         function clusterOutcomePanel() {
@@ -611,7 +704,7 @@
         }
 
         function responsiveStyles() {
-            return `<style>@media(max-width:820px){#pl-root .pl-split{grid-template-columns:minmax(0,1fr)!important}#pl-root canvas{max-width:100%}#pl-root [data-pl-outcome-inspector]{height:auto!important;min-height:280px}}</style>`;
+            return `<style>@media(max-width:820px){#pl-root .pl-split,#pl-root .pl-metric-channels{grid-template-columns:minmax(0,1fr)!important}#pl-root canvas{max-width:100%}#pl-root [data-pl-outcome-inspector]{height:auto!important;min-height:280px}}</style>`;
         }
 
         function paint() {
@@ -745,7 +838,7 @@
                 ['unexpected', 'slope_residual_o', C.green],
             ].map(([label, prefix, color]) => ({
                 label, color,
-                values: [0, 1, 2, 3, 4, 5].map(offset => Number((rows[`${prefix}${offset}`] || {}).heldoutSpearman)),
+                values: [0, 1, 2, 3, 4, 5].map(offset => numeric((rows[`${prefix}${offset}`] || {}).heldoutSpearman)),
             }));
             const finite = series.flatMap(row => row.values).filter(Number.isFinite);
             const minimum = Math.min(0, ...finite), maximum = Math.max(.01, ...finite);
@@ -780,26 +873,22 @@
                 if (kind === 'cluster-outcome-axis') {
                     const detail = state.clusterOutcomeDetail, points = detail && detail.points;
                     if (!points) return;
-                    const values = (points.target || []).map(Number), valueBounds = bounds(values);
-                    const colors = values.map(value => {
-                        if (!Number.isFinite(value)) return C.faint;
-                        const t = Math.max(0, Math.min(1, (value - valueBounds[0]) / ((valueBounds[1] - valueBounds[0]) || 1)));
-                        return `rgb(${Math.round(56 + 192 * t)},${Math.round(189 - 76 * t)},${Math.round(248 - 135 * t)})`;
-                    });
-                    const plot = (points.x || []).map((x, index) => [Number(x), Number((points.y || [])[index])]);
+                    const scale = outcomeScale(detail);
+                    const colors = scale.values.map(value => scale.color(value));
+                    const plot = (points.x || []).map((x, index) => [numeric(x), numeric((points.y || [])[index])]);
                     return scatter(canvas, plot, colors, null, null, false, state.clusterOutcomePointIndex);
                 }
                 if (kind === 'cluster-outcome-oof') {
                     const validation = (state.clusterOutcomeDetail || {}).validation || {};
                     const points = (validation.predictedOOF || []).map((value, index) => [
-                        Number(value), Number((validation.observedResidualOOF || [])[index]),
+                        numeric(value), numeric((validation.observedResidualOOF || [])[index]),
                     ]);
                     return scatter(canvas, points, points.map(() => clusterColor(state.clusterOutcomeCluster)), null);
                 }
                 if (kind === 'cluster-outcome-entry') {
                     const diagnostic = ((state.data.clusterOutcomes || {}).normalization || {}).entryTerminalDiagnostic || {};
                     const points = (diagnostic.predictedEntryOOF || []).map((value, index) => [
-                        Number(value), Number((diagnostic.entry || [])[index]),
+                        numeric(value), numeric((diagnostic.entry || [])[index]),
                     ]);
                     return scatter(canvas, points, points.map(() => C.cyan), null);
                 }
