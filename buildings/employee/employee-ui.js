@@ -22,6 +22,7 @@ const EmployeeUI = (() => {
                     </div>
                     <div class="employee-toolbar">
                         <input type="text" class="employee-search" id="employee-search" placeholder="Search accounts...">
+                        ${isOwner() ? '<button class="employee-letter-btn" id="employee-letter-btn" title="Generate a signed employment verification letter (PDF)">📄 Employment Letter</button>' : ''}
                     </div>
                     <div class="employee-grid" id="employee-grid"></div>
                 </div>
@@ -34,7 +35,129 @@ const EmployeeUI = (() => {
             search = e.target.value.toLowerCase();
             renderGrid();
         });
+        const letterBtn = document.getElementById('employee-letter-btn');
+        if (letterBtn) letterBtn.addEventListener('click', openLetterModal);
         // "+ New Employee" removed — the roster IS the real accounts (name · profile · colour).
+    }
+
+    function isOwner() { return !!(window.__access && window.__access.all === true); }
+
+    // ── Employment verification letter (owner-only) ──
+    // Fill the details, draw your signature on the pad, Generate → the server
+    // renders a Centrality LTD letterhead PDF (same pdfkit engine as invoices),
+    // opens it for preview and downloads it.
+    function openLetterModal() {
+        document.getElementById('employee-letter-overlay')?.remove();
+        const ov = document.createElement('div');
+        ov.id = 'employee-letter-overlay';
+        ov.className = 'employee-letter-overlay';
+        ov.innerHTML = `
+            <div class="employee-letter-card">
+                <div class="employee-letter-head">
+                    <div class="employee-letter-title">📄 Employment Verification Letter</div>
+                    <button class="employee-letter-x" id="emp-letter-close" title="Close">✕</button>
+                </div>
+                <div class="employee-letter-grid">
+                    <label>Employee name<input type="text" id="emp-l-name" value="Rita-Jeanne Smith"></label>
+                    <label>Job title<input type="text" id="emp-l-title" value="Fabrication Assistant"></label>
+                    <label>Start date<input type="date" id="emp-l-start" value="2026-05-12"></label>
+                    <label>Position type<select id="emp-l-type">
+                        <option value="permanent, full-time" selected>Permanent, full-time</option>
+                        <option value="permanent, part-time">Permanent, part-time</option>
+                        <option value="casual">Casual / as-needed</option>
+                    </select></label>
+                    <label>Hourly rate (CAD)<input type="number" id="emp-l-rate" value="20" min="0" step="0.25"></label>
+                    <label>Avg hours / week<input type="number" id="emp-l-hours" value="40" min="0" step="1"></label>
+                    <label>Pronoun<select id="emp-l-pronoun">
+                        <option selected>She</option><option>He</option><option>They</option>
+                    </select></label>
+                    <label class="employee-letter-check"><input type="checkbox" id="emp-l-vouch" checked> Include "reliable and valued member of our team"</label>
+                </div>
+                <div class="employee-letter-sig-label">Signature — draw with your mouse or finger <button class="employee-letter-clear" id="emp-l-clear">Clear</button></div>
+                <canvas id="emp-l-sig" class="employee-letter-sig" width="920" height="280"></canvas>
+                <div class="employee-letter-actions">
+                    <button class="employee-letter-generate" id="emp-l-generate">Generate signed PDF</button>
+                    <span class="employee-letter-status" id="emp-l-status"></span>
+                </div>
+            </div>`;
+        document.body.appendChild(ov);
+        ov.addEventListener('click', (e) => { if (e.target === ov) ov.remove(); });
+        document.getElementById('emp-letter-close').addEventListener('click', () => ov.remove());
+
+        // Signature pad — canvas is 2x its CSS size for crisp strokes
+        const cv = document.getElementById('emp-l-sig');
+        const ctx = cv.getContext('2d');
+        ctx.lineWidth = 4.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#1b2a52';
+        let drawing = false, drawn = false;
+        const pos = (e) => {
+            const r = cv.getBoundingClientRect();
+            return { x: (e.clientX - r.left) * (cv.width / r.width), y: (e.clientY - r.top) * (cv.height / r.height) };
+        };
+        cv.addEventListener('pointerdown', (e) => { drawing = true; drawn = true; cv.setPointerCapture(e.pointerId); const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); });
+        cv.addEventListener('pointermove', (e) => { if (!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); });
+        const stop = () => { drawing = false; };
+        cv.addEventListener('pointerup', stop); cv.addEventListener('pointercancel', stop);
+        document.getElementById('emp-l-clear').addEventListener('click', () => { ctx.clearRect(0, 0, cv.width, cv.height); drawn = false; });
+
+        // Export just the drawn strokes (+padding), not the whole pad — a small
+        // signature in one corner still comes out full-size in the PDF.
+        const cropSignature = () => {
+            const { width, height } = cv;
+            const data = ctx.getImageData(0, 0, width, height).data;
+            let minX = width, minY = height, maxX = -1, maxY = -1;
+            for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+                if (data[(y * width + x) * 4 + 3] > 10) {
+                    if (x < minX) minX = x; if (x > maxX) maxX = x;
+                    if (y < minY) minY = y; if (y > maxY) maxY = y;
+                }
+            }
+            if (maxX < 0) return null;
+            const pad = 10;
+            minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+            maxX = Math.min(width - 1, maxX + pad); maxY = Math.min(height - 1, maxY + pad);
+            const out = document.createElement('canvas');
+            out.width = maxX - minX + 1; out.height = maxY - minY + 1;
+            out.getContext('2d').drawImage(cv, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
+            return out.toDataURL('image/png');
+        };
+
+        document.getElementById('emp-l-generate').addEventListener('click', async () => {
+            const btn = document.getElementById('emp-l-generate');
+            const status = document.getElementById('emp-l-status');
+            const nameV = document.getElementById('emp-l-name').value.trim();
+            const startRaw = document.getElementById('emp-l-start').value;
+            if (!nameV || !startRaw) { alert('Employee name and start date are required.'); return; }
+            const startLong = new Date(startRaw + 'T00:00:00').toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
+            btn.disabled = true; status.textContent = 'Generating…';
+            try {
+                const res = await fetch('/api/employee/letter', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        employeeName: nameV,
+                        employeeTitle: document.getElementById('emp-l-title').value.trim(),
+                        startDate: startLong,
+                        positionType: document.getElementById('emp-l-type').value,
+                        hourlyRate: parseFloat(document.getElementById('emp-l-rate').value) || 0,
+                        hoursPerWeek: parseFloat(document.getElementById('emp-l-hours').value) || 0,
+                        pronoun: document.getElementById('emp-l-pronoun').value,
+                        includeVouch: document.getElementById('emp-l-vouch').checked,
+                        signaturePng: drawn ? cropSignature() : null
+                    })
+                });
+                if (!res.ok) { let j = null; try { j = await res.json(); } catch (e) {} throw new Error((j && j.error) || ('HTTP ' + res.status)); }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');                       // preview in the browser's PDF viewer
+                const a = document.createElement('a');
+                a.href = url; a.download = `Employment Letter - ${nameV}.pdf`;
+                document.body.appendChild(a); a.click(); a.remove();
+                status.textContent = '✓ PDF ready — opened in a new tab and downloaded';
+            } catch (e) {
+                status.textContent = '';
+                alert('Could not generate the letter: ' + e.message);
+            }
+            btn.disabled = false;
+        });
     }
 
     function avatarHtml(emp, size) {

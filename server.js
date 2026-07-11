@@ -5136,6 +5136,118 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
         return;
     }
 
+    // =========================================
+    // API: Employment verification letter (Employee Island) — owner-only
+    // (unmapped /api/employee/* routes default to owner in auth.routeBuilding).
+    // Takes the letter fields + an optional drawn-signature PNG (data URL) and
+    // returns a letterhead PDF, same pdfkit engine as invoices.
+    // =========================================
+    if (pathname === '/api/employee/letter' && req.method === 'POST') {
+        try {
+            const b = await readBody(req);
+            const name = String(b.employeeName || '').trim() || 'Employee';
+            const firstName = name.split(/\s+/)[0];
+            const title = String(b.employeeTitle || '').trim() || 'Employee';
+            const startDate = String(b.startDate || '').trim();
+            const positionType = String(b.positionType || 'permanent, full-time').trim();
+            const rate = parseFloat(b.hourlyRate) || 0;
+            const hours = parseFloat(b.hoursPerWeek) || 0;
+            const includeVouch = b.includeVouch !== false;
+            const pronoun = ['She', 'He', 'They'].includes(b.pronoun) ? b.pronoun : 'She';
+            const their = { She: 'her', He: 'his', They: 'their' }[pronoun];
+            const letterDate = String(b.letterDate || '').trim() || new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
+            const annual = rate > 0 && hours > 0 ? Math.round(rate * hours * 52 / 100) * 100 : 0;
+
+            const COMPANY = 'Centrality LTD';
+            const ADDR1 = '14 Discovery Ridge Road SW';
+            const ADDR2 = 'Calgary AB, Canada T3H 4P8';
+            const PHONE = '+1 (403) 519-6945';
+            const EMAIL = 'tylerdaviscsatari@gmail.com';
+            const SIGNER = String(b.signerName || 'Tyler Csatari').trim();
+            const SIGNER_TITLE = String(b.signerTitle || 'CEO').trim();
+
+            const fileName = `Employment Letter - ${name.replace(/[^a-zA-Z0-9 _-]/g, '')} - ${new Date().toISOString().slice(0, 10)}.pdf`;
+            const doc = new PDFDocument({ size: 'LETTER', margin: 64 });
+            const chunks = [];
+            doc.on('data', c => chunks.push(c));
+            doc.on('end', () => {
+                const pdf = Buffer.concat(chunks);
+                res.writeHead(200, {
+                    'Content-Type': 'application/pdf',
+                    'Content-Disposition': `inline; filename="${fileName}"`,
+                    'Content-Length': pdf.length
+                });
+                res.end(pdf);
+            });
+
+            const dark = '#1c2430', grey = '#6a7280', M = 64, W = 612 - M * 2;
+
+            // ── Letterhead ──
+            doc.font('Helvetica-Bold').fontSize(21).fillColor(dark)
+                .text('CENTRALITY', M, 58, { width: W, align: 'center', characterSpacing: 5 });
+            doc.font('Helvetica').fontSize(9).fillColor(grey)
+                .text('L T D', M, 84, { width: W, align: 'center', characterSpacing: 6 });
+            doc.moveTo(M, 104).lineTo(612 - M, 104).lineWidth(1.5).strokeColor(dark).stroke();
+            doc.fontSize(8.5).fillColor(grey)
+                .text(`${ADDR1} · ${ADDR2} · ${PHONE} · ${EMAIL}`, M, 111, { width: W, align: 'center' });
+
+            // ── Date + subject ──
+            doc.fontSize(11).font('Helvetica').fillColor(dark).text(letterDate, M, 152);
+            doc.font('Helvetica-Bold').fontSize(11.5)
+                .text(`RE: Verification of Employment — ${name}`, M, 184, { width: W });
+
+            // ── Body ──
+            const para = (txt, opts = {}) => {
+                doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(11).fillColor(dark)
+                    .text(txt, M, doc.y + (opts.gap ?? 16), { width: W, lineGap: 3.5 });
+            };
+            doc.y = 200;
+            para('To whom it may concern,');
+            para(`This letter confirms that ${name} is currently employed with ${COMPANY} as a ${title}. ${firstName} has been employed with us since ${startDate}.`);
+            const payBits = [];
+            if (hours > 0) payBits.push(`working an average of ${hours} hours per week`);
+            if (rate > 0) payBits.push(`at an hourly rate of $${rate.toFixed(2)} CAD${annual ? ` (approximately $${annual.toLocaleString('en-US')} per year, gross)` : ''}`);
+            para(`${firstName} holds a ${positionType} position${payBits.length ? ', ' + payBits.join(' ') : ''}.`);
+            if (includeVouch) para(`${firstName} is a reliable and valued member of our team.`);
+            para(`Should you have any questions regarding ${their} employment, please do not hesitate to contact me at ${PHONE} or ${EMAIL}.`);
+            para('Sincerely,');
+
+            // ── Signature ──
+            let sigY = doc.y + 14;
+            const sigPng = typeof b.signaturePng === 'string' && b.signaturePng.startsWith('data:image/png;base64,')
+                ? Buffer.from(b.signaturePng.split(',')[1], 'base64') : null;
+            if (sigPng) {
+                try { doc.image(sigPng, M, sigY, { fit: [190, 72] }); } catch (e) {}
+                sigY += 78;
+            } else {
+                sigY += 54;   // room for a wet signature
+                doc.moveTo(M, sigY - 6).lineTo(M + 190, sigY - 6).lineWidth(0.8).strokeColor('#9aa1ab').stroke();
+            }
+
+            // ── Signer block (Keg-style: dotted rule + details) ──
+            doc.moveTo(M + 6, sigY + 6).lineTo(M + 6, sigY + 76).lineWidth(1).dash(1.5, { space: 2.5 }).strokeColor('#b7bcc4').stroke();
+            doc.undash();
+            const bx = M + 18;
+            doc.font('Helvetica-Bold').fontSize(10.5).fillColor(dark).text(SIGNER, bx, sigY + 6);
+            doc.font('Helvetica-Oblique').fontSize(9.5).fillColor(grey).text(SIGNER_TITLE, bx, sigY + 21);
+            doc.font('Helvetica-Bold').fontSize(9.5).fillColor(dark).text(COMPANY.toUpperCase(), bx, sigY + 38);
+            doc.font('Helvetica').fontSize(9).fillColor(grey);
+            doc.text(`${ADDR1} | ${ADDR2}`, bx, sigY + 52);
+            doc.text(`PH: ${PHONE}  ·  ${EMAIL}`, bx, sigY + 65);
+
+            // ── Footer ──
+            doc.moveTo(M, 706).lineTo(612 - M, 706).lineWidth(0.5).strokeColor('#d8dce2').stroke();
+            doc.font('Helvetica').fontSize(8).fillColor('#9aa1ab')
+                .text(`${COMPANY} · ${ADDR1}, ${ADDR2} · ${PHONE} · ${EMAIL}`, M, 714, { width: W, align: 'center' });
+
+            doc.end();
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
     // DELETE /api/invoices/:id — delete invoice record and R2 file
     const invoiceDeleteMatch = pathname.match(/^\/api\/invoices\/([^/]+)$/);
     if (invoiceDeleteMatch && req.method === 'DELETE') {
