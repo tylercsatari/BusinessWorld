@@ -135,6 +135,7 @@ def main() -> None:
     manual_probe = load_json("manual-probe.json", {})
     manual_projection = load_json("manual-projection.json", {})
     cluster_outcomes = load_json("cluster-outcomes.json", {})
+    latency_study = load_json("latency-study.json", {})
     boundary_registry = load_jsonl_gz("boundary-experiments.jsonl.gz")
     cluster_registry = load_jsonl_gz("cluster-experiments.jsonl.gz")
     all_span_cluster_registry = load_jsonl_gz("all-span-cluster-experiments.jsonl.gz")
@@ -318,6 +319,18 @@ def main() -> None:
                 "every reported correlation is held out by source video."
             ),
         },
+        "latencyStudy": {
+            "status": latency_study.get("status"),
+            "mapId": latency_study.get("mapId"),
+            "clusters": latency_study.get("clusterCount", 0),
+            "lags": len(latency_study.get("lagsSeconds") or []),
+            "windows": len(latency_study.get("windows") or []),
+            "curveResolution": latency_study.get("curveResolution"),
+            "interpretation": (
+                "One held-out semantic ruler per fold is shared across every lag and alignment; "
+                "text-free natural-drop baselines and negative lags prevent post-hoc latency claims."
+            ),
+        },
     }
     (CACHE / "findings.json").write_text(json.dumps(json_ready(findings), separators=(",", ":"),
                                                     allow_nan=False),
@@ -360,6 +373,9 @@ def main() -> None:
             "axisExperiments": len(axis_registry),
             "clusterOutcomeExperiments": len(cluster_outcome_registry),
             "clusterOutcomeFamilies": cluster_outcomes.get("selectedFamilyCount", 0),
+            "latencyStudyClusters": latency_study.get("clusterCount", 0),
+            "latencyStudyLags": len(latency_study.get("lagsSeconds") or []),
+            "latencyStudyWindows": len(latency_study.get("windows") or []),
             "manualProbeMapsCompared": (
                 (manual_probe.get("counts") or {}).get("frozenMapsCompared", 0)
             ),
@@ -383,6 +399,10 @@ def main() -> None:
                 "outcomes join only after the k=4 labels are frozen; source-video holdout and "
                 "search-wide nulls govern every cluster-target axis"
             ),
+            "latencyStudySeparated": (
+                "one semantic score is shared across every lag within each held-out fold; natural "
+                "drop uses timing and curve endpoints only, with negative-lag controls"
+            ),
         },
         "artifacts": {
             "findings": "/api/longquant/promise-lab/findings",
@@ -393,6 +413,7 @@ def main() -> None:
             "manualProbe": "/api/longquant/promise-lab/manual-probe",
             "manualProjection": "/api/longquant/promise-lab/manual-projection",
             "clusterOutcomes": "/api/longquant/promise-lab/cluster-outcomes",
+            "latencyStudy": "/api/longquant/promise-lab/latency-study",
             "crossScope": "/api/longquant/promise-lab/cross-scope",
             "swaps": "/api/longquant/promise-lab/swaps",
             "axes": "/api/longquant/promise-lab/axes",
@@ -417,6 +438,7 @@ def main() -> None:
         ("manual-probe.json", "manual-probe.json.gz"),
         ("manual-projection.json", "manual-projection.json.gz"),
         ("cluster-outcomes.json", "cluster-outcomes.json.gz"),
+        ("latency-study.json", "latency-study.json.gz"),
         ("cross-scope.json", "cross-scope.json.gz"),
         ("swaps.json", "swaps/summary.json.gz"),
         ("axes.json", "axes.json.gz"),

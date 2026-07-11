@@ -18,6 +18,10 @@
             clusterOutcomeTarget: null, clusterOutcomeDetail: null,
             clusterOutcomePointIndex: null, clusterOutcomeLoading: false,
             clusterOutcomeError: null,
+            latencyCluster: 2, latencyWindow: 'phrase', latencySelectedLagIndex: null,
+            latencyTrainLagIndex: 6, latencyResponseLagIndex: 8,
+            latencyPointGlobalIndex: null, latencyDetail: null,
+            latencyDetailLoading: false, latencyDetailError: null,
         };
         let progressTimer = null;
         let resizeTimer = null;
@@ -25,6 +29,7 @@
         let hookRequest = 0;
         let sourceRequest = 0;
         let clusterOutcomeRequest = 0;
+        let latencyDetailRequest = 0;
 
         const api = name => `/api/longquant/promise-lab/${name}`;
         const fmt = (value, digits = 2) => value == null || !isFinite(value) ? '-' : Number(value).toFixed(digits);
@@ -222,6 +227,37 @@
             }
         }
 
+        async function loadLatencyDetail(cluster) {
+            const request = ++latencyDetailRequest;
+            const key = String(cluster);
+            const cache = state.data.latencyDetails || (state.data.latencyDetails = {});
+            state.latencyCluster = Number(cluster);
+            state.latencyDetailError = null;
+            if (cache[key]) {
+                state.latencyDetail = cache[key];
+                state.latencyDetailLoading = false;
+                paint();
+                return;
+            }
+            state.latencyDetail = null;
+            state.latencyDetailLoading = true;
+            paint();
+            try {
+                const response = await fetch(`${api('latency-study')}/${encodeURIComponent(cluster)}`, { cache: 'default' });
+                if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+                const value = await response.json();
+                cache[key] = value;
+                if (request === latencyDetailRequest) state.latencyDetail = value;
+            } catch (error) {
+                if (request === latencyDetailRequest) state.latencyDetailError = String(error && error.message || error);
+            } finally {
+                if (request === latencyDetailRequest) {
+                    state.latencyDetailLoading = false;
+                    paint();
+                }
+            }
+        }
+
         function initializeClusterOutcome(summary) {
             if (!summary || state.clusterOutcomeTarget) return;
             const clusters = summary.clusters || [];
@@ -263,6 +299,7 @@
                 load('manualProbe', api('manual-probe'));
                 load('manualProjection', api('manual-projection'));
                 load('clusterOutcomes', api('cluster-outcomes')).then(initializeClusterOutcome);
+                load('latencyStudy', api('latency-study'));
             }
             if (state.view === 'hooks' || state.view === 'boundaries') load('discovery');
             if (state.view === 'components' || state.view === 'clusters') {
@@ -492,10 +529,85 @@
             return `<div style="height:1px;background:${C.border};margin:16px 0"></div>${card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:280px;flex:1"><div style="font-size:9px;color:${C.purple};font-weight:900;text-transform:uppercase">Quantifying the four frozen categories</div><div style="font-size:15px;color:${C.text};font-weight:900;margin-top:2px">Cluster-conditioned outcome and phrase-slope embeddings</div><div style="font-size:9px;color:${C.dim};line-height:1.55;margin-top:4px">The k=4 assignment above is unchanged. Each category now gets its own views, realistic views, outlier, 10M class, swipe, 5-second retention, and exact phrase-slope axes. Outcomes join only here, after clustering.</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${stat('axis runs', Number(summary.experimentCount || 0).toLocaleString(), C.purple)}${stat('selected families', summary.selectedFamilyCount || 0, C.cyan)}${stat('validated', summary.validatedFamilyCount || 0, C.green)}${stat('exact timing', `${timing.exactHooks || 0}/${timing.hooks || 0}`, C.amber)}</div></div><div style="font-size:8px;color:${C.mute};margin-top:7px">Five hooks with caption-text mismatches are excluded only from timed slope targets; all remain in video-level targets. ${Number(timing.spansWithExactPositiveDuration || 0).toLocaleString()} / ${Number(timing.spanInstances || 0).toLocaleString()} spans have exact positive-duration intervals. No timestamp is guessed.</div>`, 'margin-bottom:10px;border-color:' + C.purple + '55')}${clusterOutcomeMatrix(summary)}${clusterOutcomeDetailPanel(summary)}`;
         }
 
+        const latencyLagLabel = value => `${Number(value) > 0 ? '+' : ''}${Number(value).toFixed(Number(value) % 1 ? 1 : 0)}s`;
+
+        function activeLatencyRows(summary) {
+            const cluster = (summary.clusters || []).find(row => Number(row.label) === Number(state.latencyCluster))
+                || (summary.clusters || [])[0] || {};
+            const window = (cluster.windows || []).find(row => row.id === state.latencyWindow)
+                || (cluster.windows || [])[0] || {};
+            return { cluster, window, lags: summary.lagsSeconds || [] };
+        }
+
+        function latencyPointPanel(summary, cluster) {
+            if (state.latencyPointGlobalIndex == null) {
+                return card(`<div style="font-size:11px;color:${C.text};font-weight:900">Exact phrase response trace</div><div style="font-size:9px;color:${C.mute};line-height:1.55;margin-top:5px">Click any point in the semantic map above, or choose a fixed-ruler extreme below. This panel will show the phrase's spoken interval and, for every lag, the observed raw slope, text-free expected slope, and excess slope on the same source video.</div>`, 'margin-bottom:10px;border-color:' + C.cyan + '44');
+            }
+            if (state.latencyDetailLoading) return card(`<div style="font-size:9px;color:${C.cyan}">Loading point-level latency traces for cluster ${state.latencyCluster}...</div>`, 'margin-bottom:10px');
+            if (state.latencyDetailError) return card(`<div style="font-size:9px;color:${C.red}">${esc(state.latencyDetailError)}</div>`, 'margin-bottom:10px');
+            const detail = state.latencyDetail;
+            if (!detail || Number(detail.cluster) !== Number(state.latencyCluster)) return card(`<div style="font-size:9px;color:${C.mute}">Point trace is ready to load for cluster ${state.latencyCluster}.</div>`, 'margin-bottom:10px');
+            const localIndex = (detail.globalIndices || []).indexOf(Number(state.latencyPointGlobalIndex));
+            if (localIndex < 0) return card(`<div style="font-size:9px;color:${C.amber}">The selected phrase belongs to another frozen cluster. Select a cluster-${state.latencyCluster} point or change the latency cluster.</div>`, 'margin-bottom:10px');
+            const pointIndex = ((state.data.manualProjection || {}).frozenPointIndex || {});
+            const globalIndex = Number(state.latencyPointGlobalIndex);
+            const hookIndex = Number((pointIndex.hookIndices || [])[globalIndex]);
+            const hook = (pointIndex.hooks || [])[hookIndex] || {};
+            const source = (summary.sourceCurves || []).find(row => Number(row.hookIndex) === hookIndex) || {};
+            const lags = detail.lagsSeconds || [];
+            const observed = (((detail.phrase || {}).observedRaw || [])[localIndex]) || [];
+            const expected = (((detail.phrase || {}).expectedRawOOF || [])[localIndex]) || [];
+            const excess = (((detail.phrase || {}).unexpectedRaw || [])[localIndex]) || [];
+            const start = numeric((detail.spanStartSeconds || [])[localIndex]);
+            const end = numeric((detail.spanEndSeconds || [])[localIndex]);
+            const selectedLag = Number.isInteger(state.latencySelectedLagIndex)
+                ? Math.max(0, Math.min(lags.length - 1, state.latencySelectedLagIndex))
+                : Math.max(0, lags.indexOf(0));
+            const table = lags.map((lag, index) => `<tr style="background:${index === selectedLag ? C.cyan + '14' : 'transparent'}"><td style="padding:4px;color:${lag < 0 ? C.amber : C.text};border-bottom:1px solid ${C.border}">${latencyLagLabel(lag)}</td><td style="padding:4px;color:${C.dim};border-bottom:1px solid ${C.border}">${fmt(start + Number(lag), 2)}s → ${fmt(end + Number(lag), 2)}s</td><td style="padding:4px;color:${C.text};border-bottom:1px solid ${C.border}">${Number.isFinite(numeric(observed[index])) ? signed(numeric(observed[index]) * 100, 3) : '-'}</td><td style="padding:4px;color:${C.purple};border-bottom:1px solid ${C.border}">${Number.isFinite(numeric(expected[index])) ? signed(numeric(expected[index]) * 100, 3) : '-'}</td><td style="padding:4px;color:${numeric(excess[index]) >= 0 ? C.green : C.red};border-bottom:1px solid ${C.border}">${Number.isFinite(numeric(excess[index])) ? signed(numeric(excess[index]) * 100, 3) : '-'}</td></tr>`).join('');
+            return card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div style="min-width:260px;flex:1"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">Exact phrase response trace · global span ${globalIndex.toLocaleString()}</div><div style="font-size:15px;color:${C.text};font-weight:900;margin-top:3px">${esc((pointIndex.texts || [])[globalIndex] || '')}</div><div style="font-size:9px;color:${C.dim};margin-top:3px">${esc(hook.title || hook.videoId || '')}</div></div><div style="font-size:8.5px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Spoken:</b> ${fmt(start, 3)}s → ${fmt(end, 3)}s<br><b style="color:${C.text}">Curve sampling:</b> one native point every ${fmt(source.curveSampleSeconds, 3)}s<br><b style="color:${C.text}">Semantic score:</b> ${fmt((detail.sharedSemanticScoreOOF || [])[localIndex], 4)} (held-out fold)</div></div><div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(310px,.8fr);gap:10px"><div><canvas data-pl-canvas="latency-point" style="width:100%;height:300px;display:block"></canvas><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:4px">X is response lag relative to this exact spoken phrase. Y is raw retention percentage points per second. Cyan = observed, purple = text-free out-of-fold expectation, green/red = excess above/below expectation.</div></div><div style="max-height:300px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['lag', 'exact curve window', 'observed', 'expected', 'excess'].map(label => `<th style="position:sticky;top:0;background:${C.card2};padding:4px;text-align:left;color:${C.mute};border-bottom:1px solid ${C.border2}">${label}${['observed', 'expected', 'excess'].includes(label) ? ' pp/s' : ''}</th>`).join('')}</tr></thead><tbody>${table}</tbody></table></div></div>`, 'margin-bottom:10px;border-color:' + C.cyan + '66');
+        }
+
+        function latencyExtremes(cluster) {
+            const axis = cluster.sharedAxis || {}, extremes = axis.extremes || {};
+            const column = (label, rows, color) => `<div><div style="font-size:9px;color:${color};font-weight:900;margin-bottom:4px">${label}</div>${(rows || []).slice(0, 12).map(row => `<button data-pl-latency-point-global="${row.globalIndex}" style="display:block;width:100%;border:0;border-top:1px solid ${C.border};background:transparent;color:${C.text};padding:5px 0;text-align:left;font-size:8.5px;cursor:pointer"><b>${esc(row.text || '')}</b><br><span style="color:${C.mute}">held-out shared score ${fmt(row.score, 3)}</span></button>`).join('')}</div>`;
+            const stable = axis.allFoldDirectionsAgree;
+            return card(`<div style="font-size:8.5px;color:${stable ? C.dim : C.amber};line-height:1.5;margin-bottom:7px"><b style="color:${stable ? C.green : C.amber}">${stable ? 'All fold directions agree.' : 'Fold directions do not all agree.'}</b> These are cross-fitted shared-ruler extremes, not any one offset's independently fitted list. ${stable ? '' : 'Treat individual phrase rankings as exploratory; the lag-level held-out statistics remain the primary result.'}</div><div class="pl-split" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">${column('Higher shared semantic score', extremes.high, C.green)}${column('Lower shared semantic score', extremes.low, C.red)}</div>`, 'margin-bottom:10px');
+        }
+
+        function latencyPanel() {
+            const summary = state.data.latencyStudy;
+            if (!summary) return state.errors.latencyStudy ? card(`<div style="font-size:9px;color:${C.red}">${esc(state.errors.latencyStudy)}</div>`) : loading('latencyStudy');
+            const { cluster, window, lags } = activeLatencyRows(summary);
+            if (!cluster.label && cluster.label !== 0) return '';
+            const peak = window.peak || {};
+            const supported = (summary.clusters || []).flatMap(row => row.windows || []).filter(row => (row.peak || {}).latencySupported);
+            const selectedLagIndex = Number.isInteger(state.latencySelectedLagIndex)
+                ? Math.max(0, Math.min(lags.length - 1, state.latencySelectedLagIndex))
+                : Math.max(0, lags.indexOf(Number(peak.lag)));
+            const selectedRow = (window.rows || [])[selectedLagIndex] || {};
+            const resolution = summary.curveResolution || {};
+            const natural = summary.sourceEqualNaturalDrop || [];
+            const naturalAt = second => natural.find(row => Number(row.second) === Number(second)) || {};
+            const opening = [0, .5, 1, 2].map(second => ({ second, row: naturalAt(second) }));
+            const transfer = cluster.axisTransfer || {}, diagnostic = transfer.rankDiagnostic0to1 || {};
+            const trainIndex = Math.max(0, Math.min(lags.length - 1, Number(state.latencyTrainLagIndex || 0)));
+            const responseIndex = Math.max(0, Math.min(lags.length - 1, Number(state.latencyResponseLagIndex || 0)));
+            const transferValue = (((transfer.values || [])[trainIndex]) || [])[responseIndex];
+            const stability = cluster.sharedAxis || {};
+            return `<div style="height:1px;background:${C.border};margin:18px 0"></div>${card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:300px;flex:1"><div style="font-size:9px;color:${supported.length ? C.amber : C.red};font-weight:900;text-transform:uppercase">Latency hypothesis · held-out confirmation</div><div style="font-size:16px;color:${C.text};font-weight:900;margin-top:2px">${supported.length ? `${supported.length} window-cluster results pass the declared rule` : 'No tested cluster establishes a response latency'}</div><div style="font-size:9px;color:${C.dim};line-height:1.55;margin-top:4px">This does not prove latency is zero. It means no positive lag survives source-video holdout, negative-lag falsification controls, its source-level confidence interval, and max-null correction across all 115 tested lag/alignment combinations. The old 0s, 1s, and 2s cards above are independently fitted rulers and their extreme lists must not be compared as though one ruler moved through time.</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${stat('clusters', summary.clusterCount || 0, C.purple)}${stat('lags each', lags.length, C.cyan)}${stat('alignments', (summary.windows || []).length, C.green)}${stat('native median step', `${fmt(resolution.medianSampleSeconds, 3)}s`, C.amber)}</div></div>`, 'margin-bottom:10px;border-color:' + (supported.length ? C.amber : C.red) + '77')}
+            ${card(`<div style="font-size:10px;color:${C.text};font-weight:900;margin-bottom:6px">Source-equal natural opening drop · before any phrase attribution</div><div class="pl-natural-stats" style="display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:7px">${opening.map(({ second, row }) => `<div style="border-left:2px solid ${C.red};padding:4px 8px"><div style="font-size:8px;color:${C.mute}">${second.toFixed(1)}s → ${(second + 1).toFixed(1)}s</div><div style="font-size:16px;color:${C.text};font-weight:900">${signed(Number(row.rawMean || 0) * 100, 1)} pp/s</div><div style="font-size:8px;color:${C.dim}">${row.videos || 0} videos equally weighted</div></div>`).join('')}</div><div style="font-size:8px;color:${C.mute};margin-top:7px">The opening curve is not a constant decline: its largest average drop is around 0.5–1.5s, then it rapidly settles. Phrase effects below are measured against a text-free out-of-fold baseline for this changing shape.</div>`, 'margin-bottom:10px')}
+            ${card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap;margin-bottom:7px"><div><div style="font-size:11px;color:${C.text};font-weight:900">Choose one frozen cluster and one response-window definition</div><div style="font-size:8px;color:${C.mute};margin-top:2px">Changing these controls changes the measured window, not the shared semantic score within the selected cluster.</div></div><div style="display:flex;gap:4px;flex-wrap:wrap">${(summary.clusters || []).map(row => button(`cluster ${row.label}`, `data-pl-latency-cluster="${row.label}"`, Number(row.label) === Number(cluster.label))).join('')}</div></div><div style="display:flex;gap:5px;flex-wrap:wrap">${(summary.windows || []).map(row => button(row.label, `data-pl-latency-window="${row.id}"`, row.id === window.id)).join('')}</div><div style="font-size:8.5px;color:${C.dim};line-height:1.5;margin-top:7px"><b style="color:${C.text}">${esc(window.label || '')}:</b> ${esc(window.definition || '')}. Negative lags are controls; they are never candidate response delays.</div>`, 'margin-bottom:10px')}
+            ${card(`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${stat(peak.latencySupported ? 'latency status' : 'latency status', peak.latencySupported ? 'SUPPORTED' : 'NOT SUPPORTED', peak.latencySupported ? C.green : C.red)}${stat('descriptive peak', peak.lag == null ? '-' : latencyLagLabel(peak.lag), C.cyan)}${stat('effect / semantic SD', signed(peak.effect, 6) + '/s', C.purple)}${stat('95% effect CI', `${signed(peak.effectCiLow, 6)} to ${signed(peak.effectCiHigh, 6)}`, C.dim)}${stat('held-out rho', fmt(peak.rho, 3), C.text)}${stat('115-test p', fmt(peak.maxNullP, 3), C.amber)}</div><div style="font-size:8.5px;color:${C.dim};line-height:1.55">At the selected chart lag <b style="color:${C.text}">${latencyLagLabel(selectedRow.lag || 0)}</b>: effect ${signed(selectedRow.effect, 6)}/s · rho ${fmt(selectedRow.rho, 3)} · 95% CI ${signed(selectedRow.effectCiLow, 6)} to ${signed(selectedRow.effectCiHigh, 6)} · corrected p ${fmt(selectedRow.maxNullP, 3)}. Effect is endpoint-normalized retention-slope change per one standard deviation of the exact same held-out semantic score.</div>`, 'margin-bottom:10px;border-color:' + (peak.latencySupported ? C.green : C.red) + '55')}
+            <div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:10px;color:${C.cyan};font-weight:900;margin-bottom:3px">One fixed semantic ruler across response lags</div><canvas data-pl-canvas="latency-effect" style="width:100%;height:300px;display:block"></canvas><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:4px"><b style="color:${C.text}">X:</b> response lag. <b style="color:${C.text}">Y:</b> unexpected normalized slope per semantic-score SD; whiskers are source bootstrap 95% intervals. Amber area is the negative-lag control region. Click a lag to inspect it.</div>`)}${card(`<div style="font-size:10px;color:${C.purple};font-weight:900;margin-bottom:3px">Observed drop versus text-free natural baseline</div><canvas data-pl-canvas="latency-baseline" style="width:100%;height:300px;display:block"></canvas><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:4px">For whole-phrase alignment, Y is raw retention percentage points/second. Cyan is observed; purple is expected from timing and curve endpoints only; green/red is the remaining excess. Other alignments use endpoint-normalized units.</div>`)}</div>
+            <div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:10px;color:${C.text};font-weight:900;margin-bottom:3px">Train-lag → response-lag transfer · cluster ${cluster.label}</div><canvas data-pl-canvas="latency-transfer" style="width:100%;height:480px;display:block"></canvas><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:4px">Rows freeze the ruler trained at one lag; columns move only the response measurement. Red is positive held-out rho, blue is negative, white is zero. Selected: ruler ${latencyLagLabel(lags[trainIndex])} → response ${latencyLagLabel(lags[responseIndex])} = rho ${fmt(transferValue, 3)}.</div>`)}${card(`<div style="font-size:10px;color:${C.text};font-weight:900;margin-bottom:5px">What the 0s / 1s reversal means</div><div style="font-size:9px;color:${C.dim};line-height:1.6">Independent ruler rank correlation: <b style="color:${C.text}">${fmt(diagnostic.scoreSpearman, 3)}</b>.<br>Top-decile overlap: <b style="color:${C.text}">${pct(Number(diagnostic.topDecileJaccard || 0) * 100)}</b>.<br><br>A negative rank correlation means the two independently trained rulers reorder the same phrases. The off-diagonal heatmap cells answer the stronger question: when one ruler is frozen, does its association actually reverse as only the response window moves?<br><br>Shared-mode coefficient energy: <b style="color:${C.text}">${pct(Number(stability.firstModeEnergyMean || 0) * 100)}</b>.<br>Fold direction agreement: <b style="color:${stability.allFoldDirectionsAgree ? C.green : C.amber}">${stability.allFoldDirectionsAgree ? 'all 10 fold pairs agree' : `${pct(Number(stability.foldAxisPositivePairFraction || 0) * 100)} of fold pairs agree`}</b>.<br>Median fold-axis cosine: <b style="color:${C.text}">${fmt(stability.foldAxisMedianCosine, 3)}</b>.</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:8px">Low mode energy or fold agreement means there may be multiple semantic response patterns rather than one stable ruler. It is reported as uncertainty, not silently averaged away.</div>`)}</div>
+            <div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.55fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:10px;color:${C.green};font-weight:900;margin-bottom:3px">Natural retention drop by actual video second</div><canvas data-pl-canvas="latency-natural" style="width:100%;height:300px;display:block"></canvas><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:4px">Every video has equal weight. The line is median raw slope across one-second windows; the band is the source-video interquartile range. This is descriptive curve geometry with no phrase text, cluster, or embedding.</div>`)}${card(`<div style="font-size:10px;color:${C.text};font-weight:900;margin-bottom:5px">Measurement limits</div><div style="font-size:9px;color:${C.dim};line-height:1.6">Retention curves contain <b style="color:${C.text}">${resolution.curvePointsPerVideo || 0} points/video</b>.<br>Native interval median: <b style="color:${C.text}">${fmt(resolution.medianSampleSeconds, 3)}s</b>.<br>90th percentile: <b style="color:${C.text}">${fmt(resolution.p90SampleSeconds, 3)}s</b>.<br>Half-second-or-finer sources: <b style="color:${C.text}">${resolution.videosAtOrFinerThanHalfSecond || 0}/${resolution.videos || 0}</b>.<br><br>The 0.5s lag grid is interpolated. Adjacent cells are not independent when native sampling is coarser, so the UI reports intervals and corrected tests rather than claiming sub-sample timing precision.</div>`)}</div>
+            ${latencyPointPanel(summary, cluster)}${latencyExtremes(cluster)}`;
+        }
+
         function renderSavedProjection() {
             if (!state.data.manualProbe) return loading('manualProbe');
             if (!state.data.manualProjection) return loading('manualProjection');
-            return `${manualProjectionPanel()}${manualMetricGlossary()}${clusterOutcomePanel()}`;
+            return `${manualProjectionPanel()}${manualMetricGlossary()}${clusterOutcomePanel()}${latencyPanel()}`;
         }
 
         function renderOverview() {
@@ -704,7 +816,7 @@
         }
 
         function responsiveStyles() {
-            return `<style>@media(max-width:820px){#pl-root .pl-split,#pl-root .pl-metric-channels{grid-template-columns:minmax(0,1fr)!important}#pl-root canvas{max-width:100%}#pl-root [data-pl-outcome-inspector]{height:auto!important;min-height:280px}}</style>`;
+            return `<style>@media(max-width:820px){#pl-root .pl-split,#pl-root .pl-metric-channels,#pl-root .pl-natural-stats{grid-template-columns:minmax(0,1fr)!important}#pl-root canvas{max-width:100%}#pl-root [data-pl-outcome-inspector]{height:auto!important;min-height:280px}}</style>`;
         }
 
         function paint() {
@@ -798,6 +910,13 @@
                 if (kind === 'cluster-outcome-axis') {
                     const scrollX = window.scrollX, scrollY = window.scrollY;
                     state.clusterOutcomePointIndex = originalIndex;
+                    const detail = state.clusterOutcomeDetail || {};
+                    const globalIndex = (((detail.points || {}).globalIndices || [])[originalIndex]);
+                    if (globalIndex != null) {
+                        state.latencyPointGlobalIndex = Number(globalIndex);
+                        state.latencyCluster = Number(detail.cluster);
+                        loadLatencyDetail(detail.cluster);
+                    }
                     paint();
                     window.scrollTo(scrollX, scrollY);
                     return;
@@ -866,6 +985,188 @@
             });
         }
 
+        function drawLatencyLines(canvas, xValues, series, options = {}) {
+            const { context, width, height } = canvasContext(canvas);
+            const finiteX = xValues.map(Number).filter(Number.isFinite);
+            const finiteY = series.flatMap(row => [
+                ...(row.values || []), ...(row.low || []), ...(row.high || []),
+            ]).map(Number).filter(Number.isFinite);
+            if (!finiteX.length || !finiteY.length) return;
+            const left = 44, right = 12, top = 27, bottom = 27;
+            const minX = Math.min(...finiteX), maxX = Math.max(...finiteX);
+            let minY = Math.min(0, ...finiteY), maxY = Math.max(0, ...finiteY);
+            if (Math.abs(maxY - minY) < 1e-9) { minY -= 1; maxY += 1; }
+            const x = value => left + (Number(value) - minX) / ((maxX - minX) || 1) * (width - left - right);
+            const y = value => height - bottom - (Number(value) - minY) / ((maxY - minY) || 1) * (height - top - bottom);
+            if (options.negativeControl && minX < 0) {
+                context.fillStyle = C.amber + '12';
+                context.fillRect(left, top, Math.max(0, x(0) - left), height - top - bottom);
+                context.fillStyle = C.amber; context.font = '8px sans-serif';
+                context.fillText('negative-lag controls', left + 5, top + 10);
+            }
+            context.strokeStyle = C.border2; context.lineWidth = 1;
+            context.beginPath(); context.moveTo(left, y(0)); context.lineTo(width - right, y(0)); context.stroke();
+            if (minX <= 0 && maxX >= 0) {
+                context.strokeStyle = C.dim; context.setLineDash([3, 3]);
+                context.beginPath(); context.moveTo(x(0), top); context.lineTo(x(0), height - bottom); context.stroke();
+                context.setLineDash([]);
+            }
+            context.fillStyle = C.mute; context.font = '8px sans-serif';
+            context.fillText(options.yFormat ? options.yFormat(maxY) : fmt(maxY, 3), 2, top + 3);
+            context.fillText(options.yFormat ? options.yFormat(minY) : fmt(minY, 3), 2, height - bottom);
+            xValues.forEach((value, index) => {
+                if (index % Math.max(1, Math.round(xValues.length / 6)) === 0 || index === xValues.length - 1) {
+                    context.fillText(options.xFormat ? options.xFormat(value) : String(value), x(value) - 8, height - 8);
+                }
+            });
+            series.forEach((row, seriesIndex) => {
+                if (row.low && row.high) {
+                    const upper = [], lower = [];
+                    xValues.forEach((value, index) => {
+                        if (Number.isFinite(numeric(row.low[index])) && Number.isFinite(numeric(row.high[index]))) {
+                            upper.push([x(value), y(row.high[index])]);
+                            lower.push([x(value), y(row.low[index])]);
+                        }
+                    });
+                    if (upper.length) {
+                        context.fillStyle = row.color + '20';
+                        context.beginPath();
+                        upper.forEach((point, index) => index ? context.lineTo(...point) : context.moveTo(...point));
+                        lower.reverse().forEach(point => context.lineTo(...point));
+                        context.closePath(); context.fill();
+                    }
+                }
+                context.strokeStyle = row.color; context.fillStyle = row.color; context.lineWidth = row.width || 2;
+                context.beginPath();
+                let drawing = false;
+                xValues.forEach((value, index) => {
+                    const datum = numeric((row.values || [])[index]);
+                    if (!Number.isFinite(datum)) { drawing = false; return; }
+                    if (drawing) context.lineTo(x(value), y(datum)); else context.moveTo(x(value), y(datum));
+                    drawing = true;
+                });
+                context.stroke();
+                (row.values || []).forEach((datum, index) => {
+                    datum = numeric(datum); if (!Number.isFinite(datum)) return;
+                    context.beginPath(); context.arc(x(xValues[index]), y(datum), 2.2, 0, Math.PI * 2); context.fill();
+                });
+                context.fillText(row.label, left + seriesIndex * 112, 12);
+            });
+            if (Number.isInteger(options.selectedIndex) && options.selectedIndex >= 0 && options.selectedIndex < xValues.length) {
+                context.strokeStyle = C.text; context.lineWidth = 1.5;
+                context.beginPath(); context.moveTo(x(xValues[options.selectedIndex]), top); context.lineTo(x(xValues[options.selectedIndex]), height - bottom); context.stroke();
+            }
+            return { left, right, top, bottom, x, y };
+        }
+
+        function drawLatencyEffect(canvas) {
+            const summary = state.data.latencyStudy; if (!summary) return;
+            const { window: windowRow, lags } = activeLatencyRows(summary);
+            const rows = windowRow.rows || [];
+            const selected = Number.isInteger(state.latencySelectedLagIndex)
+                ? state.latencySelectedLagIndex : Math.max(0, lags.indexOf(Number((windowRow.peak || {}).lag)));
+            const geometry = drawLatencyLines(canvas, lags, [{
+                label: 'effect / semantic SD', color: C.cyan,
+                values: rows.map(row => row.effect),
+                low: rows.map(row => row.effectCiLow), high: rows.map(row => row.effectCiHigh),
+            }], { negativeControl: true, selectedIndex: selected, xFormat: latencyLagLabel, yFormat: value => signed(value, 4) });
+            if (!geometry) return;
+            canvas.onclick = event => {
+                const rect = canvas.getBoundingClientRect();
+                const localX = event.clientX - rect.left;
+                let best = 0, distance = Infinity;
+                lags.forEach((lag, index) => { const delta = Math.abs(geometry.x(lag) - localX); if (delta < distance) { distance = delta; best = index; } });
+                const scrollX = globalThis.window.scrollX, scrollY = globalThis.window.scrollY;
+                state.latencySelectedLagIndex = best; paint(); globalThis.window.scrollTo(scrollX, scrollY);
+            };
+        }
+
+        function drawLatencyBaseline(canvas) {
+            const summary = state.data.latencyStudy; if (!summary) return;
+            const { window: windowRow, lags } = activeLatencyRows(summary);
+            const rows = windowRow.rows || [];
+            const raw = windowRow.id === 'phrase';
+            const scale = raw ? 100 : 1;
+            drawLatencyLines(canvas, lags, [
+                { label: 'observed', color: C.cyan, values: rows.map(row => numeric(raw ? row.observedRawMean : row.observedNormalizedMean) * scale) },
+                { label: 'text-free expected', color: C.purple, values: rows.map(row => numeric(raw ? row.expectedRawMean : row.expectedNormalizedMean) * scale) },
+                { label: 'excess', color: C.green, values: rows.map(row => numeric(raw ? row.unexpectedRawMean : row.unexpectedNormalizedMean) * scale) },
+            ], { negativeControl: true, selectedIndex: state.latencySelectedLagIndex, xFormat: latencyLagLabel, yFormat: value => signed(value, raw ? 1 : 3) });
+        }
+
+        function drawLatencyTransfer(canvas) {
+            const summary = state.data.latencyStudy; if (!summary) return;
+            const { cluster, lags } = activeLatencyRows(summary);
+            const values = (cluster.axisTransfer || {}).values || [];
+            if (!values.length) return;
+            const { context, width, height } = canvasContext(canvas);
+            const left = 43, right = 12, top = 28, bottom = 35;
+            const cellWidth = (width - left - right) / lags.length;
+            const cellHeight = (height - top - bottom) / lags.length;
+            const finite = values.flat().map(Number).filter(Number.isFinite);
+            const limit = Math.max(.01, ...finite.map(Math.abs));
+            values.forEach((row, rowIndex) => row.forEach((value, columnIndex) => {
+                value = numeric(value);
+                const t = Number.isFinite(value) ? Math.max(-1, Math.min(1, value / limit)) : 0;
+                context.fillStyle = t >= 0
+                    ? `rgb(${Math.round(235 + 13 * t)},${Math.round(235 - 122 * t)},${Math.round(235 - 122 * t)})`
+                    : `rgb(${Math.round(235 + 179 * t)},${Math.round(235 + 46 * t)},${Math.round(235 - 13 * t)})`;
+                context.fillRect(left + columnIndex * cellWidth, top + rowIndex * cellHeight, Math.ceil(cellWidth), Math.ceil(cellHeight));
+            }));
+            const train = Math.max(0, Math.min(lags.length - 1, Number(state.latencyTrainLagIndex || 0)));
+            const response = Math.max(0, Math.min(lags.length - 1, Number(state.latencyResponseLagIndex || 0)));
+            context.strokeStyle = C.text; context.lineWidth = 2;
+            context.strokeRect(left + response * cellWidth, top + train * cellHeight, cellWidth, cellHeight);
+            const zeroIndex = lags.indexOf(0);
+            if (zeroIndex >= 0) {
+                context.strokeStyle = C.amber; context.lineWidth = 1;
+                context.strokeRect(left, top + zeroIndex * cellHeight, width - left - right, cellHeight);
+                context.strokeRect(left + zeroIndex * cellWidth, top, cellWidth, height - top - bottom);
+            }
+            context.fillStyle = C.mute; context.font = '8px sans-serif';
+            lags.forEach((lag, index) => {
+                if (index % 4 === 0 || index === lags.length - 1) {
+                    context.fillText(latencyLagLabel(lag), left + index * cellWidth - 4, height - 10);
+                    context.fillText(latencyLagLabel(lag), 3, top + index * cellHeight + 6);
+                }
+            });
+            context.fillStyle = C.text; context.fillText('response measured at lag →', left, height - 1);
+            context.save(); context.translate(9, height - bottom); context.rotate(-Math.PI / 2); context.fillText('ruler trained at lag →', 0, 0); context.restore();
+            canvas.onclick = event => {
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left, y = event.clientY - rect.top;
+                const column = Math.floor((x - left) / cellWidth), row = Math.floor((y - top) / cellHeight);
+                if (column < 0 || column >= lags.length || row < 0 || row >= lags.length) return;
+                const scrollX = window.scrollX, scrollY = window.scrollY;
+                state.latencyTrainLagIndex = row; state.latencyResponseLagIndex = column;
+                paint(); window.scrollTo(scrollX, scrollY);
+            };
+        }
+
+        function drawLatencyNatural(canvas) {
+            const summary = state.data.latencyStudy; if (!summary) return;
+            const rows = summary.sourceEqualNaturalDrop || [];
+            drawLatencyLines(canvas, rows.map(row => row.second), [{
+                label: 'median natural drop', color: C.green,
+                values: rows.map(row => numeric(row.rawMedian) * 100),
+                low: rows.map(row => numeric(row.rawQ25) * 100),
+                high: rows.map(row => numeric(row.rawQ75) * 100),
+            }], { xFormat: value => `${Number(value).toFixed(0)}s`, yFormat: value => `${signed(value, 1)} pp/s` });
+        }
+
+        function drawLatencyPoint(canvas) {
+            const detail = state.latencyDetail; if (!detail || state.latencyPointGlobalIndex == null) return;
+            const localIndex = (detail.globalIndices || []).indexOf(Number(state.latencyPointGlobalIndex));
+            if (localIndex < 0) return;
+            const lags = detail.lagsSeconds || [], phrase = detail.phrase || {};
+            const row = name => ((phrase[name] || [])[localIndex] || []).map(value => numeric(value) * 100);
+            drawLatencyLines(canvas, lags, [
+                { label: 'observed', color: C.cyan, values: row('observedRaw') },
+                { label: 'text-free expected', color: C.purple, values: row('expectedRawOOF') },
+                { label: 'excess', color: C.green, values: row('unexpectedRaw') },
+            ], { negativeControl: true, selectedIndex: state.latencySelectedLagIndex, xFormat: latencyLagLabel, yFormat: value => `${signed(value, 1)} pp/s` });
+        }
+
         function drawCanvases() {
             document.querySelectorAll('#pl-root canvas[data-pl-canvas]').forEach(canvas => {
                 const kind = canvas.dataset.plCanvas;
@@ -893,6 +1194,11 @@
                     return scatter(canvas, points, points.map(() => C.cyan), null);
                 }
                 if (kind === 'cluster-outcome-offsets') return drawClusterOutcomeOffsets(canvas);
+                if (kind === 'latency-effect') return drawLatencyEffect(canvas);
+                if (kind === 'latency-baseline') return drawLatencyBaseline(canvas);
+                if (kind === 'latency-transfer') return drawLatencyTransfer(canvas);
+                if (kind === 'latency-natural') return drawLatencyNatural(canvas);
+                if (kind === 'latency-point') return drawLatencyPoint(canvas);
                 if (kind === 'components' || kind === 'hook-map') {
                     const atlas = kind === 'hook-map' ? state.data.atlas : activeAtlas(); if (!atlas) return;
                     const projections = atlas.projections || {};
@@ -969,7 +1275,7 @@
         function handleClick(event) {
             const target = event.target;
             const view = target.closest('[data-pl-view]'); if (view) { state.view = view.dataset.plView; ensureView(); paint(); return true; }
-            if (target.closest('[data-pl-refresh]')) { Object.keys(state.data).forEach(key => delete state.data[key]); state.hook = null; state.source = null; state.focusedCluster = null; state.clusterOutcomeTarget = null; state.clusterOutcomeDetail = null; state.clusterOutcomePointIndex = null; ensureView(); return true; }
+            if (target.closest('[data-pl-refresh]')) { Object.keys(state.data).forEach(key => delete state.data[key]); state.hook = null; state.source = null; state.focusedCluster = null; state.clusterOutcomeTarget = null; state.clusterOutcomeDetail = null; state.clusterOutcomePointIndex = null; state.latencyDetail = null; state.latencyPointGlobalIndex = null; ensureView(); return true; }
             if (target.closest('[data-pl-open-manual-probe]')) { openManualProbe(); return true; }
             if (target.closest('[data-pl-clear-cluster-focus]')) { state.focusedCluster = null; paint(); return true; }
             if (target.closest('[data-pl-apply-query]')) { state.registryPage = 0; paint(); return true; }
@@ -984,6 +1290,9 @@
             const outcomeCluster = target.closest('[data-pl-outcome-cluster]'); if (outcomeCluster) { const summary = state.data.clusterOutcomes || {}, cluster = Number(outcomeCluster.dataset.plOutcomeCluster), clusterRow = (summary.clusters || []).find(row => Number(row.label) === cluster), available = new Set((clusterRow && clusterRow.targets || []).map(row => row.target)); const name = available.has(state.clusterOutcomeTarget) ? state.clusterOutcomeTarget : ((clusterRow && clusterRow.targets || [])[0] || {}).target; if (name) loadClusterOutcomeDetail(cluster, name); return true; }
             const outcomeFamily = target.closest('[data-pl-outcome-family]'); if (outcomeFamily) { const family = outcomeFamily.dataset.plOutcomeFamily, summary = state.data.clusterOutcomes || {}, cluster = (summary.clusters || []).find(row => Number(row.label) === Number(state.clusterOutcomeCluster)), row = (cluster && cluster.targets || []).find(item => ((summary.targetDefinitions || {})[item.target] || {}).family === family); state.clusterOutcomeFamily = family; if (row) loadClusterOutcomeDetail(state.clusterOutcomeCluster, row.target); else paint(); return true; }
             const outcomeGlobal = target.closest('[data-pl-outcome-global-index]'); if (outcomeGlobal) { const indices = ((state.clusterOutcomeDetail || {}).points || {}).globalIndices || [], local = indices.indexOf(Number(outcomeGlobal.dataset.plOutcomeGlobalIndex)); if (local >= 0) { state.clusterOutcomePointIndex = local; paint(); } return true; }
+            const latencyCluster = target.closest('[data-pl-latency-cluster]'); if (latencyCluster) { state.latencyCluster = Number(latencyCluster.dataset.plLatencyCluster); state.latencySelectedLagIndex = null; state.latencyDetail = null; if (state.latencyPointGlobalIndex != null) loadLatencyDetail(state.latencyCluster); else paint(); return true; }
+            const latencyWindow = target.closest('[data-pl-latency-window]'); if (latencyWindow) { state.latencyWindow = latencyWindow.dataset.plLatencyWindow; state.latencySelectedLagIndex = null; paint(); return true; }
+            const latencyPoint = target.closest('[data-pl-latency-point-global]'); if (latencyPoint) { state.latencyPointGlobalIndex = Number(latencyPoint.dataset.plLatencyPointGlobal); loadLatencyDetail(state.latencyCluster); return true; }
             const metric = target.closest('[data-pl-metric]'); if (metric) { state.metric = metric.dataset.plMetric; paint(); return true; }
             const source = target.closest('[data-pl-source]'); if (source) { if (source.hasAttribute('data-pl-open-swaps')) { state.view = 'swaps'; load('swaps'); } loadSource(source.dataset.plSource); return true; }
             const axis = target.closest('[data-pl-axis]'); if (axis) { state.axisIndex = Number(axis.dataset.plAxis); paint(); return true; }

@@ -39,6 +39,7 @@ def main() -> None:
         "manual-probe": read("manual-probe.json", None),
         "manual-projection": read("manual-projection.json", None),
         "cluster-outcomes": read("cluster-outcomes.json", None),
+        "latency-study": read("latency-study.json", None),
         "cross-scope": read("cross-scope.json", {}),
         "swaps": read("swaps.json", None),
         "axes": read("axes.json", None),
@@ -55,6 +56,7 @@ window.fetch=async function(url,opts){{
   const path=new URL(url,location.href).pathname;
   const base='/api/longquant/promise-lab/';
   if(path.startsWith(base+'cluster-outcome/')){{const parts=path.slice((base+'cluster-outcome/').length).split('/');const packed=await nativeFetch(`/buildings/jarvis/promise-lab/.cache/cluster-outcomes-details/${{encodeURIComponent(parts[0]||'')}}/${{encodeURIComponent(parts[1]||'')}}.json.gz`,opts);if(!packed.ok)return packed;const stream=packed.body.pipeThrough(new DecompressionStream('gzip'));return new Response(stream,{{status:200,headers:{{'Content-Type':'application/json'}}}});}}
+  if(path.startsWith(base+'latency-study/')){{const cluster=path.slice((base+'latency-study/').length);const packed=await nativeFetch(`/buildings/jarvis/promise-lab/.cache/latency-study-details/${{encodeURIComponent(cluster)}}.json.gz`,opts);if(!packed.ok)return packed;const stream=packed.body.pipeThrough(new DecompressionStream('gzip'));return new Response(stream,{{status:200,headers:{{'Content-Type':'application/json'}}}});}}
   if(path.startsWith(base+'hook/')){{const id=decodeURIComponent(path.slice((base+'hook/').length));const v=window.__PL_REAL.hooks[id];return new Response(JSON.stringify(v||{{error:'real hook artifact not built'}}),{{status:v?200:404,headers:{{'Content-Type':'application/json'}}}});}}
   if(path.startsWith(base+'swap-source/')){{const id=decodeURIComponent(path.slice((base+'swap-source/').length));const v=window.__PL_REAL.swapSources[id];return new Response(JSON.stringify(v||{{error:'source not included in verification harness'}}),{{status:v?200:404,headers:{{'Content-Type':'application/json'}}}});}}
   if(path.startsWith(base)){{const key=path.slice(base.length);const v=window.__PL_REAL[key];return new Response(JSON.stringify(v||{{error:'real artifact not built yet'}}),{{status:v?200:404,headers:{{'Content-Type':'application/json'}}}});}}

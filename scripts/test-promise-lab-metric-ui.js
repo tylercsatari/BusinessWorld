@@ -107,6 +107,66 @@ const payloads = {
     'cluster-outcome/2/slope_residual_o2': detail(
         'slope_residual_o2', residualDefinition, [-.03, 0, .03], [-.01, 0, .01], residualExperiment,
     ),
+    'latency-study': {
+        status: 'complete', clusterCount: 1, lagsSeconds: [-1, 0, 1],
+        windows: [
+            { id: 'phrase', label: 'Whole phrase shifted', definition: 'the exact phrase interval shifted by lag' },
+            { id: 'onset_1s', label: '1s after phrase starts', definition: 'one second from phrase onset plus lag' },
+        ],
+        curveResolution: {
+            curvePointsPerVideo: 100, medianSampleSeconds: .46, p90SampleSeconds: .6,
+            videosAtOrFinerThanHalfSecond: 2, videos: 3,
+        },
+        sourceEqualNaturalDrop: [0, .5, 1, 2].map((second, index) => ({
+            second, videos: 3, rawMean: [-.16, -.28, -.19, -.06][index],
+            rawMedian: [-.15, -.27, -.18, -.055][index], rawQ25: -.3, rawQ75: -.04,
+        })),
+        sourceCurves: [{ hookIndex: 0, videoId: 'fixture', title: 'Fixture video', durationSeconds: 20, curveSampleSeconds: .2, curve: [1.4, 1.2, 1.0] }],
+        clusters: [{
+            label: 2, spanInstances: 3, sourceVideos: 3,
+            sharedAxis: {
+                firstModeEnergyMean: .31, foldAxisMedianCosine: .62,
+                foldAxisPositivePairFraction: 1, allFoldDirectionsAgree: true,
+                extremes: {
+                    high: [{ globalIndex: 0, text: 'first phrase', score: 1.2 }],
+                    low: [{ globalIndex: 2, text: 'third phrase', score: -1.1 }],
+                },
+            },
+            axisTransfer: {
+                values: [[.1, -.1, -.2], [-.1, .2, -.15], [.05, -.03, .25]],
+                rankDiagnostic0to1: { scoreSpearman: -.53, topDecileJaccard: .0045 },
+            },
+            windows: ['phrase', 'onset_1s'].map((id, windowIndex) => ({
+                id, label: id === 'phrase' ? 'Whole phrase shifted' : '1s after phrase starts',
+                definition: id === 'phrase' ? 'the exact phrase interval shifted by lag' : 'one second from phrase onset plus lag',
+                peak: {
+                    lag: 1, effect: .001, effectCiLow: -.001, effectCiHigh: .002,
+                    rho: .05, maxNullP: .8, negativeControlMaxAbsRho: .08,
+                    latencySupported: false,
+                },
+                rows: [-1, 0, 1].map((lag, index) => ({
+                    lag, effect: [-.0002, .0001, .001][index], effectCiLow: -.001,
+                    effectCiHigh: .002, rho: [-.03, .01, .05][index], maxNullP: .8,
+                    observedRawMean: [-.1, -.08, -.05][index], expectedRawMean: [-.09, -.075, -.052][index],
+                    unexpectedRawMean: [-.01, -.005, .002][index],
+                    observedNormalizedMean: -.05, expectedNormalizedMean: -.048,
+                    unexpectedNormalizedMean: -.002,
+                })),
+            })),
+        }],
+    },
+    'latency-study/2': {
+        cluster: 2, lagsSeconds: [-1, 0, 1], globalIndices: [0, 1, 2],
+        sharedSemanticScoreOOF: [1.2, 0, -1.1], spanStartSeconds: [1, 2, 3], spanEndSeconds: [2, 3, 4],
+        phrase: {
+            observedRaw: [[-.1, -.08, -.05], [null, -.07, -.04], [-.08, -.06, -.03]],
+            expectedRawOOF: [[-.09, -.075, -.052], [null, -.065, -.045], [-.075, -.055, -.035]],
+            unexpectedRaw: [[-.01, -.005, .002], [null, -.005, .005], [-.005, -.005, .005]],
+            observedNormalized: [[-.1, -.08, -.05], [null, -.07, -.04], [-.08, -.06, -.03]],
+            expectedNormalizedOOF: [[-.09, -.075, -.052], [null, -.065, -.045], [-.075, -.055, -.035]],
+            unexpectedNormalized: [[-.01, -.005, .002], [null, -.005, .005], [-.005, -.005, .005]],
+        },
+    },
 };
 
 async function main() {
@@ -182,6 +242,20 @@ async function main() {
         assert(inspectorText.includes('missing phrase'), inspectorText);
         assert(inspectorText.includes('point color (Raw phrase slope +2s): not measured'));
         assert(inspectorText.includes('measured slope window: 4.000s → 5.000s'));
+        await page.getByText('Exact phrase response trace · global span 1', { exact: true }).waitFor();
+        const latencyText = await page.locator('#pl-root').innerText();
+        assert(latencyText.includes('No tested cluster establishes a response latency'));
+        assert(latencyText.includes('0.0s → 1.0s'));
+        assert(latencyText.includes('-16.0 pp/s'));
+        assert(latencyText.includes('Independent ruler rank correlation: -0.530'));
+        assert(latencyText.includes('point-level latency traces') === false);
+        assert.strictEqual(await page.locator('canvas[data-pl-canvas="latency-transfer"]').count(), 1);
+        assert.strictEqual(await page.locator('canvas[data-pl-canvas="latency-point"]').count(), 1);
+
+        await page.getByRole('button', { name: '1s after phrase starts', exact: true }).click();
+        await page.getByText('1s after phrase starts:', { exact: false }).waitFor();
+        assert((await page.locator('#pl-root').innerText()).includes('Changing these controls changes the measured window, not the shared semantic score'));
+        await page.getByRole('button', { name: 'Whole phrase shifted', exact: true }).click();
 
         await page.getByRole('button', { name: 'Video outcomes', exact: true }).click();
         await page.locator('[data-pl-outcome-target="views_raw"][data-pl-outcome-cluster="2"]').click();
@@ -209,9 +283,11 @@ async function main() {
         const responsive = await page.evaluate(() => {
             const channels = document.querySelector('.pl-metric-channels');
             const columns = getComputedStyle(channels).gridTemplateColumns.split(' ').filter(Boolean).length;
-            return { columns, overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+            const naturalColumns = getComputedStyle(document.querySelector('.pl-natural-stats')).gridTemplateColumns.split(' ').filter(Boolean).length;
+            return { columns, naturalColumns, overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
         });
         assert.strictEqual(responsive.columns, 1, 'metric channel explanation must stack on mobile');
+        assert.strictEqual(responsive.naturalColumns, 1, 'natural-drop stats must stack on mobile');
         assert(responsive.overflow <= 1, `page has ${responsive.overflow}px horizontal overflow on mobile`);
         assert.deepStrictEqual(errors, []);
 

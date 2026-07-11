@@ -3598,12 +3598,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         'manual-probe': 'manual-probe.json.gz',
         'manual-projection': 'manual-projection.json.gz',
         'cluster-outcomes': 'cluster-outcomes.json.gz',
+        'latency-study': 'latency-study.json.gz',
         'cross-scope': 'cross-scope.json.gz',
         swaps: 'swaps/summary.json.gz',
         axes: 'axes.json.gz',
         registry: 'registry.json.gz',
     };
-    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|manual-probe|manual-projection|cluster-outcomes|cross-scope|swaps|axes|registry)$/);
+    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|manual-probe|manual-projection|cluster-outcomes|latency-study|cross-scope|swaps|axes|registry)$/);
     if (promiseArtifact && req.method === 'GET') {
         const ok = await serveR2GzipJsonStream(res,
             `longform/promise-lab-v4/${promiseArtifacts[promiseArtifact[1]]}`);
@@ -3622,6 +3623,18 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         if (!ok) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end('{"error":"cluster outcome map is not built"}');
+        }
+        return;
+    }
+    const promiseLatencyDetail = pathname.match(
+        /^\/api\/longquant\/promise-lab\/latency-study\/([0-3])$/
+    );
+    if (promiseLatencyDetail && req.method === 'GET') {
+        const ok = await serveR2GzipJsonStream(res,
+            `longform/promise-lab-v4/latency-study/${promiseLatencyDetail[1]}.json.gz`);
+        if (!ok) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end('{"error":"latency detail is not built"}');
         }
         return;
     }
