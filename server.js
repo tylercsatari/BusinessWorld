@@ -1453,6 +1453,10 @@ function aiVideoPromptMessages(count, context, runIndex, totalRuns) {
 }
 
 const _staticGz = new Map();   // filePath → {mt, gz}: gzipped big static files, keyed by Last-Modified
+const STATIC_STREAM_THRESHOLD = Math.max(
+    1024 * 1024,
+    parseInt(process.env.STATIC_STREAM_THRESHOLD || String(16 * 1024 * 1024), 10)
+);
 const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${PORT}`);
     const pathname = url.pathname;
@@ -9514,8 +9518,8 @@ Respond ONLY as valid JSON (no markdown):
     const ext = path.extname(filePath);
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
-    fs.readFile(filePath, (err, data) => {
-        if (err) {
+    fs.stat(filePath, (statErr, fileStat) => {
+        if (statErr || !fileStat.isFile()) {
             res.writeHead(404);
             res.end('Not found');
             return;
@@ -9528,50 +9532,81 @@ Respond ONLY as valid JSON (no markdown):
             // Data files are the single source of truth — must never serve stale. Revalidate every time;
             // allow a 304 (via Last-Modified) so large unchanged JSON isn't re-downloaded needlessly.
             headers['Cache-Control'] = 'no-cache, must-revalidate';
-            try {
-                const mt = fs.statSync(filePath).mtime; headers['Last-Modified'] = mt.toUTCString();
-                const ims = req.headers['if-modified-since'];
-                if (ims && new Date(ims).getTime() >= Math.floor(mt.getTime() / 1000) * 1000) {
-                    res.writeHead(304, headers); res.end(); return;
-                }
-            } catch (e) { /* fall through to full send */ }
+            const mt = fileStat.mtime; headers['Last-Modified'] = mt.toUTCString();
+            const ims = req.headers['if-modified-since'];
+            if (ims && new Date(ims).getTime() >= Math.floor(mt.getTime() / 1000) * 1000) {
+                res.writeHead(304, headers); res.end(); return;
+            }
         }
-        // Inject cache-busting version stamps into HTML files
-        let out = data;
-        if (ext === '.html') {
-            let html = data.toString('utf8');
-            html = html.replace(/\.js(\?v=\d+)?"/g, `.js?v=${BUILD_TS}"`);
-            html = html.replace(/\.css(\?v=\d+)?"/g, `.css?v=${BUILD_TS}"`);
-            out = Buffer.from(html, 'utf8');
+        if (req.method === 'HEAD') {
+            if (fileStat.size >= STATIC_STREAM_THRESHOLD || ext !== '.html') {
+                headers['Content-Length'] = fileStat.size;
+            }
+            res.writeHead(200, headers);
+            res.end();
+            return;
         }
-        // gzip text assets — the big data files (novelty.json ~10MB, rtg_field.json ~9MB) compress
-        // ~90%, plus jarvis-retention.js itself. Biggest single win for the Retention→Views load.
-        // Large files keep their gzipped bytes in a small mtime-keyed cache so the 10MB gzip CPU
-        // hit happens once per file version, not once per request.
         const GZIP_EXT = new Set(['.json', '.js', '.css', '.html', '.svg', '.md', '.webmanifest']);
-        if (GZIP_EXT.has(ext) && (req.headers['accept-encoding'] || '').includes('gzip') && out.length > 1400) {
-            const gzHdr = { ...headers, 'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding' };
-            if (ext !== '.html' && out.length > 262144) {          // html is version-stamped per request — never cache it
-                const mt = headers['Last-Modified'] || String(out.length);
-                const hit = _staticGz.get(filePath);
-                if (hit && hit.mt === mt) { res.writeHead(200, gzHdr); res.end(hit.gz); return; }
+        // Never materialize a large static file in Node's heap. Stream text through
+        // zlib and binaries directly from disk; browser-facing Promise Lab data uses
+        // the separate R2 streaming routes, but this also keeps local verification
+        // artifacts and other large static files from taking down the app process.
+        if (fileStat.size >= STATIC_STREAM_THRESHOLD) {
+            const source = fs.createReadStream(filePath);
+            source.on('error', () => { try { res.destroy(); } catch (e) {} });
+            if (GZIP_EXT.has(ext) && (req.headers['accept-encoding'] || '').includes('gzip')) {
+                const zipper = zlib.createGzip();
+                zipper.on('error', () => { try { res.destroy(); } catch (e) {} });
+                res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding' });
+                source.pipe(zipper).pipe(res);
+            } else {
+                res.writeHead(200, { ...headers, 'Content-Length': fileStat.size });
+                source.pipe(res);
+            }
+            return;
+        }
+        fs.readFile(filePath, (err, data) => {
+            if (err) {
+                res.writeHead(404);
+                res.end('Not found');
+                return;
+            }
+            // Inject cache-busting version stamps into HTML files
+            let out = data;
+            if (ext === '.html') {
+                let html = data.toString('utf8');
+                html = html.replace(/\.js(\?v=\d+)?"/g, `.js?v=${BUILD_TS}"`);
+                html = html.replace(/\.css(\?v=\d+)?"/g, `.css?v=${BUILD_TS}"`);
+                out = Buffer.from(html, 'utf8');
+            }
+            // gzip text assets — the big data files (novelty.json ~10MB, rtg_field.json ~9MB) compress
+            // ~90%, plus jarvis-retention.js itself. Biggest single win for the Retention→Views load.
+            // Large files keep their gzipped bytes in a small mtime-keyed cache so the 10MB gzip CPU
+            // hit happens once per file version, not once per request.
+            if (GZIP_EXT.has(ext) && (req.headers['accept-encoding'] || '').includes('gzip') && out.length > 1400) {
+                const gzHdr = { ...headers, 'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding' };
+                if (ext !== '.html' && out.length > 262144) {          // html is version-stamped per request — never cache it
+                    const mt = headers['Last-Modified'] || String(out.length);
+                    const hit = _staticGz.get(filePath);
+                    if (hit && hit.mt === mt) { res.writeHead(200, gzHdr); res.end(hit.gz); return; }
+                    zlib.gzip(out, (gzErr, gz) => {
+                        if (gzErr) { res.writeHead(200, headers); res.end(out); return; }
+                        _staticGz.set(filePath, { mt, gz });
+                        if (_staticGz.size > 24) _staticGz.delete(_staticGz.keys().next().value);
+                        res.writeHead(200, gzHdr); res.end(gz);
+                    });
+                    return;
+                }
                 zlib.gzip(out, (gzErr, gz) => {
                     if (gzErr) { res.writeHead(200, headers); res.end(out); return; }
-                    _staticGz.set(filePath, { mt, gz });
-                    if (_staticGz.size > 24) _staticGz.delete(_staticGz.keys().next().value);
-                    res.writeHead(200, gzHdr); res.end(gz);
+                    res.writeHead(200, gzHdr);
+                    res.end(gz);
                 });
                 return;
             }
-            zlib.gzip(out, (gzErr, gz) => {
-                if (gzErr) { res.writeHead(200, headers); res.end(out); return; }
-                res.writeHead(200, gzHdr);
-                res.end(gz);
-            });
-            return;
-        }
-        res.writeHead(200, headers);
-        res.end(out);
+            res.writeHead(200, headers);
+            res.end(out);
+        });
     });
 });
 
