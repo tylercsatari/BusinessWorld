@@ -29,11 +29,16 @@ Stages:
    views, keep rate, retention levels, windows, slopes, and post-hook hold.
 9. `run_manual_probe.py`: a separated post-hoc comparison of manual selections
    against already-retained map and cluster IDs; it creates no new maps.
-10. `build_ui.py`: browser artifacts, cluster representatives, findings, and the
+10. `run_manual_projection.py`: reconstruct the winning map's exact four
+   clustering coordinates, freeze its labels, and compare three 2D viewing planes.
+11. `build_ui.py`: browser artifacts, cluster representatives, findings, and the
    complete experiment registry.
 
 `verify_all_span_store.py`, `verify_swap_outputs.py`, and
-`verify_axis_outputs.py` are hard gates in the orchestrated build. They check
+`verify_axis_outputs.py` are hard gates in the orchestrated build. The manual
+projection also has `verify_manual_projection.py`, which checks the frozen-label
+hash, all coordinate shapes and finiteness, basis orthonormality, and the declared
+winner. Together these gates check
 exact character slices, complete lattice/subset identity, vector finiteness and
 normalization, crossed-design completeness, per-source artifacts, zero-error
 self-span controls, one predeclared-confound selection per target, and exact
@@ -68,3 +73,9 @@ then compares all already-retained maps and clusters using equal-hook-weighted K
 information contribution. It creates no embeddings, clusters, maps, or outcome
 axes. The output is `.cache/manual-probe.json` and is published separately as
 `manual-probe.json.gz`, so the discovery artifacts remain unchanged.
+
+`manual-projection.json.gz` contains the current PCA plane, an orthonormalized
+Fisher plane, and an orthonormal max-min plane for the same frozen `k=4` labels.
+The max-min search optimizes the weakest of all six pairwise standardized
+cluster separations. It is a post-hoc visualization experiment: it never refits
+k-means, changes membership, or enters scientific discovery evidence.

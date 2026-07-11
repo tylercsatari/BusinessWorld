@@ -251,6 +251,7 @@ def _scope_evaluations(
             "manualWeightInCluster": float(selected_counts[winning_cluster]),
             "manualRecall": float(selected[winning_cluster]),
             "atlasClusterSize": int(base_counts[winning_cluster]),
+            "atlasPopulation": int(len(labels)),
             "atlasBaseRate": float(base[winning_cluster]),
             "enrichment": float(selected[winning_cluster] / base[winning_cluster]),
             "informationContributionBits": float(contribution[winning_cluster]),

@@ -83,6 +83,8 @@ class ManualProbeTests(unittest.TestCase):
         self.assertEqual(scored["winner"]["mapId"], "concentrated")
         self.assertEqual(scored["winner"]["cluster"], 0)
         self.assertAlmostEqual(scored["winner"]["manualRecall"], 1.0)
+        self.assertEqual(scored["winner"]["atlasPopulation"], 8)
+        self.assertAlmostEqual(scored["winner"]["atlasBaseRate"], 0.5)
         self.assertAlmostEqual(scored["winner"]["enrichment"], 2.0)
 
 

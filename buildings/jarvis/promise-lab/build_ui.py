@@ -131,6 +131,7 @@ def main() -> None:
     swaps = load_json("swaps.json", {})
     axes = load_json("axes.json", {})
     manual_probe = load_json("manual-probe.json", {})
+    manual_projection = load_json("manual-projection.json", {})
     boundary_registry = load_jsonl_gz("boundary-experiments.jsonl.gz")
     cluster_registry = load_jsonl_gz("cluster-experiments.jsonl.gz")
     all_span_cluster_registry = load_jsonl_gz("all-span-cluster-experiments.jsonl.gz")
@@ -285,6 +286,17 @@ def main() -> None:
                 "discovery, clustering, or outcome-axis fitting."
             ),
         },
+        "manualProjection": {
+            "status": manual_projection.get("status"),
+            "mapId": manual_projection.get("mapId"),
+            "selectedMethod": manual_projection.get("selectedMethod"),
+            "improvementOverPca": manual_projection.get("improvementOverPca"),
+            "labelsChanged": manual_projection.get("labelsChanged"),
+            "interpretation": (
+                "Post-hoc viewing planes for one frozen map. They change displayed coordinates, "
+                "never cluster membership."
+            ),
+        },
     }
     (CACHE / "findings.json").write_text(json.dumps(json_ready(findings), separators=(",", ":"),
                                                     allow_nan=False),
@@ -328,6 +340,7 @@ def main() -> None:
             "manualProbeMapsCompared": (
                 (manual_probe.get("counts") or {}).get("frozenMapsCompared", 0)
             ),
+            "manualProjectionMethods": len(manual_projection.get("methods") or []),
         },
         "separation": {
             "discoveryInputs": "hook text, token order, Gemini text vectors, exact deletion counterfactuals",
@@ -339,6 +352,9 @@ def main() -> None:
             "manualProbeSeparated": (
                 "manual interpretation is post-hoc, creates zero maps, and never enters discovery"
             ),
+            "manualProjectionSeparated": (
+                "fixed-label viewing experiment only; labels, maps, outcomes, and discovery are unchanged"
+            ),
         },
         "artifacts": {
             "findings": "/api/longquant/promise-lab/findings",
@@ -347,6 +363,7 @@ def main() -> None:
             "atlas": "/api/longquant/promise-lab/atlas",
             "allSpanAtlas": "/api/longquant/promise-lab/all-span-atlas",
             "manualProbe": "/api/longquant/promise-lab/manual-probe",
+            "manualProjection": "/api/longquant/promise-lab/manual-projection",
             "crossScope": "/api/longquant/promise-lab/cross-scope",
             "swaps": "/api/longquant/promise-lab/swaps",
             "axes": "/api/longquant/promise-lab/axes",
@@ -369,6 +386,7 @@ def main() -> None:
         ("atlas.json", "atlas.json.gz"),
         ("all-span-atlas.json", "all-span-atlas.json.gz"),
         ("manual-probe.json", "manual-probe.json.gz"),
+        ("manual-projection.json", "manual-projection.json.gz"),
         ("cross-scope.json", "cross-scope.json.gz"),
         ("swaps.json", "swaps/summary.json.gz"),
         ("axes.json", "axes.json.gz"),

@@ -23,7 +23,8 @@ def main() -> None:
     parser.add_argument("--from-stage", choices=(
         "interventions", "discovery", "atlas", "all-spans", "verify-all-spans",
         "all-span-atlas", "cross-scope", "swaps", "verify-swaps", "axes",
-        "verify-axes", "manual-probe", "ui",
+        "verify-axes", "manual-probe", "manual-projection",
+        "verify-manual-projection", "ui",
     ),
                         default="interventions")
     parser.add_argument("--no-upload", action="store_true")
@@ -41,12 +42,15 @@ def main() -> None:
         ("axes", "run_axes.py"),
         ("verify-axes", "verify_axis_outputs.py"),
         ("manual-probe", "run_manual_probe.py"),
+        ("manual-projection", "run_manual_projection.py"),
+        ("verify-manual-projection", "verify_manual_projection.py"),
         ("ui", "build_ui.py"),
     ]
     start = next(index for index, item in enumerate(order) if item[0] == args.from_stage)
     for stage, script in order[start:]:
         supports_no_upload = stage not in {
-            "verify-all-spans", "verify-swaps", "verify-axes", "ui"
+            "verify-all-spans", "verify-swaps", "verify-axes",
+            "verify-manual-projection", "ui"
         }
         extra = ["--no-upload"] if args.no_upload and supports_no_upload else []
         if args.no_upload and stage == "ui":
