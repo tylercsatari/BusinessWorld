@@ -3597,18 +3597,31 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         'all-span-atlas': 'all-span-atlas.json.gz',
         'manual-probe': 'manual-probe.json.gz',
         'manual-projection': 'manual-projection.json.gz',
+        'cluster-outcomes': 'cluster-outcomes.json.gz',
         'cross-scope': 'cross-scope.json.gz',
         swaps: 'swaps/summary.json.gz',
         axes: 'axes.json.gz',
         registry: 'registry.json.gz',
     };
-    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|manual-probe|manual-projection|cross-scope|swaps|axes|registry)$/);
+    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|manual-probe|manual-projection|cluster-outcomes|cross-scope|swaps|axes|registry)$/);
     if (promiseArtifact && req.method === 'GET') {
         const ok = await serveR2GzipJsonStream(res,
             `longform/promise-lab-v4/${promiseArtifacts[promiseArtifact[1]]}`);
         if (!ok) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end('{"error":"Promise Lab artifact is still building"}');
+        }
+        return;
+    }
+    const promiseClusterOutcome = pathname.match(
+        /^\/api\/longquant\/promise-lab\/cluster-outcome\/([0-3])\/([a-z0-9_-]+)$/
+    );
+    if (promiseClusterOutcome && req.method === 'GET') {
+        const ok = await serveR2GzipJsonStream(res,
+            `longform/promise-lab-v4/cluster-outcomes/${promiseClusterOutcome[1]}/${promiseClusterOutcome[2]}.json.gz`);
+        if (!ok) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end('{"error":"cluster outcome map is not built"}');
         }
         return;
     }

@@ -108,6 +108,8 @@ def compact_registry_row(row):
         "bestCandidateRepresentation", "confounds", "target",
         "targetChannel", "targetDefinition", "ridgeAlpha", "n", "heldoutSpearman", "heldoutPearson", "heldoutR2",
         "searchWideP", "searchWideQ", "searchWideNull", "selectedForTarget",
+        "selectedForClusterTarget", "cluster", "targetLabel", "targetFamily",
+        "offsetSeconds", "frozenMapId", "frozenLabelsChanged",
         "nullRepeats", "minimumAttainableP",
         "bestPredictiveForTarget", "validationConfoundsRequired", "targetUnit",
         "multipleTestingFamily", "status", "outcomesUsed",
@@ -132,11 +134,13 @@ def main() -> None:
     axes = load_json("axes.json", {})
     manual_probe = load_json("manual-probe.json", {})
     manual_projection = load_json("manual-projection.json", {})
+    cluster_outcomes = load_json("cluster-outcomes.json", {})
     boundary_registry = load_jsonl_gz("boundary-experiments.jsonl.gz")
     cluster_registry = load_jsonl_gz("cluster-experiments.jsonl.gz")
     all_span_cluster_registry = load_jsonl_gz("all-span-cluster-experiments.jsonl.gz")
     cross_scope_registry = load_jsonl_gz("cross-scope-experiments.jsonl.gz")
     axis_registry = load_jsonl_gz("axis-experiments.jsonl.gz")
+    cluster_outcome_registry = load_jsonl_gz("cluster-outcomes-experiments.jsonl.gz")
     metadata_rows = [json.loads(path.read_text(encoding="utf-8"))
                      for path in (CACHE / "metadata").glob("*.json")]
     if len(metadata_rows) > int(interventions.get("hooksComplete") or 0):
@@ -151,6 +155,7 @@ def main() -> None:
     registry = [compact_registry_row(row) for row in
                 boundary_registry + cluster_registry + all_span_cluster_registry
                 + cross_scope_registry + axis_registry]
+    registry.extend(compact_registry_row(row) for row in cluster_outcome_registry)
 
     selected = [row.get("selectedSegmentation") or {} for row in discovery.get("rows") or []]
     selected_counts = Counter(int(row.get("segmentCount") or 0) for row in selected)
@@ -299,6 +304,20 @@ def main() -> None:
                 "never cluster membership."
             ),
         },
+        "clusterOutcomes": {
+            "status": cluster_outcomes.get("status"),
+            "mapId": cluster_outcomes.get("mapId"),
+            "clusters": cluster_outcomes.get("clusterCount", 0),
+            "targetFamilies": cluster_outcomes.get("selectedFamilyCount", 0),
+            "experiments": cluster_outcomes.get("experimentCount", 0),
+            "validated": cluster_outcomes.get("validatedFamilyCount", 0),
+            "timingAudit": cluster_outcomes.get("timingAudit"),
+            "topIndicators": cluster_outcomes.get("topIndicators", [])[:12],
+            "interpretation": (
+                "Outcome and exact phrase-slope axes fitted only after freezing the four labels; "
+                "every reported correlation is held out by source video."
+            ),
+        },
     }
     (CACHE / "findings.json").write_text(json.dumps(json_ready(findings), separators=(",", ":"),
                                                     allow_nan=False),
@@ -339,6 +358,8 @@ def main() -> None:
             "crossScopeExperiments": len(cross_scope_registry),
             "swapRows": swaps.get("swapRows", 0),
             "axisExperiments": len(axis_registry),
+            "clusterOutcomeExperiments": len(cluster_outcome_registry),
+            "clusterOutcomeFamilies": cluster_outcomes.get("selectedFamilyCount", 0),
             "manualProbeMapsCompared": (
                 (manual_probe.get("counts") or {}).get("frozenMapsCompared", 0)
             ),
@@ -358,6 +379,10 @@ def main() -> None:
             "manualProjectionSeparated": (
                 "fixed-label viewing experiment only; labels, maps, outcomes, and discovery are unchanged"
             ),
+            "clusterOutcomesSeparated": (
+                "outcomes join only after the k=4 labels are frozen; source-video holdout and "
+                "search-wide nulls govern every cluster-target axis"
+            ),
         },
         "artifacts": {
             "findings": "/api/longquant/promise-lab/findings",
@@ -367,6 +392,7 @@ def main() -> None:
             "allSpanAtlas": "/api/longquant/promise-lab/all-span-atlas",
             "manualProbe": "/api/longquant/promise-lab/manual-probe",
             "manualProjection": "/api/longquant/promise-lab/manual-projection",
+            "clusterOutcomes": "/api/longquant/promise-lab/cluster-outcomes",
             "crossScope": "/api/longquant/promise-lab/cross-scope",
             "swaps": "/api/longquant/promise-lab/swaps",
             "axes": "/api/longquant/promise-lab/axes",
@@ -390,6 +416,7 @@ def main() -> None:
         ("all-span-atlas.json", "all-span-atlas.json.gz"),
         ("manual-probe.json", "manual-probe.json.gz"),
         ("manual-projection.json", "manual-projection.json.gz"),
+        ("cluster-outcomes.json", "cluster-outcomes.json.gz"),
         ("cross-scope.json", "cross-scope.json.gz"),
         ("swaps.json", "swaps/summary.json.gz"),
         ("axes.json", "axes.json.gz"),

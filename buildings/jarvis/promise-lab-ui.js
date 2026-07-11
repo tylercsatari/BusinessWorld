@@ -14,12 +14,17 @@
             axisIndex: 0, registryPage: 0, hookQuery: '', registryQuery: '', registryStage: 'all',
             atlasScope: 'supported', focusedCluster: null, projectionMethod: savedProjectionMethod,
             savedPointIndex: null,
+            clusterOutcomeCluster: 2, clusterOutcomeFamily: 'performance',
+            clusterOutcomeTarget: null, clusterOutcomeDetail: null,
+            clusterOutcomePointIndex: null, clusterOutcomeLoading: false,
+            clusterOutcomeError: null,
         };
         let progressTimer = null;
         let resizeTimer = null;
         let resizeBound = false;
         let hookRequest = 0;
         let sourceRequest = 0;
+        let clusterOutcomeRequest = 0;
 
         const api = name => `/api/longquant/promise-lab/${name}`;
         const fmt = (value, digits = 2) => value == null || !isFinite(value) ? '-' : Number(value).toFixed(digits);
@@ -92,6 +97,58 @@
             if (request === sourceRequest) paint();
         }
 
+        async function loadClusterOutcomeDetail(cluster, target) {
+            const request = ++clusterOutcomeRequest;
+            const key = `${cluster}/${target}`;
+            const cache = state.data.clusterOutcomeDetails || (state.data.clusterOutcomeDetails = {});
+            state.clusterOutcomeCluster = Number(cluster);
+            state.clusterOutcomeTarget = target;
+            state.clusterOutcomePointIndex = null;
+            state.clusterOutcomeError = null;
+            if (cache[key]) {
+                state.clusterOutcomeDetail = cache[key];
+                state.clusterOutcomeLoading = false;
+                paint();
+                return;
+            }
+            state.clusterOutcomeDetail = null;
+            state.clusterOutcomeLoading = true;
+            paint();
+            try {
+                const response = await fetch(
+                    `${api('cluster-outcome')}/${encodeURIComponent(cluster)}/${encodeURIComponent(target)}`,
+                    { cache: 'default' },
+                );
+                if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+                const value = await response.json();
+                cache[key] = value;
+                if (request === clusterOutcomeRequest) state.clusterOutcomeDetail = value;
+            } catch (error) {
+                if (request === clusterOutcomeRequest) state.clusterOutcomeError = String(error && error.message || error);
+            } finally {
+                if (request === clusterOutcomeRequest) {
+                    state.clusterOutcomeLoading = false;
+                    paint();
+                }
+            }
+        }
+
+        function initializeClusterOutcome(summary) {
+            if (!summary || state.clusterOutcomeTarget) return;
+            const clusters = summary.clusters || [];
+            const cluster = clusters.find(row => Number(row.label) === Number(state.clusterOutcomeCluster)) || clusters[0];
+            if (!cluster) return;
+            state.clusterOutcomeCluster = Number(cluster.label);
+            const preferred = (summary.topIndicators || []).find(
+                row => Number(row.cluster) === state.clusterOutcomeCluster
+            );
+            const selected = preferred || (cluster.targets || [])[0];
+            if (!selected) return;
+            state.clusterOutcomeTarget = selected.target;
+            state.clusterOutcomeFamily = ((summary.targetDefinitions || {})[selected.target] || {}).family || 'performance';
+            loadClusterOutcomeDetail(state.clusterOutcomeCluster, state.clusterOutcomeTarget);
+        }
+
         async function pollProgress() {
             try {
                 const response = await fetch(`${api('progress')}?t=${Date.now()}`, { cache: 'no-store' });
@@ -116,6 +173,7 @@
             if (state.view === 'saved') {
                 load('manualProbe', api('manual-probe'));
                 load('manualProjection', api('manual-projection'));
+                load('clusterOutcomes', api('cluster-outcomes')).then(initializeClusterOutcome);
             }
             if (state.view === 'hooks' || state.view === 'boundaries') load('discovery');
             if (state.view === 'components' || state.view === 'clusters') {
@@ -281,10 +339,70 @@
                 </div>`, 'margin-bottom:10px;border-color:' + C.cyan + '55');
         }
 
+        function clusterOutcomePointInspector(detail) {
+            const localIndex = Number(state.clusterOutcomePointIndex);
+            const points = (detail || {}).points || {};
+            const globalIndices = points.globalIndices || [];
+            if (state.clusterOutcomePointIndex == null || !Number.isInteger(localIndex)
+                || localIndex < 0 || localIndex >= globalIndices.length) {
+                return `<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;color:${C.mute};font-size:10px;line-height:1.55"><div><b style="color:${C.text};font-size:12px">Axis point inspector</b><br>Click a point to see the exact span text embedded, its complete source hook, measured target, adjusted target, timing interval, and axis coordinates.</div></div>`;
+            }
+            const globalIndex = Number(globalIndices[localIndex]);
+            const pointIndex = ((state.data.manualProjection || {}).frozenPointIndex || {});
+            const hookIndex = Number((pointIndex.hookIndices || [])[globalIndex]);
+            const hook = (pointIndex.hooks || [])[hookIndex] || {};
+            const hookText = String(hook.text || '');
+            const charStart = Number((pointIndex.charStarts || [])[globalIndex]);
+            const charEnd = Number((pointIndex.charEnds || [])[globalIndex]);
+            const highlighted = Number.isFinite(charStart) && Number.isFinite(charEnd)
+                && charStart >= 0 && charEnd >= charStart && charEnd <= hookText.length
+                ? `${esc(hookText.slice(0, charStart))}<mark style="background:${C.cyan}2a;color:${C.text};padding:1px 2px">${esc(hookText.slice(charStart, charEnd))}</mark>${esc(hookText.slice(charEnd))}`
+                : esc(hookText);
+            const meta = detail.targetMeta || {};
+            const offset = Number(meta.offsetSeconds || 0);
+            const spokenStart = Number((points.spanStartSeconds || [])[localIndex]);
+            const spokenEnd = Number((points.spanEndSeconds || [])[localIndex]);
+            const rawTarget = Number((points.target || [])[localIndex]);
+            const residualTarget = Number((points.targetResidual || [])[localIndex]);
+            return `<div style="padding:12px;height:100%;overflow:auto"><div style="font-size:8px;color:${clusterColor(detail.cluster)};font-weight:900;text-transform:uppercase">cluster ${detail.cluster} · ${esc(meta.label || detail.target || '')}</div><div style="font-size:14px;color:${C.text};font-weight:900;line-height:1.35;margin:5px 0">${esc((pointIndex.texts || [])[globalIndex] || '')}</div><div style="font-size:8px;color:${C.mute};margin-bottom:3px">source video</div><div style="font-size:10px;color:${C.text};font-weight:800">${esc(hook.title || hook.videoId || '')}</div><div style="font-size:8px;color:${C.faint};margin-top:2px">${esc(hook.videoId || '')} · global span ${globalIndex.toLocaleString()} · frozen cluster ${Number((pointIndex.labels || [])[globalIndex])}</div><div style="height:1px;background:${C.border};margin:10px 0"></div><div style="font-size:8px;color:${C.mute};margin-bottom:3px">exact source hook</div><div style="font-size:9px;color:${C.dim};line-height:1.55">${highlighted}</div><div style="height:1px;background:${C.border};margin:10px 0"></div><div style="font-size:8px;color:${C.mute};margin-bottom:3px">visible input → output trace</div><div style="font-size:9px;color:${C.text};line-height:1.6"><b>embedded text:</b> ${esc((pointIndex.texts || [])[globalIndex] || '')}<br><b>semantic representation:</b> ${esc((detail.selectedExperiment || {}).representation || '')} · ${(detail.selectedExperiment || {}).pcaDimensions || '-'}D · ridge alpha ${fmt((detail.selectedExperiment || {}).ridgeAlpha, 2)}<br><b>measured/model target:</b> ${fmt(rawTarget, 6)} ${esc(meta.unit || '')}<br><b>target after fold-declared confounds:</b> ${fmt(residualTarget, 6)}<br><b>outcome axis:</b> ${fmt((points.x || [])[localIndex], 5)} · <b>background axis:</b> ${fmt((points.y || [])[localIndex], 5)}<br><b>spoken interval:</b> ${fmt(spokenStart, 3)}s → ${fmt(spokenEnd, 3)}s${meta.family === 'performance' ? '' : `<br><b>measured slope window:</b> ${fmt(spokenStart + offset, 3)}s → ${fmt(spokenEnd + offset, 3)}s · offset +${offset}s`}</div></div>`;
+        }
+
+        function clusterOutcomeMatrix(summary) {
+            const definitions = summary.targetDefinitions || {};
+            const familyTargets = Object.keys(definitions).filter(
+                name => definitions[name].family === state.clusterOutcomeFamily
+            );
+            return card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap;margin-bottom:7px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">Four-cluster held-out result matrix</div><div style="font-size:8px;color:${C.mute}">Every cell is a separate axis learned only within that frozen category. rho is source-video held-out Spearman; q corrects the full 100-family selection.</div></div><div style="display:flex;gap:4px;flex-wrap:wrap">${[['performance', 'Performance'], ['raw-slope', 'Raw slope'], ['normalized-slope', 'Normalized slope'], ['residual-slope', 'Unexpected slope']].map(([id, label]) => button(label, `data-pl-outcome-family="${id}"`, state.clusterOutcomeFamily === id)).join('')}</div></div><div style="overflow:auto"><div style="min-width:${Math.max(620, 104 + familyTargets.length * 122)}px">${(summary.clusters || []).map(cluster => { const byTarget = Object.fromEntries((cluster.targets || []).map(row => [row.target, row])); return `<div style="display:grid;grid-template-columns:96px repeat(${familyTargets.length},minmax(112px,1fr));gap:4px;margin-bottom:4px"><button data-pl-outcome-cluster="${cluster.label}" style="border:1px solid ${Number(cluster.label) === Number(state.clusterOutcomeCluster) ? clusterColor(cluster.label) : C.border};background:${C.card2};color:${clusterColor(cluster.label)};font-size:10px;font-weight:900;cursor:pointer;text-align:left;padding:7px;border-radius:5px;${Number(cluster.label) === Number(state.clusterOutcomeCluster) ? `box-shadow:inset 3px 0 ${clusterColor(cluster.label)}` : ''}">cluster ${cluster.label}<br><span style="font-size:8px;color:${C.mute}">${Number(cluster.spanInstances || 0).toLocaleString()} spans</span></button>${familyTargets.map(name => { const row = byTarget[name] || {}, active = Number(cluster.label) === Number(state.clusterOutcomeCluster) && name === state.clusterOutcomeTarget, validated = row.status === 'validated'; return `<button data-pl-outcome-target="${esc(name)}" data-pl-outcome-cluster="${cluster.label}" style="min-width:0;border:1px solid ${active ? C.cyan : validated ? C.green + '88' : C.border};background:${active ? C.cyan + '18' : C.card2};color:${C.text};padding:6px;border-radius:5px;text-align:left;cursor:pointer"><div style="font-size:8px;color:${validated ? C.green : C.dim};font-weight:900;white-space:normal">${esc((definitions[name] || {}).label || name)}</div><div style="font-size:11px;font-weight:900;margin-top:2px">rho ${fmt(row.heldoutSpearman, 3)}</div><div style="font-size:8px;color:${C.mute}">q ${fmt(row.searchWideQ, 3)} · ${esc(row.representation || '')}</div></button>`; }).join('')}</div>`; }).join('')}</div></div>`, 'margin-bottom:10px');
+        }
+
+        function clusterOutcomeDetailPanel(summary) {
+            const detail = state.clusterOutcomeDetail;
+            if (state.clusterOutcomeLoading) return card(`<div style="font-size:10px;color:${C.cyan}">Loading the selected point-level embedding map...</div>`, 'margin-bottom:10px');
+            if (state.clusterOutcomeError) return card(`<div style="font-size:10px;color:${C.red}">${esc(state.clusterOutcomeError)}</div>`, 'margin-bottom:10px');
+            if (!detail) return '';
+            const experiment = detail.selectedExperiment || {}, meta = detail.targetMeta || {};
+            const offset = Number(meta.offsetSeconds || 0);
+            const cluster = (summary.clusters || []).find(row => Number(row.label) === Number(detail.cluster)) || {};
+            const baseline = (cluster.slopeBaselineAudits || {})[String(offset)] || detail.normalizationAudit || {};
+            const extremes = detail.extremes || {};
+            const extremeColumn = (title, rows, color) => `<div><div style="font-size:9px;color:${color};font-weight:900;margin-bottom:4px">${esc(title)}</div>${(rows || []).map(row => `<button data-pl-outcome-global-index="${row.globalIndex}" style="display:block;width:100%;text-align:left;border:0;border-top:1px solid ${C.border};background:transparent;color:${C.text};padding:5px 0;font-size:8.5px;cursor:pointer"><b>${esc(row.text || '')}</b><br><span style="color:${C.mute}">axis ${fmt(row.axis, 3)} · target ${fmt(row.target, 3)}</span></button>`).join('')}</div>`;
+            return `${card(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:7px"><div style="min-width:270px;flex:1"><div style="font-size:9px;color:${clusterColor(detail.cluster)};font-weight:900;text-transform:uppercase">frozen cluster ${detail.cluster} · ${esc(meta.family || '')}</div><div style="font-size:15px;color:${C.text};font-weight:900;margin-top:2px">${esc(meta.label || detail.target)}</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:3px">${esc(meta.definition || '')}</div><div style="font-size:8px;color:${C.mute};margin-top:4px">input: exact contiguous span text · representation: ${esc(experiment.representation || '')} · ${experiment.pcaDimensions || '-'} PCA dimensions · alpha ${fmt(experiment.ridgeAlpha, 2)} · confounds: ${esc(experiment.confounds || '')}</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${stat('held-out rho', fmt(experiment.heldoutSpearman, 3), experiment.status === 'validated' ? C.green : C.text)}${stat('search p', fmt(experiment.searchWideP, 4), C.cyan)}${stat('family q', fmt(experiment.searchWideQ, 4), experiment.status === 'validated' ? C.green : C.amber)}${stat('audit rows', Number(experiment.n || 0).toLocaleString(), C.purple)}</div></div><div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(290px,.7fr);gap:10px"><div><canvas data-pl-canvas="cluster-outcome-axis" style="width:100%;height:430px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px">Horizontal is the final cluster-specific semantic outcome axis; vertical is an orthogonal background coordinate. Color is the target value. Click any point without leaving this view.</div></div><aside data-pl-outcome-inspector style="height:430px;background:${C.card2};border-left:2px solid ${clusterColor(detail.cluster)};overflow:hidden">${clusterOutcomePointInspector(detail)}</aside></div>`, 'margin-bottom:10px;border-color:' + clusterColor(detail.cluster))}
+            <div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:10px;color:${C.green};font-weight:900;margin-bottom:3px">Held-out prediction check</div><canvas data-pl-canvas="cluster-outcome-oof" style="width:100%;height:270px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px">Horizontal is prediction from a fold that never saw this source video; vertical is the adjusted observed target. Four deterministic audit spans per source are shown.</div>`)}${card(`<div style="font-size:10px;color:${C.purple};font-weight:900;margin-bottom:3px">Offset response · cluster ${detail.cluster}</div><canvas data-pl-canvas="cluster-outcome-offsets" style="width:100%;height:270px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px">The same frozen cluster measured at aligned 0s and forward processing offsets 1-5s. Raw, endpoint-normalized, and unexpected-slope families stay separate.</div>`)}</div>
+            <div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.75fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:10px;color:${C.cyan};font-weight:900;margin-bottom:3px">Entry / terminal normalization diagnostic</div><canvas data-pl-canvas="cluster-outcome-entry" style="width:100%;height:260px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px">Out-of-fold expected entry from terminal retention and duration: Pearson ${fmt(((summary.normalization || {}).entryTerminalDiagnostic || {}).oofPearson, 3)} · Spearman ${fmt(((summary.normalization || {}).entryTerminalDiagnostic || {}).oofSpearman, 3)} · R2 ${fmt(((summary.normalization || {}).entryTerminalDiagnostic || {}).oofR2, 3)}. This measured relationship adjusts the rewatch-linked starting level.</div>`)}${card(`<div style="font-size:10px;color:${C.text};font-weight:900;margin-bottom:5px">What was adjusted</div><div style="font-size:9px;color:${C.dim};line-height:1.6">Endpoint normalization: <b style="color:${C.text}">(retention - terminal) / (entry - terminal)</b>.<br>Terminal is the mean of the final 5% of curve points, minimum three.<br>Natural-drop residual is grouped out of sample from exact span timing, phrase duration, video duration, entry, terminal, amplitude, and entry minus expected entry.<br>${meta.family === 'performance' ? 'This target is video-level, so no phrase-slope window is used.' : `Selected phrase window offset: <b style="color:${C.text}">+${offset}s</b>. Baseline OOF rho ${fmt(baseline.oofSpearman, 3)} · R2 ${fmt(baseline.oofR2, 3)}.`}</div>`)}</div>
+            ${card(`<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">${extremeColumn('Highest axis spans', extremes.high, C.green)}${extremeColumn('Lowest axis spans', extremes.low, C.red)}</div>`, 'margin-bottom:10px')}`;
+        }
+
+        function clusterOutcomePanel() {
+            const summary = state.data.clusterOutcomes;
+            if (!summary) return state.errors.clusterOutcomes ? card(`<div style="font-size:10px;color:${C.red}">${esc(state.errors.clusterOutcomes)}</div>`) : loading('clusterOutcomes');
+            const timing = summary.timingAudit || {};
+            return `<div style="height:1px;background:${C.border};margin:16px 0"></div>${card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:280px;flex:1"><div style="font-size:9px;color:${C.purple};font-weight:900;text-transform:uppercase">Quantifying the four frozen categories</div><div style="font-size:15px;color:${C.text};font-weight:900;margin-top:2px">Cluster-conditioned outcome and phrase-slope embeddings</div><div style="font-size:9px;color:${C.dim};line-height:1.55;margin-top:4px">The k=4 assignment above is unchanged. Each category now gets its own views, realistic views, outlier, 10M class, swipe, 5-second retention, and exact phrase-slope axes. Outcomes join only here, after clustering.</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${stat('axis runs', Number(summary.experimentCount || 0).toLocaleString(), C.purple)}${stat('selected families', summary.selectedFamilyCount || 0, C.cyan)}${stat('validated', summary.validatedFamilyCount || 0, C.green)}${stat('exact timing', `${timing.exactHooks || 0}/${timing.hooks || 0}`, C.amber)}</div></div><div style="font-size:8px;color:${C.mute};margin-top:7px">Five hooks with caption-text mismatches are excluded only from timed slope targets; all remain in video-level targets. ${Number(timing.spansWithExactPositiveDuration || 0).toLocaleString()} / ${Number(timing.spanInstances || 0).toLocaleString()} spans have exact positive-duration intervals. No timestamp is guessed.</div>`, 'margin-bottom:10px;border-color:' + C.purple + '55')}${clusterOutcomeMatrix(summary)}${clusterOutcomeDetailPanel(summary)}`;
+        }
+
         function renderSavedProjection() {
             if (!state.data.manualProbe) return loading('manualProbe');
             if (!state.data.manualProjection) return loading('manualProjection');
-            return `${manualProjectionPanel()}${manualMetricGlossary()}`;
+            return `${manualProjectionPanel()}${manualMetricGlossary()}${clusterOutcomePanel()}`;
         }
 
         function renderOverview() {
@@ -493,7 +611,7 @@
         }
 
         function responsiveStyles() {
-            return `<style>@media(max-width:820px){#pl-root .pl-split{grid-template-columns:minmax(0,1fr)!important}#pl-root canvas{max-width:100%}}</style>`;
+            return `<style>@media(max-width:820px){#pl-root .pl-split{grid-template-columns:minmax(0,1fr)!important}#pl-root canvas{max-width:100%}#pl-root [data-pl-outcome-inspector]{height:auto!important;min-height:280px}}</style>`;
         }
 
         function paint() {
@@ -564,10 +682,11 @@
             });
             context.globalAlpha = 1;
             canvas.onclick = event => {
-                const interactiveKinds = new Set(['components', 'hook-map', 'cluster', 'manual-projection']);
+                const interactiveKinds = new Set(['components', 'hook-map', 'cluster', 'manual-projection', 'cluster-outcome-axis']);
                 const kind = canvas.dataset.plCanvas;
                 const atlas = kind === 'hook-map' ? state.data.atlas : activeAtlas();
-                if (!interactiveKinds.has(kind) || (kind !== 'manual-projection' && !atlas)) return;
+                if (!interactiveKinds.has(kind)
+                    || (!['manual-projection', 'cluster-outcome-axis'].includes(kind) && !atlas)) return;
                 const rect = canvas.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top;
                 let best = -1, distance = Infinity;
                 projected.forEach((point, index) => { const d = (point[0] - x) ** 2 + (point[1] - y) ** 2; if (d < distance) { distance = d; best = index; } });
@@ -579,6 +698,13 @@
                     if (!spanId) return;
                     const scrollX = window.scrollX, scrollY = window.scrollY;
                     state.savedPointIndex = originalIndex;
+                    paint();
+                    window.scrollTo(scrollX, scrollY);
+                    return;
+                }
+                if (kind === 'cluster-outcome-axis') {
+                    const scrollX = window.scrollX, scrollY = window.scrollY;
+                    state.clusterOutcomePointIndex = originalIndex;
                     paint();
                     window.scrollTo(scrollX, scrollY);
                     return;
@@ -605,10 +731,79 @@
             (hook.tokens || []).forEach((token, index) => { if (index % Math.max(1, Math.ceil(n / 12)) === 0) context.fillText(String(token.text).slice(0, 6), 2, 13 + index * cell); });
         }
 
+        function drawClusterOutcomeOffsets(canvas) {
+            const summary = state.data.clusterOutcomes;
+            const cluster = summary && (summary.clusters || []).find(
+                row => Number(row.label) === Number(state.clusterOutcomeCluster)
+            );
+            if (!cluster) return;
+            const { context, width, height } = canvasContext(canvas);
+            const rows = Object.fromEntries((cluster.targets || []).map(row => [row.target, row]));
+            const series = [
+                ['raw', 'slope_raw_o', C.cyan],
+                ['normalized', 'slope_normalized_o', C.purple],
+                ['unexpected', 'slope_residual_o', C.green],
+            ].map(([label, prefix, color]) => ({
+                label, color,
+                values: [0, 1, 2, 3, 4, 5].map(offset => Number((rows[`${prefix}${offset}`] || {}).heldoutSpearman)),
+            }));
+            const finite = series.flatMap(row => row.values).filter(Number.isFinite);
+            const minimum = Math.min(0, ...finite), maximum = Math.max(.01, ...finite);
+            const left = 34, right = 10, top = 24, bottom = 24;
+            const x = offset => left + offset / 5 * (width - left - right);
+            const y = value => height - bottom - (value - minimum) / ((maximum - minimum) || 1) * (height - top - bottom);
+            context.strokeStyle = C.border2; context.lineWidth = 1;
+            context.beginPath(); context.moveTo(left, y(0)); context.lineTo(width - right, y(0)); context.stroke();
+            context.fillStyle = C.mute; context.font = '8px sans-serif';
+            for (let offset = 0; offset <= 5; offset++) context.fillText(`+${offset}s`, x(offset) - 8, height - 7);
+            context.fillText(fmt(maximum, 2), 3, top + 3); context.fillText(fmt(minimum, 2), 3, height - bottom);
+            series.forEach((row, seriesIndex) => {
+                context.strokeStyle = row.color; context.fillStyle = row.color; context.lineWidth = 2;
+                context.beginPath();
+                row.values.forEach((value, offset) => {
+                    if (!Number.isFinite(value)) return;
+                    if (offset === 0) context.moveTo(x(offset), y(value)); else context.lineTo(x(offset), y(value));
+                });
+                context.stroke();
+                row.values.forEach((value, offset) => {
+                    if (!Number.isFinite(value)) return;
+                    context.beginPath(); context.arc(x(offset), y(value), 3, 0, Math.PI * 2); context.fill();
+                });
+                context.fillText(row.label, left + seriesIndex * 76, 11);
+            });
+        }
+
         function drawCanvases() {
             document.querySelectorAll('#pl-root canvas[data-pl-canvas]').forEach(canvas => {
                 const kind = canvas.dataset.plCanvas;
                 if (kind === 'interaction') return drawInteraction(canvas);
+                if (kind === 'cluster-outcome-axis') {
+                    const detail = state.clusterOutcomeDetail, points = detail && detail.points;
+                    if (!points) return;
+                    const values = (points.target || []).map(Number), valueBounds = bounds(values);
+                    const colors = values.map(value => {
+                        if (!Number.isFinite(value)) return C.faint;
+                        const t = Math.max(0, Math.min(1, (value - valueBounds[0]) / ((valueBounds[1] - valueBounds[0]) || 1)));
+                        return `rgb(${Math.round(56 + 192 * t)},${Math.round(189 - 76 * t)},${Math.round(248 - 135 * t)})`;
+                    });
+                    const plot = (points.x || []).map((x, index) => [Number(x), Number((points.y || [])[index])]);
+                    return scatter(canvas, plot, colors, null, null, false, state.clusterOutcomePointIndex);
+                }
+                if (kind === 'cluster-outcome-oof') {
+                    const validation = (state.clusterOutcomeDetail || {}).validation || {};
+                    const points = (validation.predictedOOF || []).map((value, index) => [
+                        Number(value), Number((validation.observedResidualOOF || [])[index]),
+                    ]);
+                    return scatter(canvas, points, points.map(() => clusterColor(state.clusterOutcomeCluster)), null);
+                }
+                if (kind === 'cluster-outcome-entry') {
+                    const diagnostic = ((state.data.clusterOutcomes || {}).normalization || {}).entryTerminalDiagnostic || {};
+                    const points = (diagnostic.predictedEntryOOF || []).map((value, index) => [
+                        Number(value), Number((diagnostic.entry || [])[index]),
+                    ]);
+                    return scatter(canvas, points, points.map(() => C.cyan), null);
+                }
+                if (kind === 'cluster-outcome-offsets') return drawClusterOutcomeOffsets(canvas);
                 if (kind === 'components' || kind === 'hook-map') {
                     const atlas = kind === 'hook-map' ? state.data.atlas : activeAtlas(); if (!atlas) return;
                     const projections = atlas.projections || {};
@@ -685,7 +880,7 @@
         function handleClick(event) {
             const target = event.target;
             const view = target.closest('[data-pl-view]'); if (view) { state.view = view.dataset.plView; ensureView(); paint(); return true; }
-            if (target.closest('[data-pl-refresh]')) { Object.keys(state.data).forEach(key => delete state.data[key]); state.hook = null; state.source = null; state.focusedCluster = null; ensureView(); return true; }
+            if (target.closest('[data-pl-refresh]')) { Object.keys(state.data).forEach(key => delete state.data[key]); state.hook = null; state.source = null; state.focusedCluster = null; state.clusterOutcomeTarget = null; state.clusterOutcomeDetail = null; state.clusterOutcomePointIndex = null; ensureView(); return true; }
             if (target.closest('[data-pl-open-manual-probe]')) { openManualProbe(); return true; }
             if (target.closest('[data-pl-clear-cluster-focus]')) { state.focusedCluster = null; paint(); return true; }
             if (target.closest('[data-pl-apply-query]')) { state.registryPage = 0; paint(); return true; }
@@ -696,6 +891,10 @@
             const map = target.closest('[data-pl-map]'); if (map) { state.mapIndex = Number(map.dataset.plMap); state.focusedCluster = null; paint(); return true; }
             const mapPage = target.closest('[data-pl-map-page]'); if (mapPage) { const maps = ((activeAtlas() || {}).maps || []); const max = Math.max(0, Math.ceil(maps.length / 24) - 1); state.mapPage = Math.max(0, Math.min(max, state.mapPage + Number(mapPage.dataset.plMapPage))); state.mapIndex = Math.min(Math.max(0, maps.length - 1), state.mapPage * 24); state.focusedCluster = null; paint(); return true; }
             const projectionMethod = target.closest('[data-pl-projection-method]'); if (projectionMethod) { state.projectionMethod = projectionMethod.dataset.plProjectionMethod; try { window.localStorage.setItem(projectionMethodKey, state.projectionMethod); } catch (_) { /* Storage is optional. */ } paint(); return true; }
+            const outcomeTarget = target.closest('[data-pl-outcome-target]'); if (outcomeTarget) { const summary = state.data.clusterOutcomes || {}, cluster = Number(outcomeTarget.dataset.plOutcomeCluster ?? state.clusterOutcomeCluster), name = outcomeTarget.dataset.plOutcomeTarget; state.clusterOutcomeFamily = ((summary.targetDefinitions || {})[name] || {}).family || state.clusterOutcomeFamily; loadClusterOutcomeDetail(cluster, name); return true; }
+            const outcomeCluster = target.closest('[data-pl-outcome-cluster]'); if (outcomeCluster) { const summary = state.data.clusterOutcomes || {}, cluster = Number(outcomeCluster.dataset.plOutcomeCluster), clusterRow = (summary.clusters || []).find(row => Number(row.label) === cluster), available = new Set((clusterRow && clusterRow.targets || []).map(row => row.target)); const name = available.has(state.clusterOutcomeTarget) ? state.clusterOutcomeTarget : ((clusterRow && clusterRow.targets || [])[0] || {}).target; if (name) loadClusterOutcomeDetail(cluster, name); return true; }
+            const outcomeFamily = target.closest('[data-pl-outcome-family]'); if (outcomeFamily) { const family = outcomeFamily.dataset.plOutcomeFamily, summary = state.data.clusterOutcomes || {}, cluster = (summary.clusters || []).find(row => Number(row.label) === Number(state.clusterOutcomeCluster)), row = (cluster && cluster.targets || []).find(item => ((summary.targetDefinitions || {})[item.target] || {}).family === family); state.clusterOutcomeFamily = family; if (row) loadClusterOutcomeDetail(state.clusterOutcomeCluster, row.target); else paint(); return true; }
+            const outcomeGlobal = target.closest('[data-pl-outcome-global-index]'); if (outcomeGlobal) { const indices = ((state.clusterOutcomeDetail || {}).points || {}).globalIndices || [], local = indices.indexOf(Number(outcomeGlobal.dataset.plOutcomeGlobalIndex)); if (local >= 0) { state.clusterOutcomePointIndex = local; paint(); } return true; }
             const metric = target.closest('[data-pl-metric]'); if (metric) { state.metric = metric.dataset.plMetric; paint(); return true; }
             const source = target.closest('[data-pl-source]'); if (source) { if (source.hasAttribute('data-pl-open-swaps')) { state.view = 'swaps'; load('swaps'); } loadSource(source.dataset.plSource); return true; }
             const axis = target.closest('[data-pl-axis]'); if (axis) { state.axisIndex = Number(axis.dataset.plAxis); paint(); return true; }
