@@ -1228,6 +1228,7 @@ const JarvisLongQuant = (function () {
         const box = (label, value, detail, color) => `<div style="min-width:170px;flex:1 1 190px;border-left:2px solid ${color};padding:2px 9px"><div style="font-size:9px;color:${C.mute};font-weight:900;text-transform:uppercase">${esc(label)}</div><div style="font-size:18px;color:${color};font-weight:900;margin-top:2px">${esc(value)}</div><div style="font-size:9px;color:${C.faint};line-height:1.35;margin-top:2px">${esc(detail)}</div></div>`;
         return `<div style="margin-top:8px;border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};padding:9px 0"><div style="font-size:9px;color:${C.cyan};font-weight:900;text-transform:uppercase;margin-bottom:7px">Model-aligned score contract</div><div style="display:flex;gap:8px;flex-wrap:wrap">${box('Thumbnail potential', visual == null ? '—' : `${(visual * 100).toFixed(0)}th`, 'image-only frozen visual CTR+views ladder; grind threshold uses this', C.green)}${box('Idea model reward', reward(score.idea_model_reward), `visual potential minus topical relevance penalty; relevance ${pass(trace.relevance, trace.relevance_floor || LQ_REL_FLOOR)}`, C.accent)}${box('Thumbnail model reward', reward(score.thumbnail_model_reward), `idea reward minus real-thumbnail density penalty; density ${pass(trace.density, trace.density_floor || LQ_DENSITY_FLOOR)}`, C.cyan)}</div><div style="margin-top:8px;font-size:9px;line-height:1.45;color:${C.faint}"><div><b style="color:${C.text}">Title + thumbnail diagnostic:</b> ${esc(metricLine('together'))} · never used for the threshold</div><div style="margin-top:2px"><b style="color:${C.text}">Title-only diagnostic:</b> ${esc(metricLine('text'))} · never used for the threshold</div></div></div>`;
     }
+    const LQSCORETRIES = {};
     function lqxScoreFor(cacheId, key, title, idea, localScore, autoScore) {
         let c = LQSCORES[cacheId];
         if (c && !c.loading && !c.error) c = LQSCORES[cacheId] = lqxNormalizeScore(c);
@@ -1237,8 +1238,14 @@ const JarvisLongQuant = (function () {
             return localScore;
         }
         if (!autoScore && localScore && localScore.metrics) return localScore;
-        if (c && c.error && key && autoScore && Date.now() - (c.at || 0) > 5000) { delete LQSCORES[cacheId]; lqxScoreKey(cacheId, key, title, idea); return LQSCORES[cacheId] || c; }
-        if (c && !c.loading && !c.error && key && autoScore && !lqxHasTwelveOutputs(c)) { delete LQSCORES[cacheId]; lqxScoreKey(cacheId, key, title, idea); return LQSCORES[cacheId] || localScore || c; }
+        // BOUNDED retries — a score that keeps erroring or can never reach 12/12 (e.g. a channel map
+        // missing projections) must NOT respawn the scorer forever: that was an infinite re-request
+        // loop that looked like "scoring never loads". 3 error retries, ONE completeness refetch,
+        // then accept what we have and show it (errors red, partial contracts amber).
+        LQSCORETRIES[cacheId] = LQSCORETRIES[cacheId] || { err: 0, comp: 0 };
+        const tries = LQSCORETRIES[cacheId];
+        if (c && c.error && key && autoScore && Date.now() - (c.at || 0) > 5000 && tries.err < 3) { tries.err++; delete LQSCORES[cacheId]; lqxScoreKey(cacheId, key, title, idea); return LQSCORES[cacheId] || c; }
+        if (c && !c.loading && !c.error && key && autoScore && !lqxHasTwelveOutputs(c) && tries.comp < 1) { tries.comp++; delete LQSCORES[cacheId]; lqxScoreKey(cacheId, key, title, idea); return LQSCORES[cacheId] || localScore || c; }
         if (!c && key && autoScore && !lqxHasTwelveOutputs(localScore)) lqxScoreKey(cacheId, key, title, idea);
         return c || localScore || null;
     }
@@ -1298,6 +1305,7 @@ const JarvisLongQuant = (function () {
     }
     function lqxChannelMetricHtml(score, compact) {
         score = lqxNormalizeScore(score);
+        if (score && score.error && !score.channels) return `<div style="margin-top:5px;font-size:${compact ? '9px' : '10px'};color:${C.red};border:1px solid ${C.red}44;border-radius:6px;padding:4px 7px">⚠ scoring failed: ${esc(String(score.error).slice(0, 160))}</div>`;
         if (!score || !score.channels) return '';
         for (const ch of ['visual', 'together']) if (!RAW[ch]) rawEnsure(ch);
         const outputs = {};
@@ -1319,7 +1327,7 @@ const JarvisLongQuant = (function () {
             }).join('');
             return `<div style="display:grid;grid-template-columns:${compact ? '58px' : '76px'} minmax(0,1fr);gap:${compact ? '5px' : '7px'};align-items:start;margin-top:${compact ? '4px' : '6px'}"><div><div style="font-size:${compact ? '8px' : '9px'};color:${ch === 'visual' ? C.green : C.accent};font-weight:900;text-transform:uppercase">${ch}</div><div style="font-size:${compact ? '7px' : '8px'};color:${C.faint};line-height:1.25">${esc(compact ? (ch === 'visual' ? 'image only' : 'image + title') : input)}</div></div><div style="display:flex;gap:${compact ? '3px' : '4px'};flex-wrap:wrap">${cells}</div></div>`;
         };
-        return `<div style="margin-top:${compact ? '6px' : '8px'};border-top:1px solid ${C.border};padding-top:${compact ? '5px' : '7px'}"><div style="display:flex;justify-content:space-between;gap:6px;font-size:${compact ? '8px' : '9px'};font-weight:900;text-transform:uppercase"><span style="color:${C.mute}">12 embedding outputs</span><span style="color:${found === 12 ? C.green : C.amber}">${found}/12</span></div>${row('visual')}${row('together')}</div>`;
+        return `<div style="margin-top:${compact ? '6px' : '8px'};border-top:1px solid ${C.border};padding-top:${compact ? '5px' : '7px'}"><div style="display:flex;justify-content:space-between;gap:6px;font-size:${compact ? '8px' : '9px'};font-weight:900;text-transform:uppercase"><span style="color:${C.mute}">12 embedding outputs</span><span style="color:${found === 12 ? C.green : C.amber}">${found}/12</span></div>${score.scoreWarning ? `<div style="font-size:8.5px;color:${C.amber};margin-top:3px">⚠ ${esc(String(score.scoreWarning).slice(0, 150))}</div>` : ''}${row('visual')}${row('together')}</div>`;
     }
     function lqxMetricGraph(score, metric, label, ch, cacheId) {
         if (!score || !score.channels || !score.channels[ch]) return '';
@@ -1683,6 +1691,178 @@ const JarvisLongQuant = (function () {
             row.loading = false; row.error = String((e && e.message) || e);
         }
         rtgUpdateLqExp();
+    }
+    // ═══ 🤖 Claude RTG — data-driven promise-component discovery (Claude's playground) ═══
+    // No assumed taxonomy: hooks are chunked structurally, chunks embedded alone AND in-context
+    // (contribution vectors preserve attention), clustered 30 different ways, tied to REAL outcomes
+    // with cross-validation + permutation baselines, then recombined whole-text to test components.
+    const LQCRTG = {};
+    function crtgEnsure(name) {
+        const c = LQCRTG[name];
+        if (c) return c.loading ? null : c;
+        LQCRTG[name] = { loading: 1 };
+        lqxJson('/api/longquant/claudertg/' + name).then(j => { LQCRTG[name] = j || {}; rtgUpdateCrtg(); })
+            .catch(e => { LQCRTG[name] = { error: (e && e.message) || String(e) }; rtgUpdateCrtg(); });
+        return null;
+    }
+    async function crtgScorePromise(text) {
+        text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+        if (!text || text.length < 4) return;
+        st.crtgScores = st.crtgScores || [];
+        const id = 'p' + lqxHash(text.toLowerCase());
+        st.crtgPSel = id;
+        let row = st.crtgScores.find(r => r.id === id);
+        if (row && row.axes) { rtgUpdateCrtg(); return; }
+        if (!row) { row = { id, text }; st.crtgScores.unshift(row); }
+        row.loading = true; row.error = null; rtgUpdateCrtg();
+        try {
+            const j = await lqxJson('/api/longquant/claudertg/score-promise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+            row.axes = j.axes; row.loading = false;
+        } catch (e) { row.loading = false; row.error = String((e && e.message) || e); }
+        rtgUpdateCrtg();
+    }
+    function rtgUpdateCrtg() { try { const el = window.document.getElementById('lq-crtg-panel'); if (el) el.innerHTML = renderClaudeRTG(); } catch (e) { } }
+    const CRTG_PAL = ['#38bdf8', '#a78bfa', '#34d399', '#fbbf24', '#f87171', '#f472b6', '#22d3ee', '#a3e635', '#fb923c', '#e879f9', '#4ade80', '#facc15', '#60a5fa', '#c084fc', '#2dd4bf', '#f43f5e', '#94a3b8', '#eab308', '#818cf8', '#10b981', '#fda4af', '#7dd3fc', '#bef264', '#fdba74'];
+    function crtgScatter(coords, assign, W, H, sel, clickable) {
+        if (!Array.isArray(coords) || !coords.length) return '';
+        const xs = coords.map(c => c[0]), ys = coords.map(c => c[1]);
+        const x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+        const X = x => 4 + (x - x0) / ((x1 - x0) || 1) * (W - 8), Y = y => H - 4 - (y - y0) / ((y1 - y0) || 1) * (H - 8);
+        let d = '';
+        const step = Math.max(1, Math.ceil(coords.length / (clickable ? 1400 : 500)));
+        for (let i = 0; i < coords.length; i += step) {
+            const a = assign[i], on = sel == null || a === sel;
+            d += `<circle cx="${X(coords[i][0]).toFixed(1)}" cy="${Y(coords[i][1]).toFixed(1)}" r="${clickable ? 2.4 : 1.5}" fill="${CRTG_PAL[a % CRTG_PAL.length]}" opacity="${on ? 0.85 : 0.12}"/>`;
+        }
+        return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block;background:${C.card2};border-radius:8px">${d}</svg>`;
+    }
+    function renderClaudeRTG() {
+        const meta = crtgEnsure('meta'), clus = crtgEnsure('clusterings'), axes = crtgEnsure('axes'), swaps = crtgEnsure('swaps'), chk = crtgEnsure('chunks');
+        let out = cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🤖 Claude RTG — promise components, discovered not assumed</div>
+          <div style="font-size:11px;color:${C.mute};line-height:1.55">Every hook from the 🪝 dataset is chunked structurally (no labels), each chunk embedded <b style="color:${C.text}">alone</b> and as an <b style="color:${C.text}">in-context contribution</b> (emb(full) − emb(full − chunk) — the attention-aware meaning of the chunk in its sentence), clustered dozens of ways, tied to REAL outcomes (keep · ret@5s · ret@hook · avg retention · log views) with cross-validation and permutation baselines, then components are spliced into other hooks and the WHOLE recombined text re-embedded and scored. Clusters are candidate components — what they mean is for the data to say.</div>
+          ${meta && meta.builtAt ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:10px">${[['hooks', meta.nHooks], ['chunks', meta.nChunks], ['clusterings', meta.nConfigs], ['best silhouette', meta.bestSil]].map(([l, v]) => `<span style="border:1px solid ${C.border};border-radius:6px;padding:3px 8px;color:${C.dim}"><b style="color:${C.text}">${v}</b> ${l}</span>`).join('')}</div><div style="font-size:9px;color:${C.faint};margin-top:6px">${esc(meta.honest || '')}</div>` : meta && meta.error ? `<div style="font-size:11px;color:${C.red};margin-top:8px">${esc(String(meta.error))}</div>` : `<div style="font-size:11px;color:${C.cyan};margin-top:8px">⏳ the discovery pipeline is computing (chunk → embed → 30 clusterings → CV axes → swaps) — <span data-crtgreload style="cursor:pointer;text-decoration:underline">check again</span></div>`}`, 14);
+        // ── ⚗️ PROMISE AXES: frozen supervised directions (the thumbnail recipe on text) ──
+        const pax = crtgEnsure('promise_axes');
+        if (pax && Array.isArray(pax.axes) && pax.axes.length) {
+            const trusted = a => a.permP <= 0.05 && a.heldout_spearman >= 0.15;
+            const sorted = pax.axes.slice().sort((a, b) => b.heldout_spearman - a.heldout_spearman);
+            const selId = st.crtgPAxis || (sorted[0] && sorted[0].id);
+            const SPLBL = { full: 'whole hook', chunk: 'mean clause', resid: 'topic-removed structure', skel: 'delexicalized skeleton' };
+            const rows = sorted.map(a => `<div data-crtgpaxis="${esc(a.id)}" style="cursor:pointer;display:grid;grid-template-columns:1fr 90px 70px 60px;gap:8px;padding:5px 7px;border:1px solid ${selId === a.id ? C.cyan : C.border};border-radius:7px;margin-bottom:4px;background:${selId === a.id ? C.cyan + '10' : 'transparent'}"><span style="font-size:10.5px;color:${C.text}"><b>${esc(a.outcome)}</b> on ${esc(SPLBL[a.space] || a.space)}</span><span style="font-size:9px;color:${C.dim}">${esc(a.method)}</span><span style="font-size:10.5px;font-weight:900;color:${trusted(a) ? C.green : C.dim}">ρ ${a.heldout_spearman}</span><span style="font-size:9px;color:${C.faint}">p ${a.permP}</span></div>`).join('');
+            const a0 = sorted.find(a => a.id === selId) || sorted[0];
+            let detail = '';
+            if (a0 && Array.isArray(a0.emergence)) {
+                const pts = a0.emergence.filter(e2 => e2.actual != null);
+                const ys = pts.map(e2 => e2.actual);
+                const y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+                const W = 480, Hh = 170, padL = 6;
+                const dots = pts.map(e2 => `<circle cx="${(padL + e2.pct / 100 * (W - 2 * padL)).toFixed(1)}" cy="${(Hh - 8 - (e2.actual - y0) / ((y1 - y0) || 1) * (Hh - 16)).toFixed(1)}" r="2.6" fill="${C.cyan}" opacity="0.6"><title>${esc(e2.text)} · ${e2.pct}th → ${e2.actual}</title></circle>`).join('');
+                detail = `<div style="margin-top:9px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">emergence — axis percentile (x) vs the REAL ${esc(a0.outcome)} (y) · held-out ρ ${a0.heldout_spearman} · hover any dot</div><svg viewBox="0 0 ${W} ${Hh}" style="width:100%;display:block;background:${C.card2};border-radius:8px">${dots}</svg>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-top:8px">
+                  <div><div style="font-size:9px;color:${C.green};text-transform:uppercase;font-weight:900;margin-bottom:3px">top of the axis</div>${(a0.topHooks || []).map(t => `<div style="font-size:10px;color:${C.dim};padding:2px 0;border-bottom:1px solid ${C.border}">“${esc(t.text)}” <span style="color:${C.faint}">${t.pct}th · actual ${t.actual == null ? '—' : t.actual}</span></div>`).join('')}</div>
+                  <div><div style="font-size:9px;color:${C.red};text-transform:uppercase;font-weight:900;margin-bottom:3px">bottom of the axis</div>${(a0.bottomHooks || []).map(t => `<div style="font-size:10px;color:${C.dim};padding:2px 0;border-bottom:1px solid ${C.border}">“${esc(t.text)}” <span style="color:${C.faint}">${t.pct}th · actual ${t.actual == null ? '—' : t.actual}</span></div>`).join('')}</div>
+                </div></div>`;
+            }
+            out += cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">⚗️ Promise axes <span style="font-size:10px;color:${C.mute};font-weight:600">— frozen directions in the 1536-d space along which the REAL metric emerges (blend + ladder, exactly like the thumbnail ctrviews scorer) · green = held-out ρ ≥ 0.15 and beats permutation</span></div><div style="font-size:9px;color:${C.faint};margin-bottom:7px">${esc(pax.note || '')}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px"><div>${rows}</div><div>${detail}</div></div>`, 12);
+            // ── 🎯 interactive scoring: type promise variants, compare on the axes ──
+            const hist = st.crtgScores || [];
+            const selS = hist.find(h2 => h2.id === st.crtgPSel) || hist[0];
+            let scoreHtml = `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input data-crtgpscoreinput value="${esc(st.crtgPInput || '')}" placeholder="type a promise line — e.g. a closer variant — and score it on every axis…" style="flex:1;min-width:240px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 10px;font-size:12px"/><span data-crtgpscorego style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:7px 14px;font-size:11px;font-weight:800;white-space:nowrap">🎯 Score</span></div>`;
+            if (hist.length) scoreHtml += `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${hist.slice(0, 16).map(h2 => { const best = (h2.axes || []).find(x => x.id === 'full_rethook'); return `<span data-crtgpsel="${esc(h2.id)}" style="cursor:pointer;border:1px solid ${selS && selS.id === h2.id ? C.green : C.border};background:${selS && selS.id === h2.id ? C.green + '1e' : C.card};color:${selS && selS.id === h2.id ? C.green : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h2.loading ? '⏳ ' : best ? `<b>${best.pct}th</b> · ` : ''}${esc(h2.text.slice(0, 80))}</span>`; }).join('')}</div>`;
+            if (selS) {
+                if (selS.loading) scoreHtml += `<div style="font-size:11px;color:${C.cyan};margin-top:9px">embedding and projecting onto ${pax.axes.length} axes…</div>`;
+                else if (selS.error) scoreHtml += `<div style="font-size:11px;color:${C.red};margin-top:9px">${esc(String(selS.error).slice(0, 200))}</div>`;
+                else if (selS.axes) {
+                    const tr = selS.axes.filter(x => x.trusted).sort((a, b) => b.heldout_spearman - a.heldout_spearman);
+                    const rest = selS.axes.filter(x => !x.trusted);
+                    scoreHtml += `<div style="margin-top:10px;font-size:12px;font-weight:800;color:${C.text}">“${esc(selS.text)}”</div>
+                      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">${tr.map(x => `<span title="held-out ρ ${x.heldout_spearman} · p ${x.permP}" style="border:1px solid ${x.pct >= 80 ? C.green : C.cyan}66;border-radius:6px;padding:4px 8px;font-size:10px;color:${C.dim}">${esc(x.outcome)} · ${esc(SPLBL[x.space] || x.space)} <b style="color:${x.pct >= 80 ? C.green : C.text};font-size:13px">${x.pct}th</b></span>`).join('')}</div>
+                      ${rest.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;opacity:0.55">${rest.map(x => `<span title="NOT trusted (ρ ${x.heldout_spearman}, p ${x.permP})" style="border:1px dashed ${C.border};border-radius:5px;padding:2px 6px;font-size:9px;color:${C.faint}">${esc(x.id)} ${x.pct}th</span>`).join('')}</div>` : ''}`;
+                }
+            }
+            out += cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">🎯 Score a promise line <span style="font-size:10px;color:${C.mute};font-weight:600">— the thumbnail-threshold workflow for text: type variants of a promise and compare where each lands on the emerged axes</span></div>${scoreHtml}`, 12);
+        }
+        if (!clus || !Array.isArray(clus.configs) || !clus.configs.length) return out;
+        const CRTG_EMB_LABELS = { alone: 'raw (topic-heavy baseline)', context: 'in-context contribution', resid: 'topic-removed (vs own hook)', residsib: 'vs sibling chunks', skeleton: 'delexicalized skeleton', pc10: 'top-10 PCs removed', pc20: 'top-20 PCs removed' };
+        const embKeys = Object.keys(clus.coords || {});
+        const emb0 = st.crtgEmb && embKeys.indexOf(st.crtgEmb) >= 0 ? st.crtgEmb : (embKeys.indexOf('resid') >= 0 ? 'resid' : embKeys[0] || 'alone');
+        const space0 = st.crtgSpace || 'pca50', k0 = st.crtgK || 12;
+        const cfg = clus.configs.find(c => c.emb === emb0 && c.space === space0 && c.k === k0) || clus.configs[0];
+        const coords = (clus.coords || {})[cfg.emb] || null;
+        const pill = (attr, val, cur, lab) => `<span data-${attr}="${val}" style="cursor:pointer;border:1px solid ${String(cur) === String(val) ? C.cyan : C.border};background:${String(cur) === String(val) ? C.cyan + '1e' : 'transparent'};color:${String(cur) === String(val) ? C.cyan : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">${lab}</span>`;
+        const chunkById = {};
+        if (chk && Array.isArray(chk.chunks)) chk.chunks.forEach(c => chunkById[c.cid] = c);
+        const selC = st.crtgCluster;
+        const legend = cfg.clusters.map(cl => `<span data-crtgcluster="${cl.c}" style="cursor:pointer;border:1px solid ${selC === cl.c ? CRTG_PAL[cl.c % CRTG_PAL.length] : C.border};background:${selC === cl.c ? CRTG_PAL[cl.c % CRTG_PAL.length] + '22' : 'transparent'};border-radius:6px;padding:3px 8px;font-size:9px;color:${C.dim}"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${CRTG_PAL[cl.c % CRTG_PAL.length]};margin-right:4px"></span><b style="color:${C.text}">${cl.size}</b> · ${esc((cl.terms || []).slice(0, 3).join(' '))} · pos ${cl.meanPos}${cl.topicMix != null ? ` · <b style="color:${cl.topicMix >= 0.55 ? C.green : C.amber}">mix ${cl.topicMix}</b>` : ''}</span>`).join('');
+        let clusterDetail = '';
+        const selObj = selC != null && cfg.clusters.find(cl => cl.c === selC);
+        if (selObj) {
+            const outRows = ['keep', 'ret5', 'rethook', 'avgret', 'logviews'].map(o => {
+                const st2 = (selObj.outcomes || {})[o];
+                if (!st2) return '';
+                const good = st2.delta > 0;
+                return `<span title="cluster mean vs corpus mean · n=${st2.n} hooks" style="border:1px solid ${good ? C.green : C.red}55;border-radius:5px;padding:2px 7px;font-size:9px;color:${good ? C.green : C.red}">${o} ${st2.delta > 0 ? '+' : ''}${st2.delta}</span>`;
+            }).join('');
+            const members = cfg.cids.map((cid, i) => ({ cid, a: cfg.assign[i] })).filter(x => x.a === selC).slice(0, 40)
+                .map(x => chunkById[x.cid]).filter(Boolean);
+            clusterDetail = `<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px">
+              <div style="font-size:11px;font-weight:900;color:${CRTG_PAL[selC % CRTG_PAL.length]}">cluster ${selC} — ${selObj.size} chunks from ${selObj.nHooks} hooks · mean position ${selObj.meanPos} <span style="font-size:9px;color:${C.faint}">(0 = opener · 1 = closer)</span>${selObj.topicMix != null ? ` · <b style="color:${selObj.topicMix >= 0.55 ? C.green : C.amber}">topic-mix ${selObj.topicMix}</b> <span style="font-size:9px;color:${C.faint}">(high = spans unrelated ideas = structural, low = topic bucket)</span>` : ''}</div>
+              <div style="font-size:10px;color:${C.dim};margin:4px 0">exemplar: “${esc(selObj.medoidText || '')}”</div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;margin:6px 0">${outRows || `<span style="font-size:9px;color:${C.faint}">not enough hooks for outcome stats</span>`}</div>
+              <div style="max-height:180px;overflow:auto;margin-top:6px">${members.map(m => `<div style="font-size:10px;color:${C.dim};padding:2px 0;border-bottom:1px solid ${C.border}">“${esc(m.text)}” <span style="color:${C.faint}">· pos ${Number(m.pos).toFixed(2)} · ${esc(m.strat)}</span></div>`).join('')}</div>
+            </div>`;
+        }
+        out += cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:5px">🧭 Cluster explorer <span style="font-size:10px;color:${C.mute};font-weight:600">— ${esc(cfg.key)} · silhouette ${cfg.sil == null ? '—' : cfg.sil} · keep-link permutation p ${cfg.permP_keep}${cfg.topicMix != null ? ` · <b style="color:${cfg.topicMix >= 0.55 ? C.green : C.amber}">topic-mix ${cfg.topicMix}</b>` : ''}</span></div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">embedding</span>${embKeys.map(ek => pill('crtgemb', ek, emb0, CRTG_EMB_LABELS[ek] || ek)).join('')}<span style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-left:8px">space</span>${['raw', 'pca50', 'umap2'].map(sp => pill('crtgspace', sp, space0, sp)).join('')}<span style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-left:8px">k</span>${[5, 8, 12, 16, 24].map(k => pill('crtgk', k, k0, String(k))).join('')}</div>
+          ${coords ? crtgScatter(coords, cfg.assign, 560, 300, selC == null ? null : selC, true) : `<div style="font-size:10px;color:${C.dim}">no 2D coords for this embedding</div>`}
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:7px">${legend}</div>${clusterDetail}`, 12);
+        const galEmb = st.crtgGalEmb && embKeys.indexOf(st.crtgGalEmb) >= 0 ? st.crtgGalEmb : emb0;
+        const minis = clus.configs.filter(c2 => c2.emb === galEmb).map(c2 => {
+            const cds = (clus.coords || {})[c2.emb];
+            if (!cds) return '';
+            return `<div data-crtgcfg="${esc(c2.emb + '|' + c2.space + '|' + c2.k)}" style="cursor:pointer;border:1px solid ${c2.key === cfg.key ? C.cyan : C.border};border-radius:7px;padding:4px;background:${C.card2}"><div style="font-size:8px;color:${C.dim};margin-bottom:2px">${esc(c2.key)} · sil ${c2.sil == null ? '—' : c2.sil}${c2.topicMix != null ? ` · mix ${c2.topicMix}` : ''}</div>${crtgScatter(cds, c2.assign, 130, 84, null, false)}</div>`;
+        }).join('');
+        out += cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">🖼 All clusterings <span style="font-size:10px;color:${C.mute};font-weight:600">— every sweep config; click one to open it in the explorer</span></div><div style="font-size:9px;color:${C.faint};margin-bottom:5px">Same 2D projection per embedding type; colours are that config's assignment. Structure that persists across many configs is real; one-k-only structure is noise. ${esc(clus.mixNote || '')}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px">${embKeys.map(ek => pill('crtggalemb', ek, galEmb, CRTG_EMB_LABELS[ek] || ek)).join('')}</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:7px">${minis}</div>`, 12);
+        if (axes && Array.isArray(axes.axes)) {
+            const selA = st.crtgAxis || 'keep';
+            const sig = v => v && v.permP != null && v.permP <= 0.05 && v.cvR2 > 0;
+            const SETCOLS = [['topic', 'topic only (what the video is about)'], ['structure', 'structure only (topic removed)'], ['skeleton', 'skeleton (words masked)'], ['alone', 'raw chunk'], ['combined', 'topic + structure']];
+            const cell = v => v == null ? `<span style="font-size:10px;color:${C.faint}">—</span>` : `<span style="font-size:10px;color:${sig(v) ? C.green : C.dim}"><b>${v.cvR2}</b> <span style="font-size:8px">p ${v.permP}</span></span>`;
+            const isV2 = axes.axes[0] && axes.axes[0].sets;
+            const rows = isV2
+                ? `<div style="display:grid;grid-template-columns:80px repeat(5,1fr);gap:6px;padding:3px 6px;font-size:8.5px;color:${C.mute};text-transform:uppercase"><span></span>${SETCOLS.map(([k2, l]) => `<span title="${esc(l)}">${k2}</span>`).join('')}</div>` + axes.axes.map(a => `<div data-crtgaxis="${esc(a.outcome)}" style="cursor:pointer;display:grid;grid-template-columns:80px repeat(5,1fr);gap:6px;padding:5px 6px;border:1px solid ${selA === a.outcome ? C.cyan : C.border};border-radius:7px;margin-bottom:4px;background:${selA === a.outcome ? C.cyan + '10' : 'transparent'}"><b style="font-size:11px;color:${C.text}">${esc(a.outcome)}</b>${SETCOLS.map(([k2]) => cell((a.sets || {})[k2])).join('')}</div>`).join('')
+                : axes.axes.map(a => `<div data-crtgaxis="${esc(a.outcome)}" style="cursor:pointer;padding:5px 6px;border:1px solid ${selA === a.outcome ? C.cyan : C.border};border-radius:7px;margin-bottom:4px"><b style="font-size:11px;color:${C.text}">${esc(a.outcome)}</b> <span style="font-size:10px;color:${C.dim}">chunks R² ${(a.chunks || {}).cvR2} · full ${(a.fullHook || {}).cvR2}</span></div>`).join('');
+            const a0 = axes.axes.find(a => a.outcome === selA) || axes.axes[0];
+            const topL = a0 && (a0.topStructChunks || a0.topChunks) || [];
+            const botL = a0 && (a0.bottomStructChunks || a0.bottomChunks) || [];
+            const lists = a0 ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-top:8px">
+              <div><div style="font-size:9px;color:${C.green};text-transform:uppercase;font-weight:900;margin-bottom:3px">${isV2 ? 'structure-axis top' : 'axis top'} — ${esc(a0.outcome)}</div>${topL.map(t => `<div style="font-size:10px;color:${C.dim};padding:2px 0;border-bottom:1px solid ${C.border}">“${esc(t.text)}”</div>`).join('')}</div>
+              <div><div style="font-size:9px;color:${C.red};text-transform:uppercase;font-weight:900;margin-bottom:3px">${isV2 ? 'structure-axis bottom' : 'axis bottom'}</div>${botL.map(t => `<div style="font-size:10px;color:${C.dim};padding:2px 0;border-bottom:1px solid ${C.border}">“${esc(t.text)}”</div>`).join('')}</div>
+            </div>` : '';
+            out += cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">📐 Outcome decomposition <span style="font-size:10px;color:${C.mute};font-weight:600">— how much of each real outcome is TOPIC vs STRUCTURE? Green = beats its hook-level permutation baseline</span></div><div style="font-size:9px;color:${C.faint};margin-bottom:7px">${esc(axes.note || '')}</div>${rows}${lists}`, 12);
+        }
+        if (swaps && swaps.slots) {
+            const slot0 = st.crtgSlot || 'last';
+            const sl = swaps.slots[slot0] || { components: [] };
+            const base = sl.hostBaseline || {};
+            const comps = (sl.components || []).map((cp, ci) => {
+                const openC = st.crtgComp === ci;
+                const chips = ['ctrviews', 'ctr', 'ret30', 'views', 'realviews', 'gt10m'].map(mk => {
+                    const v = cp.avg && cp.avg[mk], b = base[mk];
+                    const dTxt = v != null && b != null ? (v - b >= 0 ? ' +' : ' ') + (v - b).toFixed(1) : '';
+                    return `<span title="avg over ${cp.nHosts} host hooks · host baseline ${b != null ? b : '—'}" style="border:1px solid ${v != null && b != null && v > b ? C.green : C.border}55;border-radius:5px;padding:2px 6px;font-size:9px;color:${C.dim}">${mk} <b style="color:${v != null && b != null && v > b ? C.green : C.text}">${v == null ? '—' : v}</b>${dTxt}</span>`;
+                }).join('');
+                return `<div data-crtgcomp="${ci}" style="cursor:pointer;border:1px solid ${openC ? C.cyan : C.border};border-radius:8px;padding:8px;margin-bottom:6px;background:${C.card2}">
+                  <div style="font-size:11px;font-weight:800;color:${C.text}">“${esc(cp.component)}” <span style="font-size:9px;color:${C.faint};font-weight:600">cluster ${cp.cluster} · ${esc((cp.terms || []).join(' '))} · ${cp.nMembers} sibling chunks · spliced into ${cp.nHosts} hooks</span></div>
+                  <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px">${chips}</div>
+                  ${openC ? `<div style="margin-top:7px;border-top:1px solid ${C.border};padding-top:6px">${(cp.examples || []).map(ex => `<div style="font-size:10px;color:${C.dim};padding:3px 0;border-bottom:1px solid ${C.border}">“${esc(ex.text)}” <b style="color:${C.text}">${ex.m_ctrviews != null ? ex.m_ctrviews + 'th' : '—'}</b></div>`).join('')}</div>` : ''}
+                </div>`;
+            }).join('');
+            out += cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">🔁 Component swaps <span style="font-size:10px;color:${C.mute};font-weight:600">— a discovered component spliced into many real hooks, whole text re-embedded (attention preserved), scored on the text channel</span></div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;margin:6px 0;align-items:center">${pill('crtgslot', 'last', slot0, 'replace the CLOSER (last clause)')}${pill('crtgslot', 'first', slot0, 'replace the OPENER (first clause)')}<span style="font-size:9px;color:${C.faint}">host baseline: ctrviews ${base.ctrviews != null ? base.ctrviews : '—'} over ${sl.nHosts || '—'} hooks</span></div>
+              ${comps || `<div style="font-size:10px;color:${C.dim}">no components for this slot</div>`}`, 12);
+        }
+        return out;
     }
     function renderLqExperiment() {
         lqThumbsEnsure(); lqIdeaRunsEnsure(); lqGrindRunsEnsure(); lqGrindStatusEnsure();
@@ -3936,7 +4116,7 @@ const JarvisLongQuant = (function () {
         //  • PER-CHANNEL  — analyses of the selected account's own videos (scoped by the channel bar)
         //  • CORPUS       — built on ALL videos (your 211 + the 11k library); account-independent
         const PERCHAN = [['data', '📋 Data'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict']];
-        const CORPUS = [['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['promise', 'Promise Lab']];   // 💡 Ideas consolidated into 🎰 Guesses (phase dropdown)
+        const CORPUS = [['raw', '🔬 Raw'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['promise', 'Promise Lab'], ['claudertg', '🤖 Claude RTG']];   // 💡 Ideas consolidated into 🎰 Guesses (phase dropdown)
         const SECLBL = Object.fromEntries([...PERCHAN, ...CORPUS]);
         const isPer = PERCHAN.some(([id]) => id === st.sec);
         const btn = ([id, l]) => `<button data-rs="${id}" style="background:${st.sec === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.sec === id ? C.accent : C.border};color:${st.sec === id ? C.accent : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`;
@@ -3972,7 +4152,7 @@ const JarvisLongQuant = (function () {
         if (isPer && st.sec !== 'data' && !S) {
             sec = cardc(`<div style="padding:26px;text-align:center"><div style="font-size:14px;font-weight:800;color:${C.text};margin-bottom:6px">${SECLBL[st.sec]} — not computed for ${chName} yet</div><div style="font-size:11px;color:${C.mute};line-height:1.7;max-width:580px;margin:0 auto">${active === 'all' ? 'Pooled analysis isn\'t built yet — switch to a single channel.' : `This per-channel analysis hasn't been run for <b>${chName}</b>. It has <b style="color:${C.green}">${nKeep}</b> videos with retention — open <b>📋 Data</b>, or run <code>build_study.py ${active}</code>.`}</div></div>`, 16);
         } else {
-            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderLongGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-lqexppanel">${renderLqExperiment()}</div>` : st.sec === 'promise' ? `<div id="lq-promise-panel">${renderPromiseLab()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
+            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderLongGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-lqexppanel">${renderLqExperiment()}</div>` : st.sec === 'promise' ? `<div id="lq-promise-panel">${renderPromiseLab()}</div>` : st.sec === 'claudertg' ? `<div id="lq-crtg-panel">${renderClaudeRTG()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         }
         const bgNote = BGPEND > 0 ? `<div style="font-size:10px;color:${C.cyan};margin:-4px 0 8px;font-weight:600">⏳ heavy corpus data still streaming in (${BGPEND} file${BGPEND > 1 ? 's' : ''} left) — sections light up as their data lands</div>` : '';
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
@@ -4012,6 +4192,23 @@ const JarvisLongQuant = (function () {
         const pset = e.target.closest('[data-predset]'); if (pset) { st.predFeats = pset.getAttribute('data-predset').split('+'); render(); return; }
         const pint = e.target.closest('[data-predint]'); if (pint) { const k = pint.getAttribute('data-predint'); st.predInts = (st.predInts || []); st.predInts = st.predInts.includes(k) ? st.predInts.filter(x => x !== k) : st.predInts.concat([k]); render(); return; }
         const ns = e.target.closest('[data-rs]'); if (ns) { st.sec = ns.getAttribute('data-rs'); render(); return; }
+        if (e.target.closest('[data-crtgreload]')) { Object.keys(LQCRTG).forEach(k => delete LQCRTG[k]); rtgUpdateCrtg(); return; }
+        const xce = e.target.closest('[data-crtgemb]'); if (xce) { st.crtgEmb = xce.getAttribute('data-crtgemb'); st.crtgCluster = null; rtgUpdateCrtg(); return; }
+        const xcg = e.target.closest('[data-crtggalemb]'); if (xcg) { st.crtgGalEmb = xcg.getAttribute('data-crtggalemb'); rtgUpdateCrtg(); return; }
+        const xcs = e.target.closest('[data-crtgspace]'); if (xcs) { st.crtgSpace = xcs.getAttribute('data-crtgspace'); st.crtgCluster = null; rtgUpdateCrtg(); return; }
+        const xck = e.target.closest('[data-crtgk]'); if (xck) { st.crtgK = parseInt(xck.getAttribute('data-crtgk'), 10); st.crtgCluster = null; rtgUpdateCrtg(); return; }
+        const xcc = e.target.closest('[data-crtgcluster]'); if (xcc) { const c0 = parseInt(xcc.getAttribute('data-crtgcluster'), 10); st.crtgCluster = st.crtgCluster === c0 ? null : c0; rtgUpdateCrtg(); return; }
+        const xcf = e.target.closest('[data-crtgcfg]'); if (xcf) { const [em, sp, kk] = xcf.getAttribute('data-crtgcfg').split('|'); st.crtgEmb = em; st.crtgSpace = sp; st.crtgK = parseInt(kk, 10); st.crtgCluster = null; rtgUpdateCrtg(); try { xcf.closest('#lq-crtg-panel').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e2) { } return; }
+        const xca = e.target.closest('[data-crtgaxis]'); if (xca) { st.crtgAxis = xca.getAttribute('data-crtgaxis'); rtgUpdateCrtg(); return; }
+        const xcl = e.target.closest('[data-crtgslot]'); if (xcl) { st.crtgSlot = xcl.getAttribute('data-crtgslot'); st.crtgComp = null; rtgUpdateCrtg(); return; }
+        const xpa = e.target.closest('[data-crtgpaxis]'); if (xpa) { st.crtgPAxis = xpa.getAttribute('data-crtgpaxis'); rtgUpdateCrtg(); return; }
+        if (e.target.closest('[data-crtgpscorego]')) {
+            const inp = window.document.querySelector('[data-crtgpscoreinput]'); if (inp) st.crtgPInput = inp.value;
+            crtgScorePromise(st.crtgPInput || '');
+            return;
+        }
+        const xps = e.target.closest('[data-crtgpsel]'); if (xps) { st.crtgPSel = xps.getAttribute('data-crtgpsel'); rtgUpdateCrtg(); return; }
+        const xcp = e.target.closest('[data-crtgcomp]'); if (xcp) { const ci = parseInt(xcp.getAttribute('data-crtgcomp'), 10); st.crtgComp = st.crtgComp === ci ? null : ci; rtgUpdateCrtg(); return; }
         const tbt = e.target.closest('[data-tribetgt]'); if (tbt) { st.tribeTarget = tbt.getAttribute('data-tribetgt'); rtgUpdateTribe(); return; }
         const tbf = e.target.closest('[data-tribefeat]'); if (tbf) { st.tribeFeat = tbf.getAttribute('data-tribefeat'); rtgUpdateTribe(); return; }
         const tbg = e.target.closest('[data-tribegrp]'); if (tbg) { st.tribeGroup = tbg.getAttribute('data-tribegrp'); rtgUpdateTribe(); return; }

@@ -10922,9 +10922,19 @@ async function longQuantScoreThumbnail(buf, title, idea) {
     const scoreIdea = String(idea || scoreTitle).replace(/\s+/g, ' ').trim().slice(0, 500);
     if (!scoreTitle) throw new Error('Video title or idea is required for the 12-output Long Quant score');
     const score = longQuantPublicScore(await longQuantScoreImageBuffer(buf, scoreTitle, scoreIdea));
-    if (!score || !score.output_contract || !score.output_contract.complete) {
-        const missing = score && score.output_contract && score.output_contract.missing;
-        throw new Error(`Long Quant 12-output score incomplete${missing && missing.length ? `: ${missing.join(', ')}` : ''}`);
+    if (!score) throw new Error('Long Quant scorer returned nothing');
+    // NEVER hard-fail a whole generation because a channel map lacks some metric projections
+    // (raw-long/together/map.json shipped without ctr/ret30/realviews/ctrviews and this throw
+    // killed EVERY generation and upload score at the last step). The primary visual threshold
+    // score is intact — degrade LOUDLY: keep the incomplete-contract flag + a visible warning
+    // the UI already renders (found/12 in amber), and log it server-side.
+    if (!score.output_contract || !score.output_contract.complete) {
+        const missing = (score.output_contract && score.output_contract.missing) || [];
+        score.scoreWarning = `score is ${12 - missing.length}/12 outputs — missing ${missing.join(', ') || 'unknown outputs'} (channel map lacks those projections)`;
+        console.warn('[longquant] incomplete 12-output score (serving anyway):', missing.join(', '));
+    }
+    if (score.pctile == null && score.visual_pctile == null) {
+        throw new Error('Long Quant score has no visual percentile — the primary threshold axis is required');
     }
     return score;
 }
