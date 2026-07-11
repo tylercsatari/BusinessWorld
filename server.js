@@ -3592,7 +3592,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const lgGroup = pathname.match(/^\/api\/longquant\/guesses\/group\/([a-z0-9]+)\/([a-z0-9]+)$/i);
     if (lgGroup && req.method === 'GET') {
-        await serveR2Gz(req, res, `longform/guesses/${lgGroup[1]}/groups/${lgGroup[2]}.json`, 3e6, { error: 'no group' }, 404); return;
+        // demo groups are LIVE (attempts stream in) — the old 50-minute cache froze the UI at
+        // "0 thumbnails" while renders finished on R2. Archived run groups stay long-cached.
+        const groupTtl = lgGroup[1] === 'demo' ? 4e3 : 3e6;
+        await serveR2Gz(req, res, `longform/guesses/${lgGroup[1]}/groups/${lgGroup[2]}.json`, groupTtl, { error: 'no group' }, 404); return;
     }
     const lgMon = pathname.match(/^\/api\/longquant\/guesses\/montage\/([a-z0-9]+)\/([a-z0-9_]+)$/i);
     if (lgMon && (req.method === 'GET' || req.method === 'HEAD')) {
@@ -3609,12 +3612,16 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // ── Long Quant 🧪 Experiment: generate thumbnails with the trained model + score uploads ──
     if (pathname === '/api/longquant/exp/generate' && req.method === 'POST') {
         const body = await readBody(req);
-        const title = String(body.title || '').slice(0, 200).trim();
+        const renderExact = !!body.renderExact;
+        // exact-prompt mode carries a full image prompt (1500+ chars); idea mode stays short
+        const title = String(body.title || '').slice(0, renderExact ? 2500 : 300).trim();
+        if (renderExact && title.length < 12) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"exact-prompt mode needs the full image prompt in the text box"}'); return; }
         const count = Math.max(1, Math.min(8, parseInt(body.count, 10) || 5));
         const rid = 'd' + Date.now().toString(36);
         const invent = !title;
         const payload = {
-            title, premise: title, idea: title, forceTitle: title, count, invent, mode: invent ? 'idea_plus_thumbnail' : 'thumbnail_only',
+            title, premise: title, idea: title, forceTitle: title, count, invent, renderExact,
+            mode: renderExact ? 'render_exact_prompt' : invent ? 'idea_plus_thumbnail' : 'thumbnail_only',
             instruction: invent
                 ? 'Blank request: run idea_long_r26 first, then run thumb_b10.'
                 : 'Typed request: DO NOT invent or rewrite the video idea. Use this exact title/idea as the thumbnail model input.',
@@ -11484,17 +11491,30 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
         attempts: [], done: false, streaming: true,
     };
     await checkStop();
-    await emitStatus({ stage: 'prompting', done: 0, note: 'trained thumb_b10 is writing thumbnail prompts on the model worker' });
-    await lqDemoGroupWrite(rid, group);
-    await checkStop();
-    const prompts = await longQuantWithHeartbeat(
-        () => longQuantThumbPrompts(idea, n, context, {
-            attempt: opts.attemptK,
-            seed: longQuantStableSeed(rid, 'thumb', idea, opts.attemptK || 0),
-        }),
-        () => emitStatus({ stage: 'prompting', done: 0, note: 'still waiting for trained thumb_b10 on the model worker' }),
-        12000
-    );
+    let prompts;
+    if (opts.renderExact) {
+        // 🎨 EXACT PROMPT MODE: the typed text IS the render prompt — no idea model, no thumb model.
+        const exact = longQuantCleanThumbPrompt(String(idea)).slice(0, 2200);
+        if (exact.length < 12) throw new Error('exact-prompt mode: prompt too short after cleaning');
+        prompts = Array.from({ length: n }, () => exact);
+        group.promptModel = 'your exact prompt (models skipped)';
+        group.model = `exact prompt + ${LONGQUANT_RENDER_MODEL.split('/').pop()}`;
+        group.renderExact = true;
+        await emitStatus({ stage: 'prompting', done: 0, note: 'exact-prompt mode: skipping the models, rendering your prompt verbatim' });
+        await lqDemoGroupWrite(rid, group);
+    } else {
+        await emitStatus({ stage: 'prompting', done: 0, note: 'trained thumb_b10 is writing thumbnail prompts on the model worker' });
+        await lqDemoGroupWrite(rid, group);
+        await checkStop();
+        prompts = await longQuantWithHeartbeat(
+            () => longQuantThumbPrompts(idea, n, context, {
+                attempt: opts.attemptK,
+                seed: longQuantStableSeed(rid, 'thumb', idea, opts.attemptK || 0),
+            }),
+            () => emitStatus({ stage: 'prompting', done: 0, note: 'still waiting for trained thumb_b10 on the model worker' }),
+            12000
+        );
+    }
     await checkStop();
     group.n = prompts.length;
     await emitStatus({ stage: 'rendering', n: prompts.length, done: 0, note: 'Flux Pro is rendering thumbnails; each result is scored and embedded as it lands' });
@@ -11574,7 +11594,7 @@ async function longQuantProcessRequest(rid, req) {
             await lqDemoStatus(rid, { stage: 'reasoning', n: 1, done: 0, note: 'blank request: trained idea_long_r26 is inventing the video' });
             idea = await longQuantIdeaGenerate('', 0, [], { runKey: rid }, context);
         }
-        await longQuantBuildThumbGroup(rid, idea, req.count || 5, { invented: !typed, context, sourceVideo: req.sourceVideo, attemptK: 0 });
+        await longQuantBuildThumbGroup(rid, idea, req.count || 5, { invented: !typed, context, sourceVideo: req.sourceVideo, attemptK: 0, renderExact: !!req.renderExact });
     } catch (e) {
         const msg = String(e.message || e).slice(0, 240);
         await lqDemoGroupWrite(rid, {

@@ -1051,7 +1051,7 @@ const JarvisLongQuant = (function () {
         const t = (st.lqxTitle || '').trim();
         st.lqxStatus = 'submitting…'; st.lqxRid = null; st.lqxResult = null; st.lqxStart = Date.now(); rtgUpdateLqExp();
         try {
-            const j = await lqxJson('/api/longquant/exp/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: t, count: st.lqxCount || 5 }) });
+            const j = await lqxJson('/api/longquant/exp/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: t, count: st.lqxCount || 5, renderExact: !!st.lqxRenderExact }) });
             if (!j.ok) { st.lqxStatus = 'error: ' + (j.error || 'request failed'); rtgUpdateLqExp(); return; }
             st.lqxRid = j.rid; st.lqxRequestedTitle = t; st.lqxStatus = j.invent ? 'queued — blank input: idea model will pick the video idea, then thumbnails render' : 'queued — typed input: thumbnail model only, using your idea exactly'; rtgUpdateLqExp(); window.setTimeout(lqxPoll, 5000);
         } catch (e) { st.lqxStatus = 'error: ' + e.message; rtgUpdateLqExp(); }
@@ -1063,7 +1063,8 @@ const JarvisLongQuant = (function () {
             const prog = s && s.n ? ` · ${s.done || 0}/${s.n}` : '';
             const ttl = s && s.title ? ` · idea: ${s.title}` : '';
             const stage = s && s.stage ? String(s.stage).toUpperCase() : 'RUNNING';
-            return `${stage}${prog}${ttl} — ${s && s.note ? s.note : 'trained longform worker'} (${el}s)`;
+            const err = s && s.error ? ` — ⚠ FAILED: ${s.error}` : '';
+            return `${stage}${prog}${ttl}${err} — ${s && s.note ? s.note : 'trained longform worker'} (${el}s)`;
         };
         lqxJson('/api/longquant/guesses/status/' + rid).then(s => {
             if (st.lqxRid !== rid) return;
@@ -1078,7 +1079,10 @@ const JarvisLongQuant = (function () {
             const live = st.lqxLastDemoStatus && st.lqxLastDemoStatus.rid === rid ? st.lqxLastDemoStatus : null;
             if (j && Array.isArray(j.attempts)) {
                 st.lqxResult = j;
-                if (j.done || j.streaming === false) st.lqxStatus = j.error ? `DONE - worker finished with error: ${j.error}` : null;
+                const liveDone = live && live.stage === 'done';
+                if ((j.done || j.streaming === false) && j.error) st.lqxStatus = `DONE — ⚠ worker finished with error: ${j.error}`;
+                else if (j.done || j.streaming === false) st.lqxStatus = null;
+                else if (liveDone && !j.done) { st.lqxStatus = 'FINALIZING — worker finished, fetching the results…'; window.setTimeout(lqxPoll, 2500); }
                 else {
                     st.lqxStatus = live && live.stage && live.stage !== 'queued'
                         ? statusText(live)
@@ -1872,14 +1876,14 @@ const JarvisLongQuant = (function () {
         // GENERATE card
         let gen = `<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:5px">⚡ Generate idea + thumbnails</div>
           <div style="font-size:10px;color:${C.mute};margin-bottom:7px">Leave it empty to use the idea model first. Type an idea to skip the idea model and generate ${cnt} thumbnails directly around exactly that idea. The headline is the frozen image-only thumbnail score; title-only and title+thumbnail embeddings remain separate diagnostics.</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input data-lqxtitle value="${esc(st.lqxTitle || '')}" placeholder="blank = random longform video idea, or type a seed idea…" style="flex:1;min-width:230px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 10px;font-size:12px"/><span style="font-size:9px;color:${C.mute}">outputs</span>${cntPills}<span data-lqxgen style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:7px 14px;font-size:11px;font-weight:800">⚡ Generate</span></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input data-lqxtitle value="${esc(st.lqxTitle || '')}" placeholder="blank = random longform video idea, or type a seed idea…" style="flex:1;min-width:230px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 10px;font-size:12px"/><span style="font-size:9px;color:${C.mute}">outputs</span>${cntPills}<span data-lqxexact title="skip idea_long_r26 and thumb_b10 entirely — the text box is used VERBATIM as the image prompt, rendered and scored" style="cursor:pointer;border:1px solid ${st.lqxRenderExact ? C.amber : C.border};background:${st.lqxRenderExact ? C.amber + '22' : 'transparent'};color:${st.lqxRenderExact ? C.amber : C.dim};border-radius:6px;padding:7px 10px;font-size:10px;font-weight:800;white-space:nowrap">🎨 exact prompt${st.lqxRenderExact ? ' ON' : ''}</span><span data-lqxgen style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:7px 14px;font-size:11px;font-weight:800">⚡ Generate</span></div>${st.lqxRenderExact ? `<div style="font-size:9px;color:${C.amber};margin-top:5px">🎨 exact-prompt mode: your text goes to the renderer VERBATIM (up to 2500 chars) — no trained models involved; each output still gets the full 12-output score.</div>` : ''}
           ${st.lqxStatus ? `<div style="font-size:10px;color:${String(st.lqxStatus).indexOf('error') === 0 ? C.red : C.amber};margin-top:6px">${esc(st.lqxStatus)}</div>` : ''}`;
         if (st.lqxResult && st.lqxResult.attempts) {
             const R = st.lqxResult, rid = st.lqxRid;
-            gen += `<div style="font-size:10px;color:${C.mute};margin:9px 0 6px">${R.attempts.length} thumbnails for <b style="color:${C.text}">${esc(R.title || '')}</b> — ranked by trained reward; headline = thumbnail-only potential</div>
+            gen += `<div style="font-size:10px;color:${C.mute};margin:9px 0 6px">${R.error ? `<span style=\"color:${C.red};font-weight:800\">⚠ ${esc(String(R.error).slice(0, 180))} · </span>` : ''}${R.attempts.length} thumbnails for <b style="color:${C.text}">${esc(R.title || '')}</b> — ranked by trained reward; headline = thumbnail-only potential</div>
               <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${R.attempts.map(a => {
                   const fk = rid + '_' + a.k, mk = `longform/guesses/demo/montages/${fk}.jpg`, sc2 = lqxScoreFor('gen:' + fk, mk, R.title || st.lqxTitle || '', R.title || st.lqxTitle || '', a.score, true);
-                  return `<div data-lqxopen="gen:${fk}" style="cursor:pointer;border:1px solid ${a.pctile >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/guesses/montage/demo/${fk}`, `genimg:${fk}`, `width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}`)}<div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;align-items:center;font-size:10px"><span style="font-weight:800;color:${a.pctile >= 0.8 ? C.green : a.pctile >= 0.7 ? C.amber : C.text}">${((a.pctile || 0) * 100).toFixed(0)}th thumbnail</span><span data-lqxsave="${a.k}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === fk ? C.green : C.accent};color:${st.lqxSaveFlash === fk ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-weight:700">${st.lqxSaveFlash === fk ? '✅ Saved' : '💾 Save'}</span></div>${lqxChannelMetricHtml(sc2 || a, true)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">scoring 12 embeddings…</div>` : ''}<div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:40px;overflow:hidden">${esc((a.prompt || '').slice(0, 130))}</div>${lqxRawButton(sc2 || a.score, 'gen:' + fk, R.title || st.lqxTitle || '', `/api/longquant/guesses/montage/demo/${fk}`)}</div></div>`;
+                  return `<div data-lqxopen="gen:${fk}" style="cursor:pointer;border:1px solid ${a.pctile >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/guesses/montage/demo/${fk}`, `genimg:${fk}`, `width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}`)}<div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;align-items:center;font-size:10px"><span style="font-weight:800;color:${a.pctile >= 0.8 ? C.green : a.pctile >= 0.7 ? C.amber : C.text}">${((a.pctile || 0) * 100).toFixed(0)}th thumbnail</span><span data-lqxsave="${a.k}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === fk ? C.green : C.accent};color:${st.lqxSaveFlash === fk ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-weight:700">${st.lqxSaveFlash === fk ? '✅ Saved' : '💾 Save'}</span></div>${a.status === 'error' || a.error ? `<div style="font-size:9px;color:${C.red};margin-top:4px;border:1px solid ${C.red}44;border-radius:5px;padding:3px 6px">⚠ ${esc(String(a.error || 'render failed').slice(0, 160))}</div>` : ''}${lqxChannelMetricHtml(sc2 || a, true)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">scoring 12 embeddings…</div>` : ''}<div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:40px;overflow:hidden">${esc((a.prompt || '').slice(0, 130))}</div>${lqxRawButton(sc2 || a.score, 'gen:' + fk, R.title || st.lqxTitle || '', `/api/longquant/guesses/montage/demo/${fk}`)}</div></div>`;
               }).join('')}</div>`;
             if (st.lqxOpen && String(st.lqxOpen).indexOf('gen:') === 0) {
                 const fk = st.lqxOpen.slice(4), a = R.attempts.find(x => fk === rid + '_' + x.k), mk = `longform/guesses/demo/montages/${fk}.jpg`;
@@ -4259,6 +4263,7 @@ const JarvisLongQuant = (function () {
         const lgbk = e.target.closest('[data-lgbandk]'); if (lgbk) { st.lgBandK = +lgbk.getAttribute('data-lgbandk'); rtgUpdateGuessesL(); return; }
         // 🧪 Experiment + 💡 Ideas handlers
         const xc = e.target.closest('[data-lqxcount]'); if (xc) { st.lqxCount = +xc.getAttribute('data-lqxcount'); rtgUpdateLqExp(); return; }
+        if (e.target.closest('[data-lqxexact]')) { st.lqxRenderExact = !st.lqxRenderExact; rtgUpdateLqExp(); return; }
         if (e.target.closest('[data-lqxgen]')) { lqxGenerate(); return; }
         const xs = e.target.closest('[data-lqxsave]'); if (xs) {
             const k = +xs.getAttribute('data-lqxsave'), R = st.lqxResult, rid = st.lqxRid;
