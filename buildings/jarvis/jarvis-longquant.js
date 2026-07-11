@@ -624,7 +624,6 @@ const JarvisLongQuant = (function () {
                   ${(() => { const s = U.steer || {}; const row = (tn, lab) => { for (const m of ['together', 'text', 'visual']) { const k = s[`${m}_${tn}`]; if (k) return `<div style="display:flex;justify-content:space-between;gap:10px;font-size:11px"><span style="color:${C.mute}">${lab}</span><span style="color:${C.text};font-weight:700">~${k.est}% <span style="color:${C.mute};font-weight:400">(${k.pctile}th pctile of corpus · via ${m})</span></span></div>`; } return ''; }; const kk = row('keep', 'est. keep-rate') + row('ret5', 'est. past-5s'); return kk ? `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">extrapolated onto your 211's scale</div>${kk}<div style="font-size:9px;color:${C.faint};margin-top:4px">Projected onto the same steered direction as the 11k map, quantile-mapped to your videos' actual outcomes. Open <b>→ keep-rate</b> to see it placed.</div></div>` : ''; })()}
                 </div>`;
         })() : '';
-        h += `<input id="rawUpFile" type="file" accept="video/*" multiple style="display:none"><input id="rawFrameFile" type="file" accept="image/*" style="display:none">`;
         h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
               <div style="font-size:12px;font-weight:700;color:${C.text};display:flex;gap:6px;align-items:center;flex-wrap:wrap">${n.toLocaleString()} hooks · ${chan} ${mineBtn} ${modeToggle} ${st.rawBuildMode ? showBtn : upBtn} ${upErr}</div>
               <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${chan !== 'text' ? pill('voiceover', 'voiceover', mode === 'voiceover', 'data-rawcolor') : ''}${mode === 'cluster' ? `<span style="width:6px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div>${mode === 'cluster' ? (() => {
@@ -879,7 +878,7 @@ const JarvisLongQuant = (function () {
             if (Math.abs(nextY - beforeY) > 1 || Math.abs((win.scrollY || 0) - beforeY) > 1) {
                 win.scrollTo(win.scrollX || 0, nextY);
             }
-        } catch (e) { }
+        } catch (e) { console.error('[long quant] experiment panel refresh failed', e); }
     }
     // Ideas are CONSOLIDATED into the 🎰 Guesses section — idea data refreshes repaint the guesses panel.
     function rtgUpdateLqIdeas() { rtgUpdateGuessesL(); }
@@ -894,6 +893,45 @@ const JarvisLongQuant = (function () {
         }
         if (!r.ok) throw new Error((j && j.error) || (`HTTP ${r.status}`));
         return j;
+    }
+    function lqxFormatBytes(bytes) {
+        const n = Number(bytes) || 0;
+        if (!n) return '';
+        if (n < 1024) return n + ' B';
+        if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB';
+        return (n / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+    function lqxChooseScoreImage() {
+        const upload = window.JarvisUpload;
+        if (!upload || typeof upload.pickFiles !== 'function' || typeof upload.prepareImage !== 'function') {
+            st.lqxScoreLoadError = 'The uploader did not initialize. Reload the page and try again.';
+            rtgUpdateLqExp();
+            return;
+        }
+        upload.pickFiles({
+            accept: 'image/jpeg,image/png,image/webp',
+            onSelect: async files => {
+                const file = files && files[0];
+                if (!file) return;
+                st.lqxScoreLoading = true;
+                st.lqxScoreLoadError = null;
+                st.lqxScoreLoadMeta = null;
+                st.lqxScoreImg = null;
+                st.lqxScore = null;
+                rtgUpdateLqExp();
+                const prepared = await upload.prepareImage(file, { maxWidth: 1600, maxHeight: 900, maxDataUrlChars: 2800000 });
+                st.lqxScoreImg = prepared.dataUrl;
+                st.lqxScoreFileName = prepared.name;
+                st.lqxScoreLoadMeta = `${prepared.width}×${prepared.height}${prepared.preparedBytes ? ' · ' + lqxFormatBytes(prepared.preparedBytes) : ''}`;
+                st.lqxScoreLoading = false;
+                rtgUpdateLqExp();
+            },
+            onError: error => {
+                st.lqxScoreLoading = false;
+                st.lqxScoreLoadError = String((error && error.message) || error || 'The image could not be loaded.');
+                rtgUpdateLqExp();
+            },
+        });
     }
     function lqIdeaGrp(run, iid) { const key = run + '/' + iid; if (LQIDEAGRP[key]) return; LQIDEAGRP[key] = { loading: 1 }; lqxJson('/api/longquant/ideas/group/' + run + '/' + iid).then(j => { LQIDEAGRP[key] = j; rtgUpdateGuessesL(); rtgUpdateLqExp(); }).catch(e => { LQIDEAGRP[key] = { error: e.message || 1 }; rtgUpdateGuessesL(); rtgUpdateLqExp(); }); }
     function lqThumbsEnsure(force) {
@@ -1065,7 +1103,11 @@ const JarvisLongQuant = (function () {
         rtgUpdateLqExp();
     }
     async function lqxScoreUpload() {
-        if (!st.lqxScoreImg) return;
+        if (!st.lqxScoreImg || st.lqxScoreLoading) {
+            st.lqxScoreLoadError = st.lqxScoreLoading ? 'The image is still loading.' : 'Choose an image before scoring.';
+            rtgUpdateLqExp();
+            return;
+        }
         const tin = window.document.querySelector('[data-lqxscoretitle]'); if (tin) st.lqxScoreTitle = tin.value;
         const title = String(st.lqxScoreTitle || '').trim();
         if (!title) {
@@ -1073,7 +1115,7 @@ const JarvisLongQuant = (function () {
             rtgUpdateLqExp();
             return;
         }
-        st.lqxScoring = true; st.lqxScore = null; rtgUpdateLqExp();
+        st.lqxScoring = true; st.lqxScore = null; st.lqxScoreLoadError = null; rtgUpdateLqExp();
         try {
             st.lqxScore = await lqxJson('/api/longquant/exp/score-upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: st.lqxScoreImg, title, idea: title }) });
         } catch (e) { st.lqxScore = { error: e.message }; }
@@ -1665,9 +1707,14 @@ const JarvisLongQuant = (function () {
             }
         }
         // SCORE-AN-UPLOAD card
+        const scoreImageReady = !!st.lqxScoreImg && !st.lqxScoreLoading;
+        const scoreButtonColor = scoreImageReady ? C.accent : C.faint;
         let sc = `<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:5px">🎯 Score a thumbnail</div>
           <div style="font-size:10px;color:${C.mute};margin-bottom:7px">Upload a thumbnail and enter its video title or idea. The shared scorer returns the same six image-only outputs and six image-plus-title outputs used by generation and grind.</div>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><input data-lqxscoretitle value="${esc(st.lqxScoreTitle || '')}" placeholder="video title or idea required for all 12 embeddings" style="flex:1 1 260px;min-width:0;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 10px;font-size:12px"/><label style="cursor:pointer;border:1px dashed ${C.accent};color:${C.accent};border-radius:6px;padding:7px 12px;font-size:11px;font-weight:700;white-space:nowrap">📁 Choose image<input type="file" id="lqx-file" accept="image/jpeg,image/png" style="display:none"/></label><span data-lqxscore style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:7px 14px;font-size:11px;font-weight:800;white-space:nowrap">${st.lqxScoring ? '⏳ scoring…' : 'Score →'}</span></div>`;
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><input data-lqxscoretitle value="${esc(st.lqxScoreTitle || '')}" placeholder="video title or idea required for all 12 embeddings" style="flex:1 1 260px;min-width:0;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 10px;font-size:12px"/><button type="button" data-lqxchooseimage style="cursor:pointer;border:1px dashed ${C.accent};background:transparent;color:${C.accent};border-radius:6px;padding:7px 12px;font-size:11px;font-weight:700;white-space:nowrap">${st.lqxScoreLoading ? 'Loading image…' : (st.lqxScoreImg ? 'Replace image' : 'Choose image')}</button><span data-lqxscore style="cursor:${scoreImageReady && !st.lqxScoring ? 'pointer' : 'not-allowed'};border:1px solid ${scoreButtonColor};background:${scoreButtonColor}18;color:${scoreButtonColor};border-radius:6px;padding:7px 14px;font-size:11px;font-weight:800;white-space:nowrap">${st.lqxScoring ? '⏳ scoring…' : 'Score →'}</span></div>
+          ${st.lqxScoreLoading ? `<div style="font-size:10px;color:${C.cyan};margin-top:7px">Reading and preparing the selected image…</div>` : ''}
+          ${st.lqxScoreLoadError ? `<div style="font-size:10px;color:${C.red};margin-top:7px">${esc(st.lqxScoreLoadError)}</div>` : ''}
+          ${st.lqxScoreImg && st.lqxScoreLoadMeta ? `<div style="font-size:10px;color:${C.green};margin-top:7px">${esc(st.lqxScoreFileName || 'thumbnail')} · ${esc(st.lqxScoreLoadMeta)} · ready to score</div>` : ''}`;
         if (st.lqxScoreImg) sc += st.lqxScore ? (st.lqxScore.error ? `<div style="font-size:11px;color:${C.red};max-width:340px;margin-top:9px">${esc(String(st.lqxScore.error).slice(0, 220))}</div>` : `<div style="text-align:right;margin-top:8px"><span data-lqxsaveupload style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:800">${st.lqxSaveFlash === 'upload' ? 'saved' : 'save this scored thumbnail'}</span></div>${lqxFullReadout({ cacheId: 'upload:' + lqxHash(st.lqxScoreImg), title: st.lqxScoreTitle || '', img: st.lqxScoreImg, score: st.lqxScore })}`) : `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;align-items:flex-start"><img src="${st.lqxScoreImg}" style="width:260px;max-width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;border:1px solid ${C.border}"/><div style="font-size:10px;color:${C.mute}">image loaded — hit Score</div></div>`;
         // GRIND card
         const gr = st.lqxGrindRun || {};
@@ -3937,6 +3984,27 @@ const JarvisLongQuant = (function () {
         try { if (st.sec === 'promise' && promiseUI()) promiseUI().afterRender(); } catch (e) { }
     }
 
+    function longRawUploadPickerError(error) {
+        st.rawUpErr = String((error && error.message) || error || 'The selected file could not be loaded.');
+        rtgUpdateRaw();
+    }
+    function openLongRawVideoPicker() {
+        const upload = window.JarvisUpload;
+        if (!upload || typeof upload.pickFiles !== 'function') {
+            longRawUploadPickerError('The uploader did not initialize. Reload the page and try again.');
+            return;
+        }
+        upload.pickFiles({ accept: 'video/*', multiple: true, onSelect: files => rtgRawUpload(files), onError: longRawUploadPickerError });
+    }
+    function openLongRawFramePicker(slot) {
+        const upload = window.JarvisUpload;
+        if (!upload || typeof upload.pickFiles !== 'function') {
+            longRawUploadPickerError('The uploader did not initialize. Reload the page and try again.');
+            return;
+        }
+        st.rawFrameSlot = slot;
+        upload.pickFiles({ accept: 'image/jpeg,image/png,image/webp', onSelect: files => files[0] ? rtgFrameFile(files[0], slot) : null, onError: longRawUploadPickerError });
+    }
     function onClick(e) {
         if (e.target.closest('#lq-promise-panel') && promiseUI() && promiseUI().handleClick(e)) return;
         const ps = e.target.closest('[data-pred-scale]'); if (ps) { st.predScale = ps.getAttribute('data-pred-scale'); render(); return; }
@@ -4088,7 +4156,8 @@ const JarvisLongQuant = (function () {
         }
         if (e.target.closest('[data-lqxmodalclose]')) { st.lqxOpen = null; st.lqxSavedSel = null; rtgUpdateLqExp(); return; }
         const xo = e.target.closest('[data-lqxopen]'); if (xo) { const id = xo.getAttribute('data-lqxopen'); st.lqxOpen = st.lqxOpen === id ? null : id; st.lqxSavedSel = null; rtgUpdateLqExp(); return; }
-        if (e.target.closest('[data-lqxscore]')) { lqxScoreUpload(); return; }
+        if (e.target.closest('[data-lqxchooseimage]')) { lqxChooseScoreImage(); return; }
+        if (e.target.closest('[data-lqxscore]')) { if (!st.lqxScoring) lqxScoreUpload(); return; }
         if (e.target.closest('[data-lqxtitletest]')) {
             const inp = window.document.querySelector('[data-lqxtitletestinput]'); if (inp) st.lqxTitleTestInput = inp.value;
             lqxScoreTitle(st.lqxTitleTestInput || '');
@@ -4154,14 +4223,14 @@ const JarvisLongQuant = (function () {
         const rm = e.target.closest('[data-rawmine]'); if (rm) { st.rawMine = !st.rawMine; rtgUpdateRaw(); return; }
         const rcl = e.target.closest('[data-rawclose]'); if (rcl) { st.rawSel = null; rtgUpdateRaw(); return; }
         const rid = e.target.closest('[data-rawid]'); if (rid) { const id = rid.getAttribute('data-rawid'); st.rawSel = (st.rawSel === id || !id) ? null : id; st.rawUpSel = false; rtgUpdateRaw(); return; }
-        if (e.target.closest('[data-rawupload]')) { const fi = window.document.getElementById('rawUpFile'); if (fi) { fi.value = ''; fi.click(); } return; }
+        if (e.target.closest('[data-rawupload]')) { openLongRawVideoPicker(); return; }
         if (e.target.closest('[data-rawupshow]')) { st.rawUpShow = !st.rawUpShow; rtgUpdateRaw(); return; }
         const updel = e.target.closest('[data-rawupdel]'); if (updel) { const i = +updel.getAttribute('data-rawupdel'); st.rawUploads.splice(i, 1); st.rawUpSel = null; rtgUpdateRaw(); return; }
         const upmk = e.target.closest('[data-rawupmark]'); if (upmk) { const i = +upmk.getAttribute('data-rawupmark'); st.rawUpSel = (st.rawUpSel === i ? null : i); st.rawSel = null; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-rawupclose]')) { st.rawUpSel = null; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-rawupclear]')) { st.rawUploads = []; st.rawUpSel = null; st.rawUpErr = null; rtgUpdateRaw(); return; }
         const bm = e.target.closest('[data-rawbuildmode]'); if (bm) { st.rawBuildMode = bm.getAttribute('data-rawbuildmode') === '1'; st.rawUpErr = null; rtgUpdateRaw(); return; }
-        const rfr = e.target.closest('[data-rawframe]'); if (rfr) { st.rawFrameSlot = +rfr.getAttribute('data-rawframe'); const fi = window.document.getElementById('rawFrameFile'); if (fi) { fi.value = ''; fi.click(); } return; }
+        const rfr = e.target.closest('[data-rawframe]'); if (rfr) { openLongRawFramePicker(+rfr.getAttribute('data-rawframe')); return; }
         const rfd = e.target.closest('[data-rawframedel]'); if (rfd) { st.rawFrames[+rfd.getAttribute('data-rawframedel')] = null; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-rawplace]')) { rtgPlaceHook(); return; }
         if (e.target.closest('[data-libreload]')) { Promise.all([
@@ -4206,13 +4275,6 @@ const JarvisLongQuant = (function () {
             if ((st.gPhase || '').indexOf('idea') === 0) { st.ideaRun = v; st.ideaSel = null; } else { st.lgRun = v; st.lgSel = null; }
             rtgUpdateGuessesL(); return;
         }
-        if (e.target.id === 'lqx-file') {
-            const f = e.target.files && e.target.files[0];
-            if (f) { const rd = new FileReader(); rd.onload = () => { st.lqxScoreImg = rd.result; st.lqxScore = null; rtgUpdateLqExp(); }; rd.readAsDataURL(f); }
-            return;
-        }
-        if (e.target.id === 'rawUpFile') { if (e.target.files && e.target.files.length) rtgRawUpload(e.target.files); return; }
-        if (e.target.id === 'rawFrameFile') { const f = e.target.files && e.target.files[0]; if (f) rtgFrameFile(f, st.rawFrameSlot || 0); return; }
         if (e.target.closest('[data-tracked]')) { st.trackedOnly = e.target.checked; render(); }
     }
     // Only the first 5s of a video is ever scored, so for anything but a tiny file we record the

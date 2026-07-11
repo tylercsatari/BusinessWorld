@@ -614,7 +614,6 @@ const JarvisRetention = (function () {
                   ${(() => { const s = U.steer || {}; const row = (tn, lab) => { for (const m of ['together', 'text', 'visual']) { const k = s[`${m}_${tn}`]; if (k) return `<div style="display:flex;justify-content:space-between;gap:10px;font-size:11px"><span style="color:${C.mute}">${lab}</span><span style="color:${C.text};font-weight:700">~${k.est}% <span style="color:${C.mute};font-weight:400">(${k.pctile}th pctile of corpus · via ${m})</span></span></div>`; } return ''; }; const kk = row('keep', 'est. keep-rate') + row('ret5', 'est. past-5s'); return kk ? `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">extrapolated onto your 211's scale</div>${kk}<div style="font-size:9px;color:${C.faint};margin-top:4px">Projected onto the same steered direction as the 11k map, quantile-mapped to your videos' actual outcomes. Open <b>→ keep-rate</b> to see it placed.</div></div>` : ''; })()}
                 </div>`;
         })() : '';
-        h += `<input id="rawUpFile" type="file" accept="video/*" multiple style="display:none"><input id="rawFrameFile" type="file" accept="image/*" style="display:none">`;
         h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
               <div style="font-size:12px;font-weight:700;color:${C.text};display:flex;gap:6px;align-items:center;flex-wrap:wrap">${n.toLocaleString()} hooks · ${chan} ${mineBtn} ${modeToggle} ${st.rawBuildMode ? showBtn : upBtn} ${upErr}</div>
               <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${chan !== 'text' ? pill('voiceover', 'voiceover', mode === 'voiceover', 'data-rawcolor') : ''}${mode === 'cluster' ? `<span style="width:6px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div></div>${builder}
@@ -626,7 +625,12 @@ const JarvisRetention = (function () {
             <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px;margin-top:6px">${bandUnder}${dots}${bandOver}</svg>${detail}${upDetail}`, 12);
         return h;
     }
-    function rtgUpdateRaw() { try { const el = window.document.getElementById('rtg-rawpanel'); if (el) el.innerHTML = renderRaw(); } catch (e) { } try { const e2 = window.document.getElementById('rtg-exppanel'); if (e2) e2.innerHTML = renderExperiment(); } catch (e) { } }
+    function rtgUpdateRaw() {
+        try { const el = window.document.getElementById('rtg-rawpanel'); if (el) el.innerHTML = renderRaw(); }
+        catch (e) { console.error('[shorts quant] raw panel refresh failed', e); }
+        try { const e2 = window.document.getElementById('rtg-exppanel'); if (e2) e2.innerHTML = renderExperiment(); }
+        catch (e) { console.error('[shorts quant] experiment panel refresh failed', e); }
+    }
     // ── 🎰 Guesses: every hook the model generates, dropped into the SAME map as the library ──
     function guessEnsure(run) { run = run || 'phase0'; if (GUESSES[run]) return; GUESSES[run] = { loading: 1 }; fetch('/api/hooks/guesses?run=' + run).then(r => r.json()).then(j => { GUESSES[run] = j; rtgUpdateGuesses(); }).catch(() => { GUESSES[run] = { rows: [] }; rtgUpdateGuesses(); }); }
     function rtgUpdateGuesses() { try { const el = window.document.getElementById('rtg-guesspanel'); if (el) el.innerHTML = renderGuesses(); } catch (e) { } }
@@ -849,7 +853,10 @@ const JarvisRetention = (function () {
         }
         return head + `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${runPills}</div>` + body;
     }
-    function rtgUpdateExp() { try { const el = window.document.getElementById('rtg-exppanel'); if (el) el.innerHTML = renderExperiment(); } catch (e) { } }
+    function rtgUpdateExp() {
+        try { const el = window.document.getElementById('rtg-exppanel'); if (el) el.innerHTML = renderExperiment(); }
+        catch (e) { console.error('[shorts quant] experiment panel refresh failed', e); }
+    }
     // ── Describe → generate the 5 frames (photorealistic, reference-conditioned) ──
     // UNIFIED architecture: you just describe each frame in plain language. A planner LLM reads ALL the
     // descriptions and infers which frames share a concrete visual entity (a person, place, object,
@@ -1204,8 +1211,7 @@ const JarvisRetention = (function () {
             : `<div data-rawframe="${i}" style="width:42px;height:75px;border:1px dashed ${C.border};border-radius:5px;display:flex;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋${i + 1}</div>`).join('')}
             <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="hook text…" style="flex:1;min-width:160px;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:12px"/>
             <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CY : C.border};background:${nFrames ? CY + '22' : 'transparent'};color:${nFrames ? CY : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Score this hook</span></div>${genFramesPanel()}` : '';
-        const controls = `<input id="rawUpFile" type="file" accept="video/*" style="display:none"><input id="rawFrameFile" type="file" accept="image/*" style="display:none">` +
-            cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, '🖼 5 frames + text')}${!st.rawBuildMode ? `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ Upload video</span>` : ''}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red}">${esc(String(st.rawUpErr).slice(0, 70))}</span>` : ''}</div>${builder}`, 12);
+        const controls = cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, '🖼 5 frames + text')}${!st.rawBuildMode ? `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ Upload video</span>` : ''}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red}">${esc(String(st.rawUpErr).slice(0, 70))}</span>` : ''}</div>${builder}`, 12);
         if (!EXPREG || EXPREG.loading) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">Loading the indicator registry…</div>`);
         if (EXPREG.error || !EXPREG.indicators) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">No indicator registry yet — run <code>indicators.py</code>.</div>`);
         // scorable = the indicators a NEW hook can actually be scored on (content probes + global novelty)
@@ -3053,6 +3059,31 @@ const JarvisRetention = (function () {
         try { rtgAfterRender(); } catch (e) { }
     }
 
+    function refreshRawUploadPanel() {
+        if (st.sec === 'experiment') rtgUpdateExp();
+        else rtgUpdateRaw();
+    }
+    function rawUploadPickerError(error) {
+        st.rawUpErr = String((error && error.message) || error || 'The selected file could not be loaded.');
+        refreshRawUploadPanel();
+    }
+    function openRawVideoPicker() {
+        const upload = window.JarvisUpload;
+        if (!upload || typeof upload.pickFiles !== 'function') {
+            rawUploadPickerError('The uploader did not initialize. Reload the page and try again.');
+            return;
+        }
+        upload.pickFiles({ accept: 'video/*', multiple: true, onSelect: files => rtgRawUpload(files), onError: rawUploadPickerError });
+    }
+    function openRawFramePicker(slot) {
+        const upload = window.JarvisUpload;
+        if (!upload || typeof upload.pickFiles !== 'function') {
+            rawUploadPickerError('The uploader did not initialize. Reload the page and try again.');
+            return;
+        }
+        st.rawFrameSlot = slot;
+        upload.pickFiles({ accept: 'image/jpeg,image/png,image/webp', onSelect: files => files[0] ? rtgFrameFile(files[0], slot) : null, onError: rawUploadPickerError });
+    }
     function onClick(e) {
         const ps = e.target.closest('[data-pred-scale]'); if (ps) { st.predScale = ps.getAttribute('data-pred-scale'); render(); return; }
         const pfeat = e.target.closest('[data-predfeat]'); if (pfeat) { const f = pfeat.getAttribute('data-predfeat'); st.predFeats = (st.predFeats || ['keep', 'retention', 'log_dur']); st.predFeats = st.predFeats.includes(f) ? st.predFeats.filter(x => x !== f) : st.predFeats.concat([f]); render(); return; }
@@ -3143,14 +3174,14 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-guessbands]')) { st.guessBands = !st.guessBands; rtgUpdateGuesses(); return; }
         const gbk = e.target.closest('[data-guessbandk]'); if (gbk) { st.guessBandK = +gbk.getAttribute('data-guessbandk'); rtgUpdateGuesses(); return; }
         const xpg = e.target.closest('[data-expgo]'); if (xpg) { const [ch, pj] = xpg.getAttribute('data-expgo').split(':'); st.sec = 'raw'; st.rawChan = ch; st.rawProj = pj; st.rawColor = pj === 'hi10m' ? 'views' : 'cluster'; render(); return; }
-        if (e.target.closest('[data-rawupload]')) { const fi = window.document.getElementById('rawUpFile'); if (fi) { fi.value = ''; fi.click(); } return; }
+        if (e.target.closest('[data-rawupload]')) { openRawVideoPicker(); return; }
         if (e.target.closest('[data-rawupshow]')) { st.rawUpShow = !st.rawUpShow; rtgUpdateRaw(); return; }
         const updel = e.target.closest('[data-rawupdel]'); if (updel) { const i = +updel.getAttribute('data-rawupdel'); st.rawUploads.splice(i, 1); st.rawUpSel = null; rtgUpdateRaw(); return; }
         const upmk = e.target.closest('[data-rawupmark]'); if (upmk) { const i = +upmk.getAttribute('data-rawupmark'); st.rawUpSel = (st.rawUpSel === i ? null : i); st.rawSel = null; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-rawupclose]')) { st.rawUpSel = null; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-rawupclear]')) { st.rawUploads = []; st.rawUpSel = null; st.rawUpErr = null; rtgUpdateRaw(); return; }
         const bm = e.target.closest('[data-rawbuildmode]'); if (bm) { st.rawBuildMode = bm.getAttribute('data-rawbuildmode') === '1'; st.rawUpErr = null; rtgUpdateRaw(); return; }
-        const rfr = e.target.closest('[data-rawframe]'); if (rfr) { st.rawFrameSlot = +rfr.getAttribute('data-rawframe'); const fi = window.document.getElementById('rawFrameFile'); if (fi) { fi.value = ''; fi.click(); } return; }
+        const rfr = e.target.closest('[data-rawframe]'); if (rfr) { openRawFramePicker(+rfr.getAttribute('data-rawframe')); return; }
         const rfd = e.target.closest('[data-rawframedel]'); if (rfd) { st.rawFrames[+rfd.getAttribute('data-rawframedel')] = null; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-rawplace]')) { rtgPlaceHook(); return; }
         if (e.target.closest('[data-libreload]')) { Promise.all([
@@ -3172,6 +3203,7 @@ const JarvisRetention = (function () {
         if (e.target.id === 'rtg-hazA') { st.hazA = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-hazB') { st.hazB = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-seek') { rtgSeek(+e.target.value); return; }
+        if (e.target.id === 'exp-gen-input') { st.expGenPrem = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedfilt')) { const k = e.target.getAttribute('data-savedfilt'); st.savedFilt = st.savedFilt || {}; st.savedFilt[k] = +e.target.value; window.clearTimeout(st._sfT); st._sfT = window.setTimeout(rtgUpdateExp, 130); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-grindthr')) { st.grindThr = +e.target.value; window.clearTimeout(st._gtT); st._gtT = window.setTimeout(rtgUpdateExp, 130); return; }
         if (e.target.id === 'grind-input') { st.grindPrem = e.target.value; return; }
@@ -3182,8 +3214,6 @@ const JarvisRetention = (function () {
     }
     function onChange(e) {
         if (e.target.getAttribute && e.target.getAttribute('data-savedmove') != null) { moveHook(e.target.getAttribute('data-savedmove'), e.target.value); return; }
-        if (e.target.id === 'rawUpFile') { if (e.target.files && e.target.files.length) rtgRawUpload(e.target.files); return; }
-        if (e.target.id === 'rawFrameFile') { const f = e.target.files && e.target.files[0]; if (f) rtgFrameFile(f, st.rawFrameSlot || 0); return; }
         if (e.target.closest('[data-tracked]')) { st.trackedOnly = e.target.checked; render(); }
     }
     // Only the first 5s of a video is ever scored, so for anything but a tiny file we record the
