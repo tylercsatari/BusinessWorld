@@ -2,7 +2,9 @@
  * Cloud Storage — R2 (S3-compatible) + Dropbox upload abstraction + job persistence.
  */
 const { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand,
-        DeleteObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
+        DeleteObjectCommand, ListObjectsV2Command,
+        CreateMultipartUploadCommand, UploadPartCommand,
+        CompleteMultipartUploadCommand, AbortMultipartUploadCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { NodeHttpHandler } = require('@smithy/node-http-handler');
 const https = require('https');
@@ -45,9 +47,66 @@ function isR2Ready() { return !!s3; }
 
 async function uploadToR2(key, buffer, contentType) {
     if (!s3) throw new Error('R2 not ready');
+    // Large buffers (>16MB) via multipart — a single PutObject of a 100-180MB tribe .json exceeds the
+    // 90s requestTimeout and fails. Multipart sends 16MB parts (each well under the timeout) and is
+    // resilient to a single part hiccup (that part retries, not the whole object).
+    if (buffer && buffer.length > 16 * 1024 * 1024) return uploadLargeToR2(key, buffer, contentType);
     await s3.send(new PutObjectCommand({
         Bucket: bucket, Key: key, Body: buffer, ContentType: contentType
     }));
+}
+
+// Manual multipart upload (no @aws-sdk/lib-storage dep). 16MB parts, sequential.
+async function uploadLargeToR2(key, buffer, contentType) {
+    if (!s3) throw new Error('R2 not ready');
+    const PART = 16 * 1024 * 1024;
+    const created = await s3.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: key, ContentType: contentType }));
+    const uploadId = created.UploadId;
+    try {
+        const parts = [];
+        for (let off = 0, n = 1; off < buffer.length; off += PART, n++) {
+            const body = buffer.subarray(off, Math.min(off + PART, buffer.length));
+            const r = await s3.send(new UploadPartCommand({ Bucket: bucket, Key: key, UploadId: uploadId, PartNumber: n, Body: body }));
+            parts.push({ ETag: r.ETag, PartNumber: n });
+        }
+        await s3.send(new CompleteMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId, MultipartUpload: { Parts: parts } }));
+    } catch (e) {
+        try { await s3.send(new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId })); } catch (e2) {}
+        throw e;
+    }
+}
+
+// Upload a file from DISK to R2 with bounded memory: small files as one
+// PutObject; larger ones as sequential 16MB multipart parts read straight
+// from the file handle (the whole file is never in RAM) — safe for multi-GB
+// videos on the 2GB box.
+async function uploadFileToR2(key, filePath, contentType) {
+    if (!s3) throw new Error('R2 not ready');
+    const PART = 16 * 1024 * 1024;
+    const size = (await fs.promises.stat(filePath)).size;
+    if (size <= PART) {
+        await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: await fs.promises.readFile(filePath), ContentType: contentType }));
+        return;
+    }
+    const fh = await fs.promises.open(filePath, 'r');
+    const created = await s3.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: key, ContentType: contentType }));
+    const uploadId = created.UploadId;
+    try {
+        const parts = [];
+        for (let off = 0, n = 1; off < size; off += PART, n++) {
+            const len = Math.min(PART, size - off);
+            const buf = Buffer.allocUnsafe(len);
+            await fh.read(buf, 0, len, off);
+            const r = await s3.send(new UploadPartCommand({ Bucket: bucket, Key: key, UploadId: uploadId, PartNumber: n, Body: buf }));
+            parts.push({ ETag: r.ETag, PartNumber: n });
+        }
+        await s3.send(new CompleteMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId, MultipartUpload: { Parts: parts } }));
+    } catch (e) {
+        try { await s3.send(new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId })); } catch (e2) {}
+        throw e;
+    } finally {
+        await fh.close().catch(() => {});
+    }
 }
 
 async function downloadFromR2(key) {
@@ -419,7 +478,7 @@ function sanitizeTitle(title) {
 
 module.exports = {
     // R2
-    initR2, isR2Ready, uploadToR2, downloadFromR2, getR2Stream, getR2SignedUrl,
+    initR2, isR2Ready, uploadToR2, uploadFileToR2, downloadFromR2, getR2Stream, getR2SignedUrl,
     existsInR2, deleteFromR2, listR2Keys, listR2Objects,
     // Dropbox
     getDropboxToken, getDropboxAuthStatus, uploadToDropbox, uploadLargeToDropbox, createDropboxFolder,

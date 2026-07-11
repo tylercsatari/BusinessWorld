@@ -3154,6 +3154,110 @@ const LibraryUI = (() => {
         });
     }
 
+    // ── Idea assets: photos/videos/files stored in R2, listed on idea.assets ──
+    // Media is opened/thumbnailed via short-lived signed R2 URLs fetched from
+    // /api/ideas/asset-url (authenticated), so <img>/window.open load straight
+    // from R2 with no token in the src and no server bandwidth.
+    async function assetSignedUrl(key) {
+        const r = await fetch('/api/ideas/asset-url?key=' + encodeURIComponent(key));
+        const j = await r.json();
+        if (!r.ok || !j.url) throw new Error(j.error || 'no url');
+        return j.url;
+    }
+
+    // One raw-bytes upload with progress. XHR (not fetch) for upload progress;
+    // it bypasses the auth fetch-wrapper, so stamp the token manually.
+    function uploadIdeaAsset(ideaId, file, onPct) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `/api/ideas/asset?ideaId=${encodeURIComponent(ideaId)}&name=${encodeURIComponent(file.name)}`);
+            const tok = window.getAuthToken && window.getAuthToken();
+            if (tok) xhr.setRequestHeader('Authorization', 'Bearer ' + tok);
+            xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+            xhr.upload.onprogress = (e) => { if (e.lengthComputable && onPct) onPct(Math.round(e.loaded / e.total * 100)); };
+            xhr.onload = () => {
+                try {
+                    const j = JSON.parse(xhr.responseText);
+                    if (xhr.status >= 200 && xhr.status < 300 && j.key) resolve(j);
+                    else reject(new Error(j.error || `upload failed (${xhr.status})`));
+                } catch (e) { reject(new Error(`upload failed (${xhr.status})`)); }
+            };
+            xhr.onerror = () => reject(new Error('network error during upload'));
+            xhr.send(file);
+        });
+    }
+
+    function bindIdeaAssets(note) {
+        const grid = document.getElementById('library-idea-assets');
+        const addBtn = document.getElementById('library-asset-add');
+        const fileInp = document.getElementById('library-asset-file');
+        const status = document.getElementById('library-asset-status');
+        if (!grid || !addBtn || !fileInp) return;
+        const assets = () => (NotesService.getById(note.id) || note).assets || [];
+
+        const renderGrid = () => {
+            const list = assets();
+            grid.innerHTML = list.length ? list.map((a, i) => {
+                const isImg = (a.type || '').startsWith('image/');
+                const isVid = (a.type || '').startsWith('video/');
+                const ico = isVid ? '🎬' : '📄';
+                return `<div class="library-asset-tile" data-asset-open="${i}" title="${escAttr(a.name || '')} — click to open">
+                    ${isImg ? `<img class="library-asset-thumb" data-asset-img="${escAttr(a.key)}" alt="">` : `<div class="library-asset-ico">${ico}</div>`}
+                    <div class="library-asset-name">${escHtml(a.name || (a.key || '').split('/').pop())}</div>
+                    <button class="library-asset-del" data-asset-del="${i}" title="Remove asset">✕</button>
+                </div>`;
+            }).join('') : '<div class="library-assets-empty">No assets yet.</div>';
+            grid.querySelectorAll('[data-asset-img]').forEach(img => {
+                assetSignedUrl(img.dataset.assetImg).then(u => { img.src = u; }).catch(() => {});
+            });
+            grid.querySelectorAll('[data-asset-open]').forEach(tile => tile.addEventListener('click', async (e) => {
+                if (e.target.closest('[data-asset-del]')) return;
+                const a = assets()[Number(tile.dataset.assetOpen)];
+                if (!a) return;
+                try { window.open(await assetSignedUrl(a.key), '_blank'); } catch (err) { showToast('Could not open asset'); }
+            }));
+            grid.querySelectorAll('[data-asset-del]').forEach(btn => btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const idx = Number(btn.dataset.assetDel);
+                const a = assets()[idx];
+                if (!a || !confirm(`Remove "${a.name || 'asset'}" from this idea?`)) return;
+                try { await fetch('/api/ideas/asset?key=' + encodeURIComponent(a.key), { method: 'DELETE' }); } catch (err) {}
+                await NotesService.update(note.id, { assets: assets().filter((_, i) => i !== idx) }).catch(() => {});
+                renderGrid();
+            }));
+        };
+        renderGrid();
+
+        addBtn.addEventListener('click', () => fileInp.click());
+        fileInp.addEventListener('change', async () => {
+            const files = [...(fileInp.files || [])];
+            fileInp.value = '';
+            if (!files.length) return;
+            addBtn.disabled = true;
+            const added = [];
+            try {
+                for (let i = 0; i < files.length; i++) {
+                    const f = files[i];
+                    status.textContent = `Uploading ${i + 1}/${files.length} — ${f.name}…`;
+                    const meta = await uploadIdeaAsset(note.id, f, pct => {
+                        status.textContent = `Uploading ${i + 1}/${files.length} — ${f.name} · ${pct}%`;
+                    });
+                    added.push(meta);
+                }
+                await NotesService.update(note.id, { assets: [...assets(), ...added] });
+                status.textContent = '';
+                showToast(`✓ ${added.length} asset${added.length === 1 ? '' : 's'} added`);
+            } catch (e) {
+                // keep whatever DID land before the failure
+                if (added.length) await NotesService.update(note.id, { assets: [...assets(), ...added] }).catch(() => {});
+                status.textContent = '';
+                alert('Upload failed: ' + e.message);
+            }
+            addBtn.disabled = false;
+            renderGrid();
+        });
+    }
+
     async function renderNoteEditor(note) {
         const editorEl = document.getElementById('library-editor');
         if (!editorEl) return;
@@ -3245,6 +3349,15 @@ const LibraryUI = (() => {
                         <textarea class="library-idea-context" id="library-idea-context" placeholder="More details, angles, notes... (optional)">${escHtml(note.context || '')}</textarea>
                     </div>
                     ${scriptSection}
+                    <div class="library-idea-field">
+                        <label class="library-idea-label">Assets <span class="library-assets-hint">reference photos, clips, files for this idea</span></label>
+                        <div class="library-assets-grid" id="library-idea-assets"></div>
+                        <div class="library-assets-actions">
+                            <input type="file" id="library-asset-file" multiple style="display:none">
+                            <button class="library-asset-add-btn" id="library-asset-add">＋ Add photos / videos / files</button>
+                            <span class="library-asset-status" id="library-asset-status"></span>
+                        </div>
+                    </div>
                     <div class="library-incubator-section">${incubatorSection}</div>
                 </div>
                 <div class="library-idea-tab-content" style="display:${ideaEditorTab === 'logistics' ? '' : 'none'};" data-idea-panel="logistics">
@@ -3289,6 +3402,9 @@ const LibraryUI = (() => {
         if (scriptEl) scriptEl.addEventListener('input', scheduleNoteSave);
         if (projEl) projEl.addEventListener('change', scheduleNoteSave);
         if (relatedEl) relatedEl.addEventListener('input', scheduleNoteSave);
+
+        // Assets (photos/videos/files)
+        bindIdeaAssets(note);
 
         // Voice buttons
         const voiceHookBtn = document.getElementById('idea-voice-hook');

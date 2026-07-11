@@ -2136,6 +2136,86 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
     }
 
     // =========================================
+    // API: Idea assets — photos/videos/files attached to a Library idea.
+    // Stored in R2 under library/idea-assets/<ideaId>/. The asset list itself
+    // lives on the idea record (idea.assets), managed by the client.
+    // Gated with the ideas data (Library → notes) via the /api/ideas/ prefix.
+    // =========================================
+
+    // POST raw file bytes → R2. Streams to a tmp file first (back-pressure,
+    // never buffered in RAM), then uploads with bounded memory — big phone
+    // videos are fine. Returns { key, name, type, size }.
+    if (pathname === '/api/ideas/asset' && req.method === 'POST') {
+        const ideaId = (url.searchParams.get('ideaId') || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60);
+        const rawName = (url.searchParams.get('name') || 'asset').slice(0, 120);
+        const safeName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^\.+/, '_') || 'asset';
+        if (!ideaId) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'missing ideaId' })); return; }
+        const assetType = (req.headers['content-type'] || 'application/octet-stream').split(';')[0];
+        const os = require('os');
+        const tmp = path.join(os.tmpdir(), `ideaasset_${Date.now()}_${Math.round(Math.random() * 1e6)}`);
+        const MAX = 3 * 1024 * 1024 * 1024;   // 3 GB
+        const ws = fs.createWriteStream(tmp);
+        let size = 0, done = false;
+        const fail = (code, msg) => { if (done) return; done = true; try { ws.destroy(); } catch (e) {} try { fs.unlinkSync(tmp); } catch (e) {} if (!res.headersSent) { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: msg })); } try { req.destroy(); } catch (e) {} };
+        req.on('data', c => {
+            if (done) return;
+            size += c.length;
+            if (size > MAX) { fail(413, 'file too large (max 3 GB)'); return; }
+            if (!ws.write(c)) { req.pause(); ws.once('drain', () => { if (!done) req.resume(); }); }
+        });
+        req.on('error', () => fail(400, 'upload stream error — check your connection and retry'));
+        ws.on('error', e => fail(500, 'write failed: ' + e.message));
+        req.on('end', () => {
+            if (done) return;
+            if (size === 0) return fail(400, 'empty upload');
+            ws.end(async () => {
+                const key = `library/idea-assets/${ideaId}/${Date.now()}_${safeName}`;
+                try {
+                    await cloud.uploadFileToR2(key, tmp, assetType);
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ key, name: rawName, type: assetType, size }));
+                } catch (e) {
+                    if (!res.headersSent) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'R2 upload failed: ' + e.message })); }
+                } finally {
+                    try { fs.unlinkSync(tmp); } catch (e) {}
+                }
+            });
+        });
+        return;
+    }
+
+    // GET → { url }: a short-lived signed R2 URL. The client fetches this
+    // (authenticated) and points <img>/<video>/window.open at the signed URL,
+    // so media loads straight from R2 — no token-in-src, no server bandwidth.
+    if (pathname === '/api/ideas/asset-url' && req.method === 'GET') {
+        const key = url.searchParams.get('key') || '';
+        if (!key.startsWith('library/idea-assets/') || key.includes('..')) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'bad key' })); return; }
+        try {
+            const signed = await cloud.getR2SignedUrl(key, 3600);
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+            res.end(JSON.stringify({ url: signed }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/ideas/asset' && req.method === 'DELETE') {
+        const key = url.searchParams.get('key') || '';
+        if (!key.startsWith('library/idea-assets/') || key.includes('..')) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'bad key' })); return; }
+        try {
+            await cloud.deleteFromR2(key);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
     // API: Ideas — semantic search index + query
     // =========================================
     if (pathname === '/api/ideas/index-embeddings' && req.method === 'POST') {
