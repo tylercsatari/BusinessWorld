@@ -3673,6 +3673,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         await serveR2PreGzip(req, res, 'longform/gratification/v2/relationship_matrices.json.gz', 300e3);
         return;
     }
+    if (pathname === '/api/longquant/gratification/v2/visualizations' && req.method === 'GET') {
+        await serveR2PreGzip(req, res, 'longform/gratification/v2/visualizations.json.gz', 300e3);
+        return;
+    }
     if (pathname === '/api/longquant/gratification/v2/experiments' && req.method === 'GET') {
         const redirected = await redirectR2Object(res, 'longform/gratification/v2/experiments.jsonl.gz', {
             expiresIn: 3600,

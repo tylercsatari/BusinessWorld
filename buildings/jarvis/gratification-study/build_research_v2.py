@@ -45,6 +45,7 @@ from rtg_pairs import (
     pair_adjustment_matrices,
     pair_representation_matrices,
 )
+from rtg_visualizations import VISUALIZATIONS_KEY, build_visualization_artifact
 
 
 HERE = Path(__file__).resolve().parent
@@ -55,6 +56,7 @@ COMPONENTS_PATH = CACHE_DIR / "components_v2.json.gz"
 MATRICES_PATH = CACHE_DIR / "matrices_v2.npz"
 MATRIX_JSON_PATH = CACHE_DIR / "relationship_matrices_v2.json.gz"
 PROGRESS_PATH = CACHE_DIR / "progress_v2.json"
+VISUALIZATIONS_PATH = CACHE_DIR / "visualizations_v2.json.gz"
 
 REPORT_KEY = "longform/gratification/v2/report.json"
 REGISTRY_KEY = "longform/gratification/v2/experiments.jsonl.gz"
@@ -684,6 +686,14 @@ def main() -> None:
             "Replicate surviving candidates across idea-anchor methods, curve coordinate systems, source splits, and hook-cut sensitivity.",
         ],
     }
+    visualization_manifest = build_visualization_artifact(
+        report,
+        MATRICES_PATH,
+        REGISTRY_PATH,
+        VISUALIZATIONS_PATH,
+    )
+    report["artifacts"]["visualizations"] = visualization_manifest
+    report["meta"]["visualizationVersion"] = visualization_manifest["version"]
     REPORT_PATH.write_text(json.dumps(json_safe(report), separators=(",", ":")))
     if publish:
         upload_file(store, REPORT_PATH, REPORT_KEY, "application/json")
@@ -691,6 +701,7 @@ def main() -> None:
         upload_file(store, COMPONENTS_PATH, COMPONENTS_KEY, "application/gzip")
         upload_file(store, MATRICES_PATH, MATRICES_KEY, "application/octet-stream")
         upload_file(store, MATRIX_JSON_PATH, MATRIX_JSON_KEY, "application/gzip")
+        upload_file(store, VISUALIZATIONS_PATH, VISUALIZATIONS_KEY, "application/gzip")
     write_progress(
         store if publish else None,
         "complete",

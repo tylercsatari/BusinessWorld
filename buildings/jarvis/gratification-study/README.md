@@ -64,7 +64,8 @@ cd buildings/jarvis/gratification-study
   test_rtg_embeddings.py \
   test_rtg_experiments.py \
   test_rtg_geometry.py \
-  test_rtg_pairs.py
+  test_rtg_pairs.py \
+  test_rtg_visualizations.py
 ```
 
 ## V2 Artifacts
@@ -76,6 +77,7 @@ Local cache:
 - `.cache/components_v2.json.gz`
 - `.cache/matrices_v2.npz`
 - `.cache/relationship_matrices_v2.json.gz`
+- `.cache/visualizations_v2.json.gz`
 - `.cache/component_embeddings_v2.sqlite3`
 - `.cache/component_embeddings_v2.npz`
 - `.cache/progress_v2.json`
@@ -87,6 +89,7 @@ R2:
 - `longform/gratification/v2/components.json.gz`
 - `longform/gratification/v2/matrices.npz`
 - `longform/gratification/v2/relationship_matrices.json.gz`
+- `longform/gratification/v2/visualizations.json.gz`
 - `longform/gratification/v2/component_embeddings.npz`
 - `longform/gratification/v2/progress.json`
 
@@ -107,3 +110,11 @@ The UI and reports use these levels:
    creative tests.
 
 Nothing is called an RTG score before levels 3 and 4 are satisfied.
+
+Rebuild the lazy embedding-map and complete-results artifact from the existing
+matrices and experiment registry without rerunning the research sweep:
+
+```bash
+/Users/tylercsatari/miniforge3/bin/python3 \
+  buildings/jarvis/gratification-study/refresh_visualizations_v2.py
+```
