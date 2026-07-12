@@ -91,16 +91,16 @@ def main() -> None:
     for left in range(len(EXAMPLES)):
         for right in range(left + 1, len(EXAMPLES)):
             delta = bootstrap_scores[:, left] - bootstrap_scores[:, right]
-            main_delta = first[left]["score"]["axisCoordinate"] - first[right]["score"]["axisCoordinate"]
+            main_delta = first[left]["score"]["prediction"] - first[right]["score"]["prediction"]
             comparisons.append({
                 "left": EXAMPLES[left]["id"],
                 "right": EXAMPLES[right]["id"],
-                "mainAxisDeltaLeftMinusRight": float(main_delta),
-                "bootstrapLeftHigherFraction": float(np.mean(delta > 0)),
-                "bootstrapRightHigherFraction": float(np.mean(delta < 0)),
-                "bootstrapDeltaP10": float(np.quantile(delta, .1)),
-                "bootstrapDeltaMedian": float(np.median(delta)),
-                "bootstrapDeltaP90": float(np.quantile(delta, .9)),
+                "survivalLiftDeltaLeftMinusRight": float(main_delta),
+                "retainedInformationBootstrapLeftHigherFraction": float(np.mean(delta > 0)),
+                "retainedInformationBootstrapRightHigherFraction": float(np.mean(delta < 0)),
+                "retainedInformationBootstrapDeltaP10": float(np.quantile(delta, .1)),
+                "retainedInformationBootstrapDeltaMedian": float(np.median(delta)),
+                "retainedInformationBootstrapDeltaP90": float(np.quantile(delta, .9)),
                 "bootstrapRepeats": len(bootstrap),
             })
 
@@ -136,10 +136,23 @@ def main() -> None:
             "score": result,
             "summary": {
                 "percentile": result["score"]["percentile"],
-                "axisCoordinate": result["score"]["axisCoordinate"],
-                "bootstrapP10": result["confidence"]["bootstrapPercentileP10"],
-                "bootstrapMedian": result["confidence"]["bootstrapPercentileMedian"],
-                "bootstrapP90": result["confidence"]["bootstrapPercentileP90"],
+                "axisCoordinate": result["score"]["prediction"],
+                "predictedCarryPercentPerSecond": result["score"][
+                    "predictedCarryPercentPerSecond"
+                ],
+                "responseEndSeconds": result["score"]["responseEndSeconds"],
+                "retainedInformationPercentile": (
+                    result["retainedInformation"]["score"]["percentile"]
+                ),
+                "bootstrapP10": result["retainedInformation"]["confidence"][
+                    "bootstrapPercentileP10"
+                ],
+                "bootstrapMedian": result["retainedInformation"]["confidence"][
+                    "bootstrapPercentileMedian"
+                ],
+                "bootstrapP90": result["retainedInformation"]["confidence"][
+                    "bootstrapPercentileP90"
+                ],
                 "inDomainSimilarityPercentile": result["confidence"]["inDomainSimilarityPercentile"],
                 "partitionGapPercentile": result["confidence"]["partitionScoreGapPercentile"],
                 "forwardComponents": forward_components,
@@ -161,9 +174,15 @@ def main() -> None:
             "sha256": first_hash,
         },
         "modelValidation": {
-            "heldoutSpearman": model["validation"]["heldoutSpearman"],
-            "heldoutPearson": model["validation"]["heldoutPearson"],
-            "familyCorrectedSignFlipP": model["validation"]["signFlipP"],
+            "heldoutSpearman": outcome_model["survivalModel"]["validation"][
+                "heldoutSpearman"
+            ],
+            "heldoutPearson": outcome_model["survivalModel"]["validation"][
+                "heldoutPearson"
+            ],
+            "familyCorrectedSignFlipP": outcome_model["survivalModel"][
+                "validation"
+            ]["rankInference"]["p"],
             "bootstrapRepeats": len(bootstrap),
             "forwardResponse": (
                 (model.get("forwardResponse") or {}).get("component") or {}
@@ -177,8 +196,9 @@ def main() -> None:
                 for local, index in enumerate(machine_positions)
             },
             "meaning": (
-                "ranking is the frozen axis result; winner fractions are the share of 128 "
-                "source-bootstrap refits in which each variant ranks first"
+                "ranking is the frozen length-adjusted survival result; winner fractions are "
+                "reported only for the separate retained-information bootstrap and do not replace "
+                "the survival ranking"
             ),
         },
         "allExampleRanking": [EXAMPLES[index]["id"] for index in all_rank],

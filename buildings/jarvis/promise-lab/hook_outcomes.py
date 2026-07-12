@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy.stats import rankdata
+from scipy.stats import pearsonr, rankdata, spearmanr
 from sklearn.decomposition import PCA
+from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import Ridge
 from sklearn.metrics import r2_score
 from sklearn.model_selection import GroupKFold, KFold
@@ -22,6 +23,138 @@ EPS = 1e-9
 OUTCOME_SEED = 20260718
 FIXED_DIMENSIONS = 16
 FIXED_ALPHA = 10.0
+
+
+def correlation_audit(left: np.ndarray, right: np.ndarray) -> dict:
+    """Return rank and linear association with exact two-sided p-values."""
+    left = np.asarray(left, float)
+    right = np.asarray(right, float)
+    valid = np.isfinite(left + right)
+    left = left[valid]
+    right = right[valid]
+    if len(left) < 4:
+        return {"rows": int(len(left))}
+    rank = spearmanr(left, right)
+    linear = pearsonr(left, right)
+    return {
+        "rows": int(len(left)),
+        "spearman": float(rank.statistic),
+        "spearmanP": float(rank.pvalue),
+        "pearson": float(linear.statistic),
+        "pearsonP": float(linear.pvalue),
+    }
+
+
+def fit_rewatch_kernel(curves: np.ndarray, terminal: np.ndarray,
+                       durations: np.ndarray, times: np.ndarray,
+                       alpha: float = 1.0) -> dict:
+    """Estimate how entry inflation propagates forward through observed curves."""
+    curves = np.asarray(curves, float)
+    terminal = np.asarray(terminal, float)
+    durations = np.asarray(durations, float)
+    times = np.asarray(times, float)
+    if curves.ndim != 2 or curves.shape[1] != len(times):
+        raise ValueError("rewatch curves and time grid differ")
+    entry_inflation = curves[:, 0] - 100.0
+    features = np.column_stack([
+        entry_inflation, terminal, np.log(np.maximum(durations, EPS)),
+    ])
+    valid = np.all(np.isfinite(features), axis=1) & np.all(np.isfinite(curves), axis=1)
+    if valid.sum() < 20:
+        raise ValueError("insufficient finite curves for rewatch normalization")
+    scaler = StandardScaler().fit(features[valid])
+    model = Ridge(alpha=float(alpha)).fit(
+        scaler.transform(features[valid]), curves[valid],
+    )
+    raw = np.asarray(model.coef_[:, 0] / scaler.scale_[0], float)
+    raw[0] = 1.0
+    kernel = IsotonicRegression(
+        increasing=False, y_min=0.0, y_max=1.0,
+    ).fit_transform(times, raw)
+    kernel[0] = 1.0
+    return {
+        "timesSeconds": times.astype(np.float32),
+        "rawEntryInflationCoefficient": raw.astype(np.float32),
+        "kernel": np.asarray(kernel, np.float32),
+        "ridgeAlpha": float(alpha),
+        "controlVariables": [
+            "terminal retention", "log video duration",
+        ],
+        "definition": (
+            "At each second, regress observed retention on entry above 100%, terminal "
+            "retention, and log video duration; then constrain the entry coefficient "
+            "to a non-increasing 1-to-0 decay."
+        ),
+    }
+
+
+def apply_rewatch_kernel(curves: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+    """Remove only the corpus-estimated decaying entry-inflation contribution."""
+    curves = np.asarray(curves, float)
+    kernel = np.asarray(kernel, float)
+    if curves.ndim == 1:
+        adjusted = curves - (curves[0] - 100.0) * kernel
+        adjusted[0] = 100.0
+        return adjusted.astype(np.float32)
+    adjusted = curves - (curves[:, :1] - 100.0) * kernel[None, :]
+    adjusted[:, 0] = 100.0
+    return adjusted.astype(np.float32)
+
+
+def response_end_values(curves: np.ndarray, times: np.ndarray,
+                        response_seconds: np.ndarray) -> np.ndarray:
+    curves = np.asarray(curves, float)
+    times = np.asarray(times, float)
+    response_seconds = np.asarray(response_seconds, float)
+    return np.asarray([
+        np.interp(response_seconds[index], times, curves[index])
+        for index in range(len(curves))
+    ], np.float32)
+
+
+def per_second_survival(end_retention: np.ndarray,
+                        response_seconds: np.ndarray) -> np.ndarray:
+    """Convert end survival to the geometric percent carried through each second."""
+    end_retention = np.asarray(end_retention, float)
+    response_seconds = np.asarray(response_seconds, float)
+    return (
+        100.0 * np.exp(
+            np.log(np.maximum(end_retention, 1e-4) / 100.0)
+            / np.maximum(response_seconds, 1e-4)
+        )
+    ).astype(np.float32)
+
+
+def duration_baseline_features(response_seconds: np.ndarray) -> np.ndarray:
+    seconds = np.maximum(np.asarray(response_seconds, float), 1e-4)
+    return np.column_stack([seconds, seconds ** 2, np.log(seconds)]).astype(np.float32)
+
+
+def fit_duration_baseline(response_seconds: np.ndarray, target: np.ndarray,
+                          alpha: float = FIXED_ALPHA) -> dict:
+    features = duration_baseline_features(response_seconds)
+    target = np.asarray(target, float)
+    scaler = StandardScaler().fit(features)
+    model = Ridge(alpha=float(alpha)).fit(scaler.transform(features), target)
+    coefficient = np.asarray(model.coef_, float) / scaler.scale_
+    intercept = float(model.intercept_ - scaler.mean_ @ coefficient)
+    return {
+        "coefficient": coefficient.astype(np.float32),
+        "intercept": intercept,
+        "ridgeAlpha": float(alpha),
+        "features": ["response seconds", "response seconds squared", "log response seconds"],
+    }
+
+
+def apply_duration_baseline(response_seconds: np.ndarray | float,
+                            model: dict) -> np.ndarray:
+    scalar = np.ndim(response_seconds) == 0
+    values = np.asarray([response_seconds] if scalar else response_seconds, float)
+    prediction = (
+        duration_baseline_features(values) @ np.asarray(model["coefficient"], float)
+        + float(model["intercept"])
+    )
+    return prediction[0] if scalar else prediction
 
 
 def _splitter(count: int, groups: np.ndarray | None, folds: int, seed: int):
@@ -153,6 +286,99 @@ def fit_full_linear(features: np.ndarray, target: np.ndarray,
             features, model["coefficient"][:, 0]
         )
     return output
+
+
+def nested_survival_crossfit(features: np.ndarray, curves: np.ndarray,
+                             terminal: np.ndarray, durations: np.ndarray,
+                             response_seconds: np.ndarray, times: np.ndarray,
+                             folds: int = 5,
+                             seed: int = OUTCOME_SEED) -> dict:
+    """Cross-fit normalization, duration correction, and semantic prediction."""
+    features = row_unit(np.asarray(features, np.float32))
+    curves = np.asarray(curves, np.float32)
+    terminal = np.asarray(terminal, np.float32)
+    durations = np.asarray(durations, np.float32)
+    response_seconds = np.asarray(response_seconds, np.float32)
+    times = np.asarray(times, np.float32)
+    count = len(features)
+    score_prediction = np.full(count, np.nan, np.float32)
+    score_baseline = np.full(count, np.nan, np.float32)
+    score_target = np.full(count, np.nan, np.float32)
+    carry = np.full(count, np.nan, np.float32)
+    expected_carry = np.full(count, np.nan, np.float32)
+    curve_prediction = np.full_like(curves, np.nan, dtype=np.float32)
+    curve_baseline = np.full_like(curves, np.nan, dtype=np.float32)
+    curve_target = np.full_like(curves, np.nan, dtype=np.float32)
+    fold_index = np.full(count, -1, np.int16)
+    directions = []
+    fold_kernels = []
+    splits = KFold(
+        n_splits=min(folds, count), shuffle=True, random_state=seed,
+    ).split(np.arange(count))
+    for fold, (train, test) in enumerate(splits):
+        train = np.asarray(train, int)
+        test = np.asarray(test, int)
+        normalization = fit_rewatch_kernel(
+            curves[train], terminal[train], durations[train], times,
+        )
+        adjusted = apply_rewatch_kernel(curves, normalization["kernel"])
+        fold_carry = per_second_survival(
+            response_end_values(adjusted, times, response_seconds),
+            response_seconds,
+        )
+        length_model = fit_duration_baseline(
+            response_seconds[train], fold_carry[train],
+        )
+        fold_expected = apply_duration_baseline(response_seconds, length_model)
+        fold_target = fold_carry - fold_expected
+        score_model = _fit_direct(
+            features, fold_target, train, FIXED_DIMENSIONS, FIXED_ALPHA,
+            seed + fold * 101,
+        )
+        score_prediction[test] = apply_linear_model(
+            features[test], score_model,
+        )[:, 0]
+        score_baseline[test] = float(np.mean(fold_target[train]))
+        score_target[test] = fold_target[test]
+        carry[test] = fold_carry[test]
+        expected_carry[test] = fold_expected[test]
+        direction = score_model["coefficient"][:, 0]
+        directions.append(direction / (np.linalg.norm(direction) + EPS))
+
+        curve_model = _fit_direct(
+            features, adjusted, train, FIXED_DIMENSIONS, FIXED_ALPHA,
+            seed + 7001 + fold * 101,
+        )
+        curve_prediction[test] = apply_linear_model(features[test], curve_model)
+        curve_baseline[test] = np.mean(adjusted[train], axis=0)
+        curve_target[test] = adjusted[test]
+        fold_index[test] = fold
+        fold_kernels.append(normalization["kernel"])
+
+    curve_prediction[:, 0] = 100.0
+    curve_baseline[:, 0] = 100.0
+    curve_target[:, 0] = 100.0
+    cosines = [
+        float(directions[left] @ directions[right])
+        for left in range(len(directions))
+        for right in range(left + 1, len(directions))
+    ]
+    return {
+        "scorePrediction": score_prediction,
+        "scoreBaseline": score_baseline,
+        "scoreTarget": score_target,
+        "carryPercentPerSecond": carry,
+        "expectedCarryPercentPerSecond": expected_carry,
+        "curvePrediction": curve_prediction,
+        "curveBaseline": curve_baseline,
+        "curveTarget": curve_target,
+        "foldIndex": fold_index,
+        "foldKernels": np.asarray(fold_kernels, np.float32),
+        "foldDirectionMedianCosine": float(np.median(cosines)) if cosines else None,
+        "foldDirectionPositiveFraction": (
+            float(np.mean(np.asarray(cosines) > 0)) if cosines else None
+        ),
+    }
 
 
 def rank_signflip(prediction: np.ndarray, target: np.ndarray,

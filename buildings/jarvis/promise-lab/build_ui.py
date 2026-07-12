@@ -195,6 +195,24 @@ def main() -> None:
             "outcomesUsed": True,
         })
     if hook_outcomes.get("status") == "complete":
+        survival = hook_outcomes.get("survivalModel") or {}
+        survival_validation = survival.get("validation") or {}
+        registry.append({
+            "id": "hook-survival-length-adjusted",
+            "stage": "whole-hook-survival-axis",
+            "method": "nested rewatch-normalized duration-adjusted direct text axis",
+            "representation": "complete-hook Gemini text embedding",
+            "pcaDimensions": 16,
+            "ridgeAlpha": 10.0,
+            "n": survival_validation.get("rows"),
+            "target": "length_adjusted_hook_survival",
+            "targetDefinition": (survival.get("targetContract") or {}).get("formula"),
+            "heldoutSpearman": survival_validation.get("heldoutSpearman"),
+            "heldoutPearson": survival_validation.get("heldoutPearson"),
+            "searchWideP": (survival_validation.get("rankInference") or {}).get("p"),
+            "status": survival_validation.get("status"),
+            "outcomesUsed": True,
+        })
         for target, target_meta in (hook_outcomes.get("targets") or {}).items():
             hook_model = (hook_outcomes.get("hookModels") or {}).get(target) or {}
             hook_validation = hook_model.get("validation") or {}
@@ -454,11 +472,18 @@ def main() -> None:
                 for target, model in (hook_outcomes.get("componentModels") or {}).items()
             },
             "curveValidation": ((hook_outcomes.get("curveModel") or {}).get("validation")),
+            "rewatchAdjustedCurveValidation": (
+                (hook_outcomes.get("curveModel") or {}).get("rewatchAdjustedValidation")
+            ),
+            "survivalValidation": (
+                (hook_outcomes.get("survivalModel") or {}).get("validation")
+            ),
+            "rewatchAudit": hook_outcomes.get("rewatchAudit"),
             "speakingRate": ((hook_outcomes.get("curveModel") or {}).get("speakingRate")),
             "interpretation": (
-                "Complete-hook predictions and every stored map coordinate are fitted with grouped "
-                "out-of-fold validation. Component outcome maps are reported separately and remain "
-                "diagnostic whenever their own source-held-out family test does not validate."
+                "The primary hook score is a nested held-out length-adjusted survival axis after an "
+                "empirical rewatch correction. Component response and direct outcome maps remain "
+                "separate; diagnostic maps are never promoted into the headline score."
             ),
         },
     }

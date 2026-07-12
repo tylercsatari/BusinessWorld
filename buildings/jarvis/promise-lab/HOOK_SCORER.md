@@ -9,10 +9,11 @@ It uses the same `gemini-embedding-2` 1536-dimensional
 text space as Long Quant. It does not ask a generative LLM to interpret, split,
 rank, or rewrite the hook.
 
-The score is deliberately named **Hook retained-information percentile**, not
-virality. On this 208-hook corpus, the retention-derived direction survives
-held-out validation; observed views do not. Calling the current direction a
-views or virality predictor would overstate the evidence.
+The primary score is deliberately named **Length-adjusted hook survival
+percentile**, not virality. It predicts whether a hook loses less
+rewatch-adjusted retention than the ordinary loss for the same response
+duration. The earlier retained-information direction remains visible as a
+separate complete-hook plane and as the broad component Shapley channel.
 
 ## 1. Frozen semantic categories
 
@@ -52,7 +53,7 @@ boundary audit reaches ROC AUC 0.817621 and average precision 0.748050. The
 median top-two score gap is only 0.002210, so the UI exposes that uncertainty
 instead of pretending every boundary is certain.
 
-## 3. Outcome definition
+## 3. Retained-information diagnostic
 
 The learning target starts with six endpoint-normalized retention measurements:
 
@@ -80,7 +81,7 @@ A ridge model then removes seven measured confounds from that target:
 The residual is the amount of retained information above or below what those
 measured conditions predict. It is observational and does not prove causality.
 
-## 4. Frozen quality direction
+## 4. Frozen retained-information direction
 
 Inside each training fold, normalized hook embeddings are reduced by PCA and a
 ridge model predicts the residual retention factor. Dimension count and ridge
@@ -104,7 +105,42 @@ UI does not replace them with an invented confidence label.
 Observed log views alone fail the same held-out test (Spearman 0.0152,
 p=0.8204). A joint retention-plus-views target also gives views the opposite
 sign from retention. That falsification is why the production label remains a
-retention-information score rather than a generic viral score.
+retention score rather than a generic viral score.
+
+## 4a. Primary length-adjusted survival score
+
+The primary score is fitted in a fully nested five-fold procedure. Inside each
+outer training fold, the observed 0-20 second curves are regressed on entry
+inflation (`retention(0) - 100`), terminal retention, and log video duration.
+The entry-inflation coefficient is constrained to a non-increasing 1-to-0
+kernel. For source `i` and second `t`:
+
+`R_adjusted_i(t) = R_observed_i(t) - (R_observed_i(0) - 100) * kernel(t)`
+
+This makes every adjusted curve start at exactly 100. The kernel falls to zero
+near 15 seconds, so the adjusted curve converges back to the observed curve. It
+is an empirical de-inflation index, not an identified causal first-pass curve.
+The observed curve remains available in the UI.
+
+The rewatch hypothesis is supported observationally: terminal retention versus
+entry inflation has Spearman `0.85546` (`p < 1e-60`), and entry inflation versus
+the 0-3 second slope has Spearman `-0.92168` (`p < 1e-85`).
+
+Let `T` be the exact spoken hook end plus the validated +1 second response lag.
+The geometric percent carried through each second is:
+
+`carry = 100 * exp(log(R_adjusted(T) / 100) / T)`
+
+A text-free ridge baseline predicts ordinary carry using `T`, `T^2`, and
+`log(T)`. The semantic target is `carry - expected_carry`. Higher therefore
+means less loss than normal at the same duration. The complete-hook Gemini
+embedding predicts this target with nested held-out Spearman `0.35853`, Pearson
+`0.35568`, MAE improvement `8.00%`, sign-flip `p=0.000244`, median fold-direction
+cosine `0.80029`, and positive agreement for every fold pair.
+
+The displayed percentile ranks the semantic prediction among the 208 training
+hook predictions. Stored rows also expose a separate actual-target percentile;
+the two are never conflated.
 
 ## 5. Components and relationships
 
@@ -178,10 +214,10 @@ expected slope. Higher means flatter loss or a rise beyond expectation.
 
 Two attempted extensions fail their own held-out gates and are not promoted:
 the equal average of four component scores does not validate as a new whole-hook
-score, and a standalone pair-residual model is only borderline. The original
-complete-hook retained-information axis remains the overall hook score; pair
-cells are exact interactions on the validated later-component axis and make no
-separate causal claim.
+score, and a standalone pair-residual model is only borderline. The headline
+survival score is fitted directly from the complete hook; the component axes
+are not averaged into it. Pair cells are exact interactions on the validated
+later-component axis and make no separate causal claim.
 
 ## 7. Outcome axes and retention forecast
 
@@ -215,33 +251,42 @@ source-equal mean speaking rate of 3.9175 lexical words/second, then shifts each
 word response forward by the measured +1.0-second lag. This is a rough
 observational forecast, not a causal audience simulator.
 
+A second nested model predicts the rewatch-adjusted curve on the same 41-point
+grid. Its held-out MAE is 4.518 percentage points versus 4.909 for the text-free
+baseline, an `7.97%` improvement; mean timewise Spearman is `0.41381`, and the
+empirical 80% band covers `80.30%`. All 208 source videos are at least 22
+seconds, so no 20-second target is extrapolated beyond an observed source
+video. Spoken hooks end at median 4.99 seconds and maximum 12.76 seconds. The UI
+marks hook end plus response lag and shades the remaining region as a whole-hook
+continuation forecast: no words or component categories are invented there.
+
 ## 8. Supplied example, held out from training
 
 The four supplied sentences are evaluation-only. Scoring them twice produces
 the identical JSON SHA-256
-`0b3f77a1750241534952fa3596245374cb9da933b9d446015b5c063b6812f89a`.
+`300455f15acb6156220ae230bd8d22e97eb32a2e694829010839a624f989dd31`.
 
-| Hook | Percentile | Bootstrap P10-P90 |
-| --- | ---: | ---: |
-| machine, unexpected use | 49.52 | 32.21-74.13 |
-| machine, second feature | 37.02 | 28.89-69.18 |
-| machine, mechanism question | 35.10 | 22.93-66.15 |
-| Lego shoulder scenario | 22.12 | 14.90-58.61 |
+| Hook | Survival percentile | Predicted carry/second | Response end |
+| --- | ---: | ---: | ---: |
+| machine, unexpected use | 86.06 | 100.002% | 6.11s |
+| machine, second feature | 81.73 | 100.263% | 5.34s |
+| machine, mechanism question | 79.81 | 100.813% | 4.32s |
+| Lego shoulder scenario | 49.52 | 99.974% | 5.34s |
 
 The frozen main-axis order for the three machine variants is:
 
 `unexpected use > second feature > mechanism question`
 
-Across 128 source-bootstrap refits, the unexpected-use version wins 67.97%, the
-second-feature version 21.88%, and the mechanism question 10.16%. Unexpected use
-beats mechanism question in 83.59% of refits and beats second feature in 71.09%.
+The 128-refit winner frequencies still belong to the separate retained-information
+axis: unexpected use wins 67.97%, second feature 21.88%, and mechanism question
+10.16%. They are displayed as retained-information sensitivity evidence, not as
+confidence for the survival ranking.
 
 All four examples are near the edge of the observed semantic domain: their
-nearest-training similarity percentiles range from 0.96 to 4.33. Consequently,
-the intervals are broad. The result is objective and reproducible, but it is not
-high-confidence evidence that the ordering will generalize to every unseen
-topic. Adding more diverse hooks with retention outcomes is the honest path to
-tighter confidence.
+nearest-training similarity percentiles range from 0.96 to 4.33. The result is
+objective and reproducible, but it is not high-confidence evidence that the
+ordering will generalize to every unseen topic. Adding more diverse hooks with
+retention outcomes is the honest path to tighter confidence.
 
 ## 9. Reproduction and serving
 
@@ -284,8 +329,9 @@ unbounded API and memory job.
 
 Large artifacts are loaded from `longform/promise-lab-v4/` in R2 and cached in
 `/tmp`; there is no resident GPU and no always-on model worker. The Promise Lab
-**Hook scorer** tab renders five complete-hook planes, all six score planes for
-each of four components, the rough retention curve and word-response points,
+**Hook scorer** tab renders six complete-hook planes, all six score planes for
+each of four components, observed and rewatch-adjusted retention curves,
+word-response points, and the explicit post-hook continuation region,
 stored example comparison, exact partition, component contributions, pair
 interactions, subset inputs, domain evidence, and latency decision. The **Hook
 library** renders all 208 source-held-out predictions beside actual viewed ratio,

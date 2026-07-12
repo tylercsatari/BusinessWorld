@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 
 from embedding_store import EmbeddingStore, R2Store, json_ready
+from hook_outcomes import apply_duration_baseline
 from hook_score_core import (
     apply_linear_model,
     apply_category_transform,
@@ -23,6 +24,7 @@ from hook_score_core import (
     component_response_windows,
     decode_compositional_four_chunks,
     estimated_token_timeline,
+    interpolate_series,
     outcome_prediction_payload,
     pair_interactions,
     percentile,
@@ -40,7 +42,7 @@ REMOTE_PREFIX = "longform/promise-lab-v4"
 MODEL_FILE = "hook-quality-model.json"
 PARTITION_FILE = "canonical-partition-model.json"
 OUTCOME_MODEL_FILE = "hook-outcome-model.json"
-SCORER_VERSION = "deterministic-hook-scorer-v3-outcome-atlas"
+SCORER_VERSION = "deterministic-hook-scorer-v4-survival"
 MAX_HOOK_TOKENS = 64
 
 
@@ -365,31 +367,92 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
         })
 
     curve_model = outcome_model["curveModel"]
+    adjusted_model = outcome_model["rewatchAdjustedCurveModel"]
     times = np.asarray(curve_model["timesSeconds"], np.float32)
     predicted = apply_linear_model(primitives["full"], curve_model)[0]
     lower = predicted + np.asarray(curve_model["residualP10ByTime"], np.float32)
     upper = predicted + np.asarray(curve_model["residualP90ByTime"], np.float32)
+    adjusted_predicted = apply_linear_model(primitives["full"], adjusted_model)[0]
+    adjusted_lower = adjusted_predicted + np.asarray(
+        adjusted_model["residualP10ByTime"], np.float32,
+    )
+    adjusted_upper = adjusted_predicted + np.asarray(
+        adjusted_model["residualP90ByTime"], np.float32,
+    )
+    adjusted_predicted[0] = adjusted_lower[0] = adjusted_upper[0] = 100.0
     rate = outcome_model.get("speakingRate") or {}
     response_lag = float(outcome_model.get("responseLagSeconds") or 0)
     words = estimated_token_timeline(
-        partition["tokens"], partition["owners"], times, predicted,
-        float(rate.get("meanWordsPerSecond") or 1), response_lag, lower, upper,
+        partition["tokens"], partition["owners"], times, adjusted_predicted,
+        float(rate.get("meanWordsPerSecond") or 1), response_lag,
+        adjusted_lower, adjusted_upper,
     )
+    for word in words:
+        second = float(word["responseSeconds"])
+        word["observedAbsolutePredictedRetentionPercent"] = interpolate_series(
+            times, predicted, second,
+        )
+        word["observedAbsolutePredictionP10"] = interpolate_series(
+            times, lower, second,
+        )
+        word["observedAbsolutePredictionP90"] = interpolate_series(
+            times, upper, second,
+        )
+    spoken_end = max((float(word["spokenEndSeconds"]) for word in words), default=0.0)
+    response_end = max((float(word["responseSeconds"]) for word in words), default=0.0)
+    survival_model = outcome_model["survivalModel"]
+    survival_payload = _prediction_interval(
+        outcome_prediction_payload(primitives["full"], survival_model),
+        survival_model,
+    )
+    expected_carry = float(apply_duration_baseline(
+        response_end, survival_model["lengthBaseline"],
+    ))
+    predicted_lift = float(survival_payload["prediction"])
+    predicted_carry = expected_carry + predicted_lift
+    predicted_end = float(
+        100.0 * (max(predicted_carry, 1e-4) / 100.0) ** max(response_end, 1e-4)
+    )
+    survival_score = {
+        **survival_payload,
+        "label": "Length-adjusted hook survival percentile",
+        "higherMeans": survival_model["targetContract"]["higherMeans"],
+        "definition": survival_model["targetContract"]["formula"],
+        "responseEndSeconds": response_end,
+        "spokenHookEndSeconds": spoken_end,
+        "expectedCarryPercentPerSecond": expected_carry,
+        "predictedCarryPercentPerSecond": predicted_carry,
+        "predictedAdjustedRetentionAtResponseEnd": predicted_end,
+        "targetContract": survival_model["targetContract"],
+    }
     return {
         "status": "complete",
         "methodVersion": outcome_model.get("methodVersion"),
         "targets": targets,
         "hook": hook_predictions,
         "components": component_predictions,
+        "survivalScore": survival_score,
         "retentionForecast": {
-            "status": (curve_model.get("validation") or {}).get("status"),
+            "status": (adjusted_model.get("validation") or {}).get("status"),
             "timesSeconds": times.astype(float).tolist(),
             "predictedPercent": predicted.astype(float).tolist(),
             "predictionP10": lower.astype(float).tolist(),
             "predictionP90": upper.astype(float).tolist(),
-            "validation": curve_model.get("validation"),
+            "rewatchAdjustedPredictedPercent": adjusted_predicted.astype(float).tolist(),
+            "rewatchAdjustedPredictionP10": adjusted_lower.astype(float).tolist(),
+            "rewatchAdjustedPredictionP90": adjusted_upper.astype(float).tolist(),
+            "validation": adjusted_model.get("validation"),
+            "observedAbsoluteValidation": curve_model.get("validation"),
             "speakingRate": rate,
             "responseLagSeconds": response_lag,
+            "spokenHookEndSeconds": spoken_end,
+            "responseEndSeconds": response_end,
+            "postHookForecastStartSeconds": response_end,
+            "forecastEndSeconds": float(times[-1]),
+            "forecastScope": (
+                "word and component attribution ends at responseEndSeconds; later points are "
+                "a whole-hook text forecast without additional word/category attribution"
+            ),
             "wordTimingPolicy": "library-average speaking rate",
             "words": words,
             "componentWindows": component_response_windows(
@@ -493,6 +556,23 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
     )
 
     validation = model["validation"]
+    retained_score = {
+        "label": "Hook retained-information percentile",
+        "axisCoordinate": full_coordinate,
+        "percentile": axis_percentile,
+        "higherMeans": model["target"]["higherMeans"],
+        "definition": model["scoreDefinition"],
+    }
+    retained_map = {
+        "x": full_coordinate,
+        "y": float(primitives["full"] @ np.asarray(
+            model["mapOrthogonalDirection"], np.float32,
+        )),
+        "xDefinition": "frozen retained-information coordinate",
+        "yDefinition": "largest remaining semantic direction orthogonal to retained information",
+    }
+    survival_score = outcomes["survivalScore"]
+    survival_validation = survival_score.get("validation") or {}
     stable_payload = f"{SCORER_VERSION}\0{model['methodVersion']}\0{primitives['text']}"
     return {
         "version": 1,
@@ -508,31 +588,39 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             "spanEmbeddingInputs": primitives["embeddingInputs"],
             "generativeLlmUsed": False,
         },
-        "score": {
-            "label": "Hook retained-information percentile",
-            "axisCoordinate": full_coordinate,
-            "percentile": axis_percentile,
-            "higherMeans": model["target"]["higherMeans"],
-            "definition": model["scoreDefinition"],
-        },
+        "score": survival_score,
         "confidence": {
-            "heldoutSpearman": validation["heldoutSpearman"],
-            "heldoutPearson": validation["heldoutPearson"],
-            "familyCorrectedSignFlipP": validation["signFlipP"],
-            "foldDirectionMedianCosine": validation["foldDirectionMedianCosine"],
-            "bootstrapPercentileP10": float(np.quantile(bootstrap_percentiles, .1)) if len(bootstrap_percentiles) else None,
-            "bootstrapPercentileMedian": float(np.median(bootstrap_percentiles)) if len(bootstrap_percentiles) else None,
-            "bootstrapPercentileP90": float(np.quantile(bootstrap_percentiles, .9)) if len(bootstrap_percentiles) else None,
+            "heldoutSpearman": survival_validation.get("heldoutSpearman"),
+            "heldoutPearson": survival_validation.get("heldoutPearson"),
+            "familyCorrectedSignFlipP": (
+                (survival_validation.get("rankInference") or {}).get("p")
+            ),
+            "foldDirectionMedianCosine": survival_validation.get(
+                "foldDirectionMedianCosine"
+            ),
             "nearestTrainingCosine": nearest_cosine,
             "inDomainSimilarityPercentile": domain_percentile,
             "partitionScoreGap": partition["scoreGap"],
             "partitionScoreGapPercentile": partition["scoreGapPercentile"],
         },
         "map": {
-            "x": full_coordinate,
-            "y": float(primitives["full"] @ np.asarray(model["mapOrthogonalDirection"], np.float32)),
-            "xDefinition": "frozen quality-axis coordinate",
-            "yDefinition": "largest remaining semantic direction orthogonal to quality",
+            "x": survival_score.get("mapX"),
+            "y": survival_score.get("mapY"),
+            "xDefinition": "frozen length-adjusted hook-survival prediction",
+            "yDefinition": "largest remaining semantic direction orthogonal to hook survival",
+        },
+        "retainedInformation": {
+            "score": retained_score,
+            "map": retained_map,
+            "confidence": {
+                "heldoutSpearman": validation["heldoutSpearman"],
+                "heldoutPearson": validation["heldoutPearson"],
+                "signFlipP": validation["signFlipP"],
+                "foldDirectionMedianCosine": validation["foldDirectionMedianCosine"],
+                "bootstrapPercentileP10": float(np.quantile(bootstrap_percentiles, .1)) if len(bootstrap_percentiles) else None,
+                "bootstrapPercentileMedian": float(np.median(bootstrap_percentiles)) if len(bootstrap_percentiles) else None,
+                "bootstrapPercentileP90": float(np.quantile(bootstrap_percentiles, .9)) if len(bootstrap_percentiles) else None,
+            },
         },
         "partition": {
             key: value for key, value in partition.items() if key != "owners"
@@ -550,7 +638,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             "reason": "Gemini does not embed empty content; zero is the declared additive origin",
         },
         "nearestTrainingHooks": nearest,
-        "target": model["target"],
+        "target": survival_score.get("targetContract"),
         "latency": {
             "legacyWholeHookAxisTest": model["latencyDecision"],
             "forwardComponentMetric": (

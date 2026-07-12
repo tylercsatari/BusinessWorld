@@ -29,6 +29,18 @@ def main() -> None:
                for row in hook["components"])
     assert artifact["curveModel"]["validation"]["maeImprovementFraction"] > 0
     assert artifact["curveModel"]["validation"]["pairedImprovementInference"]["p"] <= .05
+    assert artifact["survivalModel"]["validation"]["status"] == "validated"
+    assert artifact["survivalModel"]["validation"]["heldoutSpearman"] > 0
+    assert artifact["survivalModel"]["validation"]["maeImprovementFraction"] > 0
+    assert artifact["curveModel"]["rewatchAdjustedValidation"]["status"] == "validated-rough-forecast"
+    assert artifact["rewatchAudit"]["scope"]["videosShorterThan20Seconds"] == 0
+    assert artifact["rewatchAudit"]["entryInflationVsTerminal"]["spearman"] > .8
+    assert all(row["survivalScore"]["validationStatus"] == "validated"
+               for row in artifact["hooks"])
+    assert all(abs(row["retentionForecast"]["rewatchAdjustedActualPercent"][0] - 100) < 1e-6
+               for row in artifact["hooks"])
+    assert all(row["retentionForecast"]["responseEndSeconds"] < 20
+               for row in artifact["hooks"])
     assert artifact["curveModel"]["speakingRate"]["exactTimedHooks"] >= 200
     print(json.dumps({
         "status": "verified",
@@ -37,6 +49,8 @@ def main() -> None:
         "relationships": artifact["audit"]["relationships"],
         "curveMAE": artifact["curveModel"]["validation"]["heldoutMAEPercentagePoints"],
         "curveBaselineMAE": artifact["curveModel"]["validation"]["baselineMAEPercentagePoints"],
+        "survivalRho": artifact["survivalModel"]["validation"]["heldoutSpearman"],
+        "rewatchAdjustedCurveRho": artifact["curveModel"]["rewatchAdjustedValidation"]["meanTimewiseSpearman"],
         "speakingRate": artifact["curveModel"]["speakingRate"]["meanWordsPerSecond"],
     }, indent=2))
 
