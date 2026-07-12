@@ -2648,7 +2648,6 @@ const LibraryUI = (() => {
 
         const renderNoteItem = (n) => {
             const isConverted = n.type === 'converted';
-            const preview = n.hook || n.context || '';
             const isRealProject = Array.isArray(realProjectsCache) && realProjectsCache.length > 0 && n.project && realProjectsCache.includes(n.project);
             const badge = isRealProject && window.EggRenderer ? window.EggRenderer.projectBadgeHtml(n.project) : '';
             let statusHtml = '';
@@ -2658,10 +2657,15 @@ const LibraryUI = (() => {
             } else if (isConverted) {
                 statusHtml = ' <span class="library-converted-badge-inline">Sent</span>';
             }
+            // In-pipeline ideas display the WORKSHOP record's current name/hook —
+            // same single-source rule as the editor, so the list never drifts.
+            const displayName = linkedVideo ? (linkedVideo.name || n.name) : n.name;
+            const lvHook = linkedVideo ? ((Array.isArray(linkedVideo.hooks) && linkedVideo.hooks[0] && linkedVideo.hooks[0].text) || linkedVideo.hook || '') : '';
+            const preview = linkedVideo ? (lvHook || linkedVideo.context || n.context || '') : (n.hook || n.context || '');
             return `
             <div class="library-list-item ${isConverted ? 'converted' : ''}" data-note-id="${n.id}">
                 <div class="library-list-item-content">
-                    <div class="library-list-title">${escHtml(n.name)}${statusHtml}<span class="library-idea-dots"><span class="library-idea-dot${n.context ? ' has-context' : ''}"></span><span class="library-idea-dot dot-script${n.script ? ' has-script' : ''}"></span><span class="library-idea-dot dot-logistics${n.logistics ? ' has-logistics' : ''}"></span></span></div>
+                    <div class="library-list-title">${escHtml(displayName)}${statusHtml}<span class="library-idea-dots"><span class="library-idea-dot${n.context ? ' has-context' : ''}"></span><span class="library-idea-dot dot-script${n.script ? ' has-script' : ''}"></span><span class="library-idea-dot dot-logistics${n.logistics ? ' has-logistics' : ''}"></span></span></div>
                     <div class="library-list-date">${badge ? `<button class="library-project-badge-btn" data-project="${escAttr(n.project)}">${badge}</button>` : escHtml(preview ? preview.substring(0, 60) : 'idea')}</div>
                 </div>
                 <button class="library-delete-btn" data-note-id="${n.id}" title="Delete">&times;</button>
@@ -3262,19 +3266,6 @@ const LibraryUI = (() => {
         const editorEl = document.getElementById('library-editor');
         if (!editorEl) return;
 
-        let projectOptions = '';
-        let projs = [];
-        try {
-            projs = await VideoService.getProjects();
-            // Always include the current project as a selected option, even if not in projs list
-            const currentProject = note.project || '';
-            const projectSet = currentProject && !projs.includes(currentProject)
-                ? [currentProject, ...projs]
-                : projs;
-            projectOptions = projectSet.map(p => `<option value="${escAttr(p)}" ${p === currentProject ? 'selected' : ''}>${escHtml(p)}</option>`).join('');
-        } catch (e) {}
-        const isLinkedProject = note.project && projs.includes(note.project);
-
         const isConverted = note.type === 'converted';
         let linkedVideo = null;
         // Ensure videos are loaded before checking for linked video
@@ -3282,6 +3273,41 @@ const LibraryUI = (() => {
             await VideoService.sync().catch(() => {});
         }
         linkedVideo = VideoService.getByIdeaId(note.id);
+        if (linkedVideo) {
+            // Pull fresh workshop data so the synced view is CURRENT, not cache-stale.
+            await VideoService.sync(true).catch(() => {});
+            linkedVideo = VideoService.getByIdeaId(note.id) || linkedVideo;
+        }
+
+        // ── Single source of truth ── once an idea is in the pipeline, the
+        // Workshop video record IS the entry: render its fields here, and
+        // saveNote writes edits back to it — the Library and Workshop can
+        // never show two different versions of the same video again.
+        let hookVariantNote = '';
+        let src = note;
+        if (linkedVideo) {
+            const vHooks = Array.isArray(linkedVideo.hooks) ? linkedVideo.hooks : [];
+            let vHook = linkedVideo.hook || '';
+            if (vHooks.length) {
+                vHook = vHooks[0].text || '';
+                if (vHooks.length > 1) hookVariantNote = `<div class="library-sync-hint">Hook variant 1 of ${vHooks.length} — manage all variants in the Workshop</div>`;
+            }
+            src = { name: linkedVideo.name || note.name, hook: vHook, context: linkedVideo.context || '', script: linkedVideo.script || '', project: linkedVideo.project || '', relatedTo: note.relatedTo || '' };
+        }
+        const syncBanner = linkedVideo ? `<div class="library-sync-banner">🔗 Synced with the Workshop — this is the pipeline video record itself; edits here update the Workshop and vice-versa.</div>` : '';
+
+        let projectOptions = '';
+        let projs = [];
+        try {
+            projs = await VideoService.getProjects();
+            // Always include the current project as a selected option, even if not in projs list
+            const currentProject = src.project || '';
+            const projectSet = currentProject && !projs.includes(currentProject)
+                ? [currentProject, ...projs]
+                : projs;
+            projectOptions = projectSet.map(p => `<option value="${escAttr(p)}" ${p === currentProject ? 'selected' : ''}>${escHtml(p)}</option>`).join('');
+        } catch (e) {}
+        const isLinkedProject = src.project && projs.includes(src.project);
 
         let incubatorSection = '';
         if (linkedVideo) {
@@ -3303,7 +3329,7 @@ const LibraryUI = (() => {
         const scriptSection = `
             <div class="library-idea-field">
                 <label class="library-idea-label">Script ${expandIcon}</label>
-                <textarea class="library-idea-script" id="library-idea-script" placeholder="Write your script here...">${escHtml(note.script || '')}</textarea>
+                <textarea class="library-idea-script" id="library-idea-script" placeholder="Write your script here...">${escHtml(src.script || '')}</textarea>
             </div>`;
 
         const logisticsHtml = renderLogisticsPanel(note);
@@ -3319,13 +3345,14 @@ const LibraryUI = (() => {
             </div>
             <div class="library-editor-body">
                 <div class="library-editor-title-row">
-                    <input type="text" class="library-editor-title" id="library-editor-title" value="${escAttr(note.name)}" placeholder="Idea title..." />
+                    <input type="text" class="library-editor-title" id="library-editor-title" value="${escAttr(src.name)}" placeholder="Idea title..." />
                 </div>
                 <div class="library-idea-tabs">
                     <button class="library-idea-tab ${ideaEditorTab === 'overview' ? 'active' : ''}" data-idea-tab="overview">Overview</button>
                     <button class="library-idea-tab ${ideaEditorTab === 'logistics' ? 'active' : ''}" data-idea-tab="logistics">Logistics</button>
                 </div>
                 <div class="library-idea-tab-content" style="display:${ideaEditorTab === 'overview' ? '' : 'none'};" data-idea-panel="overview">
+                    ${syncBanner}
                     <div class="library-meta-row">
                         <label class="library-meta-label">Project</label>
                         <div style="display:flex;align-items:center;gap:6px;">
@@ -3338,15 +3365,16 @@ const LibraryUI = (() => {
                     </div>
                     <div class="library-idea-field">
                         <label class="library-idea-label">Related to</label>
-                        <textarea class="library-idea-related" id="library-idea-related" placeholder="Describe relationships to other ideas or projects...">${escHtml(note.relatedTo || '')}</textarea>
+                        <textarea class="library-idea-related" id="library-idea-related" placeholder="Describe relationships to other ideas or projects...">${escHtml(src.relatedTo || '')}</textarea>
                     </div>
                     <div class="library-idea-field">
                         <label class="library-idea-label">Hook <button class="idea-voice-btn" id="idea-voice-hook" title="Voice input">🎤</button></label>
-                        <textarea class="library-idea-hook" id="library-idea-hook" placeholder="What's the hook? (optional)">${escHtml(note.hook || '')}</textarea>
+                        <textarea class="library-idea-hook" id="library-idea-hook" placeholder="What's the hook? (optional)">${escHtml(src.hook || '')}</textarea>
+                        ${hookVariantNote}
                     </div>
                     <div class="library-idea-field">
                         <label class="library-idea-label">Context <button class="idea-voice-btn" id="idea-voice-context" title="Voice input">🎤</button></label>
-                        <textarea class="library-idea-context" id="library-idea-context" placeholder="More details, angles, notes... (optional)">${escHtml(note.context || '')}</textarea>
+                        <textarea class="library-idea-context" id="library-idea-context" placeholder="More details, angles, notes... (optional)">${escHtml(src.context || '')}</textarea>
                     </div>
                     ${scriptSection}
                     <div class="library-idea-field">
@@ -3567,6 +3595,26 @@ const LibraryUI = (() => {
             const newScript = scriptEl?.value || '';
             const relatedEl = document.getElementById('library-idea-related');
             const newRelatedTo = relatedEl?.value || '';
+            // Single source of truth: if the idea is in the pipeline, the WORKSHOP
+            // video record is the entry — write shared fields there first. The
+            // hook must go into the workshop's hook-INSTANCE model (hooks[0].text);
+            // writing the legacy v.hook field is ignored once instances exist,
+            // which was exactly the "hooks not syncing" bug.
+            const linkedVideo = VideoService.getByIdeaId(selectedNote.id);
+            if (linkedVideo) {
+                const freshV = VideoService.getById(linkedVideo.id) || linkedVideo;
+                const patch = { name: newName, context: newContext, script: newScript, project: newProject };
+                if (Array.isArray(freshV.hooks) && freshV.hooks.length) {
+                    const hooks = freshV.hooks.map(h => ({ ...h }));
+                    hooks[0].text = newHook;
+                    patch.hooks = hooks;
+                } else {
+                    patch.hook = newHook;
+                }
+                await VideoService.update(linkedVideo.id, patch);
+            }
+            // Keep the idea's own copy identical (it's the fallback if the video
+            // is ever deleted, and keeps the Library list/search current).
             await NotesService.update(selectedNote.id, {
                 name: newName,
                 hook: newHook,
@@ -3576,13 +3624,6 @@ const LibraryUI = (() => {
                 relatedTo: newRelatedTo
             });
             selectedNote = NotesService.getById(selectedNote.id);
-            // Bidirectional sync: if this idea has a linked video, update it too
-            const linkedVideo = VideoService.getByIdeaId(selectedNote.id);
-            if (linkedVideo) {
-                // Mirror ALL shared fields (script included) so the workshop video and
-                // this idea stay identical — editing either place updates the other.
-                VideoService.update(linkedVideo.id, { name: newName, hook: newHook, context: newContext, script: newScript, project: newProject }).catch(() => {});
-            }
             setSaveStatus('Saved');
         } catch (e) { setSaveStatus('Save failed'); noteDirty = true; }
     }

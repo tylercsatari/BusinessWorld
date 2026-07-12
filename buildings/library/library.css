@@ -3734,3 +3734,7 @@
 .library-asset-add-btn:hover { background: #fdf3e0; }
 .library-asset-add-btn:disabled { opacity: 0.6; cursor: default; }
 .library-asset-status { font-size: 11.5px; color: #8a6a3a; margin-left: 8px; }
+
+/* ── Workshop-synced idea banner ── */
+.library-sync-banner { background: linear-gradient(90deg, rgba(61,139,240,0.10), rgba(61,139,240,0.04)); border: 1px solid rgba(61,139,240,0.35); color: #2a5fa8; border-radius: 8px; padding: 7px 11px; font-size: 12px; font-weight: 600; margin-bottom: 12px; }
+.library-sync-hint { font-size: 11px; color: #8a7a5e; margin-top: 4px; font-style: italic; }
