@@ -30,8 +30,7 @@ from hook_quality import (
     select_full_configuration,
 )
 from hook_score_core import (
-    pair_interactions, percentile, projection_scores, shapley_values,
-    subset_texts as component_subset_texts,
+    local_counterfactual_texts, percentile,
 )
 from latency_study import (
     DEFAULT_LAGS,
@@ -50,7 +49,7 @@ CACHE = HERE / ".cache"
 VECTOR_DIR = CACHE / "all-span-vectors"
 MODEL_PATH = CACHE / "hook-quality-model.json"
 SUMMARY_PATH = CACHE / "hook-quality.json"
-METHOD_VERSION = "crossfit-retention-factor-axis-shapley-v1"
+METHOD_VERSION = "crossfit-retention-factor-local-deletion-v2"
 
 
 def read_json(path: Path):
@@ -164,9 +163,12 @@ def component_latency(corpus: list[dict], hooks: list[dict], partitions: list[di
             "normalizedMeasuredByLag": audit["measured"],
             "rawMeasuredByLag": raw_audit["measured"],
         }
+    equal_rows_per_source = max(
+        int(np.sum(groups == group)) for group in set(groups)
+    )
     inference = lag_family_inference(
         component_scores, residuals, groups, lags, repeats=repeats,
-        per_group=4, seed=QUALITY_SEED + 700,
+        per_group=equal_rows_per_source, seed=QUALITY_SEED + 700,
     )
     all_rows = []
     negative_max = 0.0
@@ -209,6 +211,10 @@ def component_latency(corpus: list[dict], hooks: list[dict], partitions: list[di
             "each component score uses an axis trained without its source video; the natural-drop "
             "baseline also predicts each source out of fold"
         ),
+        "sourceBalancing": (
+            f"every source contributes {equal_rows_per_source} deterministic resampled rows, "
+            "derived from the largest emergent component count"
+        ),
         "inference": inference,
         "entryDiagnostic": entry_diagnostic,
     }
@@ -228,6 +234,7 @@ def main() -> None:
     corpus = corpus_payload["rows"]
     manifest = read_json(CACHE / "all-span-manifest.json")
     partitions_payload = read_json(CACHE / "canonical-partitions.json")
+    partition_model = read_json(CACHE / "canonical-partition-model.json")
     partitions = partitions_payload["rows"]
     if [str(row["id"]) for row in corpus] != [str(row["videoId"]) for row in manifest["hooks"]]:
         raise RuntimeError("corpus and all-span hook order do not match")
@@ -296,15 +303,18 @@ def main() -> None:
     direction = np.asarray(fitted["direction"], np.float32)
     second_direction = deterministic_orthogonal(features, direction)
 
-    text_by_source = {
-        str(row["videoId"]): component_subset_texts(
-            row["text"], tokenize(row["text"]),
-            np.asarray([int(token["owner"]) for token in row["tokens"]], int),
-        ) for row in partitions
-    }
+    raw_span_store = np.load(VECTOR_DIR / "raw.npy", mmap_mode="r")
+    context_span_store = np.load(VECTOR_DIR / "context.npy", mmap_mode="r")
+    text_by_source = {}
     required = []
-    for texts in text_by_source.values():
-        required.extend(text for mask, text in texts.items() if mask != 15 and text)
+    for partition in partitions:
+        owners = np.asarray([int(token["owner"]) for token in partition["tokens"]], int)
+        count = int(partition["componentCount"])
+        texts = local_counterfactual_texts(
+            partition["text"], tokenize(partition["text"]), owners, count,
+        )
+        text_by_source[str(partition["videoId"])] = texts
+        required.extend(text for text in texts["withoutPair"].values() if text)
     embedding_store = EmbeddingStore(CACHE / "hook-quality-embeddings.sqlite3")
     try:
         embedded = embedding_store.embed_many(required)
@@ -324,14 +334,37 @@ def main() -> None:
         fold_index = int(validation["foldIndex"][hook_index])
         oof_direction = fold_directions[fold_index]
         texts = text_by_source[str(partition["videoId"])]
-        vectors = {}
-        for mask, text in texts.items():
-            vectors[mask] = features[hook_index] if mask == 15 else embedded[text]
-        scores = projection_scores(vectors, oof_direction)
-        shapley = shapley_values(scores, 4)
-        interactions = pair_interactions(scores, 4)
+        component_count = int(partition["componentCount"])
+        full_score = float(features[hook_index] @ oof_direction)
+        global_indices = np.asarray([
+            int(chunk["globalSpanIndex"]) for chunk in partition["chunks"]
+        ], int)
+        singleton_vectors = row_unit(np.asarray(raw_span_store[global_indices], np.float32))
+        context_vectors = row_unit(np.asarray(context_span_store[global_indices], np.float32))
+        singleton_scores = singleton_vectors @ oof_direction
+        context_scores = context_vectors @ oof_direction
+        deletion_effects = full_score - context_scores
+        interactions = []
+        for left in range(component_count):
+            for right in range(left + 1, component_count):
+                text = texts["withoutPair"][(left, right)]
+                without_pair_score = (
+                    float(
+                        (embedded[text] / (np.linalg.norm(embedded[text]) + 1e-9))
+                        @ oof_direction
+                    ) if text else 0.0
+                )
+                interactions.append({
+                    "left": left,
+                    "right": right,
+                    "interaction": float(
+                        full_score - context_scores[left] - context_scores[right]
+                        + without_pair_score
+                    ),
+                    "definition": "full - without left - without right + without both",
+                })
         component_start = len(component_rows)
-        for index, (chunk, value) in enumerate(zip(partition["chunks"], shapley)):
+        for index, (chunk, value) in enumerate(zip(partition["chunks"], deletion_effects)):
             category = int(chunk["category"])
             row = {
                 "sourceIndex": hook_index,
@@ -340,9 +373,14 @@ def main() -> None:
                 "category": category,
                 "start": int(chunk["start"]), "end": int(chunk["end"]),
                 "text": chunk["text"],
-                "shapley": float(value),
-                "singletonAxisCoordinate": float(scores[1 << index]),
-                "deletionEffect": float(scores[15] - scores[15 ^ (1 << index)]),
+                "categoryProbability": chunk.get("categoryProbability"),
+                "leftBoundaryProbability": chunk.get("leftBoundaryProbabilityOOF"),
+                "rightBoundaryProbability": chunk.get("rightBoundaryProbabilityOOF"),
+                "leftBoundaryPosterior": chunk.get("leftBoundaryPosterior"),
+                "rightBoundaryPosterior": chunk.get("rightBoundaryPosterior"),
+                "deletionEffect": float(value),
+                "singletonAxisCoordinate": float(singleton_scores[index]),
+                "attributionDefinition": "full hook coordinate minus coordinate without this component",
             }
             component_rows.append(row)
             component_oof_scores.append(float(value))
@@ -353,7 +391,7 @@ def main() -> None:
             row["categoryPair"] = pair_key
             pair_values[pair_key].append(float(row["interaction"]))
         sequence_key = "-".join(str(row["category"]) for row in partition["chunks"])
-        sequence_values[sequence_key].append(float(scores[15]))
+        sequence_values[sequence_key].append(full_score)
         source_rows.append({
             "index": hook_index,
             "videoId": partition["videoId"],
@@ -362,18 +400,18 @@ def main() -> None:
             "axisCoordinate": float(features[hook_index] @ direction),
             "axisPercentile": percentile(fitted["trainingProjections"], float(features[hook_index] @ direction)),
             "mapY": float(features[hook_index] @ second_direction),
-            "oofAxisCoordinate": float(scores[15]),
-            "oofAxisPercentile": percentile(fold_training[fold_index], float(scores[15])),
+            "oofAxisCoordinate": full_score,
+            "oofAxisPercentile": percentile(fold_training[fold_index], full_score),
             "oofTargetResidual": float(validation["targets"][hook_index]),
             "fold": fold_index,
             "sequence": sequence_key,
             "componentOffset": component_start,
-            "componentCount": 4,
+            "componentCount": component_count,
             "partitionScoreGap": partition.get("scoreGap"),
             "partitionScoreGapPercentile": partition.get("scoreGapPercentile"),
             "pairInteractions": interactions,
-            "subsetScores": {str(mask): float(value) for mask, value in sorted(scores.items())},
-            "shapleyEfficiencyError": float(abs(shapley.sum() - scores[15])),
+            "localCounterfactualCount": component_count + len(interactions),
+            "attributionCompletenessClaim": False,
             "retentionFeatures": curve_inputs["retentionMatrix"][hook_index].astype(float).tolist(),
         })
 
@@ -383,7 +421,7 @@ def main() -> None:
                         for key, values in pair_values.items()}
     for row in component_rows:
         row["categoryPercentile"] = percentile(
-            np.asarray(category_calibration[str(row["category"])]), row["shapley"]
+            np.asarray(category_calibration[str(row["category"])]), row["deletionEffect"]
         )
     latency = component_latency(
         corpus, manifest["hooks"], partitions, np.asarray(component_oof_scores, float),
@@ -394,7 +432,7 @@ def main() -> None:
     bootstrap_training = bootstrap @ features.T
     loo_nearest = leave_one_out_nearest(features)
     model = {
-        "version": 1,
+        "version": 2,
         "status": "complete",
         "methodVersion": METHOD_VERSION,
         "embeddingModel": manifest["embeddingModel"],
@@ -411,7 +449,7 @@ def main() -> None:
         "trainingTexts": [str(row["hookText"]) for row in corpus],
         "trainingFullEmbeddings": np.round(features, 7).astype(float).tolist(),
         "leaveOneOutNearestCosineSorted": np.sort(loo_nearest).astype(float).tolist(),
-        "categoryShapleyCalibration": category_calibration,
+        "categoryDeletionCalibration": category_calibration,
         "pairInteractionCalibration": pair_calibration,
         "partitionModelArtifact": "canonical-partition-model.json.gz",
         "target": {
@@ -439,8 +477,8 @@ def main() -> None:
             "display score is its percentile among the 208 training hooks"
         ),
         "componentDefinition": (
-            "exact four-player Shapley decomposition over all 16 subsets, with subset text preserving "
-            "source order and every retained source character"
+            "exact full-context deletion effect for each evidence-selected component; pair "
+            "interactions are full - without left - without right + without both"
         ),
         "confidenceChannels": [
             "nested five-fold held-out association", "source bootstrap axis variation",
@@ -448,9 +486,9 @@ def main() -> None:
         ],
     }
     summary = {
-        "version": 1,
+        "version": 2,
         "status": "complete",
-        "stage": "deterministic hook-quality latent axis and exact component attribution",
+        "stage": "deterministic hook-quality axis and variable local counterfactual attribution",
         "methodVersion": METHOD_VERSION,
         "model": {
             "scoreLabel": "Hook retained-information percentile",
@@ -465,6 +503,23 @@ def main() -> None:
             "selectedAlpha": selected["alpha"],
             "generativeLlmUsed": False,
         },
+        "partition": {
+            "methodVersion": partitions_payload.get("methodVersion"),
+            "categoryCount": 4,
+            "categoryLabels": [0, 1, 2, 3],
+            "fixedComponentCountUsed": False,
+            "validation": partitions_payload.get("validation") or {},
+            "boundaryModel": {
+                key: partition_model["boundaryModel"].get(key)
+                for key in (
+                    "heldoutAuc", "heldoutAveragePrecision", "heldoutDecisionThreshold",
+                    "heldoutDecisionMetric", "heldoutMatthewsCorrelation",
+                    "heldoutBalancedAccuracy", "servingPolicy",
+                )
+            },
+            "selectionRule": partition_model.get("boundaryTarget") or {},
+            "constraints": partition_model.get("constraints") or {},
+        },
         "axis": {
             "x": "quality-axis cosine coordinate; right is higher residual retained information",
             "y": "largest remaining semantic PCA direction after removing the quality axis",
@@ -473,16 +528,17 @@ def main() -> None:
         },
         "components": component_rows,
         "calibration": {
-            "categoryShapley": category_calibration,
+            "categoryDeletion": category_calibration,
             "pairInteraction": pair_calibration,
             "sequenceCounts": {key: len(values) for key, values in sequence_values.items()},
         },
         "latency": latency,
         "falsificationAudits": falsification_audits,
         "audit": {
-            "subsetEmbeddings": len(set(required)),
+            "pairDeletionEmbeddings": len(set(required)),
             "componentRows": len(component_rows),
-            "maximumShapleyEfficiencyError": max(row["shapleyEfficiencyError"] for row in source_rows),
+            "relationshipRows": sum(len(row["pairInteractions"]) for row in source_rows),
+            "fixedComponentCountUsed": False,
             "partitionCoverageFailures": partitions_payload["validation"]["coverageFailures"],
             "partitionOverlaps": partitions_payload["validation"]["overlaps"],
             "elapsedSeconds": round(time.time() - started, 3),
@@ -498,7 +554,7 @@ def main() -> None:
         "heldoutSpearman": validation["heldoutSpearman"],
         "signFlipP": validation["signFlipP"],
         "selected": selected,
-        "subsetEmbeddings": len(set(required)),
+        "pairDeletionEmbeddings": len(set(required)),
         "latencySupported": latency["latencySupported"],
         "elapsedSeconds": summary["audit"]["elapsedSeconds"],
     }, indent=2))

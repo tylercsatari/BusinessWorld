@@ -40,7 +40,7 @@ from forward_response import (
     source_signflip,
 )
 from hook_quality import retention_inputs
-from hook_score_core import pair_interactions, percentile, subset_texts
+from hook_score_core import local_counterfactual_texts, percentile
 from latency_study import natural_drop_features
 from run_cluster_outcomes import load_timing_records
 from sequence import tokenize
@@ -53,7 +53,7 @@ OUTPUT_PATH = CACHE / "forward-response.json"
 MODEL_PATH = CACHE / "forward-response-model.json"
 HOOK_QUALITY_PATH = CACHE / "hook-quality.json"
 HOOK_MODEL_PATH = CACHE / "hook-quality-model.json"
-METHOD_VERSION = "forward-shifted-phrase-slope-category-axis-v1"
+METHOD_VERSION = "variable-component-forward-response-v2"
 
 
 def read_json(path: Path):
@@ -516,15 +516,21 @@ def main() -> None:
         })
 
     text_by_source = {}
-    required_subsets = []
+    required_counterfactuals = []
     for partition in partitions:
         owners = np.asarray([int(row["owner"]) for row in partition["tokens"]], int)
-        texts = subset_texts(partition["text"], tokenize(partition["text"]), owners, 4)
+        count = int(partition["componentCount"])
+        texts = local_counterfactual_texts(
+            partition["text"], tokenize(partition["text"]), owners, count,
+        )
         text_by_source[str(partition["videoId"])] = texts
-        required_subsets.extend(text for mask, text in texts.items() if mask and text)
+        required_counterfactuals.extend(
+            text for family in ("withoutOne", "withoutPair", "pairOnly")
+            for text in texts[family].values() if text
+        )
     store = EmbeddingStore(CACHE / "hook-quality-embeddings.sqlite3")
     try:
-        embedded_subsets = store.embed_many(required_subsets)
+        embedded_counterfactuals = store.embed_many(required_counterfactuals)
     finally:
         store.close()
 
@@ -533,12 +539,16 @@ def main() -> None:
     pair_targets = []
     pair_natural = []
     for source_index, partition in enumerate(partitions):
-        base = source_index * 4
+        component_indices = np.flatnonzero(source_indices == source_index)
+        if len(component_indices) != int(partition["componentCount"]):
+            raise RuntimeError(f"component offset mismatch for {partition['videoId']}")
+        base = int(component_indices[0])
+        component_count = len(component_indices)
         texts = text_by_source[str(partition["videoId"])]
-        for left in range(4):
-            for right in range(left + 1, 4):
-                pair_text = texts[(1 << left) | (1 << right)]
-                pair_vectors.append(embedded_subsets[pair_text])
+        for left in range(component_count):
+            for right in range(left + 1, component_count):
+                pair_text = texts["pairOnly"][(left, right)]
+                pair_vectors.append(embedded_counterfactuals[pair_text])
                 later = base + right
                 pair_targets.append(
                     fixed["targetResidual"][later] - fixed["prediction"][later]
@@ -570,10 +580,12 @@ def main() -> None:
                 })
     pair_embedding = row_unit(np.asarray(pair_vectors, np.float32))
     pair_left = np.asarray([
-        raw_components[int(row["sourceIndex"]) * 4 + int(row["left"])] for row in pair_rows
+        raw_components[np.flatnonzero(source_indices == int(row["sourceIndex"]))[int(row["left"])]]
+        for row in pair_rows
     ])
     pair_right = np.asarray([
-        raw_components[int(row["sourceIndex"]) * 4 + int(row["right"])] for row in pair_rows
+        raw_components[np.flatnonzero(source_indices == int(row["sourceIndex"]))[int(row["right"])]]
+        for row in pair_rows
     ])
     nonadditive_pair = interaction_features(pair_embedding, pair_left, pair_right)
     relationship_feature_candidates = {
@@ -612,37 +624,57 @@ def main() -> None:
     for source_index, partition in enumerate(partitions):
         full = hook_features[source_index]
         texts = text_by_source[str(partition["videoId"])]
-        subset_features = {}
-        for mask in range(1, 16):
-            raw_vector = full if mask == 15 else row_unit(embedded_subsets[texts[mask]])
-            complement = 15 ^ mask
-            context_vector = (
-                np.zeros_like(full) if complement == 0
-                else row_unit(embedded_subsets[texts[complement]])
-            )
-            influence_vector = row_unit(full - context_vector)
-            subset_features[mask] = combined_component_features(
-                raw_vector[None, :], influence_vector[None, :]
-            )[0]
-        interactions_by_category = {}
-        for right in range(1, 4):
-            category = str(component_rows[source_index * 4 + right]["category"])
-            direction = np.asarray(component_models[category]["direction"], np.float32)
-            scores = {0: 0.0}
-            scores.update({
-                mask: float(feature @ direction)
-                for mask, feature in subset_features.items()
-            })
-            interactions_by_category[right] = {
-                (int(row["left"]), int(row["right"])): float(row["interaction"])
-                for row in pair_interactions(scores, 4)
-            }
-        for left in range(4):
-            for right in range(left + 1, 4):
-                value = interactions_by_category[right][(left, right)]
+        component_indices = np.flatnonzero(source_indices == source_index)
+        base = int(component_indices[0])
+        component_count = len(component_indices)
+        full_feature = combined_component_features(
+            full[None, :], full[None, :],
+        )[0]
+        for left in range(component_count):
+            for right in range(left + 1, component_count):
+                category = str(component_rows[base + right]["category"])
+                direction = np.asarray(component_models[category]["direction"], np.float32)
+
+                without_left_raw = row_unit(
+                    embedded_counterfactuals[texts["withoutOne"][left]]
+                )
+                without_right_raw = row_unit(
+                    embedded_counterfactuals[texts["withoutOne"][right]]
+                )
+                without_pair_text = texts["withoutPair"][(left, right)]
+                without_pair_raw = (
+                    row_unit(embedded_counterfactuals[without_pair_text])
+                    if without_pair_text else np.zeros_like(full)
+                )
+                pair_raw = row_unit(
+                    embedded_counterfactuals[texts["pairOnly"][(left, right)]]
+                )
+                without_left_feature = combined_component_features(
+                    without_left_raw[None, :],
+                    row_unit(full - raw_components[base + left])[None, :],
+                )[0]
+                without_right_feature = combined_component_features(
+                    without_right_raw[None, :],
+                    row_unit(full - raw_components[base + right])[None, :],
+                )[0]
+                without_pair_feature = combined_component_features(
+                    without_pair_raw[None, :],
+                    row_unit(full - pair_raw)[None, :],
+                )[0]
+                value = float(
+                    full_feature @ direction
+                    - without_left_feature @ direction
+                    - without_right_feature @ direction
+                    + without_pair_feature @ direction
+                )
                 response_interaction_values.append(value)
                 pair_rows[pair_cursor]["responseAxisInteraction"] = value
+                pair_rows[pair_cursor]["responseInteractionDefinition"] = (
+                    "full - without left - without right + without both"
+                )
                 pair_cursor += 1
+    if pair_cursor != len(pair_rows):
+        raise RuntimeError("variable relationship counter did not consume every pair")
 
     response_interaction_values = np.asarray(response_interaction_values, np.float32)
     pair_calibration = {}
@@ -710,7 +742,7 @@ def main() -> None:
         and fixed["heldoutSpearman"] > control_max
     )
     model = {
-        "version": 1,
+        "version": 2,
         "status": "complete",
         "methodVersion": METHOD_VERSION,
         "embeddingModel": manifest["embeddingModel"],
@@ -737,8 +769,8 @@ def main() -> None:
         "wholeHook": {
             "accepted": False,
             "definition": (
-                "equal mean of the four category-calibrated component-axis percentiles; "
-                "each component has exactly one non-overlapping token owner"
+                "equal mean of every evidence-selected category-calibrated component-axis "
+                "percentile; each component has exactly one non-overlapping token owner"
             ),
             "trainingCompositeSorted": composite_training_sorted.astype(float).tolist(),
             "validation": composite_validation,
@@ -756,8 +788,9 @@ def main() -> None:
         },
         "relationship": {
             "definition": (
-                "exact second-order Shapley interaction across all 16 component subsets, "
-                "measured on the later component's validated category-specific forward-response axis"
+                "exact local second-order deletion interaction (full - without left - without "
+                "right + without both), measured on the later component's validated "
+                "category-specific forward-response axis"
             ),
             "calibrationByCategoryPair": response_interaction_calibration,
             "validationSource": "inherits the later component axis validation; no separate causal claim",
@@ -789,7 +822,7 @@ def main() -> None:
         },
     }
     summary = {
-        "version": 1,
+        "version": 2,
         "status": "complete",
         "stage": "forward-only component response metric and latent axes",
         "methodVersion": METHOD_VERSION,

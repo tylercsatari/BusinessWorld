@@ -16,6 +16,7 @@ CACHE = HERE / ".cache"
 def main() -> None:
     summary = json.loads((CACHE / "hook-quality.json").read_text(encoding="utf-8"))
     model = json.loads((CACHE / "hook-quality-model.json").read_text(encoding="utf-8"))
+    partitions = json.loads((CACHE / "canonical-partitions.json").read_text(encoding="utf-8"))
     assert summary["status"] == model["status"] == "complete"
     assert model["generativeLlmUsed"] is False and model["semanticRules"] == 0
     assert model["trainingExamples"] == 208
@@ -43,13 +44,16 @@ def main() -> None:
     assert all(float(value) > 0 for value in target["factorLoadings"])
     points = summary["axis"]["points"]
     components = summary["components"]
-    assert len(points) == 208 and len(components) == 832
-    assert max(float(row["shapleyEfficiencyError"]) for row in points) < 1e-8
+    assert len(points) == 208 and len(components) == partitions["chunks"]
     for row in points:
         vector = training[int(row["index"])]
         expected = float(vector @ direction)
         assert np.isclose(expected, float(row["axisCoordinate"]), atol=2e-6)
         assert 0 <= float(row["axisPercentile"]) <= 100
+        count = int(row["componentCount"])
+        assert count == int(partitions["rows"][int(row["index"])]["componentCount"])
+        assert len(row["pairInteractions"]) == count * (count - 1) // 2
+    assert all(np.isfinite(float(row["deletionEffect"])) for row in components)
     latency = summary["latency"]
     assert len(latency["lagsSeconds"]) == 23
     assert len(latency["windows"]) == 5

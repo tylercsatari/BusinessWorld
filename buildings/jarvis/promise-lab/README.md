@@ -31,14 +31,15 @@ Stages:
    against already-retained map and cluster IDs; it creates no new maps.
 10. `run_manual_projection.py`: reconstruct the winning map's exact four
    clustering coordinates, freeze its labels, and compare three 2D viewing planes.
-11. `run_canonical_partitions.py`: one outcome-blind, four-part, contiguous exact
-   cover per hook, with frozen category assignment only after boundary selection.
+11. `run_canonical_partitions.py`: one outcome-blind, variable-count, contiguous
+   exact cover per hook; the four frozen categories are assigned only after
+   source-held-out boundary selection and may repeat or be absent.
 12. `run_hook_quality.py`: nested held-out retention-information direction,
-   source bootstraps, all 16 subset embeddings, exact Shapley attribution, pair
+   source bootstraps, full-context component deletions, O(n²) local pair
    interactions, domain checks, and latency falsification.
 13. `run_forward_response.py`: nested forward-only lag selection, text-free
-   natural-drop adjustment, four category-specific component axes, all 832
-   stored component measurements, and 1,248 exact pair interactions.
+   natural-drop adjustment, four category-specific component axes, all 1,006
+   stored component measurements, and 2,489 exact local pair interactions.
 14. `run_hook_outcomes.py`: grouped out-of-fold whole-hook and category-specific
    component predictions for viewed percentage, five-second retention, average
    retention, and log views; a nested rewatch-adjusted, duration-neutral hook
@@ -58,10 +59,10 @@ hash, all coordinate shapes and finiteness, basis orthonormality, and the declar
 winner. `verify_forward_response.py` checks the selected forward lag, grouped
 inference, reverse-time controls, exact timing windows, every component and pair,
 and the rejected aggregate audits. `verify_hook_outcomes.py` checks all 208
-source-held-out predictions, 832 components, 1,248 relationships, curve shape,
+source-held-out predictions, 1,006 components, 2,489 relationships, curve shape,
 timing coverage, rewatch-kernel monotonicity, score and curve validation,
 uncertainty arrays, and improvement over the text-free baselines. Together these gates check
-exact character slices, complete lattice/subset identity, vector finiteness and
+exact character slices, complete variable-cover and local-deletion identity, vector finiteness and
 normalization, crossed-design completeness, per-source artifacts, zero-error
 self-span controls, one predeclared-confound selection per target, and exact
 agreement among the axis registry, maps, out-of-fold rows, and direction tensors.

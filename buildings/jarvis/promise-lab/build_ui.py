@@ -455,8 +455,20 @@ def main() -> None:
             },
             "interpretation": (
                 "The deployable coordinate is a complete-hook text direction validated against a "
-                "cross-fitted endpoint-normalized retention factor. Four-player Shapley values "
-                "decompose that same coordinate; they are not separate fitted outcomes."
+                "cross-fitted endpoint-normalized retention factor. Variable-count full-context "
+                "deletions attribute that same coordinate; they are not separate fitted outcomes."
+            ),
+        },
+        "canonicalPartition": {
+            "status": canonical_partitions.get("status"),
+            "methodVersion": canonical_partitions.get("methodVersion"),
+            "hooks": canonical_partitions.get("hooks", 0),
+            "components": canonical_partitions.get("chunks", 0),
+            "validation": canonical_partitions.get("validation") or {},
+            "interpretation": (
+                "Four is the number of frozen semantic category labels, not the number of pieces "
+                "required in a hook. Each source-held-out token gap supplies a learned cut/non-cut "
+                "probability and the decoder chooses the maximum-posterior non-overlapping cover."
             ),
         },
         "hookOutcomes": {
@@ -573,8 +585,9 @@ def main() -> None:
                 "drop uses timing and curve endpoints only, with negative-lag controls"
             ),
             "canonicalPartitionSeparated": (
-                "four exact-cover boundaries use compositional embedding reconstruction only; "
-                "outcomes and supplied examples cannot choose a boundary"
+                "variable exact-cover boundaries use source-held-out semantic contrast evidence; "
+                "four is only the frozen category vocabulary, and outcomes or supplied examples "
+                "cannot choose a boundary"
             ),
             "hookQualitySeparated": (
                 "the supplied comparison examples are evaluation-only; every reported training "

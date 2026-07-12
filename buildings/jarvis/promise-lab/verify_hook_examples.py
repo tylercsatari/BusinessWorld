@@ -6,9 +6,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import numpy as np
-
-
 HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
 def main() -> None:
@@ -31,25 +28,21 @@ def main() -> None:
         assert row["text"] not in training_texts
         score = row["score"]
         assert score["input"]["generativeLlmUsed"] is False
-        assert len(score["components"]) == 4
-        assert len(score["pairInteractions"]) == 6
-        assert len(score["subsets"]) == 15
+        count = int(score["partition"]["componentCount"])
+        assert len(score["components"]) == count >= 1
+        assert len(score["pairInteractions"]) == count * (count - 1) // 2
+        assert len(score["localCounterfactuals"]["componentDeletions"]) == count
+        assert len(score["localCounterfactuals"]["pairDeletions"]) == count * (count - 1) // 2
         assert score["partition"]["coverage"] == 1
         assert score["partition"]["overlapCount"] == 0
-        contribution = sum(float(value["shapleyAxisContribution"])
-                           for value in score["components"])
-        assert np.isclose(
-            contribution,
-            float(score["retainedInformation"]["score"]["axisCoordinate"]),
-            atol=1e-7,
-        )
+        assert all(value["attributionDefinition"] for value in score["components"])
         assert 0 <= float(score["score"]["percentile"]) <= 100
         assert score["score"]["validation"]["status"] == "validated"
         forward = score["forwardResponse"]
         assert forward["validatedAtComponentLevel"] is True
         assert forward["metric"]["selectedLagSeconds"] == 1.0
-        assert len(forward["components"]) == 4
-        assert len(forward["relationships"]) == 6
+        assert len(forward["components"]) == count
+        assert len(forward["relationships"]) == count * (count - 1) // 2
         assert all(0 <= float(value["percentile"]) <= 100
                    for value in forward["components"])
         assert all(0 <= float(value["percentile"]) <= 100
@@ -62,7 +55,7 @@ def main() -> None:
         }
         assert all(value["validation"]["status"] == "validated"
                    for value in outcomes["hook"].values())
-        assert len(outcomes["components"]) == 4
+        assert len(outcomes["components"]) == count
         assert all(len(component["outcomePredictions"]) == 4
                    for component in score["components"])
         forecast = outcomes["retentionForecast"]
@@ -73,7 +66,7 @@ def main() -> None:
         assert forecast["rewatchAdjustedPredictedPercent"][0] == 100
         assert forecast["responseEndSeconds"] < forecast["forecastEndSeconds"]
         assert forecast["responseLagSeconds"] == 1.0
-        assert len(forecast["componentWindows"]) == 4
+        assert len(forecast["componentWindows"]) == count
         assert forecast["words"]
     winner_fraction = result["machineVariantResult"]["bootstrapWinnerFractions"]["unexpected-use"]
     assert 0 <= float(winner_fraction) <= 1

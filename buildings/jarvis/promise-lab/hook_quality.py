@@ -1,4 +1,4 @@
-"""Held-out hook-retention axis and exact four-component attribution."""
+"""Held-out hook-retention axis for variable non-overlapping components."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from sklearn.preprocessing import StandardScaler
 
 from axes import finite_correlation, spearman
 from cluster_outcomes import endpoint_normalize_curve, retention_at
-from hook_score_core import pair_interactions, percentile, row_unit, shapley_values
+from hook_score_core import percentile, row_unit
 
 
 EPS = 1e-9
@@ -300,35 +300,3 @@ def bootstrap_directions(features: np.ndarray, retention: np.ndarray, confounds:
             direction = -direction
         output.append(direction.astype(np.float32))
     return np.asarray(output, np.float32)
-
-
-def score_subsets(vectors_by_mask: dict[int, np.ndarray], model: dict) -> dict:
-    direction = np.asarray(model["direction"], np.float32)
-    bootstrap = np.asarray(model.get("bootstrapDirections") or [], np.float32)
-    training = np.asarray(model["trainingProjectionsSorted"], float)
-    scores = {0: 0.0}
-    for mask, vector in vectors_by_mask.items():
-        if mask == 0:
-            continue
-        unit = np.asarray(vector, np.float32)
-        unit /= np.linalg.norm(unit) + EPS
-        scores[int(mask)] = float(unit @ direction)
-    shapley = shapley_values(scores, 4)
-    full_score = scores[15]
-    result = {
-        "axisScore": full_score,
-        "percentile": percentile(training, full_score),
-        "shapley": shapley.astype(float).tolist(),
-        "shapleySum": float(shapley.sum()),
-        "shapleyEfficiencyError": float(abs(shapley.sum() - (scores[15] - scores[0]))),
-        "pairInteractions": pair_interactions(scores, 4),
-        "subsetScores": {str(mask): value for mask, value in sorted(scores.items())},
-    }
-    if len(bootstrap):
-        full = np.asarray(vectors_by_mask[15], np.float32)
-        full /= np.linalg.norm(full) + EPS
-        values = bootstrap @ full
-        result["bootstrapAxisScoreP10"] = float(np.quantile(values, .1))
-        result["bootstrapAxisScoreMedian"] = float(np.median(values))
-        result["bootstrapAxisScoreP90"] = float(np.quantile(values, .9))
-    return result

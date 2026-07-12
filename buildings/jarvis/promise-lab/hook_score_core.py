@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import itertools
 import math
 
 import numpy as np
@@ -153,135 +152,143 @@ def apply_category_transform(raw_span_vectors: np.ndarray, transform: dict) -> n
     return ((residual - mean) @ components.T / np.maximum(scale, EPS)).astype(np.float32)
 
 
-def decode_compositional_four_chunks(starts: np.ndarray, ends: np.ndarray,
-                                     raw: np.ndarray, influence: np.ndarray,
-                                     full: np.ndarray, category_logp: np.ndarray,
-                                     lexical_tokens: np.ndarray,
-                                     batch_size: int = 1024) -> dict:
+def decode_variable_chunks(starts: np.ndarray, ends: np.ndarray,
+                           boundary_probability: np.ndarray,
+                           category_logp: np.ndarray,
+                           lexical_tokens: np.ndarray) -> dict:
+    """Decode the maximum-posterior boundary set as a lexical exact cover."""
     starts = np.asarray(starts, int)
     ends = np.asarray(ends, int)
-    raw = row_unit(raw)
-    influence = row_unit(influence)
-    full = row_unit(np.asarray(full, np.float32))
+    boundary_probability = np.asarray(boundary_probability, float)
     category_logp = np.asarray(category_logp, float)
     lexical_tokens = np.asarray(lexical_tokens, bool)
+    if not (len(starts) == len(ends) == len(category_logp)):
+        raise ValueError("variable exact-cover inputs do not have matching rows")
     token_count = int(ends.max())
     if len(lexical_tokens) != token_count:
         raise ValueError("lexical token mask does not match the hook")
+    if len(boundary_probability) != max(0, token_count - 1):
+        raise ValueError("boundary probabilities must contain one row per token gap")
+
     lexical_prefix = np.concatenate([[0], np.cumsum(lexical_tokens.astype(int))])
-    lookup = {(int(start), int(end)): index for index, (start, end) in enumerate(zip(starts, ends))}
-    partitions = []
-    for cuts in itertools.combinations(range(1, token_count), 3):
-        boundaries = (0, *cuts, token_count)
-        if any(lexical_prefix[boundaries[index + 1]] - lexical_prefix[boundaries[index]] <= 0
-               for index in range(4)):
+    lookup = {(int(start), int(end)): index
+              for index, (start, end) in enumerate(zip(starts, ends))}
+    clipped = np.clip(boundary_probability, EPS, 1 - EPS)
+    selected_log = np.log(clipped)
+    rejected_log = np.log1p(-clipped)
+    rejected_prefix = np.concatenate([[0.0], np.cumsum(rejected_log)])
+
+    paths: dict[int, list[tuple[float, tuple[int, ...]]]] = {0: [(0.0, ())]}
+    partition_counts = [0] * (token_count + 1)
+    partition_counts[0] = 1
+    for position in range(token_count):
+        current = paths.get(position) or []
+        if not current:
             continue
-        partitions.append([lookup[(boundaries[index], boundaries[index + 1])] for index in range(4)])
-    if not partitions:
-        raise ValueError("no four-part lexical exact cover exists")
-    best_rows = []
-    for offset in range(0, len(partitions), batch_size):
-        indices = np.asarray(partitions[offset:offset + batch_size], int)
-        raw_sum = raw[indices].sum(axis=1)
-        influence_sum = influence[indices].sum(axis=1)
-        raw_score = raw_sum @ full / (np.linalg.norm(raw_sum, axis=1) + EPS)
-        influence_score = influence_sum @ full / (np.linalg.norm(influence_sum, axis=1) + EPS)
-        score = (raw_score + influence_score) / 2
-        for local in np.argsort(-score, kind="stable")[:2]:
-            best_rows.append((
-                float(score[local]), float(raw_score[local]), float(influence_score[local]),
-                indices[local].tolist(),
-            ))
-    best_rows.sort(key=lambda row: (-row[0], row[3]))
-    best = best_rows[0]
-    second = next((row for row in best_rows[1:] if row[3] != best[3]), None)
-    chunks = [{
-        "spanIndex": int(span_index),
-        "start": int(starts[span_index]),
-        "end": int(ends[span_index]),
-        "category": int(np.argmax(category_logp[span_index])),
-    } for span_index in best[3]]
-    gap = best[0] - second[0] if second else None
+        for finish in range(position + 1, token_count + 1):
+            if lexical_prefix[finish] - lexical_prefix[position] <= 0:
+                continue
+            span_index = lookup[(position, finish)]
+            # Every gap inside the segment is rejected; its terminal gap is
+            # selected unless this is the final segment.
+            increment = float(rejected_prefix[finish - 1] - rejected_prefix[position])
+            if finish < token_count:
+                increment += float(selected_log[finish - 1])
+            partition_counts[finish] += partition_counts[position]
+            candidates = paths.setdefault(finish, [])
+            candidates.extend((score + increment, selected + (span_index,))
+                              for score, selected in current)
+            unique = {}
+            for score, selected in candidates:
+                if selected not in unique or score > unique[selected]:
+                    unique[selected] = score
+            paths[finish] = sorted(
+                ((score, selected) for selected, score in unique.items()),
+                key=lambda row: (-row[0], row[1]),
+            )[:2]
+
+    finalists = paths.get(token_count) or []
+    if not finalists:
+        raise ValueError("no lexical variable-length exact cover exists")
+    best_score, best_indices = finalists[0]
+    second = finalists[1] if len(finalists) > 1 else None
+    gap = best_score - second[0] if second else None
+    chunks = []
+    for span_index in best_indices:
+        row = {
+            "spanIndex": int(span_index),
+            "start": int(starts[span_index]),
+            "end": int(ends[span_index]),
+            "category": int(np.argmax(category_logp[span_index])),
+            "leftBoundaryProbability": (
+                float(boundary_probability[int(starts[span_index]) - 1])
+                if int(starts[span_index]) > 0 else None
+            ),
+            "rightBoundaryProbability": (
+                float(boundary_probability[int(ends[span_index]) - 1])
+                if int(ends[span_index]) < token_count else None
+            ),
+        }
+        chunks.append(row)
     return {
-        "score": best[0],
-        "rawReconstructionCosine": best[1],
-        "influenceReconstructionCosine": best[2],
+        "score": float(best_score),
         "runnerUpScore": float(second[0]) if second else None,
         "scoreGap": float(gap) if gap is not None else None,
         "topTwoPosteriorProxy": (
             float(1 / (1 + math.exp(-min(50, gap)))) if gap is not None else 1.0
         ),
         "chunks": chunks,
-        "partitionsCompared": len(partitions),
+        "componentCount": len(chunks),
+        "partitionsCompared": int(partition_counts[token_count]),
         "boundarySelectionUsesCategories": False,
         "boundarySelectionUsesOutcomes": False,
+        "componentCountConstraint": None,
         "objective": (
-            "mean cosine of the full-hook embedding with (a) the sum of isolated chunk "
-            "embeddings and (b) the sum of in-context deletion-influence embeddings"
+            "maximum Bernoulli posterior over every learned cut versus non-cut decision, "
+            "subject only to contiguous complete coverage and lexical content"
+        ),
+        "complexityControl": (
+            "each possible token gap contributes its learned cut or non-cut probability; "
+            "there is no chosen k, maximum count, duration rule, significance threshold, "
+            "or tuned split penalty"
         ),
         "categoryAssignment": "maximum frozen-category posterior after boundaries are fixed",
     }
 
 
-def shapley_values(scores: dict[int, float], component_count: int = 4) -> np.ndarray:
-    full_mask = (1 << component_count) - 1
-    missing = [mask for mask in range(full_mask + 1) if mask not in scores]
-    if missing:
-        raise ValueError(f"missing subset scores: {missing}")
-    output = np.zeros(component_count, float)
-    for component in range(component_count):
-        bit = 1 << component
-        for mask in range(full_mask + 1):
-            if mask & bit:
-                continue
-            size = int(mask.bit_count())
-            weight = (
-                math.factorial(size) * math.factorial(component_count - size - 1)
-                / math.factorial(component_count)
-            )
-            output[component] += weight * (scores[mask | bit] - scores[mask])
-    return output
-
-
-def pair_interactions(scores: dict[int, float], component_count: int = 4) -> list[dict]:
-    output = []
-    for left in range(component_count):
-        for right in range(left + 1, component_count):
-            bits = (1 << left) | (1 << right)
-            value = 0.0
-            for mask in range(1 << component_count):
-                if mask & bits:
-                    continue
-                size = int(mask.bit_count())
-                weight = (
-                    math.factorial(size) * math.factorial(component_count - size - 2)
-                    / (2 * math.factorial(component_count - 1))
-                )
-                value += weight * (
-                    scores[mask | bits] - scores[mask | (1 << left)]
-                    - scores[mask | (1 << right)] + scores[mask]
-                )
-            output.append({"left": left, "right": right, "interaction": float(value)})
-    return output
-
-
-def projection_scores(vectors_by_mask: dict[int, np.ndarray], direction: np.ndarray) -> dict[int, float]:
-    direction = np.asarray(direction, np.float32)
-    output = {0: 0.0}
-    for mask, vector in vectors_by_mask.items():
-        if int(mask) == 0:
-            continue
-        output[int(mask)] = float(row_unit(np.asarray(vector, np.float32)) @ direction)
-    return output
-
-
-def subset_texts(source_text: str, tokens: list, owners: np.ndarray,
-                 component_count: int = 4) -> dict[int, str]:
+def local_counterfactual_texts(source_text: str, tokens: list,
+                               owners: np.ndarray, component_count: int) -> dict:
+    """Materialize exact O(n^2) local deletion and retained-pair texts."""
     owners = np.asarray(owners, int)
     if len(tokens) != len(owners):
         raise ValueError("token ownership does not cover the source sequence")
-    output = {}
-    for mask in range(1, 1 << component_count):
-        removed = [index for index, owner in enumerate(owners) if not mask & (1 << owner)]
-        output[mask] = without(tokens, removed, source_text=source_text)
-    return output
+    if set(owners.tolist()) != set(range(int(component_count))):
+        raise ValueError("component owners must be contiguous from zero")
+    without_one = {}
+    without_pair = {}
+    pair_only = {}
+    for component in range(int(component_count)):
+        removed = [index for index, owner in enumerate(owners) if owner == component]
+        without_one[component] = without(tokens, removed, source_text=source_text)
+    for left in range(int(component_count)):
+        for right in range(left + 1, int(component_count)):
+            without_pair[(left, right)] = without(
+                tokens,
+                [index for index, owner in enumerate(owners) if owner in (left, right)],
+                source_text=source_text,
+            )
+            pair_only[(left, right)] = without(
+                tokens,
+                [index for index, owner in enumerate(owners) if owner not in (left, right)],
+                source_text=source_text,
+            )
+    return {
+        "withoutOne": without_one,
+        "withoutPair": without_pair,
+        "pairOnly": pair_only,
+        "componentCount": int(component_count),
+        "definition": (
+            "full-context one-component deletions and two-component deletions, plus retained "
+            "ordered pairs; source order and every retained source character are preserved"
+        ),
+    }

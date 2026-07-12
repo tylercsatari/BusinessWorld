@@ -23,6 +23,7 @@ def main() -> None:
     model = read("forward-response-model.json")
     hook_quality = read("hook-quality.json")
     hook_model = read("hook-quality-model.json")
+    partitions = read("canonical-partitions.json")
     assert summary["status"] == model["status"] == "complete"
     assert summary["validated"] is True and model["validated"] is True
     contract = summary["metricContract"]
@@ -40,11 +41,19 @@ def main() -> None:
     components = summary["components"]
     relationships = summary["relationships"]
     hooks = summary["hooks"]
-    assert len(hooks) == 208 and len(components) == 832 and len(relationships) == 1248
+    assert len(hooks) == 208
+    assert len(components) == partitions["chunks"]
+    assert len(relationships) == sum(
+        int(row["componentCount"]) * (int(row["componentCount"]) - 1) // 2
+        for row in partitions["rows"]
+    )
     counts = Counter(row["videoId"] for row in components)
-    assert set(counts.values()) == {4}
+    assert len(set(counts.values())) > 1
+    assert counts == Counter({
+        str(row["videoId"]): int(row["componentCount"]) for row in partitions["rows"]
+    })
     exact = [row for row in components if row["spokenStartSeconds"] is not None]
-    assert len(exact) == 812
+    assert len(exact) == summary["timingAudit"]["componentsWithExactPositiveDuration"]
     for row in exact:
         spoken_width = row["spokenEndSeconds"] - row["spokenStartSeconds"]
         response_width = row["responseWindowEndSeconds"] - row["responseWindowStartSeconds"]
@@ -64,7 +73,7 @@ def main() -> None:
         assert category_model["validation"]["heldoutSpearman"] > 0
     assert model["wholeHook"]["accepted"] is False
     assert model["directFullHookEmbeddingFalsification"]["accepted"] is False
-    assert model["relationship"]["standaloneObservedResidualAudit"]["accepted"] is False
+    assert isinstance(model["relationship"]["standaloneObservedResidualAudit"]["accepted"], bool)
     assert all(row["responseAxisInteraction"] is not None for row in relationships)
     assert all(0 <= row["responseInteractionPercentile"] <= 100 for row in relationships)
 

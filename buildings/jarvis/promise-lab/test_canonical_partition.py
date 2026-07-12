@@ -3,35 +3,61 @@ import unittest
 import numpy as np
 
 from canonical_partition import (
+    BOUNDARY_FEATURE_NAMES,
+    boundary_features,
     category_log_probabilities,
-    decode_compositional_four_chunks,
-    decode_structural_four_chunks,
-    decode_with_constraint_audit,
     fit_category_model,
     structural_features,
 )
+from hook_score_core import decode_variable_chunks
+
+
+def span_rows(token_count):
+    starts = np.asarray([
+        start for start in range(token_count) for end in range(start + 1, token_count + 1)
+    ])
+    ends = np.asarray([
+        end for start in range(token_count) for end in range(start + 1, token_count + 1)
+    ])
+    return starts, ends
 
 
 class CanonicalPartitionTests(unittest.TestCase):
-    def test_decoder_returns_exact_nonoverlapping_cover(self):
-        starts = np.asarray([start for start in range(8) for end in range(start + 1, 9)])
-        ends = np.asarray([end for start in range(8) for end in range(start + 1, 9)])
-        probability = np.full(len(starts), .05, np.float32)
-        logp = np.full((len(starts), 4), np.log(.01), np.float32)
-        intended = [(0, 1, 0), (1, 4, 1), (4, 6, 2), (6, 8, 3)]
-        for start, end, category in intended:
+    def test_decoder_allows_one_component(self):
+        starts, ends = span_rows(6)
+        logp = np.log(np.full((len(starts), 4), .25, np.float32))
+        result = decode_variable_chunks(
+            starts, ends, np.full(5, .1), logp, np.ones(6, bool),
+        )
+        self.assertEqual(result["componentCount"], 1)
+        self.assertEqual([(row["start"], row["end"]) for row in result["chunks"]], [(0, 6)])
+
+    def test_decoder_selects_variable_boundaries_and_repeated_categories(self):
+        starts, ends = span_rows(8)
+        boundary = np.asarray([.05, .98, .05, .05, .97, .05, .05])
+        logp = np.log(np.full((len(starts), 4), .01, np.float32))
+        intended = [(0, 2), (2, 5), (5, 8)]
+        for start, end in intended:
             index = int(np.flatnonzero((starts == start) & (ends == end))[0])
-            probability[index] = .98
-            logp[index] = np.log([.003, .003, .003, .003])
-            logp[index, category] = np.log(.991)
-        result = decode_with_constraint_audit(starts, ends, probability, logp)
-        observed = [(row["start"], row["end"], row["category"]) for row in result["chunks"]]
-        self.assertEqual(observed, intended)
+            logp[index, 2] = np.log(.97)
+        result = decode_variable_chunks(starts, ends, boundary, logp, np.ones(8, bool))
+        self.assertEqual(
+            [(row["start"], row["end"], row["category"]) for row in result["chunks"]],
+            [(0, 2, 2), (2, 5, 2), (5, 8, 2)],
+        )
         owners = np.full(8, -1, int)
         for index, row in enumerate(result["chunks"]):
             owners[row["start"]:row["end"]] = index
-        self.assertTrue(np.all(owners >= 0))
-        self.assertEqual(sorted(row["category"] for row in result["chunks"]), [0, 1, 2, 3])
+        np.testing.assert_array_equal(owners, [0, 0, 1, 1, 1, 2, 2, 2])
+
+    def test_decoder_cannot_create_punctuation_only_component(self):
+        starts, ends = span_rows(5)
+        boundary = np.asarray([.99, .99, .99, .99])
+        lexical = np.asarray([True, False, False, True, True])
+        logp = np.log(np.full((len(starts), 4), .25, np.float32))
+        result = decode_variable_chunks(starts, ends, boundary, logp, lexical)
+        for row in result["chunks"]:
+            self.assertTrue(lexical[row["start"]:row["end"]].any())
 
     def test_category_probabilities_are_normalized(self):
         rng = np.random.default_rng(4)
@@ -42,41 +68,22 @@ class CanonicalPartitionTests(unittest.TestCase):
         np.testing.assert_allclose(probabilities.sum(axis=1), 1, atol=1e-5)
         self.assertGreater(np.mean(np.argmax(probabilities, axis=1) == labels), .95)
 
-    def test_structural_decoder_does_not_move_boundaries_for_category_quota(self):
-        starts = np.asarray([start for start in range(8) for end in range(start + 1, 9)])
-        ends = np.asarray([end for start in range(8) for end in range(start + 1, 9)])
-        probability = np.full(len(starts), .02, np.float32)
-        logp = np.log(np.tile([.97, .01, .01, .01], (len(starts), 1))).astype(np.float32)
-        intended = [(0, 2), (2, 4), (4, 6), (6, 8)]
-        for start, end in intended:
-            index = int(np.flatnonzero((starts == start) & (ends == end))[0])
-            probability[index] = .99
-        result = decode_structural_four_chunks(starts, ends, probability, logp)
-        self.assertEqual([(row["start"], row["end"]) for row in result["chunks"]], intended)
-        self.assertEqual([row["category"] for row in result["chunks"]], [0, 0, 0, 0])
-
-    def test_compositional_decoder_uses_reconstructive_nonoverlapping_units(self):
-        starts = np.asarray([start for start in range(8) for end in range(start + 1, 9)])
-        ends = np.asarray([end for start in range(8) for end in range(start + 1, 9)])
-        raw = np.tile([0.0, 1.0], (len(starts), 1)).astype(np.float32)
-        influence = raw.copy()
-        intended = [(0, 2), (2, 4), (4, 6), (6, 8)]
-        for start, end in intended:
-            index = int(np.flatnonzero((starts == start) & (ends == end))[0])
-            raw[index] = [1.0, 0.0]
-            influence[index] = [1.0, 0.0]
-        result = decode_compositional_four_chunks(
-            starts, ends, raw, influence, np.asarray([1.0, 0.0]),
-            np.log(np.full((len(starts), 4), .25)), np.ones(8, bool),
-        )
-        self.assertEqual([(row["start"], row["end"]) for row in result["chunks"]], intended)
-        self.assertAlmostEqual(result["rawReconstructionCosine"], 1.0, places=6)
-
-    def test_structural_features_are_finite_and_length_free(self):
+    def test_boundary_features_are_finite_and_length_free(self):
         rng = np.random.default_rng(8)
         dimension = 12
-        starts = np.asarray([start for start in range(4) for end in range(start + 1, 5)])
-        ends = np.asarray([end for start in range(4) for end in range(start + 1, 5)])
+        starts, ends = span_rows(4)
+        count = len(starts)
+        full = rng.normal(size=dimension).astype(np.float32)
+        arrays = [rng.normal(size=(count, dimension)).astype(np.float32) for _ in range(4)]
+        logp = np.log(np.full((count, 4), .25, np.float32))
+        features = boundary_features(full, *arrays, starts, ends, logp)
+        self.assertEqual(features.shape, (3, len(BOUNDARY_FEATURE_NAMES)))
+        self.assertTrue(np.isfinite(features).all())
+
+    def test_structural_features_remain_finite_as_audit(self):
+        rng = np.random.default_rng(9)
+        dimension = 12
+        starts, ends = span_rows(4)
         count = len(starts)
         full = rng.normal(size=dimension).astype(np.float32)
         arrays = [rng.normal(size=(count, dimension)).astype(np.float32) for _ in range(4)]

@@ -262,9 +262,9 @@ retention, not five independent psychological constructs.
 
 ## Stage 8: Canonical forward-response metric
 
-After the outcome-blind four-part exact covers are frozen, a dedicated study
+After the outcome-blind variable-count exact covers are frozen, a dedicated study
 tests where the audience response to each canonical component appears. This is
-not a relabeling of the earlier all-span result: it uses 832 mutually exclusive
+not a relabeling of the earlier all-span result: it uses 1,006 mutually exclusive
 canonical chunks, a predeclared equal-energy raw plus deletion-influence input,
 and category-specific axes rather than asking one span axis to cover every
 scope and lag.
@@ -280,20 +280,20 @@ cross-fitted entry-to-terminal relationship.
 Completed evidence:
 
 - the selected production lag is `+1.0s`;
-- nested category-balanced held-out Spearman is `0.1375` with source sign-flip
-  `p=0.000244`;
-- the fixed `+1s` category-balanced held-out Spearman is `0.2050`;
-- category-held-out correlations are `0.2125`, `0.2445`, `0.2346`, and `0.1267`;
+- nested category-balanced held-out Spearman is `0.0836` with source sign-flip
+  `p=0.001220`;
+- the fixed `+1s` category-balanced held-out Spearman is `0.1433`;
+- category-held-out correlations are `0.1434`, `0.1973`, `0.1928`, and `0.0375`;
 - the fixed signal is stronger than every separately fitted reverse-time control;
-- 203 hooks and 812 components have exact positive-duration timing; all 832
-  components and 1,248 ordered source pairs are stored;
+- 203 hooks and 983 components have exact positive-duration timing; all 1,006
+  components and 2,489 local source pairs are stored;
 - 2,048 source bootstraps select a median lag of one second, with a 10th to 90th
-  percentile range from 0.5 to 4.0 seconds;
-- the equal four-component whole-hook aggregate fails (`p=0.7464`) and is not
+  percentile range from 0 to 1.5 seconds;
+- the equal variable-component whole-hook aggregate fails (`p=0.3815`) and is not
   promoted over the validated complete-hook retained-information axis;
-- the standalone pair-residual audit remains unvalidated (`p=0.0618`); pair
-  cells therefore report exact interactions on the later component's validated
-  axis and make no separate causal claim.
+- the standalone relationship-residual audit is predictive in source holdout
+  (`p=0.000244`) but remains a separate descriptive relationship axis; pair cells
+  report exact local interactions and make no causal claim.
 
 ## Required visual evidence
 
@@ -310,7 +310,7 @@ The UI must expose:
 - baseline-adjusted transfer bars for every Long Quant metric;
 - semantic axis planes;
 - grouped out-of-fold predicted-versus-observed plots;
-- the forward-only lag curve, all four canonical component planes, exact spoken
+- the forward-only lag curve, all maps for every canonical component, exact spoken
   and response windows, observed-minus-expected slopes, and held-out predictions;
 - the complete experiment registry.
 

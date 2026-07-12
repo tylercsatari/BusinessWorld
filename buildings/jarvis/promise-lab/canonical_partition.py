@@ -3,18 +3,21 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.metrics import (
+    average_precision_score,
+    balanced_accuracy_score,
+    matthews_corrcoef,
+    roc_auc_score,
+)
 from sklearn.model_selection import GroupKFold
 from sklearn.preprocessing import StandardScaler
 
 from hook_score_core import (
     apply_category_transform,
     category_log_probabilities,
-    decode_compositional_four_chunks,
     row_unit,
 )
 
@@ -36,6 +39,22 @@ FEATURE_NAMES = (
     "category_certainty",
     "nested_semantic_stability",
     "nested_category_stability",
+)
+BOUNDARY_FEATURE_NAMES = (
+    "prefix_suffix_raw_contrast",
+    "prefix_suffix_context_contrast",
+    "prefix_suffix_influence_contrast",
+    "prefix_suffix_nonadditive_contrast",
+    "adjacent_token_raw_contrast",
+    "adjacent_token_influence_contrast",
+    "prefix_suffix_category_total_variation",
+    "adjacent_category_total_variation",
+    "prefix_category_certainty",
+    "suffix_category_certainty",
+    "adjacent_left_category_certainty",
+    "adjacent_right_category_certainty",
+    "split_raw_reconstruction",
+    "split_influence_reconstruction",
 )
 
 
@@ -164,6 +183,54 @@ def structural_features(full: np.ndarray, raw: np.ndarray, context: np.ndarray,
     return features
 
 
+def boundary_features(full: np.ndarray, raw: np.ndarray, context: np.ndarray,
+                      influence: np.ndarray, nonadditive: np.ndarray,
+                      starts: np.ndarray, ends: np.ndarray,
+                      category_logp: np.ndarray) -> np.ndarray:
+    """Outcome-blind semantic contrast at every possible token gap."""
+    full = row_unit(np.asarray(full, np.float32))
+    raw = row_unit(raw)
+    context = row_unit(context)
+    influence = row_unit(influence)
+    nonadditive = row_unit(nonadditive)
+    starts = np.asarray(starts, int)
+    ends = np.asarray(ends, int)
+    probability = np.exp(np.asarray(category_logp, float))
+    token_count = int(ends.max())
+    lookup = {(int(start), int(end)): index
+              for index, (start, end) in enumerate(zip(starts, ends))}
+    rows = []
+    for boundary in range(1, token_count):
+        prefix = lookup[(0, boundary)]
+        suffix = lookup[(boundary, token_count)]
+        left = lookup[(boundary - 1, boundary)]
+        right = lookup[(boundary, boundary + 1)]
+        raw_sum = raw[prefix] + raw[suffix]
+        influence_sum = influence[prefix] + influence[suffix]
+        rows.append([
+            1 - float(raw[prefix] @ raw[suffix]),
+            1 - float(context[prefix] @ context[suffix]),
+            1 - float(influence[prefix] @ influence[suffix]),
+            1 - float(nonadditive[prefix] @ nonadditive[suffix]),
+            1 - float(raw[left] @ raw[right]),
+            1 - float(influence[left] @ influence[right]),
+            .5 * float(np.abs(probability[prefix] - probability[suffix]).sum()),
+            .5 * float(np.abs(probability[left] - probability[right]).sum()),
+            float(probability[prefix].max()),
+            float(probability[suffix].max()),
+            float(probability[left].max()),
+            float(probability[right].max()),
+            float(raw_sum @ full / (np.linalg.norm(raw_sum) + EPS)),
+            float(influence_sum @ full / (np.linalg.norm(influence_sum) + EPS)),
+        ])
+    features = np.asarray(rows, np.float32)
+    if features.shape != (max(0, token_count - 1), len(BOUNDARY_FEATURE_NAMES)):
+        raise ValueError("boundary feature geometry is incomplete")
+    if not np.isfinite(features).all():
+        raise ValueError("boundary features contain non-finite values")
+    return features
+
+
 def _row_weights(groups: np.ndarray) -> np.ndarray:
     groups = np.asarray(groups).astype(str)
     counts = {group: int(np.sum(groups == group)) for group in set(groups)}
@@ -172,186 +239,105 @@ def _row_weights(groups: np.ndarray) -> np.ndarray:
 
 
 def fit_boundary_model(features: np.ndarray, target: np.ndarray, groups: np.ndarray,
-                       c_values=(.01, .1, 1.0, 10.0), folds: int = 5) -> tuple[dict, np.ndarray]:
+                       folds: int = 5,
+                       feature_names: tuple[str, ...] = FEATURE_NAMES) -> tuple[dict, np.ndarray]:
     features = np.asarray(features, np.float32)
     target = np.asarray(target, int)
     groups = np.asarray(groups).astype(str)
     weights = _row_weights(groups)
     splitter = GroupKFold(n_splits=min(folds, len(set(groups))))
-    rows = []
-    predictions_by_c = {}
-    for c_value in c_values:
-        predictions = np.full(len(target), np.nan, float)
-        for train, test in splitter.split(features, target, groups):
-            scaler = StandardScaler().fit(features[train], sample_weight=weights[train])
-            model = LogisticRegression(
-                C=float(c_value), max_iter=600, solver="lbfgs", random_state=PARTITION_SEED,
-            ).fit(scaler.transform(features[train]), target[train], sample_weight=weights[train])
-            predictions[test] = model.predict_proba(scaler.transform(features[test]))[:, 1]
-        auc = float(roc_auc_score(target, predictions, sample_weight=weights))
-        average_precision = float(average_precision_score(target, predictions, sample_weight=weights))
-        rows.append({"C": float(c_value), "heldoutAuc": auc,
-                     "heldoutAveragePrecision": average_precision})
-        predictions_by_c[float(c_value)] = predictions
-    selected = max(rows, key=lambda row: (row["heldoutAuc"], row["heldoutAveragePrecision"], -row["C"]))
+    predictions = np.full(len(target), np.nan, float)
+    fold_models = []
+    for fold_index, (train, test) in enumerate(splitter.split(features, target, groups)):
+        scaler = StandardScaler().fit(features[train], sample_weight=weights[train])
+        model = LogisticRegression(
+            penalty=None, max_iter=1000, solver="lbfgs", random_state=PARTITION_SEED,
+        ).fit(scaler.transform(features[train]), target[train], sample_weight=weights[train])
+        predictions[test] = model.predict_proba(scaler.transform(features[test]))[:, 1]
+        fold_models.append({
+            "fold": fold_index,
+            "scalerMean": scaler.mean_.astype(float).tolist(),
+            "scalerScale": scaler.scale_.astype(float).tolist(),
+            "coefficients": model.coef_[0].astype(float).tolist(),
+            "intercept": float(model.intercept_[0]),
+            "heldoutGroups": sorted(set(groups[test])),
+        })
+    auc = float(roc_auc_score(target, predictions, sample_weight=weights))
+    average_precision = float(average_precision_score(
+        target, predictions, sample_weight=weights,
+    ))
+    thresholds = np.unique(predictions)
+    operating_points = []
+    for threshold in thresholds:
+        decision = predictions >= threshold
+        operating_points.append({
+            "threshold": float(threshold),
+            "matthewsCorrelation": float(matthews_corrcoef(target, decision)),
+            "balancedAccuracy": float(balanced_accuracy_score(target, decision)),
+            "predictedPositiveRate": float(np.average(decision, weights=weights)),
+        })
+    positive_rate = float(np.average(target, weights=weights))
+    operating_point = max(
+        operating_points,
+        key=lambda row: (
+            -abs(row["predictedPositiveRate"] - positive_rate),
+            row["matthewsCorrelation"], row["balancedAccuracy"], -row["threshold"],
+        ),
+    )
     scaler = StandardScaler().fit(features, sample_weight=weights)
     model = LogisticRegression(
-        C=selected["C"], max_iter=600, solver="lbfgs", random_state=PARTITION_SEED,
+        penalty=None, max_iter=1000, solver="lbfgs", random_state=PARTITION_SEED,
     ).fit(scaler.transform(features), target, sample_weight=weights)
     artifact = {
-        "featureNames": list(FEATURE_NAMES),
-        "selectedC": selected["C"],
-        "heldoutAuc": selected["heldoutAuc"],
-        "heldoutAveragePrecision": selected["heldoutAveragePrecision"],
-        "positiveRate": float(np.average(target, weights=weights)),
-        "configurations": rows,
+        "featureNames": list(feature_names),
+        "fitMethod": "unpenalized maximum-likelihood logistic regression",
+        "manualRegularization": False,
+        "heldoutAuc": auc,
+        "heldoutAveragePrecision": average_precision,
+        "heldoutDecisionThreshold": operating_point["threshold"],
+        "heldoutDecisionMetric": (
+            "closest source-equal predicted cut prevalence to unanimous above-null prevalence; "
+            "Matthews correlation breaks ties"
+        ),
+        "heldoutMatthewsCorrelation": operating_point["matthewsCorrelation"],
+        "heldoutBalancedAccuracy": operating_point["balancedAccuracy"],
+        "heldoutPredictedPositiveRate": operating_point["predictedPositiveRate"],
+        "positiveRate": positive_rate,
         "scalerMean": scaler.mean_.astype(float).tolist(),
         "scalerScale": scaler.scale_.astype(float).tolist(),
         "coefficients": model.coef_[0].astype(float).tolist(),
         "intercept": float(model.intercept_[0]),
+        "foldModels": fold_models,
+        "servingPolicy": "mean probability from every grouped source-held-out fold model",
         "groupedBy": "source hook",
         "sourceEqualWeights": True,
         "outcomesUsed": False,
     }
-    return artifact, predictions_by_c[selected["C"]].astype(np.float32)
+    return artifact, predictions.astype(np.float32)
 
 
 def boundary_probabilities(features: np.ndarray, model: dict) -> np.ndarray:
     features = np.asarray(features, np.float64)
-    mean = np.asarray(model["scalerMean"], float)
-    scale = np.asarray(model["scalerScale"], float)
-    coefficients = np.asarray(model["coefficients"], float)
-    logits = ((features - mean) / np.maximum(scale, EPS)) @ coefficients + float(model["intercept"])
-    return (1 / (1 + np.exp(-np.clip(logits, -50, 50)))).astype(np.float32)
-
-
-@dataclass
-class _Path:
-    score: float
-    chunks: list[tuple[int, int, int, int]]
-
-
-def _keep_two(rows: list[_Path]) -> list[_Path]:
-    unique = {}
+    rows = model.get("foldModels") or [model]
+    predictions = []
     for row in rows:
-        key = tuple(row.chunks)
-        if key not in unique or row.score > unique[key].score:
-            unique[key] = row
-    return sorted(unique.values(), key=lambda row: row.score, reverse=True)[:2]
+        mean = np.asarray(row["scalerMean"], float)
+        scale = np.asarray(row["scalerScale"], float)
+        coefficients = np.asarray(row["coefficients"], float)
+        logits = (
+            (features - mean) / np.maximum(scale, EPS)
+        ) @ coefficients + float(row["intercept"])
+        predictions.append(1 / (1 + np.exp(-np.clip(logits, -50, 50))))
+    return np.mean(predictions, axis=0).astype(np.float32)
 
 
-def decode_four_chunks(starts: np.ndarray, ends: np.ndarray,
-                       boundary_probability: np.ndarray, category_logp: np.ndarray,
-                       require_unique_categories: bool = True) -> dict:
-    """Decode four exact-cover chunks, optionally using each category exactly once."""
-    starts = np.asarray(starts, int)
-    ends = np.asarray(ends, int)
-    boundary_probability = np.asarray(boundary_probability, float)
-    category_logp = np.asarray(category_logp, float)
-    token_count = int(ends.max())
-    by_start = {}
-    for index, start in enumerate(starts):
-        by_start.setdefault(int(start), []).append(index)
-    states: dict[tuple[int, int], list[_Path]] = {(0, 0): [_Path(0.0, [])]}
-    for chunk_number in range(4):
-        next_states: dict[tuple[int, int], list[_Path]] = {}
-        for (position, mask), paths in states.items():
-            remaining_chunks = 4 - chunk_number
-            for span_index in by_start.get(position, []):
-                finish = int(ends[span_index])
-                remaining_tokens = token_count - finish
-                if remaining_tokens < remaining_chunks - 1:
-                    continue
-                structural = math.log(max(EPS, float(boundary_probability[span_index])))
-                for category in range(category_logp.shape[1]):
-                    bit = 1 << category
-                    if require_unique_categories and mask & bit:
-                        continue
-                    next_mask = mask | bit if require_unique_categories else mask
-                    increment = structural + float(category_logp[span_index, category])
-                    key = (finish, next_mask)
-                    candidates = next_states.setdefault(key, [])
-                    for path in paths:
-                        candidates.append(_Path(
-                            path.score + increment,
-                            path.chunks + [(span_index, position, finish, category)],
-                        ))
-                    next_states[key] = _keep_two(candidates)
-        states = next_states
-    final_mask = (1 << category_logp.shape[1]) - 1 if require_unique_categories else 0
-    finalists = states.get((token_count, final_mask), [])
-    if not finalists:
-        raise ValueError("no valid four-chunk exact-cover partition")
-    best = finalists[0]
-    second = finalists[1] if len(finalists) > 1 else None
-    return {
-        "score": float(best.score),
-        "runnerUpScore": float(second.score) if second else None,
-        "scoreGap": float(best.score - second.score) if second else None,
-        "topTwoPosteriorProxy": (
-            float(1 / (1 + math.exp(-min(50, best.score - second.score)))) if second else 1.0
-        ),
-        "chunks": [{"spanIndex": item[0], "start": item[1], "end": item[2],
-                    "category": item[3]} for item in best.chunks],
-        "requiresEveryCategoryExactlyOnce": bool(require_unique_categories),
-    }
-
-def decode_with_constraint_audit(starts: np.ndarray, ends: np.ndarray,
-                                 boundary_probability: np.ndarray,
-                                 category_logp: np.ndarray) -> dict:
-    unique = decode_four_chunks(starts, ends, boundary_probability, category_logp, True)
-    repeated = decode_four_chunks(starts, ends, boundary_probability, category_logp, False)
-    unique["unconstrainedCategoryScore"] = repeated["score"]
-    unique["uniqueCategoryConstraintPenalty"] = float(repeated["score"] - unique["score"])
-    unique["unconstrainedCategories"] = [row["category"] for row in repeated["chunks"]]
-    return unique
-
-
-def decode_structural_four_chunks(starts: np.ndarray, ends: np.ndarray,
-                                  boundary_probability: np.ndarray,
-                                  category_logp: np.ndarray) -> dict:
-    """Choose boundaries from structural evidence, then label each frozen chunk."""
-    starts = np.asarray(starts, int)
-    ends = np.asarray(ends, int)
-    boundary_probability = np.asarray(boundary_probability, float)
-    category_logp = np.asarray(category_logp, float)
-    token_count = int(ends.max())
-    by_start = {}
-    for index, start in enumerate(starts):
-        by_start.setdefault(int(start), []).append(index)
-    states: dict[int, list[_Path]] = {0: [_Path(0.0, [])]}
-    for chunk_number in range(4):
-        next_states: dict[int, list[_Path]] = {}
-        for position, paths in states.items():
-            remaining_chunks = 4 - chunk_number
-            for span_index in by_start.get(position, []):
-                finish = int(ends[span_index])
-                if token_count - finish < remaining_chunks - 1:
-                    continue
-                increment = math.log(max(EPS, float(boundary_probability[span_index])))
-                category = int(np.argmax(category_logp[span_index]))
-                candidates = next_states.setdefault(finish, [])
-                for path in paths:
-                    candidates.append(_Path(
-                        path.score + increment,
-                        path.chunks + [(span_index, position, finish, category)],
-                    ))
-                next_states[finish] = _keep_two(candidates)
-        states = next_states
-    finalists = states.get(token_count, [])
-    if not finalists:
-        raise ValueError("no structural four-chunk exact-cover partition")
-    best = finalists[0]
-    second = finalists[1] if len(finalists) > 1 else None
-    return {
-        "score": float(best.score),
-        "runnerUpScore": float(second.score) if second else None,
-        "scoreGap": float(best.score - second.score) if second else None,
-        "topTwoPosteriorProxy": (
-            float(1 / (1 + math.exp(-min(50, best.score - second.score)))) if second else 1.0
-        ),
-        "chunks": [{"spanIndex": item[0], "start": item[1], "end": item[2],
-                    "category": item[3]} for item in best.chunks],
-        "boundarySelectionUsesCategoryQuota": False,
-        "categoryAssignment": "maximum frozen-category posterior after boundaries are fixed",
-    }
+def decision_neutral_boundary_probability(posterior: np.ndarray,
+                                          threshold: float) -> np.ndarray:
+    """Map the learned held-out operating point to neutral probability 0.5."""
+    posterior = np.clip(np.asarray(posterior, float), EPS, 1 - EPS)
+    threshold = float(np.clip(threshold, EPS, 1 - EPS))
+    evidence = (
+        np.log(posterior) - np.log1p(-posterior)
+        - (math.log(threshold) - math.log1p(-threshold))
+    )
+    return (1 / (1 + np.exp(-np.clip(evidence, -50, 50)))).astype(np.float32)

@@ -14,6 +14,11 @@ from pathlib import Path
 
 import numpy as np
 
+from canonical_partition import (
+    boundary_features,
+    boundary_probabilities,
+    decision_neutral_boundary_probability,
+)
 from embedding_store import EmbeddingStore, R2Store, json_ready
 from hook_outcomes import apply_duration_baseline
 from hook_score_core import (
@@ -22,16 +27,13 @@ from hook_score_core import (
     category_log_probabilities,
     combined_component_features,
     component_response_windows,
-    decode_compositional_four_chunks,
+    decode_variable_chunks,
     estimated_token_timeline,
     interpolate_series,
     outcome_prediction_payload,
-    pair_interactions,
+    local_counterfactual_texts,
     percentile,
-    projection_scores,
     row_unit,
-    shapley_values,
-    subset_texts,
 )
 from sequence import all_spans, normalize_source, surface, tokenize, without_span
 
@@ -42,8 +44,7 @@ REMOTE_PREFIX = "longform/promise-lab-v4"
 MODEL_FILE = "hook-quality-model.json"
 PARTITION_FILE = "canonical-partition-model.json"
 OUTCOME_MODEL_FILE = "hook-outcome-model.json"
-SCORER_VERSION = "deterministic-hook-scorer-v4-survival"
-MAX_HOOK_TOKENS = 64
+SCORER_VERSION = "deterministic-variable-hook-scorer-v5"
 
 
 def _decode_json(payload: bytes) -> dict:
@@ -84,16 +85,12 @@ def _embedding_cache_path() -> Path:
 def build_span_primitives(text: str, store: EmbeddingStore) -> dict:
     text = normalize_source(text)
     tokens = tokenize(text)
-    if len(tokens) > MAX_HOOK_TOKENS:
-        raise ValueError(
-            f"a hook can contain at most {MAX_HOOK_TOKENS} tokens; received {len(tokens)}"
-        )
     lexical = np.asarray([
         any(character.isalnum() or character == "_" for character in token.text)
         for token in tokens
     ], bool)
-    if int(lexical.sum()) < 4:
-        raise ValueError("a hook needs at least four lexical atoms for the frozen four-part decoder")
+    if int(lexical.sum()) < 1:
+        raise ValueError("a hook needs at least one lexical atom")
     spans = all_spans(len(tokens))
     span_texts = [surface(tokens, span.start, span.end, source_text=text) for span in spans]
     context_texts = [without_span(tokens, span.start, span.end, source_text=text) for span in spans]
@@ -106,15 +103,28 @@ def build_span_primitives(text: str, store: EmbeddingStore) -> dict:
         for value in context_texts
     ], np.float32)
     influence = row_unit(full[None, :] - contexts)
+    starts = np.asarray([span.start for span in spans], int)
+    ends = np.asarray([span.end for span in spans], int)
+    lookup = {(int(start), int(end)): index
+              for index, (start, end) in enumerate(zip(starts, ends))}
+    token_effects = np.asarray([
+        full - contexts[lookup[(index, index + 1)]] for index in range(len(tokens))
+    ], np.float32)
+    prefix = np.vstack([
+        np.zeros((1, len(full)), np.float32), np.cumsum(token_effects, axis=0),
+    ])
+    additive = prefix[ends] - prefix[starts]
+    nonadditive = row_unit((full[None, :] - contexts) - additive)
     return {
         "text": text,
         "tokens": tokens,
-        "starts": np.asarray([span.start for span in spans], int),
-        "ends": np.asarray([span.end for span in spans], int),
+        "starts": starts,
+        "ends": ends,
         "spanTexts": span_texts,
         "raw": raw,
         "context": contexts,
         "influence": influence,
+        "nonadditive": nonadditive,
         "full": full,
         "lexical": lexical,
         "embeddingInputs": len(set(required)),
@@ -126,9 +136,19 @@ def decode_partition(primitives: dict, partition_model: dict) -> dict:
         primitives["raw"], partition_model["categoryTransform"],
     )
     logp = category_log_probabilities(category_values, partition_model["categoryModel"])
-    decoded = decode_compositional_four_chunks(
-        primitives["starts"], primitives["ends"], primitives["raw"],
-        primitives["influence"], primitives["full"], logp, primitives["lexical"],
+    features = boundary_features(
+        primitives["full"], primitives["raw"], primitives["context"],
+        primitives["influence"], primitives["nonadditive"],
+        primitives["starts"], primitives["ends"], logp,
+    )
+    boundary_model = partition_model["boundaryModel"]
+    posterior = boundary_probabilities(features, boundary_model)
+    boundary_probability = decision_neutral_boundary_probability(
+        posterior, boundary_model["heldoutDecisionThreshold"],
+    )
+    decoded = decode_variable_chunks(
+        primitives["starts"], primitives["ends"], boundary_probability,
+        logp, primitives["lexical"],
     )
     tokens = primitives["tokens"]
     owners = np.full(len(tokens), -1, int)
@@ -146,8 +166,16 @@ def decode_partition(primitives: dict, partition_model: dict) -> dict:
             "category": category,
             "categoryProbability": float(probability[category]),
             "categoryDistribution": probability.astype(float).tolist(),
+            "leftBoundaryProbability": chunk.get("leftBoundaryProbability"),
+            "rightBoundaryProbability": chunk.get("rightBoundaryProbability"),
+            "leftBoundaryPosterior": float(posterior[start - 1]) if start > 0 else None,
+            "rightBoundaryPosterior": (
+                float(posterior[end - 1]) if end < len(tokens) else None
+            ),
         })
-    if (owners < 0).any() or any(np.sum(owners == index) == 0 for index in range(4)):
+    component_count = len(chunks)
+    if ((owners < 0).any()
+            or set(owners.tolist()) != set(range(component_count))):
         raise RuntimeError("decoder did not produce one exact non-overlapping owner per token")
     gap_calibration = np.asarray(
         partition_model["partitionCalibration"]["scoreGapsSorted"], float,
@@ -155,11 +183,20 @@ def decode_partition(primitives: dict, partition_model: dict) -> dict:
     return {
         **{key: decoded[key] for key in (
             "score", "runnerUpScore", "scoreGap", "topTwoPosteriorProxy",
-            "rawReconstructionCosine", "influenceReconstructionCosine",
-            "partitionsCompared", "objective",
+            "partitionsCompared", "objective", "complexityControl",
         )},
         "scoreGapPercentile": percentile(gap_calibration, float(decoded["scoreGap"] or 0)),
         "chunks": chunks,
+        "componentCount": component_count,
+        "boundaryProbabilities": boundary_probability.astype(float).tolist(),
+        "boundaryPosteriors": posterior.astype(float).tolist(),
+        "boundaryModelValidation": {
+            key: boundary_model.get(key) for key in (
+                "heldoutAuc", "heldoutAveragePrecision", "heldoutDecisionThreshold",
+                "heldoutDecisionMetric", "heldoutMatthewsCorrelation",
+                "heldoutBalancedAccuracy", "servingPolicy",
+            )
+        },
         "owners": owners,
         "tokens": [{
             "index": token.index, "text": token.text,
@@ -170,19 +207,27 @@ def decode_partition(primitives: dict, partition_model: dict) -> dict:
     }
 
 
-def _bootstrap_attribution(vectors: dict[int, np.ndarray], model: dict) -> tuple[np.ndarray, np.ndarray]:
+def _bootstrap_attribution(full: np.ndarray, singleton: np.ndarray,
+                           context: np.ndarray, pair_context: dict[tuple[int, int], np.ndarray],
+                           model: dict) -> tuple[np.ndarray, np.ndarray]:
     directions = np.asarray(model.get("bootstrapDirections") or [], np.float32)
     component_rows = []
     pair_rows = []
     for direction in directions:
-        scores = projection_scores(vectors, direction)
-        component_rows.append(shapley_values(scores, 4))
-        pair_rows.append([row["interaction"] for row in pair_interactions(scores, 4)])
+        full_score = float(full @ direction)
+        context_score = context @ direction
+        component_rows.append(full_score - context_score)
+        pair_rows.append([
+            float(full_score - context_score[left] - context_score[right]
+                  + pair_context[(left, right)] @ direction)
+            for left in range(len(singleton))
+            for right in range(left + 1, len(singleton))
+        ])
     return np.asarray(component_rows, float), np.asarray(pair_rows, float)
 
 
 def _score_forward_response(primitives: dict, partition: dict,
-                            vectors: dict[int, np.ndarray], components: list[dict],
+                            counter_vectors: dict, components: list[dict],
                             interactions: list[dict], model: dict) -> dict | None:
     forward = model.get("forwardResponse") or {}
     if not forward or not forward.get("validated"):
@@ -224,43 +269,49 @@ def _score_forward_response(primitives: dict, partition: dict,
         }
         component_percentiles.append(axis_percentile)
 
-    subset_features = {}
-    full = np.asarray(vectors[15], np.float32)
-    for mask in range(1, 16):
-        raw = np.asarray(vectors[mask], np.float32)
-        complement = 15 ^ mask
-        context = (
-            np.zeros_like(full) if complement == 0
-            else np.asarray(vectors[complement], np.float32)
-        )
-        influence = row_unit(full - context)
-        subset_features[mask] = combined_component_features(
-            raw[None, :], influence[None, :]
-        )[0]
-
     relationship = forward.get("relationship") or {}
     calibration = relationship.get("calibrationByCategoryPair") or {}
     interaction_lookup = {
         (int(row["left"]), int(row["right"])): row for row in interactions
     }
-    for right in range(1, 4):
+    full = primitives["full"]
+    full_feature = combined_component_features(full[None, :], full[None, :])[0]
+    component_raw = []
+    for chunk in partition["chunks"]:
+        span_index = int(np.flatnonzero(
+            (starts == int(chunk["start"])) & (ends == int(chunk["end"]))
+        )[0])
+        component_raw.append(primitives["raw"][span_index])
+    for right in range(1, len(components)):
         category = str(int(components[right]["category"]))
         direction = np.asarray(component_model[category]["direction"], np.float32)
-        scores = {0: 0.0}
-        scores.update({
-            mask: float(feature @ direction) for mask, feature in subset_features.items()
-        })
-        for row in pair_interactions(scores, 4):
-            left = int(row["left"])
-            if int(row["right"]) != right:
-                continue
+        for left in range(right):
+            without_left_feature = combined_component_features(
+                counter_vectors["withoutOne"][left][None, :],
+                row_unit(full - component_raw[left])[None, :],
+            )[0]
+            without_right_feature = combined_component_features(
+                counter_vectors["withoutOne"][right][None, :],
+                row_unit(full - component_raw[right])[None, :],
+            )[0]
+            pair_raw = counter_vectors["pairOnly"][(left, right)]
+            without_pair_feature = combined_component_features(
+                counter_vectors["withoutPair"][(left, right)][None, :],
+                row_unit(full - pair_raw)[None, :],
+            )[0]
+            interaction = float(
+                full_feature @ direction
+                - without_left_feature @ direction
+                - without_right_feature @ direction
+                + without_pair_feature @ direction
+            )
             target = interaction_lookup[(left, right)]
             category_pair = f"{components[left]['category']}->{components[right]['category']}"
             samples = np.asarray(calibration.get(category_pair) or [], float)
             target["forwardResponse"] = {
-                "interaction": float(row["interaction"]),
+                "interaction": interaction,
                 "percentile": (
-                    percentile(samples, float(row["interaction"])) if len(samples) else None
+                    percentile(samples, interaction) if len(samples) else None
                 ),
                 "categoryPair": category_pair,
                 "definition": relationship.get("definition"),
@@ -288,7 +339,7 @@ def _score_forward_response(primitives: dict, partition: dict,
             "definition": whole.get("definition"),
             "validation": whole.get("validation"),
             "reason": (
-                "the four component axes validate individually, but their equal-mean aggregate "
+                "the component axes validate individually, but their equal-mean aggregate "
                 "did not validate as a separate whole-hook target"
             ),
         },
@@ -473,26 +524,60 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
     try:
         primitives = build_span_primitives(text, store)
         partition = decode_partition(primitives, partition_model)
-        subset_input = subset_texts(
-            primitives["text"], primitives["tokens"], partition["owners"], 4,
+        component_count = int(partition["componentCount"])
+        counter_texts = local_counterfactual_texts(
+            primitives["text"], primitives["tokens"], partition["owners"],
+            component_count,
         )
-        missing = [value for mask, value in subset_input.items() if mask != 15 and value]
-        embedded = store.embed_many(missing)
-        vectors = {
-            mask: primitives["full"] if mask == 15 else embedded[value]
-            for mask, value in subset_input.items()
+        required = [
+            value for family in ("withoutOne", "withoutPair", "pairOnly")
+            for value in counter_texts[family].values() if value
+        ]
+        embedded = store.embed_many(required)
+        zero = np.zeros_like(primitives["full"])
+
+        def counter_vector(value: str) -> np.ndarray:
+            return row_unit(embedded[value]) if value else zero
+
+        counter_vectors = {
+            family: {key: counter_vector(value) for key, value in counter_texts[family].items()}
+            for family in ("withoutOne", "withoutPair", "pairOnly")
         }
     finally:
         if owned_store:
             store.close()
 
     direction = np.asarray(model["qualityDirection"], np.float32)
-    scores = projection_scores(vectors, direction)
-    shapley = shapley_values(scores, 4)
-    interactions = pair_interactions(scores, 4)
-    bootstrap_components, bootstrap_pairs = _bootstrap_attribution(vectors, model)
+    starts = np.asarray(primitives["starts"], int)
+    ends = np.asarray(primitives["ends"], int)
+    span_indices = np.asarray([
+        int(np.flatnonzero(
+            (starts == int(chunk["start"])) & (ends == int(chunk["end"]))
+        )[0]) for chunk in partition["chunks"]
+    ], int)
+    singleton_vectors = primitives["raw"][span_indices]
+    context_vectors = primitives["context"][span_indices]
+    full_coordinate = float(primitives["full"] @ direction)
+    singleton_scores = singleton_vectors @ direction
+    context_scores = context_vectors @ direction
+    deletion_effects = full_coordinate - context_scores
+    pair_context = counter_vectors["withoutPair"]
+    interactions = []
+    for left in range(component_count):
+        for right in range(left + 1, component_count):
+            interactions.append({
+                "left": left,
+                "right": right,
+                "interaction": float(
+                    full_coordinate - context_scores[left] - context_scores[right]
+                    + pair_context[(left, right)] @ direction
+                ),
+                "definition": "full - without left - without right + without both",
+            })
+    bootstrap_components, bootstrap_pairs = _bootstrap_attribution(
+        primitives["full"], singleton_vectors, context_vectors, pair_context, model,
+    )
     training_projection = np.asarray(model["trainingProjectionsSorted"], float)
-    full_coordinate = scores[15]
     axis_percentile = percentile(training_projection, full_coordinate)
 
     bootstrap_directions = np.asarray(model.get("bootstrapDirections") or [], np.float32)
@@ -517,17 +602,18 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
     )
 
     components = []
-    for index, (chunk, value) in enumerate(zip(partition["chunks"], shapley)):
+    for index, (chunk, value) in enumerate(zip(partition["chunks"], deletion_effects)):
         category_key = str(chunk["category"])
         samples = bootstrap_components[:, index] if len(bootstrap_components) else np.asarray([])
         components.append({
             **chunk,
-            "shapleyAxisContribution": float(value),
+            "retainedInformationDeletionEffect": float(value),
             "categoryContributionPercentile": percentile(
-                np.asarray(model["categoryShapleyCalibration"][category_key], float), float(value),
+                np.asarray(model["categoryDeletionCalibration"][category_key], float), float(value),
             ),
-            "singletonAxisCoordinate": float(scores[1 << index]),
-            "deletionEffect": float(scores[15] - scores[15 ^ (1 << index)]),
+            "singletonAxisCoordinate": float(singleton_scores[index]),
+            "withoutComponentAxisCoordinate": float(context_scores[index]),
+            "attributionDefinition": model["componentDefinition"],
             "bootstrapP10": float(np.quantile(samples, .1)) if len(samples) else None,
             "bootstrapMedian": float(np.median(samples)) if len(samples) else None,
             "bootstrapP90": float(np.quantile(samples, .9)) if len(samples) else None,
@@ -549,7 +635,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
         })
 
     forward_response = _score_forward_response(
-        primitives, partition, vectors, components, interactions, model,
+        primitives, partition, counter_vectors, components, interactions, model,
     )
     outcomes = _score_outcomes(
         primitives, partition, components, outcome_model,
@@ -575,7 +661,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
     survival_validation = survival_score.get("validation") or {}
     stable_payload = f"{SCORER_VERSION}\0{model['methodVersion']}\0{primitives['text']}"
     return {
-        "version": 1,
+        "version": 2,
         "status": "complete",
         "id": hashlib.sha256(stable_payload.encode("utf-8")).hexdigest()[:20],
         "scorerVersion": SCORER_VERSION,
@@ -586,6 +672,8 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             "embeddingDimensions": model["embeddingDimensions"],
             "fullHookEmbeddingInput": primitives["text"],
             "spanEmbeddingInputs": primitives["embeddingInputs"],
+            "localCounterfactualEmbeddingInputs": len(set(required)),
+            "emergentComponentCount": component_count,
             "generativeLlmUsed": False,
         },
         "score": survival_score,
@@ -627,15 +715,22 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
         },
         "components": components,
         "pairInteractions": interactions,
-        "subsets": [{
-            "mask": mask,
-            "includedComponents": [index for index in range(4) if mask & (1 << index)],
-            "embeddingInput": subset_input[mask],
-            "axisCoordinate": float(scores[mask]),
-        } for mask in range(1, 16)],
-        "emptySubsetConvention": {
-            "mask": 0, "axisCoordinate": 0.0,
-            "reason": "Gemini does not embed empty content; zero is the declared additive origin",
+        "localCounterfactuals": {
+            "definition": counter_texts["definition"],
+            "componentDeletions": [{
+                "removedComponent": index,
+                "embeddingInput": counter_texts["withoutOne"][index],
+                "axisCoordinate": float(context_scores[index]),
+                "effect": float(deletion_effects[index]),
+            } for index in range(component_count)],
+            "pairDeletions": [{
+                "removedComponents": [left, right],
+                "embeddingInput": counter_texts["withoutPair"][(left, right)],
+                "retainedPairEmbeddingInput": counter_texts["pairOnly"][(left, right)],
+                "axisCoordinate": float(pair_context[(left, right)] @ direction),
+                "interaction": float(interaction["interaction"]),
+            } for interaction in interactions
+              for left, right in [(int(interaction["left"]), int(interaction["right"]))]],
         },
         "nearestTrainingHooks": nearest,
         "target": survival_score.get("targetContract"),

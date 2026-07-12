@@ -53,7 +53,7 @@ HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
 OUTPUT_PATH = CACHE / "hook-outcomes.json"
 MODEL_PATH = CACHE / "hook-outcome-model.json"
-METHOD_VERSION = "hook-outcome-and-retention-forecast-v2-survival"
+METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v3"
 CURVE_TIMES = np.arange(0.0, 20.0001, .5, dtype=np.float32)
 
 TARGETS = {
@@ -637,10 +637,21 @@ def main() -> None:
         row = {
             **base,
             "broadRetainedInformation": {
-                "shapley": quality_row.get("shapley"),
+                "deletionEffect": quality_row.get("deletionEffect"),
                 "percentile": quality_row.get("categoryPercentile"),
                 "singletonAxisCoordinate": quality_row.get("singletonAxisCoordinate"),
-                "deletionEffect": quality_row.get("deletionEffect"),
+                "definition": quality_row.get("attributionDefinition"),
+            },
+            "boundaryEvidence": {
+                "leftProbability": quality_row.get("leftBoundaryProbability"),
+                "rightProbability": quality_row.get("rightBoundaryProbability"),
+                "leftRawPosterior": quality_row.get("leftBoundaryPosterior"),
+                "rightRawPosterior": quality_row.get("rightBoundaryPosterior"),
+                "categoryProbability": quality_row.get("categoryProbability"),
+                "definition": (
+                    "source-held-out learned cut probability at each selected edge; outer hook "
+                    "edges are structural and therefore have no probability"
+                ),
             },
             "forwardResponse": forward_row or None,
             "outcomes": {},
@@ -670,6 +681,17 @@ def main() -> None:
                 "heldoutSpearman": validation["heldoutSpearman"],
             }
         components.append(row)
+
+    component_offsets = []
+    component_cursor = 0
+    relationship_total = 0
+    for partition in partitions:
+        count = int(partition["componentCount"])
+        component_offsets.append(component_cursor)
+        component_cursor += count
+        relationship_total += count * (count - 1) // 2
+    if component_cursor != len(components):
+        raise RuntimeError("variable component offsets do not match component outcomes")
 
     hooks = []
     for source_index, (corpus_row, partition) in enumerate(zip(corpus, partitions)):
@@ -743,6 +765,8 @@ def main() -> None:
             nested_survival["carryPercentPerSecond"][source_index]
         )
         survival_predicted_carry = survival_expected + survival_prediction
+        component_offset = component_offsets[source_index]
+        component_count = int(partition["componentCount"])
         hooks.append({
             "sourceIndex": source_index,
             "videoId": video_id,
@@ -791,16 +815,19 @@ def main() -> None:
                 "higherMeans": survival_model["targetContract"]["higherMeans"],
             },
             "outcomes": hook_outcomes,
-            "componentOffset": source_index * 4,
-            "componentCount": 4,
-            "components": components[source_index * 4:source_index * 4 + 4],
+            "componentOffset": component_offset,
+            "componentCount": component_count,
+            "components": components[
+                component_offset:component_offset + component_count
+            ],
             "relationships": [
                 {
                     **(quality_relations.get((video_id, left, right)) or {}),
                     "left": left,
                     "right": right,
                 }
-                for left in range(4) for right in range(left + 1, 4)
+                for left in range(component_count)
+                for right in range(left + 1, component_count)
             ],
             "retentionForecast": {
                 "timesSeconds": CURVE_TIMES,
@@ -908,7 +935,7 @@ def main() -> None:
         "audit": {
             "hooks": len(hooks),
             "components": len(components),
-            "relationships": len(hooks) * 6,
+            "relationships": relationship_total,
             "outcomeTargets": len(TARGETS),
             "curvePointsPerHook": len(CURVE_TIMES),
             "forecastEndSeconds": float(CURVE_TIMES[-1]),

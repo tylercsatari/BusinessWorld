@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a frozen zero-overlap four-category partition for every source hook."""
+"""Build a frozen variable-count exact cover and four-category labels."""
 
 from __future__ import annotations
 
@@ -12,18 +12,18 @@ import numpy as np
 from sklearn.decomposition import PCA
 
 from canonical_partition import (
+    BOUNDARY_FEATURE_NAMES,
     apply_category_transform,
+    boundary_features,
     boundary_probabilities,
     category_log_probabilities,
-    decode_compositional_four_chunks,
-    decode_structural_four_chunks,
-    decode_with_constraint_audit,
+    decision_neutral_boundary_probability,
     fit_boundary_model,
     fit_category_model,
     row_unit,
-    structural_features,
 )
 from embedding_store import R2_PREFIX, R2Store, json_ready
+from hook_score_core import decode_variable_chunks
 from sequence import tokenize
 
 
@@ -32,7 +32,7 @@ CACHE = HERE / ".cache"
 STORE = CACHE / "all-span-vectors"
 SUMMARY_PATH = CACHE / "canonical-partitions.json"
 MODEL_PATH = CACHE / "canonical-partition-model.json"
-METHOD_VERSION = "exact-cover-four-category-v1"
+METHOD_VERSION = "variable-exact-cover-four-category-v2"
 
 
 def read_json(path: Path):
@@ -50,6 +50,21 @@ def atomic_json(path: Path, value) -> None:
 def percentile(values: np.ndarray, value: float) -> float:
     values = np.sort(np.asarray(values, float))
     return float(100 * np.searchsorted(values, value, side="right") / max(1, len(values)))
+
+
+def reconstruction_audit(partition: dict, raw: np.ndarray,
+                         influence: np.ndarray, full: np.ndarray) -> dict:
+    indices = np.asarray([int(row["spanIndex"]) for row in partition["chunks"]], int)
+    full = row_unit(np.asarray(full, np.float32))
+    raw_sum = row_unit(np.asarray(raw, np.float32))[indices].sum(axis=0)
+    influence_sum = row_unit(np.asarray(influence, np.float32))[indices].sum(axis=0)
+    return {
+        "rawReconstructionCosine": float(raw_sum @ full / (np.linalg.norm(raw_sum) + 1e-9)),
+        "influenceReconstructionCosine": float(
+            influence_sum @ full / (np.linalg.norm(influence_sum) + 1e-9)
+        ),
+        "purpose": "audit only; reconstruction cannot choose boundaries or component count",
+    }
 
 
 def reconstruct_frozen_transform(atlas: dict, manifest: dict, winner: dict) -> tuple[dict, np.ndarray, np.ndarray]:
@@ -96,6 +111,7 @@ def main() -> None:
     args = parser.parse_args()
 
     manifest = read_json(CACHE / "all-span-manifest.json")
+    discovery = read_json(CACHE / "discovery-summary.json")
     atlas = read_json(CACHE / "all-span-atlas.json")
     probe = read_json(CACHE / "manual-probe.json")
     winner = probe["winner"]
@@ -111,9 +127,12 @@ def main() -> None:
     nonadditive_store = np.load(STORE / "nonadditive.npy", mmap_mode="r")
     full_store = np.load(STORE / "full.npy", mmap_mode="r")
     rows = manifest["rows"]
-    features = np.empty((len(rows), 14), np.float32)
-    groups = np.empty(len(rows), object)
-    boundary_target = np.zeros(len(rows), np.int8)
+    discovery_by_video = {str(row["videoId"]): row for row in discovery["rows"]}
+    feature_blocks = []
+    target_blocks = []
+    group_blocks = []
+    boundary_slices = {}
+    boundary_cursor = 0
 
     for hook in manifest["hooks"]:
         begin = int(hook["spanOffset"])
@@ -121,7 +140,7 @@ def main() -> None:
         selected_rows = rows[begin:end]
         starts = np.asarray([row["start"] for row in selected_rows], int)
         ends = np.asarray([row["end"] for row in selected_rows], int)
-        features[begin:end] = structural_features(
+        block = boundary_features(
             np.asarray(full_store[int(hook["hookIndex"])], np.float32),
             np.asarray(raw_store[begin:end], np.float32),
             np.asarray(context_store[begin:end], np.float32),
@@ -129,16 +148,44 @@ def main() -> None:
             np.asarray(nonadditive_store[begin:end], np.float32),
             starts, ends, category_logp[begin:end],
         )
-        groups[begin:end] = str(hook["videoId"])
-        boundary_target[begin:end] = np.asarray(
-            [bool(row.get("boundarySupported")) for row in selected_rows], np.int8
+        evidence_rows = sorted(
+            (discovery_by_video[str(hook["videoId"])].get("boundaries") or []),
+            key=lambda row: int(row["index"]),
         )
+        if len(evidence_rows) != len(block):
+            raise ValueError(f"{hook['videoId']} boundary evidence does not match token gaps")
+        target = np.asarray([
+            len(row.get("methodAboveNull") or {}) == 3
+            and all(float(value) > 0 for value in (row.get("methodAboveNull") or {}).values())
+            for row in evidence_rows
+        ], np.int8)
+        feature_blocks.append(block)
+        target_blocks.append(target)
+        group_blocks.append(np.full(len(block), str(hook["videoId"]), object))
+        boundary_slices[str(hook["videoId"])] = slice(
+            boundary_cursor, boundary_cursor + len(block)
+        )
+        boundary_cursor += len(block)
 
-    boundary_model, boundary_oof = fit_boundary_model(features, boundary_target, groups)
-    boundary_probability = boundary_probabilities(features, boundary_model)
+    features = np.vstack(feature_blocks)
+    boundary_target = np.concatenate(target_blocks)
+    groups = np.concatenate(group_blocks)
+    boundary_model, boundary_oof_posterior = fit_boundary_model(
+        features, boundary_target, groups, feature_names=BOUNDARY_FEATURE_NAMES,
+    )
+    serving_boundary_posterior = boundary_probabilities(features, boundary_model)
+    serving_boundary_probability = decision_neutral_boundary_probability(
+        serving_boundary_posterior, boundary_model["heldoutDecisionThreshold"],
+    )
+    boundary_posterior = boundary_oof_posterior
+    boundary_probability = decision_neutral_boundary_probability(
+        boundary_oof_posterior, boundary_model["heldoutDecisionThreshold"],
+    )
     decoded = []
     gaps = []
-    penalties = []
+    component_counts = []
+    oof_count_matches = []
+    oof_boundary_jaccards = []
     for hook in manifest["hooks"]:
         begin = int(hook["spanOffset"])
         end = begin + int(hook["spanCount"])
@@ -146,33 +193,39 @@ def main() -> None:
         starts = np.asarray([row["start"] for row in selected_rows], int)
         ends = np.asarray([row["end"] for row in selected_rows], int)
         tokens = tokenize(hook["text"])
-        partition = decode_compositional_four_chunks(
-            starts, ends,
+        lexical = np.asarray([
+            any(character.isalnum() or character == "_" for character in token.text)
+            for token in tokens
+        ], bool)
+        boundary_slice = boundary_slices[str(hook["videoId"])]
+        partition = decode_variable_chunks(
+            starts, ends, boundary_probability[boundary_slice], category_logp[begin:end], lexical,
+        )
+        serving_partition = decode_variable_chunks(
+            starts, ends, serving_boundary_probability[boundary_slice],
+            category_logp[begin:end], lexical,
+        )
+        partition["reconstructionAudit"] = reconstruction_audit(
+            partition,
             np.asarray(raw_store[begin:end], np.float32),
             np.asarray(influence_store[begin:end], np.float32),
             np.asarray(full_store[int(hook["hookIndex"])], np.float32),
-            category_logp[begin:end],
-            np.asarray([any(character.isalnum() or character == "_" for character in token.text)
-                        for token in tokens], bool),
         )
-        structural_partition = decode_structural_four_chunks(
-            starts, ends, boundary_probability[begin:end], category_logp[begin:end]
-        )
-        quota_partition = decode_with_constraint_audit(
-            starts, ends, boundary_probability[begin:end], category_logp[begin:end]
-        )
-        partition["uniqueCategoryQuotaAudit"] = {
-            "score": quota_partition["score"],
-            "unconstrainedCategoryScore": quota_partition["unconstrainedCategoryScore"],
-            "uniqueCategoryConstraintPenalty": quota_partition["uniqueCategoryConstraintPenalty"],
-            "categories": [chunk["category"] for chunk in quota_partition["chunks"]],
-            "purpose": "falsification audit only; it is not allowed to choose canonical boundaries",
-        }
-        partition["structuralBoundaryAudit"] = {
-            "score": structural_partition["score"],
-            "chunks": [{key: chunk[key] for key in ("start", "end", "category")}
-                       for chunk in structural_partition["chunks"]],
-            "purpose": "comparison only; the compositional reconstruction chooses canonical boundaries",
+        full_boundaries = {int(row["end"]) for row in partition["chunks"][:-1]}
+        serving_boundaries = {int(row["end"]) for row in serving_partition["chunks"][:-1]}
+        union = full_boundaries | serving_boundaries
+        boundary_jaccard = float(
+            len(full_boundaries & serving_boundaries) / len(union)
+        ) if union else 1.0
+        partition["boundaryEvidenceMode"] = "source-held-out fold prediction"
+        partition["servingEnsembleAudit"] = {
+            "componentCount": int(serving_partition["componentCount"]),
+            "boundaries": sorted(serving_boundaries),
+            "countMatches": bool(
+                serving_partition["componentCount"] == partition["componentCount"]
+            ),
+            "boundaryJaccard": boundary_jaccard,
+            "purpose": "new-text fold-ensemble stability audit; it cannot choose stored covers",
         }
         token_owner = np.full(len(tokens), -1, int)
         chunks = []
@@ -194,12 +247,37 @@ def main() -> None:
                 "category": int(chunk["category"]),
                 "categoryProbability": float(probability[int(chunk["category"])]),
                 "categoryDistribution": probability.astype(float).tolist(),
-                "boundaryProbability": float(boundary_probability[global_index]),
-                "boundaryProbabilityOOF": float(boundary_oof[global_index]),
-                "boundarySupported": bool(row.get("boundarySupported")),
+                "leftBoundaryProbability": chunk["leftBoundaryProbability"],
+                "rightBoundaryProbability": chunk["rightBoundaryProbability"],
+                "leftBoundaryProbabilityOOF": (
+                    float(boundary_probability[boundary_slice][start - 1])
+                    if start > 0 else None
+                ),
+                "leftBoundaryPosterior": (
+                    float(boundary_posterior[boundary_slice][start - 1])
+                    if start > 0 else None
+                ),
+                "rightBoundaryPosterior": (
+                    float(boundary_posterior[boundary_slice][finish - 1])
+                    if finish < len(tokens) else None
+                ),
+                "rightBoundaryProbabilityOOF": (
+                    float(boundary_probability[boundary_slice][finish - 1])
+                    if finish < len(tokens) else None
+                ),
+                "leftServingBoundaryProbability": (
+                    float(serving_boundary_probability[boundary_slice][start - 1])
+                    if start > 0 else None
+                ),
+                "rightServingBoundaryProbability": (
+                    float(serving_boundary_probability[boundary_slice][finish - 1])
+                    if finish < len(tokens) else None
+                ),
             })
-        if (token_owner < 0).any() or len(set(token_owner.tolist())) != 4:
-            raise ValueError(f"{hook['videoId']} did not receive an exact four-part cover")
+        component_count = len(chunks)
+        if ((token_owner < 0).any()
+                or set(token_owner.tolist()) != set(range(component_count))):
+            raise ValueError(f"{hook['videoId']} did not receive a variable exact cover")
         partition.update({
             "videoId": hook["videoId"],
             "title": hook.get("title") or "",
@@ -209,24 +287,23 @@ def main() -> None:
                         "start": token.start, "end": token.end,
                         "owner": int(token_owner[token.index])} for token in tokens],
             "chunks": chunks,
+            "componentCount": component_count,
             "coverage": 1.0,
             "overlapCount": 0,
-            "categoriesUsed": sorted(chunk["category"] for chunk in chunks),
+            "categoriesUsed": sorted(set(chunk["category"] for chunk in chunks)),
         })
         gaps.append(float(partition["scoreGap"] or 0))
-        penalties.append(float(quota_partition["uniqueCategoryConstraintPenalty"]))
+        component_counts.append(component_count)
+        oof_count_matches.append(partition["servingEnsembleAudit"]["countMatches"])
+        oof_boundary_jaccards.append(boundary_jaccard)
         decoded.append(partition)
 
     gaps_array = np.asarray(gaps, float)
-    penalties_array = np.asarray(penalties, float)
     for row in decoded:
         row["scoreGapPercentile"] = percentile(gaps_array, float(row["scoreGap"] or 0))
-        row["constraintPenaltyPercentile"] = percentile(
-            penalties_array, float(row["uniqueCategoryQuotaAudit"]["uniqueCategoryConstraintPenalty"])
-        )
 
     model = {
-        "version": 1,
+        "version": 2,
         "status": "complete",
         "methodVersion": METHOD_VERSION,
         "mapId": winner["mapId"],
@@ -235,31 +312,51 @@ def main() -> None:
         "outcomesUsed": False,
         "manualPhrasesUsedToFitPartition": False,
         "constraints": {
-            "chunkCount": 4,
+            "chunkCount": None,
+            "componentCountSelection": (
+                "maximum source-held-out learned cut/non-cut posterior across every lexical exact cover"
+            ),
             "categories": [0, 1, 2, 3],
             "eachCategoryExactlyOnce": False,
-            "categoryQuotaMayChooseBoundaries": False,
+            "categoryLabelsMayChooseBoundaries": False,
             "punctuationOnlyChunkAllowed": False,
             "contiguous": True,
             "completeCoverage": True,
             "overlapAllowed": False,
+            "maximumComponentCount": None,
+            "manualSplitPenalty": None,
         },
         "categoryTransform": transform,
         "categoryModel": category_model,
         "boundaryModel": boundary_model,
+        "boundaryTarget": {
+            "positive": (
+                "the cut appears above its own permutation-null frequency in all three "
+                "outcome-blind geometric segmentation families"
+            ),
+            "negative": "at least one geometric family does not exceed its null frequency",
+            "decision": "maximum Bernoulli posterior over all compatible cut/non-cut decisions",
+            "decisionCalibration": (
+                "recenter posterior log odds on the source-held-out threshold whose source-equal "
+                "cut prevalence matches the unanimous above-null prevalence; Matthews correlation "
+                "breaks exact ties, then every compatible cut/non-cut combination is decoded"
+            ),
+            "manualThreshold": None,
+            "outcomesUsed": False,
+        },
         "partitionCalibration": {
             "scoreGapsSorted": np.sort(gaps_array).astype(float).tolist(),
-            "constraintPenaltiesSorted": np.sort(penalties_array).astype(float).tolist(),
+            "componentCountsSorted": np.sort(component_counts).astype(int).tolist(),
         },
     }
     summary = {
-        "version": 1,
+        "version": 2,
         "status": "complete",
-        "stage": "canonical zero-overlap four-category partition",
+        "stage": "variable-count zero-overlap exact cover with four frozen category labels",
         "methodVersion": METHOD_VERSION,
         "mapId": winner["mapId"],
         "hooks": len(decoded),
-        "chunks": 4 * len(decoded),
+        "chunks": int(sum(component_counts)),
         "spanSearchUniverse": len(rows),
         "outcomesUsed": False,
         "validation": {
@@ -268,14 +365,29 @@ def main() -> None:
             "categoryLabelRangeFailures": 0,
             "boundaryHeldoutAuc": boundary_model["heldoutAuc"],
             "boundaryHeldoutAveragePrecision": boundary_model["heldoutAveragePrecision"],
+            "boundaryModelRole": (
+                "one probability per possible token cut; the exact-cover decoder uses cut and "
+                "non-cut probabilities directly"
+            ),
+            "candidateTokenGaps": int(len(boundary_target)),
+            "unanimousAboveNullGaps": int(boundary_target.sum()),
             "medianRawReconstructionCosine": float(np.median([
-                row["rawReconstructionCosine"] for row in decoded
+                row["reconstructionAudit"]["rawReconstructionCosine"] for row in decoded
             ])),
             "medianInfluenceReconstructionCosine": float(np.median([
-                row["influenceReconstructionCosine"] for row in decoded
+                row["reconstructionAudit"]["influenceReconstructionCosine"] for row in decoded
             ])),
             "medianTopTwoScoreGap": float(np.median(gaps_array)),
-            "medianUniqueCategoryConstraintPenalty": float(np.median(penalties_array)),
+            "minimumComponents": int(np.min(component_counts)),
+            "medianComponents": float(np.median(component_counts)),
+            "meanComponents": float(np.mean(component_counts)),
+            "maximumComponents": int(np.max(component_counts)),
+            "componentCountHistogram": {
+                str(count): int(component_counts.count(count))
+                for count in sorted(set(component_counts))
+            },
+            "servingEnsembleCountAgreement": float(np.mean(oof_count_matches)),
+            "servingEnsembleMedianBoundaryJaccard": float(np.median(oof_boundary_jaccards)),
             "hooksUsingAllFourCategories": int(sum(
                 row["categoriesUsed"] == [0, 1, 2, 3] for row in decoded
             )),

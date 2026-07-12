@@ -2,36 +2,29 @@ import unittest
 
 import numpy as np
 
-from hook_score_core import pair_interactions, projection_scores, shapley_values, subset_texts
-from score_hook import MAX_HOOK_TOKENS, build_span_primitives
+from hook_score_core import local_counterfactual_texts
 from sequence import tokenize
 
 
 class HookScoreCoreTest(unittest.TestCase):
-    def test_live_scorer_rejects_quadratic_input_before_embedding(self):
-        class StoreThatMustNotRun:
-            def embed_many(self, _texts):
-                raise AssertionError("oversized input reached the embedding API")
-
-        text = " ".join(f"token{index}" for index in range(MAX_HOOK_TOKENS + 1))
-        with self.assertRaisesRegex(ValueError, "at most 64 tokens"):
-            build_span_primitives(text, StoreThatMustNotRun())
-
-    def test_subsets_never_duplicate_source_atoms(self):
-        text = "one two three four"
+    def test_variable_counterfactuals_preserve_source_order(self):
+        text = "one two, three four five"
         tokens = tokenize(text)
-        values = subset_texts(text, tokens, np.asarray([0, 1, 2, 3]))
-        self.assertEqual(values[15], text)
-        self.assertEqual(values[5], "one three")
-        self.assertEqual(values[8], "four")
+        owners = np.asarray([0, 0, 1, 1, 2, 2], int)
+        values = local_counterfactual_texts(text, tokens, owners, 3)
+        self.assertEqual(values["componentCount"], 3)
+        self.assertEqual(values["withoutOne"][1], "one two four five")
+        self.assertEqual(values["pairOnly"][(0, 2)], "one two four five")
+        self.assertEqual(len(values["withoutPair"]), 3)
 
-    def test_shapley_and_pairs_share_one_projection_function(self):
-        direction = np.asarray([1.0, 0.0], np.float32)
-        vectors = {mask: np.asarray([float(mask), 1.0], np.float32) for mask in range(1, 16)}
-        scores = projection_scores(vectors, direction)
-        values = shapley_values(scores, 4)
-        self.assertAlmostEqual(float(values.sum()), scores[15], places=8)
-        self.assertEqual(len(pair_interactions(scores, 4)), 6)
+    def test_one_component_has_no_pairs(self):
+        text = "one complete thought"
+        tokens = tokenize(text)
+        owners = np.zeros(len(tokens), int)
+        values = local_counterfactual_texts(text, tokens, owners, 1)
+        self.assertEqual(values["withoutOne"][0], "")
+        self.assertEqual(values["withoutPair"], {})
+        self.assertEqual(values["pairOnly"], {})
 
 
 if __name__ == "__main__":

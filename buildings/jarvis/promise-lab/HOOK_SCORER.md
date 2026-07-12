@@ -1,8 +1,8 @@
 # Deterministic Hook Scorer
 
 This is the deployable Promise Lab path from raw hook text to one quantitative
-score, four non-overlapping component attributions, six pair interactions, and
-explicit uncertainty. It also reports four held-out complete-hook outcomes, a
+score, a variable number of non-overlapping component attributions, every local
+pair interaction, and explicit uncertainty. It also reports four held-out complete-hook outcomes, a
 rough 0-20 second retention forecast, predicted retention at each word-response
 time, and a separately validated forward retention response for each component.
 It uses the same `gemini-embedding-2` 1536-dimensional
@@ -13,7 +13,7 @@ The primary score is deliberately named **Length-adjusted hook survival
 percentile**, not virality. It predicts whether a hook loses less
 rewatch-adjusted retention than the ordinary loss for the same response
 duration. The earlier retained-information direction remains visible as a
-separate complete-hook plane and as the broad component Shapley channel.
+separate complete-hook plane and as the broad component deletion channel.
 
 ## 1. Frozen semantic categories
 
@@ -28,30 +28,33 @@ Category assignment happens only after boundaries are selected. Categories do
 not vote on the boundaries, and the decoder does not force all four category
 labels to appear in every hook.
 
-## 2. Exact four-part partition
+## 2. Variable exact-cover partition
 
-For a hook of `n` tokens, the decoder enumerates every triple of cuts
-`0 < b1 < b2 < b3 < n`. A candidate is valid only when each of its four
-contiguous chunks contains at least one lexical token. This produces one exact
-cover:
+For a hook of `n` tokens, there are `n-1` possible internal cuts. Outcome-blind
+discovery labels a gap positive only when all three geometric segmentation
+families place it above their own token-gap permutation null. A 14-feature
+semantic boundary model is fitted with grouped source-video holdout. Features
+measure embedding contrast around the cut; they contain no outcomes, supplied
+phrases, component count, token position, duration, or LLM labels.
 
-`[0:b1), [b1:b2), [b2:b3), [b3:n)`
+The serving model gives each gap a cut probability `p_i`. For any contiguous
+lexical exact cover, the decoder evaluates:
 
-Every source token therefore has exactly one owner. Coverage is 100%, overlap
-is zero, order is unchanged, and nothing is silently dropped.
+`log P(cover) = sum(cut gaps log(p_i)) + sum(uncut gaps log(1-p_i))`
 
-For chunk `j`, let `e_j` be its isolated unit embedding, `d_j` its unit
-in-context deletion-influence embedding, and `h` the full-hook unit embedding.
-The outcome-blind partition objective is:
+The maximum-posterior cover wins. Every source token has exactly one owner,
+coverage is 100%, overlap is zero, order is unchanged, and nothing is silently
+dropped. There is no chosen `k`, maximum component count, duration rule,
+significance threshold, or tuned split penalty. The four semantic categories
+are assigned only after boundaries are fixed and may repeat or be absent.
 
-`partition_score = 0.5 * cos(h, sum_j e_j) + 0.5 * cos(h, sum_j d_j)`
-
-The highest-scoring exact cover wins. The gap to the runner-up is retained as
-partition uncertainty. On the training corpus there are 0 coverage failures
-and 0 overlapping tokens across 208 hooks and 832 canonical chunks. A held-out
-boundary audit reaches ROC AUC 0.817621 and average precision 0.748050. The
-median top-two score gap is only 0.002210, so the UI exposes that uncertainty
-instead of pretending every boundary is certain.
+On the 208-hook training corpus this yields 1,006 components: minimum 1, median
+5, mean 4.84, and maximum 15. The count histogram is stored in the artifact and
+displayed in the UI. Only 15 hooks use all four category labels. The grouped
+held-out boundary model reaches ROC AUC 0.7053 and average precision 0.3683.
+Saved training rows retain source-held-out probabilities; live serving averages
+the grouped fold models. The top-two cover gap and every selected edge
+probability remain visible as uncertainty.
 
 ## 3. Retained-information diagnostic
 
@@ -144,24 +147,23 @@ the two are never conflated.
 
 ## 5. Components and relationships
 
-Once the four exact-cover chunks are fixed, the scorer constructs all 16 subset
-states. Mask 0 is the declared additive origin because an empty string cannot
-be embedded. Masks 1 through 15 preserve the original characters and order of
-their retained chunks; each unique text is embedded once.
+Once the variable exact cover is frozen, each component receives one
+full-context deletion effect on the retained-information axis:
 
-For subset-value function `v(S) = unit_embedding(S) dot q`, each component gets
-the exact four-player Shapley value:
+`effect_i = v(full) - v(full without i)`
 
-`phi_i = sum over S not containing i of |S|!(4-|S|-1)!/4! * [v(S+i)-v(S)]`
+Each pair receives one exact local second-order deletion interaction:
 
-The four values sum exactly to the full hook coordinate. Six Shapley interaction
-indices measure whether each component pair performs above or below the sum of
-its isolated effects while averaging over every remaining context. The UI shows
-all 15 real embedding inputs, singleton effects, deletion effects, component
-bootstrap intervals, pair intervals, and category-relative percentiles.
+`interaction_ij = v(full) - v(without i) - v(without j) + v(without i,j)`
 
-The broad Shapley values above decompose the complete-hook retained-information
-axis. A second value function measures local response. For each exact component,
+This requires `n + n(n-1)/2` counterfactual states instead of an exponential
+power set, so hooks with 1, 3, 10, or 15 components use the same method. Every
+retained string preserves source order and source characters. These local
+effects are deliberately not called Shapley values and make no completeness or
+additivity claim. The UI exposes every deletion input, pair input, bootstrap
+interval, and category-relative percentile.
+
+A second value function measures local response. For each exact component,
 the serving feature is an equal-energy concatenation of:
 
 - its isolated unit embedding;
@@ -169,8 +171,8 @@ the serving feature is an equal-energy concatenation of:
 
 A different frozen 3072-dimensional direction is fitted for each of the four
 outcome-blind categories. The relationship between components `i` and `j` is
-the exact second-order interaction across all 16 subset states on component
-`j`'s category-specific forward-response direction. This keeps order and
+the same local second-order deletion interaction on component `j`'s
+category-specific forward-response direction. This keeps order and
 context in the calculation instead of averaging isolated phrase scores.
 
 ## 6. Uncertainty and latency
@@ -198,11 +200,11 @@ equal-category Fisher mean of held-out rank correlations. The selected ruler is
 then tested once on untouched videos.
 
 The selected production ruler is **+1.0 second**. Its fixed held-out
-category-balanced Spearman is `0.2050`; category values are `0.2125`, `0.2445`,
-`0.2346`, and `0.1267`, all positive. The nested selection procedure is also
+category-balanced Spearman is `0.1433`; category values are `0.1434`, `0.1973`,
+`0.1928`, and `0.0375`, all positive. The nested selection procedure is also
 positive, and the fixed +1-second signal exceeds every reverse-time control.
 Across 2,048 source bootstraps the median winning lag is 1.0 second; the 10th to
-90th percentile range is 0.5 to 4.0 seconds, and +1 second wins 42.3%. The UI
+90th percentile range is 0 to 1.5 seconds, and +1 second wins 42.1%. The UI
 shows that uncertainty rather than presenting one second as millisecond-level
 certainty.
 
@@ -212,16 +214,15 @@ uses exact timing, duration, entry, terminal, amplitude, and the out-of-fold
 entry expected from terminal retention. The modeled target is observed minus
 expected slope. Higher means flatter loss or a rise beyond expectation.
 
-Two attempted extensions fail their own held-out gates and are not promoted:
-the equal average of four component scores does not validate as a new whole-hook
-score, and a standalone pair-residual model is only borderline. The headline
-survival score is fitted directly from the complete hook; the component axes
-are not averaged into it. Pair cells are exact interactions on the validated
-later-component axis and make no separate causal claim.
+The equal average across each hook's emergent component scores does not validate
+as a new whole-hook score and is not promoted. The standalone relationship
+residual is statistically predictive in source holdout, but remains a separate
+descriptive relationship axis rather than a causal or headline hook score. The
+headline survival score is fitted directly from the complete hook.
 
 ## 7. Outcome axes and retention forecast
 
-The frozen four-part boundaries are reused without refitting. Four direct linear
+The frozen variable-count boundaries are reused without refitting. Four direct linear
 serving axes are trained from the complete 1536D hook embedding with grouped
 out-of-fold validation:
 
@@ -264,7 +265,7 @@ continuation forecast: no words or component categories are invented there.
 
 The four supplied sentences are evaluation-only. Scoring them twice produces
 the identical JSON SHA-256
-`300455f15acb6156220ae230bd8d22e97eb32a2e694829010839a624f989dd31`.
+`ca97b91c64fecc77f0598eb3b874ae7e73e313503e41a0108205486ce3a346f1`.
 
 | Hook | Survival percentile | Predicted carry/second | Response end |
 | --- | ---: | ---: | ---: |
@@ -322,18 +323,18 @@ ID, submitted hook text, and timestamp; reloading the page reattaches to that jo
 while the text and evaluation examples stay locked until the matching result
 arrives. The synchronous form remains available for local verification.
 
-Live input is capped at 64 tokens before any embedding request. The exhaustive
-span/context surface grows quadratically, and 64 already covers the training
-corpus maximum of 57 without allowing an accidental paragraph to create an
-unbounded API and memory job.
+The exhaustive span/context surface grows quadratically with token count. The
+serving queue isolates each request and reports the exact number of embedded
+span, context, component-deletion, and pair-deletion inputs. Component count is
+never capped or forced by the training-corpus maximum.
 
 Large artifacts are loaded from `longform/promise-lab-v4/` in R2 and cached in
 `/tmp`; there is no resident GPU and no always-on model worker. The Promise Lab
 **Hook scorer** tab renders six complete-hook planes, all six score planes for
-each of four components, observed and rewatch-adjusted retention curves,
+every emergent component in horizontally scrollable strips, observed and rewatch-adjusted retention curves,
 word-response points, and the explicit post-hook continuation region,
-stored example comparison, exact partition, component contributions, pair
-interactions, subset inputs, domain evidence, and latency decision. The **Hook
+stored example comparison, exact partition, component deletion effects, pair
+interactions, local counterfactual inputs, domain evidence, and latency decision. The **Hook
 library** renders all 208 source-held-out predictions beside actual viewed ratio,
 retention, views, and curves; expanding a row reuses the same maps and inspectors
 without recomputing or changing views.

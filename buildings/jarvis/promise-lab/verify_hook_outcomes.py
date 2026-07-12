@@ -12,16 +12,24 @@ CACHE = HERE / ".cache"
 def main() -> None:
     artifact = json.loads((CACHE / "hook-outcomes.json").read_text(encoding="utf-8"))
     model = json.loads((CACHE / "hook-outcome-model.json").read_text(encoding="utf-8"))
+    partitions = json.loads((CACHE / "canonical-partitions.json").read_text(encoding="utf-8"))
     assert artifact["status"] == model["status"] == "complete"
     assert artifact["methodVersion"] == model["methodVersion"]
     assert artifact["audit"]["hooks"] == 208
-    assert artifact["audit"]["components"] == 832
-    assert artifact["audit"]["relationships"] == 1248
+    assert artifact["audit"]["components"] == partitions["chunks"]
+    assert artifact["audit"]["relationships"] == sum(
+        int(row["componentCount"]) * (int(row["componentCount"]) - 1) // 2
+        for row in partitions["rows"]
+    )
     assert artifact["audit"]["componentCoverageFailures"] == 0
     assert len(artifact["targets"]) == 4
     assert len(artifact["hooks"]) == 208
-    assert all(len(row["components"]) == 4 for row in artifact["hooks"])
-    assert all(len(row["relationships"]) == 6 for row in artifact["hooks"])
+    assert all(len(row["components"]) == int(row["componentCount"])
+               for row in artifact["hooks"])
+    assert all(len(row["relationships"]) == int(row["componentCount"])
+               * (int(row["componentCount"]) - 1) // 2
+               for row in artifact["hooks"])
+    assert len(set(int(row["componentCount"]) for row in artifact["hooks"])) > 1
     assert all(len(row["retentionForecast"]["timesSeconds"]) == 41
                for row in artifact["hooks"])
     assert all(len(row["outcomes"]) == 4 for row in artifact["hooks"])

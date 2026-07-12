@@ -2,37 +2,21 @@ import unittest
 
 import numpy as np
 
-from hook_quality import pair_interactions, shapley_values
+from hook_quality import retention_inputs
 
 
 class HookQualityTests(unittest.TestCase):
-    def test_shapley_efficiency_for_additive_score(self):
-        weights = np.asarray([.2, -.1, .4, .05])
-        scores = {
-            mask: float(sum(weights[index] for index in range(4) if mask & (1 << index)))
-            for mask in range(16)
-        }
-        observed = shapley_values(scores)
-        np.testing.assert_allclose(observed, weights, atol=1e-9)
-        self.assertAlmostEqual(float(observed.sum()), scores[15] - scores[0])
-        for row in pair_interactions(scores):
-            self.assertAlmostEqual(row["interaction"], 0.0, places=9)
-
-    def test_shapley_allocates_interaction_symmetrically(self):
-        scores = {}
-        for mask in range(16):
-            value = float(mask.bit_count())
-            if mask & 1 and mask & 2:
-                value += 2.0
-            scores[mask] = value
-        observed = shapley_values(scores)
-        self.assertAlmostEqual(observed[0], 2.0)
-        self.assertAlmostEqual(observed[1], 2.0)
-        self.assertAlmostEqual(observed[2], 1.0)
-        self.assertAlmostEqual(observed[3], 1.0)
-        interaction = next(row for row in pair_interactions(scores)
-                           if row["left"] == 0 and row["right"] == 1)
-        self.assertAlmostEqual(interaction["interaction"], 1.0)
+    def test_retention_inputs_keep_variable_hook_lengths_as_a_confound(self):
+        corpus = [{
+            "curve": [1.1, 1.0, .9, .8, .7],
+            "duration_s": 10,
+            "hookEndSec": 4,
+            "keep_rate": 65,
+        }]
+        observed = retention_inputs(corpus, np.asarray([11]))
+        self.assertEqual(observed["retentionMatrix"].shape, (1, 6))
+        self.assertEqual(observed["confounds"].shape, (1, 7))
+        self.assertEqual(observed["confounds"][0, 0], 11)
 
 
 if __name__ == "__main__":
