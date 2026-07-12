@@ -330,7 +330,7 @@ async function serveR2ObjectForRequest(req, res, key, contentType, opts = {}) {
 }
 
 const _limiters = new Map();
-function runLimited(name, limit, fn) {
+function runLimited(name, limit, fn, front) {
     limit = Math.max(1, parseInt(limit, 10) || 1);
     let q = _limiters.get(name);
     if (!q) { q = { active: 0, waiters: [] }; _limiters.set(name, q); }
@@ -344,11 +344,38 @@ function runLimited(name, limit, fn) {
             });
         };
         if (q.active < limit) run();
+        else if (front) q.waiters.unshift(run);   // interactive work jumps ahead of queued background scores
         else q.waiters.push(run);
     });
 }
 const HEAVY_SCORE_LIMIT = Math.max(1, parseInt(process.env.HEAVY_SCORE_LIMIT || (IS_RENDER ? 1 : 2), 10));
 const runHeavyScore = fn => runLimited('heavy-score', HEAVY_SCORE_LIMIT, fn);
+// a user waiting at the screen must NEVER sit behind a grind's batch scoring
+const runHeavyScoreInteractive = fn => runLimited('heavy-score', HEAVY_SCORE_LIMIT, fn, true);
+// ── async scoring jobs: POST returns a job id instantly (no Render 100s proxy ceiling),
+//    the scorer runs in-process, results persist to R2 so a redeploy can't lose them silently ──
+const _lqJobs = new Map();
+function lqJobSubmit(kind, runner) {
+    const jid = 'j' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+    const rec = { jid, kind, status: 'queued', ts: Date.now() };
+    _lqJobs.set(jid, rec);
+    (async () => {
+        rec.status = 'running'; rec.ts = Date.now();
+        try { rec.result = await runner(); rec.status = 'done'; }
+        catch (e) { rec.status = 'error'; rec.error = String((e && e.message) || e).slice(0, 300); }
+        rec.ts = Date.now();
+        await cloud.uploadToR2(`longform/jobs/${jid}.json`, Buffer.from(JSON.stringify(rec)), 'application/json').catch(() => {});
+        setTimeout(() => _lqJobs.delete(jid), 20 * 60e3);
+    })();
+    return jid;
+}
+async function lqJobGet(jid) {
+    const m = _lqJobs.get(jid);
+    if (m) return m;
+    const b = await cloud.downloadFromR2(`longform/jobs/${jid}.json`).catch(() => null);
+    if (b) { try { return JSON.parse(b.toString('utf8')); } catch (e) {} }
+    return null;   // lost (deploy killed it before any write) — client resubmits
+}
 
 function compactIndicator(ind) {
     if (!ind) return ind;
@@ -626,13 +653,13 @@ async function longQuantScoreEmbeddings(buf, title) {
     ]);
     return { visual, text: textEmb, together };
 }
-async function longQuantScoreImageBuffer(buf, title, idea) {
+async function longQuantScoreImageBuffer(buf, title, idea, interactive) {
     const os = require('os');
     const tmp = path.join(os.tmpdir(), `lqscore_${Date.now()}_${Math.round(Math.random() * 1e6)}.jpg`);
     const embTmp = path.join(os.tmpdir(), `lqscore_${Date.now()}_${Math.round(Math.random() * 1e6)}.emb.json`);
     fs.writeFileSync(tmp, buf);
     try {
-        return await runHeavyScore(async () => {
+        return await (interactive ? runHeavyScoreInteractive : runHeavyScore)(async () => {
             const emb = await longQuantScoreEmbeddings(buf, title || idea || '');
             fs.writeFileSync(embTmp, JSON.stringify(emb));
             return await new Promise((ok, no) => {
@@ -668,11 +695,11 @@ async function longQuantScoreImageBuffer(buf, title, idea) {
 
 // Title-only scoring: embed JUST the text and read it against the raw-long TEXT latent space —
 // same corpus, same neighbor placement, same metric projections as the visual maps.
-async function longQuantScoreTitleText(title) {
+async function longQuantScoreTitleText(title, interactive) {
     const os = require('os');
     const embTmp = path.join(os.tmpdir(), `lqscore_${Date.now()}_${Math.round(Math.random() * 1e6)}.emb.json`);
     try {
-        return await runHeavyScore(async () => {
+        return await (interactive ? runHeavyScoreInteractive : runHeavyScore)(async () => {
             const et = await longQuantGeminiEmbed([{ text: String(title || '').slice(0, 500) }]);
             fs.writeFileSync(embTmp, JSON.stringify({ text: et }));
             return await new Promise((ok, no) => {
@@ -3660,7 +3687,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (!b64 || b64.length < 100) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no image"}'); return; }
             if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"Enter the video title or idea so visual and together embeddings can both be scored"}'); return; }
             if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
-            const score = await longQuantScoreThumbnail(Buffer.from(b64, 'base64'), title, idea);
+            if (body.async) { const jobId = lqJobSubmit('score-upload', () => longQuantScoreThumbnail(Buffer.from(b64, 'base64'), title, idea, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            const score = await longQuantScoreThumbnail(Buffer.from(b64, 'base64'), title, idea, true);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(score));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -3745,6 +3773,41 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         }
         return;
     }
+    if (pathname === '/api/longquant/claudertg/score-promise' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const text = String(body.text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+            if (text.length < 4) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type a promise line to score"}'); return; }
+            if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
+            const promiseRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
+                const py = spawn(RAW_PYTHON, [path.join(__dirname, 'claude_rtg_score.py'), '--text', text], { env: RAW_PY_ENV });
+                let so = '', se = '';
+                py.stdout.on('data', d => so += d);
+                py.stderr.on('data', d => se += d);
+                const t = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('promise scorer timeout')); }, 300000);
+                py.on('close', () => {
+                    clearTimeout(t);
+                    const line = so.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+                    if (!line) return no(new Error('promise scorer: ' + (se.trim().split('\n').pop() || 'no output').slice(-160)));
+                    try { const j = JSON.parse(line); return j.error ? no(new Error(j.error)) : ok(j); } catch (e) { no(e); }
+                });
+                py.on('error', e => { clearTimeout(t); no(e); });
+            }));
+            if (body.async) { const jobId = lqJobSubmit('score-promise', promiseRunner); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            const out = await promiseRunner();
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify(out));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    const lqCrtg = pathname.match(/^\/api\/longquant\/claudertg\/(meta|chunks|clusterings|axes|swaps|promise_axes)$/);
+    if (lqCrtg && req.method === 'GET') {
+        await serveGzCached(req, res, 'lq:crtg-' + lqCrtg[1], 60e3, async () => {
+            const b = await cloud.downloadFromR2(`longform/claude-rtg/${lqCrtg[1]}.json`).catch(() => null);
+            return b ? b.toString('utf8') : '{}';
+        }, {});
+        return;
+    }
     if (pathname === '/api/longquant/hooks/edit' && req.method === 'POST') {
         try {
             const body = await readBody(req);
@@ -3756,7 +3819,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const b = await cloud.downloadFromR2(key).catch(() => null);
             if (!b) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"no record for that video"}'); return; }
             const rec = JSON.parse(b.toString('utf8'));
-            const score = await longQuantScoreTitleText(hookText);   // re-embed + re-place in the text latent space
+            const editRunner = async () => {
+            const score = await longQuantScoreTitleText(hookText, true);   // re-embed + re-place in the text latent space
             rec.hookText = hookText;
             rec.score = { ...score, title: hookText };
             if (isFinite(endSec) && endSec > 0 && endSec < 300) {
@@ -3786,8 +3850,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 idx.builtAt = Date.now();
                 await cloud.uploadToR2('longform/hook-embeds/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
             } catch (e) { console.warn('hook edit index patch:', e.message); }
+            return { ok: true, rec };
+            };
+            if (body.async) { const jobId = lqJobSubmit('hook-edit', editRunner); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ ok: true, rec }));
+            res.end(JSON.stringify(await editRunner()));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
@@ -3805,13 +3872,21 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         res.end(b ? b.toString('utf8') : '{"error":"not found"}');
         return;
     }
+    const lqJob = pathname.match(/^\/api\/longquant\/jobs\/(j[a-z0-9]+)$/);
+    if (lqJob && req.method === 'GET') {
+        const rec = await lqJobGet(lqJob[1]);
+        res.writeHead(rec ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(rec ? JSON.stringify(rec) : '{"error":"job lost (server restarted) — resubmit"}');
+        return;
+    }
     if (pathname === '/api/longquant/exp/score-title' && req.method === 'POST') {
         try {
             const body = await readBody(req);
             const title = String(body.title || body.idea || '').slice(0, 500).trim();
             if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type a title to embed"}'); return; }
             if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
-            const score = await longQuantScoreTitleText(title);
+            if (body.async) { const jobId = lqJobSubmit('score-title', () => longQuantScoreTitleText(title, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            const score = await longQuantScoreTitleText(title, true);
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify(score));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -3827,7 +3902,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (!jpg) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"image not found"}'); return; }
             const title = String(body.title || '').slice(0, 500).trim();
             const idea = String(body.idea || title).slice(0, 500).trim();
-            const score = await longQuantScoreThumbnail(jpg, title, idea);
+            if (body.async) { const jobId = lqJobSubmit('score-key', () => longQuantScoreThumbnail(jpg, title, idea, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            const score = await longQuantScoreThumbnail(jpg, title, idea, true);
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify(score));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -11129,11 +11205,11 @@ function longQuantPublicScore(score) {
         },
     };
 }
-async function longQuantScoreThumbnail(buf, title, idea) {
+async function longQuantScoreThumbnail(buf, title, idea, interactive) {
     const scoreTitle = String(title || idea || '').replace(/\s+/g, ' ').trim().slice(0, 500);
     const scoreIdea = String(idea || scoreTitle).replace(/\s+/g, ' ').trim().slice(0, 500);
     if (!scoreTitle) throw new Error('Video title or idea is required for the 12-output Long Quant score');
-    const score = longQuantPublicScore(await longQuantScoreImageBuffer(buf, scoreTitle, scoreIdea));
+    const score = longQuantPublicScore(await longQuantScoreImageBuffer(buf, scoreTitle, scoreIdea, interactive));
     if (!score) throw new Error('Long Quant scorer returned nothing');
     // NEVER hard-fail a whole generation because a channel map lacks some metric projections
     // (raw-long/together/map.json shipped without ctr/ret30/realviews/ctrviews and this throw

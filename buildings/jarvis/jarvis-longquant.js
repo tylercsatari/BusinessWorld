@@ -1010,10 +1010,29 @@ const JarvisLongQuant = (function () {
     if (typeof window !== 'undefined' && !window.__lqGrindLivePoll) window.__lqGrindLivePoll = window.setInterval(lqGrindLiveTick, LQ_LIVE_REFRESH_MS);
     function lqIdeaRunsEnsure(force) { if (LQIDEARUNS[0] && !force) return; LQIDEARUNS[0] = LQIDEARUNS[0] || { loading: 1 }; lqxJson('/api/longquant/ideas/runs').then(j => { LQIDEARUNS[0] = j.runs || []; if (!st.ideaRun && LQIDEARUNS[0].length) st.ideaRun = LQIDEARUNS[0][LQIDEARUNS[0].length - 1]; rtgUpdateLqIdeas(); rtgUpdateLqExp(); }).catch(() => { LQIDEARUNS[0] = []; rtgUpdateLqIdeas(); }); }
     function lqIdeaIdx(run) { if (!run || LQIDEAIDX[run]) return; LQIDEAIDX[run] = { loading: 1 }; fetch('/api/longquant/ideas/index?run=' + run).then(r => r.text()).then(t => { LQIDEAIDX[run] = { rows: t.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean) }; rtgUpdateLqIdeas(); rtgUpdateLqExp(); }).catch(() => { LQIDEAIDX[run] = { rows: [] }; rtgUpdateLqIdeas(); }); }
+    // submit a scoring job and poll it: the POST returns instantly with a job id, so no request
+    // ever sits open long enough to hit Render's ~100s proxy ceiling (the "hit or miss" scoring
+    // failures were interactive scores queued behind grind batch scoring past that ceiling).
+    async function lqxJob(url, bodyObj, resubmits) {
+        const sub = await lqxJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...bodyObj, async: true }) });
+        if (!sub || !sub.jobId) return sub;   // server predates jobs — sync result
+        for (let i = 0; i < 240; i++) {
+            await new Promise(r => window.setTimeout(r, i < 8 ? 2500 : 5000));
+            let j;
+            try { j = await lqxJson('/api/longquant/jobs/' + sub.jobId); }
+            catch (e) {
+                if (/job lost|resubmit/i.test(String(e.message)) && (resubmits || 0) < 2) return lqxJob(url, bodyObj, (resubmits || 0) + 1);
+                throw e;
+            }
+            if (j && j.status === 'done') return j.result;
+            if (j && j.status === 'error') throw new Error(j.error || 'scoring job failed');
+        }
+        throw new Error('scoring job still running after 15 minutes — give up and retry');
+    }
     function lqxScoreKey(id, key, title, idea) {
         if (!id || !key || LQSCORES[id]) return;
         LQSCORES[id] = { loading: 1 };
-        lqxJson('/api/longquant/exp/score-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, title: title || '', idea: idea || title || '' }) })
+        lqxJob('/api/longquant/exp/score-key', { key, title: title || '', idea: idea || title || '' })
             .then(j => { LQSCORES[id] = j; rtgUpdateLqExp(); rtgUpdateGuessesL(); })
             .catch(e => { LQSCORES[id] = { error: e.message, at: Date.now(), key, title: title || '', idea: idea || title || '' }; rtgUpdateLqExp(); rtgUpdateGuessesL(); });
     }
@@ -1133,7 +1152,7 @@ const JarvisLongQuant = (function () {
         }
         st.lqxScoring = true; st.lqxScore = null; st.lqxScoreLoadError = null; rtgUpdateLqExp();
         try {
-            st.lqxScore = await lqxJson('/api/longquant/exp/score-upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: st.lqxScoreImg, title, idea: title }) });
+            st.lqxScore = await lqxJob('/api/longquant/exp/score-upload', { image: st.lqxScoreImg, title, idea: title });
         } catch (e) { st.lqxScore = { error: e.message }; }
         st.lqxScoring = false; rtgUpdateLqExp();
     }
@@ -1677,7 +1696,7 @@ const JarvisLongQuant = (function () {
         if (ed.selEnd != null && words[ed.selEnd]) endSec = Math.round((words[ed.selEnd].t + (words[ed.selEnd].d || 0.3)) * 100) / 100;
         ed.saving = true; ed.error = null; rtgUpdateLqExp();
         try {
-            const j = await lqxJson('/api/longquant/hooks/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: ed.id, hookText: text, hookEndSec: endSec }) });
+            const j = await lqxJob('/api/longquant/hooks/edit', { id: ed.id, hookText: text, hookEndSec: endSec });
             if (j && j.rec) LQHOOKDET[ed.id] = j.rec;
             st.lqxHookEdit = null;
             lqHookEmbEnsure(true);
@@ -1700,7 +1719,7 @@ const JarvisLongQuant = (function () {
         row.loading = true; row.error = null;
         rtgUpdateLqExp();
         try {
-            const j = await lqxJson('/api/longquant/exp/score-title', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) });
+            const j = await lqxJob('/api/longquant/exp/score-title', { title });
             row.score = j; row.loading = false;
             lqxAttachRaw('titletest:' + id, j, title, '', false);   // makes "open in Raw map" work
         } catch (e) {
@@ -1732,7 +1751,7 @@ const JarvisLongQuant = (function () {
         if (!row) { row = { id, text }; st.crtgScores.unshift(row); }
         row.loading = true; row.error = null; rtgUpdateCrtg();
         try {
-            const j = await lqxJson('/api/longquant/claudertg/score-promise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+            const j = await lqxJob('/api/longquant/claudertg/score-promise', { text });
             row.axes = j.axes; row.loading = false;
         } catch (e) { row.loading = false; row.error = String((e && e.message) || e); }
         rtgUpdateCrtg();
