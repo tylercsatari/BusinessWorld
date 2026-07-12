@@ -26,6 +26,8 @@
             hookScoreText: '', hookScoreResult: null, hookScoreLoading: false,
             hookScoreError: null, hookScoreStatus: null, hookScoreJobId: null,
             hookQualityPointIndex: null, forwardResponseComponentIndex: null,
+            hookLibraryQuery: '', hookLibraryMetric: 'overall', hookLibrarySelectedId: null,
+            outcomePointVideoId: null, outcomeComponentPointKey: null,
         };
         let progressTimer = null;
         let resizeTimer = null;
@@ -80,6 +82,24 @@
             if (absolute >= 1e3) return `${fmt(Number(value) / 1e3, 1)}K`;
             return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
         };
+        const hookOutcomeOrder = ['viewed_percent', 'retention_5s', 'average_retention', 'log_views'];
+        function formatHookOutcomeValue(value, target, compact = false) {
+            value = numeric(value);
+            if (!Number.isFinite(value)) return '-';
+            if (target === 'log_views') return compact ? formatCompactNumber(10 ** value) : `${formatCompactNumber(10 ** value)} views`;
+            return `${fmt(value, compact ? 1 : 2)}%`;
+        }
+        function validationLabel(validation) {
+            const status = String((validation || {}).status || 'diagnostic-not-validated');
+            return status.startsWith('validated') ? 'VALIDATED' : 'DIAGNOSTIC';
+        }
+        function validationColor(validation) {
+            return String((validation || {}).status || '').startsWith('validated') ? C.green : C.amber;
+        }
+        function selectedLibraryHook() {
+            const hooks = ((state.data.hookOutcomes || {}).hooks || []);
+            return hooks.find(row => String(row.videoId) === String(state.hookLibrarySelectedId)) || null;
+        }
         function formatOutcomeValue(value, target, meta, compact = false) {
             value = numeric(value);
             if (!Number.isFinite(value)) return 'not measured';
@@ -143,7 +163,7 @@
         const card = (body, extra = '') => `<section style="background:${C.card};border:1px solid ${C.border};border-radius:8px;padding:12px;${extra}">${body}</section>`;
         const stat = (label, value, color = C.text) => `<div style="min-width:112px;border-left:2px solid ${color};padding:3px 9px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase">${esc(label)}</div><div style="font-size:17px;font-weight:900;color:${color}">${esc(String(value))}</div></div>`;
         const button = (label, attr, active = false) => `<button ${attr} style="border:1px solid ${active ? C.cyan : C.border};background:${active ? C.cyan + '1c' : C.card2};color:${active ? C.cyan : C.dim};border-radius:6px;padding:5px 9px;font-size:10px;font-weight:800;cursor:pointer">${esc(label)}</button>`;
-        const statusColor = status => status === 'complete' || status === 'validated' || status === 'supported' ? C.green : status === 'error' ? C.red : C.amber;
+        const statusColor = status => status === 'complete' || String(status || '').startsWith('validated') || status === 'supported' ? C.green : status === 'error' ? C.red : C.amber;
         const activeAtlas = () => state.atlasScope === 'all' ? state.data.allSpanAtlas : state.data.atlas;
         const atlasRows = atlas => (atlas && (atlas.spans || atlas.candidates)) || [];
         const atlasCount = atlas => Number((atlas && (atlas.spanInstances || atlas.candidateInstances)) || atlasRows(atlas).length || 0);
@@ -465,8 +485,13 @@
             load('progress');
             if (state.view === 'scorer') {
                 load('hookQuality', api('hook-quality'));
+                load('hookOutcomes', api('hook-outcomes'));
                 load('hookExamples', api('hook-example-results'));
                 resumePendingHookScore();
+            }
+            if (state.view === 'library') {
+                load('hookQuality', api('hook-quality'));
+                load('hookOutcomes', api('hook-outcomes'));
             }
             if (state.view === 'overview') { load('findings'); load('manualProbe', api('manual-probe')); }
             if (state.view === 'saved') {
@@ -499,7 +524,7 @@
             const manifest = state.data.manifest || {};
             const progress = state.data.progress || {};
             const views = [
-                ['overview', 'Results'], ['scorer', 'Hook scorer'], ['hooks', 'Hooks'], ['boundaries', 'Boundaries'],
+                ['overview', 'Results'], ['scorer', 'Hook scorer'], ['library', 'Hook library'], ['hooks', 'Hooks'], ['boundaries', 'Boundaries'],
                 ['components', 'Embeddings'], ['clusters', 'Cluster atlas'], ['saved', 'Saved embedding'], ['swaps', 'Swaps'],
                 ['axes', 'Outcome axes'], ['registry', 'Registry'],
             ];
@@ -829,31 +854,181 @@
             return card(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">Frozen evaluation-only example</div><div style="font-size:8.5px;color:${C.mute};margin-top:2px">These four sentences were withheld from every fit. Two identical replays produced SHA ${esc(String((examples.deterministicReplay || {}).sha256 || '').slice(0, 12))}.</div></div><div style="font-size:9px;color:${C.green};font-weight:900">Winner: ${esc(result.winner || '-')}</div></div><div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:8.5px"><thead><tr>${['hook', 'axis score', 'bootstrap score interval', '+1s components', 'in-domain evidence', 'wins refits'].map(label => `<th style="text-align:left;padding:5px;color:${C.mute};border-bottom:1px solid ${C.border}">${label}</th>`).join('')}</tr></thead><tbody>${rows.map(row => { const value = row.summary || {}; return `<tr><td style="padding:6px;border-bottom:1px solid ${C.border};min-width:260px"><button data-pl-hook-example="${esc(row.id)}" ${state.hookScoreLoading ? 'disabled' : ''} style="border:0;background:transparent;color:${state.hookScoreLoading ? C.faint : C.text};font-size:8.5px;font-weight:800;text-align:left;cursor:${state.hookScoreLoading ? 'wait' : 'pointer'};padding:0">${esc(row.text)}</button></td><td style="padding:6px;border-bottom:1px solid ${C.border};color:${C.text};white-space:nowrap"><b>${fmt(value.percentile, 1)}th</b><br><span style="color:${C.mute}">${signed(value.axisCoordinate, 4)}</span></td><td style="padding:6px;border-bottom:1px solid ${C.border};color:${C.dim};white-space:nowrap">${fmt(value.bootstrapP10, 1)}th to ${fmt(value.bootstrapP90, 1)}th<br>median ${fmt(value.bootstrapMedian, 1)}th</td><td style="padding:6px;border-bottom:1px solid ${C.border};color:${C.dim};white-space:nowrap">${(value.forwardComponents || []).map(component => `<span title="${esc(component.text || '')}" style="display:inline-block;margin-right:3px;color:${clusterColor(component.category)}">C${component.category} <b>${fmt(component.percentile, 0)}th</b></span>`).join('') || '-'}</td><td style="padding:6px;border-bottom:1px solid ${C.border};color:${Number(value.inDomainSimilarityPercentile) < 10 ? C.amber : C.dim};white-space:nowrap">${fmt(value.inDomainSimilarityPercentile, 1)}th similarity<br>partition ${fmt(value.partitionGapPercentile, 1)}th</td><td style="padding:6px;border-bottom:1px solid ${C.border};color:${fractions[row.id] == null ? C.faint : C.green};white-space:nowrap">${fractions[row.id] == null ? '-' : pct(Number(fractions[row.id]) * 100)}</td></tr>`; }).join('')}</tbody></table></div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:7px">The machine variants rank ${esc((result.mainAxisRanking || []).join(' → '))}. The ranking is deterministic; refit frequencies expose model uncertainty. Component cells are their separately validated +1s response axes; they are not averaged into an unvalidated replacement whole-hook score.</div>`, 'margin-bottom:10px');
         }
 
+        function activeHookOutcomeFocus() {
+            if (state.view === 'scorer' && state.hookScoreResult) {
+                return { type: 'live', result: state.hookScoreResult };
+            }
+            const row = selectedLibraryHook();
+            return row ? { type: 'stored', row } : null;
+        }
+
+        function hookOutcomeValidation(target) {
+            const outcomes = state.data.hookOutcomes || {};
+            if (target === 'quality') {
+                const model = (state.data.hookQuality || {}).model || {};
+                return { status: 'validated', heldoutSpearman: model.heldoutSpearman, familyQ: model.signFlipP };
+            }
+            return ((((outcomes.hookModels || {})[target] || {}).validation) || {});
+        }
+
+        function hookOutcomePayload(focus, target) {
+            if (!focus) return null;
+            if (target === 'quality') {
+                if (focus.type === 'live') return {
+                    percentile: ((focus.result || {}).score || {}).percentile,
+                    prediction: ((focus.result || {}).score || {}).axisCoordinate,
+                    mapX: ((focus.result || {}).map || {}).x,
+                    mapY: ((focus.result || {}).map || {}).y,
+                };
+                return (focus.row || {}).overallScore || null;
+            }
+            if (focus.type === 'live') return ((((focus.result || {}).outcomes || {}).hook || {})[target] || null);
+            return (((focus.row || {}).outcomes || {})[target] || null);
+        }
+
+        function outcomePredictionStrip(focus) {
+            if (!focus) return '';
+            const targets = (state.data.hookOutcomes || {}).targets || {};
+            return `<div class="pl-outcome-strip" style="display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:8px;margin-bottom:10px">${hookOutcomeOrder.map(target => {
+                const meta = targets[target] || {}, value = hookOutcomePayload(focus, target) || {};
+                const prediction = focus.type === 'live' ? value.prediction : value.predictedOOF;
+                const actual = focus.type === 'stored' ? value.actual : null;
+                const validation = hookOutcomeValidation(target);
+                return `<div style="background:${C.card};border:1px solid ${validationColor(validation)}55;padding:10px;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px;align-items:center"><span style="font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase">${esc(meta.shortLabel || target)}</span><span style="font-size:7px;color:${validationColor(validation)};font-weight:900">${validationLabel(validation)}</span></div><div style="font-size:20px;color:${C.text};font-weight:900;margin-top:4px">${esc(formatHookOutcomeValue(prediction, target))}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px">${focus.type === 'stored' ? `OOF prediction · actual <b style="color:${C.text}">${esc(formatHookOutcomeValue(actual, target))}</b><br>error ${esc(signed(numeric(actual) - numeric(prediction), target === 'log_views' ? 3 : 1))}${target === 'log_views' ? ' log10' : ' pp'}` : `prediction interval ${esc(formatHookOutcomeValue(value.predictionP10, target, true))} to ${esc(formatHookOutcomeValue(value.predictionP90, target, true))}`}<br>held-out rho ${fmt(validation.heldoutSpearman, 3)} · q ${fmt(validation.familyQ, 4)}</div></div>`;
+            }).join('')}</div>`;
+        }
+
+        function outcomePointInspector() {
+            const row = ((state.data.hookOutcomes || {}).hooks || []).find(value =>
+                String(value.videoId) === String(state.outcomePointVideoId));
+            if (!row) return '';
+            return `<div style="border:1px solid ${C.cyan}55;background:${C.card2};padding:9px;margin:0 0 10px"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">Selected training point</div><div style="font-size:11px;color:${C.text};font-weight:900;margin-top:3px">${esc(row.title || row.videoId || '')}</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:2px">${esc(row.text || '')}</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;font-size:8px;color:${C.mute}">${hookOutcomeOrder.map(target => { const value = (row.outcomes || {})[target] || {}; return `<span>${esc(((state.data.hookOutcomes || {}).targets || {})[target]?.shortLabel || target)} <b style="color:${C.text}">${esc(formatHookOutcomeValue(value.predictedOOF, target, true))}</b> predicted / ${esc(formatHookOutcomeValue(value.actual, target, true))} actual</span>`; }).join('')}</div></div>`;
+        }
+
+        function hookOutcomeAxisGallery(focus) {
+            const outcomes = state.data.hookOutcomes || {}, targets = outcomes.targets || {};
+            const axes = [{ id: 'quality', label: 'Retained information', definition: 'validated broad complete-hook coordinate' },
+                ...hookOutcomeOrder.map(id => ({ id, label: (targets[id] || {}).shortLabel || id, definition: (targets[id] || {}).definition || '' }))];
+            return `<div style="margin:14px 0 10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:7px"><div><div style="font-size:12px;color:${C.text};font-weight:900">All five complete-hook embedding planes</div><div style="font-size:8.5px;color:${C.mute};margin-top:2px">Every point is one of 208 hooks. X is the named frozen score; Y is its orthogonal semantic direction. Point color is the held-out observed target. A cyan ring is the current hook.</div></div><div style="font-size:8px;color:${C.dim}">Click a training point to inspect predicted versus actual without leaving this view.</div></div><div class="pl-map-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:8px">${axes.map(axis => {
+                const validation = hookOutcomeValidation(axis.id), value = hookOutcomePayload(focus, axis.id) || {};
+                const prediction = axis.id === 'quality' ? value.percentile : (focus && focus.type === 'stored' ? value.predictedOOF : value.prediction);
+                const display = axis.id === 'quality'
+                    ? (Number.isFinite(numeric(prediction)) ? `${fmt(prediction, 1)}th` : '-')
+                    : formatHookOutcomeValue(prediction, axis.id);
+                return `<section style="background:${C.card};border:1px solid ${validationColor(validation)}44;padding:9px;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start"><div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(axis.label)}</div><div style="font-size:7.5px;color:${C.mute};line-height:1.4;margin-top:2px">${esc(axis.definition)}</div></div><div style="text-align:right;white-space:nowrap"><b style="font-size:13px;color:${C.cyan}">${esc(display)}</b><div style="font-size:7px;color:${validationColor(validation)};font-weight:900">${validationLabel(validation)}</div></div></div><canvas data-pl-canvas="hook-outcome-axis" data-pl-outcome-target="${axis.id}" style="width:100%;height:220px;display:block;margin-top:5px"></canvas><div style="font-size:7.5px;color:${C.mute};margin-top:3px">held-out rho ${fmt(validation.heldoutSpearman, 3)} · q ${fmt(validation.familyQ, 4)}</div></section>`;
+            }).join('')}</div></div>${outcomePointInspector()}`;
+        }
+
+        function retentionWordTable(forecast) {
+            const words = (forecast || {}).words || [];
+            if (!words.length) return '';
+            return `<div style="overflow:auto;margin-top:8px"><div style="display:flex;gap:4px;min-width:max-content;padding-bottom:4px">${words.map(word => {
+                const actual = numeric(word.actualRetentionPercent), predicted = numeric(word.predictedRetentionPercent);
+                return `<div style="width:92px;border-top:3px solid ${clusterColor(word.component)};background:${C.card2};padding:6px;box-sizing:border-box"><div style="font-size:9px;color:${C.text};font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(word.text || '')}">${esc(word.text || '')}</div><div style="font-size:7.5px;color:${C.mute};line-height:1.45;margin-top:3px">response ${fmt(word.responseSeconds, 2)}s<br>pred ${pct(predicted)}${Number.isFinite(actual) ? `<br>actual ${pct(actual)}<br><b style="color:${actual >= predicted ? C.green : C.red}">${signed(actual - predicted, 1)} pp</b>` : ''}</div></div>`;
+            }).join('')}</div></div>`;
+        }
+
+        function retentionForecastPanel(forecast, stored = false) {
+            if (!forecast) return '';
+            const model = (state.data.hookOutcomes || {}).curveModel || {};
+            const validation = forecast.validation || model.validation || {};
+            const speaking = forecast.speakingRate || model.speakingRate || {};
+            return `<section style="border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};padding:12px 0;margin:12px 0"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:280px;flex:1"><div style="font-size:12px;color:${C.text};font-weight:900">Predicted retention by second and by word</div><div style="font-size:8.5px;color:${C.dim};line-height:1.5;margin-top:3px">${stored ? 'Cyan is the source-held-out forecast; green is the measured curve.' : 'Cyan is the frozen-model forecast; the shaded band is the empirical 80% interval.'} Word response points use ${esc(forecast.wordTimingPolicy || 'library-average speaking rate')} and the measured +${fmt(forecast.responseLagSeconds == null ? 1 : forecast.responseLagSeconds, 1)}s response lag.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('curve MAE', `${fmt(validation.heldoutMAEPercentagePoints, 2)} pp`, C.cyan)}${stat('baseline MAE', `${fmt(validation.baselineMAEPercentagePoints, 2)} pp`, C.dim)}${stat('improvement', pct(Number(validation.maeImprovementFraction || 0) * 100), C.green)}${stat('timewise rho', fmt(validation.meanTimewiseSpearman, 3), C.purple)}${stat('average speech', `${fmt(speaking.meanWordsPerSecond, 2)} words/s`, C.amber)}</div></div><canvas data-pl-canvas="retention-forecast" style="width:100%;height:360px;display:block;margin-top:7px"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px">Band coverage ${pct(Number(validation.empiricalBandCoverage || 0) * 100)} · paired improvement p ${fmt((validation.pairedImprovementInference || {}).p, 4)} · 41 points from 0 to 20 seconds. This is a rough observational forecast, not a causal simulator.</div>${retentionWordTable(forecast)}</section>`;
+        }
+
+        function componentMetricValue(component, axis, focusType) {
+            if (!component) return null;
+            if (axis === 'broad') {
+                const row = focusType === 'live' ? component : component.broadRetainedInformation || {};
+                return { percentile: focusType === 'live' ? row.categoryContributionPercentile : row.percentile, coordinate: focusType === 'live' ? row.shapleyAxisContribution : row.shapley, status: 'validated' };
+            }
+            if (axis === 'forward') {
+                const row = component.forwardResponse || {};
+                return { percentile: focusType === 'live' ? row.percentile : row.axisPercentile, coordinate: row.axisCoordinate, status: 'validated', rho: row.heldoutSpearmanForCategory };
+            }
+            const row = focusType === 'live' ? ((component.outcomePredictions || {})[axis] || {}) : ((component.outcomes || {})[axis] || {});
+            return { ...row, coordinate: focusType === 'live' ? row.prediction : row.predictedOOF, status: (row.validation || {}).status || row.validationStatus, rho: (row.validation || {}).heldoutSpearman ?? row.heldoutSpearman };
+        }
+
+        function componentOutcomePointInspector() {
+            if (!state.outcomeComponentPointKey) return '';
+            const [videoId, componentIndex] = String(state.outcomeComponentPointKey).split(':');
+            const row = ((state.data.hookOutcomes || {}).hooks || []).find(value => String(value.videoId) === videoId);
+            const component = row && (row.components || [])[Number(componentIndex)];
+            if (!row || !component) return '';
+            return `<div style="border:1px solid ${clusterColor(component.category)}88;background:${C.card2};padding:9px;margin-bottom:8px"><div style="font-size:8px;color:${clusterColor(component.category)};font-weight:900">SELECTED TRAINING COMPONENT · CLUSTER ${component.category}</div><div style="font-size:11px;color:${C.text};font-weight:900;margin-top:3px">${esc(component.text || '')}</div><div style="font-size:8px;color:${C.mute};margin-top:2px">${esc(row.title || row.videoId || '')} · tokens ${component.startToken}-${component.endToken}</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;font-size:8px;color:${C.dim}"><span>broad <b style="color:${C.text}">${fmt((component.broadRetainedInformation || {}).percentile, 1)}th</b></span><span>+1s response <b style="color:${C.text}">${fmt((component.forwardResponse || {}).axisPercentile, 1)}th</b></span>${hookOutcomeOrder.map(target => `<span>${esc((((state.data.hookOutcomes || {}).targets || {})[target] || {}).shortLabel || target)} <b style="color:${C.text}">${fmt(((component.outcomes || {})[target] || {}).percentile, 1)}th</b></span>`).join('')}</div></div>`;
+        }
+
+        function componentScoreGallery(focus) {
+            if (!focus) return '';
+            const components = focus.type === 'live' ? ((focus.result || {}).components || []) : ((focus.row || {}).components || []);
+            if (!components.length) return '';
+            const targets = (state.data.hookOutcomes || {}).targets || {};
+            const axes = [
+                { id: 'broad', label: 'Broad retained-information contribution', note: 'X = exact Shapley contribution; Y = standalone semantic coordinate.' },
+                { id: 'forward', label: '+1s forward retention response', note: 'X = validated response coordinate; Y = orthogonal semantic direction.' },
+                ...hookOutcomeOrder.map(id => ({ id, label: `${(targets[id] || {}).shortLabel || id} component diagnostic`, note: 'X = category-specific predicted outcome; Y = orthogonal semantic direction.' })),
+            ];
+            return `<div style="margin:14px 0"><div style="font-size:12px;color:${C.text};font-weight:900">Every component score in its actual cluster plane</div><div style="font-size:8.5px;color:${C.mute};line-height:1.5;margin:3px 0 9px">Each row is one scoring channel. Each of the four maps contains only training components from that component's frozen cluster, with the current component ringed in cyan. Outcome maps marked diagnostic did not independently pass category-specific held-out validation.</div>${componentOutcomePointInspector()}${axes.map(axis => `<section style="border-top:1px solid ${C.border};padding-top:9px;margin-top:9px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:6px"><div><div style="font-size:10px;color:${C.text};font-weight:900">${esc(axis.label)}</div><div style="font-size:7.5px;color:${C.mute}">${esc(axis.note)}</div></div></div><div class="pl-component-map-grid" style="display:grid;grid-template-columns:repeat(4,minmax(190px,1fr));gap:7px">${components.map((component, index) => {
+                const value = componentMetricValue(component, axis.id, focus.type) || {};
+                const status = String(value.status || 'diagnostic-not-validated');
+                const color = status.startsWith('validated') ? C.green : C.amber;
+                const display = ['broad', 'forward'].includes(axis.id) ? `${fmt(value.percentile, 1)}th` : formatHookOutcomeValue(value.coordinate, axis.id);
+                return `<div style="background:${C.card};border:1px solid ${color}44;padding:8px;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px"><div style="min-width:0"><div style="font-size:8px;color:${clusterColor(component.category)};font-weight:900">COMPONENT ${index + 1} · CLUSTER ${component.category}</div><div title="${esc(component.text || '')}" style="font-size:8px;color:${C.text};font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc(component.text || '')}</div></div><div style="text-align:right;white-space:nowrap"><b style="font-size:12px;color:${C.cyan}">${esc(display)}</b><div style="font-size:6.5px;color:${color};font-weight:900">${status.startsWith('validated') ? 'VALIDATED' : 'DIAGNOSTIC'}</div></div></div><canvas data-pl-canvas="component-score-axis" data-pl-component-index="${index}" data-pl-component-category="${component.category}" data-pl-component-axis="${axis.id}" style="width:100%;height:190px;display:block;margin-top:4px"></canvas><div style="font-size:7px;color:${C.mute};margin-top:2px">${axis.id === 'broad' ? `contribution ${signed(value.coordinate, 4)}` : axis.id === 'forward' ? `axis ${signed(value.coordinate, 4)} · rho ${fmt(value.rho, 3)}` : `percentile ${fmt(value.percentile, 1)}th · rho ${fmt(value.rho, 3)}`}</div></div>`;
+            }).join('')}</div></section>`).join('')}</div>`;
+        }
+
+        function libraryRelationships(row) {
+            const components = row.components || [], relationships = row.relationships || [];
+            const lookup = Object.fromEntries(relationships.map(value => [`${value.left}-${value.right}`, value]));
+            return `<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr><th style="padding:4px;color:${C.mute}">component</th>${components.map((component, index) => `<th style="padding:4px;color:${clusterColor(component.category)}">${index + 1}</th>`).join('')}</tr></thead><tbody>${components.map((component, left) => `<tr><th style="padding:4px;color:${clusterColor(component.category)}">${left + 1}</th>${components.map((_, right) => { const value = left < right ? lookup[`${left}-${right}`] : right < left ? lookup[`${right}-${left}`] : null; const response = value && value.forwardResponse || {}; return `<td style="padding:6px;text-align:center;border:1px solid ${C.border};background:${value ? C.card2 : 'transparent'};color:${value ? C.text : C.faint}" title="${value ? esc(value.categoryPair || '') : ''}">${value ? `${fmt(response.axisPercentile, 0)}th<br><span style="color:${C.mute}">${signed(value.interaction, 3)}</span>` : '·'}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`;
+        }
+
+        function hookLibraryDetail(row) {
+            const focus = { type: 'stored', row };
+            return `<section data-pl-library-detail style="border:1px solid ${C.cyan}66;background:${C.card2};padding:12px;margin:0 0 10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">Held-out source audit</div><div style="font-size:15px;color:${C.text};font-weight:900;margin-top:3px">${esc(row.title || row.videoId || '')}</div><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:3px">${esc(row.text || '')}</div></div>${button('Close detail', 'data-pl-library-close')}</div>${outcomePredictionStrip(focus)}${retentionForecastPanel(row.retentionForecast, true)}${hookOutcomeAxisGallery(focus)}<div style="margin:12px 0"><div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:6px">Four exact-cover components</div><div class="pl-component-summary-grid" style="display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:7px">${(row.components || []).map(component => `<div style="border-left:3px solid ${clusterColor(component.category)};background:${C.card};padding:8px;min-width:0"><div style="font-size:7.5px;color:${clusterColor(component.category)};font-weight:900">CLUSTER ${component.category} · TOKENS ${component.startToken}-${component.endToken}</div><div style="font-size:9px;color:${C.text};font-weight:800;line-height:1.4;margin:3px 0;overflow-wrap:anywhere">${esc(component.text || '')}</div><div style="font-size:7.5px;color:${C.dim};line-height:1.5;overflow-wrap:anywhere">broad ${fmt((component.broadRetainedInformation || {}).percentile, 1)}th · +1s ${fmt((component.forwardResponse || {}).axisPercentile, 1)}th<br>${hookOutcomeOrder.map(target => `${esc(((state.data.hookOutcomes || {}).targets || {})[target]?.shortLabel || target)} ${fmt(((component.outcomes || {})[target] || {}).percentile, 0)}th`).join(' · ')}</div></div>`).join('')}</div></div><div class="pl-split" style="display:grid;grid-template-columns:minmax(280px,.65fr) minmax(0,1.35fr);gap:10px"><div><div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:5px">Six component relationships</div>${libraryRelationships(row)}<div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:5px">Cell = +1s response-axis relationship percentile; second line = broad Shapley interaction.</div></div><div style="font-size:8.5px;color:${C.dim};line-height:1.6"><b style="color:${C.text}">Traceability:</b> these are stored source-held-out predictions, not refits performed when you opened the row. Exact captions time ${((row.retentionForecast || {}).words || []).length} words; every token belongs to one and only one component. Curve MAE for this source is ${fmt((row.retentionForecast || {}).sourceMAEPercentagePoints, 2)} percentage points versus ${fmt((row.retentionForecast || {}).baselineMAEPercentagePoints, 2)} for the text-free baseline.</div></div>${componentScoreGallery(focus)}</section>`;
+        }
+
+        function renderHookLibrary() {
+            const outcomes = state.data.hookOutcomes;
+            if (!outcomes) return loading('hookOutcomes');
+            const query = state.hookLibraryQuery.trim().toLowerCase();
+            let rows = (outcomes.hooks || []).filter(row => !query || `${row.title || ''} ${row.text || ''} ${row.videoId || ''}`.toLowerCase().includes(query));
+            const metricValue = row => state.hookLibraryMetric === 'overall'
+                ? numeric((row.overallScore || {}).percentile)
+                : numeric(((row.outcomes || {})[state.hookLibraryMetric] || {}).predictedOOF);
+            rows = [...rows].sort((left, right) => metricValue(right) - metricValue(left) || String(left.videoId).localeCompare(String(right.videoId)));
+            const targets = outcomes.targets || {};
+            return `${card(`<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"><label style="flex:1;min-width:260px"><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:4px">Search all 208 measured hooks</span><input data-pl-query="library" value="${esc(state.hookLibraryQuery)}" placeholder="title, hook text, or video ID" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:7px 8px;border-radius:5px;font-size:10px"></label>${button('Apply', 'data-pl-library-apply')}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${[['overall', 'Hook score'], ...hookOutcomeOrder.map(id => [id, (targets[id] || {}).shortLabel || id])].map(([id, label]) => button(label, `data-pl-library-metric="${id}"`, state.hookLibraryMetric === id)).join('')}</div><div style="font-size:8px;color:${C.mute};margin-top:6px">${rows.length} hooks sorted by ${esc(state.hookLibraryMetric === 'overall' ? 'retained-information percentile' : `${(targets[state.hookLibraryMetric] || {}).shortLabel || state.hookLibraryMetric} held-out prediction`)}. Every row shows prediction, actual, error, components, and its full curve.</div>`, 'margin-bottom:9px')}
+            <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:6px">${rows.map((row, index) => { const selected = String(row.videoId) === String(state.hookLibrarySelectedId); return `<div><div class="pl-library-row" data-pl-library-hook="${esc(row.videoId)}" role="button" tabindex="0" style="display:grid;grid-template-columns:minmax(280px,1.5fr) repeat(4,minmax(100px,.55fr)) minmax(180px,.75fr);gap:7px;align-items:center;border:1px solid ${selected ? C.cyan : C.border};background:${selected ? C.cyan + '0d' : C.card};padding:8px;cursor:pointer"><div style="min-width:0"><div style="display:flex;justify-content:space-between;gap:6px"><span style="font-size:7.5px;color:${C.mute}">#${index + 1} · ${esc(row.videoId || '')}</span><b style="font-size:9px;color:${C.green}">${fmt((row.overallScore || {}).percentile, 1)}th</b></div><div style="font-size:10px;color:${C.text};font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc(row.title || '')}</div><div style="font-size:8px;color:${C.dim};line-height:1.35;max-height:2.7em;overflow:hidden;margin-top:2px">${esc(row.text || '')}</div><div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">${(row.components || []).map(component => `<span style="border-bottom:2px solid ${clusterColor(component.category)};font-size:7px;color:${C.mute};padding:2px 3px">C${component.category} ${fmt((component.forwardResponse || {}).axisPercentile, 0)}th</span>`).join('')}</div></div>${hookOutcomeOrder.map(target => { const value = (row.outcomes || {})[target] || {}; return `<div style="border-left:2px solid ${numeric(value.actual) >= numeric(value.predictedOOF) ? C.green : C.red};padding-left:6px;min-width:0"><div style="font-size:7px;color:${C.mute};text-transform:uppercase">${esc((targets[target] || {}).shortLabel || target)}</div><b style="display:block;font-size:11px;color:${C.text};white-space:nowrap">${esc(formatHookOutcomeValue(value.predictedOOF, target, true))}</b><div style="font-size:7px;color:${C.dim};white-space:nowrap">actual ${esc(formatHookOutcomeValue(value.actual, target, true))}<br>error ${signed(numeric(value.actual) - numeric(value.predictedOOF), target === 'log_views' ? 2 : 1)}</div></div>`; }).join('')}<canvas data-pl-canvas="library-retention-mini" data-pl-video-id="${esc(row.videoId)}" style="width:100%;height:62px;display:block"></canvas></div>${selected ? hookLibraryDetail(row) : ''}</div>`; }).join('')}</div>`;
+        }
+
         function hookScoreResultPanel(result) {
             if (!result) return '';
             const score = result.score || {}, confidence = result.confidence || {};
             const components = result.components || [], pairs = result.pairInteractions || [];
             const forward = result.forwardResponse || {}, forwardMetric = forward.metric || {};
+            const outcomes = result.outcomes || {}, focus = { type: 'live', result };
             const pairLookup = Object.fromEntries(pairs.map(row => [`${row.left}-${row.right}`, row]));
             const interactionTable = `<table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr><th style="padding:4px;color:${C.mute}">component</th>${components.map((_, index) => `<th style="padding:4px;color:${clusterColor(index)}">${index + 1}</th>`).join('')}</tr></thead><tbody>${components.map((_, left) => `<tr><th style="padding:4px;color:${clusterColor(left)}">${left + 1}</th>${components.map((__, right) => { const row = left < right ? pairLookup[`${left}-${right}`] : right < left ? pairLookup[`${right}-${left}`] : null; const value = row && numeric(row.interaction); const alpha = row ? Math.min(.38, .08 + Math.abs(value) * 7) : 0; const background = !row ? C.card2 : value >= 0 ? `rgba(74,222,128,${alpha})` : `rgba(248,113,113,${alpha})`; return `<td title="${row ? `80% interval ${signed(row.bootstrapP10, 4)} to ${signed(row.bootstrapP90, 4)}` : ''}" style="padding:6px;text-align:center;background:${background};color:${row ? C.text : C.faint};border:1px solid ${C.border}">${row ? signed(value, 3) : '·'}</td>`; }).join('')}</tr>`).join('')}</tbody></table>`;
             const forwardInteractionTable = `<table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr><th style="padding:4px;color:${C.mute}">component</th>${components.map((component, index) => `<th style="padding:4px;color:${clusterColor(component.category)}">${index + 1}</th>`).join('')}</tr></thead><tbody>${components.map((component, left) => `<tr><th style="padding:4px;color:${clusterColor(component.category)}">${left + 1}</th>${components.map((__, right) => { const row = left < right ? pairLookup[`${left}-${right}`] : right < left ? pairLookup[`${right}-${left}`] : null; const response = row && row.forwardResponse; const value = response && numeric(response.interaction); const score = response && numeric(response.percentile); const alpha = response ? Math.min(.4, .08 + Math.abs(score - 50) / 120) : 0; const background = !response ? C.card2 : score >= 50 ? `rgba(74,222,128,${alpha})` : `rgba(248,113,113,${alpha})`; return `<td title="${response ? `${esc(response.categoryPair)} · coordinate ${signed(value, 4)}` : ''}" style="padding:6px;text-align:center;background:${background};color:${response ? C.text : C.faint};border:1px solid ${C.border}">${response ? `${fmt(score, 0)}th` : '·'}</td>`; }).join('')}</tr>`).join('')}</tbody></table>`;
-            return `<div data-pl-hook-score-result><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${stat('hook score', `${fmt(score.percentile, 1)}th`, C.green)}${stat('bootstrap 10–90%', `${fmt(confidence.bootstrapPercentileP10, 1)}–${fmt(confidence.bootstrapPercentileP90, 1)}th`, C.cyan)}${stat('held-out rho', fmt(confidence.heldoutSpearman, 3), C.text)}${stat('sign-flip p', fmt(confidence.familyCorrectedSignFlipP, 4), C.purple)}${stat('domain similarity', `${fmt(confidence.inDomainSimilarityPercentile, 1)}th`, Number(confidence.inDomainSimilarityPercentile) < 10 ? C.amber : C.green)}${stat('partition certainty', `${fmt(confidence.partitionScoreGapPercentile, 1)}th`, C.amber)}</div>
+            return `<div data-pl-hook-score-result><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${stat('hook score', `${fmt(score.percentile, 1)}th`, C.green)}${stat('bootstrap 10–90%', `${fmt(confidence.bootstrapPercentileP10, 1)}–${fmt(confidence.bootstrapPercentileP90, 1)}th`, C.cyan)}${stat('held-out rho', fmt(confidence.heldoutSpearman, 3), C.text)}${stat('sign-flip p', fmt(confidence.familyCorrectedSignFlipP, 4), C.purple)}${stat('domain similarity', `${fmt(confidence.inDomainSimilarityPercentile, 1)}th`, Number(confidence.inDomainSimilarityPercentile) < 10 ? C.amber : C.green)}${stat('partition certainty', `${fmt(confidence.partitionScoreGapPercentile, 1)}th`, C.amber)}</div>${outcomePredictionStrip(focus)}${retentionForecastPanel(outcomes.retentionForecast, false)}
             ${card(`<div style="font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:4px">Exact complete-hook embedding input</div><div style="font-size:14px;color:${C.text};font-weight:900;line-height:1.45">${esc((result.input || {}).fullHookEmbeddingInput || '')}</div><div style="font-size:8px;color:${C.dim};margin-top:6px">${esc((result.input || {}).embeddingModel || '')} · ${(result.input || {}).embeddingDimensions || 0}D · ${(result.input || {}).spanEmbeddingInputs || 0} exact span/context inputs · generative LLM: no</div>`, 'margin-bottom:10px;border-color:' + C.cyan + '55')}
             ${card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div><div style="font-size:11px;color:${C.text};font-weight:900">Four-player exact-cover decomposition</div><div style="font-size:8px;color:${C.mute};margin-top:2px">Every token has one owner; overlap ${Number((result.partition || {}).overlapCount || 0)}. Boundaries use no outcome and no supplied example labels.</div></div><div style="font-size:8px;color:${C.amber}">top-two gap ${fmt(confidence.partitionScoreGap, 5)} · ${fmt(confidence.partitionScoreGapPercentile, 1)}th training percentile</div></div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:9px">${components.map(component => `<span style="border-bottom:4px solid ${clusterColor(component.category)};background:${C.card2};padding:6px 7px;font-size:10px;color:${C.text}">${esc(component.text)}</span>`).join('')}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px">${components.map(component => { const response = component.forwardResponse || {}; return `<div style="border-left:3px solid ${clusterColor(component.category)};padding:5px 8px;background:${C.card2}"><div style="font-size:8px;color:${clusterColor(component.category)};font-weight:900">COMPONENT ${component.index + 1} · CLUSTER ${component.category}</div><div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.4;margin:3px 0">${esc(component.text)}</div><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin:5px 0"><span style="font-size:8px;color:${C.mute}">predicted +${fmt(forwardMetric.selectedLagSeconds, 1)}s response</span><b style="font-size:16px;color:${C.green}">${fmt(response.percentile, 1)}th</b></div><div style="font-size:8.5px;color:${C.dim};line-height:1.55">forward coordinate ${signed(response.axisCoordinate, 4)} · category held-out rho ${fmt(response.heldoutSpearmanForCategory, 3)}<br>broad retained-info Shapley <b style="color:${numeric(component.shapleyAxisContribution) >= 0 ? C.green : C.red}">${signed(component.shapleyAxisContribution, 4)}</b> · ${fmt(component.categoryContributionPercentile, 1)}th<br>bootstrap ${signed(component.bootstrapP10, 4)} to ${signed(component.bootstrapP90, 4)} · deletion ${signed(component.deletionEffect, 4)}</div></div>`; }).join('')}</div>`, 'margin-bottom:10px')}
-            <div class="pl-split" style="display:grid;grid-template-columns:minmax(280px,.8fr) minmax(0,1.2fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:5px">Forward-response relationship matrix</div>${forwardInteractionTable}<div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:7px">Each cell is the exact second-order interaction across all 16 subsets on the later component's validated +${fmt(forwardMetric.selectedLagSeconds, 1)}s response axis. Green is above the matching category-pair median; red is below.</div><div style="height:1px;background:${C.border};margin:9px 0"></div><div style="font-size:9px;color:${C.text};font-weight:900;margin-bottom:4px">Broad retained-information interaction</div>${interactionTable}`)}${card(`<div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:5px">All 15 non-empty subset inputs</div><div style="max-height:390px;overflow:auto">${(result.subsets || []).map(row => `<details style="border-top:1px solid ${C.border};padding:5px 0"><summary style="cursor:pointer;color:${C.dim};font-size:8.5px">mask ${row.mask.toString(2).padStart(4, '0')} · components ${(row.includedComponents || []).map(value => value + 1).join(', ')} · broad axis ${signed(row.axisCoordinate, 4)}</summary><div style="font-size:9px;color:${C.text};line-height:1.45;padding:5px 8px">${esc(row.embeddingInput)}</div></details>`).join('')}</div><div style="font-size:8px;color:${C.mute};margin-top:6px">Empty subset = declared zero-vector origin; it is never sent to Gemini.</div>`)}</div>
+            <div class="pl-split" style="display:grid;grid-template-columns:minmax(280px,.8fr) minmax(0,1.2fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:5px">Forward-response relationship matrix</div>${forwardInteractionTable}<div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:7px">Each cell is the exact second-order interaction across all 16 subsets on the later component's validated +${fmt(forwardMetric.selectedLagSeconds, 1)}s response axis. Green is above the matching category-pair median; red is below.</div><div style="height:1px;background:${C.border};margin:9px 0"></div><div style="font-size:9px;color:${C.text};font-weight:900;margin-bottom:4px">Broad retained-information interaction</div>${interactionTable}`)}${card(`<div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:5px">All 15 non-empty subset inputs</div><div style="max-height:390px;overflow:auto">${(result.subsets || []).map(row => `<details style="border-top:1px solid ${C.border};padding:5px 0"><summary style="cursor:pointer;color:${C.dim};font-size:8.5px">mask ${row.mask.toString(2).padStart(4, '0')} · components ${(row.includedComponents || []).map(value => value + 1).join(', ')} · broad axis ${signed(row.axisCoordinate, 4)}</summary><div style="font-size:9px;color:${C.text};line-height:1.45;padding:5px 8px">${esc(row.embeddingInput)}</div></details>`).join('')}</div><div style="font-size:8px;color:${C.mute};margin-top:6px">Empty subset = declared zero-vector origin; it is never sent to Gemini.</div>`)}</div>${componentScoreGallery(focus)}
             ${card(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:280px;flex:1"><div style="font-size:11px;color:${C.text};font-weight:900">Timing and scope decision</div><div style="font-size:9px;color:${C.dim};line-height:1.55;margin-top:4px">Dedicated component response lag: <b style="color:${forward.validatedAtComponentLevel ? C.green : C.red}">+${fmt(forwardMetric.selectedLagSeconds, 1)}s ${forward.validatedAtComponentLevel ? 'validated' : 'not validated'}</b>. The exact spoken interval is shifted forward by that amount; it is never shifted backward. The complete-hook number above remains the separately validated broad retained-information axis because the four-component average did not pass its own held-out test.</div></div><div style="font-size:8px;color:${C.mute};line-height:1.5">Boundary outcomes: none<br>Component outcome: unexpected normalized slope<br>Examples in training: no<br>Causal claim: no</div></div><div style="height:1px;background:${C.border};margin:9px 0"></div><div style="font-size:9px;color:${C.text};font-weight:900;margin-bottom:4px">Nearest training hooks</div>${(result.nearestTrainingHooks || []).map(row => `<div style="display:flex;justify-content:space-between;gap:8px;border-top:1px solid ${C.border};padding:5px 0;font-size:8.5px"><span style="color:${C.dim}">${esc(row.text)}</span><b style="color:${C.text}">${fmt(row.cosine, 3)}</b></div>`).join('')}`)}</div>`;
         }
 
         function renderHookScorer() {
-            const summary = state.data.hookQuality, examples = state.data.hookExamples;
+            const summary = state.data.hookQuality, examples = state.data.hookExamples, outcomes = state.data.hookOutcomes;
             if (!summary) return loading('hookQuality');
+            if (!outcomes) return loading('hookOutcomes');
             if (!examples) return loading('hookExamples');
             const model = summary.model || {}, result = state.hookScoreResult;
             return `${card(`<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"><label style="flex:1;min-width:280px"><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:4px">Complete hook text · 64-token maximum</span><textarea data-pl-hook-score-input maxlength="1200" rows="3" ${state.hookScoreLoading ? 'disabled' : ''} style="width:100%;box-sizing:border-box;resize:vertical;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:8px;font:10px/1.45 inherit;border-radius:6px;cursor:${state.hookScoreLoading ? 'wait' : 'text'}">${esc(state.hookScoreText)}</textarea></label><button data-pl-run-hook-score ${state.hookScoreLoading ? 'disabled' : ''} style="height:34px;border:1px solid ${C.cyan};background:${C.cyan}20;color:${C.cyan};padding:0 13px;border-radius:6px;font-size:10px;font-weight:900;cursor:${state.hookScoreLoading ? 'wait' : 'pointer'}">${state.hookScoreLoading ? 'Scoring…' : 'Score hook'}</button></div>${state.hookScoreError ? `<div data-pl-hook-score-error style="font-size:9px;color:${C.red};margin-top:7px">${esc(state.hookScoreError)}</div>` : ''}`, 'margin-bottom:10px')}
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${stat('training hooks', model.trainingHooks || 0, C.cyan)}${stat('held-out rho', fmt(model.heldoutSpearman, 3), C.green)}${stat('sign-flip p', fmt(model.signFlipP, 4), C.purple)}${stat('target variance', pct(Number(model.targetFactorExplainedVariance || 0) * 100), C.text)}${stat('fold cosine', fmt(model.foldDirectionMedianCosine, 3), C.amber)}${stat('generative LLM', 'NO', C.green)}</div>
             ${card(`<div style="font-size:9px;color:${C.dim};line-height:1.55"><b style="color:${C.amber}">Why this is not labeled virality:</b> observed log views alone has held-out rho ${fmt((((summary.falsificationAudits || {}).observedLogViewsOnly || {}).heldoutSpearman), 3)} and p ${fmt((((summary.falsificationAudits || {}).observedLogViewsOnly || {}).signFlipP), 3)}. In the joint unsupervised factor, the views loading is ${signed((((summary.falsificationAudits || {}).retentionPlusObservedLogViewsPca || {}).observedLogViewsLoading), 3)}, opposite the retention direction. That candidate was rejected; the validated score remains retained information.</div>`, 'margin-bottom:10px;border-color:' + C.amber + '55')}
-            <div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:3px">Frozen hook-quality plane</div><div style="font-size:8px;color:${C.mute};margin-bottom:5px">X = retained-information axis; right is higher. Y = largest orthogonal semantic direction. Color = held-out observed retention-factor residual. Cyan ring = current score.</div><canvas data-pl-canvas="hook-quality-axis" style="width:100%;height:410px;display:block"></canvas>`)}${card(hookQualityPointInspector(summary))}</div>
-            ${forwardResponsePanel(summary)}${hookExamplePanel(examples)}${state.hookScoreLoading ? card(`<div data-pl-hook-score-progress style="font-size:10px;color:${C.cyan}">${esc(state.hookScoreStatus || 'Scoring hook')}</div>`, 'margin-bottom:10px') : hookScoreResultPanel(result)}`;
+            ${hookOutcomeAxisGallery(activeHookOutcomeFocus())}${forwardResponsePanel(summary)}${hookExamplePanel(examples)}${state.hookScoreLoading ? card(`<div data-pl-hook-score-progress style="font-size:10px;color:${C.cyan}">${esc(state.hookScoreStatus || 'Scoring hook')}</div>`, 'margin-bottom:10px') : hookScoreResultPanel(result)}`;
         }
 
         function renderSavedProjection() {
@@ -1057,7 +1232,7 @@
 
         function body() {
             return {
-                overview: renderOverview, scorer: renderHookScorer, hooks: renderHooks, boundaries: renderBoundaries,
+                overview: renderOverview, scorer: renderHookScorer, library: renderHookLibrary, hooks: renderHooks, boundaries: renderBoundaries,
                 components: renderComponents, clusters: renderClusters, saved: renderSavedProjection, swaps: renderSwaps,
                 axes: renderAxes, registry: renderRegistry,
             }[state.view]();
@@ -1068,7 +1243,7 @@
         }
 
         function responsiveStyles() {
-            return `<style>@media(max-width:820px){#pl-root .pl-split,#pl-root .pl-metric-channels,#pl-root .pl-natural-stats{grid-template-columns:minmax(0,1fr)!important}#pl-root canvas{max-width:100%}#pl-root [data-pl-outcome-inspector]{height:auto!important;min-height:280px}}</style>`;
+            return `<style>@media(max-width:1180px){#pl-root .pl-component-map-grid,#pl-root .pl-component-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}#pl-root .pl-library-row{grid-template-columns:minmax(250px,1.4fr) repeat(2,minmax(100px,.6fr))!important}}@media(max-width:820px){#pl-root .pl-split,#pl-root .pl-metric-channels,#pl-root .pl-natural-stats,#pl-root .pl-outcome-strip,#pl-root .pl-component-map-grid,#pl-root .pl-component-summary-grid,#pl-root .pl-library-row{grid-template-columns:minmax(0,1fr)!important}#pl-root canvas{max-width:100%}#pl-root [data-pl-outcome-inspector]{height:auto!important;min-height:280px}}</style>`;
         }
 
         function paint() {
@@ -1108,6 +1283,7 @@
                     .concat(selectedRows).sort((left, right) => left.index - right.index);
             }
             if (!visible.length) { canvasContext(canvas); return; }
+            canvas.dataset.plPlottedPoints = String(visible.length);
             const { context, width, height } = canvasContext(canvas);
             let xb = bounds(visible.map(row => row.point[0])), yb = bounds(visible.map(row => row.point[1]));
             if (equalScale) {
@@ -1139,16 +1315,30 @@
             });
             context.globalAlpha = 1;
             canvas.onclick = event => {
-                const interactiveKinds = new Set(['components', 'hook-map', 'cluster', 'manual-projection', 'cluster-outcome-axis', 'hook-quality-axis', 'forward-response-axis']);
+                const interactiveKinds = new Set(['components', 'hook-map', 'cluster', 'manual-projection', 'cluster-outcome-axis', 'hook-quality-axis', 'forward-response-axis', 'hook-outcome-axis', 'component-score-axis']);
                 const kind = canvas.dataset.plCanvas;
                 const atlas = kind === 'hook-map' ? state.data.atlas : activeAtlas();
                 if (!interactiveKinds.has(kind)
-                    || (!['manual-projection', 'cluster-outcome-axis', 'hook-quality-axis', 'forward-response-axis'].includes(kind) && !atlas)) return;
+                    || (!['manual-projection', 'cluster-outcome-axis', 'hook-quality-axis', 'forward-response-axis', 'hook-outcome-axis', 'component-score-axis'].includes(kind) && !atlas)) return;
                 const rect = canvas.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top;
                 let best = -1, distance = Infinity;
                 projected.forEach((point, index) => { const d = (point[0] - x) ** 2 + (point[1] - y) ** 2; if (d < distance) { distance = d; best = index; } });
                 if (best < 0 || distance >= 225) return;
                 const originalIndex = visible[best].index;
+                if (kind === 'hook-outcome-axis') {
+                    const videoId = (canvas._plOutcomeVideoIds || [])[originalIndex];
+                    if (!videoId) return;
+                    const scrollX = window.scrollX, scrollY = window.scrollY;
+                    state.outcomePointVideoId = String(videoId);
+                    paint(); window.scrollTo(scrollX, scrollY); return;
+                }
+                if (kind === 'component-score-axis') {
+                    const ref = (canvas._plComponentRefs || [])[originalIndex];
+                    if (!ref) return;
+                    const scrollX = window.scrollX, scrollY = window.scrollY;
+                    state.outcomeComponentPointKey = `${ref.videoId}:${ref.component}`;
+                    paint(); window.scrollTo(scrollX, scrollY); return;
+                }
                 if (kind === 'hook-quality-axis') {
                     const count = ((((state.data.hookQuality || {}).axis || {}).points || []).length);
                     if (originalIndex >= count) return;
@@ -1437,9 +1627,164 @@
             ], { negativeControl: true, selectedIndex: state.latencySelectedLagIndex, xFormat: latencyLagLabel, yFormat: value => `${signed(value, 1)} pp/s` });
         }
 
+        function activeRetentionForecast(canvas) {
+            if (canvas.dataset.plVideoId) {
+                const row = ((state.data.hookOutcomes || {}).hooks || []).find(value =>
+                    String(value.videoId) === String(canvas.dataset.plVideoId));
+                return row && row.retentionForecast;
+            }
+            const focus = activeHookOutcomeFocus();
+            if (!focus) return null;
+            return focus.type === 'live'
+                ? ((((focus.result || {}).outcomes || {}).retentionForecast) || null)
+                : ((focus.row || {}).retentionForecast || null);
+        }
+
+        function drawRetentionForecast(canvas, mini = false) {
+            const forecast = activeRetentionForecast(canvas);
+            if (!forecast) return;
+            const times = (forecast.timesSeconds || []).map(numeric);
+            const predicted = (forecast.predictedPercent || forecast.predictedOOFPercent || []).map(numeric);
+            const actual = (forecast.actualPercent || []).map(numeric);
+            const low = (forecast.predictionP10 || []).map(numeric), high = (forecast.predictionP90 || []).map(numeric);
+            if (!times.length || !predicted.length) return;
+            const { context, width, height } = canvasContext(canvas);
+            const left = mini ? 3 : 42, right = mini ? 3 : 12, top = mini ? 4 : 18, bottom = mini ? 4 : 25;
+            const values = [...predicted, ...actual, ...low, ...high].filter(Number.isFinite);
+            let [minY, maxY] = bounds(values);
+            const padding = Math.max(2, (maxY - minY) * .08);
+            minY -= padding; maxY += padding;
+            const minX = Math.min(...times), maxX = Math.max(...times);
+            const x = value => left + (numeric(value) - minX) / ((maxX - minX) || 1) * (width - left - right);
+            const y = value => height - bottom - (numeric(value) - minY) / ((maxY - minY) || 1) * (height - top - bottom);
+            if (!mini) {
+                (forecast.componentWindows || []).forEach(windowRow => {
+                    const start = Math.max(minX, numeric(windowRow.responseWindowStartSeconds));
+                    const end = Math.min(maxX, numeric(windowRow.responseWindowEndSeconds));
+                    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return;
+                    context.globalAlpha = .08; context.fillStyle = clusterColor(windowRow.component);
+                    context.fillRect(x(start), top, Math.max(1, x(end) - x(start)), height - top - bottom);
+                });
+                context.globalAlpha = 1; context.strokeStyle = C.border2; context.lineWidth = 1;
+                for (let index = 0; index <= 4; index++) {
+                    const value = minY + index / 4 * (maxY - minY);
+                    context.beginPath(); context.moveTo(left, y(value)); context.lineTo(width - right, y(value)); context.stroke();
+                    context.fillStyle = C.mute; context.font = '8px sans-serif'; context.fillText(`${fmt(value, 0)}%`, 2, y(value) + 3);
+                }
+                for (let second = 0; second <= 20; second += 5) context.fillText(`${second}s`, x(second) - 7, height - 7);
+            }
+            const band = times.map((time, index) => [x(time), y(high[index]), y(low[index])])
+                .filter(point => point.every(Number.isFinite));
+            if (!mini && band.length) {
+                context.fillStyle = C.cyan + '1f'; context.beginPath();
+                band.forEach((point, index) => index ? context.lineTo(point[0], point[1]) : context.moveTo(point[0], point[1]));
+                [...band].reverse().forEach(point => context.lineTo(point[0], point[2]));
+                context.closePath(); context.fill();
+            }
+            const line = (valuesRow, color, lineWidth) => {
+                context.strokeStyle = color; context.lineWidth = lineWidth; context.beginPath(); let drawing = false;
+                times.forEach((time, index) => {
+                    const value = valuesRow[index];
+                    if (!Number.isFinite(value)) { drawing = false; return; }
+                    if (drawing) context.lineTo(x(time), y(value)); else context.moveTo(x(time), y(value));
+                    drawing = true;
+                });
+                context.stroke();
+            };
+            line(predicted, C.cyan, mini ? 1.5 : 2.4);
+            if (actual.length) line(actual, C.green, mini ? 1.2 : 2);
+            if (!mini) {
+                (forecast.words || []).forEach(word => {
+                    const value = numeric(word.predictedRetentionPercent), time = numeric(word.responseSeconds);
+                    if (!Number.isFinite(value) || !Number.isFinite(time) || time < minX || time > maxX) return;
+                    context.fillStyle = clusterColor(word.component); context.beginPath(); context.arc(x(time), y(value), 2.5, 0, Math.PI * 2); context.fill();
+                });
+                context.fillStyle = C.cyan; context.font = '8px sans-serif'; context.fillText('predicted', left, 10);
+                if (actual.length) { context.fillStyle = C.green; context.fillText('actual', left + 62, 10); }
+            }
+        }
+
+        function continuousColors(values) {
+            const range = bounds(values.map(numeric));
+            return values.map(value => {
+                value = numeric(value);
+                if (!Number.isFinite(value)) return C.faint;
+                const t = Math.max(0, Math.min(1, (value - range[0]) / ((range[1] - range[0]) || 1)));
+                return `rgb(${Math.round(56 + 192 * t)},${Math.round(189 - 76 * t)},${Math.round(248 - 135 * t)})`;
+            });
+        }
+
+        function drawHookOutcomeAxis(canvas) {
+            const target = canvas.dataset.plOutcomeTarget;
+            const rows = ((state.data.hookOutcomes || {}).hooks || []);
+            if (!rows.length) return;
+            const points = rows.map(row => target === 'quality'
+                ? [numeric((row.overallScore || {}).mapX), numeric((row.overallScore || {}).mapY)]
+                : [numeric(((row.outcomes || {})[target] || {}).mapX), numeric(((row.outcomes || {})[target] || {}).mapY)]);
+            const observed = rows.map(row => target === 'quality'
+                ? numeric((row.overallScore || {}).observedResidual)
+                : numeric(((row.outcomes || {})[target] || {}).actual));
+            const colors = continuousColors(observed), selected = new Set();
+            canvas.dataset.plSourcePoints = String(rows.length);
+            canvas.dataset.plFinitePoints = String(points.filter(point => point.every(Number.isFinite)).length);
+            const focus = activeHookOutcomeFocus();
+            if (focus && focus.type === 'stored') {
+                const index = rows.findIndex(row => String(row.videoId) === String(focus.row.videoId));
+                if (index >= 0) selected.add(index);
+            } else if (focus && focus.type === 'live') {
+                const value = hookOutcomePayload(focus, target) || {};
+                const point = [numeric(value.mapX), numeric(value.mapY)];
+                if (point.every(Number.isFinite)) { selected.add(points.length); points.push(point); colors.push(C.cyan); }
+            }
+            canvas._plOutcomeVideoIds = rows.map(row => row.videoId);
+            return scatter(canvas, points, colors, selected);
+        }
+
+        function drawComponentScoreAxis(canvas) {
+            const category = Number(canvas.dataset.plComponentCategory), axis = canvas.dataset.plComponentAxis;
+            const sourceRows = ((state.data.hookOutcomes || {}).hooks || []), rows = [];
+            sourceRows.forEach(source => (source.components || []).forEach(component => {
+                if (Number(component.category) === category) rows.push({ source, component });
+            }));
+            if (!rows.length) return;
+            const pointFor = component => {
+                if (axis === 'broad') { const broad = component.broadRetainedInformation || {}; return [numeric(broad.shapley), numeric(broad.singletonAxisCoordinate)]; }
+                if (axis === 'forward') { const row = component.forwardResponse || {}; return [numeric(row.axisCoordinate), numeric(row.mapY)]; }
+                const row = (component.outcomes || {})[axis] || {}; return [numeric(row.mapX), numeric(row.mapY)];
+            };
+            const observedFor = row => axis === 'broad'
+                ? numeric((row.source.overallScore || {}).observedResidual)
+                : axis === 'forward'
+                    ? numeric((row.component.forwardResponse || {}).unexpectedObservedSlope)
+                    : numeric(((row.component.outcomes || {})[axis] || {}).actual);
+            const points = rows.map(row => pointFor(row.component));
+            canvas.dataset.plSourcePoints = String(rows.length);
+            canvas.dataset.plFinitePoints = String(points.filter(point => point.every(Number.isFinite)).length);
+            const colors = continuousColors(rows.map(observedFor)), selected = new Set();
+            const focus = activeHookOutcomeFocus(), componentIndex = Number(canvas.dataset.plComponentIndex);
+            if (focus && focus.type === 'stored') {
+                const index = rows.findIndex(row => String(row.source.videoId) === String(focus.row.videoId)
+                    && Number(row.component.component) === componentIndex);
+                if (index >= 0) selected.add(index);
+            } else if (focus && focus.type === 'live') {
+                const component = ((focus.result || {}).components || [])[componentIndex] || {};
+                let point;
+                if (axis === 'broad') point = [numeric(component.shapleyAxisContribution), numeric(component.singletonAxisCoordinate)];
+                else if (axis === 'forward') point = [numeric((component.forwardResponse || {}).axisCoordinate), numeric((component.forwardResponse || {}).mapY)];
+                else { const value = (component.outcomePredictions || {})[axis] || {}; point = [numeric(value.mapX), numeric(value.mapY)]; }
+                if (point && point.every(Number.isFinite)) { selected.add(points.length); points.push(point); colors.push(C.cyan); }
+            }
+            canvas._plComponentRefs = rows.map(row => ({ videoId: row.source.videoId, component: row.component.component }));
+            return scatter(canvas, points, colors, selected);
+        }
+
         function drawCanvases() {
             document.querySelectorAll('#pl-root canvas[data-pl-canvas]').forEach(canvas => {
                 const kind = canvas.dataset.plCanvas;
+                if (kind === 'hook-outcome-axis') return drawHookOutcomeAxis(canvas);
+                if (kind === 'component-score-axis') return drawComponentScoreAxis(canvas);
+                if (kind === 'retention-forecast') return drawRetentionForecast(canvas, false);
+                if (kind === 'library-retention-mini') return drawRetentionForecast(canvas, true);
                 if (kind === 'hook-quality-axis') {
                     const summary = state.data.hookQuality || {};
                     const rows = ((summary.axis || {}).points || []);
@@ -1611,6 +1956,16 @@
             const view = target.closest('[data-pl-view]'); if (view) { state.view = view.dataset.plView; ensureView(); paint(); return true; }
             if (target.closest('[data-pl-refresh]')) { Object.keys(state.data).forEach(key => delete state.data[key]); state.hook = null; state.source = null; state.focusedCluster = null; state.clusterOutcomeTarget = null; state.clusterOutcomeDetail = null; state.clusterOutcomePointIndex = null; state.latencyDetail = null; state.latencyPointGlobalIndex = null; state.hookQualityPointIndex = null; state.forwardResponseComponentIndex = null; ensureView(); return true; }
             if (target.closest('[data-pl-run-hook-score]')) { scoreHookText(); return true; }
+            const libraryMetric = target.closest('[data-pl-library-metric]');
+            if (libraryMetric) { state.hookLibraryMetric = libraryMetric.dataset.plLibraryMetric; paint(); return true; }
+            if (target.closest('[data-pl-library-apply]')) { paint(); return true; }
+            if (target.closest('[data-pl-library-close]')) { state.hookLibrarySelectedId = null; paint(); return true; }
+            const libraryHook = target.closest('[data-pl-library-hook]');
+            if (libraryHook) {
+                const scrollX = window.scrollX, scrollY = window.scrollY;
+                state.hookLibrarySelectedId = libraryHook.dataset.plLibraryHook;
+                paint(); window.scrollTo(scrollX, scrollY); return true;
+            }
             const example = target.closest('[data-pl-hook-example]');
             if (example) {
                 if (state.hookScoreLoading) return true;
@@ -1651,6 +2006,7 @@
 
         function handleInput(event) {
             if (event.target.matches('[data-pl-hook-score-input]')) { state.hookScoreText = event.target.value; return true; }
+            if (event.target.matches('[data-pl-query="library"]')) { state.hookLibraryQuery = event.target.value; return true; }
             if (event.target.matches('[data-pl-query="hook"]')) { state.hookQuery = event.target.value; return true; }
             if (event.target.matches('[data-pl-query="registry"]')) { state.registryQuery = event.target.value; return true; }
             return false;

@@ -49,6 +49,23 @@ def main() -> None:
         assert all(0 <= float(value["percentile"]) <= 100
                    for value in forward["relationships"])
         assert forward["exploratoryWholeHookComposite"]["accepted"] is False
+        outcomes = score["outcomes"]
+        assert outcomes["status"] == "complete"
+        assert set(outcomes["hook"]) == {
+            "viewed_percent", "retention_5s", "average_retention", "log_views",
+        }
+        assert all(value["validation"]["status"] == "validated"
+                   for value in outcomes["hook"].values())
+        assert len(outcomes["components"]) == 4
+        assert all(len(component["outcomePredictions"]) == 4
+                   for component in score["components"])
+        forecast = outcomes["retentionForecast"]
+        assert forecast["status"] == "validated-rough-forecast"
+        assert len(forecast["timesSeconds"]) == 41
+        assert len(forecast["predictedPercent"]) == 41
+        assert forecast["responseLagSeconds"] == 1.0
+        assert len(forecast["componentWindows"]) == 4
+        assert forecast["words"]
     winner_fraction = result["machineVariantResult"]["bootstrapWinnerFractions"]["unexpected-use"]
     assert 0 <= float(winner_fraction) <= 1
     print(json.dumps({

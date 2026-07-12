@@ -42,6 +42,7 @@ def main() -> None:
         "latency-study": read("latency-study.json", None),
         "canonical-partitions": read("canonical-partitions.json", None),
         "hook-quality": read("hook-quality.json", None),
+        "hook-outcomes": read("hook-outcomes.json", None),
         "hook-example-results": read("hook-example-results.json", None),
         "cross-scope": read("cross-scope.json", {}),
         "swaps": read("swaps.json", None),

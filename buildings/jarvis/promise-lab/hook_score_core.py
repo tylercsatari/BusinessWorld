@@ -27,6 +27,100 @@ def combined_component_features(raw: np.ndarray, influence: np.ndarray) -> np.nd
     return np.concatenate([raw, influence], axis=1).astype(np.float32) / np.sqrt(2.0)
 
 
+def apply_linear_model(features: np.ndarray, model: dict) -> np.ndarray:
+    """Apply an offline-fitted compact linear model without sklearn at serving time."""
+    features = row_unit(np.asarray(features, np.float32))
+    if features.ndim == 1:
+        features = features[None, :]
+    coefficient = np.asarray(model["coefficient"], np.float32)
+    if coefficient.ndim == 1:
+        coefficient = coefficient[:, None]
+    intercept = np.asarray(model["intercept"], np.float32).reshape(-1)
+    return features @ coefficient + intercept
+
+
+def outcome_prediction_payload(feature: np.ndarray, model: dict) -> dict:
+    feature = row_unit(np.asarray(feature, np.float32)).reshape(1, -1)
+    prediction = float(apply_linear_model(feature, model)[0, 0])
+    samples = np.asarray(model.get("trainingPredictionSorted") or [], float)
+    return {
+        "prediction": prediction,
+        "percentile": percentile(samples, prediction) if len(samples) else None,
+        "mapX": prediction,
+        "mapY": float(feature[0] @ np.asarray(model["mapDirection"], np.float32)),
+    }
+
+
+def interpolate_series(times: np.ndarray, values: np.ndarray, second: float) -> float:
+    times = np.asarray(times, float)
+    values = np.asarray(values, float)
+    valid = np.isfinite(times) & np.isfinite(values)
+    if not valid.any():
+        return float("nan")
+    return float(np.interp(float(second), times[valid], values[valid]))
+
+
+def estimated_token_timeline(tokens: list[dict], owners: np.ndarray | list[int],
+                             times: np.ndarray, prediction: np.ndarray,
+                             words_per_second: float, response_lag: float,
+                             lower: np.ndarray | None = None,
+                             upper: np.ndarray | None = None) -> list[dict]:
+    """Time lexical tokens at a measured average speaking rate and sample the curve."""
+    owners = np.asarray(owners, int)
+    words_per_second = max(float(words_per_second), EPS)
+    lexical_position = 0
+    output = []
+    for index, token in enumerate(tokens):
+        text = str(token.get("text") or "")
+        if not any(character.isalnum() or character == "_" for character in text):
+            continue
+        spoken_start = lexical_position / words_per_second
+        lexical_position += 1
+        spoken_end = lexical_position / words_per_second
+        response_second = spoken_end + float(response_lag)
+        row = {
+            "tokenIndex": int(token.get("index", index)),
+            "text": text,
+            "component": int(owners[index]),
+            "spokenStartSeconds": spoken_start,
+            "spokenEndSeconds": spoken_end,
+            "responseSeconds": response_second,
+            "predictedRetentionPercent": interpolate_series(
+                times, prediction, response_second
+            ),
+        }
+        if lower is not None:
+            row["predictedRetentionP10"] = interpolate_series(
+                times, lower, response_second
+            )
+        if upper is not None:
+            row["predictedRetentionP90"] = interpolate_series(
+                times, upper, response_second
+            )
+        output.append(row)
+    return output
+
+
+def component_response_windows(words: list[dict], component_count: int,
+                               response_lag: float) -> list[dict]:
+    output = []
+    for component in range(int(component_count)):
+        selected = [row for row in words if int(row["component"]) == component]
+        if not selected:
+            output.append({"component": component})
+            continue
+        start = min(float(row["spokenStartSeconds"]) for row in selected)
+        end = max(float(row["spokenEndSeconds"]) for row in selected)
+        output.append({
+            "component": component,
+            "spokenStartSeconds": start,
+            "spokenEndSeconds": end,
+            "responseWindowStartSeconds": start + float(response_lag),
+            "responseWindowEndSeconds": end + float(response_lag),
+        })
+    return output
+
+
 def percentile(sorted_values: np.ndarray, value: float) -> float:
     sorted_values = np.sort(np.asarray(sorted_values, float))
     return float(100 * np.searchsorted(sorted_values, value, side="right") / max(1, len(sorted_values)))

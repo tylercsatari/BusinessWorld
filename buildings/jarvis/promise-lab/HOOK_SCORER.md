@@ -2,8 +2,10 @@
 
 This is the deployable Promise Lab path from raw hook text to one quantitative
 score, four non-overlapping component attributions, six pair interactions, and
-explicit uncertainty. It also reports a separately validated forward retention
-response for each component. It uses the same `gemini-embedding-2` 1536-dimensional
+explicit uncertainty. It also reports four held-out complete-hook outcomes, a
+rough 0-20 second retention forecast, predicted retention at each word-response
+time, and a separately validated forward retention response for each component.
+It uses the same `gemini-embedding-2` 1536-dimensional
 text space as Long Quant. It does not ask a generative LLM to interpret, split,
 rank, or rewrite the hook.
 
@@ -181,11 +183,43 @@ complete-hook retained-information axis remains the overall hook score; pair
 cells are exact interactions on the validated later-component axis and make no
 separate causal claim.
 
-## 7. Supplied example, held out from training
+## 7. Outcome axes and retention forecast
+
+The frozen four-part boundaries are reused without refitting. Four direct linear
+serving axes are trained from the complete 1536D hook embedding with grouped
+out-of-fold validation:
+
+- viewed-versus-swiped percentage: rho 0.2858, q 0.00033
+- five-second retention: rho 0.3462, q 0.00033
+- average retention: rho 0.2748, q 0.00049
+- log10 observed views: rho 0.2542, q 0.00033
+
+Each displayed training prediction is out of fold. Live inputs use the final
+frozen direction and retain empirical 10th-to-90th residual intervals. Views are
+modeled in log10 space and converted back to counts only for display.
+
+The same exact component plus deletion-influence feature is fitted separately
+inside each frozen category. Source-aggregated component predictions validate
+for five-second and average retention, but component-only viewed percentage and
+views do not. More importantly, none of the individual category outcome axes
+passes its own family-corrected gate. The UI therefore renders every component
+plane for inspection but marks those outcome maps **diagnostic**, never as a
+validated replacement hook score.
+
+A multi-output ridge model predicts absolute audience retention every 0.5
+seconds from 0 through 20 seconds. Source-held-out MAE is 5.381 percentage
+points versus 5.813 for the text-free mean-curve baseline, a 7.43% improvement;
+mean timewise rho is 0.3836 and the empirical 80% band covers 79.81%. Exact
+caption timings are used for 203 of 208 stored hooks. A live hook uses the
+source-equal mean speaking rate of 3.9175 lexical words/second, then shifts each
+word response forward by the measured +1.0-second lag. This is a rough
+observational forecast, not a causal audience simulator.
+
+## 8. Supplied example, held out from training
 
 The four supplied sentences are evaluation-only. Scoring them twice produces
 the identical JSON SHA-256
-`5aa5205e250b6122bfbeab417fb9709574d8e4149b68db7db1290673105ce20f`.
+`0b3f77a1750241534952fa3596245374cb9da933b9d446015b5c063b6812f89a`.
 
 | Hook | Percentile | Bootstrap P10-P90 |
 | --- | ---: | ---: |
@@ -209,7 +243,7 @@ high-confidence evidence that the ordering will generalize to every unseen
 topic. Adding more diverse hooks with retention outcomes is the honest path to
 tighter confidence.
 
-## 8. Reproduction and serving
+## 9. Reproduction and serving
 
 The orchestrated build sequence is:
 
@@ -223,6 +257,7 @@ The hard gates are:
 python buildings/jarvis/promise-lab/verify_canonical_partitions.py
 python buildings/jarvis/promise-lab/verify_hook_quality.py
 python buildings/jarvis/promise-lab/verify_forward_response.py
+python buildings/jarvis/promise-lab/verify_hook_outcomes.py
 python buildings/jarvis/promise-lab/verify_hook_examples.py
 ```
 
@@ -249,7 +284,10 @@ unbounded API and memory job.
 
 Large artifacts are loaded from `longform/promise-lab-v4/` in R2 and cached in
 `/tmp`; there is no resident GPU and no always-on model worker. The Promise Lab
-**Hook scorer** tab renders the quality map, stored example comparison, exact
-partition, four category-specific forward-response maps, every measured training
-interval, component contributions, pair interactions, subset inputs, domain
-evidence, latency decision, and nearest training hooks from these same artifacts.
+**Hook scorer** tab renders five complete-hook planes, all six score planes for
+each of four components, the rough retention curve and word-response points,
+stored example comparison, exact partition, component contributions, pair
+interactions, subset inputs, domain evidence, and latency decision. The **Hook
+library** renders all 208 source-held-out predictions beside actual viewed ratio,
+retention, views, and curves; expanding a row reuses the same maps and inspectors
+without recomputing or changing views.

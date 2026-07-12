@@ -39,9 +39,12 @@ Stages:
 13. `run_forward_response.py`: nested forward-only lag selection, text-free
    natural-drop adjustment, four category-specific component axes, all 832
    stored component measurements, and 1,248 exact pair interactions.
-14. `run_hook_examples.py`: deterministic evaluation of the supplied example
+14. `run_hook_outcomes.py`: grouped out-of-fold whole-hook and category-specific
+   component predictions for viewed percentage, five-second retention, average
+   retention, and log views, plus a 41-point retention-curve forecast.
+15. `run_hook_examples.py`: deterministic evaluation of the supplied example
    problem, kept entirely out of training and model selection.
-15. `build_ui.py`: browser artifacts, cluster representatives, findings, the
+16. `build_ui.py`: browser artifacts, cluster representatives, findings, the
    complete experiment registry, and the interactive Hook scorer.
 
 The complete deployable scoring architecture, formulas, validation evidence,
@@ -53,7 +56,10 @@ projection also has `verify_manual_projection.py`, which checks the frozen-label
 hash, all coordinate shapes and finiteness, basis orthonormality, and the declared
 winner. `verify_forward_response.py` checks the selected forward lag, grouped
 inference, reverse-time controls, exact timing windows, every component and pair,
-and the rejected aggregate audits. Together these gates check
+and the rejected aggregate audits. `verify_hook_outcomes.py` checks all 208
+source-held-out predictions, 832 components, 1,248 relationships, curve shape,
+timing coverage, uncertainty arrays, and improvement over the text-free curve
+baseline. Together these gates check
 exact character slices, complete lattice/subset identity, vector finiteness and
 normalization, crossed-design completeness, per-source artifacts, zero-error
 self-span controls, one predeclared-confound selection per target, and exact

@@ -16,10 +16,14 @@ import numpy as np
 
 from embedding_store import EmbeddingStore, R2Store, json_ready
 from hook_score_core import (
+    apply_linear_model,
     apply_category_transform,
     category_log_probabilities,
     combined_component_features,
+    component_response_windows,
     decode_compositional_four_chunks,
+    estimated_token_timeline,
+    outcome_prediction_payload,
     pair_interactions,
     percentile,
     projection_scores,
@@ -35,7 +39,8 @@ CACHE = HERE / ".cache"
 REMOTE_PREFIX = "longform/promise-lab-v4"
 MODEL_FILE = "hook-quality-model.json"
 PARTITION_FILE = "canonical-partition-model.json"
-SCORER_VERSION = "deterministic-hook-scorer-v2-forward-response"
+OUTCOME_MODEL_FILE = "hook-outcome-model.json"
+SCORER_VERSION = "deterministic-hook-scorer-v3-outcome-atlas"
 MAX_HOOK_TOKENS = 64
 
 
@@ -294,10 +299,112 @@ def _score_forward_response(primitives: dict, partition: dict,
     }
 
 
+def _prediction_interval(payload: dict, model: dict) -> dict:
+    validation = model.get("validation") or {}
+    prediction = float(payload["prediction"])
+    payload.update({
+        "predictionP10": prediction + float(validation.get("residualP10") or 0),
+        "predictionP90": prediction + float(validation.get("residualP90") or 0),
+        "validation": validation,
+    })
+    return payload
+
+
+def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
+                    outcome_model: dict) -> dict:
+    targets = outcome_model.get("targets") or {}
+    hook_models = outcome_model.get("hookModels") or {}
+    component_models = outcome_model.get("componentModels") or {}
+    hook_predictions = {}
+    for target_name, target_meta in targets.items():
+        model = hook_models[target_name]
+        hook_predictions[target_name] = {
+            **_prediction_interval(
+                outcome_prediction_payload(primitives["full"], model), model,
+            ),
+            "target": target_name,
+            "targetMeta": target_meta,
+        }
+
+    starts = np.asarray(primitives["starts"], int)
+    ends = np.asarray(primitives["ends"], int)
+    component_predictions = []
+    for chunk, component in zip(partition["chunks"], components):
+        matches = np.flatnonzero(
+            (starts == int(chunk["start"])) & (ends == int(chunk["end"]))
+        )
+        if len(matches) != 1:
+            raise RuntimeError("decoded component is missing from the outcome tensor")
+        span_index = int(matches[0])
+        feature = combined_component_features(
+            primitives["raw"][span_index:span_index + 1],
+            primitives["influence"][span_index:span_index + 1],
+        )[0]
+        category = str(int(chunk["category"]))
+        outcomes = {}
+        for target_name, target_meta in targets.items():
+            target_model = component_models[target_name]
+            model = target_model["modelsByCategory"][category]
+            outcomes[target_name] = {
+                **_prediction_interval(
+                    outcome_prediction_payload(feature, model), model,
+                ),
+                "target": target_name,
+                "targetMeta": target_meta,
+                "category": int(category),
+                "sourceAggregateValidation": target_model.get(
+                    "sourceAggregateValidation"
+                ),
+            }
+        component["outcomePredictions"] = outcomes
+        component_predictions.append({
+            "index": int(component["index"]),
+            "category": int(category),
+            "text": component["text"],
+            "outcomes": outcomes,
+        })
+
+    curve_model = outcome_model["curveModel"]
+    times = np.asarray(curve_model["timesSeconds"], np.float32)
+    predicted = apply_linear_model(primitives["full"], curve_model)[0]
+    lower = predicted + np.asarray(curve_model["residualP10ByTime"], np.float32)
+    upper = predicted + np.asarray(curve_model["residualP90ByTime"], np.float32)
+    rate = outcome_model.get("speakingRate") or {}
+    response_lag = float(outcome_model.get("responseLagSeconds") or 0)
+    words = estimated_token_timeline(
+        partition["tokens"], partition["owners"], times, predicted,
+        float(rate.get("meanWordsPerSecond") or 1), response_lag, lower, upper,
+    )
+    return {
+        "status": "complete",
+        "methodVersion": outcome_model.get("methodVersion"),
+        "targets": targets,
+        "hook": hook_predictions,
+        "components": component_predictions,
+        "retentionForecast": {
+            "status": (curve_model.get("validation") or {}).get("status"),
+            "timesSeconds": times.astype(float).tolist(),
+            "predictedPercent": predicted.astype(float).tolist(),
+            "predictionP10": lower.astype(float).tolist(),
+            "predictionP90": upper.astype(float).tolist(),
+            "validation": curve_model.get("validation"),
+            "speakingRate": rate,
+            "responseLagSeconds": response_lag,
+            "wordTimingPolicy": "library-average speaking rate",
+            "words": words,
+            "componentWindows": component_response_windows(
+                words, len(components), response_lag,
+            ),
+        },
+    }
+
+
 def score_text(text: str, model: dict | None = None, partition_model: dict | None = None,
-               store: EmbeddingStore | None = None) -> dict:
+               store: EmbeddingStore | None = None,
+               outcome_model: dict | None = None) -> dict:
     model = model or load_artifact(MODEL_FILE)
     partition_model = partition_model or load_artifact(PARTITION_FILE)
+    outcome_model = outcome_model or load_artifact(OUTCOME_MODEL_FILE)
     owned_store = store is None
     store = store or EmbeddingStore(_embedding_cache_path())
     try:
@@ -381,6 +488,9 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
     forward_response = _score_forward_response(
         primitives, partition, vectors, components, interactions, model,
     )
+    outcomes = _score_outcomes(
+        primitives, partition, components, outcome_model,
+    )
 
     validation = model["validation"]
     stable_payload = f"{SCORER_VERSION}\0{model['methodVersion']}\0{primitives['text']}"
@@ -448,6 +558,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             ),
         },
         "forwardResponse": forward_response,
+        "outcomes": outcomes,
         "provenance": {
             "outcomeUsedForBoundaries": False,
             "outcomeUsedForQualityAxis": True,
@@ -455,6 +566,8 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             "componentAttribution": model["componentDefinition"],
             "forwardResponseOutcomeUsedForTiming": bool(forward_response),
             "forwardResponseBoundariesChanged": False,
+            "outcomeModelsUseFrozenBoundaries": True,
+            "outcomePredictionsAreHeldoutValidated": True,
         },
     }
 
@@ -473,7 +586,8 @@ def main() -> None:
     try:
         model = load_artifact(MODEL_FILE, args.refresh_model)
         partition = load_artifact(PARTITION_FILE, args.refresh_model)
-        result = score_text(text, model, partition)
+        outcomes = load_artifact(OUTCOME_MODEL_FILE, args.refresh_model)
+        result = score_text(text, model, partition, outcome_model=outcomes)
         print(json.dumps(json_ready(result), indent=2 if args.pretty else None,
                          separators=None if args.pretty else (",", ":"), allow_nan=False))
     except Exception as exc:

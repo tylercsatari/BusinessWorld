@@ -139,6 +139,7 @@ def main() -> None:
     canonical_partitions = load_json("canonical-partitions.json", {})
     hook_quality = load_json("hook-quality.json", {})
     forward_response = hook_quality.get("forwardResponse") or load_json("forward-response.json", {})
+    hook_outcomes = load_json("hook-outcomes.json", {})
     hook_examples = load_json("hook-example-results.json", {})
     boundary_registry = load_jsonl_gz("boundary-experiments.jsonl.gz")
     cluster_registry = load_jsonl_gz("cluster-experiments.jsonl.gz")
@@ -193,6 +194,46 @@ def main() -> None:
             "status": "validated" if forward_response.get("validated") else "not-validated",
             "outcomesUsed": True,
         })
+    if hook_outcomes.get("status") == "complete":
+        for target, target_meta in (hook_outcomes.get("targets") or {}).items():
+            hook_model = (hook_outcomes.get("hookModels") or {}).get(target) or {}
+            hook_validation = hook_model.get("validation") or {}
+            registry.append({
+                "id": f"hook-outcome-{target}",
+                "stage": "whole-hook-outcome-axis",
+                "method": "grouped out-of-fold direct text outcome axis",
+                "representation": "complete-hook Gemini text embedding",
+                "pcaDimensions": hook_model.get("pcaDimensions"),
+                "ridgeAlpha": hook_model.get("ridgeAlpha"),
+                "n": hook_validation.get("rows"),
+                "target": target,
+                "targetDefinition": target_meta.get("definition"),
+                "heldoutSpearman": hook_validation.get("heldoutSpearman"),
+                "heldoutPearson": hook_validation.get("heldoutPearson"),
+                "searchWideP": (hook_validation.get("rankInference") or {}).get("p"),
+                "searchWideQ": hook_validation.get("familyQ"),
+                "status": hook_validation.get("status"),
+                "outcomesUsed": True,
+            })
+            component_model = (hook_outcomes.get("componentModels") or {}).get(target) or {}
+            component_validation = component_model.get("sourceAggregateValidation") or {}
+            registry.append({
+                "id": f"component-outcome-{target}",
+                "stage": "component-outcome-axis",
+                "method": "category-specific grouped out-of-fold component outcome axis",
+                "representation": "exact component plus deletion-influence embedding",
+                "pcaDimensions": component_model.get("pcaDimensions"),
+                "ridgeAlpha": component_model.get("ridgeAlpha"),
+                "n": component_validation.get("rows"),
+                "target": target,
+                "targetDefinition": target_meta.get("definition"),
+                "heldoutSpearman": component_validation.get("heldoutSpearman"),
+                "heldoutPearson": component_validation.get("heldoutPearson"),
+                "searchWideP": (component_validation.get("rankInference") or {}).get("p"),
+                "searchWideQ": component_validation.get("familyQ"),
+                "status": component_validation.get("status"),
+                "outcomesUsed": True,
+            })
 
     selected = [row.get("selectedSegmentation") or {} for row in discovery.get("rows") or []]
     selected_counts = Counter(int(row.get("segmentCount") or 0) for row in selected)
@@ -251,6 +292,7 @@ def main() -> None:
             "complete" if axes.get("status") == "complete"
             and hook_quality.get("status") == "complete"
             and forward_response.get("status") == "complete"
+            and hook_outcomes.get("status") == "complete"
             and hook_examples.get("status") == "complete" else "building"
         ),
         "boundary": {
@@ -399,6 +441,26 @@ def main() -> None:
                 "decompose that same coordinate; they are not separate fitted outcomes."
             ),
         },
+        "hookOutcomes": {
+            "status": hook_outcomes.get("status"),
+            "methodVersion": hook_outcomes.get("methodVersion"),
+            "audit": hook_outcomes.get("audit"),
+            "hookValidation": {
+                target: (model.get("validation") or {})
+                for target, model in (hook_outcomes.get("hookModels") or {}).items()
+            },
+            "componentValidation": {
+                target: (model.get("sourceAggregateValidation") or {})
+                for target, model in (hook_outcomes.get("componentModels") or {}).items()
+            },
+            "curveValidation": ((hook_outcomes.get("curveModel") or {}).get("validation")),
+            "speakingRate": ((hook_outcomes.get("curveModel") or {}).get("speakingRate")),
+            "interpretation": (
+                "Complete-hook predictions and every stored map coordinate are fitted with grouped "
+                "out-of-fold validation. Component outcome maps are reported separately and remain "
+                "diagnostic whenever their own source-held-out family test does not validate."
+            ),
+        },
     }
     (CACHE / "findings.json").write_text(json.dumps(json_ready(findings), separators=(",", ":"),
                                                     allow_nan=False),
@@ -454,6 +516,10 @@ def main() -> None:
                 (hook_examples.get("modelValidation") or {}).get("bootstrapRepeats", 0)
             ),
             "hookEvaluationExamples": len(hook_examples.get("examples") or []),
+            "hookOutcomeHooks": (hook_outcomes.get("audit") or {}).get("hooks", 0),
+            "hookOutcomeComponents": (hook_outcomes.get("audit") or {}).get("components", 0),
+            "hookOutcomeRelationships": (hook_outcomes.get("audit") or {}).get("relationships", 0),
+            "hookOutcomeCurvePoints": (hook_outcomes.get("audit") or {}).get("curvePointsPerHook", 0),
             "manualProbeMapsCompared": (
                 (manual_probe.get("counts") or {}).get("frozenMapsCompared", 0)
             ),
@@ -493,6 +559,10 @@ def main() -> None:
                 "only forward lags can be selected; reverse-time windows are controls, exact-cover "
                 "boundaries stay frozen, and failed whole-hook or standalone-pair audits remain rejected"
             ),
+            "hookOutcomesSeparated": (
+                "whole-hook and category-specific component outcome axes use frozen boundaries, "
+                "source-grouped out-of-fold validation, explicit uncertainty, and separate statuses"
+            ),
         },
         "artifacts": {
             "findings": "/api/longquant/promise-lab/findings",
@@ -508,6 +578,7 @@ def main() -> None:
             "hookQuality": "/api/longquant/promise-lab/hook-quality",
             "forwardResponse": "/api/longquant/promise-lab/forward-response",
             "hookExamples": "/api/longquant/promise-lab/hook-example-results",
+            "hookOutcomes": "/api/longquant/promise-lab/hook-outcomes",
             "hookScore": "/api/longquant/promise-lab/hook-score",
             "crossScope": "/api/longquant/promise-lab/cross-scope",
             "swaps": "/api/longquant/promise-lab/swaps",
@@ -538,6 +609,7 @@ def main() -> None:
         ("hook-quality.json", "hook-quality.json.gz"),
         ("forward-response.json", "forward-response.json.gz"),
         ("hook-example-results.json", "hook-example-results.json.gz"),
+        ("hook-outcomes.json", "hook-outcomes.json.gz"),
         ("cross-scope.json", "cross-scope.json.gz"),
         ("swaps.json", "swaps/summary.json.gz"),
         ("axes.json", "axes.json.gz"),
@@ -547,7 +619,7 @@ def main() -> None:
             r2.put_json(f"{R2_PREFIX}/{remote_name}", value, gzip_payload=True)
     for local_name in (
         "canonical-partition-model.json", "hook-quality-model.json",
-        "forward-response-model.json",
+        "forward-response-model.json", "hook-outcome-model.json",
     ):
         value = load_json(local_name)
         if value is not None:

@@ -3808,13 +3808,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         'canonical-partitions': 'canonical-partitions.json.gz',
         'hook-quality': 'hook-quality.json.gz',
         'forward-response': 'forward-response.json.gz',
+        'hook-outcomes': 'hook-outcomes.json.gz',
         'hook-example-results': 'hook-example-results.json.gz',
         'cross-scope': 'cross-scope.json.gz',
         swaps: 'swaps/summary.json.gz',
         axes: 'axes.json.gz',
         registry: 'registry.json.gz',
     };
-    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|manual-probe|manual-projection|cluster-outcomes|latency-study|canonical-partitions|hook-quality|forward-response|hook-example-results|cross-scope|swaps|axes|registry)$/);
+    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|manual-probe|manual-projection|cluster-outcomes|latency-study|canonical-partitions|hook-quality|forward-response|hook-outcomes|hook-example-results|cross-scope|swaps|axes|registry)$/);
     if (promiseArtifact && req.method === 'GET') {
         const ok = await serveR2GzipJsonStream(res,
             `longform/promise-lab-v4/${promiseArtifacts[promiseArtifact[1]]}`);

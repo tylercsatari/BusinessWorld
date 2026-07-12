@@ -71,10 +71,11 @@ def main() -> None:
     args = parser.parse_args()
     model = load_artifact(MODEL_FILE)
     partition = load_artifact(PARTITION_FILE)
+    outcome_model = load_artifact("hook-outcome-model.json")
     store = EmbeddingStore(_embedding_cache_path())
     try:
-        first = [score_text(row["text"], model, partition, store) for row in EXAMPLES]
-        second = [score_text(row["text"], model, partition, store) for row in EXAMPLES]
+        first = [score_text(row["text"], model, partition, store, outcome_model) for row in EXAMPLES]
+        second = [score_text(row["text"], model, partition, store, outcome_model) for row in EXAMPLES]
         full_vectors = store.embed_many([row["text"] for row in EXAMPLES])
     finally:
         store.close()
