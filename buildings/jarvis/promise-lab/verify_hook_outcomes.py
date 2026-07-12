@@ -43,10 +43,22 @@ def main() -> None:
     assert artifact["curveModel"]["rewatchAdjustedValidation"]["status"] == "validated-rough-forecast"
     assert artifact["rewatchAudit"]["scope"]["videosShorterThan20Seconds"] == 0
     assert artifact["rewatchAudit"]["entryInflationVsTerminal"]["spearman"] > .8
+    assert artifact["rewatchAudit"]["normalization"]["fittedDecayParameters"] == 0
+    geometry = artifact["rewatchAudit"]["geometryValidation"]
+    assert geometry["maximumStartErrorPercentagePoints"] < 1e-5
+    assert geometry["negativeCorrectionValues"] == 0
+    assert geometry["correctionInducedIncreaseIntervals"] == 0
+    assert geometry["maximumFullVideoEndpointCorrectionPercentagePoints"] < .1
     assert all(row["survivalScore"]["validationStatus"] == "validated"
+               for row in artifact["hooks"])
+    assert all(row["retentionForecast"]["normalizationAvailable"] is True
                for row in artifact["hooks"])
     assert all(abs(row["retentionForecast"]["rewatchAdjustedActualPercent"][0] - 100) < 1e-6
                for row in artifact["hooks"])
+    assert all(len(row["retentionForecast"]["replayCorrectionPercent"]) == 41
+               for row in artifact["hooks"])
+    assert all(len(row["retentionForecast"]["componentWindows"])
+               == int(row["componentCount"]) for row in artifact["hooks"])
     assert all(row["retentionForecast"]["responseEndSeconds"] < 20
                for row in artifact["hooks"])
     assert artifact["curveModel"]["speakingRate"]["exactTimedHooks"] >= 200

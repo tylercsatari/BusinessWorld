@@ -494,7 +494,8 @@ def main() -> None:
             "speakingRate": ((hook_outcomes.get("curveModel") or {}).get("speakingRate")),
             "interpretation": (
                 "The primary hook score is a nested held-out length-adjusted survival axis after an "
-                "empirical rewatch correction. Component response and direct outcome maps remain "
+                "additive terminal-conditioned replay correction. Component response and direct "
+                "outcome maps remain "
                 "separate; diagnostic maps are never promoted into the headline score."
             ),
         },

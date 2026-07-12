@@ -11,7 +11,7 @@ rank, or rewrite the hook.
 
 The primary score is deliberately named **Length-adjusted hook survival
 percentile**, not virality. It predicts whether a hook loses less
-rewatch-adjusted retention than the ordinary loss for the same response
+endpoint-normalized retention than the ordinary loss for the same response
 duration. The earlier retained-information direction remains visible as a
 separate complete-hook plane and as the broad component deletion channel.
 
@@ -112,18 +112,23 @@ retention score rather than a generic viral score.
 
 ## 4a. Primary length-adjusted survival score
 
-The primary score is fitted in a fully nested five-fold procedure. Inside each
-outer training fold, the observed 0-20 second curves are regressed on entry
-inflation (`retention(0) - 100`), terminal retention, and log video duration.
-The entry-inflation coefficient is constrained to a non-increasing 1-to-0
-kernel. For source `i` and second `t`:
+The primary score is fitted in a fully nested five-fold procedure. For each
+measured source, let `F` be the arithmetic mean of the final `max(3, 5%)`
+retention samples and let the entry excess be `E = max(R(0)-100, 0)`. The
+additive terminal-conditioned replay envelope is:
 
-`R_adjusted_i(t) = R_observed_i(t) - (R_observed_i(0) - 100) * kernel(t)`
+`C(t) = E * clip((R(t)-F) / (R(0)-F), 0, 1)`
 
-This makes every adjusted curve start at exactly 100. The kernel falls to zero
-near 15 seconds, so the adjusted curve converges back to the observed curve. It
-is an empirical de-inflation index, not an identified causal first-pass curve.
-The observed curve remains available in the UI.
+`R_normalized(t) = R_observed(t) - C(t)`
+
+This makes every corpus curve start at exactly 100 without fitting a shared
+time-decay shape. Because both outputs are affine in the same observed value
+between the entry and terminal anchors, the correction cannot create a
+direction reversal absent from the observed curve. It remains an empirical
+endpoint-conditioned index, not identified replay counts or a causal
+first-pass curve. A measured curve and measured terminal anchor are required;
+text alone cannot be normalized. The observed curve remains available in the
+UI.
 
 The rewatch hypothesis is supported observationally: terminal retention versus
 entry inflation has Spearman `0.85546` (`p < 1e-60`), and entry inflation versus
@@ -132,14 +137,14 @@ the 0-3 second slope has Spearman `-0.92168` (`p < 1e-85`).
 Let `T` be the exact spoken hook end plus the validated +1 second response lag.
 The geometric percent carried through each second is:
 
-`carry = 100 * exp(log(R_adjusted(T) / 100) / T)`
+`carry = 100 * exp(log(R_normalized(T) / 100) / T)`
 
 A text-free ridge baseline predicts ordinary carry using `T`, `T^2`, and
 `log(T)`. The semantic target is `carry - expected_carry`. Higher therefore
 means less loss than normal at the same duration. The complete-hook Gemini
-embedding predicts this target with nested held-out Spearman `0.35853`, Pearson
-`0.35568`, MAE improvement `8.00%`, sign-flip `p=0.000244`, median fold-direction
-cosine `0.80029`, and positive agreement for every fold pair.
+embedding predicts this target with nested held-out Spearman `0.30444`, Pearson
+`0.31112`, MAE improvement `5.30%`, sign-flip `p=0.000244`, median fold-direction
+cosine `0.73548`, and positive agreement for every fold pair.
 
 The displayed percentile ranks the semantic prediction among the 208 training
 hook predictions. Stored rows also expose a separate actual-target percentile;
@@ -252,27 +257,32 @@ source-equal mean speaking rate of 3.9175 lexical words/second, then shifts each
 word response forward by the measured +1.0-second lag. This is a rough
 observational forecast, not a causal audience simulator.
 
-A second nested model predicts the rewatch-adjusted curve on the same 41-point
-grid. Its held-out MAE is 4.518 percentage points versus 4.909 for the text-free
-baseline, an `7.97%` improvement; mean timewise Spearman is `0.41381`, and the
+A second nested model predicts the endpoint-normalized training curve on the
+same 41-point grid. Its held-out MAE is 3.834 percentage points versus 4.105 for
+the text-free baseline, a `6.61%` improvement; mean timewise Spearman is
+`0.29230`, and the
 empirical 80% band covers `80.30%`. All 208 source videos are at least 22
 seconds, so no 20-second target is extrapolated beyond an observed source
 video. Spoken hooks end at median 4.99 seconds and maximum 12.76 seconds. The UI
 marks hook end plus response lag and shades the remaining region as a whole-hook
 continuation forecast: no words or component categories are invented there.
+Stored hooks can toggle between the measured observed and normalized curves.
+Live text inputs show only the rough observed-retention forecast; they never
+claim to have a normalized curve without measured retention and a terminal
+anchor.
 
 ## 8. Supplied example, held out from training
 
 The four supplied sentences are evaluation-only. Scoring them twice produces
 the identical JSON SHA-256
-`ca97b91c64fecc77f0598eb3b874ae7e73e313503e41a0108205486ce3a346f1`.
+`7057d67914eac9de0fb2dbd18f1837976e14ebd20875e89d613e5b931a7eecfe`.
 
 | Hook | Survival percentile | Predicted carry/second | Response end |
 | --- | ---: | ---: | ---: |
-| machine, unexpected use | 86.06 | 100.002% | 6.11s |
-| machine, second feature | 81.73 | 100.263% | 5.34s |
-| machine, mechanism question | 79.81 | 100.813% | 4.32s |
-| Lego shoulder scenario | 49.52 | 99.974% | 5.34s |
+| machine, unexpected use | 74.52 | 96.682% | 6.11s |
+| machine, second feature | 62.50 | 96.360% | 5.34s |
+| machine, mechanism question | 60.10 | 96.049% | 4.32s |
+| Lego shoulder scenario | 53.37 | 96.261% | 5.34s |
 
 The frozen main-axis order for the three machine variants is:
 
@@ -331,7 +341,7 @@ never capped or forced by the training-corpus maximum.
 Large artifacts are loaded from `longform/promise-lab-v4/` in R2 and cached in
 `/tmp`; there is no resident GPU and no always-on model worker. The Promise Lab
 **Hook scorer** tab renders six complete-hook planes, all six score planes for
-every emergent component in horizontally scrollable strips, observed and rewatch-adjusted retention curves,
+every emergent component in horizontally scrollable strips, observed and endpoint-normalized retention curves,
 word-response points, and the explicit post-hook continuation region,
 stored example comparison, exact partition, component deletion effects, pair
 interactions, local counterfactual inputs, domain evidence, and latency decision. The **Hook

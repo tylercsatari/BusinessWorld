@@ -5,7 +5,6 @@ from __future__ import annotations
 import numpy as np
 from scipy.stats import pearsonr, rankdata, spearmanr
 from sklearn.decomposition import PCA
-from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import Ridge
 from sklearn.metrics import r2_score
 from sklearn.model_selection import GroupKFold, KFold
@@ -45,60 +44,50 @@ def correlation_audit(left: np.ndarray, right: np.ndarray) -> dict:
     }
 
 
-def fit_rewatch_kernel(curves: np.ndarray, terminal: np.ndarray,
-                       durations: np.ndarray, times: np.ndarray,
-                       alpha: float = 1.0) -> dict:
-    """Estimate how entry inflation propagates forward through observed curves."""
-    curves = np.asarray(curves, float)
-    terminal = np.asarray(terminal, float)
-    durations = np.asarray(durations, float)
-    times = np.asarray(times, float)
-    if curves.ndim != 2 or curves.shape[1] != len(times):
-        raise ValueError("rewatch curves and time grid differ")
-    entry_inflation = curves[:, 0] - 100.0
-    features = np.column_stack([
-        entry_inflation, terminal, np.log(np.maximum(durations, EPS)),
-    ])
-    valid = np.all(np.isfinite(features), axis=1) & np.all(np.isfinite(curves), axis=1)
-    if valid.sum() < 20:
-        raise ValueError("insufficient finite curves for rewatch normalization")
-    scaler = StandardScaler().fit(features[valid])
-    model = Ridge(alpha=float(alpha)).fit(
-        scaler.transform(features[valid]), curves[valid],
+def terminal_conditioned_replay_correction(
+        curves: np.ndarray, terminal: np.ndarray | float) -> np.ndarray:
+    """Return an additive replay envelope anchored by observed endpoints.
+
+    The correction is an endpoint-conditioned index, not an identified count of
+    repeat viewers. It attributes the entry excess above 100 proportionally to
+    the observed curve's remaining distance above its terminal anchor. Unlike a
+    shared time-decay kernel, it cannot create a reversal that is absent from the
+    observed curve because both the corrected curve and correction are affine in
+    the same observed value between the two anchors.
+    """
+    values = np.asarray(curves, float)
+    scalar_curve = values.ndim == 1
+    if scalar_curve:
+        values = values[None, :]
+    if values.ndim != 2 or values.shape[1] < 2:
+        raise ValueError("replay correction requires one or more complete curves")
+    anchors = np.asarray(terminal, float)
+    if anchors.ndim == 0:
+        anchors = np.full(len(values), float(anchors), float)
+    anchors = anchors.reshape(-1)
+    if len(anchors) != len(values):
+        raise ValueError("terminal anchors and retention curves differ")
+    if not np.all(np.isfinite(values)) or not np.all(np.isfinite(anchors)):
+        raise ValueError("replay correction requires finite curves and terminal anchors")
+    amplitude = values[:, 0] - anchors
+    if np.any(amplitude <= EPS):
+        raise ValueError("entry retention must exceed the terminal anchor")
+    entry_excess = np.maximum(values[:, 0] - 100.0, 0.0)
+    remaining_fraction = np.clip(
+        (values - anchors[:, None]) / amplitude[:, None], 0.0, 1.0,
     )
-    raw = np.asarray(model.coef_[:, 0] / scaler.scale_[0], float)
-    raw[0] = 1.0
-    kernel = IsotonicRegression(
-        increasing=False, y_min=0.0, y_max=1.0,
-    ).fit_transform(times, raw)
-    kernel[0] = 1.0
-    return {
-        "timesSeconds": times.astype(np.float32),
-        "rawEntryInflationCoefficient": raw.astype(np.float32),
-        "kernel": np.asarray(kernel, np.float32),
-        "ridgeAlpha": float(alpha),
-        "controlVariables": [
-            "terminal retention", "log video duration",
-        ],
-        "definition": (
-            "At each second, regress observed retention on entry above 100%, terminal "
-            "retention, and log video duration; then constrain the entry coefficient "
-            "to a non-increasing 1-to-0 decay."
-        ),
-    }
+    correction = entry_excess[:, None] * remaining_fraction
+    correction[:, 0] = entry_excess
+    result = correction.astype(np.float32)
+    return result[0] if scalar_curve else result
 
 
-def apply_rewatch_kernel(curves: np.ndarray, kernel: np.ndarray) -> np.ndarray:
-    """Remove only the corpus-estimated decaying entry-inflation contribution."""
-    curves = np.asarray(curves, float)
-    kernel = np.asarray(kernel, float)
-    if curves.ndim == 1:
-        adjusted = curves - (curves[0] - 100.0) * kernel
-        adjusted[0] = 100.0
-        return adjusted.astype(np.float32)
-    adjusted = curves - (curves[:, :1] - 100.0) * kernel[None, :]
-    adjusted[:, 0] = 100.0
-    return adjusted.astype(np.float32)
+def apply_terminal_conditioned_replay_correction(
+        curves: np.ndarray, terminal: np.ndarray | float) -> np.ndarray:
+    """Subtract the additive endpoint-conditioned replay envelope."""
+    values = np.asarray(curves, float)
+    correction = terminal_conditioned_replay_correction(values, terminal)
+    return (values - correction).astype(np.float32)
 
 
 def response_end_values(curves: np.ndarray, times: np.ndarray,
@@ -289,15 +278,14 @@ def fit_full_linear(features: np.ndarray, target: np.ndarray,
 
 
 def nested_survival_crossfit(features: np.ndarray, curves: np.ndarray,
-                             terminal: np.ndarray, durations: np.ndarray,
-                             response_seconds: np.ndarray, times: np.ndarray,
+                             terminal: np.ndarray, response_seconds: np.ndarray,
+                             times: np.ndarray,
                              folds: int = 5,
                              seed: int = OUTCOME_SEED) -> dict:
     """Cross-fit normalization, duration correction, and semantic prediction."""
     features = row_unit(np.asarray(features, np.float32))
     curves = np.asarray(curves, np.float32)
     terminal = np.asarray(terminal, np.float32)
-    durations = np.asarray(durations, np.float32)
     response_seconds = np.asarray(response_seconds, np.float32)
     times = np.asarray(times, np.float32)
     count = len(features)
@@ -311,17 +299,13 @@ def nested_survival_crossfit(features: np.ndarray, curves: np.ndarray,
     curve_target = np.full_like(curves, np.nan, dtype=np.float32)
     fold_index = np.full(count, -1, np.int16)
     directions = []
-    fold_kernels = []
+    adjusted = apply_terminal_conditioned_replay_correction(curves, terminal)
     splits = KFold(
         n_splits=min(folds, count), shuffle=True, random_state=seed,
     ).split(np.arange(count))
     for fold, (train, test) in enumerate(splits):
         train = np.asarray(train, int)
         test = np.asarray(test, int)
-        normalization = fit_rewatch_kernel(
-            curves[train], terminal[train], durations[train], times,
-        )
-        adjusted = apply_rewatch_kernel(curves, normalization["kernel"])
         fold_carry = per_second_survival(
             response_end_values(adjusted, times, response_seconds),
             response_seconds,
@@ -353,7 +337,6 @@ def nested_survival_crossfit(features: np.ndarray, curves: np.ndarray,
         curve_baseline[test] = np.mean(adjusted[train], axis=0)
         curve_target[test] = adjusted[test]
         fold_index[test] = fold
-        fold_kernels.append(normalization["kernel"])
 
     curve_prediction[:, 0] = 100.0
     curve_baseline[:, 0] = 100.0
@@ -373,7 +356,6 @@ def nested_survival_crossfit(features: np.ndarray, curves: np.ndarray,
         "curveBaseline": curve_baseline,
         "curveTarget": curve_target,
         "foldIndex": fold_index,
-        "foldKernels": np.asarray(fold_kernels, np.float32),
         "foldDirectionMedianCosine": float(np.median(cosines)) if cosines else None,
         "foldDirectionPositiveFraction": (
             float(np.mean(np.asarray(cosines) > 0)) if cosines else None

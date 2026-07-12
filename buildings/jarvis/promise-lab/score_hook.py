@@ -418,25 +418,16 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
         })
 
     curve_model = outcome_model["curveModel"]
-    adjusted_model = outcome_model["rewatchAdjustedCurveModel"]
     times = np.asarray(curve_model["timesSeconds"], np.float32)
     predicted = apply_linear_model(primitives["full"], curve_model)[0]
     lower = predicted + np.asarray(curve_model["residualP10ByTime"], np.float32)
     upper = predicted + np.asarray(curve_model["residualP90ByTime"], np.float32)
-    adjusted_predicted = apply_linear_model(primitives["full"], adjusted_model)[0]
-    adjusted_lower = adjusted_predicted + np.asarray(
-        adjusted_model["residualP10ByTime"], np.float32,
-    )
-    adjusted_upper = adjusted_predicted + np.asarray(
-        adjusted_model["residualP90ByTime"], np.float32,
-    )
-    adjusted_predicted[0] = adjusted_lower[0] = adjusted_upper[0] = 100.0
     rate = outcome_model.get("speakingRate") or {}
     response_lag = float(outcome_model.get("responseLagSeconds") or 0)
     words = estimated_token_timeline(
-        partition["tokens"], partition["owners"], times, adjusted_predicted,
+        partition["tokens"], partition["owners"], times, predicted,
         float(rate.get("meanWordsPerSecond") or 1), response_lag,
-        adjusted_lower, adjusted_upper,
+        lower, upper,
     )
     for word in words:
         second = float(word["responseSeconds"])
@@ -484,15 +475,17 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
         "components": component_predictions,
         "survivalScore": survival_score,
         "retentionForecast": {
-            "status": (adjusted_model.get("validation") or {}).get("status"),
+            "status": (curve_model.get("validation") or {}).get("status"),
+            "normalizationAvailable": False,
+            "normalizationUnavailableReason": (
+                "Replay normalization requires a measured audience-retention curve and "
+                "measured terminal retention. Text alone supplies neither input."
+            ),
             "timesSeconds": times.astype(float).tolist(),
             "predictedPercent": predicted.astype(float).tolist(),
             "predictionP10": lower.astype(float).tolist(),
             "predictionP90": upper.astype(float).tolist(),
-            "rewatchAdjustedPredictedPercent": adjusted_predicted.astype(float).tolist(),
-            "rewatchAdjustedPredictionP10": adjusted_lower.astype(float).tolist(),
-            "rewatchAdjustedPredictionP90": adjusted_upper.astype(float).tolist(),
-            "validation": adjusted_model.get("validation"),
+            "validation": curve_model.get("validation"),
             "observedAbsoluteValidation": curve_model.get("validation"),
             "speakingRate": rate,
             "responseLagSeconds": response_lag,

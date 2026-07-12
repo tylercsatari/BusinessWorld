@@ -4,13 +4,13 @@ import numpy as np
 
 from hook_outcomes import (
     apply_duration_baseline,
-    apply_rewatch_kernel,
+    apply_terminal_conditioned_replay_correction,
     crossfit_linear,
     curve_validation,
     fit_duration_baseline,
-    fit_rewatch_kernel,
     fit_full_linear,
     per_second_survival,
+    terminal_conditioned_replay_correction,
 )
 from hook_score_core import apply_linear_model, outcome_prediction_payload
 
@@ -51,21 +51,34 @@ class HookOutcomeTests(unittest.TestCase):
         self.assertGreater(result["maeImprovementFraction"], 0)
         self.assertEqual(len(result["residualP10ByTime"]), 3)
 
-    def test_rewatch_kernel_starts_at_one_and_never_increases(self):
-        rng = np.random.default_rng(17)
-        times = np.arange(0, 5.5, .5)
-        inflation = rng.uniform(0, 35, 60)
-        kernel = np.exp(-times)
-        base = 100 - 2.2 * times
-        curves = base[None, :] + inflation[:, None] * kernel[None, :]
-        terminal = rng.uniform(25, 70, 60)
-        duration = rng.uniform(25, 70, 60)
-        fitted = fit_rewatch_kernel(curves, terminal, duration, times)
-        values = np.asarray(fitted["kernel"])
-        self.assertAlmostEqual(float(values[0]), 1.0)
-        self.assertTrue((np.diff(values) <= 1e-8).all())
-        adjusted = apply_rewatch_kernel(curves, values)
-        np.testing.assert_allclose(adjusted[:, 0], 100, atol=1e-5)
+    def test_terminal_conditioned_correction_is_additive_and_endpoint_anchored(self):
+        curves = np.asarray([
+            [160, 145, 130, 110, 80],
+            [130, 121, 105, 90, 60],
+        ], float)
+        terminal = np.asarray([80, 60], float)
+        correction = terminal_conditioned_replay_correction(curves, terminal)
+        adjusted = apply_terminal_conditioned_replay_correction(curves, terminal)
+        np.testing.assert_allclose(adjusted, curves - correction, atol=1e-6)
+        np.testing.assert_allclose(adjusted[:, 0], 100, atol=1e-6)
+        np.testing.assert_allclose(correction[:, 0], [60, 30], atol=1e-6)
+        np.testing.assert_allclose(correction[:, -1], 0, atol=1e-6)
+        np.testing.assert_allclose(adjusted[:, -1], terminal, atol=1e-6)
+
+    def test_correction_cannot_invent_a_retention_direction_reversal(self):
+        curve = np.asarray([155, 138, 142, 118, 90, 70], float)
+        adjusted = apply_terminal_conditioned_replay_correction(curve, 70)
+        raw_delta = np.diff(curve)
+        adjusted_delta = np.diff(adjusted)
+        self.assertTrue(np.all(np.sign(raw_delta) == np.sign(adjusted_delta)))
+        self.assertFalse(np.any((adjusted_delta > 0) & (raw_delta <= 0)))
+
+    def test_terminal_anchor_changes_the_replay_envelope_without_time_kernel(self):
+        curve = np.asarray([160, 140, 120, 100, 80], float)
+        lower = terminal_conditioned_replay_correction(curve, 50)
+        higher = terminal_conditioned_replay_correction(curve, 75)
+        self.assertGreater(float(lower[2]), float(higher[2]))
+        self.assertEqual(float(lower[0]), float(higher[0]))
 
     def test_duration_baseline_and_geometric_carry_are_replayable(self):
         seconds = np.asarray([2, 3, 5, 8, 12], float)

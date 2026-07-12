@@ -13,6 +13,7 @@ import numpy as np
 
 from axes import bh_fdr
 from cluster_outcomes import (
+    entry_terminal_diagnostic,
     exact_token_timings,
     normalized_caption_atom,
     retention_at,
@@ -24,17 +25,17 @@ from hook_outcomes import (
     FIXED_DIMENSIONS,
     OUTCOME_SEED,
     apply_duration_baseline,
-    apply_rewatch_kernel,
+    apply_terminal_conditioned_replay_correction,
     correlation_audit,
     crossfit_linear,
     curve_validation,
     fit_duration_baseline,
     fit_full_linear,
-    fit_rewatch_kernel,
     nested_survival_crossfit,
     per_second_survival,
     response_end_values,
     scalar_validation,
+    terminal_conditioned_replay_correction,
 )
 from hook_score_core import (
     combined_component_features,
@@ -53,7 +54,7 @@ HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
 OUTPUT_PATH = CACHE / "hook-outcomes.json"
 MODEL_PATH = CACHE / "hook-outcome-model.json"
-METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v3"
+METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v4"
 CURVE_TIMES = np.arange(0.0, 20.0001, .5, dtype=np.float32)
 
 TARGETS = {
@@ -467,7 +468,7 @@ def main() -> None:
         terminal_retention_percent(row) for row in corpus
     ], np.float32)
     nested_survival = nested_survival_crossfit(
-        full_features, curve_target, terminal, durations, response_end,
+        full_features, curve_target, terminal, response_end,
         CURVE_TIMES, seed=OUTCOME_SEED + 9001,
     )
     survival_validation = scalar_validation(
@@ -499,12 +500,35 @@ def main() -> None:
         else "diagnostic-not-validated"
     )
 
-    normalization = fit_rewatch_kernel(
-        curve_target, terminal, durations, CURVE_TIMES,
+    replay_correction = terminal_conditioned_replay_correction(
+        curve_target, terminal,
     )
-    adjusted_curve_target = apply_rewatch_kernel(
-        curve_target, normalization["kernel"],
+    adjusted_curve_target = apply_terminal_conditioned_replay_correction(
+        curve_target, terminal,
     )
+    normalization = {
+        "methodVersion": "terminal-conditioned-additive-replay-envelope-v1",
+        "timesSeconds": CURVE_TIMES,
+        "formula": (
+            "C(t) = max(R(0)-100, 0) * clip((R(t)-F) / (R(0)-F), 0, 1); "
+            "R_normalized(t) = R_observed(t) - C(t)"
+        ),
+        "inputs": [
+            "observed audience-retention curve R(t)",
+            "observed entry retention R(0)",
+            "robust terminal retention anchor F",
+        ],
+        "terminalAnchor": (
+            "arithmetic mean of the final max(3, 5%) measured retention samples; "
+            "this reduces single-point outro noise"
+        ),
+        "fittedDecayParameters": 0,
+        "definition": (
+            "An additive endpoint-conditioned replay envelope. Entry excess above 100 is "
+            "carried in proportion to the observed curve's remaining distance above its "
+            "terminal anchor. No shared time-decay curve is fitted."
+        ),
+    }
     adjusted_end = response_end_values(
         adjusted_curve_target, CURVE_TIMES, response_end,
     )
@@ -528,11 +552,11 @@ def main() -> None:
             "label": "Length-adjusted hook survival",
             "unit": "excess geometric retention carry percentage points per second",
             "higherMeans": (
-                "the hook loses less rewatch-adjusted retention than the ordinary "
+                "the hook loses less endpoint-normalized retention than the ordinary "
                 "drop for a hook with the same response duration"
             ),
             "formula": (
-                "100 * exp(log(R_adjusted(response_end) / 100) / response_end) "
+                "100 * exp(log(R_endpoint_normalized(response_end) / 100) / response_end) "
                 "minus the out-of-fold duration-only expected carry rate"
             ),
             "responseEnd": "exact spoken hook end plus the validated forward response lag",
@@ -556,6 +580,24 @@ def main() -> None:
     opening_three_seconds = (
         curve_target[:, int(round(3.0 / .5))] - curve_target[:, 0]
     ) / 3.0
+    entry_diagnostic = entry_terminal_diagnostic(
+        curve_target[:, 0], terminal, durations, seed=OUTCOME_SEED + 9010,
+    )
+    entry_prediction = np.asarray(entry_diagnostic["predictedEntryOOF"], float)
+    entry_valid = np.isfinite(entry_prediction + curve_target[:, 0])
+    entry_diagnostic["oofMAEPercentagePoints"] = float(np.mean(np.abs(
+        entry_prediction[entry_valid] - curve_target[entry_valid, 0]
+    )))
+    raw_delta = np.diff(curve_target, axis=1)
+    adjusted_delta = np.diff(adjusted_curve_target, axis=1)
+    correction_delta = np.diff(replay_correction, axis=1)
+    native_endpoint_correction = []
+    for row, anchor in zip(corpus, terminal):
+        native_curve = np.asarray(row.get("curve") or [], float) * 100.0
+        native_endpoint_correction.append(float(
+            terminal_conditioned_replay_correction(native_curve, anchor)[-1]
+        ))
+    tolerance = 1e-5
     rewatch_audit = {
         "hypothesisStatus": "supported-observationally",
         "entryInflationVsTerminal": correlation_audit(entry_inflation, terminal),
@@ -568,9 +610,35 @@ def main() -> None:
         "terminalVsOpeningThreeSecondSlope": correlation_audit(
             terminal, opening_three_seconds,
         ),
+        "terminalToEntryModel": entry_diagnostic,
         "normalization": normalization,
-        "foldKernelP10": np.quantile(nested_survival["foldKernels"], .1, axis=0),
-        "foldKernelP90": np.quantile(nested_survival["foldKernels"], .9, axis=0),
+        "correctionMedianPercentagePoints": np.median(replay_correction, axis=0),
+        "correctionP10PercentagePoints": np.quantile(replay_correction, .1, axis=0),
+        "correctionP90PercentagePoints": np.quantile(replay_correction, .9, axis=0),
+        "normalizedMedianPercent": np.median(adjusted_curve_target, axis=0),
+        "normalizedP10Percent": np.quantile(adjusted_curve_target, .1, axis=0),
+        "normalizedP90Percent": np.quantile(adjusted_curve_target, .9, axis=0),
+        "geometryValidation": {
+            "maximumStartErrorPercentagePoints": float(np.max(np.abs(
+                adjusted_curve_target[:, 0] - 100.0
+            ))),
+            "negativeCorrectionValues": int(np.sum(replay_correction < -tolerance)),
+            "observedIncreaseIntervals": int(np.sum(raw_delta > tolerance)),
+            "normalizedIncreaseIntervals": int(np.sum(adjusted_delta > tolerance)),
+            "correctionIncreaseIntervals": int(np.sum(correction_delta > tolerance)),
+            "correctionInducedIncreaseIntervals": int(np.sum(
+                (adjusted_delta > tolerance) & (raw_delta <= tolerance)
+            )),
+            "maximumFullVideoEndpointCorrectionPercentagePoints": float(np.max(
+                native_endpoint_correction
+            )),
+            "medianCorrectionAt20SecondsPercentagePoints": float(np.median(
+                replay_correction[:, -1]
+            )),
+            "p90CorrectionAt20SecondsPercentagePoints": float(np.quantile(
+                replay_correction[:, -1], .9
+            )),
+        },
         "scope": {
             "videos": len(corpus),
             "minimumVideoDurationSeconds": float(np.min(durations)),
@@ -581,8 +649,10 @@ def main() -> None:
             "maximumResponseEndSeconds": float(np.max(response_end)),
         },
         "claimBoundary": (
-            "This is an empirical de-inflation index, not identified first-pass retention. "
-            "The observed absolute curve remains available beside it."
+            "This is an endpoint-conditioned replay envelope, not identified replay counts "
+            "or causal first-pass retention. A measured curve and measured terminal anchor "
+            "are required; text alone cannot be normalized. The observed absolute curve "
+            "always remains available beside it."
         ),
     }
     curve_low = curve_crossfit["prediction"] + np.asarray(
@@ -830,6 +900,9 @@ def main() -> None:
                 for right in range(left + 1, component_count)
             ],
             "retentionForecast": {
+                "normalizationAvailable": True,
+                "normalizationMethod": normalization["methodVersion"],
+                "terminalRetentionPercent": float(terminal[source_index]),
                 "timesSeconds": CURVE_TIMES,
                 "actualPercent": np.asarray([
                     retention_at(actual_curve, duration, float(second)) * 100
@@ -842,6 +915,7 @@ def main() -> None:
                 "rewatchAdjustedPredictedOOFPercent": adjusted_prediction_curve,
                 "rewatchAdjustedPredictionP10": adjusted_lower_curve,
                 "rewatchAdjustedPredictionP90": adjusted_upper_curve,
+                "replayCorrectionPercent": replay_correction[source_index],
                 "sourceMAEPercentagePoints": float(np.mean(np.abs(
                     prediction_curve - curve_target[source_index]
                 ))),
@@ -869,7 +943,9 @@ def main() -> None:
                     else "library-average speaking rate"
                 ),
                 "words": words,
-                "componentWindows": component_response_windows(words, 4, response_lag),
+                "componentWindows": component_response_windows(
+                    words, component_count, response_lag,
+                ),
             },
         })
 
@@ -924,10 +1000,11 @@ def main() -> None:
             "speakingRate": rate,
             "responseLagSeconds": response_lag,
             "definition": (
-                "The complete-hook embedding predicts both observed absolute retention and a "
-                "rewatch-adjusted curve at 0.5-second steps. Word/category attribution ends at "
+                "The complete-hook embedding predicts observed absolute retention and the "
+                "endpoint-normalized training target at 0.5-second steps. Stored hooks also "
+                "show the measured additive replay envelope. Word/category attribution ends at "
                 "the exact spoken hook plus the validated forward lag; later points are only a "
-                "whole-hook continuation forecast."
+                "whole-hook continuation forecast. Text-only inputs cannot be replay-normalized."
             ),
         },
         "rewatchAudit": rewatch_audit,

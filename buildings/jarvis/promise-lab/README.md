@@ -42,8 +42,8 @@ Stages:
    stored component measurements, and 2,489 exact local pair interactions.
 14. `run_hook_outcomes.py`: grouped out-of-fold whole-hook and category-specific
    component predictions for viewed percentage, five-second retention, average
-   retention, and log views; a nested rewatch-adjusted, duration-neutral hook
-   survival score; and observed plus adjusted 41-point retention forecasts.
+   retention, and log views; a nested endpoint-normalized, duration-neutral hook
+   survival score; and observed plus normalized 41-point retention forecasts.
 15. `run_hook_examples.py`: deterministic evaluation of the supplied example
    problem, kept entirely out of training and model selection.
 16. `build_ui.py`: browser artifacts, cluster representatives, findings, the
@@ -60,7 +60,7 @@ winner. `verify_forward_response.py` checks the selected forward lag, grouped
 inference, reverse-time controls, exact timing windows, every component and pair,
 and the rejected aggregate audits. `verify_hook_outcomes.py` checks all 208
 source-held-out predictions, 1,006 components, 2,489 relationships, curve shape,
-timing coverage, rewatch-kernel monotonicity, score and curve validation,
+timing coverage, additive replay-envelope geometry, score and curve validation,
 uncertainty arrays, and improvement over the text-free baselines. Together these gates check
 exact character slices, complete variable-cover and local-deletion identity, vector finiteness and
 normalization, crossed-design completeness, per-source artifacts, zero-error

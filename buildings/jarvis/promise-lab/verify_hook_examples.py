@@ -60,10 +60,13 @@ def main() -> None:
                    for component in score["components"])
         forecast = outcomes["retentionForecast"]
         assert forecast["status"] == "validated-rough-forecast"
+        assert forecast["normalizationAvailable"] is False
+        assert "measured audience-retention curve" in forecast[
+            "normalizationUnavailableReason"
+        ]
         assert len(forecast["timesSeconds"]) == 41
         assert len(forecast["predictedPercent"]) == 41
-        assert len(forecast["rewatchAdjustedPredictedPercent"]) == 41
-        assert forecast["rewatchAdjustedPredictedPercent"][0] == 100
+        assert "rewatchAdjustedPredictedPercent" not in forecast
         assert forecast["responseEndSeconds"] < forecast["forecastEndSeconds"]
         assert forecast["responseLagSeconds"] == 1.0
         assert len(forecast["componentWindows"]) == count
