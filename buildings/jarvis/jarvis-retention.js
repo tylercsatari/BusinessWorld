@@ -3627,7 +3627,7 @@ const JarvisRetention = (function () {
         }
         render();
     }
-    return { mount };
+    return { mount , __st: () => st };
 })();
 if (typeof window !== 'undefined') window.JarvisRetention = JarvisRetention;
 if (typeof module !== 'undefined' && module.exports) module.exports = JarvisRetention;
