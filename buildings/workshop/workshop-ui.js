@@ -5146,6 +5146,10 @@ const WorkshopUI = (() => {
     function editingHandoffHtml(v) {
         const folderLabel = v.dropboxPath || (v.project ? `${v.project}/` : 'No Channel Project selected');
         const sharedLink = isDropboxSharedLink(v.dropboxLink) ? v.dropboxLink : '';
+        // Reference folders: OTHER projects' Dropbox folders linked to this video
+        // so the editor can pull from them — [{ project, path, link }].
+        const refs = Array.isArray(v.refFolders) ? v.refFolders : [];
+        const refOptions = dropboxProjects.filter(p => p !== v.project && !refs.some(r => (r.project || '') === p));
         return `<div class="wsp-edit-handoff" id="wsp-edit-handoff">
             <div class="wsp-edit-handoff-head">
                 <div>
@@ -5162,6 +5166,21 @@ const WorkshopUI = (() => {
                 <span class="wsp-edit-folder-label">Shared link</span>
                 <input id="wsp-edit-dropbox-link" value="${escAttr(sharedLink)}" placeholder="Paste public Dropbox shared folder link" style="flex:1;min-width:220px;border:1px solid #ded6ca;border-radius:6px;padding:7px 9px;font:inherit;font-size:12px;">
                 <button class="wsp-mini-btn" id="wsp-edit-dropbox-save-link">Save link</button>
+            </div>
+            <div class="wsp-edit-folder-line" style="align-items:flex-start">
+                <span class="wsp-edit-folder-label" title="Other projects' Dropbox folders the editor can reference for this video">Reference folders</span>
+                <div class="wsp-ref-folders">
+                    ${refs.map((r, i) => `<div class="wsp-ref-folder-row">
+                        <span class="wsp-edit-folder-path" title="${escAttr(r.path || '')}">📁 ${escHtml(r.project || r.path || 'folder')}</span>
+                        <button class="wsp-mini-btn" data-ref-open="${i}">Open</button>
+                        <button class="wsp-mini-btn danger" data-ref-del="${i}" title="Remove this reference (the folder itself is untouched)">✕</button>
+                    </div>`).join('')}
+                    <select id="wsp-ref-folder-select" class="wsp-inline-select" title="Link another project's Dropbox folder as an editing reference">
+                        <option value="">＋ Add reference folder…</option>
+                        ${refOptions.map(p => `<option value="${escAttr(p)}">${escHtml(p)}</option>`).join('')}
+                        <option value="__custom__">Custom Dropbox path…</option>
+                    </select>
+                </div>
             </div>
             <div class="wsp-edit-handoff-grid">
                 <div class="wsp-edit-handoff-panel">
@@ -5328,10 +5347,73 @@ const WorkshopUI = (() => {
         }
     }
 
+    // Open a linked reference folder: use its cached shared link, else create
+    // one (saved back onto the video so it's one-time), then open.
+    async function openRefFolder(v, idx, btn) {
+        const fresh = VideoService.getById(v.id) || v;
+        const refs = Array.isArray(fresh.refFolders) ? fresh.refFolders : [];
+        const ref = refs[idx];
+        if (!ref || !ref.path) return;
+        const sameTab = shouldOpenExternalInSameTab();
+        if (isDropboxSharedLink(ref.link)) { openExternalDropboxLink(ref.link, null, sameTab); return; }
+        let pendingTab = null;
+        if (!sameTab) {
+            pendingTab = window.open('', '_blank');
+            if (pendingTab) pendingTab.opener = null;
+            renderPendingDropboxTab(pendingTab);
+        }
+        const oldText = btn ? btn.textContent : '';
+        if (btn) { btn.disabled = true; btn.textContent = 'Creating link…'; }
+        try {
+            const link = await createDropboxSharedLink(ref.path);
+            await atomicVideoUpdate(fresh.id, (f) => {
+                const rs = (Array.isArray(f.refFolders) ? f.refFolders : []).map(r => ({ ...r }));
+                if (rs[idx] && rs[idx].path === ref.path) rs[idx].link = link;
+                return { refFolders: rs };
+            }).catch(() => {});
+            openExternalDropboxLink(link, pendingTab, sameTab);
+        } catch (e) {
+            if (pendingTab) pendingTab.close();
+            alert('Could not open the reference folder: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = oldText; }
+        }
+    }
+
     function initEditingHandoff(v) {
         const host = document.getElementById('wsp-edit-handoff');
         if (!host) return;
         host.querySelector('#wsp-edit-dropbox-open')?.addEventListener('click', () => openVideoDropboxFolder(v, host.querySelector('#wsp-edit-dropbox-open')));
+        // Reference folders: open / remove / add
+        host.querySelectorAll('[data-ref-open]').forEach(b => b.addEventListener('click', () => openRefFolder(v, Number(b.dataset.refOpen), b)));
+        host.querySelectorAll('[data-ref-del]').forEach(b => b.addEventListener('click', async () => {
+            const idx = Number(b.dataset.refDel);
+            await atomicVideoUpdate(v.id, (f) => ({ refFolders: (Array.isArray(f.refFolders) ? f.refFolders : []).filter((_, i) => i !== idx) })).catch(() => {});
+            rerenderEditor(v.id);
+        }));
+        const refSel = host.querySelector('#wsp-ref-folder-select');
+        if (refSel) refSel.addEventListener('change', async () => {
+            const val = refSel.value;
+            refSel.value = '';
+            if (!val) return;
+            let project = val, path = '';
+            if (val === '__custom__') {
+                const p = prompt('Dropbox folder path (e.g. /BusinessHub/Some Project/refs):');
+                if (!p || !p.trim()) return;
+                path = p.trim().startsWith('/') ? p.trim() : '/' + p.trim();
+                project = path.split('/').filter(Boolean).pop() || path;
+            } else {
+                const root = await dropboxRootPath();
+                path = dropboxJoinPath(root, val);
+            }
+            await atomicVideoUpdate(v.id, (f) => {
+                const rs = (Array.isArray(f.refFolders) ? f.refFolders : []).map(r => ({ ...r }));
+                if (rs.some(r => r.path === path)) return {};   // already linked
+                rs.push({ project, path, link: '' });
+                return { refFolders: rs };
+            }).catch(() => {});
+            rerenderEditor(v.id);
+        });
         const linkInput = host.querySelector('#wsp-edit-dropbox-link');
         const saveLink = async () => {
             const fresh = VideoService.getById(v.id) || v;
