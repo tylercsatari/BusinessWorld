@@ -36,9 +36,12 @@ Stages:
 12. `run_hook_quality.py`: nested held-out retention-information direction,
    source bootstraps, all 16 subset embeddings, exact Shapley attribution, pair
    interactions, domain checks, and latency falsification.
-13. `run_hook_examples.py`: deterministic evaluation of the supplied example
+13. `run_forward_response.py`: nested forward-only lag selection, text-free
+   natural-drop adjustment, four category-specific component axes, all 832
+   stored component measurements, and 1,248 exact pair interactions.
+14. `run_hook_examples.py`: deterministic evaluation of the supplied example
    problem, kept entirely out of training and model selection.
-14. `build_ui.py`: browser artifacts, cluster representatives, findings, the
+15. `build_ui.py`: browser artifacts, cluster representatives, findings, the
    complete experiment registry, and the interactive Hook scorer.
 
 The complete deployable scoring architecture, formulas, validation evidence,
@@ -48,7 +51,9 @@ and supplied-example result are documented in [`HOOK_SCORER.md`](HOOK_SCORER.md)
 `verify_axis_outputs.py` are hard gates in the orchestrated build. The manual
 projection also has `verify_manual_projection.py`, which checks the frozen-label
 hash, all coordinate shapes and finiteness, basis orthonormality, and the declared
-winner. Together these gates check
+winner. `verify_forward_response.py` checks the selected forward lag, grouped
+inference, reverse-time controls, exact timing windows, every component and pair,
+and the rejected aggregate audits. Together these gates check
 exact character slices, complete lattice/subset identity, vector finiteness and
 normalization, crossed-design completeness, per-source artifacts, zero-error
 self-span controls, one predeclared-confound selection per target, and exact

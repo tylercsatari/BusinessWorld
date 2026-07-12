@@ -20,6 +20,13 @@ def row_unit(values: np.ndarray) -> np.ndarray:
     return values / (np.linalg.norm(values, axis=1, keepdims=True) + EPS)
 
 
+def combined_component_features(raw: np.ndarray, influence: np.ndarray) -> np.ndarray:
+    """Equal-energy literal and deletion-influence blocks used by train and serve."""
+    raw = row_unit(raw)
+    influence = row_unit(influence)
+    return np.concatenate([raw, influence], axis=1).astype(np.float32) / np.sqrt(2.0)
+
+
 def percentile(sorted_values: np.ndarray, value: float) -> float:
     sorted_values = np.sort(np.asarray(sorted_values, float))
     return float(100 * np.searchsorted(sorted_values, value, side="right") / max(1, len(sorted_values)))

@@ -27,7 +27,8 @@ def main() -> None:
         "verify-manual-projection", "cluster-outcomes",
         "verify-cluster-outcomes", "latency-study", "verify-latency-study",
         "canonical-partitions", "verify-canonical-partitions", "hook-quality",
-        "verify-hook-quality", "hook-examples", "verify-hook-examples", "ui",
+        "verify-hook-quality", "forward-response", "verify-forward-response",
+        "hook-examples", "verify-hook-examples", "ui",
     ),
                         default="interventions")
     parser.add_argument("--no-upload", action="store_true")
@@ -55,6 +56,8 @@ def main() -> None:
         ("verify-canonical-partitions", "verify_canonical_partitions.py"),
         ("hook-quality", "run_hook_quality.py"),
         ("verify-hook-quality", "verify_hook_quality.py"),
+        ("forward-response", "run_forward_response.py"),
+        ("verify-forward-response", "verify_forward_response.py"),
         ("hook-examples", "run_hook_examples.py"),
         ("verify-hook-examples", "verify_hook_examples.py"),
         ("ui", "build_ui.py"),
@@ -65,7 +68,8 @@ def main() -> None:
             "verify-all-spans", "verify-swaps", "verify-axes",
             "verify-manual-projection", "verify-cluster-outcomes",
             "verify-latency-study", "verify-canonical-partitions",
-            "verify-hook-quality", "verify-hook-examples", "ui",
+            "verify-hook-quality", "verify-forward-response",
+            "verify-hook-examples", "ui",
         }
         extra = ["--no-upload"] if args.no_upload and supports_no_upload else []
         if args.no_upload and stage == "ui":

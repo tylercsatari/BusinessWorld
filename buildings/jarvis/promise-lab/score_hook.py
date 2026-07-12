@@ -18,6 +18,7 @@ from embedding_store import EmbeddingStore, R2Store, json_ready
 from hook_score_core import (
     apply_category_transform,
     category_log_probabilities,
+    combined_component_features,
     decode_compositional_four_chunks,
     pair_interactions,
     percentile,
@@ -34,7 +35,7 @@ CACHE = HERE / ".cache"
 REMOTE_PREFIX = "longform/promise-lab-v4"
 MODEL_FILE = "hook-quality-model.json"
 PARTITION_FILE = "canonical-partition-model.json"
-SCORER_VERSION = "deterministic-hook-scorer-v1"
+SCORER_VERSION = "deterministic-hook-scorer-v2-forward-response"
 MAX_HOOK_TOKENS = 64
 
 
@@ -173,6 +174,126 @@ def _bootstrap_attribution(vectors: dict[int, np.ndarray], model: dict) -> tuple
     return np.asarray(component_rows, float), np.asarray(pair_rows, float)
 
 
+def _score_forward_response(primitives: dict, partition: dict,
+                            vectors: dict[int, np.ndarray], components: list[dict],
+                            interactions: list[dict], model: dict) -> dict | None:
+    forward = model.get("forwardResponse") or {}
+    if not forward or not forward.get("validated"):
+        return None
+    component_model = (forward.get("component") or {}).get("modelsByCategory") or {}
+    starts = np.asarray(primitives["starts"], int)
+    ends = np.asarray(primitives["ends"], int)
+    component_percentiles = []
+    for index, (chunk, component) in enumerate(zip(partition["chunks"], components)):
+        matches = np.flatnonzero(
+            (starts == int(chunk["start"])) & (ends == int(chunk["end"]))
+        )
+        if len(matches) != 1:
+            raise RuntimeError("decoded component is missing from the exact span tensor")
+        span_index = int(matches[0])
+        category = str(int(chunk["category"]))
+        category_model = component_model.get(category)
+        if not category_model:
+            raise RuntimeError(f"forward-response category model is missing: {category}")
+        feature = combined_component_features(
+            primitives["raw"][span_index:span_index + 1],
+            primitives["influence"][span_index:span_index + 1],
+        )[0]
+        coordinate = float(feature @ np.asarray(category_model["direction"], np.float32))
+        map_y = float(feature @ np.asarray(category_model["mapDirection"], np.float32))
+        axis_percentile = percentile(
+            np.asarray(category_model["trainingProjectionSorted"], float), coordinate,
+        )
+        validation = category_model.get("validation") or {}
+        component["forwardResponse"] = {
+            "label": "Predicted forward retention response",
+            "axisCoordinate": coordinate,
+            "mapY": map_y,
+            "percentile": axis_percentile,
+            "category": int(category),
+            "heldoutSpearmanForCategory": validation.get("heldoutSpearman"),
+            "foldDirectionStability": validation.get("foldDirectionStability"),
+            "metricId": (forward.get("metricContract") or {}).get("selectedCandidate"),
+        }
+        component_percentiles.append(axis_percentile)
+
+    subset_features = {}
+    full = np.asarray(vectors[15], np.float32)
+    for mask in range(1, 16):
+        raw = np.asarray(vectors[mask], np.float32)
+        complement = 15 ^ mask
+        context = (
+            np.zeros_like(full) if complement == 0
+            else np.asarray(vectors[complement], np.float32)
+        )
+        influence = row_unit(full - context)
+        subset_features[mask] = combined_component_features(
+            raw[None, :], influence[None, :]
+        )[0]
+
+    relationship = forward.get("relationship") or {}
+    calibration = relationship.get("calibrationByCategoryPair") or {}
+    interaction_lookup = {
+        (int(row["left"]), int(row["right"])): row for row in interactions
+    }
+    for right in range(1, 4):
+        category = str(int(components[right]["category"]))
+        direction = np.asarray(component_model[category]["direction"], np.float32)
+        scores = {0: 0.0}
+        scores.update({
+            mask: float(feature @ direction) for mask, feature in subset_features.items()
+        })
+        for row in pair_interactions(scores, 4):
+            left = int(row["left"])
+            if int(row["right"]) != right:
+                continue
+            target = interaction_lookup[(left, right)]
+            category_pair = f"{components[left]['category']}->{components[right]['category']}"
+            samples = np.asarray(calibration.get(category_pair) or [], float)
+            target["forwardResponse"] = {
+                "interaction": float(row["interaction"]),
+                "percentile": (
+                    percentile(samples, float(row["interaction"])) if len(samples) else None
+                ),
+                "categoryPair": category_pair,
+                "definition": relationship.get("definition"),
+                "validationSource": relationship.get("validationSource"),
+            }
+
+    whole = forward.get("wholeHook") or {}
+    standalone = relationship.get("standaloneObservedResidualAudit") or {}
+    composite_coordinate = float(np.mean(component_percentiles))
+    composite_training = np.asarray(whole.get("trainingCompositeSorted") or [], float)
+    return {
+        "status": "complete",
+        "validatedAtComponentLevel": True,
+        "metric": forward.get("metricContract"),
+        "componentValidation": (forward.get("component") or {}).get("validation"),
+        "components": [row["forwardResponse"] for row in components],
+        "relationships": [row.get("forwardResponse") for row in interactions],
+        "exploratoryWholeHookComposite": {
+            "accepted": False,
+            "coordinate": composite_coordinate,
+            "percentile": (
+                percentile(composite_training, composite_coordinate)
+                if len(composite_training) else None
+            ),
+            "definition": whole.get("definition"),
+            "validation": whole.get("validation"),
+            "reason": (
+                "the four component axes validate individually, but their equal-mean aggregate "
+                "did not validate as a separate whole-hook target"
+            ),
+        },
+        "standaloneRelationshipAudit": {
+            "accepted": standalone.get("accepted"),
+            "selectedRepresentation": standalone.get("selectedRepresentation"),
+            "targetDefinition": standalone.get("targetDefinition"),
+            "validation": standalone.get("validation"),
+        },
+    }
+
+
 def score_text(text: str, model: dict | None = None, partition_model: dict | None = None,
                store: EmbeddingStore | None = None) -> dict:
     model = model or load_artifact(MODEL_FILE)
@@ -257,6 +378,10 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             "bootstrapPositiveFraction": float(np.mean(samples > 0)) if len(samples) else None,
         })
 
+    forward_response = _score_forward_response(
+        primitives, partition, vectors, components, interactions, model,
+    )
+
     validation = model["validation"]
     stable_payload = f"{SCORER_VERSION}\0{model['methodVersion']}\0{primitives['text']}"
     return {
@@ -316,12 +441,20 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
         },
         "nearestTrainingHooks": nearest,
         "target": model["target"],
-        "latency": model["latencyDecision"],
+        "latency": {
+            "legacyWholeHookAxisTest": model["latencyDecision"],
+            "forwardComponentMetric": (
+                forward_response.get("metric") if forward_response else None
+            ),
+        },
+        "forwardResponse": forward_response,
         "provenance": {
             "outcomeUsedForBoundaries": False,
             "outcomeUsedForQualityAxis": True,
             "examplesUsedForTraining": False,
             "componentAttribution": model["componentDefinition"],
+            "forwardResponseOutcomeUsedForTiming": bool(forward_response),
+            "forwardResponseBoundariesChanged": False,
         },
     }
 

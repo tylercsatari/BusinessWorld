@@ -39,6 +39,16 @@ def main() -> None:
                            for value in score["components"])
         assert np.isclose(contribution, float(score["score"]["axisCoordinate"]), atol=1e-7)
         assert 0 <= float(score["score"]["percentile"]) <= 100
+        forward = score["forwardResponse"]
+        assert forward["validatedAtComponentLevel"] is True
+        assert forward["metric"]["selectedLagSeconds"] == 1.0
+        assert len(forward["components"]) == 4
+        assert len(forward["relationships"]) == 6
+        assert all(0 <= float(value["percentile"]) <= 100
+                   for value in forward["components"])
+        assert all(0 <= float(value["percentile"]) <= 100
+                   for value in forward["relationships"])
+        assert forward["exploratoryWholeHookComposite"]["accepted"] is False
     winner_fraction = result["machineVariantResult"]["bootstrapWinnerFractions"]["unexpected-use"]
     assert 0 <= float(winner_fraction) <= 1
     print(json.dumps({

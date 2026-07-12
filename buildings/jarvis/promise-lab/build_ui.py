@@ -138,6 +138,7 @@ def main() -> None:
     latency_study = load_json("latency-study.json", {})
     canonical_partitions = load_json("canonical-partitions.json", {})
     hook_quality = load_json("hook-quality.json", {})
+    forward_response = hook_quality.get("forwardResponse") or load_json("forward-response.json", {})
     hook_examples = load_json("hook-example-results.json", {})
     boundary_registry = load_jsonl_gz("boundary-experiments.jsonl.gz")
     cluster_registry = load_jsonl_gz("cluster-experiments.jsonl.gz")
@@ -174,6 +175,22 @@ def main() -> None:
             "heldoutPearson": quality_model.get("heldoutPearson"),
             "searchWideP": quality_model.get("signFlipP"),
             "status": "validated" if float(quality_model.get("signFlipP") or 1) <= .05 else "not-validated",
+            "outcomesUsed": True,
+        })
+    if forward_response.get("status") == "complete":
+        response_model = forward_response.get("componentModel") or {}
+        response_inference = response_model.get("sourceInference") or {}
+        registry.append({
+            "id": forward_response.get("methodVersion"),
+            "stage": "forward-component-response-axis",
+            "method": "nested source-held-out forward-lag selection and category axes",
+            "representation": "exact component plus deletion-influence embeddings",
+            "pcaDimensions": 16,
+            "ridgeAlpha": 10.0,
+            "n": (forward_response.get("audit") or {}).get("components"),
+            "heldoutSpearman": response_model.get("heldoutCategoryBalancedSpearman"),
+            "searchWideP": response_inference.get("p"),
+            "status": "validated" if forward_response.get("validated") else "not-validated",
             "outcomesUsed": True,
         })
 
@@ -233,6 +250,7 @@ def main() -> None:
         "status": (
             "complete" if axes.get("status") == "complete"
             and hook_quality.get("status") == "complete"
+            and forward_response.get("status") == "complete"
             and hook_examples.get("status") == "complete" else "building"
         ),
         "boundary": {
@@ -362,6 +380,19 @@ def main() -> None:
             "latencySupported": ((hook_quality.get("latency") or {}).get("latencySupported")),
             "exampleWinner": ((hook_examples.get("machineVariantResult") or {}).get("winner")),
             "deterministicReplay": hook_examples.get("deterministicReplay"),
+            "forwardResponse": {
+                "validated": forward_response.get("validated"),
+                "selectedLagSeconds": (
+                    (forward_response.get("metricContract") or {}).get("selectedLagSeconds")
+                ),
+                "components": len(forward_response.get("components") or []),
+                "relationships": len(forward_response.get("relationships") or []),
+                "heldoutCategoryBalancedSpearman": (
+                    (forward_response.get("componentModel") or {}).get(
+                        "heldoutCategoryBalancedSpearman"
+                    )
+                ),
+            },
             "interpretation": (
                 "The deployable coordinate is a complete-hook text direction validated against a "
                 "cross-fitted endpoint-normalized retention factor. Four-player Shapley values "
@@ -417,6 +448,8 @@ def main() -> None:
             "canonicalComponents": canonical_partitions.get("chunks", 0),
             "hookQualityTrainingHooks": ((hook_quality.get("model") or {}).get("trainingHooks", 0)),
             "hookQualityComponents": len(hook_quality.get("components") or []),
+            "forwardResponseComponents": len(forward_response.get("components") or []),
+            "forwardResponseRelationships": len(forward_response.get("relationships") or []),
             "hookQualityBootstrapDirections": (
                 (hook_examples.get("modelValidation") or {}).get("bootstrapRepeats", 0)
             ),
@@ -456,6 +489,10 @@ def main() -> None:
                 "the supplied comparison examples are evaluation-only; every reported training "
                 "score is out of fold and live scoring uses the frozen final direction"
             ),
+            "forwardResponseSeparated": (
+                "only forward lags can be selected; reverse-time windows are controls, exact-cover "
+                "boundaries stay frozen, and failed whole-hook or standalone-pair audits remain rejected"
+            ),
         },
         "artifacts": {
             "findings": "/api/longquant/promise-lab/findings",
@@ -469,6 +506,7 @@ def main() -> None:
             "latencyStudy": "/api/longquant/promise-lab/latency-study",
             "canonicalPartitions": "/api/longquant/promise-lab/canonical-partitions",
             "hookQuality": "/api/longquant/promise-lab/hook-quality",
+            "forwardResponse": "/api/longquant/promise-lab/forward-response",
             "hookExamples": "/api/longquant/promise-lab/hook-example-results",
             "hookScore": "/api/longquant/promise-lab/hook-score",
             "crossScope": "/api/longquant/promise-lab/cross-scope",
@@ -498,6 +536,7 @@ def main() -> None:
         ("latency-study.json", "latency-study.json.gz"),
         ("canonical-partitions.json", "canonical-partitions.json.gz"),
         ("hook-quality.json", "hook-quality.json.gz"),
+        ("forward-response.json", "forward-response.json.gz"),
         ("hook-example-results.json", "hook-example-results.json.gz"),
         ("cross-scope.json", "cross-scope.json.gz"),
         ("swaps.json", "swaps/summary.json.gz"),
@@ -506,7 +545,10 @@ def main() -> None:
         value = load_json(local_name)
         if value is not None:
             r2.put_json(f"{R2_PREFIX}/{remote_name}", value, gzip_payload=True)
-    for local_name in ("canonical-partition-model.json", "hook-quality-model.json"):
+    for local_name in (
+        "canonical-partition-model.json", "hook-quality-model.json",
+        "forward-response-model.json",
+    ):
         value = load_json(local_name)
         if value is not None:
             r2.put_json(f"{R2_PREFIX}/{local_name}.gz", value, gzip_payload=True)

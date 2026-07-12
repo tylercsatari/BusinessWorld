@@ -2,7 +2,8 @@
 
 This is the deployable Promise Lab path from raw hook text to one quantitative
 score, four non-overlapping component attributions, six pair interactions, and
-explicit uncertainty. It uses the same `gemini-embedding-2` 1536-dimensional
+explicit uncertainty. It also reports a separately validated forward retention
+response for each component. It uses the same `gemini-embedding-2` 1536-dimensional
 text space as Long Quant. It does not ask a generative LLM to interpret, split,
 rank, or rewrite the hook.
 
@@ -121,6 +122,19 @@ its isolated effects while averaging over every remaining context. The UI shows
 all 15 real embedding inputs, singleton effects, deletion effects, component
 bootstrap intervals, pair intervals, and category-relative percentiles.
 
+The broad Shapley values above decompose the complete-hook retained-information
+axis. A second value function measures local response. For each exact component,
+the serving feature is an equal-energy concatenation of:
+
+- its isolated unit embedding;
+- its in-context deletion-influence unit embedding.
+
+A different frozen 3072-dimensional direction is fitted for each of the four
+outcome-blind categories. The relationship between components `i` and `j` is
+the exact second-order interaction across all 16 subset states on component
+`j`'s category-specific forward-response direction. This keeps order and
+context in the calculation instead of averaging isolated phrase scores.
+
 ## 6. Uncertainty and latency
 
 The model stores 128 source-bootstrap refits. Each scored hook reports the 10th,
@@ -131,17 +145,47 @@ when alternatives are compared. It also reports:
 - canonical partition top-two gap and its training percentile
 - held-out model statistics
 
-Latency is tested rather than assumed. The study evaluates 23 offsets from -3
-through +8 seconds in 0.5-second steps across five retention windows, for 115
-tests. Component scores and natural-drop baselines are cross-fitted by source,
-then evaluated against a source-bootstrap family-wise max null. No positive lag
-passes the predeclared rule, so production attribution uses no selected lag.
+Latency is tested rather than assumed. The earlier study asked whether one
+whole-hook semantic direction could be reused unchanged at every lag; that
+fixed-direction hypothesis did not validate and remains visible as a negative
+result. The production component study asks the relevant different question:
+which forward shift lets category-specific component semantics predict their
+own local retention response?
+
+The selectable candidates are the exact spoken interval shifted forward from
+0 through 5 seconds in 0.5-second increments. Reverse-time shifts from -3 to
+-0.5 seconds are falsification controls and can never win. Within every outer
+source-video fold, the lag is selected using only the training videos and an
+equal-category Fisher mean of held-out rank correlations. The selected ruler is
+then tested once on untouched videos.
+
+The selected production ruler is **+1.0 second**. Its fixed held-out
+category-balanced Spearman is `0.2050`; category values are `0.2125`, `0.2445`,
+`0.2346`, and `0.1267`, all positive. The nested selection procedure is also
+positive, and the fixed +1-second signal exceeds every reverse-time control.
+Across 2,048 source bootstraps the median winning lag is 1.0 second; the 10th to
+90th percentile range is 0.5 to 4.0 seconds, and +1 second wins 42.3%. The UI
+shows that uncertainty rather than presenting one second as millisecond-level
+certainty.
+
+For interval `[start, end]`, the observed target is the least-squares slope over
+`[start + 1, end + 1]` after endpoint normalization. A text-free ridge baseline
+uses exact timing, duration, entry, terminal, amplitude, and the out-of-fold
+entry expected from terminal retention. The modeled target is observed minus
+expected slope. Higher means flatter loss or a rise beyond expectation.
+
+Two attempted extensions fail their own held-out gates and are not promoted:
+the equal average of four component scores does not validate as a new whole-hook
+score, and a standalone pair-residual model is only borderline. The original
+complete-hook retained-information axis remains the overall hook score; pair
+cells are exact interactions on the validated later-component axis and make no
+separate causal claim.
 
 ## 7. Supplied example, held out from training
 
 The four supplied sentences are evaluation-only. Scoring them twice produces
 the identical JSON SHA-256
-`5429e521e26cefa248106516922dc744e8095a9c290227c36a9ab893e66551c5`.
+`5aa5205e250b6122bfbeab417fb9709574d8e4149b68db7db1290673105ce20f`.
 
 | Hook | Percentile | Bootstrap P10-P90 |
 | --- | ---: | ---: |
@@ -178,6 +222,7 @@ The hard gates are:
 ```bash
 python buildings/jarvis/promise-lab/verify_canonical_partitions.py
 python buildings/jarvis/promise-lab/verify_hook_quality.py
+python buildings/jarvis/promise-lab/verify_forward_response.py
 python buildings/jarvis/promise-lab/verify_hook_examples.py
 ```
 
@@ -205,5 +250,6 @@ unbounded API and memory job.
 Large artifacts are loaded from `longform/promise-lab-v4/` in R2 and cached in
 `/tmp`; there is no resident GPU and no always-on model worker. The Promise Lab
 **Hook scorer** tab renders the quality map, stored example comparison, exact
-partition, component contributions, pair interactions, subset inputs, domain
+partition, four category-specific forward-response maps, every measured training
+interval, component contributions, pair interactions, subset inputs, domain
 evidence, latency decision, and nearest training hooks from these same artifacts.

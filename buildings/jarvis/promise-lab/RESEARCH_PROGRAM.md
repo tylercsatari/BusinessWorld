@@ -260,6 +260,41 @@ measured source-component direction that can honestly be named reference to
 gratification. The five observed targets are also correlated views of early
 retention, not five independent psychological constructs.
 
+## Stage 8: Canonical forward-response metric
+
+After the outcome-blind four-part exact covers are frozen, a dedicated study
+tests where the audience response to each canonical component appears. This is
+not a relabeling of the earlier all-span result: it uses 832 mutually exclusive
+canonical chunks, a predeclared equal-energy raw plus deletion-influence input,
+and category-specific axes rather than asking one span axis to cover every
+scope and lag.
+
+Selectable response windows are the exact spoken interval shifted only forward
+from zero through five seconds in half-second increments. Reverse-time windows
+are controls. Lag selection happens inside each outer source-video fold, using
+an equal-category Fisher mean of inner held-out correlations. The response
+target is endpoint-normalized least-squares slope minus a text-free expected
+natural drop fitted from timing, duration, entry, terminal, amplitude, and the
+cross-fitted entry-to-terminal relationship.
+
+Completed evidence:
+
+- the selected production lag is `+1.0s`;
+- nested category-balanced held-out Spearman is `0.1375` with source sign-flip
+  `p=0.000244`;
+- the fixed `+1s` category-balanced held-out Spearman is `0.2050`;
+- category-held-out correlations are `0.2125`, `0.2445`, `0.2346`, and `0.1267`;
+- the fixed signal is stronger than every separately fitted reverse-time control;
+- 203 hooks and 812 components have exact positive-duration timing; all 832
+  components and 1,248 ordered source pairs are stored;
+- 2,048 source bootstraps select a median lag of one second, with a 10th to 90th
+  percentile range from 0.5 to 4.0 seconds;
+- the equal four-component whole-hook aggregate fails (`p=0.7464`) and is not
+  promoted over the validated complete-hook retained-information axis;
+- the standalone pair-residual audit remains unvalidated (`p=0.0618`); pair
+  cells therefore report exact interactions on the later component's validated
+  axis and make no separate causal claim.
+
 ## Required visual evidence
 
 The UI must expose:
@@ -275,6 +310,8 @@ The UI must expose:
 - baseline-adjusted transfer bars for every Long Quant metric;
 - semantic axis planes;
 - grouped out-of-fold predicted-versus-observed plots;
+- the forward-only lag curve, all four canonical component planes, exact spoken
+  and response windows, observed-minus-expected slopes, and held-out predictions;
 - the complete experiment registry.
 
 ## Falsification and stopping rules

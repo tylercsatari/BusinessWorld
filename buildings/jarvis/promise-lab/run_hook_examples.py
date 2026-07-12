@@ -117,6 +117,19 @@ def main() -> None:
     ))
     example_rows = []
     for spec, result in zip(EXAMPLES, first):
+        forward = result.get("forwardResponse") or {}
+        forward_components = [
+            {
+                "index": component["index"],
+                "text": component["text"],
+                "category": component["category"],
+                "percentile": (component.get("forwardResponse") or {}).get("percentile"),
+                "axisCoordinate": (component.get("forwardResponse") or {}).get("axisCoordinate"),
+                "heldoutSpearmanForCategory": (
+                    (component.get("forwardResponse") or {}).get("heldoutSpearmanForCategory")
+                ),
+            } for component in result.get("components") or []
+        ]
         example_rows.append({
             **spec,
             "score": result,
@@ -128,6 +141,12 @@ def main() -> None:
                 "bootstrapP90": result["confidence"]["bootstrapPercentileP90"],
                 "inDomainSimilarityPercentile": result["confidence"]["inDomainSimilarityPercentile"],
                 "partitionGapPercentile": result["confidence"]["partitionScoreGapPercentile"],
+                "forwardComponents": forward_components,
+                "forwardRelationships": forward.get("relationships") or [],
+                "forwardMetric": forward.get("metric"),
+                "exploratoryWholeHookComposite": forward.get(
+                    "exploratoryWholeHookComposite"
+                ),
             },
         })
     output = {
@@ -145,6 +164,9 @@ def main() -> None:
             "heldoutPearson": model["validation"]["heldoutPearson"],
             "familyCorrectedSignFlipP": model["validation"]["signFlipP"],
             "bootstrapRepeats": len(bootstrap),
+            "forwardResponse": (
+                (model.get("forwardResponse") or {}).get("component") or {}
+            ).get("validation"),
         },
         "machineVariantResult": {
             "mainAxisRanking": [EXAMPLES[index]["id"] for index in machine_rank],
