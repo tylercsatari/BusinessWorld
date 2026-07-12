@@ -609,9 +609,23 @@ const JarvisRetention = (function () {
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="font-size:12px;font-weight:700;color:${C.text};line-height:1.4"><span style="color:${col}">⬆ #${i + 1}</span> · ${esc(U.title || 'My upload')}${U.silent ? ` <span style="color:${C.faint};font-weight:400;font-size:10px">· no voiceover</span>` : ''}</div><span data-rawupclose="1" style="cursor:pointer;color:${C.dim};font-size:16px;line-height:1;padding:0 4px">×</span></div>
                   <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">exact input embedded — first-5s frames, 1/sec</div>
                   <img src="data:image/jpeg;base64,${U.montage}" style="width:100%;border-radius:6px;background:#000;margin-bottom:8px"/>
-                  ${U.silent ? '' : `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:2px">transcript (first 5s)</div><div style="font-size:12px;color:${C.text};font-style:italic;margin-bottom:8px;line-height:1.45;background:#0f172a;border-radius:6px;padding:9px 11px">"${esc(U.transcript || '')}"</div>`}
+                  ${(() => {
+                      const ed = st.rawTransEdit && st.rawTransEdit.idx === st.rawUpSel ? st.rawTransEdit : null;
+                      const head = `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:2px">transcript (first 5s)${U.transcriptSource ? ` · ${esc(U.transcriptSource)}` : ''}</div>`;
+                      const body = U.silent
+                          ? `<div style="font-size:11px;color:${C.dim};margin-bottom:6px">no speech detected${U.transcript ? ` — low-confidence guess: <i>"${esc(String(U.transcript).slice(0, 160))}"</i>` : ''} — text/together channels were skipped. If there IS a voiceover, fix it below.</div>`
+                          : `<div style="font-size:12px;color:${C.text};font-style:italic;margin-bottom:6px;line-height:1.45;background:#0f172a;border-radius:6px;padding:9px 11px">"${esc(U.transcript || '')}"</div>`;
+                      if (!ed) return head + body + (U.montage ? `<div style="margin-bottom:8px"><span data-rawtransedit="${st.rawUpSel}" style="cursor:pointer;border:1px solid ${C.amber};background:${C.amber}18;color:${C.amber};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:800">✏️ fix transcript + re-embed</span></div>` : '');
+                      return head + `<div style="border:1px solid ${C.amber}66;border-radius:8px;padding:8px;margin-bottom:8px;background:#0f172a">
+                        <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">type EXACTLY what is said in the first 5 seconds (leave empty for none)</div>
+                        <textarea data-rawtranstext rows="2" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:12px;font-family:inherit;resize:vertical">${esc(ed.text || '')}</textarea>
+                        <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:6px"><span data-rawreembed="${st.rawUpSel}" style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:4px 11px;font-size:10px;font-weight:900">${st.rawReembedBusy ? '⏳ re-embedding all channels…' : '🔁 re-embed with this transcript'}</span><span data-rawreembedvis="${st.rawUpSel}" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">visuals only</span><span data-rawtranscancel style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">cancel</span></div>
+                        <div style="font-size:8.5px;color:${C.faint};margin-top:4px">Re-embeds the SAME 5-frame montage with your text: visual stays identical, text + together are recomputed, and every steered output updates.</div>
+                      </div>`;
+                  })()}
                   ${placed}
                   ${(() => { const s = U.steer || {}; const row = (tn, lab) => { for (const m of ['together', 'text', 'visual']) { const k = s[`${m}_${tn}`]; if (k) return `<div style="display:flex;justify-content:space-between;gap:10px;font-size:11px"><span style="color:${C.mute}">${lab}</span><span style="color:${C.text};font-weight:700">~${k.est}% <span style="color:${C.mute};font-weight:400">(${k.pctile}th pctile of corpus · via ${m})</span></span></div>`; } return ''; }; const kk = row('keep', 'est. keep-rate') + row('ret5', 'est. past-5s'); return kk ? `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">extrapolated onto your 211's scale</div>${kk}<div style="font-size:9px;color:${C.faint};margin-top:4px">Projected onto the same steered direction as the 11k map, quantile-mapped to your videos' actual outcomes. Open <b>→ keep-rate</b> to see it placed.</div></div>` : ''; })()}
+                  ${rawChanGridHtml(U)}
                 </div>`;
         })() : '';
         h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
@@ -1321,7 +1335,14 @@ const JarvisRetention = (function () {
             <div style="font-size:10px;color:${CY};font-weight:800;text-transform:uppercase;margin-bottom:5px">Embedding — 5 boxes (views in BOTH library &amp; your scale)</div>
             <div style="${gcol};margin-bottom:12px">${['keep', 'ret5', 'views', 'realviews', 'gt10M'].map(embBox).join('')}</div>
             <div style="font-size:10px;color:${C.purple};font-weight:800;text-transform:uppercase;margin-bottom:5px">Novelty — 3 boxes (independent)</div>
-            <div style="${gcol}">${['keep', 'ret5', 'views'].map(novBox).join('')}</div>`, 12);
+            <div style="${gcol}">${['keep', 'ret5', 'views'].map(novBox).join('')}</div>
+            ${rawChanGridHtml(up)}
+            ${(() => {
+                const idx = (st.rawUploads || []).lastIndexOf(up);
+                if (idx < 0 || !up.montage) return '';
+                const hasText = !!String(up.transcript || up.text || '').trim() && !up.silent;
+                return `<div style="margin-top:8px;font-size:10px;color:${C.dim}">transcript: ${hasText ? `<i>"${esc(String(up.transcript || up.text).slice(0, 140))}"</i>` : `<b style="color:${C.amber}">none detected</b> — text + together outputs are locked`}${up.transcriptSource ? ` · ${esc(up.transcriptSource)}` : ''} <span data-rawtransedit="${idx}" style="cursor:pointer;border:1px solid ${C.amber};background:${C.amber}18;color:${C.amber};border-radius:6px;padding:2px 8px;font-size:9px;font-weight:800;margin-left:6px">✏️ fix transcript + re-embed</span></div>${st.rawTransEdit && st.rawTransEdit.idx === idx ? `<div style="border:1px solid ${C.amber}66;border-radius:8px;padding:8px;margin-top:6px;background:#0f172a"><textarea data-rawtranstext rows="2" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:12px;font-family:inherit;resize:vertical">${esc(st.rawTransEdit.text || '')}</textarea><div style="display:flex;gap:7px;margin-top:6px"><span data-rawreembed="${idx}" style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:4px 11px;font-size:10px;font-weight:900">${st.rawReembedBusy ? '⏳ re-embedding…' : '🔁 re-embed with this transcript'}</span><span data-rawreembedvis="${idx}" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">visuals only</span><span data-rawtranscancel style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">cancel</span></div></div>` : ''}`;
+            })()}`, 12);
         return head + controls + '<div id="exp-scoreout"></div>' + trace + boxes + savedStrip();
     }
     function rtgUpdateFusion() { try { const el = window.document.getElementById('rtg-fusionpanel'); if (el) el.innerHTML = renderFusion(); } catch (e) { } }
@@ -3084,7 +3105,83 @@ const JarvisRetention = (function () {
         st.rawFrameSlot = slot;
         upload.pickFiles({ accept: 'image/jpeg,image/png,image/webp', onSelect: files => files[0] ? rtgFrameFile(files[0], slot) : null, onError: rawUploadPickerError });
     }
+    // async scoring job: POST returns {jobId} instantly (no Render 100s proxy ceiling),
+    // poll until done; if a redeploy loses the job, resubmit up to twice.
+    async function rtJob(url, opts, resubmits) {
+        const r = await fetch(url, opts);
+        const raw = await r.text();
+        let j = null; try { j = JSON.parse(raw); } catch (e) { }
+        if (!j) throw new Error('server returned ' + r.status + (raw.trim().startsWith('<') ? ' — redeploying; retry in ~30s' : ' (non-JSON)'));
+        if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+        if (!j.jobId) return j;   // sync result
+        for (let i = 0; i < 240; i++) {
+            await new Promise(res2 => window.setTimeout(res2, i < 8 ? 2500 : 5000));
+            const pr = await fetch('/api/longquant/jobs/' + j.jobId);
+            const pj = await pr.json().catch(() => null);
+            if (pr.status === 404) {
+                if ((resubmits || 0) < 2) return rtJob(url, opts, (resubmits || 0) + 1);
+                throw new Error('scoring job lost across a redeploy — try again');
+            }
+            if (pj && pj.status === 'done') return pj.result;
+            if (pj && pj.status === 'error') throw new Error(pj.error || 'scoring job failed');
+        }
+        throw new Error('scoring job still running after 15 minutes');
+    }
+    // re-embed an upload with a corrected transcript (or none) — reuses its stored montage,
+    // recomputes text/together channels + every steered output, replaces the record in place.
+    async function rtgReembed(idx, text, visualOnly) {
+        const u = (st.rawUploads || [])[idx];
+        if (!u || !u.montage || st.rawReembedBusy) return;
+        st.rawReembedBusy = true; st.rawUpErr = null; rtgUpdateRaw(); rtgUpdateExp();
+        try {
+            const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage: u.montage, text: visualOnly ? '' : String(text || '').slice(0, 2000), title: u.title || 'Re-embedded hook', duration: u.dur_s || u.duration || null, async: true }) });
+            if (j && !j.error) {
+                st.rawUploads[idx] = { ...j, title: u.title || j.title, transcriptSource: visualOnly ? 'forced visual-only' : 'typed by you', _reembedded: true };
+                st.rawUpSel = idx;
+                st.rawTransEdit = null;
+            } else st.rawUpErr = (j && j.error) || 're-embed failed';
+        } catch (e) { st.rawUpErr = 're-embed: ' + (e.message || e); }
+        st.rawReembedBusy = false;
+        rtgUpdateRaw(); rtgUpdateExp(); render();
+    }
+    // EVERY channel × EVERY steered output, labelled — the long-quant-style full grid.
+    // 5 outputs × visual always + text/together when a transcript exists = up to 15 (+ novelty set).
+    function rawChanGridHtml(U) {
+        if (!U || !U.steer) return '';
+        const TARGETS = [['keep', 'keep rate'], ['ret5', 'past-5s'], ['views', 'views (library)'], ['realviews', 'views (yours)'], ['outlier', 'outlier'], ['gt10M', '>10M']];
+        const CHANS = [['visual', '5-frame montage only'], ['text', 'transcript only'], ['together', 'montage + transcript']];
+        const hasText = !!String(U.transcript || U.text || '').trim() && !U.silent;
+        let found = 0, possible = 0;
+        const rows = CHANS.map(([m, input]) => {
+            const present = m === 'visual' || hasText;
+            const cells = TARGETS.map(([tn, lab]) => {
+                if (present) possible++;
+                const k = U.steer[`${m}_${tn}`];
+                if (!present) return `<span style="border:1px dashed ${C.border};border-radius:5px;padding:2px 6px;font-size:9px;color:${C.faint}">${lab} —</span>`;
+                if (!k) return `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;font-size:9px;color:${C.faint}">${lab} missing</span>`;
+                found++;
+                const pc = k.pctile != null ? Math.round(k.pctile) : null;
+                return `<span title="${esc(m)} embedding: ${esc(input)}" style="border:1px solid ${pc != null && pc >= 80 ? C.green : C.cyan}55;border-radius:5px;padding:2px 6px;font-size:9px;color:${C.dim}">${lab} <b style="color:${pc != null && pc >= 80 ? C.green : C.text}">${steerDisp(tn, k.est)}</b>${pc != null ? ` <span style="color:${C.faint}">${pc}th</span>` : ''}</span>`;
+            }).join('');
+            return `<div style="display:grid;grid-template-columns:74px minmax(0,1fr);gap:6px;align-items:start;margin-top:4px"><div><div style="font-size:9px;font-weight:900;text-transform:uppercase;color:${m === 'visual' ? C.green : m === 'text' ? C.purple : C.accent}">${m}</div><div style="font-size:7.5px;color:${C.faint};line-height:1.25">${present ? esc(input) : 'no transcript'}</div></div><div style="display:flex;gap:3px;flex-wrap:wrap">${cells}</div></div>`;
+        }).join('');
+        return `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="display:flex;justify-content:space-between;gap:6px;font-size:9px;font-weight:900;text-transform:uppercase"><span style="color:${C.mute}">all embedding outputs</span><span style="color:${found === possible ? C.green : C.amber}">${found}/${possible}${hasText ? '' : ' (visual-only — no transcript; fix it above to unlock text + together)'}</span></div>${rows}</div>`;
+    }
     function onClick(e) {
+        const rte = e.target.closest('[data-rawtransedit]'); if (rte) {
+            const idx = parseInt(rte.getAttribute('data-rawtransedit'), 10);
+            const u = (st.rawUploads || [])[idx] || {};
+            st.rawTransEdit = { idx, text: u.silent ? '' : String(u.transcript || '') };
+            render(); return;
+        }
+        if (e.target.closest('[data-rawtranscancel]')) { st.rawTransEdit = null; render(); return; }
+        const rre = e.target.closest('[data-rawreembed]'); if (rre) {
+            const ta = window.document.querySelector('[data-rawtranstext]');
+            if (ta && st.rawTransEdit) st.rawTransEdit.text = ta.value;
+            rtgReembed(parseInt(rre.getAttribute('data-rawreembed'), 10), (st.rawTransEdit && st.rawTransEdit.text) || '', false);
+            return;
+        }
+        const rrv = e.target.closest('[data-rawreembedvis]'); if (rrv) { rtgReembed(parseInt(rrv.getAttribute('data-rawreembedvis'), 10), '', true); return; }
         const ps = e.target.closest('[data-pred-scale]'); if (ps) { st.predScale = ps.getAttribute('data-pred-scale'); render(); return; }
         const pfeat = e.target.closest('[data-predfeat]'); if (pfeat) { const f = pfeat.getAttribute('data-predfeat'); st.predFeats = (st.predFeats || ['keep', 'retention', 'log_dur']); st.predFeats = st.predFeats.includes(f) ? st.predFeats.filter(x => x !== f) : st.predFeats.concat([f]); render(); return; }
         const pset = e.target.closest('[data-predset]'); if (pset) { st.predFeats = pset.getAttribute('data-predset').split('+'); render(); return; }
@@ -3199,6 +3296,7 @@ const JarvisRetention = (function () {
         if (tr) { const id = tr.getAttribute('data-row'); st.open = st.open === id ? null : id; render(); }
     }
     function onInput(e) {
+        if (e.target.hasAttribute && e.target.hasAttribute('data-rawtranstext')) { if (st.rawTransEdit) st.rawTransEdit.text = e.target.value; return; }
         if (e.target.id === 'rtg-minstr') { st.rtgMinStr = +e.target.value; rtgUpdateThresh(); return; }
         if (e.target.id === 'rtg-hazA') { st.hazA = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-hazB') { st.hazB = +e.target.value; rtgUpdateHazCompare(); return; }
@@ -3275,11 +3373,8 @@ const JarvisRetention = (function () {
                 st.rawUpStage = 1; st.rawUpQueue = { i: n + 1, total: list.length }; rtgUpdateRaw();
                 const upHeaders = { 'X-Raw-Ext': ext, 'X-Raw-Title': safeTitle };
                 if (realDur > 0) upHeaders['X-Raw-Duration'] = String(Math.round(realDur));   // true full length → correct realviews
-                const r = await fetch('/api/raw/embed-upload', { method: 'POST', headers: upHeaders, body: blob });   // tiny clip (or small file) — streams
-                const raw = await r.text();
-                let j = null; try { j = JSON.parse(raw); } catch (e) { }
-                if (!j) { st.rawUpErr = (file.name || '') + ': server returned ' + r.status + ((r.status >= 500 || raw.trim().startsWith('<')) ? ' — the server is redeploying or busy; wait ~30s and try again' : ' (non-JSON)'); }
-                else if (!r.ok || j.error) { st.rawUpErr = (file.name || '') + ': ' + (j.error || ('HTTP ' + r.status)); }
+                const j = await rtJob('/api/raw/embed-upload', { method: 'POST', headers: { ...upHeaders, 'x-raw-async': '1' }, body: blob });   // async job — immune to the 100s proxy ceiling
+                if (!j || j.error) { st.rawUpErr = (file.name || '') + ': ' + ((j && j.error) || 'embed failed'); }
                 else { st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; }
             } catch (e) { st.rawUpErr = (file.name || '') + ': ' + (String(e.message || e).includes('Failed to fetch') ? 'connection dropped (large upload or redeploy) — retry in a moment' : e.message); }
             window.clearInterval(tick);

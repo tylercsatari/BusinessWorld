@@ -1686,8 +1686,7 @@ const server = http.createServer(async (req, res) => {
                 const script = path.join(__dirname, 'raw_upload.py');
                 const pyArgs = [script, '--file', tmp, '--title', title];
                 if (durH > 0 && isFinite(durH)) pyArgs.push('--duration', String(Math.round(durH)));
-                try {
-                    const line = await runHeavyScore(() => new Promise((ok, no) => {
+                const upRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
                         const py = spawn(RAW_PYTHON, pyArgs, { env: RAW_PY_ENV });
                         let out = '', err = '';
                         py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
@@ -1700,6 +1699,15 @@ const server = http.createServer(async (req, res) => {
                         });
                         py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
                     }));
+                if (String(req.headers['x-raw-async'] || '') === '1') {
+                    const jobId = lqJobSubmit('raw-embed-upload', async () => {
+                        try { return JSON.parse(await upRunner()); }
+                        finally { try { fs.unlinkSync(tmp); } catch (_) {} }
+                    });
+                    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return;
+                }
+                try {
+                    const line = await upRunner();
                     res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(line);
                 } catch (e) {
                     res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message }));
@@ -1732,9 +1740,11 @@ const server = http.createServer(async (req, res) => {
             try { fs.writeFileSync(tmp, Buffer.from(m, 'base64')); }
             catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write failed: ' + e.message })); return; }
             const script = path.join(__dirname, 'raw_upload.py');
-            try {
-                const line = await runHeavyScore(() => new Promise((ok, no) => {
-                    const py = spawn(RAW_PYTHON, [script, '--image', tmp, '--text', (j.text || '').toString().slice(0, 2000), '--title', (j.title || 'Built hook').toString().slice(0, 80)], { env: RAW_PY_ENV });
+            const monArgs = [script, '--image', tmp, '--text', (j.text || '').toString().slice(0, 2000), '--title', (j.title || 'Built hook').toString().slice(0, 80)];
+            const monDur = parseFloat(j.duration);
+            if (monDur > 0 && isFinite(monDur)) monArgs.push('--duration', String(Math.round(monDur)));
+            const monRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
+                    const py = spawn(RAW_PYTHON, monArgs, { env: RAW_PY_ENV });
                     let out = '', err = '';
                     py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
                     const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout')); }, 120000);
@@ -1746,6 +1756,15 @@ const server = http.createServer(async (req, res) => {
                     });
                     py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
                 }));
+            if (j.async) {
+                const jobId = lqJobSubmit('raw-embed-montage', async () => {
+                    try { return JSON.parse(await monRunner()); }
+                    finally { try { fs.unlinkSync(tmp); } catch (_) {} }
+                });
+                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return;
+            }
+            try {
+                const line = await monRunner();
                 res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(line);
             } catch (e) {
                 res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message }));

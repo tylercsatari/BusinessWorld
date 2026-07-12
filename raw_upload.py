@@ -79,18 +79,27 @@ def gemini_transcribe(wav):
         return '', False
 
 def whisper_text(wav):
-    """Whisper-tiny where available (matches how the dataset was transcribed);
-    falls back to the Gemini API when Whisper/torch isn't installed."""
+    """Whisper-tiny where available (matches how the dataset was transcribed) with a Gemini
+    SECOND OPINION: quiet or music-backed voiceovers routinely fail whisper-tiny's confidence
+    gates and used to come back 'silent' even though speech exists. If whisper isn't confident,
+    Gemini listens too — a hook is only called silent when BOTH hear nothing."""
+    wtxt, wgood = '', False
     try:
         import whisper
         res = whisper.load_model('tiny').transcribe(wav, fp16=False)
+        wtxt = (res.get('text') or '').strip()
+        segs = res.get('segments') or []
+        nsp = float(np.mean([sg.get('no_speech_prob', 0.0) for sg in segs])) if segs else 1.0
+        alp = float(np.mean([sg.get('avg_logprob', -5.0) for sg in segs])) if segs else -5.0
+        wgood = bool(wtxt) and nsp < 0.6 and alp > -1.0 and coherent(wtxt)
     except Exception:
-        return gemini_transcribe(wav)
-    txt = (res.get('text') or '').strip()
-    segs = res.get('segments') or []
-    nsp = float(np.mean([sg.get('no_speech_prob', 0.0) for sg in segs])) if segs else 1.0
-    alp = float(np.mean([sg.get('avg_logprob', -5.0) for sg in segs])) if segs else -5.0
-    return txt, (bool(txt) and nsp < 0.6 and alp > -1.0 and coherent(txt))
+        pass
+    if wgood:
+        return wtxt, True
+    gtxt, ggood = gemini_transcribe(wav)
+    if ggood and gtxt:
+        return gtxt, True
+    return (wtxt or gtxt), False
 
 def _montage_audio(src, mon, wav):
     """Extract the 5-frame montage + first-5s audio→transcript from one source file.
