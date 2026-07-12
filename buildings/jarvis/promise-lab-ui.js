@@ -241,9 +241,9 @@
             await settleHookScore(request, operation);
         }
 
-        async function jsonResponse(response) {
+        async function jsonResponse(response, allowErrorRecord = false) {
             const value = await response.json().catch(() => ({}));
-            if (!response.ok || value.error) {
+            if (!response.ok || (!allowErrorRecord && value.error)) {
                 throw new Error(value.error || `${response.status} ${response.statusText}`);
             }
             return value;
@@ -277,7 +277,7 @@
                     job = await jsonResponse(await fetch(
                         `/api/longquant/jobs/${encodeURIComponent(jobId)}`,
                         { cache: 'no-store' },
-                    ));
+                    ), true);
                 } catch (error) {
                     if (/job lost|resubmit/i.test(String(error && error.message || error)) && resubmits < 2) {
                         clearPendingHookScore(jobId);
