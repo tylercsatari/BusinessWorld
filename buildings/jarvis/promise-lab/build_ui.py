@@ -136,6 +136,9 @@ def main() -> None:
     manual_projection = load_json("manual-projection.json", {})
     cluster_outcomes = load_json("cluster-outcomes.json", {})
     latency_study = load_json("latency-study.json", {})
+    canonical_partitions = load_json("canonical-partitions.json", {})
+    hook_quality = load_json("hook-quality.json", {})
+    hook_examples = load_json("hook-example-results.json", {})
     boundary_registry = load_jsonl_gz("boundary-experiments.jsonl.gz")
     cluster_registry = load_jsonl_gz("cluster-experiments.jsonl.gz")
     all_span_cluster_registry = load_jsonl_gz("all-span-cluster-experiments.jsonl.gz")
@@ -157,6 +160,22 @@ def main() -> None:
                 boundary_registry + cluster_registry + all_span_cluster_registry
                 + cross_scope_registry + axis_registry]
     registry.extend(compact_registry_row(row) for row in cluster_outcome_registry)
+    if hook_quality.get("status") == "complete":
+        quality_model = hook_quality.get("model") or {}
+        registry.append({
+            "id": hook_quality.get("methodVersion"),
+            "stage": "hook-quality-axis",
+            "method": "nested held-out retained-information direction",
+            "representation": "complete-hook Gemini text embedding",
+            "pcaDimensions": quality_model.get("selectedDimensions"),
+            "ridgeAlpha": quality_model.get("selectedAlpha"),
+            "n": quality_model.get("trainingHooks"),
+            "heldoutSpearman": quality_model.get("heldoutSpearman"),
+            "heldoutPearson": quality_model.get("heldoutPearson"),
+            "searchWideP": quality_model.get("signFlipP"),
+            "status": "validated" if float(quality_model.get("signFlipP") or 1) <= .05 else "not-validated",
+            "outcomesUsed": True,
+        })
 
     selected = [row.get("selectedSegmentation") or {} for row in discovery.get("rows") or []]
     selected_counts = Counter(int(row.get("segmentCount") or 0) for row in selected)
@@ -211,7 +230,11 @@ def main() -> None:
         ]
 
     findings = {
-        "status": "complete" if axes.get("status") == "complete" else "building",
+        "status": (
+            "complete" if axes.get("status") == "complete"
+            and hook_quality.get("status") == "complete"
+            and hook_examples.get("status") == "complete" else "building"
+        ),
         "boundary": {
             "hooksTested": len(selected),
             "supportedMultiSegmentHooks": supported,
@@ -331,6 +354,20 @@ def main() -> None:
                 "text-free natural-drop baselines and negative lags prevent post-hoc latency claims."
             ),
         },
+        "hookQuality": {
+            "status": hook_quality.get("status"),
+            "methodVersion": hook_quality.get("methodVersion"),
+            "model": hook_quality.get("model"),
+            "components": len(hook_quality.get("components") or []),
+            "latencySupported": ((hook_quality.get("latency") or {}).get("latencySupported")),
+            "exampleWinner": ((hook_examples.get("machineVariantResult") or {}).get("winner")),
+            "deterministicReplay": hook_examples.get("deterministicReplay"),
+            "interpretation": (
+                "The deployable coordinate is a complete-hook text direction validated against a "
+                "cross-fitted endpoint-normalized retention factor. Four-player Shapley values "
+                "decompose that same coordinate; they are not separate fitted outcomes."
+            ),
+        },
     }
     (CACHE / "findings.json").write_text(json.dumps(json_ready(findings), separators=(",", ":"),
                                                     allow_nan=False),
@@ -376,6 +413,14 @@ def main() -> None:
             "latencyStudyClusters": latency_study.get("clusterCount", 0),
             "latencyStudyLags": len(latency_study.get("lagsSeconds") or []),
             "latencyStudyWindows": len(latency_study.get("windows") or []),
+            "canonicalPartitions": canonical_partitions.get("hooks", 0),
+            "canonicalComponents": canonical_partitions.get("chunks", 0),
+            "hookQualityTrainingHooks": ((hook_quality.get("model") or {}).get("trainingHooks", 0)),
+            "hookQualityComponents": len(hook_quality.get("components") or []),
+            "hookQualityBootstrapDirections": (
+                (hook_examples.get("modelValidation") or {}).get("bootstrapRepeats", 0)
+            ),
+            "hookEvaluationExamples": len(hook_examples.get("examples") or []),
             "manualProbeMapsCompared": (
                 (manual_probe.get("counts") or {}).get("frozenMapsCompared", 0)
             ),
@@ -403,6 +448,14 @@ def main() -> None:
                 "one semantic score is shared across every lag within each held-out fold; natural "
                 "drop uses timing and curve endpoints only, with negative-lag controls"
             ),
+            "canonicalPartitionSeparated": (
+                "four exact-cover boundaries use compositional embedding reconstruction only; "
+                "outcomes and supplied examples cannot choose a boundary"
+            ),
+            "hookQualitySeparated": (
+                "the supplied comparison examples are evaluation-only; every reported training "
+                "score is out of fold and live scoring uses the frozen final direction"
+            ),
         },
         "artifacts": {
             "findings": "/api/longquant/promise-lab/findings",
@@ -414,6 +467,10 @@ def main() -> None:
             "manualProjection": "/api/longquant/promise-lab/manual-projection",
             "clusterOutcomes": "/api/longquant/promise-lab/cluster-outcomes",
             "latencyStudy": "/api/longquant/promise-lab/latency-study",
+            "canonicalPartitions": "/api/longquant/promise-lab/canonical-partitions",
+            "hookQuality": "/api/longquant/promise-lab/hook-quality",
+            "hookExamples": "/api/longquant/promise-lab/hook-example-results",
+            "hookScore": "/api/longquant/promise-lab/hook-score",
             "crossScope": "/api/longquant/promise-lab/cross-scope",
             "swaps": "/api/longquant/promise-lab/swaps",
             "axes": "/api/longquant/promise-lab/axes",
@@ -439,6 +496,9 @@ def main() -> None:
         ("manual-projection.json", "manual-projection.json.gz"),
         ("cluster-outcomes.json", "cluster-outcomes.json.gz"),
         ("latency-study.json", "latency-study.json.gz"),
+        ("canonical-partitions.json", "canonical-partitions.json.gz"),
+        ("hook-quality.json", "hook-quality.json.gz"),
+        ("hook-example-results.json", "hook-example-results.json.gz"),
         ("cross-scope.json", "cross-scope.json.gz"),
         ("swaps.json", "swaps/summary.json.gz"),
         ("axes.json", "axes.json.gz"),
@@ -446,6 +506,10 @@ def main() -> None:
         value = load_json(local_name)
         if value is not None:
             r2.put_json(f"{R2_PREFIX}/{remote_name}", value, gzip_payload=True)
+    for local_name in ("canonical-partition-model.json", "hook-quality-model.json"):
+        value = load_json(local_name)
+        if value is not None:
+            r2.put_json(f"{R2_PREFIX}/{local_name}.gz", value, gzip_payload=True)
     print(json.dumps({"status": manifest["status"], "counts": manifest["counts"],
                       "findings": findings}, indent=2))
 

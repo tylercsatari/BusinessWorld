@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""Hard checks for the deployable retained-information axis and decomposition."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import numpy as np
+
+
+HERE = Path(__file__).resolve().parent
+CACHE = HERE / ".cache"
+
+
+def main() -> None:
+    summary = json.loads((CACHE / "hook-quality.json").read_text(encoding="utf-8"))
+    model = json.loads((CACHE / "hook-quality-model.json").read_text(encoding="utf-8"))
+    assert summary["status"] == model["status"] == "complete"
+    assert model["generativeLlmUsed"] is False and model["semanticRules"] == 0
+    assert model["trainingExamples"] == 208
+    direction = np.asarray(model["qualityDirection"], float)
+    orthogonal = np.asarray(model["mapOrthogonalDirection"], float)
+    assert direction.shape == orthogonal.shape == (1536,)
+    assert np.isclose(np.linalg.norm(direction), 1, atol=2e-5)
+    assert np.isclose(np.linalg.norm(orthogonal), 1, atol=2e-5)
+    assert abs(float(direction @ orthogonal)) < 2e-5
+    bootstrap = np.asarray(model["bootstrapDirections"], float)
+    bootstrap_training = np.asarray(model["bootstrapTrainingProjectionsSorted"], float)
+    training = np.asarray(model["trainingFullEmbeddings"], float)
+    assert bootstrap.shape == (128, 1536)
+    assert bootstrap_training.shape == (128, 208)
+    assert training.shape == (208, 1536)
+    assert np.all(np.diff(np.asarray(model["trainingProjectionsSorted"], float)) >= 0)
+    assert np.all(np.diff(bootstrap_training, axis=1) >= 0)
+    validation = model["validation"]
+    assert validation["heldoutSpearman"] > 0
+    assert validation["signFlipP"] <= .05
+    assert validation["foldDirectionPositiveFraction"] == 1
+    target = model["target"]
+    assert target["factorExplainedVariance"] > .5
+    assert len(target["factorLoadings"]) == 6
+    assert all(float(value) > 0 for value in target["factorLoadings"])
+    points = summary["axis"]["points"]
+    components = summary["components"]
+    assert len(points) == 208 and len(components) == 832
+    assert max(float(row["shapleyEfficiencyError"]) for row in points) < 1e-8
+    for row in points:
+        vector = training[int(row["index"])]
+        expected = float(vector @ direction)
+        assert np.isclose(expected, float(row["axisCoordinate"]), atol=2e-6)
+        assert 0 <= float(row["axisPercentile"]) <= 100
+    latency = summary["latency"]
+    assert len(latency["lagsSeconds"]) == 23
+    assert len(latency["windows"]) == 5
+    assert len(latency["rows"]) == 115
+    assert latency["timingAudit"]["exactSources"] >= 200
+    assert latency["selectedLagSeconds"] is None if not latency["latencySupported"] else True
+    print(json.dumps({
+        "status": "verified",
+        "heldoutSpearman": validation["heldoutSpearman"],
+        "signFlipP": validation["signFlipP"],
+        "targetVariance": target["factorExplainedVariance"],
+        "components": len(components),
+        "latencySupported": latency["latencySupported"],
+    }, indent=2))
+
+
+if __name__ == "__main__":
+    main()

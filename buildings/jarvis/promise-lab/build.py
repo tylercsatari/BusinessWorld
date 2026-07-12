@@ -25,7 +25,9 @@ def main() -> None:
         "all-span-atlas", "cross-scope", "swaps", "verify-swaps", "axes",
         "verify-axes", "manual-probe", "manual-projection",
         "verify-manual-projection", "cluster-outcomes",
-        "verify-cluster-outcomes", "latency-study", "verify-latency-study", "ui",
+        "verify-cluster-outcomes", "latency-study", "verify-latency-study",
+        "canonical-partitions", "verify-canonical-partitions", "hook-quality",
+        "verify-hook-quality", "hook-examples", "verify-hook-examples", "ui",
     ),
                         default="interventions")
     parser.add_argument("--no-upload", action="store_true")
@@ -49,13 +51,21 @@ def main() -> None:
         ("verify-cluster-outcomes", "verify_cluster_outcomes.py"),
         ("latency-study", "run_latency_study.py"),
         ("verify-latency-study", "verify_latency_study.py"),
+        ("canonical-partitions", "run_canonical_partitions.py"),
+        ("verify-canonical-partitions", "verify_canonical_partitions.py"),
+        ("hook-quality", "run_hook_quality.py"),
+        ("verify-hook-quality", "verify_hook_quality.py"),
+        ("hook-examples", "run_hook_examples.py"),
+        ("verify-hook-examples", "verify_hook_examples.py"),
         ("ui", "build_ui.py"),
     ]
     start = next(index for index, item in enumerate(order) if item[0] == args.from_stage)
     for stage, script in order[start:]:
         supports_no_upload = stage not in {
             "verify-all-spans", "verify-swaps", "verify-axes",
-            "verify-manual-projection", "verify-cluster-outcomes", "verify-latency-study", "ui"
+            "verify-manual-projection", "verify-cluster-outcomes",
+            "verify-latency-study", "verify-canonical-partitions",
+            "verify-hook-quality", "verify-hook-examples", "ui",
         }
         extra = ["--no-upload"] if args.no_upload and supports_no_upload else []
         if args.no_upload and stage == "ui":

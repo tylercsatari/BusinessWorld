@@ -31,8 +31,18 @@ Stages:
    against already-retained map and cluster IDs; it creates no new maps.
 10. `run_manual_projection.py`: reconstruct the winning map's exact four
    clustering coordinates, freeze its labels, and compare three 2D viewing planes.
-11. `build_ui.py`: browser artifacts, cluster representatives, findings, and the
-   complete experiment registry.
+11. `run_canonical_partitions.py`: one outcome-blind, four-part, contiguous exact
+   cover per hook, with frozen category assignment only after boundary selection.
+12. `run_hook_quality.py`: nested held-out retention-information direction,
+   source bootstraps, all 16 subset embeddings, exact Shapley attribution, pair
+   interactions, domain checks, and latency falsification.
+13. `run_hook_examples.py`: deterministic evaluation of the supplied example
+   problem, kept entirely out of training and model selection.
+14. `build_ui.py`: browser artifacts, cluster representatives, findings, the
+   complete experiment registry, and the interactive Hook scorer.
+
+The complete deployable scoring architecture, formulas, validation evidence,
+and supplied-example result are documented in [`HOOK_SCORER.md`](HOOK_SCORER.md).
 
 `verify_all_span_store.py`, `verify_swap_outputs.py`, and
 `verify_axis_outputs.py` are hard gates in the orchestrated build. The manual

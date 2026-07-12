@@ -361,7 +361,7 @@ function lqJobSubmit(kind, runner) {
     _lqJobs.set(jid, rec);
     (async () => {
         rec.status = 'running'; rec.ts = Date.now();
-        try { rec.result = await runner(); rec.status = 'done'; }
+        try { rec.result = await runner(rec); rec.status = 'done'; }
         catch (e) { rec.status = 'error'; rec.error = String((e && e.message) || e).slice(0, 300); }
         rec.ts = Date.now();
         await cloud.uploadToR2(`longform/jobs/${jid}.json`, Buffer.from(JSON.stringify(rec)), 'application/json').catch(() => {});
@@ -375,6 +375,15 @@ async function lqJobGet(jid) {
     const b = await cloud.downloadFromR2(`longform/jobs/${jid}.json`).catch(() => null);
     if (b) { try { return JSON.parse(b.toString('utf8')); } catch (e) {} }
     return null;   // lost (deploy killed it before any write) — client resubmits
+}
+
+async function sendLqJobStatus(res, jid) {
+    const rec = await lqJobGet(jid);
+    res.writeHead(rec ? 200 : 404, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+    });
+    res.end(rec ? JSON.stringify(rec) : '{"error":"job lost (server restarted) — resubmit"}');
 }
 
 function compactIndicator(ind) {
@@ -807,6 +816,55 @@ function readBody(req) {
         });
         req.on('error', reject);
     });
+}
+
+function requestIsLoopback(req) {
+    const address = String((req.socket && req.socket.remoteAddress) || '');
+    return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+}
+
+async function handlePromiseHookScore(req, res) {
+    try {
+        const body = await readBody(req);
+        const text = String(body.text || '').replace(/\s+/g, ' ').trim().slice(0, 1200);
+        if (text.length < 8) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type a complete hook to score"}'); return; }
+        if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
+        const scoreRunner = job => {
+            if (job) { job.status = 'queued'; job.ts = Date.now(); }
+            return runHeavyScoreInteractive(() => {
+                if (job) { job.status = 'running'; job.ts = Date.now(); }
+                return new Promise((ok, no) => {
+            const script = path.join(__dirname, 'buildings/jarvis/promise-lab/score_hook.py');
+            const py = spawn(RAW_PYTHON, [script, '--stdin'], { env: RAW_PY_ENV, stdio: ['pipe', 'pipe', 'pipe'] });
+            let so = '', se = '';
+            py.stdout.on('data', d => { so += d; if (so.length > 8e6) so = so.slice(-8e6); });
+            py.stderr.on('data', d => { se += d; if (se.length > 20000) se = se.slice(-20000); });
+            py.stdin.end(text);
+            const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (_) {} no(new Error('hook scorer timeout')); }, 300000);
+            py.on('close', code => {
+                clearTimeout(timer);
+                const line = so.trim().split('\n').filter(value => value.trim().startsWith('{')).pop();
+                if (!line) return no(new Error((se.trim().split('\n').pop() || `hook scorer exited ${code}`).slice(-240)));
+                try { const value = JSON.parse(line); return value.error ? no(new Error(value.error)) : ok(value); }
+                catch (error) { return no(error); }
+            });
+            py.on('error', error => { clearTimeout(timer); no(error); });
+                });
+            });
+        };
+        if (body.async) {
+            const jobId = lqJobSubmit('promise-hook-score', scoreRunner);
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+            res.end(JSON.stringify({ ok: true, jobId }));
+            return;
+        }
+        const value = await scoreRunner();
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(value));
+    } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: error.message }));
+    }
 }
 
 // Helper: proxy a fetch and send response
@@ -1641,6 +1699,20 @@ const server = http.createServer(async (req, res) => {
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ rawPython: RAW_PYTHON, deps, detail, ffmpeg, ytdlp, hasGeminiKey: !!process.env.GEMINI_API_KEY, gemini, hasR2: !!process.env.R2_ACCESS_KEY_ID }));
+        return;
+    }
+
+    // Local verification uses the same scorer handler without weakening the
+    // authenticated Render route below. Non-loopback and deployed requests
+    // continue through the ordinary account gate.
+    if (!IS_RENDER && requestIsLoopback(req)
+        && pathname === '/api/longquant/promise-lab/hook-score' && req.method === 'POST') {
+        await handlePromiseHookScore(req, res);
+        return;
+    }
+    const localLqJob = pathname.match(/^\/api\/longquant\/jobs\/(j[a-z0-9]+)$/);
+    if (!IS_RENDER && requestIsLoopback(req) && localLqJob && req.method === 'GET') {
+        await sendLqJobStatus(res, localLqJob[1]);
         return;
     }
 
@@ -3733,12 +3805,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         'manual-projection': 'manual-projection.json.gz',
         'cluster-outcomes': 'cluster-outcomes.json.gz',
         'latency-study': 'latency-study.json.gz',
+        'canonical-partitions': 'canonical-partitions.json.gz',
+        'hook-quality': 'hook-quality.json.gz',
+        'hook-example-results': 'hook-example-results.json.gz',
         'cross-scope': 'cross-scope.json.gz',
         swaps: 'swaps/summary.json.gz',
         axes: 'axes.json.gz',
         registry: 'registry.json.gz',
     };
-    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|manual-probe|manual-projection|cluster-outcomes|latency-study|cross-scope|swaps|axes|registry)$/);
+    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|manual-probe|manual-projection|cluster-outcomes|latency-study|canonical-partitions|hook-quality|hook-example-results|cross-scope|swaps|axes|registry)$/);
     if (promiseArtifact && req.method === 'GET') {
         const ok = await serveR2GzipJsonStream(res,
             `longform/promise-lab-v4/${promiseArtifacts[promiseArtifact[1]]}`);
@@ -3746,6 +3821,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end('{"error":"Promise Lab artifact is still building"}');
         }
+        return;
+    }
+    if (pathname === '/api/longquant/promise-lab/hook-score' && req.method === 'POST') {
+        await handlePromiseHookScore(req, res);
         return;
     }
     const promiseClusterOutcome = pathname.match(
@@ -3893,9 +3972,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const lqJob = pathname.match(/^\/api\/longquant\/jobs\/(j[a-z0-9]+)$/);
     if (lqJob && req.method === 'GET') {
-        const rec = await lqJobGet(lqJob[1]);
-        res.writeHead(rec ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(rec ? JSON.stringify(rec) : '{"error":"job lost (server restarted) — resubmit"}');
+        await sendLqJobStatus(res, lqJob[1]);
         return;
     }
     if (pathname === '/api/longquant/exp/score-title' && req.method === 'POST') {

@@ -5,6 +5,7 @@
         const C = deps.colors;
         const esc = deps.escape;
         const projectionMethodKey = 'promiseLab.savedProjectionMethod';
+        const pendingHookScoreKey = 'promiseLab.pendingHookScore';
         let savedProjectionMethod = 'maxmin';
         try { savedProjectionMethod = window.localStorage.getItem(projectionMethodKey) || 'maxmin'; } catch (_) { /* Storage is optional. */ }
         const state = {
@@ -22,6 +23,9 @@
             latencyTrainLagIndex: 6, latencyResponseLagIndex: 8,
             latencyPointGlobalIndex: null, latencyDetail: null,
             latencyDetailLoading: false, latencyDetailError: null,
+            hookScoreText: '', hookScoreResult: null, hookScoreLoading: false,
+            hookScoreError: null, hookScoreStatus: null, hookScoreJobId: null,
+            hookQualityPointIndex: null,
         };
         let progressTimer = null;
         let resizeTimer = null;
@@ -30,6 +34,8 @@
         let sourceRequest = 0;
         let clusterOutcomeRequest = 0;
         let latencyDetailRequest = 0;
+        let hookScoreRequest = 0;
+        let hookScoreResumeChecked = false;
 
         const api = name => `/api/longquant/promise-lab/${name}`;
         const fmt = (value, digits = 2) => value == null || !isFinite(value) ? '-' : Number(value).toFixed(digits);
@@ -159,6 +165,169 @@
                 state.loading[name] = false;
                 paint();
             }
+        }
+
+        function readPendingHookScore() {
+            try {
+                const value = JSON.parse(window.localStorage.getItem(pendingHookScoreKey) || 'null');
+                const valid = value && /^j[a-z0-9]+$/.test(String(value.jobId || ''))
+                    && String(value.text || '').length >= 8
+                    && Date.now() - Number(value.submittedAt || 0) < 30 * 60 * 1000;
+                if (valid) return value;
+                window.localStorage.removeItem(pendingHookScoreKey);
+            } catch (_) { /* Storage is optional. */ }
+            return null;
+        }
+
+        function savePendingHookScore(jobId, text) {
+            try {
+                window.localStorage.setItem(pendingHookScoreKey, JSON.stringify({
+                    jobId, text, submittedAt: Date.now(),
+                }));
+            } catch (_) { /* Storage is optional. */ }
+        }
+
+        function clearPendingHookScore(jobId) {
+            try {
+                const current = JSON.parse(window.localStorage.getItem(pendingHookScoreKey) || 'null');
+                if (!jobId || !current || current.jobId === jobId) {
+                    window.localStorage.removeItem(pendingHookScoreKey);
+                }
+            } catch (_) { /* Storage is optional. */ }
+        }
+
+        async function settleHookScore(request, operation) {
+            try {
+                const value = await operation;
+                if (request === hookScoreRequest) state.hookScoreResult = value;
+            } catch (error) {
+                if (request === hookScoreRequest) {
+                    state.hookScoreResult = null;
+                    state.hookScoreError = String(error && error.message || error);
+                }
+            } finally {
+                if (request === hookScoreRequest) {
+                    state.hookScoreLoading = false;
+                    state.hookScoreStatus = null;
+                    paint();
+                }
+            }
+        }
+
+        async function scoreHookText(text) {
+            text = String(text == null ? state.hookScoreText : text).replace(/\s+/g, ' ').trim().slice(0, 1200);
+            if (state.hookScoreLoading) return;
+            if (text.length < 8) {
+                state.hookScoreResult = null;
+                state.hookScoreError = 'Type a complete hook to score.';
+                paint();
+                return;
+            }
+            const pending = readPendingHookScore();
+            if (pending && pending.text !== text) clearPendingHookScore(pending.jobId);
+            const request = ++hookScoreRequest;
+            state.hookScoreText = text;
+            state.hookScoreLoading = true;
+            state.hookScoreError = null;
+            state.hookScoreStatus = pending && pending.text === text
+                ? 'Reattaching to the saved scoring job'
+                : 'Submitting to the interactive scoring lane';
+            state.hookScoreResult = null;
+            paint();
+            const operation = pending && pending.text === text
+                ? pollHookScoreJob(pending.jobId, text, request, 0)
+                : submitHookScoreJob(text, request, 0);
+            if (pending && pending.text === text) state.hookScoreJobId = pending.jobId;
+            await settleHookScore(request, operation);
+        }
+
+        async function jsonResponse(response) {
+            const value = await response.json().catch(() => ({}));
+            if (!response.ok || value.error) {
+                throw new Error(value.error || `${response.status} ${response.statusText}`);
+            }
+            return value;
+        }
+
+        async function submitHookScoreJob(text, request, resubmits) {
+            const submitted = await jsonResponse(await fetch(api('hook-score'), {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, async: true }), cache: 'no-store',
+            }));
+            if (!submitted.jobId) return submitted;
+            state.hookScoreJobId = submitted.jobId;
+            savePendingHookScore(submitted.jobId, text);
+            if (request === hookScoreRequest) {
+                state.hookScoreStatus = 'Queued with interactive priority';
+                paint();
+            }
+            return pollHookScoreJob(submitted.jobId, text, request, resubmits);
+        }
+
+        async function pollHookScoreJob(jobId, text, request, resubmits) {
+            for (let attempt = 0; attempt < 180; attempt++) {
+                if (attempt) {
+                    await new Promise(resolve => window.setTimeout(
+                        resolve, attempt < 8 ? 2500 : 5000,
+                    ));
+                }
+                if (request !== hookScoreRequest) throw new Error('score superseded');
+                let job;
+                try {
+                    job = await jsonResponse(await fetch(
+                        `/api/longquant/jobs/${encodeURIComponent(jobId)}`,
+                        { cache: 'no-store' },
+                    ));
+                } catch (error) {
+                    if (/job lost|resubmit/i.test(String(error && error.message || error)) && resubmits < 2) {
+                        clearPendingHookScore(jobId);
+                        state.hookScoreJobId = null;
+                        state.hookScoreStatus = `Server restarted; resubmitting (${resubmits + 1}/2)`;
+                        paint();
+                        return submitHookScoreJob(text, request, resubmits + 1);
+                    }
+                    throw error;
+                }
+                if (job.status === 'done') {
+                    clearPendingHookScore(jobId);
+                    state.hookScoreJobId = null;
+                    return job.result;
+                }
+                if (job.status === 'error') {
+                    clearPendingHookScore(jobId);
+                    state.hookScoreJobId = null;
+                    throw new Error(job.error || 'hook scoring failed');
+                }
+                if (request === hookScoreRequest) {
+                    const next = job.status === 'queued'
+                        ? 'Queued with interactive priority'
+                        : 'Embedding spans and scoring all component subsets';
+                    if (state.hookScoreStatus !== next) {
+                        state.hookScoreStatus = next;
+                        paint();
+                    }
+                }
+            }
+            throw new Error('Hook scoring is still running after 15 minutes. Retry to reattach.');
+        }
+
+        function resumePendingHookScore() {
+            if (hookScoreResumeChecked) return;
+            hookScoreResumeChecked = true;
+            const pending = readPendingHookScore();
+            if (!pending) return;
+            const request = ++hookScoreRequest;
+            state.hookScoreText = pending.text;
+            state.hookScoreJobId = pending.jobId;
+            state.hookScoreLoading = true;
+            state.hookScoreResult = null;
+            state.hookScoreError = null;
+            state.hookScoreStatus = 'Reattaching to the saved scoring job';
+            paint();
+            settleHookScore(
+                request,
+                pollHookScoreJob(pending.jobId, pending.text, request, 0),
+            );
         }
 
         async function loadHook(videoId) {
@@ -294,6 +463,11 @@
         function ensureView() {
             load('manifest');
             load('progress');
+            if (state.view === 'scorer') {
+                load('hookQuality', api('hook-quality'));
+                load('hookExamples', api('hook-example-results'));
+                resumePendingHookScore();
+            }
             if (state.view === 'overview') { load('findings'); load('manualProbe', api('manual-probe')); }
             if (state.view === 'saved') {
                 load('manualProbe', api('manual-probe'));
@@ -325,7 +499,7 @@
             const manifest = state.data.manifest || {};
             const progress = state.data.progress || {};
             const views = [
-                ['overview', 'Results'], ['hooks', 'Hooks'], ['boundaries', 'Boundaries'],
+                ['overview', 'Results'], ['scorer', 'Hook scorer'], ['hooks', 'Hooks'], ['boundaries', 'Boundaries'],
                 ['components', 'Embeddings'], ['clusters', 'Cluster atlas'], ['saved', 'Saved embedding'], ['swaps', 'Swaps'],
                 ['axes', 'Outcome axes'], ['registry', 'Registry'],
             ];
@@ -604,6 +778,51 @@
             ${latencyPointPanel(summary, cluster)}${latencyExtremes(cluster)}`;
         }
 
+        function hookQualityPointInspector(summary) {
+            const rows = ((summary || {}).axis || {}).points || [];
+            const index = Number(state.hookQualityPointIndex);
+            if (state.hookQualityPointIndex == null || !rows[index]) {
+                return `<div style="height:100%;min-height:190px;display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:9px;text-align:center;padding:20px">Click a training point to inspect its exact hook, held-out score, target residual, and four stored components.</div>`;
+            }
+            const row = rows[index];
+            const components = (summary.components || []).slice(
+                Number(row.componentOffset || 0), Number(row.componentOffset || 0) + Number(row.componentCount || 0),
+            );
+            return `<div style="padding:10px;min-height:190px"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">Held-out training hook ${index + 1}/${rows.length}</div><div style="font-size:12px;color:${C.text};font-weight:900;line-height:1.4;margin:4px 0">${esc(row.text || '')}</div><div style="font-size:8px;color:${C.mute}">${esc(row.title || row.videoId || '')}</div><div style="display:flex;gap:12px;flex-wrap:wrap;margin:8px 0;font-size:8.5px;color:${C.dim}"><span><b style="color:${C.text}">${fmt(row.oofAxisPercentile, 1)}th</b> held-out score</span><span><b style="color:${C.text}">${signed(row.oofTargetResidual, 3)}</b> observed residual</span><span>fold ${Number(row.fold) + 1}</span><span>partition gap ${fmt(row.partitionScoreGapPercentile, 1)}th</span></div><div style="display:flex;gap:4px;flex-wrap:wrap">${components.map(component => `<span style="border-bottom:3px solid ${clusterColor(component.category)};background:${C.card};padding:4px 5px;font-size:8.5px;color:${C.text}" title="Shapley ${signed(component.shapley, 4)}">${esc(component.text)}</span>`).join('')}</div></div>`;
+        }
+
+        function hookExamplePanel(examples) {
+            const rows = examples.examples || [], result = examples.machineVariantResult || {};
+            if (!rows.length) return '';
+            const fractions = result.bootstrapWinnerFractions || {};
+            return card(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">Frozen evaluation-only example</div><div style="font-size:8.5px;color:${C.mute};margin-top:2px">These four sentences were withheld from every fit. Two identical replays produced SHA ${esc(String((examples.deterministicReplay || {}).sha256 || '').slice(0, 12))}.</div></div><div style="font-size:9px;color:${C.green};font-weight:900">Winner: ${esc(result.winner || '-')}</div></div><div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:8.5px"><thead><tr>${['hook', 'axis score', 'bootstrap score interval', 'in-domain evidence', 'wins refits'].map(label => `<th style="text-align:left;padding:5px;color:${C.mute};border-bottom:1px solid ${C.border}">${label}</th>`).join('')}</tr></thead><tbody>${rows.map(row => { const value = row.summary || {}; return `<tr><td style="padding:6px;border-bottom:1px solid ${C.border};min-width:260px"><button data-pl-hook-example="${esc(row.id)}" ${state.hookScoreLoading ? 'disabled' : ''} style="border:0;background:transparent;color:${state.hookScoreLoading ? C.faint : C.text};font-size:8.5px;font-weight:800;text-align:left;cursor:${state.hookScoreLoading ? 'wait' : 'pointer'};padding:0">${esc(row.text)}</button></td><td style="padding:6px;border-bottom:1px solid ${C.border};color:${C.text};white-space:nowrap"><b>${fmt(value.percentile, 1)}th</b><br><span style="color:${C.mute}">${signed(value.axisCoordinate, 4)}</span></td><td style="padding:6px;border-bottom:1px solid ${C.border};color:${C.dim};white-space:nowrap">${fmt(value.bootstrapP10, 1)}th to ${fmt(value.bootstrapP90, 1)}th<br>median ${fmt(value.bootstrapMedian, 1)}th</td><td style="padding:6px;border-bottom:1px solid ${C.border};color:${Number(value.inDomainSimilarityPercentile) < 10 ? C.amber : C.dim};white-space:nowrap">${fmt(value.inDomainSimilarityPercentile, 1)}th similarity<br>partition ${fmt(value.partitionGapPercentile, 1)}th</td><td style="padding:6px;border-bottom:1px solid ${C.border};color:${fractions[row.id] == null ? C.faint : C.green};white-space:nowrap">${fractions[row.id] == null ? '-' : pct(Number(fractions[row.id]) * 100)}</td></tr>`; }).join('')}</tbody></table></div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:7px">The machine variants rank ${esc((result.mainAxisRanking || []).join(' → '))}. The ranking is deterministic; refit frequencies expose model uncertainty. Low similarity percentiles mean the exact sentence lies farther from this 208-hook training library than most leave-one-out training hooks.</div>`, 'margin-bottom:10px');
+        }
+
+        function hookScoreResultPanel(result) {
+            if (!result) return '';
+            const score = result.score || {}, confidence = result.confidence || {};
+            const components = result.components || [], pairs = result.pairInteractions || [];
+            const pairLookup = Object.fromEntries(pairs.map(row => [`${row.left}-${row.right}`, row]));
+            const interactionTable = `<table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr><th style="padding:4px;color:${C.mute}">component</th>${components.map((_, index) => `<th style="padding:4px;color:${clusterColor(index)}">${index + 1}</th>`).join('')}</tr></thead><tbody>${components.map((_, left) => `<tr><th style="padding:4px;color:${clusterColor(left)}">${left + 1}</th>${components.map((__, right) => { const row = left < right ? pairLookup[`${left}-${right}`] : right < left ? pairLookup[`${right}-${left}`] : null; const value = row && numeric(row.interaction); const alpha = row ? Math.min(.38, .08 + Math.abs(value) * 7) : 0; const background = !row ? C.card2 : value >= 0 ? `rgba(74,222,128,${alpha})` : `rgba(248,113,113,${alpha})`; return `<td title="${row ? `80% interval ${signed(row.bootstrapP10, 4)} to ${signed(row.bootstrapP90, 4)}` : ''}" style="padding:6px;text-align:center;background:${background};color:${row ? C.text : C.faint};border:1px solid ${C.border}">${row ? signed(value, 3) : '·'}</td>`; }).join('')}</tr>`).join('')}</tbody></table>`;
+            return `<div data-pl-hook-score-result><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${stat('hook score', `${fmt(score.percentile, 1)}th`, C.green)}${stat('bootstrap 10–90%', `${fmt(confidence.bootstrapPercentileP10, 1)}–${fmt(confidence.bootstrapPercentileP90, 1)}th`, C.cyan)}${stat('held-out rho', fmt(confidence.heldoutSpearman, 3), C.text)}${stat('sign-flip p', fmt(confidence.familyCorrectedSignFlipP, 4), C.purple)}${stat('domain similarity', `${fmt(confidence.inDomainSimilarityPercentile, 1)}th`, Number(confidence.inDomainSimilarityPercentile) < 10 ? C.amber : C.green)}${stat('partition certainty', `${fmt(confidence.partitionScoreGapPercentile, 1)}th`, C.amber)}</div>
+            ${card(`<div style="font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:4px">Exact complete-hook embedding input</div><div style="font-size:14px;color:${C.text};font-weight:900;line-height:1.45">${esc((result.input || {}).fullHookEmbeddingInput || '')}</div><div style="font-size:8px;color:${C.dim};margin-top:6px">${esc((result.input || {}).embeddingModel || '')} · ${(result.input || {}).embeddingDimensions || 0}D · ${(result.input || {}).spanEmbeddingInputs || 0} exact span/context inputs · generative LLM: no</div>`, 'margin-bottom:10px;border-color:' + C.cyan + '55')}
+            ${card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div><div style="font-size:11px;color:${C.text};font-weight:900">Four-player exact-cover decomposition</div><div style="font-size:8px;color:${C.mute};margin-top:2px">Every token has one owner; overlap ${Number((result.partition || {}).overlapCount || 0)}. Boundaries use no outcome and no supplied example labels.</div></div><div style="font-size:8px;color:${C.amber}">top-two gap ${fmt(confidence.partitionScoreGap, 5)} · ${fmt(confidence.partitionScoreGapPercentile, 1)}th training percentile</div></div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:9px">${components.map(component => `<span style="border-bottom:4px solid ${clusterColor(component.category)};background:${C.card2};padding:6px 7px;font-size:10px;color:${C.text}">${esc(component.text)}</span>`).join('')}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px">${components.map(component => `<div style="border-left:3px solid ${clusterColor(component.category)};padding:5px 8px;background:${C.card2}"><div style="font-size:8px;color:${clusterColor(component.category)};font-weight:900">COMPONENT ${component.index + 1} · CLUSTER ${component.category}</div><div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.4;margin:3px 0">${esc(component.text)}</div><div style="font-size:8.5px;color:${C.dim};line-height:1.55">Shapley <b style="color:${numeric(component.shapleyAxisContribution) >= 0 ? C.green : C.red}">${signed(component.shapleyAxisContribution, 4)}</b> · cluster percentile ${fmt(component.categoryContributionPercentile, 1)}th<br>bootstrap ${signed(component.bootstrapP10, 4)} to ${signed(component.bootstrapP90, 4)} · positive in ${pct(Number(component.bootstrapPositiveFraction || 0) * 100)}<br>alone ${signed(component.singletonAxisCoordinate, 4)} · deletion effect ${signed(component.deletionEffect, 4)}</div></div>`).join('')}</div>`, 'margin-bottom:10px')}
+            <div class="pl-split" style="display:grid;grid-template-columns:minmax(280px,.8fr) minmax(0,1.2fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:5px">Pair interaction matrix</div>${interactionTable}<div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:7px">Green is positive synergy beyond separate contributions; red is interference. Hover a cell for its bootstrap 10–90% interval.</div>`)}${card(`<div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:5px">All 15 non-empty subset inputs</div><div style="max-height:330px;overflow:auto">${(result.subsets || []).map(row => `<details style="border-top:1px solid ${C.border};padding:5px 0"><summary style="cursor:pointer;color:${C.dim};font-size:8.5px">mask ${row.mask.toString(2).padStart(4, '0')} · components ${(row.includedComponents || []).map(value => value + 1).join(', ')} · axis ${signed(row.axisCoordinate, 4)}</summary><div style="font-size:9px;color:${C.text};line-height:1.45;padding:5px 8px">${esc(row.embeddingInput)}</div></details>`).join('')}</div><div style="font-size:8px;color:${C.mute};margin-top:6px">Empty subset = declared zero-vector origin; it is never sent to Gemini.</div>`)}</div>
+            ${card(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:280px;flex:1"><div style="font-size:11px;color:${C.text};font-weight:900">Timing and scope decision</div><div style="font-size:9px;color:${C.dim};line-height:1.55;margin-top:4px">Response latency: <b style="color:${(result.latency || {}).supported ? C.green : C.red}">${(result.latency || {}).supported ? `${fmt((result.latency || {}).selectedLagSeconds, 1)}s supported` : 'no fixed lag supported'}</b>. The scorer therefore uses the whole-hook retained-information target and does not shift component credit to a convenient second.</div></div><div style="font-size:8px;color:${C.mute};line-height:1.5">Boundary outcomes: none<br>Axis outcome: measured retention<br>Examples in training: no<br>Causal claim: no</div></div><div style="height:1px;background:${C.border};margin:9px 0"></div><div style="font-size:9px;color:${C.text};font-weight:900;margin-bottom:4px">Nearest training hooks</div>${(result.nearestTrainingHooks || []).map(row => `<div style="display:flex;justify-content:space-between;gap:8px;border-top:1px solid ${C.border};padding:5px 0;font-size:8.5px"><span style="color:${C.dim}">${esc(row.text)}</span><b style="color:${C.text}">${fmt(row.cosine, 3)}</b></div>`).join('')}`)}</div>`;
+        }
+
+        function renderHookScorer() {
+            const summary = state.data.hookQuality, examples = state.data.hookExamples;
+            if (!summary) return loading('hookQuality');
+            if (!examples) return loading('hookExamples');
+            const model = summary.model || {}, result = state.hookScoreResult;
+            return `${card(`<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"><label style="flex:1;min-width:280px"><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:4px">Complete hook text · 64-token maximum</span><textarea data-pl-hook-score-input maxlength="1200" rows="3" ${state.hookScoreLoading ? 'disabled' : ''} style="width:100%;box-sizing:border-box;resize:vertical;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:8px;font:10px/1.45 inherit;border-radius:6px;cursor:${state.hookScoreLoading ? 'wait' : 'text'}">${esc(state.hookScoreText)}</textarea></label><button data-pl-run-hook-score ${state.hookScoreLoading ? 'disabled' : ''} style="height:34px;border:1px solid ${C.cyan};background:${C.cyan}20;color:${C.cyan};padding:0 13px;border-radius:6px;font-size:10px;font-weight:900;cursor:${state.hookScoreLoading ? 'wait' : 'pointer'}">${state.hookScoreLoading ? 'Scoring…' : 'Score hook'}</button></div>${state.hookScoreError ? `<div data-pl-hook-score-error style="font-size:9px;color:${C.red};margin-top:7px">${esc(state.hookScoreError)}</div>` : ''}`, 'margin-bottom:10px')}
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${stat('training hooks', model.trainingHooks || 0, C.cyan)}${stat('held-out rho', fmt(model.heldoutSpearman, 3), C.green)}${stat('sign-flip p', fmt(model.signFlipP, 4), C.purple)}${stat('target variance', pct(Number(model.targetFactorExplainedVariance || 0) * 100), C.text)}${stat('fold cosine', fmt(model.foldDirectionMedianCosine, 3), C.amber)}${stat('generative LLM', 'NO', C.green)}</div>
+            ${card(`<div style="font-size:9px;color:${C.dim};line-height:1.55"><b style="color:${C.amber}">Why this is not labeled virality:</b> observed log views alone has held-out rho ${fmt((((summary.falsificationAudits || {}).observedLogViewsOnly || {}).heldoutSpearman), 3)} and p ${fmt((((summary.falsificationAudits || {}).observedLogViewsOnly || {}).signFlipP), 3)}. In the joint unsupervised factor, the views loading is ${signed((((summary.falsificationAudits || {}).retentionPlusObservedLogViewsPca || {}).observedLogViewsLoading), 3)}, opposite the retention direction. That candidate was rejected; the validated score remains retained information.</div>`, 'margin-bottom:10px;border-color:' + C.amber + '55')}
+            <div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:3px">Frozen hook-quality plane</div><div style="font-size:8px;color:${C.mute};margin-bottom:5px">X = retained-information axis; right is higher. Y = largest orthogonal semantic direction. Color = held-out observed retention-factor residual. Cyan ring = current score.</div><canvas data-pl-canvas="hook-quality-axis" style="width:100%;height:410px;display:block"></canvas>`)}${card(hookQualityPointInspector(summary))}</div>
+            ${hookExamplePanel(examples)}${state.hookScoreLoading ? card(`<div data-pl-hook-score-progress style="font-size:10px;color:${C.cyan}">${esc(state.hookScoreStatus || 'Scoring hook')}</div>`, 'margin-bottom:10px') : hookScoreResultPanel(result)}`;
+        }
+
         function renderSavedProjection() {
             if (!state.data.manualProbe) return loading('manualProbe');
             if (!state.data.manualProjection) return loading('manualProjection');
@@ -805,7 +1024,7 @@
 
         function body() {
             return {
-                overview: renderOverview, hooks: renderHooks, boundaries: renderBoundaries,
+                overview: renderOverview, scorer: renderHookScorer, hooks: renderHooks, boundaries: renderBoundaries,
                 components: renderComponents, clusters: renderClusters, saved: renderSavedProjection, swaps: renderSwaps,
                 axes: renderAxes, registry: renderRegistry,
             }[state.view]();
@@ -887,16 +1106,25 @@
             });
             context.globalAlpha = 1;
             canvas.onclick = event => {
-                const interactiveKinds = new Set(['components', 'hook-map', 'cluster', 'manual-projection', 'cluster-outcome-axis']);
+                const interactiveKinds = new Set(['components', 'hook-map', 'cluster', 'manual-projection', 'cluster-outcome-axis', 'hook-quality-axis']);
                 const kind = canvas.dataset.plCanvas;
                 const atlas = kind === 'hook-map' ? state.data.atlas : activeAtlas();
                 if (!interactiveKinds.has(kind)
-                    || (!['manual-projection', 'cluster-outcome-axis'].includes(kind) && !atlas)) return;
+                    || (!['manual-projection', 'cluster-outcome-axis', 'hook-quality-axis'].includes(kind) && !atlas)) return;
                 const rect = canvas.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top;
                 let best = -1, distance = Infinity;
                 projected.forEach((point, index) => { const d = (point[0] - x) ** 2 + (point[1] - y) ** 2; if (d < distance) { distance = d; best = index; } });
                 if (best < 0 || distance >= 225) return;
                 const originalIndex = visible[best].index;
+                if (kind === 'hook-quality-axis') {
+                    const count = ((((state.data.hookQuality || {}).axis || {}).points || []).length);
+                    if (originalIndex >= count) return;
+                    const scrollX = window.scrollX, scrollY = window.scrollY;
+                    state.hookQualityPointIndex = originalIndex;
+                    paint();
+                    window.scrollTo(scrollX, scrollY);
+                    return;
+                }
                 if (kind === 'manual-projection') {
                     const pointIndex = ((state.data.manualProjection || {}).frozenPointIndex || {});
                     const spanId = (pointIndex.spanIds || [])[originalIndex];
@@ -1170,6 +1398,24 @@
         function drawCanvases() {
             document.querySelectorAll('#pl-root canvas[data-pl-canvas]').forEach(canvas => {
                 const kind = canvas.dataset.plCanvas;
+                if (kind === 'hook-quality-axis') {
+                    const summary = state.data.hookQuality || {};
+                    const rows = ((summary.axis || {}).points || []);
+                    const points = rows.map(row => [numeric(row.axisCoordinate), numeric(row.mapY)]);
+                    const targets = rows.map(row => numeric(row.oofTargetResidual));
+                    const range = bounds(targets);
+                    const colors = targets.map(value => {
+                        const t = Math.max(0, Math.min(1, (value - range[0]) / ((range[1] - range[0]) || 1)));
+                        return `rgb(${Math.round(56 + 192 * t)},${Math.round(189 - 76 * t)},${Math.round(248 - 135 * t)})`;
+                    });
+                    const selected = new Set();
+                    if (state.hookScoreResult && (state.hookScoreResult.map || {}).x != null) {
+                        selected.add(points.length);
+                        points.push([numeric(state.hookScoreResult.map.x), numeric(state.hookScoreResult.map.y)]);
+                        colors.push(C.cyan);
+                    }
+                    return scatter(canvas, points, colors, selected, null, false, state.hookQualityPointIndex);
+                }
                 if (kind === 'interaction') return drawInteraction(canvas);
                 if (kind === 'cluster-outcome-axis') {
                     const detail = state.clusterOutcomeDetail, points = detail && detail.points;
@@ -1275,7 +1521,21 @@
         function handleClick(event) {
             const target = event.target;
             const view = target.closest('[data-pl-view]'); if (view) { state.view = view.dataset.plView; ensureView(); paint(); return true; }
-            if (target.closest('[data-pl-refresh]')) { Object.keys(state.data).forEach(key => delete state.data[key]); state.hook = null; state.source = null; state.focusedCluster = null; state.clusterOutcomeTarget = null; state.clusterOutcomeDetail = null; state.clusterOutcomePointIndex = null; state.latencyDetail = null; state.latencyPointGlobalIndex = null; ensureView(); return true; }
+            if (target.closest('[data-pl-refresh]')) { Object.keys(state.data).forEach(key => delete state.data[key]); state.hook = null; state.source = null; state.focusedCluster = null; state.clusterOutcomeTarget = null; state.clusterOutcomeDetail = null; state.clusterOutcomePointIndex = null; state.latencyDetail = null; state.latencyPointGlobalIndex = null; state.hookQualityPointIndex = null; ensureView(); return true; }
+            if (target.closest('[data-pl-run-hook-score]')) { scoreHookText(); return true; }
+            const example = target.closest('[data-pl-hook-example]');
+            if (example) {
+                if (state.hookScoreLoading) return true;
+                const row = ((state.data.hookExamples || {}).examples || []).find(item => item.id === example.dataset.plHookExample);
+                if (row) {
+                    state.hookScoreText = row.text;
+                    state.hookScoreResult = row.score;
+                    state.hookScoreError = null;
+                    state.hookQualityPointIndex = null;
+                    paint();
+                }
+                return true;
+            }
             if (target.closest('[data-pl-open-manual-probe]')) { openManualProbe(); return true; }
             if (target.closest('[data-pl-clear-cluster-focus]')) { state.focusedCluster = null; paint(); return true; }
             if (target.closest('[data-pl-apply-query]')) { state.registryPage = 0; paint(); return true; }
@@ -1302,6 +1562,7 @@
         }
 
         function handleInput(event) {
+            if (event.target.matches('[data-pl-hook-score-input]')) { state.hookScoreText = event.target.value; return true; }
             if (event.target.matches('[data-pl-query="hook"]')) { state.hookQuery = event.target.value; return true; }
             if (event.target.matches('[data-pl-query="registry"]')) { state.registryQuery = event.target.value; return true; }
             return false;

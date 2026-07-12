@@ -40,6 +40,9 @@ def main() -> None:
         "manual-projection": read("manual-projection.json", None),
         "cluster-outcomes": read("cluster-outcomes.json", None),
         "latency-study": read("latency-study.json", None),
+        "canonical-partitions": read("canonical-partitions.json", None),
+        "hook-quality": read("hook-quality.json", None),
+        "hook-example-results": read("hook-example-results.json", None),
         "cross-scope": read("cross-scope.json", {}),
         "swaps": read("swaps.json", None),
         "axes": read("axes.json", None),
@@ -55,6 +58,7 @@ const nativeFetch=window.fetch.bind(window);
 window.fetch=async function(url,opts){{
   const path=new URL(url,location.href).pathname;
   const base='/api/longquant/promise-lab/';
+  if(path===base+'hook-score'){{return nativeFetch(url,opts);}}
   if(path.startsWith(base+'cluster-outcome/')){{const parts=path.slice((base+'cluster-outcome/').length).split('/');const packed=await nativeFetch(`/buildings/jarvis/promise-lab/.cache/cluster-outcomes-details/${{encodeURIComponent(parts[0]||'')}}/${{encodeURIComponent(parts[1]||'')}}.json.gz`,opts);if(!packed.ok)return packed;const stream=packed.body.pipeThrough(new DecompressionStream('gzip'));return new Response(stream,{{status:200,headers:{{'Content-Type':'application/json'}}}});}}
   if(path.startsWith(base+'latency-study/')){{const cluster=path.slice((base+'latency-study/').length);const packed=await nativeFetch(`/buildings/jarvis/promise-lab/.cache/latency-study-details/${{encodeURIComponent(cluster)}}.json.gz`,opts);if(!packed.ok)return packed;const stream=packed.body.pipeThrough(new DecompressionStream('gzip'));return new Response(stream,{{status:200,headers:{{'Content-Type':'application/json'}}}});}}
   if(path.startsWith(base+'hook/')){{const id=decodeURIComponent(path.slice((base+'hook/').length));const v=window.__PL_REAL.hooks[id];return new Response(JSON.stringify(v||{{error:'real hook artifact not built'}}),{{status:v?200:404,headers:{{'Content-Type':'application/json'}}}});}}
