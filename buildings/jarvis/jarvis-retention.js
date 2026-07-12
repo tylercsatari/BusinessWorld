@@ -1240,12 +1240,26 @@ const JarvisRetention = (function () {
         }
         // ── 1. trace: raw input → embedding ──
         const embHeat = ch => { const a = up.emb_preview && up.emb_preview[ch]; if (!a) return `<div style="font-size:9px;color:${C.faint}">${ch}: ${esc(rawInputLabel(up, ch))}</div>`; const mn = Math.min(...a), mx = Math.max(...a); return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span title="${esc(rawInputLabel(up, ch))}" style="font-size:9px;color:${C.dim};width:58px">${ch}</span><svg viewBox="0 0 ${a.length * 5} 10" style="height:11px;width:${a.length * 5}px">${a.map((v, i) => `<rect x="${i * 5}" width="4.4" height="10" fill="${rawRamp((v - mn) / ((mx - mn) || 1))}"/>`).join('')}</svg><span style="font-size:8px;color:${C.faint};white-space:nowrap">${esc(rawInputLabel(up, ch))}</span></div>`; };
-        const trace = cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px">
-              <span style="font-size:12px;font-weight:800;color:${C.text}">From raw input to score — every number is traceable</span>
+        const upIdx = (st.rawUploads || []).lastIndexOf(up);
+        const titleRow = (() => {
+            const ed = st.rawTitleEdit && st.rawTitleEdit.idx === upIdx ? st.rawTitleEdit : null;
+            if (ed) return `<span style="display:inline-flex;gap:5px;align-items:center;flex:1;min-width:220px"><input data-rawtitletext value="${esc(ed.text || '')}" style="flex:1;background:#1e293b;border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:4px 8px;font-size:12px;font-weight:800"/><span data-rawtitlesave="${upIdx}" style="cursor:pointer;border:1px solid ${C.green};color:${C.green};border-radius:5px;padding:3px 9px;font-size:10px;font-weight:900">save</span><span data-rawtitlecancel style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:5px;padding:3px 8px;font-size:10px">cancel</span></span>`;
+            return `<span style="font-size:13px;font-weight:900;color:${C.text}">${esc(up.title || 'Scored hook')} <span data-rawtitleedit="${upIdx}" title="rename this hook" style="cursor:pointer;color:${C.amber};font-size:11px">✏️</span></span>`;
+        })();
+        const transcriptBlock = (() => {
+            const ed = st.rawTransEdit && st.rawTransEdit.idx === upIdx ? st.rawTransEdit : null;
+            const shown = up.silent
+                ? `<div style="font-size:11px;color:${C.dim};background:#0f172a;border-radius:6px;padding:8px;margin-bottom:6px">no voiceover detected${up.transcript ? ` — low-confidence guess: <i>"${esc(String(up.transcript).slice(0, 120))}"</i>` : ''} — text + together stay locked until fixed</div>`
+                : `<div style="font-size:11px;font-style:italic;color:${C.text};background:#0f172a;border-radius:6px;padding:8px;margin-bottom:6px">"${esc(up.transcript || '')}"${up.transcriptSource ? ` <span style="font-style:normal;font-size:9px;color:${C.faint}">· ${esc(up.transcriptSource)}</span>` : ''}</div>`;
+            if (!ed) return shown + (up.montage ? `<div style="margin-bottom:8px"><span data-rawtransedit="${upIdx}" style="cursor:pointer;border:1px solid ${C.amber};background:${C.amber}18;color:${C.amber};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:800">✏️ fix transcript + re-embed</span></div>` : '');
+            return `<div style="border:1px solid ${C.amber}66;border-radius:8px;padding:8px;margin-bottom:8px;background:#0f172a"><textarea data-rawtranstext rows="2" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:12px;font-family:inherit;resize:vertical">${esc(ed.text || '')}</textarea><div style="display:flex;gap:7px;margin-top:6px;flex-wrap:wrap"><span data-rawreembed="${upIdx}" style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:4px 11px;font-size:10px;font-weight:900">${st.rawReembedBusy ? '⏳ re-embedding all channels…' : '🔁 re-embed with this transcript'}</span><span data-rawreembedvis="${upIdx}" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">visuals only</span><span data-rawtranscancel style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">cancel</span></div></div>`;
+        })();
+        const trace = cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+              ${titleRow}
               <span data-savescored style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${st.savedFlash ? '✅ saved' : '💾 Save this hook'}</span></div>
             <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
               <div><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">1 · the 5-frame hook (what gets embedded)</div><img src="data:image/jpeg;base64,${up.montage}" style="width:260px;border-radius:6px;background:#000"/></div>
-              <div style="flex:1;min-width:220px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">2 · transcript</div><div style="font-size:11px;font-style:italic;color:${C.text};background:#0f172a;border-radius:6px;padding:8px;margin-bottom:8px">${up.silent ? '(no voiceover — text channel scores as empty)' : '"' + esc(up.transcript || '') + '"'}</div>
+              <div style="flex:1;min-width:220px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">2 · transcript (editable)</div>${transcriptBlock}
                 <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">3 · Gemini embedding (1536-d, pooled to 48 for display)</div>${embHeat('visual')}${embHeat('text')}${embHeat('together')}${rawInputManifestHtml(up)}</div>
             </div>
             <div style="font-size:10px;color:${C.mute};margin-top:7px">4 · each indicator = <b>embedding · (a direction learned toward that metric) + bias → one number</b>, placed on the corpus scatter below.</div>`, 12);
@@ -1330,19 +1344,29 @@ const JarvisRetention = (function () {
             return cardc(`<div><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML((dispV(tn, est) || '—') + star, pc != null ? `${(pc * 100).toFixed(0)}th pctile novel` : '')}${novCurve(d, sc)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${d.name.replace('nov_', '')} (R=${Rof(d).toFixed(2)}) — novelty→${metShort(tn)} curve, your hook ◆</div></div>`, 12);
         };
         const gcol = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:12px';
-        const boxes = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">8 independent outputs — 5 embedding, 3 novelty, each its own box</div>
-            <div style="font-size:9px;color:${C.mute};margin-bottom:8px">Every number is the one the graph shows. <b style="color:${CY}">Embedding</b> = the steered map estimate (click → that graph; the marker matches). <b style="color:${C.purple}">Novelty</b> = its OWN calibration, never mixed with views/>10M. <span style="color:${C.amber}">*</span> = unvalidated (5s-retention has no novelty signal — noise).</div>
-            <div style="font-size:10px;color:${CY};font-weight:800;text-transform:uppercase;margin-bottom:5px">Embedding — 5 boxes (views in BOTH library &amp; your scale)</div>
-            <div style="${gcol};margin-bottom:12px">${['keep', 'ret5', 'views', 'realviews', 'gt10M'].map(embBox).join('')}</div>
+        const hasTextUp = !!String(up.transcript || up.text || '').trim() && !up.silent;
+        const metShort2 = tn => ({ keep: 'keep rate', ret5: '5s retention', views: 'views (library)', realviews: 'views (your scale)', outlier: 'outlier ×', gt10M: '>10M class' })[tn] || tn;
+        const projFor2 = { keep: 'keep', ret5: 'ret5', views: 'views', realviews: 'realviews', outlier: 'outlier', gt10M: 'hi10m' };
+        const colorFor2 = { keep: 'metric', ret5: 'metric', views: 'views', realviews: 'metric', outlier: 'metric', gt10M: 'gt10m' };
+        const CH_TARGETS = ['keep', 'ret5', 'views', 'realviews', 'outlier', 'gt10M'];
+        const chanBox = (ch, tn) => {
+            const k = steerOf(up, ch, tn), pj = projFor2[tn], cm = colorFor2[tn];
+            const big = k ? steerDisp(tn, k.est) : '—';
+            const sub = k && k.pctile != null ? `${Math.round(k.pctile)}th pctile` : (k ? '' : 'no steer for this output');
+            return cardc(`<div data-expgo="${ch}:${pj}" style="cursor:pointer"><div style="font-size:10px;color:${CY};font-weight:800;text-transform:uppercase">${metShort2(tn)}</div>${bigNumHTML(big, sub)}${cluster(ch, pj, cm)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px"><span style="color:${C.accent}">open graph →</span></div></div>`, 12);
+        };
+        const chanSection = ch => {
+            const input = ch === 'visual' ? '5-frame montage only' : ch === 'text' ? 'transcript only' : 'montage + transcript fused';
+            const col = ch === 'visual' ? C.green : ch === 'text' ? C.purple : C.accent;
+            if (ch !== 'visual' && !hasTextUp) return `<div style="border:1px dashed ${C.border};border-radius:8px;padding:10px;margin-bottom:12px;font-size:10px;color:${C.dim}"><b style="color:${col};text-transform:uppercase">${ch}</b> — locked: no transcript detected. Fix the transcript in the trace card above and these ${CH_TARGETS.length} graphs unlock.</div>`;
+            return `<div style="display:flex;justify-content:space-between;align-items:end;gap:10px;margin:2px 0 5px"><div><span style="font-size:10px;color:${col};font-weight:800;text-transform:uppercase">${ch}</span> <span style="font-size:9px;color:${C.faint}">${input}</span></div><span style="font-size:9px;color:${C.faint};font-weight:800">${CH_TARGETS.length} graphs</span></div><div style="${gcol};margin-bottom:12px">${CH_TARGETS.map(tn => chanBox(ch, tn)).join('')}</div>`;
+        };
+        const nGraphs = CH_TARGETS.length * (hasTextUp ? 3 : 1) + 3;
+        const boxes = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">${nGraphs} graphs — every channel × every output, plus novelty</div>
+            <div style="font-size:9px;color:${C.mute};margin-bottom:8px">Each tile is that channel's OWN latent map with your hook's marker — the number is the steered estimate the graph shows (click → full graph). <b style="color:${C.purple}">Novelty</b> uses its own calibration curves.</div>
+            ${chanSection('visual')}${chanSection('together')}${chanSection('text')}
             <div style="font-size:10px;color:${C.purple};font-weight:800;text-transform:uppercase;margin-bottom:5px">Novelty — 3 boxes (independent)</div>
-            <div style="${gcol}">${['keep', 'ret5', 'views'].map(novBox).join('')}</div>
-            ${rawChanGridHtml(up)}
-            ${(() => {
-                const idx = (st.rawUploads || []).lastIndexOf(up);
-                if (idx < 0 || !up.montage) return '';
-                const hasText = !!String(up.transcript || up.text || '').trim() && !up.silent;
-                return `<div style="margin-top:8px;font-size:10px;color:${C.dim}">transcript: ${hasText ? `<i>"${esc(String(up.transcript || up.text).slice(0, 140))}"</i>` : `<b style="color:${C.amber}">none detected</b> — text + together outputs are locked`}${up.transcriptSource ? ` · ${esc(up.transcriptSource)}` : ''} <span data-rawtransedit="${idx}" style="cursor:pointer;border:1px solid ${C.amber};background:${C.amber}18;color:${C.amber};border-radius:6px;padding:2px 8px;font-size:9px;font-weight:800;margin-left:6px">✏️ fix transcript + re-embed</span></div>${st.rawTransEdit && st.rawTransEdit.idx === idx ? `<div style="border:1px solid ${C.amber}66;border-radius:8px;padding:8px;margin-top:6px;background:#0f172a"><textarea data-rawtranstext rows="2" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:12px;font-family:inherit;resize:vertical">${esc(st.rawTransEdit.text || '')}</textarea><div style="display:flex;gap:7px;margin-top:6px"><span data-rawreembed="${idx}" style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:4px 11px;font-size:10px;font-weight:900">${st.rawReembedBusy ? '⏳ re-embedding…' : '🔁 re-embed with this transcript'}</span><span data-rawreembedvis="${idx}" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">visuals only</span><span data-rawtranscancel style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">cancel</span></div></div>` : ''}`;
-            })()}`, 12);
+            <div style="${gcol}">${['keep', 'ret5', 'views'].map(novBox).join('')}</div>`, 12);
         return head + controls + '<div id="exp-scoreout"></div>' + trace + boxes + savedStrip();
     }
     function rtgUpdateFusion() { try { const el = window.document.getElementById('rtg-fusionpanel'); if (el) el.innerHTML = renderFusion(); } catch (e) { } }
@@ -3168,6 +3192,18 @@ const JarvisRetention = (function () {
         return `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="display:flex;justify-content:space-between;gap:6px;font-size:9px;font-weight:900;text-transform:uppercase"><span style="color:${C.mute}">all embedding outputs</span><span style="color:${found === possible ? C.green : C.amber}">${found}/${possible}${hasText ? '' : ' (visual-only — no transcript; fix it above to unlock text + together)'}</span></div>${rows}</div>`;
     }
     function onClick(e) {
+        const rtt = e.target.closest('[data-rawtitleedit]'); if (rtt) {
+            const idx = parseInt(rtt.getAttribute('data-rawtitleedit'), 10);
+            st.rawTitleEdit = { idx, text: ((st.rawUploads || [])[idx] || {}).title || '' };
+            render(); return;
+        }
+        const rts = e.target.closest('[data-rawtitlesave]'); if (rts) {
+            const idx = parseInt(rts.getAttribute('data-rawtitlesave'), 10);
+            const inp2 = window.document.querySelector('[data-rawtitletext]');
+            if (inp2 && (st.rawUploads || [])[idx]) st.rawUploads[idx].title = String(inp2.value || '').slice(0, 120).trim() || st.rawUploads[idx].title;
+            st.rawTitleEdit = null; render(); return;
+        }
+        if (e.target.closest('[data-rawtitlecancel]')) { st.rawTitleEdit = null; render(); return; }
         const rte = e.target.closest('[data-rawtransedit]'); if (rte) {
             const idx = parseInt(rte.getAttribute('data-rawtransedit'), 10);
             const u = (st.rawUploads || [])[idx] || {};
@@ -3297,6 +3333,7 @@ const JarvisRetention = (function () {
     }
     function onInput(e) {
         if (e.target.hasAttribute && e.target.hasAttribute('data-rawtranstext')) { if (st.rawTransEdit) st.rawTransEdit.text = e.target.value; return; }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-rawtitletext')) { if (st.rawTitleEdit) st.rawTitleEdit.text = e.target.value; return; }
         if (e.target.id === 'rtg-minstr') { st.rtgMinStr = +e.target.value; rtgUpdateThresh(); return; }
         if (e.target.id === 'rtg-hazA') { st.hazA = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-hazB') { st.hazB = +e.target.value; rtgUpdateHazCompare(); return; }
