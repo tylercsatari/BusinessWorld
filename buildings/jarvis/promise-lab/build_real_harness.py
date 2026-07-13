@@ -50,6 +50,7 @@ def main() -> None:
         "canonical-partitions": read("canonical-partitions.json", None),
         "hook-quality": read("hook-quality.json", None),
         "hook-outcomes": read("hook-outcomes.json", None),
+        "market-reward": read("market-reward.json", None),
         "hook-example-results": read("hook-example-results.json", None),
         "cross-scope": read("cross-scope.json", {}) if args.full else {},
         "swaps": read("swaps.json", None) if args.full else None,

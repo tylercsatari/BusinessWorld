@@ -10,11 +10,11 @@ to a better/worse hook score unless it survives every declared validation gate.
 
 ## Current conclusion
 
-Promise Lab has useful semantic geometry and several reproducible random-fold
-associations. It does **not** yet have a validated universal hook-quality or
-promise-quality score.
+Promise Lab has useful semantic geometry, several reproducible diagnostics, and
+one validated cross-source local-retention training proxy. It does **not** yet
+have a causal or universal hook-quality or promise-quality score.
 
-The two strongest candidate headline axes fail the required generalization tests:
+The two owned-outcome candidate axes fail the required generalization tests:
 
 | Candidate | Random-fold result | Future-only result | Decision |
 | --- | --- | --- | --- |
@@ -25,6 +25,18 @@ The terminal-conditioned survival result is also normalization-sensitive. A
 future-free entry-normalized target gives rho 0.1353 with p 0.0517. The two model
 predictions correlate at -0.3081, so they are not interchangeable measurements of
 one stable latent property.
+
+Market Hold takes a different route. It is selected on 5,353 non-owned
+first-five-second transcript embeddings, with channel and duplicate text held
+together and ridge strength selected inside nested outer folds. The frozen score
+then transfers without refitting to the 208 owned hooks:
+
+| Frozen external score | External nested OOF | Untouched owned transfer | Decision |
+| --- | --- | --- | --- |
+| Market Hold | log-views rho 0.2500; all five outer folds select alpha 10 | 5s retention rho 0.2661, recent-half rho 0.1984; viewed rho 0.2989; average retention rho 0.3443; raw views unsupported | local-retention training proxy |
+
+This promotion is deliberately narrower than "hook virality." It supports a
+consistent optimization reward, not a causal claim about exact rewrites.
 
 ## Fixed problems
 
@@ -232,16 +244,17 @@ Fix:
 
 ### 13. Component scores were disconnected from the headline metric
 
-The live scorer exposed a whole-hook Hook Hold coordinate, but component cards
-primarily showed a separate category-conditioned response axis. That did not
+The live scorer exposed whole-hook coordinates, but component cards primarily
+showed a separate category-conditioned response axis. That did not
 answer the operational question "how much does this component change this hook's
 headline score?" Pair relationships had the same mismatch.
 
 Fix:
 
 - Every exact component is deleted from the literal input and rescored with the
-  same frozen whole-hook Hook Hold model.
-- Every component pair receives the same model's local second-order interaction.
+  same frozen whole-hook Market Hold model used by training.
+- Every component pair receives that same model's local second-order interaction.
+- Hook Hold is retained as a clearly separate terminal-conditioned diagnostic.
 - The identical operation is retained separately for viewed percentage,
   five-second retention, average retention, log views, and the 41-position
   within-hook curve forecast.
@@ -252,6 +265,28 @@ Fix:
   counterfactual model explanations, not causal or additive Shapley values.
 - Live input length is never silently truncated. Token count and measured
   training-length support are returned with every score.
+
+### 14. The owned corpus could not validate its own training score
+
+The 208-hook direct models looked useful in shuffled folds but did not transfer
+reliably to later videos. Reusing those axes as a training reward would optimize
+an interpolation artifact. The existing Shorts reward also uses a nearest-neighbor
+estimate over extrapolated labels, while the thumbnail blend was chosen on the
+same full-data geometry used to describe it.
+
+Fix:
+
+- The hook reward direction and hyperparameter selection use only non-owned rows.
+- Channel and canonical-transcript duplicates are inseparable validation groups.
+- Hyperparameter evidence is nested; each outer test fold is predicted after
+  alpha selection only on its outer training groups.
+- All 208 current Promise IDs are asserted owned and absent from external fitting.
+- One rounded coefficient, intercept, ladder, score scale, and domain policy are
+  frozen into the runtime artifact.
+- The fast trainer, full scorer, component deletions, pair interactions, saved
+  library, example evaluation, and UI replay that exact artifact.
+- Visuals, titles, cluster labels, retention curves, and topical relevance do not
+  enter the primary reward. Topical relevance is an explicit separate constraint.
 
 ## What remains valid
 
@@ -276,7 +311,10 @@ The UI and artifacts use three levels:
 3. **Validated transfer**: positive, baseline-improving, multiplicity-corrected,
    future-replicated, and robust to reasonable target definitions.
 
-No current whole-hook or component score reaches level 3.
+Market Hold reaches validated transfer only as a cross-source local-retention
+training proxy. No current score reaches causal or universal promise-quality
+status. Its component and pair values are exact model explanations, not separately
+validated causal effects.
 
 ## Remaining limitations
 
@@ -291,10 +329,13 @@ No current whole-hook or component score reaches level 3.
   endpoint. Extending the same algorithm requires transcript and timing data for
   the additional words first.
 - Percentiles are ranks against this 208-hook corpus, not calibrated probabilities.
+- Market Hold percentiles are ranks against 5,353 external transcript scores, not
+  probabilities. The direction can still encode topic, channel style, language,
+  and transcription quality alongside promise structure.
 
 ## Promotion gate for a future hook score
 
-A new score may be promoted only if all of the following are true:
+A new score may be promoted to a training proxy only if all of the following are true:
 
 1. Its target can be computed without information from after the claimed response
    window, or that future conditioning is explicitly part of the estimand.
@@ -304,8 +345,11 @@ A new score may be promoted only if all of the following are true:
 5. The result is stable across declared chronological block counts.
 6. Reasonable normalization alternatives produce positively aligned targets and
    predictions.
-7. The result replicates on a new frozen batch of videos or, preferably, a
-   randomized hook-variant experiment.
+7. The fitting labels and evaluation labels are isolated, or the result replicates
+   on a new frozen batch.
 
-Until then, Promise Lab is an instrument panel for semantic and retention
-diagnostics, not an oracle for which hook is better.
+Promotion from proxy to a causal better/worse hook score additionally requires a
+randomized same-topic hook-variant experiment.
+
+Until then, Promise Lab supplies a deterministic optimization proxy and a much
+richer instrument panel, not an oracle for which exact hook will win.

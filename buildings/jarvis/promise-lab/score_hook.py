@@ -35,6 +35,7 @@ from hook_score_core import (
     percentile,
     row_unit,
 )
+from market_reward import local_market_effects, score_market_vector
 from sequence import all_spans, normalize_source, surface, tokenize, without_span
 
 
@@ -44,7 +45,8 @@ REMOTE_PREFIX = "longform/promise-lab-v4"
 MODEL_FILE = "hook-quality-model.json"
 PARTITION_FILE = "canonical-partition-model.json"
 OUTCOME_MODEL_FILE = "hook-outcome-model.json"
-SCORER_VERSION = "deterministic-variable-hook-scorer-v10"
+MARKET_MODEL_FILE = "market-reward-model.json"
+SCORER_VERSION = "deterministic-variable-hook-scorer-v11"
 
 
 def _decode_json(payload: bytes) -> dict:
@@ -895,10 +897,12 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
 
 def score_text(text: str, model: dict | None = None, partition_model: dict | None = None,
                store: EmbeddingStore | None = None,
-               outcome_model: dict | None = None) -> dict:
+               outcome_model: dict | None = None,
+               market_model: dict | None = None) -> dict:
     model = model or load_artifact(MODEL_FILE)
     partition_model = partition_model or load_artifact(PARTITION_FILE)
     outcome_model = outcome_model or load_artifact(OUTCOME_MODEL_FILE)
+    market_model = market_model or load_artifact(MARKET_MODEL_FILE)
     owned_store = store is None
     store = store or EmbeddingStore(_embedding_cache_path())
     try:
@@ -1014,6 +1018,25 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             "bootstrapPositiveFraction": float(np.mean(samples > 0)) if len(samples) else None,
         })
 
+    market_score = score_market_vector(primitives["full"], market_model)
+    market_local = local_market_effects(
+        primitives["full"], counter_vectors["withoutOne"],
+        counter_vectors["withoutPair"],
+        [int(component["category"]) for component in components], market_model,
+    )
+    if len(market_local["components"]) != len(components):
+        raise RuntimeError("Market Hold component attribution count differs")
+    if len(market_local["relationships"]) != len(interactions):
+        raise RuntimeError("Market Hold relationship attribution count differs")
+    for component, contribution in zip(components, market_local["components"]):
+        component["marketHoldContribution"] = contribution
+    for interaction, contribution in zip(interactions, market_local["relationships"]):
+        if (int(interaction["left"]), int(interaction["right"])) != (
+            int(contribution["left"]), int(contribution["right"]),
+        ):
+            raise RuntimeError("Market Hold relationship order differs")
+        interaction["marketHoldInteraction"] = contribution
+
     forward_response = _score_forward_response(
         primitives, partition, counter_vectors, components, interactions, model,
     )
@@ -1060,6 +1083,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             "embeddingModel": model["embeddingModel"],
             "embeddingDimensions": model["embeddingDimensions"],
             "fullHookEmbeddingInput": primitives["text"],
+            "trainingRewardEmbeddingInput": primitives["text"],
             "spanEmbeddingInputs": primitives["embeddingInputs"],
             "localCounterfactualEmbeddingInputs": len(set(required)),
             "emergentComponentCount": component_count,
@@ -1082,6 +1106,8 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             ),
             "generativeLlmUsed": False,
         },
+        "primaryScore": market_score,
+        "trainingReward": market_score,
         "score": survival_score,
         "confidence": {
             "heldoutSpearman": survival_validation.get("heldoutSpearman"),
@@ -1131,6 +1157,20 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
         "components": components,
         "pairInteractions": interactions,
         "scorecard": scorecard,
+        "trainingScorecard": {
+            "headline": "Market Hold",
+            "headlineFormula": market_model["rewardContract"]["primaryScore"],
+            "componentFormula": market_model["localCalibration"]["componentDefinition"],
+            "relationshipFormula": market_model["localCalibration"]["relationshipDefinition"],
+            "coverage": {
+                "tokensOwnedExactlyOnce": partition["coverage"] == 1
+                and partition["overlapCount"] == 0,
+                "componentsExpected": component_count,
+                "componentsScored": len(market_local["components"]),
+                "relationshipsExpected": component_count * (component_count - 1) // 2,
+                "relationshipsScored": len(market_local["relationships"]),
+            },
+        },
         "localCounterfactuals": {
             "definition": counter_texts["definition"],
             "componentDeletions": [{
@@ -1138,6 +1178,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
                 "embeddingInput": counter_texts["withoutOne"][index],
                 "axisCoordinate": float(context_scores[index]),
                 "effect": float(deletion_effects[index]),
+                "marketHold": market_local["components"][index],
             } for index in range(component_count)],
             "pairDeletions": [{
                 "removedComponents": [left, right],
@@ -1145,6 +1186,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
                 "retainedPairEmbeddingInput": counter_texts["pairOnly"][(left, right)],
                 "axisCoordinate": float(pair_context[(left, right)] @ direction),
                 "interaction": float(interaction["interaction"]),
+                "marketHold": interaction["marketHoldInteraction"],
             } for interaction in interactions
               for left, right in [(int(interaction["left"]), int(interaction["right"]))]],
         },
@@ -1161,6 +1203,11 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
         "provenance": {
             "outcomeUsedForBoundaries": False,
             "outcomeUsedForQualityAxis": True,
+            "marketRewardFitUsesOwnedOutcomes": False,
+            "marketRewardUsesVisualInput": False,
+            "marketRewardUsesTitleInput": False,
+            "marketRewardUsesRetentionAtInference": False,
+            "marketRewardModelVersion": market_model["methodVersion"],
             "examplesUsedForTraining": False,
             "componentAttribution": model["componentDefinition"],
             "forwardResponseDiagnosticsComputed": bool(forward_response),

@@ -28,7 +28,8 @@ def main() -> None:
         "verify-cluster-outcomes", "latency-study", "verify-latency-study",
         "canonical-partitions", "verify-canonical-partitions", "hook-quality",
         "verify-hook-quality", "forward-response", "verify-forward-response",
-        "hook-outcomes", "verify-hook-outcomes", "hook-examples", "verify-hook-examples",
+        "hook-outcomes", "verify-hook-outcomes", "market-reward",
+        "verify-market-reward", "hook-examples", "verify-hook-examples",
         "verify-methodology", "ui",
     ),
                         default="interventions")
@@ -61,6 +62,8 @@ def main() -> None:
         ("verify-forward-response", "verify_forward_response.py"),
         ("hook-outcomes", "run_hook_outcomes.py"),
         ("verify-hook-outcomes", "verify_hook_outcomes.py"),
+        ("market-reward", "run_market_reward.py"),
+        ("verify-market-reward", "verify_market_reward.py"),
         ("hook-examples", "run_hook_examples.py"),
         ("verify-hook-examples", "verify_hook_examples.py"),
         ("verify-methodology", "verify_methodology_contract.py"),
@@ -73,7 +76,7 @@ def main() -> None:
             "verify-manual-projection", "verify-cluster-outcomes",
             "verify-latency-study", "verify-canonical-partitions",
             "verify-hook-quality", "verify-forward-response",
-            "verify-hook-outcomes",
+            "verify-hook-outcomes", "verify-market-reward",
             "verify-hook-examples", "verify-methodology", "ui",
         }
         extra = ["--no-upload"] if args.no_upload and supports_no_upload else []

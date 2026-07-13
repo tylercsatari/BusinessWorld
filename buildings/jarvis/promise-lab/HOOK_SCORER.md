@@ -1,8 +1,9 @@
 # Deterministic Hook Diagnostics
 
 Promise Lab converts hook text into reproducible semantic, partition, outcome,
-component, and retention diagnostics. It does not currently produce a validated
-universal better/worse hook score. The full audit is in
+component, and retention diagnostics. It now has one validated cross-source
+local-retention **training proxy**, Market Hold. It still does not have a causal
+or universal promise-quality truth. The full audit is in
 [`METHODOLOGY_AUDIT.md`](METHODOLOGY_AUDIT.md).
 
 The scorer uses `gemini-embedding-2` at 1536 dimensions, the same Long Quant text
@@ -67,7 +68,47 @@ That map was selected post hoc using the manual reference probe. The labels are 
 useful conditional vocabulary, not an independently discovered taxonomy. They
 cannot move a boundary, may repeat, and may be absent.
 
-## 4. Retained-information diagnostic
+## 4. Market Hold training reward
+
+Market Hold deliberately copies the successful Long Quant thumbnail serving
+contract: one fixed input, one frozen direction, one frozen percentile ladder,
+and the exact same calculation in training, live scoring, component explanation,
+and UI.
+
+The direction is fitted on 5,353 non-owned first-five-second transcript
+embeddings against `log10(views + 1)`. Videos sharing a channel or canonical
+transcript are connected into one validation group. A fixed five-value ridge grid
+is selected only inside each outer training fold. All five outer folds select
+alpha 10; nested grouped OOF Spearman is 0.2500 and fold-direction median cosine
+is 0.8574. No outcome from the 208 Promise Lab hooks enters direction or
+hyperparameter selection.
+
+For normalized complete-hook embedding `x`, frozen coefficient `w`, intercept
+`b`, and the sorted 5,353-row external score ladder `L`:
+
+`coordinate(x) = x @ w + b`
+
+`MarketHold(x) = percentile(L, coordinate(x))`
+
+The unchanged external coordinate transfers to owned outcomes:
+
+- five-second retention: rho 0.2661, family q 0.00033, recent-half rho 0.1984
+- viewed percentage: rho 0.2989, family q 0.00033
+- average retention: rho 0.3443, family q 0.00033
+- raw log views: rho 0.0760, not supported
+
+Reward is `MarketHold / 100` only when the frozen model status passes and the
+candidate is at least as close to the measured-hook manifold as the exact
+observed leave-one-out minimum. The empirical 10th-percentile similarity is a
+visible caution, not a hidden penalty. A seed-to-candidate topical cosine can be
+required separately and never changes the Market Hold coordinate.
+
+This is sufficient as a consistent model-training proxy for local hold. It is
+not evidence that topic, production, or audience effects have been isolated, and
+it cannot claim which exact rewrite causally wins without randomized same-topic
+variants.
+
+## 5. Retained-information diagnostic
 
 The broad complete-hook target begins with six endpoint-normalized retention
 measurements at 3, 5, 8, and 10 seconds, hook end, and hook end through +5 seconds.
@@ -86,11 +127,22 @@ Past-to-future sensitivity across 4, 5, 6, 8, and 10 blocks gives rho
 0.039-0.076 with p 0.29-0.63. Therefore this coordinate and its component
 deletion effects are diagnostic, not validated transfer.
 
-## 5. Components and relationships
+## 6. Components and relationships
 
-For each exact-cover component `i`, every frozen whole-hook scalar model now
-receives the exact counterfactual text with that component removed. The headline
-Hook Hold attribution is:
+For each exact-cover component `i`, the frozen Market Hold model receives the
+exact counterfactual text with that component removed. The primary attribution is:
+
+`market_effect(i) = MarketHoldCoordinate(full) - MarketHoldCoordinate(without i)`
+
+The value is reported in frozen external score standard deviations. For each
+pair `(i,j)`, the primary relationship is:
+
+`market_interaction(i,j) = full - without i - without j + without(i,j)`
+
+Every whole, component, and pair therefore uses the same coordinate as model
+training. Conditional cluster labels calibrate effect percentiles for display but
+never enter the score. Hook Hold remains a separate terminal-conditioned
+diagnostic:
 
 `hold_effect(i) = HookHold(full) - HookHold(without i)`
 
@@ -103,9 +155,7 @@ For each pair `(i,j)`, the headline relationship is:
 
 `hold_interaction(i,j) = HookHold(full) - HookHold(without i) - HookHold(without j) + HookHold(without i,j)`
 
-This makes the whole input, every component, and every relationship use the same
-headline coordinate. The older broad retained-information attribution remains a
-separate channel:
+The older broad retained-information attribution remains a separate channel:
 
 `effect(i) = value(full) - value(without i)`
 
@@ -118,7 +168,7 @@ additivity or causal contribution. A fixed-duration endpoint effect isolates the
 semantic model change; a natural-duration endpoint effect is also reported when
 the deletion leaves text, but it deliberately includes the duration change.
 
-## 6. Component response and lag
+## 7. Component response and lag
 
 The component study tests the exact spoken interval shifted from 0 through 5
 seconds in 0.5-second increments. Negative shifts are falsification controls.
@@ -139,7 +189,7 @@ No response lag or component response axis validates. The coordinates remain
 visible as conditional diagnostics. Because lag is unvalidated, whole-hook timing
 uses the exact spoken hook end with zero added lag.
 
-## 7. Terminal-conditioned survival diagnostic
+## 8. Terminal-conditioned survival diagnostic
 
 For measured source curves, terminal-conditioned replay correction is:
 
@@ -168,7 +218,7 @@ It is not promoted because:
 The displayed percentile is only the rank of this terminal-conditioned diagnostic
 among the 208 training predictions.
 
-## 8. Direct outcomes and retention curves
+## 9. Direct outcomes and retention curves
 
 The complete hook embedding separately predicts viewed percentage, five-second
 retention, average retention, and log views. Random-fold correlations are positive,
@@ -181,11 +231,13 @@ caption-derived endpoint. The same complete-hook model is used throughout, and
 no value is emitted after that endpoint. Random-fold and strict future tests are
 both shown; the forecast remains diagnostic unless the promotion rule passes.
 
-## 9. Live scorer output
+## 10. Live scorer output
 
 Every scored hook returns:
 
 - exact complete-hook and span embedding inputs
+- Market Hold coordinate, percentile, reward eligibility, external validation,
+  owned transfer evidence, and empirical domain support
 - category-blind raw boundary posteriors
 - one complete non-overlapping partition and its top-two score gap
 - conditional category labels
@@ -193,8 +245,8 @@ Every scored hook returns:
 - four direct outcome predictions
 - a diagnostic 41-position retention forecast bounded by the analyzed hook
 - every component deletion and pair deletion input
-- Hook Hold component effects and pair interactions in the same units as the
-  headline, plus separate direct-outcome and curve effects
+- Market Hold component effects and pair interactions in the exact training
+  coordinate, plus separate Hook Hold, direct-outcome, and curve diagnostics
 - every available component and relationship map
 - nearest-training-hook similarity
 - token count relative to the measured 8-57-token training range; longer inputs
@@ -203,10 +255,11 @@ Every scored hook returns:
 
 The scorer is deterministic for a fixed model artifact and exact input text.
 
-## 10. Promotion rule
+## 11. Promotion rule
 
-No score may be called validated unless it has positive multiplicity-corrected
-random-fold association, positive future-only association, positive baseline
-improvement, stability across chronological block counts, and robustness to
-reasonable target normalizations. Randomized hook-variant evidence is still the
-preferred final validation.
+A score can be used as a training proxy only when its fitting labels are isolated,
+its hyperparameters are selected inside grouped folds, its frozen direction
+transfers multiplicity-corrected to untouched owned local retention, and the
+recent half remains positive and significant. Calling that score universal or
+causal additionally requires randomized same-topic hook variants. Market Hold
+passes the first gate and not the second.

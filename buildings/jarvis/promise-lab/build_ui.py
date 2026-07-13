@@ -164,6 +164,7 @@ def main() -> None:
     hook_quality = load_json("hook-quality.json", {})
     forward_response = hook_quality.get("forwardResponse") or load_json("forward-response.json", {})
     hook_outcomes = load_json("hook-outcomes.json", {})
+    market_reward = load_json("market-reward.json", {})
     hook_examples = load_json("hook-example-results.json", {})
     boundary_registry = load_jsonl_gz("boundary-experiments.jsonl.gz")
     cluster_registry = load_jsonl_gz("cluster-experiments.jsonl.gz")
@@ -283,6 +284,28 @@ def main() -> None:
                 "status": component_validation.get("status"),
                 "outcomesUsed": True,
             })
+    if market_reward.get("status"):
+        external = market_reward.get("externalTraining") or {}
+        transfer = (market_reward.get("transferValidation") or {}).get(
+            "retention_5s", {}
+        )
+        registry.append({
+            "id": market_reward.get("methodVersion"),
+            "stage": "hook-market-reward",
+            "method": "nested external channel-and-copy-grouped frozen text direction",
+            "representation": "complete-hook Gemini text embedding",
+            "ridgeAlpha": external.get("selectedAlpha"),
+            "n": external.get("nonOwnedTrainingRows"),
+            "target": "external log10 views; untouched owned transfer to five-second retention",
+            "targetDefinition": (
+                "one external-only direction and ladder; owned outcomes calibrate units but "
+                "cannot fit or select the reward"
+            ),
+            "heldoutSpearman": transfer.get("heldoutSpearman"),
+            "searchWideQ": transfer.get("familyQ"),
+            "status": market_reward.get("status"),
+            "outcomesUsed": True,
+        })
 
     selected = [row.get("selectedSegmentation") or {} for row in discovery.get("rows") or []]
     selected_counts = Counter(int(row.get("segmentCount") or 0) for row in selected)
@@ -347,6 +370,7 @@ def main() -> None:
             and hook_quality.get("status") == "complete"
             and forward_response.get("status") == "complete"
             and hook_outcomes.get("status") == "complete"
+            and market_reward.get("status")
             and hook_examples.get("status") == "complete" else "building"
         ),
         "boundary": {
@@ -584,6 +608,26 @@ def main() -> None:
                 "independent because it does not transfer to Shorts hold."
             ),
         },
+        "marketReward": {
+            "status": market_reward.get("status"),
+            "methodVersion": market_reward.get("methodVersion"),
+            "externalTraining": market_reward.get("externalTraining"),
+            "transferValidation": market_reward.get("transferValidation"),
+            "calibrations": market_reward.get("calibrations"),
+            "domainGate": market_reward.get("domainGate"),
+            "rewardContract": market_reward.get("rewardContract"),
+            "audit": market_reward.get("audit"),
+            "interpretation": (
+                "Market Hold is the single frozen training proxy because its direction was "
+                "selected on external hooks only and transfers to viewed percentage, five-second "
+                "retention, and average retention on the untouched owned corpus. It does not "
+                "predict owned raw views and is not a causal promise-quality claim."
+                if market_reward.get("status") == "validated-cross-source-local-retention-proxy"
+                else
+                "Market Hold remains inspectable but the current artifact failed at least one "
+                "declared external, transfer, recent-half, or domain gate and emits no reward."
+            ),
+        },
     }
     (CACHE / "findings.json").write_text(json.dumps(json_ready(findings), separators=(",", ":"),
                                                     allow_nan=False),
@@ -646,6 +690,12 @@ def main() -> None:
             "hookOutcomeComponents": (hook_outcomes.get("audit") or {}).get("components", 0),
             "hookOutcomeRelationships": (hook_outcomes.get("audit") or {}).get("relationships", 0),
             "hookOutcomeCurvePoints": (hook_outcomes.get("audit") or {}).get("curvePointsPerHook", 0),
+            "marketRewardExternalHooks": (
+                (market_reward.get("externalTraining") or {}).get("nonOwnedTrainingRows", 0)
+            ),
+            "marketRewardOwnedTransferHooks": (
+                (market_reward.get("audit") or {}).get("ownedHooks", 0)
+            ),
             "manualProbeMapsCompared": (
                 (manual_probe.get("counts") or {}).get("frozenMapsCompared", 0)
             ),
@@ -694,6 +744,10 @@ def main() -> None:
                 "whole-hook and category-specific component outcome axes use frozen boundaries, "
                 "source-grouped out-of-fold validation, explicit uncertainty, and separate statuses"
             ),
+            "marketRewardSeparated": (
+                "the reward direction, alpha, and percentile ladder use zero owned outcome "
+                "labels; owned outcomes are an untouched transfer test and transparent unit calibration"
+            ),
         },
         "artifacts": {
             "findings": "/api/longquant/promise-lab/findings",
@@ -710,6 +764,7 @@ def main() -> None:
             "forwardResponse": "/api/longquant/promise-lab/forward-response",
             "hookExamples": "/api/longquant/promise-lab/hook-example-results",
             "hookOutcomes": "/api/longquant/promise-lab/hook-outcomes",
+            "marketReward": "/api/longquant/promise-lab/market-reward",
             "hookScore": "/api/longquant/promise-lab/hook-score",
             "crossScope": "/api/longquant/promise-lab/cross-scope",
             "swaps": "/api/longquant/promise-lab/swaps",
@@ -760,6 +815,7 @@ def main() -> None:
         ("forward-response.json", "forward-response.json.gz"),
         ("hook-example-results.json", "hook-example-results.json.gz"),
         ("hook-outcomes.json", "hook-outcomes.json.gz"),
+        ("market-reward.json", "market-reward.json.gz"),
         ("cross-scope.json", "cross-scope.json.gz"),
         ("swaps.json", "swaps/summary.json.gz"),
         ("axes.json", "axes.json.gz"),
@@ -770,6 +826,7 @@ def main() -> None:
     for local_name in (
         "canonical-partition-model.json", "hook-quality-model.json",
         "forward-response-model.json", "hook-outcome-model.json",
+        "market-reward-model.json",
     ):
         value = load_json(local_name)
         if value is not None:

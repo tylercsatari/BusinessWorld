@@ -12,6 +12,7 @@ def main() -> None:
     result = json.loads((CACHE / "hook-example-results.json").read_text(encoding="utf-8"))
     model = json.loads((CACHE / "hook-quality-model.json").read_text(encoding="utf-8"))
     outcome_model = json.loads((CACHE / "hook-outcome-model.json").read_text(encoding="utf-8"))
+    market_model = json.loads((CACHE / "market-reward-model.json").read_text(encoding="utf-8"))
     expected_quality_status = outcome_model["survivalModel"]["validation"]["status"]
     forward_model = model["forwardResponse"]
     lag_contract = outcome_model["responseLagContract"]
@@ -23,7 +24,8 @@ def main() -> None:
     assert len(result["examples"]) == 4 and len(result["pairwise"]) == 6
     machine = [row for row in result["examples"] if row["group"] == "machine-promise-variants"]
     expected_ranking = [row["id"] for row in sorted(
-        machine, key=lambda row: (-float(row["summary"]["percentile"]), row["id"]),
+        machine,
+        key=lambda row: (-float(row["summary"]["marketHoldPercentile"]), row["id"]),
     )]
     assert result["machineVariantResult"]["mainAxisRanking"] == expected_ranking
     assert result["machineVariantResult"]["winner"] == expected_ranking[0]
@@ -33,10 +35,24 @@ def main() -> None:
         assert abs(float(row["summary"]["holdZ"])) < 10
         assert "predictedEndpointHoldLiftPercentagePoints" in row["summary"]
         score = row["score"]
+        market = score["trainingReward"]
+        assert score["primaryScore"] == market
+        assert market["status"] == market_model["status"]
+        assert 0 <= float(market["percentile"]) <= 100
+        assert market["modelEligibleForTraining"] is True
+        assert market["eligibleForTraining"] is market["domainEligibleForTraining"]
+        if market["eligibleForTraining"]:
+            assert abs(float(market["reward"]) - float(market["percentile"]) / 100) < 1e-9
+        else:
+            assert market["reward"] is None
         assert score["input"]["generativeLlmUsed"] is False
         count = int(score["partition"]["componentCount"])
         assert len(score["components"]) == count >= 1
         assert len(score["pairInteractions"]) == count * (count - 1) // 2
+        assert all("marketHoldContribution" in value for value in score["components"])
+        assert all("marketHoldInteraction" in value for value in score["pairInteractions"])
+        assert score["trainingScorecard"]["coverage"]["componentsScored"] == count
+        assert score["trainingScorecard"]["coverage"]["relationshipsScored"] == count * (count - 1) // 2
         assert len(score["localCounterfactuals"]["componentDeletions"]) == count
         assert len(score["localCounterfactuals"]["pairDeletions"]) == count * (count - 1) // 2
         assert score["partition"]["coverage"] == 1

@@ -14,6 +14,7 @@ import numpy as np
 from embedding_store import R2_PREFIX, EmbeddingStore, R2Store, json_ready
 from hook_score_core import row_unit
 from score_hook import (
+    MARKET_MODEL_FILE,
     MODEL_FILE,
     PARTITION_FILE,
     _embedding_cache_path,
@@ -72,10 +73,15 @@ def main() -> None:
     model = load_artifact(MODEL_FILE)
     partition = load_artifact(PARTITION_FILE)
     outcome_model = load_artifact("hook-outcome-model.json")
+    market_model = load_artifact(MARKET_MODEL_FILE)
     store = EmbeddingStore(_embedding_cache_path())
     try:
-        first = [score_text(row["text"], model, partition, store, outcome_model) for row in EXAMPLES]
-        second = [score_text(row["text"], model, partition, store, outcome_model) for row in EXAMPLES]
+        first = [score_text(
+            row["text"], model, partition, store, outcome_model, market_model,
+        ) for row in EXAMPLES]
+        second = [score_text(
+            row["text"], model, partition, store, outcome_model, market_model,
+        ) for row in EXAMPLES]
         full_vectors = store.embed_many([row["text"] for row in EXAMPLES])
     finally:
         store.close()
@@ -96,6 +102,10 @@ def main() -> None:
                 "left": EXAMPLES[left]["id"],
                 "right": EXAMPLES[right]["id"],
                 "survivalLiftDeltaLeftMinusRight": float(main_delta),
+                "marketHoldRankPointDeltaLeftMinusRight": float(
+                    first[left]["trainingReward"]["percentile"]
+                    - first[right]["trainingReward"]["percentile"]
+                ),
                 "retainedInformationBootstrapLeftHigherFraction": float(np.mean(delta > 0)),
                 "retainedInformationBootstrapRightHigherFraction": float(np.mean(delta < 0)),
                 "retainedInformationBootstrapDeltaP10": float(np.quantile(delta, .1)),
@@ -110,11 +120,14 @@ def main() -> None:
     winner_counts = np.bincount(
         np.argmax(machine_bootstrap, axis=1), minlength=len(machine_positions),
     )
-    machine_rank = sorted(machine_positions, key=lambda index: (
+    machine_hook_hold_rank = sorted(machine_positions, key=lambda index: (
         -first[index]["score"]["percentile"], EXAMPLES[index]["id"],
     ))
+    machine_rank = sorted(machine_positions, key=lambda index: (
+        -first[index]["trainingReward"]["percentile"], EXAMPLES[index]["id"],
+    ))
     all_rank = sorted(range(len(EXAMPLES)), key=lambda index: (
-        -first[index]["score"]["percentile"], EXAMPLES[index]["id"],
+        -first[index]["trainingReward"]["percentile"], EXAMPLES[index]["id"],
     ))
     example_rows = []
     for spec, result in zip(EXAMPLES, first):
@@ -135,6 +148,15 @@ def main() -> None:
             **spec,
             "score": result,
             "summary": {
+                "marketHoldPercentile": result["trainingReward"]["percentile"],
+                "marketHoldZ": result["trainingReward"]["z"],
+                "marketHoldReward": result["trainingReward"]["reward"],
+                "marketHoldEligibleForTraining": result["trainingReward"][
+                    "eligibleForTraining"
+                ],
+                "marketHoldDomainNearestCosine": result["trainingReward"][
+                    "domainNearestCosine"
+                ],
                 "holdZ": result["score"]["holdZ"],
                 "percentile": result["score"]["percentile"],
                 "axisCoordinate": result["score"]["prediction"],
@@ -178,6 +200,15 @@ def main() -> None:
             "sha256": first_hash,
         },
         "modelValidation": {
+            "marketHold": {
+                "externalNestedGroupedOOFSpearman": market_model["externalTraining"][
+                    "selectedValidation"
+                ]["heldoutSpearman"],
+                "retention5sTransfer": market_model["transferValidation"][
+                    "retention_5s"
+                ],
+                "status": market_model["status"],
+            },
             "heldoutSpearman": outcome_model["survivalModel"]["validation"][
                 "heldoutSpearman"
             ],
@@ -195,14 +226,16 @@ def main() -> None:
         "machineVariantResult": {
             "mainAxisRanking": [EXAMPLES[index]["id"] for index in machine_rank],
             "winner": EXAMPLES[machine_rank[0]]["id"],
+            "hookHoldDiagnosticRanking": [
+                EXAMPLES[index]["id"] for index in machine_hook_hold_rank
+            ],
             "bootstrapWinnerFractions": {
                 EXAMPLES[index]["id"]: float(winner_counts[local] / len(bootstrap))
                 for local, index in enumerate(machine_positions)
             },
             "meaning": (
-                "ranking is the frozen Hook Hold diagnostic coordinate; winner fractions are "
-                "reported only for the separate retained-information bootstrap and do not replace "
-                "the Hook Hold ranking"
+                "ranking is the frozen cross-source Market Hold percentile; Hook Hold and "
+                "retained-information bootstrap orderings remain separate diagnostics"
             ),
         },
         "allExampleRanking": [EXAMPLES[index]["id"] for index in all_rank],
@@ -211,8 +244,9 @@ def main() -> None:
         "limits": {
             "causalClaim": False,
             "reason": (
-                "the axis is normalization- and time-sensitive, and these exact sentences do not "
-                "have randomized audience outcomes; the ordering is diagnostic only"
+                "Market Hold transfers to owned retention but these exact sentences do not have "
+                "randomized same-topic audience outcomes; the ordering is a training proxy, not "
+                "a causal winner claim"
             ),
             "confidencePolicy": (
                 "report bootstrap ordering frequencies and domain similarity directly; no invented "

@@ -48,14 +48,20 @@ Stages:
    terminal-conditioned survival diagnostic, normalization sensitivity,
    chronological validation, and observed plus normalized 41-position forecasts
    bounded by each source's analyzed hook endpoint.
-15. `run_hook_examples.py`: deterministic evaluation of the supplied example
+15. `run_market_reward.py`: one external-only transcript-to-market direction,
+   nested channel-and-copy-grouped validation, frozen percentile ladder,
+   zero-owned-label transfer tests, empirical domain support, and exact local
+   component and pair counterfactuals.
+16. `run_hook_examples.py`: deterministic evaluation of the supplied example
    problem, kept entirely out of training and model selection.
-16. `build_ui.py`: browser artifacts, cluster representatives, findings, the
+17. `build_ui.py`: browser artifacts, cluster representatives, findings, the
    complete experiment registry, and the interactive Hook scorer.
 
 The deterministic diagnostic architecture is documented in
 [`HOOK_SCORER.md`](HOOK_SCORER.md). Corrected claim boundaries and remaining
 limitations are recorded in [`METHODOLOGY_AUDIT.md`](METHODOLOGY_AUDIT.md).
+The exact comparison with the existing Shorts and Long Quant reward paths is in
+[`QUANT_TRANSFER_AUDIT.md`](QUANT_TRANSFER_AUDIT.md).
 
 `verify_all_span_store.py`, `verify_swap_outputs.py`, and
 `verify_axis_outputs.py` are hard gates in the orchestrated build. The manual
@@ -66,7 +72,10 @@ future-only lag selection, reverse-time controls, timing windows, every componen
 and pair, and rejected aggregate audits. `verify_hook_outcomes.py` checks every
 active source-held-out prediction, component, relationship, curve shape,
 timing coverage, replay-envelope geometry, normalization and temporal sensitivity,
-uncertainty arrays, and improvement over the text-free baselines. Together these
+uncertainty arrays, and improvement over the text-free baselines.
+`verify_market_reward.py` additionally proves that all current owned IDs were
+excluded from external fitting, replays every frozen score, and checks all 324
+component and 175 pair calculations against the one training coordinate. Together these
 gates check exact character slices, complete variable-cover and local-deletion identity, vector finiteness and
 normalization, crossed-design completeness, per-source artifacts, zero-error
 self-span controls, one predeclared-confound selection per target, and exact
@@ -107,6 +116,11 @@ taxonomy selected by scientific validation.
 48-coordinate preview stored by the existing Long Quant scorer. Tests use
 planted numerical structure and do not contain phrases from the user's
 examples.
+
+For model training or batch generation, `score_market_hook.py` is the minimal
+serving path: one complete text embedding, one frozen projection, and one frozen
+percentile lookup. `--seed` adds a separate topical cosine constraint; relevance
+is never blended into reward.
 
 ## Manual overfit probe
 
