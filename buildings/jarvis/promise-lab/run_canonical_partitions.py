@@ -17,7 +17,6 @@ from canonical_partition import (
     boundary_features,
     boundary_probabilities,
     category_log_probabilities,
-    decision_neutral_boundary_probability,
     fit_boundary_model,
     fit_category_model,
     row_unit,
@@ -32,7 +31,7 @@ CACHE = HERE / ".cache"
 STORE = CACHE / "all-span-vectors"
 SUMMARY_PATH = CACHE / "canonical-partitions.json"
 MODEL_PATH = CACHE / "canonical-partition-model.json"
-METHOD_VERSION = "variable-exact-cover-four-category-v2"
+METHOD_VERSION = "variable-exact-cover-four-category-v3"
 
 
 def read_json(path: Path):
@@ -170,17 +169,11 @@ def main() -> None:
     features = np.vstack(feature_blocks)
     boundary_target = np.concatenate(target_blocks)
     groups = np.concatenate(group_blocks)
-    boundary_model, boundary_oof_posterior = fit_boundary_model(
+    boundary_model, boundary_oof_posterior, boundary_probability = fit_boundary_model(
         features, boundary_target, groups, feature_names=BOUNDARY_FEATURE_NAMES,
     )
-    serving_boundary_posterior = boundary_probabilities(features, boundary_model)
-    serving_boundary_probability = decision_neutral_boundary_probability(
-        serving_boundary_posterior, boundary_model["heldoutDecisionThreshold"],
-    )
+    serving_boundary_probability = boundary_probabilities(features, boundary_model)
     boundary_posterior = boundary_oof_posterior
-    boundary_probability = decision_neutral_boundary_probability(
-        boundary_oof_posterior, boundary_model["heldoutDecisionThreshold"],
-    )
     decoded = []
     gaps = []
     component_counts = []
@@ -311,6 +304,12 @@ def main() -> None:
         "embeddingDimensions": manifest["embeddingDimensions"],
         "outcomesUsed": False,
         "manualPhrasesUsedToFitPartition": False,
+        "manualPhrasesUsedToFitPartitionBoundaries": False,
+        "manualPhrasesUsedToChooseCategoryMap": True,
+        "categoryClaimStatus": (
+            "post-hoc manual-probe-conditioned category vocabulary; categories are not an "
+            "unlabeled discovery result and cannot validate the supplied interpretation"
+        ),
         "constraints": {
             "chunkCount": None,
             "componentCountSelection": (
@@ -319,6 +318,7 @@ def main() -> None:
             "categories": [0, 1, 2, 3],
             "eachCategoryExactlyOnce": False,
             "categoryLabelsMayChooseBoundaries": False,
+            "categoryFeaturesUsedByBoundaryModel": False,
             "punctuationOnlyChunkAllowed": False,
             "contiguous": True,
             "completeCoverage": True,
@@ -337,9 +337,9 @@ def main() -> None:
             "negative": "at least one geometric family does not exceed its null frequency",
             "decision": "maximum Bernoulli posterior over all compatible cut/non-cut decisions",
             "decisionCalibration": (
-                "recenter posterior log odds on the source-held-out threshold whose source-equal "
-                "cut prevalence matches the unanimous above-null prevalence; Matthews correlation "
-                "breaks exact ties, then every compatible cut/non-cut combination is decoded"
+                "inside each outer source-held-out fold, select only L2 regularization; decode "
+                "every compatible cover directly from raw Bernoulli cut/non-cut probabilities "
+                "without threshold tuning or posterior recentering"
             ),
             "manualThreshold": None,
             "outcomesUsed": False,

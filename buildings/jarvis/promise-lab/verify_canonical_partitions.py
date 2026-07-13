@@ -23,6 +23,11 @@ def main() -> None:
     assert summary["chunks"] == sum(int(row["componentCount"]) for row in summary["rows"])
     assert summary["outcomesUsed"] is False and model["outcomesUsed"] is False
     assert model["manualPhrasesUsedToFitPartition"] is False
+    assert model["manualPhrasesUsedToFitPartitionBoundaries"] is False
+    assert model["manualPhrasesUsedToChooseCategoryMap"] is True
+    assert model["constraints"]["categoryFeaturesUsedByBoundaryModel"] is False
+    assert len(model["boundaryModel"]["featureNames"]) == 8
+    assert all("category" not in name for name in model["boundaryModel"]["featureNames"])
     assert model["constraints"]["completeCoverage"] is True
     assert model["constraints"]["overlapAllowed"] is False
     assert model["constraints"]["chunkCount"] is None

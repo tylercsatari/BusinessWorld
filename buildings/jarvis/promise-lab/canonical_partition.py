@@ -47,15 +47,10 @@ BOUNDARY_FEATURE_NAMES = (
     "prefix_suffix_nonadditive_contrast",
     "adjacent_token_raw_contrast",
     "adjacent_token_influence_contrast",
-    "prefix_suffix_category_total_variation",
-    "adjacent_category_total_variation",
-    "prefix_category_certainty",
-    "suffix_category_certainty",
-    "adjacent_left_category_certainty",
-    "adjacent_right_category_certainty",
     "split_raw_reconstruction",
     "split_influence_reconstruction",
 )
+REGULARIZATION_GRID = (.001, .01, .1, 1.0, 10.0, 100.0)
 
 
 def softmax(values: np.ndarray) -> np.ndarray:
@@ -187,7 +182,7 @@ def boundary_features(full: np.ndarray, raw: np.ndarray, context: np.ndarray,
                       influence: np.ndarray, nonadditive: np.ndarray,
                       starts: np.ndarray, ends: np.ndarray,
                       category_logp: np.ndarray) -> np.ndarray:
-    """Outcome-blind semantic contrast at every possible token gap."""
+    """Outcome- and category-blind semantic contrast at every token gap."""
     full = row_unit(np.asarray(full, np.float32))
     raw = row_unit(raw)
     context = row_unit(context)
@@ -195,7 +190,6 @@ def boundary_features(full: np.ndarray, raw: np.ndarray, context: np.ndarray,
     nonadditive = row_unit(nonadditive)
     starts = np.asarray(starts, int)
     ends = np.asarray(ends, int)
-    probability = np.exp(np.asarray(category_logp, float))
     token_count = int(ends.max())
     lookup = {(int(start), int(end)): index
               for index, (start, end) in enumerate(zip(starts, ends))}
@@ -214,12 +208,6 @@ def boundary_features(full: np.ndarray, raw: np.ndarray, context: np.ndarray,
             1 - float(nonadditive[prefix] @ nonadditive[suffix]),
             1 - float(raw[left] @ raw[right]),
             1 - float(influence[left] @ influence[right]),
-            .5 * float(np.abs(probability[prefix] - probability[suffix]).sum()),
-            .5 * float(np.abs(probability[left] - probability[right]).sum()),
-            float(probability[prefix].max()),
-            float(probability[suffix].max()),
-            float(probability[left].max()),
-            float(probability[right].max()),
             float(raw_sum @ full / (np.linalg.norm(raw_sum) + EPS)),
             float(influence_sum @ full / (np.linalg.norm(influence_sum) + EPS)),
         ])
@@ -238,24 +226,83 @@ def _row_weights(groups: np.ndarray) -> np.ndarray:
     return weights * len(weights) / weights.sum()
 
 
+def _operating_point(target: np.ndarray, prediction: np.ndarray,
+                     weights: np.ndarray) -> dict:
+    """Audit the classifier's natural Bernoulli decision without tuning a threshold."""
+    threshold = .5
+    decision = np.asarray(prediction, float) >= threshold
+    return {
+        "threshold": threshold,
+        "matthewsCorrelation": float(matthews_corrcoef(target, decision)),
+        "balancedAccuracy": float(balanced_accuracy_score(target, decision)),
+        "predictedPositiveRate": float(np.average(decision, weights=weights)),
+    }
+
+
+def _crossfit_regularization(features: np.ndarray, target: np.ndarray,
+                             groups: np.ndarray, weights: np.ndarray,
+                             candidates: tuple[float, ...],
+                             folds: int = 4) -> tuple[float, list[dict], np.ndarray]:
+    groups = np.asarray(groups).astype(str)
+    splitter = GroupKFold(n_splits=min(folds, len(set(groups))))
+    predictions = {
+        float(value): np.full(len(target), np.nan, float) for value in candidates
+    }
+    for train, test in splitter.split(features, target, groups):
+        scaler = StandardScaler().fit(features[train], sample_weight=weights[train])
+        train_x = scaler.transform(features[train])
+        test_x = scaler.transform(features[test])
+        for value in candidates:
+            model = LogisticRegression(
+                C=float(value), max_iter=2000, solver="lbfgs",
+                random_state=PARTITION_SEED,
+            ).fit(train_x, target[train], sample_weight=weights[train])
+            predictions[float(value)][test] = model.predict_proba(test_x)[:, 1]
+    rows = [{
+        "C": value,
+        "sourceWeightedAveragePrecision": float(average_precision_score(
+            target, prediction, sample_weight=weights,
+        )),
+        "sourceWeightedAuc": float(roc_auc_score(
+            target, prediction, sample_weight=weights,
+        )),
+    } for value, prediction in predictions.items()]
+    selected = max(rows, key=lambda row: (
+        row["sourceWeightedAveragePrecision"], -row["C"],
+    ))
+    return float(selected["C"]), rows, predictions[float(selected["C"])]
+
+
 def fit_boundary_model(features: np.ndarray, target: np.ndarray, groups: np.ndarray,
                        folds: int = 5,
-                       feature_names: tuple[str, ...] = FEATURE_NAMES) -> tuple[dict, np.ndarray]:
+                       feature_names: tuple[str, ...] = BOUNDARY_FEATURE_NAMES,
+                       regularization_grid: tuple[float, ...] = REGULARIZATION_GRID,
+                       ) -> tuple[dict, np.ndarray, np.ndarray]:
     features = np.asarray(features, np.float32)
     target = np.asarray(target, int)
     groups = np.asarray(groups).astype(str)
     weights = _row_weights(groups)
     splitter = GroupKFold(n_splits=min(folds, len(set(groups))))
     predictions = np.full(len(target), np.nan, float)
+    neutral_predictions = np.full(len(target), np.nan, float)
     fold_models = []
     for fold_index, (train, test) in enumerate(splitter.split(features, target, groups)):
+        selected_c, inner_rows, _ = _crossfit_regularization(
+            features[train], target[train], groups[train], weights[train],
+            regularization_grid,
+        )
         scaler = StandardScaler().fit(features[train], sample_weight=weights[train])
         model = LogisticRegression(
-            penalty=None, max_iter=1000, solver="lbfgs", random_state=PARTITION_SEED,
+            C=selected_c, max_iter=2000, solver="lbfgs",
+            random_state=PARTITION_SEED,
         ).fit(scaler.transform(features[train]), target[train], sample_weight=weights[train])
         predictions[test] = model.predict_proba(scaler.transform(features[test]))[:, 1]
+        neutral_predictions[test] = predictions[test]
         fold_models.append({
             "fold": fold_index,
+            "selectedC": selected_c,
+            "regularizationSearch": inner_rows,
+            "decisionThreshold": .5,
             "scalerMean": scaler.mean_.astype(float).tolist(),
             "scalerScale": scaler.scale_.astype(float).tolist(),
             "coefficients": model.coef_[0].astype(float).tolist(),
@@ -266,38 +313,28 @@ def fit_boundary_model(features: np.ndarray, target: np.ndarray, groups: np.ndar
     average_precision = float(average_precision_score(
         target, predictions, sample_weight=weights,
     ))
-    thresholds = np.unique(predictions)
-    operating_points = []
-    for threshold in thresholds:
-        decision = predictions >= threshold
-        operating_points.append({
-            "threshold": float(threshold),
-            "matthewsCorrelation": float(matthews_corrcoef(target, decision)),
-            "balancedAccuracy": float(balanced_accuracy_score(target, decision)),
-            "predictedPositiveRate": float(np.average(decision, weights=weights)),
-        })
     positive_rate = float(np.average(target, weights=weights))
-    operating_point = max(
-        operating_points,
-        key=lambda row: (
-            -abs(row["predictedPositiveRate"] - positive_rate),
-            row["matthewsCorrelation"], row["balancedAccuracy"], -row["threshold"],
-        ),
+    operating_point = _operating_point(target, predictions, weights)
+    selected_c, regularization_rows, _ = _crossfit_regularization(
+        features, target, groups, weights, regularization_grid,
     )
     scaler = StandardScaler().fit(features, sample_weight=weights)
     model = LogisticRegression(
-        penalty=None, max_iter=1000, solver="lbfgs", random_state=PARTITION_SEED,
+        C=selected_c, max_iter=2000, solver="lbfgs",
+        random_state=PARTITION_SEED,
     ).fit(scaler.transform(features), target, sample_weight=weights)
     artifact = {
         "featureNames": list(feature_names),
-        "fitMethod": "unpenalized maximum-likelihood logistic regression",
-        "manualRegularization": False,
+        "fitMethod": "L2 logistic regression with nested grouped regularization selection",
+        "regularizationGrid": list(regularization_grid),
+        "selectedC": selected_c,
+        "regularizationSearch": regularization_rows,
         "heldoutAuc": auc,
         "heldoutAveragePrecision": average_precision,
         "heldoutDecisionThreshold": operating_point["threshold"],
         "heldoutDecisionMetric": (
-            "closest source-equal predicted cut prevalence to unanimous above-null prevalence; "
-            "Matthews correlation breaks ties"
+            "fixed Bernoulli posterior threshold 0.5 for audit only; the exact-cover decoder uses "
+            "raw probabilities and no tuned operating threshold"
         ),
         "heldoutMatthewsCorrelation": operating_point["matthewsCorrelation"],
         "heldoutBalancedAccuracy": operating_point["balancedAccuracy"],
@@ -307,13 +344,20 @@ def fit_boundary_model(features: np.ndarray, target: np.ndarray, groups: np.ndar
         "scalerScale": scaler.scale_.astype(float).tolist(),
         "coefficients": model.coef_[0].astype(float).tolist(),
         "intercept": float(model.intercept_[0]),
+        "decisionThreshold": .5,
         "foldModels": fold_models,
-        "servingPolicy": "mean probability from every grouped source-held-out fold model",
+        "servingPolicy": (
+            "mean raw fold-specific Bernoulli posterior; each fold selects only L2 regularization "
+            "without its held-out source hooks; no posterior recentering or cut threshold tuning"
+        ),
         "groupedBy": "source hook",
         "sourceEqualWeights": True,
         "outcomesUsed": False,
     }
-    return artifact, predictions.astype(np.float32)
+    return (
+        artifact, predictions.astype(np.float32),
+        neutral_predictions.astype(np.float32),
+    )
 
 
 def boundary_probabilities(features: np.ndarray, model: dict) -> np.ndarray:
@@ -327,17 +371,6 @@ def boundary_probabilities(features: np.ndarray, model: dict) -> np.ndarray:
         logits = (
             (features - mean) / np.maximum(scale, EPS)
         ) @ coefficients + float(row["intercept"])
-        predictions.append(1 / (1 + np.exp(-np.clip(logits, -50, 50))))
+        posterior = 1 / (1 + np.exp(-np.clip(logits, -50, 50)))
+        predictions.append(posterior)
     return np.mean(predictions, axis=0).astype(np.float32)
-
-
-def decision_neutral_boundary_probability(posterior: np.ndarray,
-                                          threshold: float) -> np.ndarray:
-    """Map the learned held-out operating point to neutral probability 0.5."""
-    posterior = np.clip(np.asarray(posterior, float), EPS, 1 - EPS)
-    threshold = float(np.clip(threshold, EPS, 1 - EPS))
-    evidence = (
-        np.log(posterior) - np.log1p(-posterior)
-        - (math.log(threshold) - math.log1p(-threshold))
-    )
-    return (1 / (1 + np.exp(-np.clip(evidence, -50, 50)))).astype(np.float32)

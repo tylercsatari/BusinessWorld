@@ -80,6 +80,21 @@ class CanonicalPartitionTests(unittest.TestCase):
         self.assertEqual(features.shape, (3, len(BOUNDARY_FEATURE_NAMES)))
         self.assertTrue(np.isfinite(features).all())
 
+    def test_boundary_features_cannot_depend_on_category_probabilities(self):
+        rng = np.random.default_rng(81)
+        dimension = 12
+        starts, ends = span_rows(5)
+        count = len(starts)
+        full = rng.normal(size=dimension).astype(np.float32)
+        arrays = [rng.normal(size=(count, dimension)).astype(np.float32) for _ in range(4)]
+        uniform = np.log(np.full((count, 4), .25, np.float32))
+        adversarial = np.log(np.maximum(
+            rng.dirichlet(np.ones(4) * .01, size=count), 1e-12,
+        )).astype(np.float32)
+        left = boundary_features(full, *arrays, starts, ends, uniform)
+        right = boundary_features(full, *arrays, starts, ends, adversarial)
+        np.testing.assert_array_equal(left, right)
+
     def test_structural_features_remain_finite_as_audit(self):
         rng = np.random.default_rng(9)
         dimension = 12

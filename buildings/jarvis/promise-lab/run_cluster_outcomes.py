@@ -685,7 +685,7 @@ def main() -> None:
     selected_ranked = sorted(
         selected_rows,
         key=lambda row: (
-            row.get("status") == "validated",
+            bool(row.get("randomFoldSupported")),
             float(row.get("heldoutSpearman") or 0),
         ),
         reverse=True,
@@ -703,7 +703,14 @@ def main() -> None:
         "targetFamiliesPerCluster": len(target_names),
         "experimentCount": len(all_experiments),
         "selectedFamilyCount": len(selected_rows),
-        "validatedFamilyCount": sum(row.get("status") == "validated" for row in selected_rows),
+        "validatedFamilyCount": 0,
+        "randomFoldSupportedFamilyCount": sum(
+            bool(row.get("randomFoldSupported")) for row in selected_rows
+        ),
+        "claimBoundary": (
+            "all category-conditioned axes are random-fold-only diagnostics because the k=4 map "
+            "was selected post hoc and no chronological component replication was run"
+        ),
         "topIndicators": selected_ranked[:20],
         "timingAudit": global_inputs["timingAudit"],
         "normalization": {
@@ -768,10 +775,12 @@ def main() -> None:
         "targetFamilies": summary["selectedFamilyCount"],
         "experiments": summary["experimentCount"],
         "validated": summary["validatedFamilyCount"],
+        "randomFoldSupported": summary["randomFoldSupportedFamilyCount"],
         "timingAudit": summary["timingAudit"],
         "topIndicators": [
             {key: row.get(key) for key in (
-                "cluster", "target", "heldoutSpearman", "searchWideP", "searchWideQ", "status"
+                "cluster", "target", "heldoutSpearman", "searchWideP", "searchWideQ",
+                "randomFoldSupported", "status"
             )}
             for row in summary["topIndicators"][:8]
         ],

@@ -5,12 +5,12 @@ import numpy as np
 from forward_response import (
     ResponseCandidate,
     candidate_intervals,
+    category_balanced_source_inference,
     category_balanced_spearman,
     combined_component_features,
     crossfit_category_axis,
     interaction_features,
     response_candidates,
-    source_signflip,
 )
 
 
@@ -67,11 +67,15 @@ class ForwardResponseTests(unittest.TestCase):
         )
         self.assertGreater(result["heldoutSpearman"], .65)
         self.assertTrue(all(value > .6 for value in result["heldoutSpearmanByCategory"].values()))
-        inference = source_signflip(
-            result["prediction"], result["targetResidual"], groups, repeats=512,
+        inference = category_balanced_source_inference(
+            result["prediction"], result["targetResidual"], groups, categories,
+            repeats=512,
         )
         self.assertLess(inference["p"], .01)
         self.assertGreater(inference["ciLow"], 0)
+        self.assertAlmostEqual(
+            inference["rho"], result["heldoutSpearman"], places=6,
+        )
 
     def test_control_candidate_can_be_constructed_but_not_selected(self):
         control = ResponseCandidate("control", "control", "phrase", None, -1.0)

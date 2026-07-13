@@ -38,31 +38,33 @@ Stages:
    source bootstraps, full-context component deletions, O(n²) local pair
    interactions, domain checks, and latency falsification.
 13. `run_forward_response.py`: nested forward-only lag selection, text-free
-   natural-drop adjustment, four category-specific component axes, all 1,006
-   stored component measurements, and 2,489 exact local pair interactions.
+   natural-drop adjustment, conditional category-specific component diagnostics,
+   exact-statistic source inference, and chronological lag-selection validation.
 14. `run_hook_outcomes.py`: grouped out-of-fold whole-hook and category-specific
    component predictions for viewed percentage, five-second retention, average
    retention, and log views; a nested endpoint-normalized, duration-neutral hook
-   survival score; and observed plus normalized 41-point retention forecasts.
+   terminal-conditioned survival diagnostic, normalization sensitivity,
+   chronological validation, and observed plus normalized 41-point forecasts.
 15. `run_hook_examples.py`: deterministic evaluation of the supplied example
    problem, kept entirely out of training and model selection.
 16. `build_ui.py`: browser artifacts, cluster representatives, findings, the
    complete experiment registry, and the interactive Hook scorer.
 
-The complete deployable scoring architecture, formulas, validation evidence,
-and supplied-example result are documented in [`HOOK_SCORER.md`](HOOK_SCORER.md).
+The deterministic diagnostic architecture is documented in
+[`HOOK_SCORER.md`](HOOK_SCORER.md). Corrected claim boundaries and remaining
+limitations are recorded in [`METHODOLOGY_AUDIT.md`](METHODOLOGY_AUDIT.md).
 
 `verify_all_span_store.py`, `verify_swap_outputs.py`, and
 `verify_axis_outputs.py` are hard gates in the orchestrated build. The manual
 projection also has `verify_manual_projection.py`, which checks the frozen-label
 hash, all coordinate shapes and finiteness, basis orthonormality, and the declared
-winner. `verify_forward_response.py` checks the selected forward lag, grouped
-inference, reverse-time controls, exact timing windows, every component and pair,
-and the rejected aggregate audits. `verify_hook_outcomes.py` checks all 208
-source-held-out predictions, 1,006 components, 2,489 relationships, curve shape,
-timing coverage, additive replay-envelope geometry, score and curve validation,
-uncertainty arrays, and improvement over the text-free baselines. Together these gates check
-exact character slices, complete variable-cover and local-deletion identity, vector finiteness and
+winner. `verify_forward_response.py` checks exact-statistic grouped inference,
+future-only lag selection, reverse-time controls, timing windows, every component
+and pair, and rejected aggregate audits. `verify_hook_outcomes.py` checks all 208
+source-held-out predictions, 324 components, 175 relationships, curve shape,
+timing coverage, replay-envelope geometry, normalization and temporal sensitivity,
+uncertainty arrays, and improvement over the text-free baselines. Together these
+gates check exact character slices, complete variable-cover and local-deletion identity, vector finiteness and
 normalization, crossed-design completeness, per-source artifacts, zero-error
 self-span controls, one predeclared-confound selection per target, and exact
 agreement among the axis registry, maps, out-of-fold rows, and direction tensors.
@@ -95,7 +97,9 @@ examples.
 then compares all already-retained maps and clusters using equal-hook-weighted KL
 information contribution. It creates no embeddings, clusters, maps, or outcome
 axes. The output is `.cache/manual-probe.json` and is published separately as
-`manual-probe.json.gz`, so the discovery artifacts remain unchanged.
+`manual-probe.json.gz`, so the discovery artifacts remain unchanged. Its winning
+map does supply the conditional four-label overlay used by later category-specific
+diagnostics; those labels are therefore disclosed as post-hoc conditioned.
 
 `manual-projection.json.gz` contains the current PCA plane, an orthonormalized
 Fisher plane, and an orthonormal max-min plane for the same frozen `k=4` labels.

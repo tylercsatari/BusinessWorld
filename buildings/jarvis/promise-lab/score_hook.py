@@ -17,7 +17,6 @@ import numpy as np
 from canonical_partition import (
     boundary_features,
     boundary_probabilities,
-    decision_neutral_boundary_probability,
 )
 from embedding_store import EmbeddingStore, R2Store, json_ready
 from hook_outcomes import apply_duration_baseline
@@ -44,7 +43,7 @@ REMOTE_PREFIX = "longform/promise-lab-v4"
 MODEL_FILE = "hook-quality-model.json"
 PARTITION_FILE = "canonical-partition-model.json"
 OUTCOME_MODEL_FILE = "hook-outcome-model.json"
-SCORER_VERSION = "deterministic-variable-hook-scorer-v5"
+SCORER_VERSION = "deterministic-variable-hook-scorer-v6"
 
 
 def _decode_json(payload: bytes) -> dict:
@@ -142,10 +141,7 @@ def decode_partition(primitives: dict, partition_model: dict) -> dict:
         primitives["starts"], primitives["ends"], logp,
     )
     boundary_model = partition_model["boundaryModel"]
-    posterior = boundary_probabilities(features, boundary_model)
-    boundary_probability = decision_neutral_boundary_probability(
-        posterior, boundary_model["heldoutDecisionThreshold"],
-    )
+    boundary_probability = boundary_probabilities(features, boundary_model)
     decoded = decode_variable_chunks(
         primitives["starts"], primitives["ends"], boundary_probability,
         logp, primitives["lexical"],
@@ -168,9 +164,11 @@ def decode_partition(primitives: dict, partition_model: dict) -> dict:
             "categoryDistribution": probability.astype(float).tolist(),
             "leftBoundaryProbability": chunk.get("leftBoundaryProbability"),
             "rightBoundaryProbability": chunk.get("rightBoundaryProbability"),
-            "leftBoundaryPosterior": float(posterior[start - 1]) if start > 0 else None,
+            "leftBoundaryPosterior": (
+                float(boundary_probability[start - 1]) if start > 0 else None
+            ),
             "rightBoundaryPosterior": (
-                float(posterior[end - 1]) if end < len(tokens) else None
+                float(boundary_probability[end - 1]) if end < len(tokens) else None
             ),
         })
     component_count = len(chunks)
@@ -189,7 +187,7 @@ def decode_partition(primitives: dict, partition_model: dict) -> dict:
         "chunks": chunks,
         "componentCount": component_count,
         "boundaryProbabilities": boundary_probability.astype(float).tolist(),
-        "boundaryPosteriors": posterior.astype(float).tolist(),
+        "boundaryPosteriors": boundary_probability.astype(float).tolist(),
         "boundaryModelValidation": {
             key: boundary_model.get(key) for key in (
                 "heldoutAuc", "heldoutAveragePrecision", "heldoutDecisionThreshold",
@@ -230,7 +228,7 @@ def _score_forward_response(primitives: dict, partition: dict,
                             counter_vectors: dict, components: list[dict],
                             interactions: list[dict], model: dict) -> dict | None:
     forward = model.get("forwardResponse") or {}
-    if not forward or not forward.get("validated"):
+    if not forward or forward.get("status") != "complete":
         return None
     component_model = (forward.get("component") or {}).get("modelsByCategory") or {}
     starts = np.asarray(primitives["starts"], int)
@@ -324,7 +322,11 @@ def _score_forward_response(primitives: dict, partition: dict,
     composite_training = np.asarray(whole.get("trainingCompositeSorted") or [], float)
     return {
         "status": "complete",
-        "validatedAtComponentLevel": True,
+        "validatedAtComponentLevel": bool(forward.get("validated")),
+        "validationStatus": forward.get(
+            "validationStatus", "conditional-diagnostic"
+        ),
+        "categoryClaimStatus": forward.get("categoryClaimStatus"),
         "metric": forward.get("metricContract"),
         "componentValidation": (forward.get("component") or {}).get("validation"),
         "components": [row["forwardResponse"] for row in components],
@@ -339,8 +341,8 @@ def _score_forward_response(primitives: dict, partition: dict,
             "definition": whole.get("definition"),
             "validation": whole.get("validation"),
             "reason": (
-                "the component axes validate individually, but their equal-mean aggregate "
-                "did not validate as a separate whole-hook target"
+                "the category-conditioned component coordinates remain visible as diagnostics, "
+                "but their equal-mean aggregate did not validate as a separate whole-hook target"
             ),
         },
         "standaloneRelationshipAudit": {
@@ -457,7 +459,7 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
     )
     survival_score = {
         **survival_payload,
-        "label": "Length-adjusted hook survival percentile",
+        "label": "Terminal-conditioned hook-survival diagnostic percentile",
         "higherMeans": survival_model["targetContract"]["higherMeans"],
         "definition": survival_model["targetContract"]["formula"],
         "responseEndSeconds": response_end,
@@ -673,9 +675,18 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
         "confidence": {
             "heldoutSpearman": survival_validation.get("heldoutSpearman"),
             "heldoutPearson": survival_validation.get("heldoutPearson"),
-            "familyCorrectedSignFlipP": (
+            "familyCorrectedRankPermutationP": (
                 (survival_validation.get("rankInference") or {}).get("p")
             ),
+            "validationStatus": survival_validation.get("status"),
+            "chronologicalHeldoutSpearman": (
+                survival_validation.get("chronologicalValidation") or {}
+            ).get("heldoutSpearman"),
+            "normalizationRobust": (
+                (outcome_model.get("survivalModel") or {}).get(
+                    "normalizationSensitivity"
+                ) or {}
+            ).get("robustAcrossNormalizationChoices"),
             "foldDirectionMedianCosine": survival_validation.get(
                 "foldDirectionMedianCosine"
             ),
@@ -687,8 +698,8 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
         "map": {
             "x": survival_score.get("mapX"),
             "y": survival_score.get("mapY"),
-            "xDefinition": "frozen length-adjusted hook-survival prediction",
-            "yDefinition": "largest remaining semantic direction orthogonal to hook survival",
+        "xDefinition": "frozen terminal-conditioned hook-survival diagnostic",
+        "yDefinition": "largest remaining semantic direction orthogonal to the diagnostic",
         },
         "retainedInformation": {
             "score": retained_score,
@@ -696,7 +707,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             "confidence": {
                 "heldoutSpearman": validation["heldoutSpearman"],
                 "heldoutPearson": validation["heldoutPearson"],
-                "signFlipP": validation["signFlipP"],
+                "rankPermutationP": validation["rankPermutationP"],
                 "foldDirectionMedianCosine": validation["foldDirectionMedianCosine"],
                 "bootstrapPercentileP10": float(np.quantile(bootstrap_percentiles, .1)) if len(bootstrap_percentiles) else None,
                 "bootstrapPercentileMedian": float(np.median(bootstrap_percentiles)) if len(bootstrap_percentiles) else None,

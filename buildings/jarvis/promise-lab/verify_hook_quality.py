@@ -36,7 +36,10 @@ def main() -> None:
     assert np.all(np.diff(bootstrap_training, axis=1) >= 0)
     validation = model["validation"]
     assert validation["heldoutSpearman"] > 0
-    assert validation["signFlipP"] <= .05
+    assert validation["rankPermutationP"] <= .05
+    assert validation["status"] == "random-fold-only-diagnostic"
+    assert len(validation["chronologicalBlockSensitivity"]) == 5
+    assert validation["temporalRobustAcrossBlockCounts"] is False
     assert validation["foldDirectionPositiveFraction"] == 1
     target = model["target"]
     assert target["factorExplainedVariance"] > .5
@@ -63,7 +66,9 @@ def main() -> None:
     print(json.dumps({
         "status": "verified",
         "heldoutSpearman": validation["heldoutSpearman"],
-        "signFlipP": validation["signFlipP"],
+        "rankPermutationP": validation["rankPermutationP"],
+        "chronologicalSpearman": validation["chronologicalValidation"]["heldoutSpearman"],
+        "validationStatus": validation["status"],
         "targetVariance": target["factorExplainedVariance"],
         "components": len(components),
         "latencySupported": latency["latencySupported"],

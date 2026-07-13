@@ -26,6 +26,8 @@ def main() -> None:
     assert summary["targetFamiliesPerCluster"] == 25
     assert summary["selectedFamilyCount"] == 100
     assert summary["experimentCount"] == 6000
+    assert summary["validatedFamilyCount"] == 0
+    assert summary["randomFoldSupportedFamilyCount"] >= 0
     assert summary["validation"]["labelsChanged"] is False
     assert summary["validation"]["newClusteringFit"] is False
     assert summary["timingAudit"]["exactHooks"] == 203
@@ -41,6 +43,8 @@ def main() -> None:
             assert target["cluster"] == label
             assert target["selectedForClusterTarget"] is True
             assert target["frozenLabelsChanged"] is False
+            assert target["status"] == "random-fold-only-conditional-diagnostic"
+            assert "no chronological" in target["claimBoundary"]
             assert target["n"] > 0
             assert np.isfinite(float(target["heldoutSpearman"]))
             path = CACHE / "cluster-outcomes-details" / str(label) / f"{target['target']}.json.gz"
@@ -60,6 +64,7 @@ def main() -> None:
         "families": len(selected_ids),
         "experiments": summary["experimentCount"],
         "validated": summary["validatedFamilyCount"],
+        "randomFoldSupported": summary["randomFoldSupportedFamilyCount"],
         "timedHooks": summary["timingAudit"]["exactHooks"],
     }, indent=2))
 

@@ -277,15 +277,13 @@ def fit_full_linear(features: np.ndarray, target: np.ndarray,
     return output
 
 
-def nested_survival_crossfit(features: np.ndarray, curves: np.ndarray,
-                             terminal: np.ndarray, response_seconds: np.ndarray,
-                             times: np.ndarray,
-                             folds: int = 5,
-                             seed: int = OUTCOME_SEED) -> dict:
-    """Cross-fit normalization, duration correction, and semantic prediction."""
+def survival_crossfit(features: np.ndarray, adjusted_curves: np.ndarray,
+                      response_seconds: np.ndarray, times: np.ndarray,
+                      folds: int = 5,
+                      seed: int = OUTCOME_SEED) -> dict:
+    """Cross-fit duration correction and semantics for a declared curve target."""
     features = row_unit(np.asarray(features, np.float32))
-    curves = np.asarray(curves, np.float32)
-    terminal = np.asarray(terminal, np.float32)
+    adjusted = np.asarray(adjusted_curves, np.float32)
     response_seconds = np.asarray(response_seconds, np.float32)
     times = np.asarray(times, np.float32)
     count = len(features)
@@ -294,12 +292,11 @@ def nested_survival_crossfit(features: np.ndarray, curves: np.ndarray,
     score_target = np.full(count, np.nan, np.float32)
     carry = np.full(count, np.nan, np.float32)
     expected_carry = np.full(count, np.nan, np.float32)
-    curve_prediction = np.full_like(curves, np.nan, dtype=np.float32)
-    curve_baseline = np.full_like(curves, np.nan, dtype=np.float32)
-    curve_target = np.full_like(curves, np.nan, dtype=np.float32)
+    curve_prediction = np.full_like(adjusted, np.nan, dtype=np.float32)
+    curve_baseline = np.full_like(adjusted, np.nan, dtype=np.float32)
+    curve_target = np.full_like(adjusted, np.nan, dtype=np.float32)
     fold_index = np.full(count, -1, np.int16)
     directions = []
-    adjusted = apply_terminal_conditioned_replay_correction(curves, terminal)
     splits = KFold(
         n_splits=min(folds, count), shuffle=True, random_state=seed,
     ).split(np.arange(count))
@@ -363,8 +360,109 @@ def nested_survival_crossfit(features: np.ndarray, curves: np.ndarray,
     }
 
 
-def rank_signflip(prediction: np.ndarray, target: np.ndarray,
-                  repeats: int = 4096, seed: int = OUTCOME_SEED) -> dict:
+def chronological_splits(chronology: np.ndarray, blocks: int = 5) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Return expanding-window past-to-future splits with no future training rows."""
+    chronology = np.asarray(chronology).astype(str)
+    order = np.argsort(chronology, kind="stable")
+    chunks = [np.asarray(row, int) for row in np.array_split(order, blocks) if len(row)]
+    return [
+        (np.concatenate(chunks[:index]), chunks[index])
+        for index in range(1, len(chunks))
+    ]
+
+
+def forward_chain_linear(features: np.ndarray, target: np.ndarray,
+                         chronology: np.ndarray,
+                         dimensions: int = FIXED_DIMENSIONS,
+                         alpha: float = FIXED_ALPHA,
+                         seed: int = OUTCOME_SEED,
+                         blocks: int = 5) -> dict:
+    """Evaluate a fixed linear configuration strictly from past to future."""
+    features = row_unit(np.asarray(features, np.float32))
+    target = np.asarray(target, np.float32)
+    scalar = target.ndim == 1
+    if scalar:
+        target = target[:, None]
+    prediction = np.full_like(target, np.nan, dtype=np.float32)
+    baseline = np.full_like(target, np.nan, dtype=np.float32)
+    fold_index = np.full(len(features), -1, np.int16)
+    split_rows = []
+    chronology_values = np.asarray(chronology).astype(str)
+    for fold, (train, test) in enumerate(chronological_splits(chronology, blocks)):
+        model = _fit_direct(
+            features, target, train, dimensions, alpha, seed + fold * 101,
+        )
+        prediction[test] = apply_linear_model(features[test], model)
+        baseline[test] = np.nanmean(target[model["rows"]], axis=0)
+        fold_index[test] = fold
+        split_rows.append({
+            "fold": fold,
+            "trainRows": int(len(train)),
+            "testRows": int(len(test)),
+            "trainThrough": max(chronology_values[train].tolist()),
+            "testFrom": min(chronology_values[test].tolist()),
+            "testThrough": max(chronology_values[test].tolist()),
+        })
+    return {
+        "prediction": prediction[:, 0] if scalar else prediction,
+        "baselinePrediction": baseline[:, 0] if scalar else baseline,
+        "foldIndex": fold_index,
+        "splits": split_rows,
+        "evaluatedRows": int(np.sum(fold_index >= 0)),
+        "unevaluatedWarmupRows": int(np.sum(fold_index < 0)),
+    }
+
+
+def forward_chain_survival(features: np.ndarray, adjusted_curves: np.ndarray,
+                           response_seconds: np.ndarray, times: np.ndarray,
+                           chronology: np.ndarray,
+                           seed: int = OUTCOME_SEED,
+                           blocks: int = 5) -> dict:
+    """Evaluate duration-neutral carry with expanding chronological holdout."""
+    features = row_unit(np.asarray(features, np.float32))
+    adjusted = np.asarray(adjusted_curves, np.float32)
+    response_seconds = np.asarray(response_seconds, np.float32)
+    carry = per_second_survival(
+        response_end_values(adjusted, times, response_seconds), response_seconds,
+    )
+    prediction = np.full(len(features), np.nan, np.float32)
+    baseline = np.full(len(features), np.nan, np.float32)
+    target = np.full(len(features), np.nan, np.float32)
+    fold_index = np.full(len(features), -1, np.int16)
+    split_rows = []
+    chronology_values = np.asarray(chronology).astype(str)
+    for fold, (train, test) in enumerate(chronological_splits(chronology, blocks)):
+        duration_model = fit_duration_baseline(response_seconds[train], carry[train])
+        expected = apply_duration_baseline(response_seconds, duration_model)
+        fold_target = carry - expected
+        model = _fit_direct(
+            features, fold_target, train, FIXED_DIMENSIONS, FIXED_ALPHA,
+            seed + fold * 101,
+        )
+        prediction[test] = apply_linear_model(features[test], model)[:, 0]
+        target[test] = fold_target[test]
+        baseline[test] = float(np.mean(fold_target[train]))
+        fold_index[test] = fold
+        split_rows.append({
+            "fold": fold,
+            "trainRows": int(len(train)),
+            "testRows": int(len(test)),
+            "trainThrough": max(chronology_values[train].tolist()),
+            "testFrom": min(chronology_values[test].tolist()),
+            "testThrough": max(chronology_values[test].tolist()),
+        })
+    return {
+        "prediction": prediction,
+        "target": target,
+        "baselinePrediction": baseline,
+        "foldIndex": fold_index,
+        "splits": split_rows,
+    }
+
+
+def rank_permutation_inference(prediction: np.ndarray, target: np.ndarray,
+                               repeats: int = 4096,
+                               seed: int = OUTCOME_SEED) -> dict:
     prediction = np.asarray(prediction, float)
     target = np.asarray(target, float)
     valid = np.isfinite(prediction + target)
@@ -379,17 +477,15 @@ def rank_signflip(prediction: np.ndarray, target: np.ndarray,
     observed = float(left @ right / len(left))
     rng = np.random.default_rng(seed)
     exceed = 0
-    batch = 512
-    for start in range(0, repeats, batch):
-        count = min(batch, repeats - start)
-        signs = rng.choice((-1.0, 1.0), size=(count, len(left)))
-        null = np.abs((signs * right[None, :]) @ left / len(left))
-        exceed += int(np.sum(null >= abs(observed)))
+    for _ in range(repeats):
+        null = abs(float(left @ right[rng.permutation(len(right))] / len(left)))
+        exceed += int(null >= abs(observed))
     return {
         "observedSpearman": observed,
         "p": float((1 + exceed) / (repeats + 1)),
         "repeats": repeats,
         "n": len(left),
+        "policy": "two-sided permutation of target ranks against fixed held-out predictions",
     }
 
 
@@ -413,7 +509,7 @@ def scalar_validation(prediction: np.ndarray, target: np.ndarray,
         "residualP10": float(np.quantile(residual, .1)),
         "residualMedian": float(np.median(residual)),
         "residualP90": float(np.quantile(residual, .9)),
-        "rankInference": rank_signflip(
+        "rankInference": rank_permutation_inference(
             prediction, target, repeats=repeats, seed=seed,
         ),
         "rows": int(valid.sum()),
@@ -426,8 +522,9 @@ def paired_curve_improvement(prediction: np.ndarray, target: np.ndarray,
     prediction = np.asarray(prediction, float)
     target = np.asarray(target, float)
     baseline = np.asarray(baseline, float)
-    model_error = np.nanmean(np.abs(prediction - target), axis=1)
-    baseline_error = np.nanmean(np.abs(baseline - target), axis=1)
+    valid = np.all(np.isfinite(prediction + target + baseline), axis=1)
+    model_error = np.mean(np.abs(prediction[valid] - target[valid]), axis=1)
+    baseline_error = np.mean(np.abs(baseline[valid] - target[valid]), axis=1)
     improvement = baseline_error - model_error
     improvement = improvement[np.isfinite(improvement)]
     observed = float(np.mean(improvement))
@@ -459,6 +556,11 @@ def curve_validation(prediction: np.ndarray, target: np.ndarray,
     prediction = np.asarray(prediction, float)
     target = np.asarray(target, float)
     baseline = np.asarray(baseline, float)
+    input_sources = int(target.shape[0])
+    valid = np.all(np.isfinite(prediction + target + baseline), axis=1)
+    prediction = prediction[valid]
+    target = target[valid]
+    baseline = baseline[valid]
     residual = target - prediction
     absolute = np.abs(residual)
     baseline_absolute = np.abs(target - baseline)
@@ -486,6 +588,8 @@ def curve_validation(prediction: np.ndarray, target: np.ndarray,
         ),
         "timesSeconds": np.asarray(times, float),
         "sources": int(target.shape[0]),
+        "inputSources": input_sources,
+        "unevaluatedSources": int(input_sources - target.shape[0]),
     }
 
 

@@ -68,6 +68,13 @@ possible contiguous `k`-segment partitions. A search-wide permutation test
 calibrates the final selection. If one segment wins, the recorded result is
 "no separable component evidence"; the system does not force a phrase.
 
+The saved four-category vocabulary is a separate post-hoc interpretation layer.
+Its map was chosen using the manual reference probe. It may label a component only
+after category-blind boundaries are frozen; category probabilities and supplied
+phrases cannot enter boundary features or exact-cover decoding. Any downstream
+category-specific outcome result is conditional on that selected vocabulary and
+must be described as such.
+
 ## Swaps
 
 Swaps may begin only after both outcome-blind atlases are frozen. Exploratory

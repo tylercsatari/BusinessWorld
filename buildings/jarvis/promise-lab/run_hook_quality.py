@@ -29,6 +29,7 @@ from hook_quality import (
     retention_inputs,
     select_full_configuration,
 )
+from hook_outcomes import chronological_splits
 from hook_score_core import (
     local_counterfactual_texts, percentile,
 )
@@ -49,7 +50,7 @@ CACHE = HERE / ".cache"
 VECTOR_DIR = CACHE / "all-span-vectors"
 MODEL_PATH = CACHE / "hook-quality-model.json"
 SUMMARY_PATH = CACHE / "hook-quality.json"
-METHOD_VERSION = "crossfit-retention-factor-local-deletion-v2"
+METHOD_VERSION = "crossfit-retention-factor-local-deletion-v4"
 
 
 def read_json(path: Path):
@@ -250,6 +251,51 @@ def main() -> None:
         features, curve_inputs["retentionMatrix"], curve_inputs["confounds"],
         folds=5, null_repeats=args.null_repeats,
     )
+    chronology = np.asarray([str(row.get("published") or "") for row in corpus])
+    chronological_validation = nested_axis_validation(
+        features, curve_inputs["retentionMatrix"], curve_inputs["confounds"],
+        null_repeats=args.null_repeats,
+        outer_splits=chronological_splits(chronology),
+        validation_design="expanding-window past-to-future",
+    )
+    chronological_block_sensitivity = []
+    for blocks in (4, 5, 6, 8, 10):
+        if blocks == 5:
+            block_validation = chronological_validation
+        else:
+            block_validation = nested_axis_validation(
+                features, curve_inputs["retentionMatrix"], curve_inputs["confounds"],
+                null_repeats=min(args.null_repeats, 1024),
+                outer_splits=chronological_splits(chronology, blocks),
+                validation_design=f"expanding-window past-to-future, {blocks} blocks",
+            )
+        chronological_block_sensitivity.append({
+            "blocks": blocks,
+            "evaluatedRows": int(block_validation["evaluatedRows"]),
+            "heldoutSpearman": block_validation["heldoutSpearman"],
+            "rankPermutationP": block_validation["rankPermutationP"],
+        })
+    validation["chronologicalValidation"] = {
+        key: value for key, value in chronological_validation.items()
+        if key not in {
+            "predictions", "axisCoordinates", "axisPercentiles", "targets",
+            "foldIndex", "folds",
+        }
+    }
+    validation["chronologicalBlockSensitivity"] = chronological_block_sensitivity
+    validation["temporalRobustAcrossBlockCounts"] = bool(all(
+        row["heldoutSpearman"] > 0 and row["rankPermutationP"] <= .05
+        for row in chronological_block_sensitivity
+    ))
+    validation["status"] = (
+        "validated-random-and-future"
+        if validation["rankPermutationP"] <= .05
+        and validation["heldoutSpearman"] > 0
+        and chronological_validation["rankPermutationP"] <= .05
+        and chronological_validation["heldoutSpearman"] > 0
+        and validation["temporalRobustAcrossBlockCounts"]
+        else "random-fold-only-diagnostic"
+    )
     observed_log_views = np.log10(np.maximum(
         1, np.asarray([float(row.get("views") or 0) for row in corpus], float),
     ))[:, None]
@@ -273,12 +319,12 @@ def main() -> None:
         "observedLogViewsOnly": {
             "heldoutSpearman": views_validation["heldoutSpearman"],
             "heldoutPearson": views_validation["heldoutPearson"],
-            "signFlipP": views_validation["signFlipP"],
-            "accepted": bool(views_validation["signFlipP"] <= .05 and views_validation["heldoutSpearman"] > 0),
+            "rankPermutationP": views_validation["rankPermutationP"],
+            "accepted": bool(views_validation["rankPermutationP"] <= .05 and views_validation["heldoutSpearman"] > 0),
         },
         "retentionPlusObservedLogViewsPca": {
             "heldoutSpearman": joint_validation["heldoutSpearman"],
-            "signFlipP": joint_validation["signFlipP"],
+            "rankPermutationP": joint_validation["rankPermutationP"],
             "factorLoadings": joint_fit["targetMeta"]["retentionFactorLoadings"],
             "observedLogViewsLoading": joint_fit["targetMeta"]["retentionFactorLoadings"][-1],
             "accepted": bool(joint_fit["targetMeta"]["retentionFactorLoadings"][-1] > 0),
@@ -495,7 +541,13 @@ def main() -> None:
             "trainingHooks": len(features),
             "heldoutSpearman": validation["heldoutSpearman"],
             "heldoutPearson": validation["heldoutPearson"],
-            "signFlipP": validation["signFlipP"],
+            "rankPermutationP": validation["rankPermutationP"],
+            "validationStatus": validation["status"],
+            "chronologicalHeldoutSpearman": chronological_validation["heldoutSpearman"],
+            "chronologicalRankPermutationP": chronological_validation["rankPermutationP"],
+            "temporalRobustAcrossBlockCounts": validation[
+                "temporalRobustAcrossBlockCounts"
+            ],
             "foldDirectionMedianCosine": validation["foldDirectionMedianCosine"],
             "foldDirectionPositiveFraction": validation["foldDirectionPositiveFraction"],
             "targetFactorExplainedVariance": fitted["targetMeta"]["retentionFactorExplainedVariance"],
@@ -552,7 +604,9 @@ def main() -> None:
         remote.put_json(f"{R2_PREFIX}/hook-quality.json.gz", summary, gzip_payload=True)
     print(json.dumps({
         "heldoutSpearman": validation["heldoutSpearman"],
-        "signFlipP": validation["signFlipP"],
+        "rankPermutationP": validation["rankPermutationP"],
+        "chronologicalHeldoutSpearman": chronological_validation["heldoutSpearman"],
+        "validationStatus": validation["status"],
         "selected": selected,
         "pairDeletionEmbeddings": len(set(required)),
         "latencySupported": latency["latencySupported"],

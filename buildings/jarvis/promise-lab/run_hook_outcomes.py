@@ -31,10 +31,12 @@ from hook_outcomes import (
     curve_validation,
     fit_duration_baseline,
     fit_full_linear,
-    nested_survival_crossfit,
+    forward_chain_linear,
+    forward_chain_survival,
     per_second_survival,
     response_end_values,
     scalar_validation,
+    survival_crossfit,
     terminal_conditioned_replay_correction,
 )
 from hook_score_core import (
@@ -54,7 +56,7 @@ HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
 OUTPUT_PATH = CACHE / "hook-outcomes.json"
 MODEL_PATH = CACHE / "hook-outcome-model.json"
-METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v4"
+METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v6"
 CURVE_TIMES = np.arange(0.0, 20.0001, .5, dtype=np.float32)
 
 TARGETS = {
@@ -286,11 +288,13 @@ def main() -> None:
     categories = np.asarray([row["category"] for row in component_base], int)
     groups = np.asarray([row["videoId"] for row in component_base]).astype(str)
     hook_groups = np.asarray([str(row["id"]) for row in corpus])
+    chronology = np.asarray([str(row.get("published") or "") for row in corpus])
     targets = outcome_targets(corpus)
 
     hook_models = {}
     hook_values = {}
     hook_pvalues = []
+    hook_temporal_pvalues = []
     for target_index, (target_name, target) in enumerate(targets.items()):
         crossfit = crossfit_linear(
             full_features, target, groups=None,
@@ -303,6 +307,19 @@ def main() -> None:
         )
         validation["foldDirectionMedianCosine"] = crossfit["foldDirectionMedianCosine"]
         validation["foldDirectionPositiveFraction"] = crossfit["foldDirectionPositiveFraction"]
+        temporal = forward_chain_linear(
+            full_features, target, chronology,
+            seed=OUTCOME_SEED + 12000 + target_index * 101,
+        )
+        temporal_validation = scalar_validation(
+            temporal["prediction"], target, temporal["baselinePrediction"],
+            repeats=args.inference_repeats,
+            seed=OUTCOME_SEED + 12100 + target_index,
+        )
+        temporal_validation["splits"] = temporal["splits"]
+        temporal_validation["evaluatedRows"] = temporal["evaluatedRows"]
+        temporal_validation["unevaluatedWarmupRows"] = temporal["unevaluatedWarmupRows"]
+        validation["chronologicalValidation"] = temporal_validation
         fitted = fit_full_linear(
             full_features, target, include_map=True,
             seed=OUTCOME_SEED + target_index * 1009,
@@ -318,12 +335,22 @@ def main() -> None:
             "mapY": y,
         }
         hook_pvalues.append(validation["rankInference"]["p"])
-    for target_name, q in zip(targets, bh_fdr(hook_pvalues)):
+        hook_temporal_pvalues.append(temporal_validation["rankInference"]["p"])
+    random_q = bh_fdr(hook_pvalues)
+    temporal_q = bh_fdr(hook_temporal_pvalues)
+    for target_name, q, future_q in zip(targets, random_q, temporal_q):
         validation = hook_models[target_name]["validation"]
         validation["familyQ"] = q
+        validation["chronologicalValidation"]["familyQ"] = future_q
+        temporal_validation = validation["chronologicalValidation"]
         validation["status"] = (
-            "validated" if q <= .05 and validation["heldoutSpearman"] > 0
-            and validation["maeImprovementFraction"] > 0 else "diagnostic-not-validated"
+            "validated-random-and-future" if q <= .05
+            and validation["heldoutSpearman"] > 0
+            and validation["maeImprovementFraction"] > 0
+            and future_q <= .05
+            and temporal_validation["heldoutSpearman"] > 0
+            and temporal_validation["maeImprovementFraction"] > 0
+            else "random-fold-only-diagnostic"
         )
 
     component_models = {}
@@ -395,9 +422,10 @@ def main() -> None:
     for target_name, q in zip(targets, bh_fdr(component_pvalues)):
         aggregate = component_models[target_name]["sourceAggregateValidation"]
         aggregate["familyQ"] = q
-        aggregate["status"] = (
-            "validated" if q <= .05 and aggregate["heldoutSpearman"] > 0
-            and aggregate["maeImprovementFraction"] > 0 else "diagnostic-not-validated"
+        aggregate["status"] = "random-fold-only-conditional-diagnostic"
+        aggregate["claimBoundary"] = (
+            "grouped random-fold association conditional on a post-hoc selected category map; "
+            "no chronological component-outcome replication was run"
         )
     category_q = bh_fdr([
         row["rankInference"]["p"] for _, _, row in category_validation_refs
@@ -406,9 +434,10 @@ def main() -> None:
         category_validation_refs, category_q
     ):
         validation["familyQ"] = q
-        validation["status"] = (
-            "validated" if q <= .05 and validation["heldoutSpearman"] > 0
-            and validation["maeImprovementFraction"] > 0 else "diagnostic-not-validated"
+        validation["status"] = "random-fold-only-conditional-diagnostic"
+        validation["claimBoundary"] = (
+            "category-specific grouped random-fold association; the category vocabulary was "
+            "selected post hoc and no chronological replication was run"
         )
         component_models[target_name]["modelsByCategory"][category][
             "validation"
@@ -431,12 +460,25 @@ def main() -> None:
         curve_crossfit["baselinePrediction"], CURVE_TIMES,
         repeats=args.inference_repeats, seed=OUTCOME_SEED + 7002,
     )
+    chronological_curve = forward_chain_linear(
+        full_features, curve_target, chronology, seed=OUTCOME_SEED + 17001,
+    )
+    chronological_curve_metrics = curve_validation(
+        chronological_curve["prediction"], curve_target,
+        chronological_curve["baselinePrediction"], CURVE_TIMES,
+        repeats=args.inference_repeats, seed=OUTCOME_SEED + 17002,
+    )
+    chronological_curve_metrics["splits"] = chronological_curve["splits"]
+    curve_metrics["chronologicalValidation"] = chronological_curve_metrics
     curve_metrics["status"] = (
-        "validated-rough-forecast"
+        "validated-random-and-future-rough-forecast"
         if curve_metrics["maeImprovementFraction"] > 0
         and curve_metrics["pairedImprovementInference"]["p"] <= .05
         and curve_metrics["pairedImprovementInference"]["ciLow"] > 0
-        else "diagnostic-not-validated"
+        and chronological_curve_metrics["maeImprovementFraction"] > 0
+        and chronological_curve_metrics["pairedImprovementInference"]["p"] <= .05
+        and chronological_curve_metrics["pairedImprovementInference"]["ciLow"] > 0
+        else "random-fold-only-diagnostic"
     )
     curve_fitted = fit_full_linear(
         full_features, curve_target, include_map=False,
@@ -453,11 +495,20 @@ def main() -> None:
 
     timing_records = load_timing_records(manifest["hooks"], args.timing_workers)
     rate, timings = speaking_rate(manifest["hooks"], timing_records)
-    response_lag = float(
-        ((quality.get("forwardResponse") or {}).get("metricContract") or {}).get(
-            "selectedLagSeconds", 1.0,
-        )
+    forward_summary = quality.get("forwardResponse") or {}
+    selected_response_lag = float(
+        (forward_summary.get("metricContract") or {}).get("selectedLagSeconds", 0.0)
     )
+    response_lag = selected_response_lag if forward_summary.get("validated") else 0.0
+    response_lag_contract = {
+        "seconds": response_lag,
+        "selectedComponentLagSeconds": selected_response_lag,
+        "componentLagValidated": bool(forward_summary.get("validated")),
+        "policy": (
+            "use the selected component lag only after random-fold and future-only validation; "
+            "otherwise use the neutral spoken-hook endpoint with zero added lag"
+        ),
+    }
     spoken_end, response_end = hook_time_windows(
         partitions, timings, rate["meanWordsPerSecond"], response_lag,
     )
@@ -467,8 +518,25 @@ def main() -> None:
     terminal = np.asarray([
         terminal_retention_percent(row) for row in corpus
     ], np.float32)
-    nested_survival = nested_survival_crossfit(
-        full_features, curve_target, terminal, response_end,
+    replay_correction = terminal_conditioned_replay_correction(
+        curve_target, terminal,
+    )
+    adjusted_curve_target = apply_terminal_conditioned_replay_correction(
+        curve_target, terminal,
+    )
+    entry_normalized_curve_target = (
+        100.0 * curve_target / np.maximum(curve_target[:, :1], 1e-6)
+    ).astype(np.float32)
+    nested_survival = survival_crossfit(
+        full_features, adjusted_curve_target, response_end,
+        CURVE_TIMES, seed=OUTCOME_SEED + 9001,
+    )
+    entry_survival = survival_crossfit(
+        full_features, entry_normalized_curve_target, response_end,
+        CURVE_TIMES, seed=OUTCOME_SEED + 9001,
+    )
+    observed_survival = survival_crossfit(
+        full_features, curve_target, response_end,
         CURVE_TIMES, seed=OUTCOME_SEED + 9001,
     )
     survival_validation = scalar_validation(
@@ -476,35 +544,127 @@ def main() -> None:
         nested_survival["scoreBaseline"], repeats=args.inference_repeats,
         seed=OUTCOME_SEED + 9002,
     )
+    entry_survival_validation = scalar_validation(
+        entry_survival["scorePrediction"], entry_survival["scoreTarget"],
+        entry_survival["scoreBaseline"], repeats=args.inference_repeats,
+        seed=OUTCOME_SEED + 9102,
+    )
+    observed_survival_validation = scalar_validation(
+        observed_survival["scorePrediction"], observed_survival["scoreTarget"],
+        observed_survival["scoreBaseline"], repeats=args.inference_repeats,
+        seed=OUTCOME_SEED + 9202,
+    )
+    normalization_q = bh_fdr([
+        survival_validation["rankInference"]["p"],
+        entry_survival_validation["rankInference"]["p"],
+        observed_survival_validation["rankInference"]["p"],
+    ])
+    survival_validation["normalizationFamilyQ"] = normalization_q[0]
+    entry_survival_validation["normalizationFamilyQ"] = normalization_q[1]
+    observed_survival_validation["normalizationFamilyQ"] = normalization_q[2]
+    chronological_survival = forward_chain_survival(
+        full_features, adjusted_curve_target, response_end, CURVE_TIMES,
+        chronology, seed=OUTCOME_SEED + 19001,
+    )
+    chronological_survival_validation = scalar_validation(
+        chronological_survival["prediction"], chronological_survival["target"],
+        chronological_survival["baselinePrediction"],
+        repeats=args.inference_repeats, seed=OUTCOME_SEED + 19002,
+    )
+    chronological_survival_validation["splits"] = chronological_survival["splits"]
+    chronological_block_sensitivity = []
+    for blocks in (4, 5, 6, 8, 10):
+        if blocks == 5:
+            block_validation = chronological_survival_validation
+        else:
+            block_result = forward_chain_survival(
+                full_features, adjusted_curve_target, response_end, CURVE_TIMES,
+                chronology, seed=OUTCOME_SEED + 19001 + blocks, blocks=blocks,
+            )
+            block_validation = scalar_validation(
+                block_result["prediction"], block_result["target"],
+                block_result["baselinePrediction"],
+                repeats=min(args.inference_repeats, 2048),
+                seed=OUTCOME_SEED + 19500 + blocks,
+            )
+        chronological_block_sensitivity.append({
+            "blocks": blocks,
+            "evaluatedRows": int(block_validation["rows"]),
+            "heldoutSpearman": block_validation["heldoutSpearman"],
+            "rankPermutationP": block_validation["rankInference"]["p"],
+            "maeImprovementFraction": block_validation["maeImprovementFraction"],
+        })
     survival_validation.update({
         "foldDirectionMedianCosine": nested_survival["foldDirectionMedianCosine"],
         "foldDirectionPositiveFraction": nested_survival["foldDirectionPositiveFraction"],
-        "familyQ": survival_validation["rankInference"]["p"],
+        "familyQ": survival_validation["normalizationFamilyQ"],
+        "chronologicalValidation": chronological_survival_validation,
     })
+    normalization_sensitivity = {
+        "terminalConditioned": survival_validation,
+        "entryNormalizedNoFutureAnchor": entry_survival_validation,
+        "observedAbsolute": observed_survival_validation,
+        "chronologicalBlockSensitivity": chronological_block_sensitivity,
+        "temporalRobustAcrossBlockCounts": bool(all(
+            row["heldoutSpearman"] > 0 and row["maeImprovementFraction"] > 0
+            for row in chronological_block_sensitivity
+        )),
+        "terminalVsEntryPrediction": correlation_audit(
+            nested_survival["scorePrediction"], entry_survival["scorePrediction"],
+        ),
+        "terminalVsEntryTarget": correlation_audit(
+            nested_survival["scoreTarget"], entry_survival["scoreTarget"],
+        ),
+        "robustAcrossNormalizationChoices": bool(
+            survival_validation["normalizationFamilyQ"] <= .05
+            and survival_validation["heldoutSpearman"] > 0
+            and survival_validation["maeImprovementFraction"] > 0
+            and entry_survival_validation["normalizationFamilyQ"] <= .05
+            and entry_survival_validation["heldoutSpearman"] > 0
+            and entry_survival_validation["maeImprovementFraction"] > 0
+        ),
+        "decisionRule": (
+            "both terminal-conditioned and future-free entry-normalized targets must have "
+            "positive held-out Spearman, positive MAE improvement, and BH q <= 0.05"
+        ),
+    }
     survival_validation["status"] = (
-        "validated" if survival_validation["heldoutSpearman"] > 0
+        "validated-random-future-and-normalization-robust"
+        if survival_validation["heldoutSpearman"] > 0
         and survival_validation["maeImprovementFraction"] > 0
-        and survival_validation["rankInference"]["p"] <= .05
-        else "diagnostic-not-validated"
+        and survival_validation["normalizationFamilyQ"] <= .05
+        and normalization_sensitivity["robustAcrossNormalizationChoices"]
+        and normalization_sensitivity["temporalRobustAcrossBlockCounts"]
+        and chronological_survival_validation["heldoutSpearman"] > 0
+        and chronological_survival_validation["maeImprovementFraction"] > 0
+        and chronological_survival_validation["rankInference"]["p"] <= .05
+        else "normalization-and-time-sensitive-diagnostic"
     )
     adjusted_curve_metrics = curve_validation(
         nested_survival["curvePrediction"], nested_survival["curveTarget"],
         nested_survival["curveBaseline"], CURVE_TIMES,
         repeats=args.inference_repeats, seed=OUTCOME_SEED + 9003,
     )
+    chronological_adjusted_curve = forward_chain_linear(
+        full_features, adjusted_curve_target, chronology,
+        seed=OUTCOME_SEED + 19004,
+    )
+    chronological_adjusted_curve_metrics = curve_validation(
+        chronological_adjusted_curve["prediction"], adjusted_curve_target,
+        chronological_adjusted_curve["baselinePrediction"], CURVE_TIMES,
+        repeats=args.inference_repeats, seed=OUTCOME_SEED + 19005,
+    )
+    chronological_adjusted_curve_metrics["splits"] = chronological_adjusted_curve["splits"]
+    adjusted_curve_metrics["chronologicalValidation"] = chronological_adjusted_curve_metrics
     adjusted_curve_metrics["status"] = (
-        "validated-rough-forecast"
+        "validated-random-and-future-rough-forecast"
         if adjusted_curve_metrics["maeImprovementFraction"] > 0
         and adjusted_curve_metrics["pairedImprovementInference"]["p"] <= .05
         and adjusted_curve_metrics["pairedImprovementInference"]["ciLow"] > 0
-        else "diagnostic-not-validated"
-    )
-
-    replay_correction = terminal_conditioned_replay_correction(
-        curve_target, terminal,
-    )
-    adjusted_curve_target = apply_terminal_conditioned_replay_correction(
-        curve_target, terminal,
+        and chronological_adjusted_curve_metrics["maeImprovementFraction"] > 0
+        and chronological_adjusted_curve_metrics["pairedImprovementInference"]["p"] <= .05
+        and chronological_adjusted_curve_metrics["pairedImprovementInference"]["ciLow"] > 0
+        else "random-fold-only-diagnostic"
     )
     normalization = {
         "methodVersion": "terminal-conditioned-additive-replay-envelope-v1",
@@ -548,8 +708,9 @@ def main() -> None:
         "lengthBaseline": length_baseline,
         "trainingTargetSorted": np.sort(survival_target),
         "trainingOOFPredictionSorted": np.sort(nested_survival["scorePrediction"]),
+        "normalizationSensitivity": normalization_sensitivity,
         "targetContract": {
-            "label": "Length-adjusted hook survival",
+            "label": "Terminal-conditioned length-adjusted survival diagnostic",
             "unit": "excess geometric retention carry percentage points per second",
             "higherMeans": (
                 "the hook loses less endpoint-normalized retention than the ordinary "
@@ -559,7 +720,15 @@ def main() -> None:
                 "100 * exp(log(R_endpoint_normalized(response_end) / 100) / response_end) "
                 "minus the out-of-fold duration-only expected carry rate"
             ),
-            "responseEnd": "exact spoken hook end plus the validated forward response lag",
+            "responseEnd": (
+                "exact spoken hook end plus the component lag only if that lag validates in random "
+                "and future-only tests; otherwise exact spoken hook end with zero added lag"
+            ),
+            "responseLagContract": response_lag_contract,
+            "claimBoundary": (
+                "diagnostic only unless the direction validates on future videos and under a "
+                "future-free entry-normalized target; the current corpus fails both gates"
+            ),
         },
     })
     adjusted_curve_fitted = fit_full_linear(
@@ -852,7 +1021,7 @@ def main() -> None:
                 "observedResidual": point.get("oofTargetResidual"),
             },
             "survivalScore": {
-                "label": "Length-adjusted hook survival percentile",
+                "label": "Terminal-conditioned survival diagnostic percentile",
                 "percentile": percentile(
                     np.asarray(nested_survival["scorePrediction"], float),
                     survival_prediction,
@@ -971,6 +1140,7 @@ def main() -> None:
         "rewatchAudit": rewatch_audit,
         "speakingRate": rate,
         "responseLagSeconds": response_lag,
+        "responseLagContract": response_lag_contract,
     }
     summary = {
         "version": 2,
@@ -992,6 +1162,7 @@ def main() -> None:
             "validation": survival_validation,
             "targetContract": survival_model["targetContract"],
             "lengthBaseline": length_baseline,
+            "normalizationSensitivity": normalization_sensitivity,
         },
         "curveModel": {
             "timesSeconds": CURVE_TIMES,
@@ -999,11 +1170,12 @@ def main() -> None:
             "rewatchAdjustedValidation": adjusted_curve_metrics,
             "speakingRate": rate,
             "responseLagSeconds": response_lag,
+            "responseLagContract": response_lag_contract,
             "definition": (
                 "The complete-hook embedding predicts observed absolute retention and the "
                 "endpoint-normalized training target at 0.5-second steps. Stored hooks also "
                 "show the measured additive replay envelope. Word/category attribution ends at "
-                "the exact spoken hook plus the validated forward lag; later points are only a "
+                "the exact spoken hook plus the response-lag contract; later points are only a "
                 "whole-hook continuation forecast. Text-only inputs cannot be replay-normalized."
             ),
         },

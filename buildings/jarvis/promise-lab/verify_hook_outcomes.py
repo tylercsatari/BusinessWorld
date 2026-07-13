@@ -37,10 +37,28 @@ def main() -> None:
                for row in hook["components"])
     assert artifact["curveModel"]["validation"]["maeImprovementFraction"] > 0
     assert artifact["curveModel"]["validation"]["pairedImprovementInference"]["p"] <= .05
-    assert artifact["survivalModel"]["validation"]["status"] == "validated"
+    survival = artifact["survivalModel"]
+    validation = survival["validation"]
+    sensitivity = survival["normalizationSensitivity"]
+    assert validation["status"] == "normalization-and-time-sensitive-diagnostic"
     assert artifact["survivalModel"]["validation"]["heldoutSpearman"] > 0
     assert artifact["survivalModel"]["validation"]["maeImprovementFraction"] > 0
-    assert artifact["curveModel"]["rewatchAdjustedValidation"]["status"] == "validated-rough-forecast"
+    assert validation["chronologicalValidation"]["heldoutSpearman"] < 0
+    assert validation["chronologicalValidation"]["maeImprovementFraction"] < 0
+    assert sensitivity["robustAcrossNormalizationChoices"] is False
+    assert sensitivity["temporalRobustAcrossBlockCounts"] is False
+    assert len(sensitivity["chronologicalBlockSensitivity"]) == 5
+    assert artifact["curveModel"]["rewatchAdjustedValidation"]["status"] == "random-fold-only-diagnostic"
+    assert all(
+        row["validation"]["status"] == "random-fold-only-diagnostic"
+        for row in artifact["hookModels"].values()
+    )
+    for component_model in artifact["componentModels"].values():
+        aggregate = component_model["sourceAggregateValidation"]
+        assert aggregate["status"] == "random-fold-only-conditional-diagnostic"
+        assert "no chronological" in aggregate["claimBoundary"]
+        for category_validation in component_model["validationByCategory"].values():
+            assert category_validation["status"] == "random-fold-only-conditional-diagnostic"
     assert artifact["rewatchAudit"]["scope"]["videosShorterThan20Seconds"] == 0
     assert artifact["rewatchAudit"]["entryInflationVsTerminal"]["spearman"] > .8
     assert artifact["rewatchAudit"]["normalization"]["fittedDecayParameters"] == 0
@@ -49,7 +67,8 @@ def main() -> None:
     assert geometry["negativeCorrectionValues"] == 0
     assert geometry["correctionInducedIncreaseIntervals"] == 0
     assert geometry["maximumFullVideoEndpointCorrectionPercentagePoints"] < .1
-    assert all(row["survivalScore"]["validationStatus"] == "validated"
+    assert all(row["survivalScore"]["validationStatus"]
+               == "normalization-and-time-sensitive-diagnostic"
                for row in artifact["hooks"])
     assert all(row["retentionForecast"]["normalizationAvailable"] is True
                for row in artifact["hooks"])
@@ -62,6 +81,8 @@ def main() -> None:
     assert all(row["retentionForecast"]["responseEndSeconds"] < 20
                for row in artifact["hooks"])
     assert artifact["curveModel"]["speakingRate"]["exactTimedHooks"] >= 200
+    assert artifact["curveModel"]["responseLagContract"]["componentLagValidated"] is False
+    assert artifact["curveModel"]["responseLagSeconds"] == 0
     print(json.dumps({
         "status": "verified",
         "hooks": artifact["audit"]["hooks"],

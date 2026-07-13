@@ -26,6 +26,7 @@ from forward_response import (
     FIXED_DIMENSIONS,
     FIXED_SEMANTIC_ALPHA,
     ResponseCandidate,
+    category_balanced_source_inference,
     category_balanced_spearman,
     candidate_intervals,
     combined_component_features,
@@ -53,7 +54,7 @@ OUTPUT_PATH = CACHE / "forward-response.json"
 MODEL_PATH = CACHE / "forward-response-model.json"
 HOOK_QUALITY_PATH = CACHE / "hook-quality.json"
 HOOK_MODEL_PATH = CACHE / "hook-quality-model.json"
-METHOD_VERSION = "variable-component-forward-response-v2"
+METHOD_VERSION = "variable-component-forward-response-v3"
 
 
 def read_json(path: Path):
@@ -200,6 +201,28 @@ def candidate_payload(candidate: ResponseCandidate, result: dict,
     }
 
 
+def chronological_component_splits(corpus: list[dict], groups: np.ndarray,
+                                   blocks: int = 5) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Expand from older source videos into untouched newer source videos."""
+    source_dates = {
+        str(row["id"]): str(row.get("published") or "") for row in corpus
+    }
+    ordered_sources = np.asarray(sorted(
+        source_dates, key=lambda source: (source_dates[source], source),
+    ))
+    chunks = [np.asarray(chunk).astype(str) for chunk in np.array_split(
+        ordered_sources, blocks,
+    ) if len(chunk)]
+    output = []
+    for index in range(1, len(chunks)):
+        train_sources = set(np.concatenate(chunks[:index]).tolist())
+        test_sources = set(chunks[index].tolist())
+        train = np.flatnonzero(np.isin(groups, list(train_sources)))
+        test = np.flatnonzero(np.isin(groups, list(test_sources)))
+        output.append((train, test))
+    return output
+
+
 def lag_bootstrap(results: dict[str, dict], candidates: list[ResponseCandidate],
                   groups: np.ndarray, categories: np.ndarray,
                   repeats: int = 2048, seed: int = 20260717) -> dict:
@@ -285,6 +308,12 @@ def main() -> None:
     selection = nested_select_candidate(
         features, targets, naturals, groups, categories,
     )
+    chronological_selection = nested_select_candidate(
+        features, targets, naturals, groups, categories,
+        outer_splits=chronological_component_splits(corpus, groups),
+        validation_design="expanding-window past-to-future with train-only lag selection",
+        seed=20260730,
+    )
     candidate_by_id = {row.id: row for row in forward_candidates}
     selected_id = selection["selectedCandidate"]
     selected_candidate = candidate_by_id[selected_id]
@@ -305,13 +334,21 @@ def main() -> None:
     )
 
     fixed = forward_results[selected_id]
-    fixed_inference = source_signflip(
+    fixed_inference = category_balanced_source_inference(
         fixed["prediction"], fixed["targetResidual"], groups,
+        categories,
         repeats=args.inference_repeats,
     )
-    nested_inference = source_signflip(
+    nested_inference = category_balanced_source_inference(
         selection["prediction"], selection["targetResidual"], groups,
+        categories,
         repeats=args.inference_repeats, seed=20260713,
+    )
+    chronological_inference = category_balanced_source_inference(
+        chronological_selection["prediction"],
+        chronological_selection["targetResidual"], groups,
+        categories,
+        repeats=args.inference_repeats, seed=20260731,
     )
 
     control_candidates = [
@@ -736,10 +773,24 @@ def main() -> None:
         "lagUncertainty": lag_uncertainty,
         "causalClaim": False,
     }
-    validated = bool(
+    random_fold_supported = bool(
         nested_inference["p"] <= .05
         and nested_inference["ciLow"] > 0
         and fixed["heldoutSpearman"] > control_max
+    )
+    future_supported = bool(
+        chronological_inference["p"] <= .05
+        and chronological_inference["ciLow"] > 0
+        and chronological_selection["heldoutSpearman"] > 0
+        and all(
+            value > 0 for value in
+            chronological_selection["heldoutSpearmanByCategory"].values()
+        )
+    )
+    validated = bool(random_fold_supported and future_supported)
+    validation_status = (
+        "validated-random-and-future"
+        if validated else "random-fold-only-conditional-diagnostic"
     )
     model = {
         "version": 2,
@@ -751,6 +802,11 @@ def main() -> None:
         "generativeLlmUsed": False,
         "metricContract": metric_contract,
         "validated": validated,
+        "validationStatus": validation_status,
+        "categoryClaimStatus": (
+            "conditional on a post-hoc manual-probe-selected k=4 category map; "
+            "the category labels are not an unlabeled discovery"
+        ),
         "fixedConfiguration": {
             "featureBlocks": ["raw exact component embedding", "deletion-influence embedding"],
             "blockWeighting": "equal L2 energy",
@@ -764,6 +820,16 @@ def main() -> None:
                 "heldoutCategoryBalancedSpearman": fixed["heldoutSpearman"],
                 "heldoutSpearmanByCategory": fixed["heldoutSpearmanByCategory"],
                 "sourceInference": fixed_inference,
+                "chronologicalValidation": {
+                    "heldoutCategoryBalancedSpearman": chronological_selection["heldoutSpearman"],
+                    "heldoutSpearmanByCategory": chronological_selection["heldoutSpearmanByCategory"],
+                    "sourceInference": chronological_inference,
+                    "selectionCounts": chronological_selection["selectionCounts"],
+                    "folds": chronological_selection["folds"],
+                    "evaluatedRows": chronological_selection["evaluatedRows"],
+                    "unevaluatedWarmupRows": chronological_selection["unevaluatedRows"],
+                    "validationDesign": chronological_selection["validationDesign"],
+                },
             },
         },
         "wholeHook": {
@@ -789,14 +855,20 @@ def main() -> None:
         "relationship": {
             "definition": (
                 "exact local second-order deletion interaction (full - without left - without "
-                "right + without both), measured on the later component's validated "
-                "category-specific forward-response axis"
+                "right + without both), measured on the later component's conditional "
+                "category-specific forward-response diagnostic"
             ),
             "calibrationByCategoryPair": response_interaction_calibration,
-            "validationSource": "inherits the later component axis validation; no separate causal claim",
+            "validationSource": (
+                "inherits the later component diagnostic status; no separate validation or causal claim"
+            ),
             "standaloneObservedResidualAudit": {
                 **axis_payload(relation_fitted),
-                "accepted": bool(relation_inference["p"] <= .05 and relation_inference["ciLow"] > 0),
+                "accepted": False,
+                "reason": (
+                    "the representation was selected by maximum held-out correlation across six "
+                    "candidates on the same data; its nominal inference is exploratory"
+                ),
                 "featureDefinition": (
                     f"selected predeclared geometry: {relationship_representation}; exact source order"
                 ),
@@ -827,6 +899,8 @@ def main() -> None:
         "stage": "forward-only component response metric and latent axes",
         "methodVersion": METHOD_VERSION,
         "validated": validated,
+        "validationStatus": validation_status,
+        "categoryClaimStatus": model["categoryClaimStatus"],
         "metricContract": metric_contract,
         "selection": {
             "nestedHeldoutCategoryBalancedSpearman": selection["heldoutSpearman"],
@@ -840,6 +914,7 @@ def main() -> None:
             "fixedSelectedMetricByCategory": fixed["heldoutSpearmanByCategory"],
             "fixedSelectedMetricInference": fixed_inference,
             "maximumReverseTimeControlAbsRho": control_max,
+            "chronological": model["component"]["validation"]["chronologicalValidation"],
         },
         "forwardCandidates": forward_rows,
         "reverseTimeControls": control_rows,

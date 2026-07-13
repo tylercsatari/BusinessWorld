@@ -224,7 +224,9 @@ def crossfit_category_axis(features: np.ndarray, target: np.ndarray,
                            dimensions: int = FIXED_DIMENSIONS,
                            semantic_alpha: float = FIXED_SEMANTIC_ALPHA,
                            baseline_alpha: float = FIXED_BASELINE_ALPHA,
-                           seed: int = FORWARD_SEED) -> dict:
+                           seed: int = FORWARD_SEED,
+                           outer_splits: list[tuple[np.ndarray, np.ndarray]] | None = None,
+                           validation_design: str = "grouped random folds") -> dict:
     features = np.asarray(features, np.float32)
     groups = np.asarray(groups).astype(str)
     categories = np.asarray(categories, int)
@@ -232,8 +234,13 @@ def crossfit_category_axis(features: np.ndarray, target: np.ndarray,
     residual = np.full(len(groups), np.nan, np.float32)
     fold_index = np.full(len(groups), -1, np.int16)
     direction_rows: dict[str, list[np.ndarray]] = {}
-    splitter = GroupKFold(n_splits=min(folds, len(set(groups))))
-    for fold, (train, test) in enumerate(splitter.split(np.arange(len(groups)), groups=groups)):
+    splits = outer_splits
+    if splits is None:
+        splitter = GroupKFold(n_splits=min(folds, len(set(groups))))
+        splits = list(splitter.split(np.arange(len(groups)), groups=groups))
+    for fold, (train, test) in enumerate(splits):
+        train = np.asarray(train, int)
+        test = np.asarray(test, int)
         prepared = _prepare_category_fold(
             features, train, test, categories, dimensions, seed + fold * 101,
         )
@@ -281,6 +288,9 @@ def crossfit_category_axis(features: np.ndarray, target: np.ndarray,
         "heldoutSpearman": balanced,
         "heldoutSpearmanByCategory": by_category,
         "foldDirectionStability": cosines,
+        "validationDesign": validation_design,
+        "evaluatedRows": int(np.isfinite(prediction + residual).sum()),
+        "unevaluatedRows": int((~np.isfinite(prediction + residual)).sum()),
     }
 
 
@@ -289,7 +299,9 @@ def nested_select_candidate(features: np.ndarray,
                             naturals: dict[str, np.ndarray],
                             groups: np.ndarray, categories: np.ndarray,
                             folds: int = 5, inner_folds: int = 4,
-                            seed: int = FORWARD_SEED) -> dict:
+                            seed: int = FORWARD_SEED,
+                            outer_splits: list[tuple[np.ndarray, np.ndarray]] | None = None,
+                            validation_design: str = "nested grouped random folds") -> dict:
     """Select the response ruler inside each outer training fold, then test once."""
     features = np.asarray(features, np.float32)
     groups = np.asarray(groups).astype(str)
@@ -298,8 +310,13 @@ def nested_select_candidate(features: np.ndarray,
     prediction = np.full(len(groups), np.nan, np.float32)
     residual = np.full(len(groups), np.nan, np.float32)
     selected_rows = []
-    splitter = GroupKFold(n_splits=min(folds, len(set(groups))))
-    for fold, (train, test) in enumerate(splitter.split(np.arange(len(groups)), groups=groups)):
+    splits = outer_splits
+    if splits is None:
+        splitter = GroupKFold(n_splits=min(folds, len(set(groups))))
+        splits = list(splitter.split(np.arange(len(groups)), groups=groups))
+    for fold, (train, test) in enumerate(splits):
+        train = np.asarray(train, int)
+        test = np.asarray(test, int)
         inner_splitter = GroupKFold(n_splits=min(inner_folds, len(set(groups[train]))))
         inner_prepared = []
         for inner_fold, (inner_train, inner_test) in enumerate(
@@ -360,6 +377,9 @@ def nested_select_candidate(features: np.ndarray,
         "selectionCounts": {key: value for key, value in counts.items() if value},
         "selectedCandidate": final_id,
         "selectedFraction": counts[final_id] / max(1, len(selected_rows)),
+        "validationDesign": validation_design,
+        "evaluatedRows": int(np.isfinite(prediction + residual).sum()),
+        "unevaluatedRows": int((~np.isfinite(prediction + residual)).sum()),
     }
 
 
@@ -500,4 +520,74 @@ def source_signflip(prediction: np.ndarray, target: np.ndarray, groups: np.ndarr
         "sourceVideos": len(unique),
         "repeats": int(repeats),
         "policy": "source-video sign flips and source-video bootstrap",
+    }
+
+
+def category_balanced_source_inference(prediction: np.ndarray, target: np.ndarray,
+                                       groups: np.ndarray, categories: np.ndarray,
+                                       repeats: int = 4096,
+                                       seed: int = FORWARD_SEED) -> dict:
+    """Cluster inference for the exact equal-category Fisher-mean statistic."""
+    prediction = np.asarray(prediction, float)
+    target = np.asarray(target, float)
+    groups = np.asarray(groups).astype(str)
+    categories = np.asarray(categories, int)
+    valid = np.isfinite(prediction + target)
+    prediction = prediction[valid]
+    target = target[valid]
+    groups = groups[valid]
+    categories = categories[valid]
+    unique = np.asarray(sorted(set(groups)))
+    group_index = {group: index for index, group in enumerate(unique)}
+    contribution_rows = []
+    observed_by_category = {}
+    for category in sorted(set(categories)):
+        selected = categories == category
+        x = rankdata(prediction[selected]).astype(float)
+        y = rankdata(target[selected]).astype(float)
+        x = (x - x.mean()) / (x.std() + EPS)
+        y = (y - y.mean()) / (y.std() + EPS)
+        contributions = np.zeros(len(unique), float)
+        for value, group in zip(x * y / len(x), groups[selected]):
+            contributions[group_index[group]] += value
+        rho = float(contributions.sum())
+        observed_by_category[str(int(category))] = rho
+        contribution_rows.append(contributions)
+    observed = float(np.tanh(np.mean([
+        np.arctanh(np.clip(value, -.999999, .999999))
+        for value in observed_by_category.values()
+    ])))
+    rng = np.random.default_rng(seed)
+    exceed = 0
+    batch = 256
+    for start in range(0, repeats, batch):
+        count = min(batch, repeats - start)
+        signs = rng.choice((-1.0, 1.0), size=(count, len(unique)))
+        null_by_category = np.column_stack([
+            signs @ contributions for contributions in contribution_rows
+        ])
+        null = np.tanh(np.mean(np.arctanh(np.clip(
+            null_by_category, -.999999, .999999,
+        )), axis=1))
+        exceed += int(np.sum(np.abs(null) >= abs(observed)))
+    group_rows = {group: np.flatnonzero(groups == group) for group in unique}
+    bootstrap = np.empty(repeats, float)
+    for index in range(repeats):
+        sample = rng.choice(unique, size=len(unique), replace=True)
+        positions = np.concatenate([group_rows[group] for group in sample])
+        bootstrap[index], _ = category_balanced_spearman(
+            prediction[positions], target[positions], categories[positions],
+        )
+    return {
+        "rho": observed,
+        "rhoByCategory": observed_by_category,
+        "p": float((1 + exceed) / (repeats + 1)),
+        "ciLow": float(np.quantile(bootstrap, .025)),
+        "ciHigh": float(np.quantile(bootstrap, .975)),
+        "sourceVideos": len(unique),
+        "repeats": int(repeats),
+        "policy": (
+            "source-video wild sign null and source-video bootstrap on the exact "
+            "equal-category Fisher-mean Spearman statistic"
+        ),
     }

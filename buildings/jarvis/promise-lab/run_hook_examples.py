@@ -180,7 +180,7 @@ def main() -> None:
             "heldoutPearson": outcome_model["survivalModel"]["validation"][
                 "heldoutPearson"
             ],
-            "familyCorrectedSignFlipP": outcome_model["survivalModel"][
+            "familyCorrectedRankPermutationP": outcome_model["survivalModel"][
                 "validation"
             ]["rankInference"]["p"],
             "bootstrapRepeats": len(bootstrap),
@@ -196,7 +196,7 @@ def main() -> None:
                 for local, index in enumerate(machine_positions)
             },
             "meaning": (
-                "ranking is the frozen length-adjusted survival result; winner fractions are "
+                "ranking is the frozen terminal-conditioned survival diagnostic; winner fractions are "
                 "reported only for the separate retained-information bootstrap and do not replace "
                 "the survival ranking"
             ),
@@ -207,8 +207,8 @@ def main() -> None:
         "limits": {
             "causalClaim": False,
             "reason": (
-                "the axis has held-out observational validity, but these exact sentences do not "
-                "have randomized audience outcomes"
+                "the axis is normalization- and time-sensitive, and these exact sentences do not "
+                "have randomized audience outcomes; the ordering is diagnostic only"
             ),
             "confidencePolicy": (
                 "report bootstrap ordering frequencies and domain similarity directly; no invented "

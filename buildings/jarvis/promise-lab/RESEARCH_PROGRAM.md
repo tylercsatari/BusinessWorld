@@ -263,11 +263,10 @@ retention, not five independent psychological constructs.
 ## Stage 8: Canonical forward-response metric
 
 After the outcome-blind variable-count exact covers are frozen, a dedicated study
-tests where the audience response to each canonical component appears. This is
-not a relabeling of the earlier all-span result: it uses 1,006 mutually exclusive
-canonical chunks, a predeclared equal-energy raw plus deletion-influence input,
-and category-specific axes rather than asking one span axis to cover every
-scope and lag.
+tests whether the audience response to each canonical component can be localized.
+The corrected category-blind exact cover contains 324 mutually exclusive chunks.
+The four category labels are applied afterward from the post-hoc selected map, so
+all category-specific results are conditional diagnostics.
 
 Selectable response windows are the exact spoken interval shifted only forward
 from zero through five seconds in half-second increments. Reverse-time windows
@@ -277,23 +276,24 @@ target is endpoint-normalized least-squares slope minus a text-free expected
 natural drop fitted from timing, duration, entry, terminal, amplitude, and the
 cross-fitted entry-to-terminal relationship.
 
-Completed evidence:
+Corrected evidence:
 
-- the selected production lag is `+1.0s`;
-- nested category-balanced held-out Spearman is `0.0836` with source sign-flip
-  `p=0.001220`;
-- the fixed `+1s` category-balanced held-out Spearman is `0.1433`;
-- category-held-out correlations are `0.1434`, `0.1973`, `0.1928`, and `0.0375`;
-- the fixed signal is stronger than every separately fitted reverse-time control;
-- 203 hooks and 983 components have exact positive-duration timing; all 1,006
-  components and 2,489 local source pairs are stored;
-- 2,048 source bootstraps select a median lag of one second, with a 10th to 90th
-  percentile range from 0 to 1.5 seconds;
-- the equal variable-component whole-hook aggregate fails (`p=0.3815`) and is not
-  promoted over the validated complete-hook retained-information axis;
-- the standalone relationship-residual audit is predictive in source holdout
-  (`p=0.000244`) but remains a separate descriptive relationship axis; pair cells
-  report exact local interactions and make no causal claim.
+- nested category-balanced held-out Spearman is `-0.0515`, exact-statistic
+  source-clustered `p=0.4825`;
+- the fixed zero-second diagnostic has rho `0.0492`, `p=0.5570`;
+- category correlations include negative values in both random and future folds;
+- maximum reverse-time-control absolute rho is `0.2927`, larger than the forward
+  diagnostic;
+- chronological training-only selection chooses 0, 1, 2, and 5 seconds across
+  folds rather than one stable lag;
+- all 324 components and 175 local source pairs are stored with exact coverage;
+- the equal component whole-hook aggregate fails and is not promoted;
+- the selected relationship representation is exploratory because it was chosen
+  across six representations on the same data.
+
+The result is a falsification: no component-response lag or category response axis
+currently validates. Whole-hook timing therefore uses exact spoken hook end with
+zero added lag.
 
 ## Required visual evidence
 

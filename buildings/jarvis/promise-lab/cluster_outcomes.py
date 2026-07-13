@@ -620,7 +620,11 @@ def apply_family_fdr(selected_rows: list[dict]) -> None:
             "max-null over representation, PCA dimension, and ridge alpha within each "
             "cluster-target; Benjamini-Hochberg across all cluster-target families"
         )
-        row["status"] = (
-            "validated" if qvalue <= .05 and row["heldoutSpearman"] > 0
-            else "cluster-target-selected-not-validated"
+        row["randomFoldSupported"] = bool(
+            qvalue <= .05 and row["heldoutSpearman"] > 0
+        )
+        row["status"] = "random-fold-only-conditional-diagnostic"
+        row["claimBoundary"] = (
+            "source-grouped random-fold association conditional on the post-hoc selected k=4 map; "
+            "no chronological replication was run"
         )

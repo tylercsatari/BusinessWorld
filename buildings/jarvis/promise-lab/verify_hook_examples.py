@@ -37,10 +37,11 @@ def main() -> None:
         assert score["partition"]["overlapCount"] == 0
         assert all(value["attributionDefinition"] for value in score["components"])
         assert 0 <= float(score["score"]["percentile"]) <= 100
-        assert score["score"]["validation"]["status"] == "validated"
+        assert score["score"]["validation"]["status"] == "normalization-and-time-sensitive-diagnostic"
         forward = score["forwardResponse"]
-        assert forward["validatedAtComponentLevel"] is True
-        assert forward["metric"]["selectedLagSeconds"] == 1.0
+        assert forward["validatedAtComponentLevel"] is False
+        assert forward["validationStatus"] == "random-fold-only-conditional-diagnostic"
+        assert forward["metric"]["selectedLagSeconds"] >= 0
         assert len(forward["components"]) == count
         assert len(forward["relationships"]) == count * (count - 1) // 2
         assert all(0 <= float(value["percentile"]) <= 100
@@ -53,13 +54,13 @@ def main() -> None:
         assert set(outcomes["hook"]) == {
             "viewed_percent", "retention_5s", "average_retention", "log_views",
         }
-        assert all(value["validation"]["status"] == "validated"
+        assert all(value["validation"]["status"] == "random-fold-only-diagnostic"
                    for value in outcomes["hook"].values())
         assert len(outcomes["components"]) == count
         assert all(len(component["outcomePredictions"]) == 4
                    for component in score["components"])
         forecast = outcomes["retentionForecast"]
-        assert forecast["status"] == "validated-rough-forecast"
+        assert forecast["status"] == "random-fold-only-diagnostic"
         assert forecast["normalizationAvailable"] is False
         assert "measured audience-retention curve" in forecast[
             "normalizationUnavailableReason"
@@ -68,7 +69,7 @@ def main() -> None:
         assert len(forecast["predictedPercent"]) == 41
         assert "rewatchAdjustedPredictedPercent" not in forecast
         assert forecast["responseEndSeconds"] < forecast["forecastEndSeconds"]
-        assert forecast["responseLagSeconds"] == 1.0
+        assert forecast["responseLagSeconds"] == 0.0
         assert len(forecast["componentWindows"]) == count
         assert forecast["words"]
     winner_fraction = result["machineVariantResult"]["bootstrapWinnerFractions"]["unexpected-use"]

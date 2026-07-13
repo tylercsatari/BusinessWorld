@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.stats import rankdata
 from sklearn.decomposition import PCA
 from sklearn.linear_model import Ridge
 from sklearn.metrics import r2_score
@@ -15,6 +14,7 @@ from sklearn.preprocessing import StandardScaler
 from axes import finite_correlation, spearman
 from cluster_outcomes import endpoint_normalize_curve, retention_at
 from hook_score_core import percentile, row_unit
+from hook_outcomes import chronological_splits, rank_permutation_inference
 
 
 EPS = 1e-9
@@ -172,7 +172,9 @@ def select_full_configuration(features: np.ndarray, retention: np.ndarray,
 
 def nested_axis_validation(features: np.ndarray, retention: np.ndarray,
                            confounds: np.ndarray, folds: int = 5,
-                           null_repeats: int = 4096) -> dict:
+                           null_repeats: int = 4096,
+                           outer_splits: list[tuple[np.ndarray, np.ndarray]] | None = None,
+                           validation_design: str = "shuffled five-fold") -> dict:
     features = row_unit(features)
     indices = np.arange(len(features))
     predictions = np.full(len(features), np.nan, np.float32)
@@ -182,8 +184,10 @@ def nested_axis_validation(features: np.ndarray, retention: np.ndarray,
     fold_index = np.full(len(features), -1, np.int16)
     fold_directions = []
     fold_rows = []
-    outer = KFold(n_splits=folds, shuffle=True, random_state=QUALITY_SEED)
-    for current_fold, (train, test) in enumerate(outer.split(indices)):
+    splits = outer_splits or list(KFold(
+        n_splits=folds, shuffle=True, random_state=QUALITY_SEED,
+    ).split(indices))
+    for current_fold, (train, test) in enumerate(splits):
         configuration_rows = []
         for dimensions in DIMENSIONS:
             for alpha in ALPHAS:
@@ -236,14 +240,10 @@ def nested_axis_validation(features: np.ndarray, retention: np.ndarray,
     model_pearson = finite_correlation(predictions, targets)
     valid = np.isfinite(axis_percentiles + predictions + targets)
     r2 = float(r2_score(targets[valid], predictions[valid]))
-    ranked_prediction = rankdata(axis_percentiles[valid]).astype(float)
-    ranked_target = rankdata(targets[valid]).astype(float)
-    ranked_prediction = (ranked_prediction - ranked_prediction.mean()) / (ranked_prediction.std() + EPS)
-    ranked_target = (ranked_target - ranked_target.mean()) / (ranked_target.std() + EPS)
-    rng = np.random.default_rng(QUALITY_SEED)
-    signs = rng.choice((-1.0, 1.0), size=(null_repeats, valid.sum()))
-    null = np.abs((signs * ranked_target[None, :]) @ ranked_prediction / valid.sum())
-    pvalue = float((1 + np.sum(null >= abs(rho))) / (null_repeats + 1))
+    inference = rank_permutation_inference(
+        axis_percentiles[valid], targets[valid], repeats=null_repeats,
+        seed=QUALITY_SEED,
+    )
     cosines = []
     for left in range(len(fold_directions)):
         for right in range(left + 1, len(fold_directions)):
@@ -260,10 +260,14 @@ def nested_axis_validation(features: np.ndarray, retention: np.ndarray,
         "ridgeHeldoutSpearman": model_rho,
         "ridgeHeldoutPearson": model_pearson,
         "ridgeHeldoutR2": r2,
-        "signFlipP": pvalue,
+        "rankPermutationP": inference["p"],
+        "rankInference": inference,
         "nullRepeats": null_repeats,
         "foldDirectionMedianCosine": float(np.median(cosines)),
         "foldDirectionPositiveFraction": float(np.mean(np.asarray(cosines) > 0)),
+        "validationDesign": validation_design,
+        "evaluatedRows": int(valid.sum()),
+        "unevaluatedWarmupRows": int(len(features) - valid.sum()),
     }
 
 

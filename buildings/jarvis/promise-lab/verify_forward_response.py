@@ -25,7 +25,9 @@ def main() -> None:
     hook_model = read("hook-quality-model.json")
     partitions = read("canonical-partitions.json")
     assert summary["status"] == model["status"] == "complete"
-    assert summary["validated"] is True and model["validated"] is True
+    assert summary["validated"] is False and model["validated"] is False
+    assert summary["validationStatus"] == "random-fold-only-conditional-diagnostic"
+    assert "post-hoc manual-probe-selected" in summary["categoryClaimStatus"]
     contract = summary["metricContract"]
     assert contract["selectedLagSeconds"] >= 0
     assert contract["selectedCandidate"] == model["metricContract"]["selectedCandidate"]
@@ -33,10 +35,11 @@ def main() -> None:
     assert contract["causalClaim"] is False
     selection = summary["selection"]
     inference = selection["sourceInference"]
-    assert inference["p"] <= .05 and inference["ciLow"] > 0
-    assert selection["fixedSelectedMetricHeldoutSpearman"] > selection["maximumReverseTimeControlAbsRho"]
-    assert all(value > 0 for value in selection["fixedSelectedMetricByCategory"].values())
-    assert selection["lagBootstrap"]["medianLagSeconds"] == contract["selectedLagSeconds"]
+    assert "equal-category Fisher-mean" in inference["policy"]
+    assert abs(inference["rho"] - selection["nestedHeldoutCategoryBalancedSpearman"]) < 1e-6
+    chronological = selection["chronological"]
+    assert chronological["validationDesign"].startswith("expanding-window")
+    assert chronological["evaluatedRows"] > 0
 
     components = summary["components"]
     relationships = summary["relationships"]
@@ -70,10 +73,10 @@ def main() -> None:
         direction = np.asarray(category_model["direction"], float)
         assert len(direction) == 3072
         assert abs(np.linalg.norm(direction) - 1) < 1e-5
-        assert category_model["validation"]["heldoutSpearman"] > 0
+        assert np.isfinite(category_model["validation"]["heldoutSpearman"])
     assert model["wholeHook"]["accepted"] is False
     assert model["directFullHookEmbeddingFalsification"]["accepted"] is False
-    assert isinstance(model["relationship"]["standaloneObservedResidualAudit"]["accepted"], bool)
+    assert model["relationship"]["standaloneObservedResidualAudit"]["accepted"] is False
     assert all(row["responseAxisInteraction"] is not None for row in relationships)
     assert all(0 <= row["responseInteractionPercentile"] <= 100 for row in relationships)
 
@@ -85,7 +88,8 @@ def main() -> None:
         "selectedLagSeconds": contract["selectedLagSeconds"],
         "nestedHeldoutSpearman": selection["nestedHeldoutCategoryBalancedSpearman"],
         "fixedHeldoutSpearman": selection["fixedSelectedMetricHeldoutSpearman"],
-        "sourceSignFlipP": inference["p"],
+        "categoryBalancedP": inference["p"],
+        "validationStatus": summary["validationStatus"],
         "componentRows": len(components),
         "relationshipRows": len(relationships),
         "exactTimedComponents": len(exact),

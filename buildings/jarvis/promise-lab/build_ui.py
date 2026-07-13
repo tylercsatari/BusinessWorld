@@ -117,6 +117,24 @@ def compact_registry_row(row):
     return {key: row.get(key) for key in keep if key in row}
 
 
+def axis_claim_status(row):
+    """Translate legacy grouped-holdout support into its actual claim level."""
+    status = row.get("status")
+    if status != "validated":
+        return status
+    if row.get("targetChannel") == "observed YouTube outcome":
+        return "source-grouped-observed-diagnostic"
+    if row.get("targetChannel") == "Long Quant model-predicted counterfactual":
+        return "source-grouped-model-transfer-supported"
+    return "source-grouped-supported"
+
+
+def compact_axis_registry_row(row):
+    compact = compact_registry_row(row)
+    compact["status"] = axis_claim_status(row)
+    return compact
+
+
 def main() -> None:
     corpus = load_json("corpus.json", {"rows": []})
     interventions = load_json("intervention-summary.json", {})
@@ -160,8 +178,9 @@ def main() -> None:
         }
     registry = [compact_registry_row(row) for row in
                 boundary_registry + cluster_registry + all_span_cluster_registry
-                + cross_scope_registry + axis_registry]
-    registry.extend(compact_registry_row(row) for row in cluster_outcome_registry)
+                + cross_scope_registry]
+    registry.extend(compact_axis_registry_row(row) for row in axis_registry)
+    registry.extend(compact_axis_registry_row(row) for row in cluster_outcome_registry)
     if hook_quality.get("status") == "complete":
         quality_model = hook_quality.get("model") or {}
         registry.append({
@@ -174,8 +193,8 @@ def main() -> None:
             "n": quality_model.get("trainingHooks"),
             "heldoutSpearman": quality_model.get("heldoutSpearman"),
             "heldoutPearson": quality_model.get("heldoutPearson"),
-            "searchWideP": quality_model.get("signFlipP"),
-            "status": "validated" if float(quality_model.get("signFlipP") or 1) <= .05 else "not-validated",
+            "searchWideP": quality_model.get("rankPermutationP"),
+            "status": quality_model.get("validationStatus", "not-validated"),
             "outcomesUsed": True,
         })
     if forward_response.get("status") == "complete":
@@ -191,7 +210,9 @@ def main() -> None:
             "n": (forward_response.get("audit") or {}).get("components"),
             "heldoutSpearman": response_model.get("heldoutCategoryBalancedSpearman"),
             "searchWideP": response_inference.get("p"),
-            "status": "validated" if forward_response.get("validated") else "not-validated",
+            "status": forward_response.get(
+                "validationStatus", "conditional-diagnostic"
+            ),
             "outcomesUsed": True,
         })
     if hook_outcomes.get("status") == "complete":
@@ -364,7 +385,7 @@ def main() -> None:
             "experiments": len(axis_registry),
             "validated": len(validated_axes),
             "validatedIds": [row["id"] for row in validated_axes[:100]],
-            "selectedByTarget": [compact_registry_row(row) for row in selected_axes],
+            "selectedByTarget": [compact_axis_registry_row(row) for row in selected_axes],
             "modelTransferTargets": len(selected_model_axes),
             "modelTransferValidated": len(validated_model_axes),
             "observedTargets": len(selected_observed_axes),
@@ -374,13 +395,18 @@ def main() -> None:
             "validatedByRepresentation": dict(Counter(
                 row.get("representation") for row in validated_axes
             )),
-            "validatedModelTransfer": [compact_registry_row(row) for row in validated_model_axes],
-            "validatedObserved": [compact_registry_row(row) for row in validated_observed_axes],
+            "validatedModelTransfer": [compact_axis_registry_row(row) for row in validated_model_axes],
+            "validatedObserved": [compact_axis_registry_row(row) for row in validated_observed_axes],
+            "claimLevel": (
+                "legacy source-grouped support: observed targets have no chronological "
+                "replication and remain diagnostic"
+            ),
             "interpretation": (
-                "All model-predicted transfer targets validate on raw source-span semantics. "
-                "The corrected observed-outcome signals validate only on retained context; no "
-                "raw, influence, or non-additive source-span direction yet validates against "
-                "observed YouTube outcomes."
+                "All model-predicted transfer targets have source-grouped support on raw source-span "
+                "semantics. Five observed-outcome targets survive the legacy grouped-random null only "
+                "on retained context; without chronological replication they remain diagnostics. No "
+                "raw, influence, or non-additive source-span direction is supported against observed "
+                "YouTube outcomes."
             ),
         },
         "manualProbe": {
@@ -389,8 +415,9 @@ def main() -> None:
             "counts": manual_probe.get("counts"),
             "winner": manual_probe.get("winner"),
             "interpretation": (
-                "A manual post-hoc overfit probe over frozen maps only. It does not enter "
-                "discovery, clustering, or outcome-axis fitting."
+                "A manual post-hoc overfit probe over frozen maps. It does not alter the map or "
+                "partition boundaries, but its winning map supplies the conditional four-category "
+                "labels used by downstream category-specific outcome axes."
             ),
         },
         "manualProjection": {
@@ -413,11 +440,14 @@ def main() -> None:
             "targetFamilies": cluster_outcomes.get("selectedFamilyCount", 0),
             "experiments": cluster_outcomes.get("experimentCount", 0),
             "validated": cluster_outcomes.get("validatedFamilyCount", 0),
+            "randomFoldSupported": cluster_outcomes.get("randomFoldSupportedFamilyCount", 0),
+            "claimBoundary": cluster_outcomes.get("claimBoundary"),
             "timingAudit": cluster_outcomes.get("timingAudit"),
             "topIndicators": cluster_outcomes.get("topIndicators", [])[:12],
             "interpretation": (
-                "Outcome and exact phrase-slope axes fitted only after freezing the four labels; "
-                "every reported correlation is held out by source video."
+                "Outcome and phrase-slope axes are conditional on the post-hoc four-label map. "
+                "Their random-fold correlations are held out by source video, but are not strict "
+                "chronological replications."
             ),
         },
         "latencyStudy": {
@@ -442,6 +472,8 @@ def main() -> None:
             "deterministicReplay": hook_examples.get("deterministicReplay"),
             "forwardResponse": {
                 "validated": forward_response.get("validated"),
+                "validationStatus": forward_response.get("validationStatus"),
+                "categoryClaimStatus": forward_response.get("categoryClaimStatus"),
                 "selectedLagSeconds": (
                     (forward_response.get("metricContract") or {}).get("selectedLagSeconds")
                 ),
@@ -454,9 +486,10 @@ def main() -> None:
                 ),
             },
             "interpretation": (
-                "The deployable coordinate is a complete-hook text direction validated against a "
-                "cross-fitted endpoint-normalized retention factor. Variable-count full-context "
-                "deletions attribute that same coordinate; they are not separate fitted outcomes."
+                "The complete-hook retained-information coordinate is reproducible in random folds "
+                "but did not replicate in strict past-to-future validation. Variable-count "
+                "full-context deletions attribute that diagnostic coordinate; they are not "
+                "independently validated component outcomes."
             ),
         },
         "canonicalPartition": {
@@ -466,9 +499,10 @@ def main() -> None:
             "components": canonical_partitions.get("chunks", 0),
             "validation": canonical_partitions.get("validation") or {},
             "interpretation": (
-                "Four is the number of frozen semantic category labels, not the number of pieces "
-                "required in a hook. Each source-held-out token gap supplies a learned cut/non-cut "
-                "probability and the decoder chooses the maximum-posterior non-overlapping cover."
+                "Each source-held-out token gap supplies a category-blind cut probability and the "
+                "decoder chooses the maximum-posterior non-overlapping cover. The four labels are "
+                "a post-hoc manual-probe-conditioned overlay, not a required component count or an "
+                "independently discovered semantic taxonomy."
             ),
         },
         "hookOutcomes": {
@@ -490,13 +524,17 @@ def main() -> None:
             "survivalValidation": (
                 (hook_outcomes.get("survivalModel") or {}).get("validation")
             ),
+            "normalizationSensitivity": (
+                (hook_outcomes.get("survivalModel") or {}).get(
+                    "normalizationSensitivity"
+                )
+            ),
             "rewatchAudit": hook_outcomes.get("rewatchAudit"),
             "speakingRate": ((hook_outcomes.get("curveModel") or {}).get("speakingRate")),
             "interpretation": (
-                "The primary hook score is a nested held-out length-adjusted survival axis after an "
-                "additive terminal-conditioned replay correction. Component response and direct "
-                "outcome maps remain "
-                "separate; diagnostic maps are never promoted into the headline score."
+                "The terminal-conditioned survival percentile remains a diagnostic because it fails "
+                "strict past-to-future validation and is not robust to a future-free entry-normalized "
+                "target. No universal better-or-worse hook score is currently promoted."
             ),
         },
     }
@@ -572,31 +610,35 @@ def main() -> None:
             "outcomesJoinAfterDiscovery": True,
             "measuredAndPredictedEvidenceSeparated": True,
             "manualProbeSeparated": (
-                "manual interpretation is post-hoc, creates zero maps, and never enters discovery"
+                "manual interpretation is post-hoc and creates zero maps; it does choose the "
+                "conditional four-label overlay used downstream, but cannot enter boundary features"
             ),
             "manualProjectionSeparated": (
                 "fixed-label viewing experiment only; labels, maps, outcomes, and discovery are unchanged"
             ),
             "clusterOutcomesSeparated": (
                 "outcomes join only after the k=4 labels are frozen; source-video holdout and "
-                "search-wide nulls govern every cluster-target axis"
+                "search-wide nulls govern every cluster-target axis, but absent chronological "
+                "replication keeps every result conditional and diagnostic"
             ),
             "latencyStudySeparated": (
                 "one semantic score is shared across every lag within each held-out fold; natural "
                 "drop uses timing and curve endpoints only, with negative-lag controls"
             ),
             "canonicalPartitionSeparated": (
-                "variable exact-cover boundaries use source-held-out semantic contrast evidence; "
-                "four is only the frozen category vocabulary, and outcomes or supplied examples "
-                "cannot choose a boundary"
+                "variable exact-cover boundaries use eight category-blind source-held-out semantic "
+                "contrast features with nested regularization and raw posterior decoding; outcomes, "
+                "manual phrases, and category probabilities cannot choose a boundary"
             ),
             "hookQualitySeparated": (
                 "the supplied comparison examples are evaluation-only; every reported training "
-                "score is out of fold and live scoring uses the frozen final direction"
+                "score is out of fold, strict chronological transfer is reported, and failed "
+                "future transfer prevents promotion"
             ),
             "forwardResponseSeparated": (
                 "only forward lags can be selected; reverse-time windows are controls, exact-cover "
-                "boundaries stay frozen, and failed whole-hook or standalone-pair audits remain rejected"
+                "boundaries stay frozen, and expanding-window validation reruns lag selection using "
+                "past videos only"
             ),
             "hookOutcomesSeparated": (
                 "whole-hook and category-specific component outcome axes use frozen boundaries, "
@@ -629,8 +671,27 @@ def main() -> None:
                                                     allow_nan=False),
                                           encoding="utf-8")
 
+    final_progress = {
+        "version": 4,
+        "status": "complete",
+        "stage": "methodology audit complete; all Promise Lab artifacts published",
+        "hooksComplete": manifest["counts"]["hooks"],
+        "canonicalComponents": manifest["counts"]["canonicalComponents"],
+        "experimentsComplete": (
+            manifest["counts"]["boundaryExperiments"]
+            + manifest["counts"]["clusterExperiments"]
+            + manifest["counts"]["axisExperiments"]
+            + manifest["counts"]["clusterOutcomeExperiments"]
+        ),
+        "updatedAt": int(time.time() * 1000),
+    }
+    (CACHE / "progress.json").write_text(
+        json.dumps(final_progress, separators=(",", ":")), encoding="utf-8"
+    )
+
     r2 = R2Store()
     r2.put_json(f"{R2_PREFIX}/manifest.json", manifest)
+    r2.put_json(f"{R2_PREFIX}/progress.json", final_progress)
     r2.put_json(f"{R2_PREFIX}/findings.json.gz", findings, gzip_payload=True)
     r2.put_json(f"{R2_PREFIX}/registry.json.gz", registry_artifact, gzip_payload=True)
     # Re-upload browser-facing artifacts with Content-Encoding: gzip so a
