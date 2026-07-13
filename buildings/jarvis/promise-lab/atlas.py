@@ -16,6 +16,7 @@ from sklearn.metrics import adjusted_rand_score
 
 EPS = 1e-9
 REPRESENTATIONS = ("raw", "influence", "nonadditive", "context")
+REPRESENTATION_VERSION = "direct-segment-sum-v2"
 GEOMETRIES = ("euclidean", "spherical", "whitened")
 _GROUP_BUCKET_CACHE: dict[int, tuple[weakref.ReferenceType, list[str], dict[str, np.ndarray]]] = {}
 
@@ -23,6 +24,30 @@ _GROUP_BUCKET_CACHE: dict[int, tuple[weakref.ReferenceType, list[str], dict[str,
 def row_unit(matrix: np.ndarray) -> np.ndarray:
     matrix = np.asarray(matrix, np.float32)
     return matrix / (np.linalg.norm(matrix, axis=1, keepdims=True) + EPS)
+
+
+def span_additive_effects(token_effects: np.ndarray, starts: np.ndarray,
+                          ends: np.ndarray) -> np.ndarray:
+    """Sum each span directly, without subtracting nearly equal prefix sums."""
+    effects = np.asarray(token_effects, np.float32)
+    starts = np.asarray(starts, int)
+    ends = np.asarray(ends, int)
+    if starts.shape != ends.shape:
+        raise ValueError("span starts and ends must have the same shape")
+    if len(starts) and (int(starts.min()) < 0 or int(ends.max()) > len(effects)
+                        or np.any(ends <= starts)):
+        raise ValueError("span bounds are outside the token-effect sequence")
+    result = np.zeros((len(starts), effects.shape[1]), np.float32)
+    by_start: dict[int, dict[int, list[int]]] = {}
+    for index, (start, end) in enumerate(zip(starts, ends)):
+        by_start.setdefault(int(start), {}).setdefault(int(end), []).append(index)
+    for start, end_rows in by_start.items():
+        running = np.zeros(effects.shape[1], np.float32)
+        for end in range(start + 1, max(end_rows) + 1):
+            running += effects[end - 1]
+            for index in end_rows.get(end, ()):
+                result[index] = running
+    return result
 
 
 def representation_matrix(name: str, arrays: dict) -> np.ndarray:
@@ -38,13 +63,11 @@ def representation_matrix(name: str, arrays: dict) -> np.ndarray:
             source = influence
         else:
             token_effects = np.asarray(arrays["token_effects"], np.float32)
-            prefix = np.vstack([
-                np.zeros((1, token_effects.shape[1]), np.float32),
-                np.cumsum(token_effects, axis=0),
-            ])
-            additive = prefix[np.asarray(arrays["span_end"], int)] - prefix[
-                np.asarray(arrays["span_start"], int)
-            ]
+            additive = span_additive_effects(
+                token_effects,
+                np.asarray(arrays["span_start"], int),
+                np.asarray(arrays["span_end"], int),
+            )
             source = influence - additive
     return row_unit(source)
 

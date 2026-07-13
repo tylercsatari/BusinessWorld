@@ -13,7 +13,8 @@ from pathlib import Path
 import numpy as np
 from scipy import sparse
 
-from atlas import MatrixSource, row_unit, run_cluster_sweep, summarize_map_clusters
+from atlas import (MatrixSource, REPRESENTATION_VERSION, row_unit, run_cluster_sweep,
+                   summarize_map_clusters)
 from embedding_store import R2_PREFIX, R2Store
 
 
@@ -92,6 +93,11 @@ def main() -> None:
     args = parser.parse_args()
 
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    store_state = json.loads((STORE_DIR / "state.json").read_text(encoding="utf-8"))
+    if manifest.get("representationVersion") != REPRESENTATION_VERSION:
+        raise RuntimeError("all-span manifest uses a stale representation formula")
+    if store_state.get("representationVersion") != REPRESENTATION_VERSION:
+        raise RuntimeError("all-span vector store uses a stale representation formula")
     rows = manifest["rows"]
     row_count = len(rows)
     dimensions = int(manifest["embeddingDimensions"])
@@ -188,7 +194,10 @@ def main() -> None:
         dimensions=DIMENSION_GRID,
         cluster_counts=CLUSTER_GRID,
         nuisance={"length": lengths, "position": positions},
-        experiment_namespace="all-contiguous-spans",
+        experiment_namespace=(
+            f"all-contiguous-spans:{store_state.get('corpusFingerprint')}:"
+            f"{REPRESENTATION_VERSION}"
+        ),
         stability_sample=4096,
     )
     for row in sweep.experiments:
@@ -215,6 +224,8 @@ def main() -> None:
         "embeddingModel": manifest["embeddingModel"],
         "embeddingDimensions": manifest["embeddingDimensions"],
         "interventionVersion": manifest["interventionVersion"],
+        "representationVersion": REPRESENTATION_VERSION,
+        "sourceCorpusFingerprint": store_state.get("corpusFingerprint"),
         "enumeration": manifest["enumeration"],
         "representations": list(representations),
         "representationFormulae": formulae,

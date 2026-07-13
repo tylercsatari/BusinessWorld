@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import gzip
 import json
 import re
@@ -286,11 +287,16 @@ def compact_axis_registry_row(row):
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--no-upload", action="store_true")
+    args = parser.parse_args()
     corpus = load_json("corpus.json", {"rows": []})
     interventions = load_json("intervention-summary.json", {})
     discovery = load_json("discovery-summary.json", {})
     atlas = load_json("atlas.json", {})
     all_span_atlas = load_json("all-span-atlas.json", {})
+    component_lattice = load_json("component-lattice.json", {})
+    research_contract = load_json("research-contract.json", {})
     cross_scope = load_json("cross-scope.json", {})
     for name, value in (("atlas.json", atlas), ("all-span-atlas.json", all_span_atlas)):
         if value and enrich_cluster_summaries(value):
@@ -520,6 +526,12 @@ def main() -> None:
         for row in partition_rows
     ):
         visualization_errors.append("one or more boundary traces omit candidate token gaps")
+    if int(component_lattice.get("hookCount") or 0) != len(hook_rows):
+        visualization_errors.append("component lattice does not cover every measured hook")
+    if not (component_lattice.get("parityContract") or {}).get("shared"):
+        visualization_errors.append("corpus and predictor do not share one component-lattice builder")
+    if len(research_contract.get("rows") or []) != 66:
+        visualization_errors.append("frozen research contract does not expose all 66 sections")
     visualization_contract = {
         "status": (
             "complete" if hook_rows and outcome_axis_maps and not visualization_errors
@@ -581,6 +593,29 @@ def main() -> None:
                 "view": "Hook scorer / Hook library",
             },
             {
+                "id": "multi-resolution-lattice", "label": "Multi-resolution component lattice",
+                "outputs": int(component_lattice.get("spanCount") or 0),
+                "graphs": int(component_lattice.get("hookCount") or 0) * (
+                    len(component_lattice.get("mapDefinitions") or {}) + 1
+                ),
+                "visibleAs": "every registered representation plane plus one source-position-by-span-width lattice per hook",
+                "view": "Component lattice / Hook scorer / Hook library",
+            },
+            {
+                "id": "attention-relational-graph", "label": "Attention-like relational graph",
+                "outputs": int(component_lattice.get("edgeCount") or 0),
+                "graphs": int(component_lattice.get("hookCount") or 0) * 6,
+                "visibleAs": "containment, sequence, semantic, context, title, and fold-safe outcome edge families",
+                "view": "Component lattice / Hook scorer / Hook library",
+            },
+            {
+                "id": "research-contract", "label": "Frozen research-program implementation ledger",
+                "outputs": len(research_contract.get("rows") or []),
+                "graphs": 1,
+                "visibleAs": "all document sections, source lines, evidence artifacts, status, and definition-of-done boundary",
+                "view": "Research contract",
+            },
+            {
                 "id": "legacy-outcome-axes", "label": "Required-confound outcome directions",
                 "outputs": outcome_axis_maps, "graphs": outcome_axis_maps * 3,
                 "visibleAs": "semantic plane, grouped-source prediction check, and horizon lineage per target",
@@ -594,6 +629,10 @@ def main() -> None:
             "boundaryHooksWithTraces": sum(bool(row.get("boundaryTrace")) for row in partition_rows),
             "boundaryHooks": len(partition_rows),
             "retentionPositionCounts": semantic_horizon.get("outputPositionsPerHook"),
+            "componentLatticeHooks": int(component_lattice.get("hookCount") or 0),
+            "componentLatticeSpans": int(component_lattice.get("spanCount") or 0),
+            "componentGraphEdges": int(component_lattice.get("edgeCount") or 0),
+            "researchContractSections": len(research_contract.get("rows") or []),
         },
     }
     top_transfer = {}
@@ -920,6 +959,10 @@ def main() -> None:
             "allSpanClusterExperiments": len(all_span_cluster_registry),
             "clusterMaps": len(atlas.get("maps") or []),
             "allSpanClusterMaps": len(all_span_atlas.get("maps") or []),
+            "componentLatticeHooks": component_lattice.get("hookCount", 0),
+            "componentLatticeSpans": component_lattice.get("spanCount", 0),
+            "componentGraphEdges": component_lattice.get("edgeCount", 0),
+            "researchContractHeadings": len(research_contract.get("rows") or []),
             "crossScopeExperiments": len(cross_scope_registry),
             "swapRows": swaps.get("swapRows", 0),
             "axisExperiments": len(axis_registry),
@@ -959,6 +1002,11 @@ def main() -> None:
             "discoveryExcludes": "example phrases, connector lists, clause rules, outcomes, retention, views, position",
             "atlasScopes": "boundary-supported candidates and every contiguous span are stored separately",
             "allSpanTransforms": "primitive embeddings, algebraic contrasts, categorical nuisance residuals, and equal-block multiview concatenation",
+            "componentLatticeSeparated": (
+                "the corpus and typed predictor call one deterministic builder; structural graph edges "
+                "use no outcomes, stored outcome edges require a held-out fold, and live outcome edges "
+                "are marked inference-only"
+            ),
             "outcomesJoinAfterDiscovery": True,
             "measuredAndPredictedEvidenceSeparated": True,
             "manualProbeSeparated": (
@@ -1008,6 +1056,8 @@ def main() -> None:
             "discovery": "/api/longquant/promise-lab/discovery",
             "atlas": "/api/longquant/promise-lab/atlas",
             "allSpanAtlas": "/api/longquant/promise-lab/all-span-atlas",
+            "componentLattice": "/api/longquant/promise-lab/component-lattice",
+            "researchContract": "/api/longquant/promise-lab/research-contract",
             "manualProbe": "/api/longquant/promise-lab/manual-probe",
             "manualProjection": "/api/longquant/promise-lab/manual-projection",
             "clusterOutcomes": "/api/longquant/promise-lab/cluster-outcomes",
@@ -1047,6 +1097,11 @@ def main() -> None:
         json.dumps(final_progress, separators=(",", ":")), encoding="utf-8"
     )
 
+    if args.no_upload:
+        print(json.dumps({"status": manifest["status"], "counts": manifest["counts"],
+                          "findings": findings}, indent=2))
+        return
+
     r2 = R2Store()
     r2.put_json(f"{R2_PREFIX}/manifest.json", manifest)
     r2.put_json(f"{R2_PREFIX}/progress.json", final_progress)
@@ -1059,6 +1114,8 @@ def main() -> None:
         ("discovery-summary.json", "discovery-summary.json.gz"),
         ("atlas.json", "atlas.json.gz"),
         ("all-span-atlas.json", "all-span-atlas.json.gz"),
+        ("component-lattice.json", "component-lattice.json.gz"),
+        ("research-contract.json", "research-contract.json.gz"),
         ("manual-probe.json", "manual-probe.json.gz"),
         ("manual-projection.json", "manual-projection.json.gz"),
         ("cluster-outcomes.json", "cluster-outcomes.json.gz"),
@@ -1079,7 +1136,7 @@ def main() -> None:
     for local_name in (
         "canonical-partition-model.json", "hook-quality-model.json",
         "forward-response-model.json", "hook-outcome-model.json",
-        "market-reward-model.json",
+        "market-reward-model.json", "component-lattice-model.json",
     ):
         value = load_json(local_name)
         if value is not None:

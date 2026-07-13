@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
+from atlas import REPRESENTATION_VERSION, representation_matrix
 
 HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
@@ -16,6 +17,7 @@ STORE = CACHE / "all-span-vectors"
 
 def main() -> None:
     manifest = json.loads((CACHE / "all-span-manifest.json").read_text(encoding="utf-8"))
+    state = json.loads((STORE / "state.json").read_text(encoding="utf-8"))
     candidate_atlas = json.loads((CACHE / "atlas.json").read_text(encoding="utf-8"))
     rows = manifest["rows"]
     hooks = manifest["hooks"]
@@ -50,6 +52,10 @@ def main() -> None:
         for name in ("raw", "influence", "nonadditive", "context")
     }
     expected_shape = (expected, int(manifest["embeddingDimensions"]))
+    if state.get("representationVersion") != REPRESENTATION_VERSION:
+        raise RuntimeError("all-span representation formula version is stale")
+    if manifest.get("representationVersion") != REPRESENTATION_VERSION:
+        raise RuntimeError("all-span manifest does not identify the active representation formula")
     for name, values in arrays.items():
         if values.shape != expected_shape:
             raise RuntimeError(f"{name} has shape {values.shape}, expected {expected_shape}")
@@ -66,6 +72,61 @@ def main() -> None:
     ))
     if raw_error > .002 or influence_error > .002:
         raise RuntimeError("full-span vectors do not reproduce the exact full-hook embedding")
+    singleton_nonadditive_max = 0.0
+    influence_formula_error = 0.0
+    nonadditive_formula_error = 0.0
+    for hook in hooks:
+        begin = int(hook["spanOffset"])
+        finish = begin + int(hook["spanCount"])
+        selected_rows = rows[begin:finish]
+        starts = np.asarray([row["start"] for row in selected_rows], int)
+        ends = np.asarray([row["end"] for row in selected_rows], int)
+        context = np.asarray(arrays["context"][begin:finish], np.float32)
+        hook_full = np.asarray(full[int(hook["hookIndex"])], np.float32)
+        lookup = {
+            (int(start), int(end)): index
+            for index, (start, end) in enumerate(zip(starts, ends))
+        }
+        token_effects = np.asarray([
+            hook_full - context[lookup[(token, token + 1)]]
+            for token in range(int(hook["tokenCount"]))
+        ], np.float32)
+        tensor = {
+            "full": hook_full, "span_context": context,
+            "span_start": starts, "span_end": ends,
+            "token_effects": token_effects,
+        }
+        expected_influence = representation_matrix("influence", tensor).astype(
+            np.float16
+        ).astype(np.float32)
+        expected_nonadditive = representation_matrix("nonadditive", tensor).astype(
+            np.float16
+        ).astype(np.float32)
+        observed_influence = np.asarray(arrays["influence"][begin:finish], np.float32)
+        observed_nonadditive = np.asarray(arrays["nonadditive"][begin:finish], np.float32)
+        influence_formula_error = max(
+            influence_formula_error,
+            float(np.max(np.abs(observed_influence - expected_influence))),
+        )
+        nonadditive_formula_error = max(
+            nonadditive_formula_error,
+            float(np.max(np.abs(observed_nonadditive - expected_nonadditive))),
+        )
+        singleton_indices = np.flatnonzero(ends - starts == 1)
+        singleton_nonadditive_max = max(
+            singleton_nonadditive_max,
+            float(np.max(np.linalg.norm(observed_nonadditive[singleton_indices], axis=1))),
+        )
+    if influence_formula_error != 0 or nonadditive_formula_error != 0:
+        raise RuntimeError(
+            "persisted derived vectors do not exactly reproduce from stored source vectors: "
+            f"influence={influence_formula_error}, nonadditive={nonadditive_formula_error}"
+        )
+    if singleton_nonadditive_max != 0:
+        raise RuntimeError(
+            "singleton nonadditive vectors must be exactly zero; "
+            f"maximum norm={singleton_nonadditive_max}"
+        )
     norms = np.linalg.norm(np.asarray(arrays["raw"][::97], np.float32), axis=1)
     if float(np.max(np.abs(norms - 1))) > .003:
         raise RuntimeError("stored primitive vectors are not unit-normalized")
@@ -80,6 +141,10 @@ def main() -> None:
         "badCommaSpacing": bad_spacing,
         "fullSpanRawMaxError": raw_error,
         "fullSpanInfluenceMaxError": influence_error,
+        "influenceFormulaMaximumAbsoluteError": influence_formula_error,
+        "nonadditiveFormulaMaximumAbsoluteError": nonadditive_formula_error,
+        "singletonNonadditiveMaximumNorm": singleton_nonadditive_max,
+        "representationVersion": REPRESENTATION_VERSION,
         "sampleNormMaximumError": float(np.max(np.abs(norms - 1))),
     }, indent=2))
 

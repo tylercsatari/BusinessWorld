@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 from pathlib import Path
 
 import numpy as np
 
+from atlas import REPRESENTATION_VERSION
 from embedding_store import DIMENSIONS, MODEL
 from interventions import INTERVENTION_VERSION, make_plan, plan_fingerprint
 from run_all_spans import STORE_VERSION, corpus_fingerprint
@@ -84,14 +86,42 @@ def main() -> None:
     assert state["embeddingModel"] == manifest["embeddingModel"] == MODEL
     assert int(state["embeddingDimensions"]) == int(manifest["embeddingDimensions"]) == DIMENSIONS
     assert state["interventionVersion"] == manifest["interventionVersion"] == INTERVENTION_VERSION
+    assert state["representationVersion"] == manifest["representationVersion"] == REPRESENTATION_VERSION
     expected_spans = sum(
         int(row["tokenCount"]) * (int(row["tokenCount"]) + 1) // 2
         for row in manifest["hooks"]
     )
     assert int(state["spanInstances"]) == int(manifest["spanInstances"]) == expected_spans
 
+    lattice = read("component-lattice.json")
+    lattice_model = read("component-lattice-model.json")
+    assert lattice["status"] == "complete"
+    assert int(lattice["hookCount"]) == len(corpus) == len(lattice["rows"])
+    assert int(lattice["spanCount"]) == expected_spans
+    assert (lattice.get("parityContract") or {}).get("shared") is True
+    assert (lattice.get("graphContract") or {}).get("structuralEdgeOutcomesUsed") is False
+    assert (lattice_model.get("parityContract") or {}).get("shared") is True
+    assert lattice_model.get("prefixTransitionNullOutcomesUsed") is False
+    assert lattice_model.get("allSpanRepresentationVersion") == REPRESENTATION_VERSION
+    scorer_source = (HERE / "score_hook.py").read_text(encoding="utf-8")
+    assert "from component_lattice import build_component_lattice" in scorer_source
+    assert "component_lattice = build_component_lattice(" in scorer_source
+
+    research = read("research-contract.json")
+    contract_path = HERE / "REFERENCE_TO_GRATIFICATION_RESEARCH_PROGRAM.md"
+    assert research["status"] == "complete"
+    assert len(research["rows"]) == 66
+    assert research["contract"]["sha256"] == hashlib.sha256(contract_path.read_bytes()).hexdigest()
+    assert research["definitionOfDone"]["met"] is False
+    assert "contract-only" not in {row["status"] for row in research["rows"]}
+    assert sum(int(value) for value in research["implementationStatusCounts"].values()) == 66
+
     atlas = read("atlas.json")
     all_atlas = read("all-span-atlas.json")
+    assert atlas.get("representationVersion") == REPRESENTATION_VERSION
+    assert all_atlas.get("representationVersion") == REPRESENTATION_VERSION
+    assert all(row.get("vectorSource") == "authoritative-all-span-store"
+               for row in atlas["candidates"])
     manual = read("manual-projection.json")
     manual_map = next(row for row in all_atlas["maps"] if row["id"] == manual["mapId"])
     assert manual_map.get("pareto") is True
@@ -171,6 +201,8 @@ def main() -> None:
         "status": "verified",
         "hooks": len(corpus),
         "spans": expected_spans,
+        "componentGraphEdges": int(lattice["edgeCount"]),
+        "researchContractSections": len(research["rows"]),
         "sourceFingerprints": len(corpus),
         "routingInputSignature": expected_routing_signature,
         "axisConfounds": "train-fold-only",

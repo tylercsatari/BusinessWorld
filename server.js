@@ -598,7 +598,7 @@ const MIME_TYPES = {
 const _tribeJobs = {};
 const TRIBE_PYTHON = process.env.TRIBE_PYTHON
     || '/Users/tylercsatari/Desktop/BusinessHub/tribev2/.venv/bin/python3.11';
-// Python that has the ML/data deps (boto3, whisper, numpy). The server is often
+// Python that has the shared upload/scorer ML deps. The server is often
 // launched with a bare PATH where `python3` is system python WITHOUT these, so we
 // TEST-IMPORT the deps in each candidate and pick the first that actually has them.
 // Override with RAW_PYTHON. PYTHONHOME/PYTHONPATH are stripped so the chosen
@@ -614,7 +614,7 @@ const RAW_PYTHON = (() => {
     const cands = [process.env.RAW_PYTHON, '/Users/tylercsatari/miniforge3/bin/python3',
         '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3', '/usr/bin/python3'].filter(Boolean);
     for (const p of cands) {
-        try { execSync(`"${p}" -c "import numpy, boto3"`, { stdio: 'ignore', timeout: 12000, env: RAW_PY_ENV }); return p; }
+        try { execSync(`"${p}" -c "import numpy, boto3, scipy, sklearn"`, { stdio: 'ignore', timeout: 12000, env: RAW_PY_ENV }); return p; }
         catch (e) {}
     }
     return 'python3';
@@ -827,8 +827,10 @@ async function handlePromiseHookScore(req, res) {
     try {
         const body = await readBody(req);
         const text = String(body.text || '').replace(/\s+/g, ' ').trim();
+        const idea = String(body.idea || '').replace(/\s+/g, ' ').trim();
         if (text.length < 8) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type a complete hook to score"}'); return; }
         if (text.length > 1200) { res.writeHead(413, { 'Content-Type': 'application/json' }); res.end('{"error":"the exact scorer accepts up to 1,200 characters per analyzed opening; the input was not truncated"}'); return; }
+        if (idea.length > 1200) { res.writeHead(413, { 'Content-Type': 'application/json' }); res.end('{"error":"the candidate idea anchor accepts up to 1,200 characters; the input was not truncated"}'); return; }
         if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
         const scoreRunner = job => {
             if (job) { job.status = 'queued'; job.ts = Date.now(); }
@@ -836,11 +838,11 @@ async function handlePromiseHookScore(req, res) {
                 if (job) { job.status = 'running'; job.ts = Date.now(); }
                 return new Promise((ok, no) => {
             const script = path.join(__dirname, 'buildings/jarvis/promise-lab/score_hook.py');
-            const py = spawn(RAW_PYTHON, [script, '--stdin'], { env: RAW_PY_ENV, stdio: ['pipe', 'pipe', 'pipe'] });
+            const py = spawn(RAW_PYTHON, [script, '--json-stdin'], { env: RAW_PY_ENV, stdio: ['pipe', 'pipe', 'pipe'] });
             let so = '', se = '';
-            py.stdout.on('data', d => { so += d; if (so.length > 8e6) so = so.slice(-8e6); });
+            py.stdout.on('data', d => { so += d; if (so.length > 32e6) so = so.slice(-32e6); });
             py.stderr.on('data', d => { se += d; if (se.length > 20000) se = se.slice(-20000); });
-            py.stdin.end(text);
+            py.stdin.end(JSON.stringify({ text, idea }));
             const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (_) {} no(new Error('hook scorer timeout')); }, 300000);
             py.on('close', code => {
                 clearTimeout(timer);
@@ -1680,7 +1682,7 @@ const server = http.createServer(async (req, res) => {
         const { execSync } = require('child_process');
         let deps = 'unknown', detail = '';
         try {
-            detail = execSync(`"${RAW_PYTHON}" -c "import sys,numpy,boto3;print(sys.executable+' | py'+sys.version.split()[0]+' | numpy'+numpy.__version__+' | boto3'+boto3.__version__)"`, { env: RAW_PY_ENV, timeout: 20000 }).toString().trim();
+            detail = execSync(`"${RAW_PYTHON}" -c "import sys,numpy,boto3,scipy,sklearn;print(sys.executable+' | py'+sys.version.split()[0]+' | numpy'+numpy.__version__+' | scipy'+scipy.__version__+' | sklearn'+sklearn.__version__+' | boto3'+boto3.__version__)"`, { env: RAW_PY_ENV, timeout: 20000 }).toString().trim();
             deps = 'ok';
         } catch (e) { deps = 'FAIL'; detail = String((e.stderr && e.stderr.toString()) || e.message || e).slice(-300); }
         let ffmpeg = '', ytdlp = '';
@@ -3802,6 +3804,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         discovery: 'discovery-summary.json.gz',
         atlas: 'atlas.json.gz',
         'all-span-atlas': 'all-span-atlas.json.gz',
+        'component-lattice': 'component-lattice.json.gz',
+        'research-contract': 'research-contract.json.gz',
         'manual-probe': 'manual-probe.json.gz',
         'manual-projection': 'manual-projection.json.gz',
         'cluster-outcomes': 'cluster-outcomes.json.gz',
@@ -3817,10 +3821,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         axes: 'axes.json.gz',
         registry: 'registry.json.gz',
     };
-    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|manual-probe|manual-projection|cluster-outcomes|latency-study|canonical-partitions|hook-quality|forward-response|hook-outcomes|market-reward|hook-example-results|cross-scope|swaps|axes|registry)$/);
+    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|component-lattice|research-contract|manual-probe|manual-projection|cluster-outcomes|latency-study|canonical-partitions|hook-quality|forward-response|hook-outcomes|market-reward|hook-example-results|cross-scope|swaps|axes|registry)$/);
     if (promiseArtifact && req.method === 'GET') {
+        const cacheControl = ['component-lattice', 'research-contract'].includes(promiseArtifact[1])
+            ? 'private, no-cache'
+            : undefined;
         const ok = await serveR2GzipJsonStream(res,
-            `longform/promise-lab-v4/${promiseArtifacts[promiseArtifact[1]]}`);
+            `longform/promise-lab-v4/${promiseArtifacts[promiseArtifact[1]]}`, cacheControl);
         if (!ok) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end('{"error":"Promise Lab artifact is still building"}');
@@ -3862,6 +3869,17 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         if (!ok) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end('{"error":"hook discovery artifact is not built"}');
+        }
+        return;
+    }
+    const promiseLattice = pathname.match(/^\/api\/longquant\/promise-lab\/component-lattice\/([\w-]+)$/);
+    if (promiseLattice && req.method === 'GET') {
+        const ok = await serveR2GzipJsonStream(res,
+            `longform/promise-lab-v4/component-lattice/${promiseLattice[1]}.json.gz`,
+            'private, no-cache');
+        if (!ok) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end('{"error":"component lattice artifact is not built"}');
         }
         return;
     }

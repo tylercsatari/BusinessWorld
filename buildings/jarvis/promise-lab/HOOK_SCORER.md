@@ -57,8 +57,8 @@ Current corpus result:
 
 ## 3. Conditional category overlay
 
-After boundaries are fixed, components receive one of four labels from retained
-map `0042a54b685d55438242`:
+After boundaries are fixed, components receive one of four labels from the
+retained map recorded by `manual-projection.json`:
 
 - representation: `raw-hook-residual`
 - transform: whitened four-dimensional PCA

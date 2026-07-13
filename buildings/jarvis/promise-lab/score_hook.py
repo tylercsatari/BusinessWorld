@@ -14,10 +14,12 @@ from pathlib import Path
 
 import numpy as np
 
+from atlas import REPRESENTATION_VERSION, span_additive_effects
 from canonical_partition import (
     boundary_features,
     boundary_probabilities,
 )
+from component_lattice import build_component_lattice
 from embedding_store import EmbeddingStore, R2Store, json_ready
 from hook_outcomes import apply_duration_baseline
 from hook_score_core import (
@@ -46,7 +48,8 @@ MODEL_FILE = "hook-quality-model.json"
 PARTITION_FILE = "canonical-partition-model.json"
 OUTCOME_MODEL_FILE = "hook-outcome-model.json"
 MARKET_MODEL_FILE = "market-reward-model.json"
-SCORER_VERSION = "deterministic-variable-hook-scorer-v11"
+LATTICE_MODEL_FILE = "component-lattice-model.json"
+SCORER_VERSION = "deterministic-variable-hook-scorer-v13"
 
 
 def _decode_json(payload: bytes) -> dict:
@@ -98,25 +101,39 @@ def build_span_primitives(text: str, store: EmbeddingStore) -> dict:
     context_texts = [without_span(tokens, span.start, span.end, source_text=text) for span in spans]
     required = [text, *span_texts, *[value for value in context_texts if value]]
     vectors = store.embed_many(required)
-    full = row_unit(vectors[text])
-    raw = np.asarray([row_unit(vectors[value]) for value in span_texts], np.float32)
-    contexts = np.asarray([
-        row_unit(vectors[value]) if value else np.zeros_like(full)
+    full_source = row_unit(vectors[text])
+    raw_source = np.asarray([row_unit(vectors[value]) for value in span_texts], np.float32)
+    context_source = np.asarray([
+        row_unit(vectors[value]) if value else np.zeros_like(full_source)
         for value in context_texts
     ], np.float32)
-    influence = row_unit(full[None, :] - contexts)
     starts = np.asarray([span.start for span in spans], int)
     ends = np.asarray([span.end for span in spans], int)
     lookup = {(int(start), int(end)): index
               for index, (start, end) in enumerate(zip(starts, ends))}
+
+    def stored_precision(values: np.ndarray) -> np.ndarray:
+        return np.asarray(values, np.float16).astype(np.float32)
+
+    stored_full = stored_precision(full_source)
+    stored_raw = stored_precision(raw_source)
+    stored_context = stored_precision(context_source)
+    influence_source = row_unit(stored_full[None, :] - stored_context)
     token_effects = np.asarray([
-        full - contexts[lookup[(index, index + 1)]] for index in range(len(tokens))
+        stored_full - stored_context[lookup[(index, index + 1)]]
+        for index in range(len(tokens))
     ], np.float32)
-    prefix = np.vstack([
-        np.zeros((1, len(full)), np.float32), np.cumsum(token_effects, axis=0),
-    ])
-    additive = prefix[ends] - prefix[starts]
-    nonadditive = row_unit((full[None, :] - contexts) - additive)
+    additive = span_additive_effects(token_effects, starts, ends)
+    nonadditive_source = row_unit((stored_full[None, :] - stored_context) - additive)
+
+    def training_storage_precision(values: np.ndarray) -> np.ndarray:
+        return row_unit(stored_precision(values))
+
+    full = row_unit(stored_full)
+    raw = row_unit(stored_raw)
+    contexts = row_unit(stored_context)
+    influence = training_storage_precision(influence_source)
+    nonadditive = training_storage_precision(nonadditive_source)
     return {
         "text": text,
         "tokens": tokens,
@@ -130,6 +147,9 @@ def build_span_primitives(text: str, store: EmbeddingStore) -> dict:
         "full": full,
         "lexical": lexical,
         "embeddingInputs": len(set(required)),
+        "trainingVectorStorageDtype": "float16",
+        "representationVersion": REPRESENTATION_VERSION,
+        "liveQuantizationMatchesTrainingStore": True,
     }
 
 
@@ -960,11 +980,14 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
 def score_text(text: str, model: dict | None = None, partition_model: dict | None = None,
                store: EmbeddingStore | None = None,
                outcome_model: dict | None = None,
-               market_model: dict | None = None) -> dict:
+               market_model: dict | None = None, lattice_model: dict | None = None,
+               idea_text: str = "") -> dict:
     model = model or load_artifact(MODEL_FILE)
     partition_model = partition_model or load_artifact(PARTITION_FILE)
     outcome_model = outcome_model or load_artifact(OUTCOME_MODEL_FILE)
     market_model = market_model or load_artifact(MARKET_MODEL_FILE)
+    lattice_model = lattice_model or load_artifact(LATTICE_MODEL_FILE)
+    idea_text = normalize_source(idea_text)
     owned_store = store is None
     store = store or EmbeddingStore(_embedding_cache_path())
     try:
@@ -979,7 +1002,8 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             value for family in ("withoutOne", "withoutPair", "pairOnly")
             for value in counter_texts[family].values() if value
         ]
-        embedded = store.embed_many(required)
+        embedded = store.embed_many([*required, *([idea_text] if idea_text else [])])
+        idea_vector = row_unit(embedded[idea_text]) if idea_text else None
         zero = np.zeros_like(primitives["full"])
 
         def counter_vector(value: str) -> np.ndarray:
@@ -1105,6 +1129,21 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
     outcomes = _score_outcomes(
         primitives, partition, components, outcome_model,
     )
+    component_lattice = build_component_lattice(
+        text=primitives["text"], tokens=primitives["tokens"],
+        starts=primitives["starts"], ends=primitives["ends"],
+        raw=primitives["raw"], context=primitives["context"],
+        influence=primitives["influence"], nonadditive=primitives["nonadditive"],
+        full=primitives["full"], partition=partition, partition_model=partition_model,
+        words_per_second=float((outcome_model.get("speakingRate") or {}).get(
+            "meanWordsPerSecond") or 1),
+        prefix_transition_null=np.asarray(
+            lattice_model.get("prefixTransitionNullSorted") or [], np.float32,
+        ),
+        idea_text=idea_text or None, idea_vector=idea_vector,
+        title_manifold=lattice_model.get("titleManifold"),
+        inference_outcomes=outcomes, source_kind="live-predictor",
+    )
     scorecard = _score_local_attributions(
         primitives, partition, counter_vectors, components, interactions,
         outcomes, outcome_model,
@@ -1133,7 +1172,10 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
     training_token_counts = np.asarray([
         len(tokenize(str(value))) for value in model.get("trainingTexts") or []
     ], int)
-    stable_payload = f"{SCORER_VERSION}\0{model['methodVersion']}\0{primitives['text']}"
+    stable_payload = (
+        f"{SCORER_VERSION}\0{model['methodVersion']}\0{primitives['text']}"
+        f"\0{idea_text or ''}"
+    )
     return {
         "version": 2,
         "status": "complete",
@@ -1144,6 +1186,8 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             "hookText": primitives["text"],
             "embeddingModel": model["embeddingModel"],
             "embeddingDimensions": model["embeddingDimensions"],
+            "trainingVectorStorageDtype": primitives["trainingVectorStorageDtype"],
+            "liveQuantizationMatchesTrainingStore": primitives["liveQuantizationMatchesTrainingStore"],
             "fullHookEmbeddingInput": primitives["text"],
             "trainingRewardEmbeddingInput": primitives["text"],
             "spanEmbeddingInputs": primitives["embeddingInputs"],
@@ -1167,6 +1211,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
                      or token_count > training_token_counts.max())
             ),
             "generativeLlmUsed": False,
+            "candidateIdeaAnchor": idea_text or None,
         },
         "primaryScore": market_score,
         "trainingReward": market_score,
@@ -1262,6 +1307,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
         },
         "forwardResponse": forward_response,
         "outcomes": outcomes,
+        "componentLattice": component_lattice,
         "provenance": {
             "outcomeUsedForBoundaries": False,
             "outcomeUsedForQualityAxis": True,
@@ -1278,6 +1324,12 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             ),
             "forwardResponseBoundariesChanged": False,
             "outcomeModelsUseFrozenBoundaries": True,
+            "componentLatticeSharedWithCorpus": True,
+            "componentLatticeCandidateSpaceUsedForPartition": True,
+            "componentLatticeCanonicalCoverUsedForHeadlineScore": True,
+            "componentLatticeOverlappingSpansDoubleCounted": False,
+            "attentionRelationalGraphUsedForHeadlineScore": False,
+            "componentLatticeStructuralEdgesUseOutcomes": False,
             "outcomePredictionsHaveRandomFoldDiagnostics": True,
             "outcomePredictionsPassPromotionGate": bool(
                 all(
@@ -1296,10 +1348,18 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--text", default="")
     parser.add_argument("--stdin", action="store_true")
+    parser.add_argument("--json-stdin", action="store_true")
+    parser.add_argument("--idea", default="")
     parser.add_argument("--pretty", action="store_true")
     parser.add_argument("--refresh-model", action="store_true")
     args = parser.parse_args()
-    text = sys.stdin.read() if args.stdin else args.text
+    idea = args.idea
+    if args.json_stdin:
+        request = json.loads(sys.stdin.read() or "{}")
+        text = str(request.get("text") or "")
+        idea = str(request.get("idea") or "")
+    else:
+        text = sys.stdin.read() if args.stdin else args.text
     if not normalize_source(text):
         print(json.dumps({"error": "type a hook to score"}))
         raise SystemExit(2)
@@ -1307,7 +1367,9 @@ def main() -> None:
         model = load_artifact(MODEL_FILE, args.refresh_model)
         partition = load_artifact(PARTITION_FILE, args.refresh_model)
         outcomes = load_artifact(OUTCOME_MODEL_FILE, args.refresh_model)
-        result = score_text(text, model, partition, outcome_model=outcomes)
+        lattice = load_artifact(LATTICE_MODEL_FILE, args.refresh_model)
+        result = score_text(text, model, partition, outcome_model=outcomes,
+                            lattice_model=lattice, idea_text=idea)
         print(json.dumps(json_ready(result), indent=2 if args.pretty else None,
                          separators=None if args.pretty else (",", ":"), allow_nan=False))
     except Exception as exc:

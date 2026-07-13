@@ -12,18 +12,21 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
-MAP_ID = "0042a54b685d55438242"
 
 
 def main() -> None:
     summary = json.loads((CACHE / "latency-study.json").read_text(encoding="utf-8"))
     atlas = json.loads((CACHE / "all-span-atlas.json").read_text(encoding="utf-8"))
-    frozen = next(row for row in atlas["maps"] if row["id"] == MAP_ID)
+    manual_projection = json.loads(
+        (CACHE / "manual-projection.json").read_text(encoding="utf-8")
+    )
+    map_id = manual_projection["mapId"]
+    frozen = next(row for row in atlas["maps"] if row["id"] == map_id)
     labels = np.asarray(frozen["labels"], int)
     corpus_count = len(json.loads((CACHE / "corpus.json").read_text(encoding="utf-8"))["rows"])
     lags = np.asarray(summary["lagsSeconds"], float)
     assert summary["status"] == "complete"
-    assert summary["mapId"] == MAP_ID
+    assert summary["mapId"] == map_id
     assert summary["clusterCount"] == len(np.unique(labels))
     assert len(lags) == 23
     assert np.isclose(lags[0], -3) and np.isclose(lags[-1], 8)
@@ -59,7 +62,7 @@ def main() -> None:
         with gzip.open(path, "rt", encoding="utf-8") as handle:
             detail = json.load(handle)
         assert detail["cluster"] == label
-        assert detail["mapId"] == MAP_ID
+        assert detail["mapId"] == map_id
         assert len(detail["globalIndices"]) == expected
         assert len(detail["sharedSemanticScoreOOF"]) == expected
         for name in (

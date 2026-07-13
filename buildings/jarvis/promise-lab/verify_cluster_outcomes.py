@@ -12,19 +12,22 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
-MAP_ID = "0042a54b685d55438242"
 
 
 def main() -> None:
     summary = json.loads((CACHE / "cluster-outcomes.json").read_text(encoding="utf-8"))
     atlas = json.loads((CACHE / "all-span-atlas.json").read_text(encoding="utf-8"))
-    frozen = next(row for row in atlas["maps"] if row["id"] == MAP_ID)
+    manual_projection = json.loads(
+        (CACHE / "manual-projection.json").read_text(encoding="utf-8")
+    )
+    map_id = manual_projection["mapId"]
+    frozen = next(row for row in atlas["maps"] if row["id"] == map_id)
     labels = np.asarray(frozen["labels"], int)
     corpus_count = len(json.loads((CACHE / "corpus.json").read_text(encoding="utf-8"))["rows"])
     target_count = len(summary["targetDefinitions"])
     cluster_count = len(np.unique(labels))
     assert summary["status"] == "complete"
-    assert summary["mapId"] == MAP_ID
+    assert summary["mapId"] == map_id
     assert summary["clusterCount"] == cluster_count
     assert summary["targetFamiliesPerCluster"] == target_count
     assert summary["selectedFamilyCount"] == cluster_count * target_count
@@ -54,7 +57,7 @@ def main() -> None:
             assert path.exists()
             with gzip.open(path, "rt", encoding="utf-8") as handle:
                 detail = json.load(handle)
-            assert detail["mapId"] == MAP_ID
+            assert detail["mapId"] == map_id
             assert detail["selectedExperiment"]["id"] == target["id"]
             assert len(detail["points"]["x"]) == cluster["spanInstances"]
             assert len(detail["points"]["globalIndices"]) == cluster["spanInstances"]
@@ -62,7 +65,7 @@ def main() -> None:
     assert len(selected_ids) == cluster_count * target_count
     print(json.dumps({
         "status": "verified",
-        "mapId": MAP_ID,
+        "mapId": map_id,
         "clusters": cluster_count,
         "families": len(selected_ids),
         "experiments": summary["experimentCount"],

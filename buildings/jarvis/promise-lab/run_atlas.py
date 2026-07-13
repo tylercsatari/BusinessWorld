@@ -12,7 +12,8 @@ from pathlib import Path
 
 import numpy as np
 
-from atlas import REPRESENTATIONS, component_id, representation_matrix, run_cluster_sweep
+from atlas import (REPRESENTATIONS, REPRESENTATION_VERSION, component_id,
+                   representation_matrix, run_cluster_sweep)
 from embedding_store import R2_PREFIX, R2Store, json_ready
 from sequence import surface, tokenize, without_span
 
@@ -42,6 +43,20 @@ def load_candidates(limit_hooks: int = 0):
     rows = []
     representation_rows = {name: [] for name in REPRESENTATIONS}
     groups = []
+    all_span_index = {}
+    all_span_matrices = {}
+    all_span_manifest_path = CACHE / "all-span-manifest.json"
+    if all_span_manifest_path.exists():
+        all_span_manifest = json.loads(all_span_manifest_path.read_text(encoding="utf-8"))
+        if all_span_manifest.get("representationVersion") != REPRESENTATION_VERSION:
+            raise RuntimeError("authoritative all-span store uses a stale representation formula")
+        all_span_index = {
+            str(row["id"]): index for index, row in enumerate(all_span_manifest["rows"])
+        }
+        all_span_matrices = {
+            name: np.load(CACHE / "all-span-vectors" / f"{name}.npy", mmap_mode="r")
+            for name in REPRESENTATIONS
+        }
     legacy_index = {}
     legacy_matrices = {}
     if LEGACY_VECTOR_PATH.exists():
@@ -88,10 +103,12 @@ def load_candidates(limit_hooks: int = 0):
         for candidate in discovery.get("candidates") or []:
             start, end = int(candidate["start"]), int(candidate["end"])
             candidate_id = component_id(video_id, start, end)
+            all_span_position = all_span_index.get(candidate_id)
             span_index = lookup.get((start, end))
             exact_position = exact_index.get(candidate_id)
             legacy_position = legacy_index.get(candidate_id)
-            if span_index is None and exact_position is None and legacy_position is None:
+            if (all_span_position is None and span_index is None
+                    and exact_position is None and legacy_position is None):
                 raise RuntimeError(f"no exact tensor or verified legacy vector for {candidate_id}")
             row = {
                 "id": candidate_id,
@@ -119,13 +136,22 @@ def load_candidates(limit_hooks: int = 0):
                 "segmentationStatus": (discovery.get("selectedSegmentation") or {}).get("status", "provisional"),
                 "segmentationSearchWideP": (discovery.get("selectedSegmentation") or {}).get("searchWideP"),
                 "positionAndLengthUsedForClustering": False,
+                "vectorSource": (
+                    "authoritative-all-span-store"
+                    if all_span_position is not None else
+                    "per-hook-tensor" if span_index is not None else
+                    "verified-exact-candidate-fallback" if exact_position is not None else
+                    "verified-legacy-fallback"
+                ),
             }
             rows.append(row)
             groups.append(video_id)
             for name in REPRESENTATIONS:
                 # Copy the selected row so the list does not retain the entire
                 # per-hook span matrix through a NumPy view.
-                vector = (matrices[name][span_index] if span_index is not None
+                vector = (all_span_matrices[name][all_span_position]
+                          if all_span_position is not None
+                          else matrices[name][span_index] if span_index is not None
                           else exact_matrices[name][exact_position] if exact_position is not None
                           else legacy_matrices[name][legacy_position])
                 representation_rows[name].append(vector.copy())
@@ -195,6 +221,7 @@ def main() -> None:
         eval_sample=args.eval_sample,
         map_limit=args.map_limit,
         progress=report_progress,
+        experiment_namespace=f"candidate-components:{REPRESENTATION_VERSION}",
     )
     atlas = {
         "version": 4,
@@ -203,6 +230,8 @@ def main() -> None:
         "candidateInstances": len(rows),
         "hooks": len(set(groups)),
         "representations": list(matrices),
+        "representationVersion": REPRESENTATION_VERSION,
+        "authoritativeVectorSource": "all-span store when available",
         "geometries": ["euclidean", "spherical", "whitened"],
         "pcaDimensionsTested": [2, args.max_dimension],
         "clusterCountsTested": [2, args.max_clusters],

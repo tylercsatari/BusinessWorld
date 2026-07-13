@@ -1,4 +1,6 @@
 import json
+import gzip
+import hashlib
 import math
 import re
 import unittest
@@ -21,6 +23,8 @@ class VisualizationContractTests(unittest.TestCase):
         cls.outcomes = load_json("hook-outcomes.json")
         cls.axes = load_json("axes.json")
         cls.findings = load_json("findings.json")
+        cls.lattice = load_json("component-lattice.json")
+        cls.research_contract = load_json("research-contract.json")
         cls.ui = UI_SOURCE.read_text(encoding="utf-8")
 
     def test_every_candidate_gap_is_stored_and_visualizable(self):
@@ -86,6 +90,8 @@ class VisualizationContractTests(unittest.TestCase):
             "partition-boundaries", "complete-hook-planes", "market-transfer",
             "long-title-transfer", "retention-forecast", "word-semantics",
             "component-planes", "relationship-matrices", "legacy-outcome-axes",
+            "multi-resolution-lattice", "attention-relational-graph",
+            "research-contract",
         }
         channels = self.findings["visualizationContract"]["channels"]
         self.assertEqual({row["id"] for row in channels}, expected_channels)
@@ -108,6 +114,23 @@ class VisualizationContractTests(unittest.TestCase):
             'data-pl-retention-mode="entry"',
             'data-pl-retention-mode="absolute"',
             'data-pl-retention-mode="terminal"',
+            'data-pl-canvas="lattice-embedding"',
+            'data-pl-canvas="lattice-spans"',
+            'data-pl-canvas="lattice-graph"',
+            'class="pl-lattice-controls"',
+            'SCORED EXACT COVER',
+            'partition.canonicalComponentNodeIds',
+            "kind === 'lattice-embedding'",
+            "kind === 'lattice-spans'",
+            "kind === 'lattice-graph'",
+            'latticeEdgeMeasurement(edge)',
+            "renderStoredLattice(row)",
+            "renderLatticeSurface(result.componentLattice, 'typed live predictor')",
+            "lattice: renderLattice",
+            "contract: renderResearchContract",
+            "['multi-resolution-lattice', 'attention-relational-graph'].includes(row.id) ? 'lattice'",
+            "row.id === 'research-contract' ? 'contract'",
+            'data-pl-research-contract-table',
             'analysis stops',
             '% hook',
         )
@@ -119,6 +142,41 @@ class VisualizationContractTests(unittest.TestCase):
         self.assertEqual(emitted - handled, set(),
                          "every emitted canvas kind needs a draw handler")
         self.assertIn("SUPPORTED TRANSFER", self.ui)
+        self.assertNotIn("retained map 0042", self.ui)
+        self.assertIn("state.data.canonicalPartitions || {}).mapId", self.ui)
+
+    def test_lattice_and_research_contract_cover_the_real_corpus(self):
+        hooks = self.outcomes["hooks"]
+        expected_spans = sum(
+            int(row["tokenCount"]) * (int(row["tokenCount"]) + 1) // 2
+            for row in self.lattice["rows"]
+        )
+        self.assertEqual(self.lattice["hookCount"], len(hooks))
+        self.assertEqual(self.lattice["spanCount"], expected_spans)
+        self.assertEqual(len(self.lattice["rows"]), len(hooks))
+        self.assertTrue(all(
+            int(row["spanCount"])
+            == int(row["tokenCount"]) * (int(row["tokenCount"]) + 1) // 2
+            for row in self.lattice["rows"]
+        ))
+        self.assertEqual(len(self.lattice["mapDefinitions"]), 12)
+        self.assertTrue(self.lattice["parityContract"]["shared"])
+        self.assertFalse(self.lattice["graphContract"]["structuralEdgeOutcomesUsed"])
+        first = self.lattice["rows"][0]
+        with gzip.open(CACHE / "component-lattice" / f"{first['videoId']}.json.gz", "rt") as handle:
+            detail = json.load(handle)
+        self.assertTrue(detail["partitionContract"]["exactNonoverlappingCover"])
+        self.assertFalse(detail["partitionContract"]["selectionUsesOutcomes"])
+        self.assertEqual(
+            detail["partitionContract"]["tokenOwnership"],
+            [1] * detail["tokenCount"],
+        )
+        source = HERE / "REFERENCE_TO_GRATIFICATION_RESEARCH_PROGRAM.md"
+        contract = self.research_contract
+        self.assertEqual(len(contract["rows"]), 66)
+        self.assertEqual(contract["contract"]["sha256"], hashlib.sha256(source.read_bytes()).hexdigest())
+        self.assertFalse(contract["definitionOfDone"]["met"])
+        self.assertNotIn("contract-only", {row["status"] for row in contract["rows"]})
 
 
 if __name__ == "__main__":

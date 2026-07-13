@@ -13,7 +13,12 @@ from pathlib import Path
 
 import numpy as np
 
-from atlas import REPRESENTATIONS, component_id, representation_matrix
+from atlas import (
+    REPRESENTATIONS,
+    REPRESENTATION_VERSION,
+    component_id,
+    representation_matrix,
+)
 from embedding_store import DIMENSIONS, MODEL, R2_PREFIX, EmbeddingStore, R2Store
 from interventions import INTERVENTION_VERSION, build_tensor, make_plan
 
@@ -24,7 +29,8 @@ STORE_DIR = CACHE / "all-span-vectors"
 ROWS_DIR = STORE_DIR / "rows"
 STATE_PATH = STORE_DIR / "state.json"
 MANIFEST_PATH = CACHE / "all-span-manifest.json"
-STORE_VERSION = "all-contiguous-spans-exact-offset-v1"
+STORE_VERSION = "all-contiguous-spans-exact-offset-v2"
+MIGRATABLE_STORE_VERSIONS = {"all-contiguous-spans-exact-offset-v1"}
 
 
 def atomic_json(path: Path, value) -> None:
@@ -43,6 +49,82 @@ def open_array(name: str, shape: tuple[int, ...], dtype) -> np.memmap:
     path = STORE_DIR / f"{name}.npy"
     mode = "r+" if path.exists() else "w+"
     return np.lib.format.open_memmap(path, mode=mode, dtype=dtype, shape=shape)
+
+
+def migrate_primitive_store(state: dict, hook_specs: list[dict]) -> dict:
+    """Repair derived views from persisted source vectors without new API calls."""
+    if state.get("version") not in MIGRATABLE_STORE_VERSIONS:
+        return state
+    expected_ids = {str(spec["videoId"]) for spec in hook_specs}
+    if set(state.get("completedVideoIds") or []) != expected_ids:
+        raise RuntimeError("cannot migrate an incomplete all-span store")
+    source_paths = [
+        STORE_DIR / "full.npy", STORE_DIR / "context.npy",
+        STORE_DIR / "span-start.npy", STORE_DIR / "span-end.npy",
+    ]
+    if any(not path.exists() for path in source_paths):
+        raise RuntimeError("cannot migrate all-span store without persisted source vectors")
+
+    full = np.load(STORE_DIR / "full.npy", mmap_mode="r")
+    context = np.load(STORE_DIR / "context.npy", mmap_mode="r")
+    starts = np.load(STORE_DIR / "span-start.npy", mmap_mode="r")
+    ends = np.load(STORE_DIR / "span-end.npy", mmap_mode="r")
+    temporary_paths = {
+        name: STORE_DIR / f".{name}-{REPRESENTATION_VERSION}.npy"
+        for name in ("influence", "nonadditive")
+    }
+    outputs = {
+        name: np.lib.format.open_memmap(
+            path, mode="w+", dtype=np.float16, shape=context.shape,
+        )
+        for name, path in temporary_paths.items()
+    }
+    for position, spec in enumerate(hook_specs, 1):
+        begin = int(spec["spanOffset"])
+        finish = begin + int(spec["spanCount"])
+        local_starts = np.asarray(starts[begin:finish], int)
+        local_ends = np.asarray(ends[begin:finish], int)
+        lookup = {
+            (int(start), int(end)): index
+            for index, (start, end) in enumerate(zip(local_starts, local_ends))
+        }
+        hook_full = np.asarray(full[int(spec["hookIndex"])], np.float32)
+        hook_context = np.asarray(context[begin:finish], np.float32)
+        token_effects = np.asarray([
+            hook_full - hook_context[lookup[(token, token + 1)]]
+            for token in range(int(spec["tokenCount"]))
+        ], np.float32)
+        tensor = {
+            "full": hook_full,
+            "span_context": hook_context,
+            "span_start": local_starts,
+            "span_end": local_ends,
+            "token_effects": token_effects,
+        }
+        for name, output in outputs.items():
+            output[begin:finish] = representation_matrix(name, tensor).astype(np.float16)
+        if position % 25 == 0 or position == len(hook_specs):
+            print(
+                f"migrated derived span representations {position}/{len(hook_specs)}",
+                flush=True,
+            )
+    for output in outputs.values():
+        output.flush()
+    del outputs
+    for name, temporary in temporary_paths.items():
+        os.replace(temporary, STORE_DIR / f"{name}.npy")
+    migrated = {
+        **state,
+        "version": STORE_VERSION,
+        "representationVersion": REPRESENTATION_VERSION,
+        "migratedFrom": state.get("version"),
+        "migrationMethod": (
+            "recomputed influence and nonadditive from persisted float16 full/context "
+            "vectors using direct segment sums; no embedding API calls"
+        ),
+    }
+    atomic_json(STATE_PATH, migrated)
+    return migrated
 
 
 def publish_progress(r2: R2Store | None, value: dict) -> None:
@@ -104,13 +186,25 @@ def main() -> None:
     if args.force and STORE_DIR.exists():
         shutil.rmtree(STORE_DIR)
     existing_state = json.loads(STATE_PATH.read_text(encoding="utf-8")) if STATE_PATH.exists() else None
+    if existing_state and existing_state.get("version") in MIGRATABLE_STORE_VERSIONS:
+        migration_compatible = (
+            existing_state.get("corpusFingerprint") == fingerprint
+            and int(existing_state.get("spanInstances") or 0) == total_spans
+            and existing_state.get("embeddingModel") == MODEL
+            and int(existing_state.get("embeddingDimensions") or 0) == DIMENSIONS
+            and existing_state.get("interventionVersion") == INTERVENTION_VERSION
+        )
+        if not migration_compatible:
+            raise RuntimeError("legacy all-span store cannot be migrated for this corpus")
+        existing_state = migrate_primitive_store(existing_state, hook_specs)
     if existing_state and (
         existing_state.get("version") != STORE_VERSION or
         existing_state.get("corpusFingerprint") != fingerprint or
         int(existing_state.get("spanInstances") or 0) != total_spans or
         existing_state.get("embeddingModel") != MODEL or
         int(existing_state.get("embeddingDimensions") or 0) != DIMENSIONS or
-        existing_state.get("interventionVersion") != INTERVENTION_VERSION
+        existing_state.get("interventionVersion") != INTERVENTION_VERSION or
+        existing_state.get("representationVersion") != REPRESENTATION_VERSION
     ):
         raise RuntimeError("all-span store does not match this corpus; rerun with --force")
 
@@ -132,6 +226,7 @@ def main() -> None:
         "embeddingModel": MODEL,
         "embeddingDimensions": DIMENSIONS,
         "interventionVersion": INTERVENTION_VERSION,
+        "representationVersion": REPRESENTATION_VERSION,
         "completedVideoIds": [],
         "embeddingTextsMaterialized": 0,
     }
@@ -164,10 +259,35 @@ def main() -> None:
             tensor, metadata = build_tensor(plan, vectors)
             begin = int(spec["spanOffset"])
             end = begin + int(spec["spanCount"])
-            for name in REPRESENTATIONS:
-                arrays[name][begin:end] = representation_matrix(name, tensor).astype(np.float16)
-                arrays[name].flush()
-            full[spec["hookIndex"]] = np.asarray(tensor["full"], np.float16)
+            stored_full = np.asarray(tensor["full"], np.float16)
+            stored_context = representation_matrix("context", tensor).astype(np.float16)
+            arrays["raw"][begin:end] = representation_matrix("raw", tensor).astype(np.float16)
+            arrays["context"][begin:end] = stored_context
+            full[spec["hookIndex"]] = stored_full
+            stored_full32 = np.asarray(stored_full, np.float32)
+            stored_context32 = np.asarray(stored_context, np.float32)
+            span_lookup = {
+                (int(start), int(finish)): index
+                for index, (start, finish) in enumerate(
+                    zip(tensor["span_start"], tensor["span_end"])
+                )
+            }
+            derived_tensor = {
+                "full": stored_full32,
+                "span_context": stored_context32,
+                "span_start": tensor["span_start"],
+                "span_end": tensor["span_end"],
+                "token_effects": np.asarray([
+                    stored_full32 - stored_context32[span_lookup[(token, token + 1)]]
+                    for token in range(len(plan.tokens))
+                ], np.float32),
+            }
+            for name in ("influence", "nonadditive"):
+                arrays[name][begin:end] = representation_matrix(
+                    name, derived_tensor,
+                ).astype(np.float16)
+            for array in arrays.values():
+                array.flush()
             full.flush()
             hook_index_array[begin:end] = spec["hookIndex"]
             span_start_array[begin:end] = tensor["span_start"]
@@ -248,6 +368,7 @@ def main() -> None:
             "scope": "all-contiguous-spans",
             "storeVersion": STORE_VERSION,
             "interventionVersion": INTERVENTION_VERSION,
+            "representationVersion": REPRESENTATION_VERSION,
             "embeddingModel": MODEL,
             "embeddingDimensions": DIMENSIONS,
             "enumeration": "every contiguous interval in the observed token sequence",

@@ -30,6 +30,7 @@ def main() -> None:
         "verify-hook-quality", "forward-response", "verify-forward-response",
         "hook-outcomes", "verify-hook-outcomes", "market-reward",
         "verify-market-reward", "hook-examples", "verify-hook-examples",
+        "component-lattice", "verify-component-lattice", "research-contract",
         "verify-methodology", "ui",
     ),
                         default="interventions")
@@ -66,6 +67,9 @@ def main() -> None:
         ("verify-market-reward", "verify_market_reward.py"),
         ("hook-examples", "run_hook_examples.py"),
         ("verify-hook-examples", "verify_hook_examples.py"),
+        ("component-lattice", "run_component_lattice.py"),
+        ("verify-component-lattice", "verify_component_lattice.py"),
+        ("research-contract", "build_research_contract.py"),
         ("verify-methodology", "verify_methodology_contract.py"),
         ("ui", "build_ui.py"),
     ]
@@ -78,6 +82,7 @@ def main() -> None:
             "verify-hook-quality", "verify-forward-response",
             "verify-hook-outcomes", "verify-market-reward",
             "verify-hook-examples", "verify-methodology", "ui",
+            "verify-component-lattice",
         }
         extra = ["--no-upload"] if args.no_upload and supports_no_upload else []
         if args.no_upload and stage == "ui":

@@ -35,7 +35,6 @@ from run_cluster_outcomes import build_global_inputs, load_timing_records
 HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
 VECTOR_DIR = CACHE / "all-span-vectors"
-MAP_ID = "0042a54b685d55438242"
 
 
 def read_json(path: Path):
@@ -250,9 +249,13 @@ def main() -> None:
     atlas = read_json(CACHE / "all-span-atlas.json")
     manifest = read_json(CACHE / "all-span-manifest.json")
     corpus = read_json(CACHE / "corpus.json")
-    frozen = next((row for row in atlas["maps"] if row["id"] == MAP_ID), None)
+    manual_projection = read_json(CACHE / "manual-projection.json")
+    map_id = str(manual_projection.get("mapId") or "")
+    if not map_id:
+        raise RuntimeError("saved embedding does not declare a frozen map")
+    frozen = next((row for row in atlas["maps"] if row["id"] == map_id), None)
     if not frozen:
-        raise RuntimeError(f"frozen map {MAP_ID} is missing")
+        raise RuntimeError(f"saved frozen map {map_id} is missing from the current atlas")
     labels = np.asarray(frozen["labels"], np.int16)
     span_rows = manifest["rows"]
     hooks = manifest["hooks"]
@@ -443,7 +446,7 @@ def main() -> None:
             },
         })
         detail = {
-            "version": 1, "status": "complete", "mapId": MAP_ID,
+            "version": 1, "status": "complete", "mapId": map_id,
             "cluster": cluster, "lagsSeconds": lags.astype(float).tolist(),
             "globalIndices": global_indices.astype(int).tolist(),
             "sharedSemanticScoreOOF": vector_json(semantic["score"], 5),
@@ -486,7 +489,7 @@ def main() -> None:
         "version": 1,
         "status": "complete",
         "stage": "held-out fixed-ruler latency and natural-drop study",
-        "mapId": MAP_ID,
+        "mapId": map_id,
         "clusterCount": len(cluster_summaries),
         "lagsSeconds": lags.astype(float).tolist(),
         "lagRange": {"minimum": float(lags.min()), "maximum": float(lags.max()), "step": .5},

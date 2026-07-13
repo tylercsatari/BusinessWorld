@@ -41,7 +41,6 @@ HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
 VECTOR_DIR = CACHE / "all-span-vectors"
 TIMING_DIR = CACHE / "hook-timing"
-MAP_ID = "0042a54b685d55438242"
 DEFAULT_DIMENSIONS = [4, 8, 16, 32, 64]
 DEFAULT_ALPHAS = [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0]
 OFFSETS = list(range(6))
@@ -397,16 +396,17 @@ def main() -> None:
     manifest = read_json(CACHE / "all-span-manifest.json")
     corpus = read_json(CACHE / "corpus.json")
     manual_projection = read_json(CACHE / "manual-projection.json")
-    map_row = next((row for row in atlas["maps"] if row["id"] == MAP_ID), None)
+    map_id = str(manual_projection.get("mapId") or "")
+    if not map_id:
+        raise RuntimeError("saved embedding does not declare a frozen map")
+    map_row = next((row for row in atlas["maps"] if row["id"] == map_id), None)
     if not map_row:
-        raise RuntimeError(f"frozen map {MAP_ID} is missing")
+        raise RuntimeError(f"saved frozen map {map_id} is missing from the current atlas")
     labels = np.asarray(map_row["labels"], np.int16)
     span_rows = manifest["rows"]
     hooks = manifest["hooks"]
     if len(labels) != len(span_rows):
         raise RuntimeError("frozen labels and all-span rows do not align")
-    if manual_projection.get("mapId") != MAP_ID:
-        raise RuntimeError("saved embedding does not point to the frozen outcome-axis map")
 
     timing_records = load_timing_records(hooks, args.timing_workers)
     global_inputs = build_global_inputs(corpus["rows"], hooks, span_rows, timing_records)
@@ -576,7 +576,7 @@ def main() -> None:
                     "targetUnit": meta["unit"],
                     "offsetSeconds": meta.get("offsetSeconds"),
                     "outcomesUsed": True,
-                    "frozenMapId": MAP_ID,
+                    "frozenMapId": map_id,
                     "frozenLabelsChanged": False,
                 })
             selected_experiment = selected["experiment"]
@@ -597,7 +597,7 @@ def main() -> None:
             detail = {
                 "version": 1,
                 "status": "complete",
-                "mapId": MAP_ID,
+                "mapId": map_id,
                 "cluster": cluster,
                 "target": target_name,
                 "targetMeta": meta,
@@ -694,7 +694,7 @@ def main() -> None:
         "version": 1,
         "status": "complete",
         "stage": "frozen-cluster outcome and exact retention-slope axes",
-        "mapId": MAP_ID,
+        "mapId": map_id,
         "savedEmbeddingName": manual_projection.get("savedName"),
         "clusters": cluster_summaries,
         "clusterCount": len(clusters),

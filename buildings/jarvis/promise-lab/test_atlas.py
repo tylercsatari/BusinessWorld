@@ -3,10 +3,33 @@ import unittest
 import numpy as np
 
 from atlas import (MatrixSource, cross_group_generality, normalized_mutual_information,
-                   run_cluster_sweep, summarize_map_clusters)
+                   representation_matrix, run_cluster_sweep, span_additive_effects,
+                   summarize_map_clusters)
 
 
 class AtlasTests(unittest.TestCase):
+    def test_direct_span_sum_preserves_singleton_zero_nonadditivity(self):
+        rng = np.random.RandomState(7)
+        full = rng.normal(size=12).astype(np.float32)
+        context = rng.normal(size=(6, 12)).astype(np.float32)
+        starts = np.asarray([0, 0, 0, 1, 1, 2])
+        ends = np.asarray([1, 2, 3, 2, 3, 3])
+        singleton_lookup = {(0, 1): 0, (1, 2): 3, (2, 3): 5}
+        token_effects = np.asarray([
+            full - context[singleton_lookup[(token, token + 1)]]
+            for token in range(3)
+        ], np.float32)
+        additive = span_additive_effects(token_effects, starts, ends)
+        self.assertTrue(np.array_equal(additive[0], token_effects[0]))
+        self.assertTrue(np.array_equal(additive[3], token_effects[1]))
+        self.assertTrue(np.array_equal(additive[5], token_effects[2]))
+        values = representation_matrix("nonadditive", {
+            "full": full, "span_context": context,
+            "span_start": starts, "span_end": ends,
+            "token_effects": token_effects,
+        })
+        self.assertTrue(np.array_equal(values[[0, 3, 5]], np.zeros((3, 12), np.float32)))
+
     def test_sweep_is_outcome_blind_and_returns_maps(self):
         rng = np.random.RandomState(12)
         left = rng.normal(loc=-1, scale=.1, size=(18, 10))
