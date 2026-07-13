@@ -269,14 +269,16 @@ async function main() {
         await page.getByRole('button', { name: 'Normalized slope', exact: true }).click();
         await page.getByText('Color = Endpoint-normalized slope +2s', { exact: true }).waitFor();
         const normalizedText = await contract.innerText();
-        assert(normalizedText.includes('mapped from entry = 1 to terminal retention = 0'));
-        assert(normalizedText.includes('Blue is a steeper normalized loss'));
+        assert(normalizedText.includes('maps entry to 1 and full-video terminal retention to 0'));
+        assert(normalizedText.includes('retrospective sensitivity'));
+        assert(normalizedText.includes('Blue is a steeper endpoint-conditioned loss'));
 
         await page.getByRole('button', { name: 'Unexpected slope', exact: true }).click();
         await page.getByText('Color = Unexpected slope +2s', { exact: true }).waitFor();
         const residualText = await contract.innerText();
-        assert(residualText.includes('grouped out-of-fold slope expected from phrase timing'));
-        assert(residualText.includes('Blue is worse than the timing/endpoints predict'));
+        assert(residualText.includes('source-held-out text-free expectation'));
+        assert(residualText.includes('current component axis uses entry-indexed retention'));
+        assert(residualText.includes('Blue is worse than the declared natural-drop baseline'));
         assert(residualText.includes('Zero means exactly the out-of-fold expectation'));
 
         await page.setViewportSize({ width: 390, height: 844 });

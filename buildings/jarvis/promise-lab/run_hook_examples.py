@@ -160,8 +160,8 @@ def main() -> None:
                 "holdZ": result["score"]["holdZ"],
                 "percentile": result["score"]["percentile"],
                 "axisCoordinate": result["score"]["prediction"],
-                "predictedEndpointHoldLiftPercentagePoints": result["score"][
-                    "predictedEndpointHoldLiftPercentagePoints"
+                "predictedHoldLiftPercentagePoints": result["score"][
+                    "predictedHoldLiftPercentagePoints"
                 ],
                 "predictedCarryPercentPerSecond": result["score"][
                     "predictedCarryPercentPerSecond"

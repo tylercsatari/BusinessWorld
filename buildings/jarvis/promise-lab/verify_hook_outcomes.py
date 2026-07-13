@@ -65,6 +65,12 @@ def main() -> None:
         assert sum(len(values) for values in
                    attribution["pairsByCategorySequence"][metric].values()) == expected_relationships
     curve_validation = artifact["curveModel"]["validation"]
+    assert artifact["curveModel"]["primaryNormalization"] == "entry-indexed"
+    assert curve_validation == artifact["curveModel"]["entryIndexedValidation"]
+    assert model["curveModel"] == model["entryNormalizedCurveModel"]
+    assert model["observedAbsoluteCurveModel"]["validation"] == artifact[
+        "curveModel"
+    ]["observedAbsoluteValidation"]
     assert 0 <= float(curve_validation["pairedImprovementInference"]["p"]) <= 1
     assert all(isinstance(curve_validation[key], (int, float)) for key in (
         "heldoutMAEPercentagePoints", "baselineMAEPercentagePoints", "maeImprovementFraction",
@@ -88,7 +94,7 @@ def main() -> None:
     assert len(validation["reliabilityBins"]) == 8
     assert len(sensitivity["chronologicalBlockSensitivity"]) == 5
     assert artifact["curveModel"]["rewatchAdjustedValidation"]["status"] in {
-        "validated-random-and-future", "random-fold-only-diagnostic",
+        "validated-random-and-future-rough-forecast", "random-fold-only-diagnostic",
     }
     assert all(
         row["validation"]["status"] == "random-fold-only-diagnostic"
@@ -115,9 +121,20 @@ def main() -> None:
                for row in artifact["hooks"])
     assert all(row["survivalScore"]["label"] == "Hook Hold z-score"
                for row in artifact["hooks"])
+    assert all("predictedEntryIndexedRetentionAtResponseEnd" in row["survivalScore"]
+               and "predictedHoldLiftPercentagePoints" in row["survivalScore"]
+               and "predictedAdjustedRetentionAtResponseEnd" not in row["survivalScore"]
+               for row in artifact["hooks"])
     assert all(row["longTitleMarketPrior"]["blendedIntoHookHold"] is False
                for row in artifact["hooks"])
     assert all(row["retentionForecast"]["normalizationAvailable"] is True
+               for row in artifact["hooks"])
+    assert all(row["retentionForecast"]["availableCurveModes"]
+               == ["entry", "absolute", "terminal"]
+               for row in artifact["hooks"])
+    assert all(row["retentionForecast"]["primaryNormalization"] == "entry-indexed"
+               for row in artifact["hooks"])
+    assert all(abs(row["retentionForecast"]["entryIndexedActualPercent"][0] - 100) < 1e-6
                for row in artifact["hooks"])
     assert all(abs(row["retentionForecast"]["rewatchAdjustedActualPercent"][0] - 100) < 1e-6
                for row in artifact["hooks"])
@@ -135,6 +152,7 @@ def main() -> None:
     assert all(
         len(word["observedForecastDeletionContributionByTime"]) == 41
         and len(word["rewatchAdjustedForecastDeletionContributionByTime"]) == 41
+        and len(word["entryIndexedForecastDeletionContributionByTime"]) == 41
         and 0 <= int(word["singletonCategory"]) <= 3
         and 0 <= int(word["componentCategory"]) <= 3
         for row in artifact["hooks"] for word in row["retentionForecast"]["words"]
@@ -158,6 +176,10 @@ def main() -> None:
     prior_corpus = long_transfer["prior"]["corpus"]
     assert 0 < prior_corpus["embeddedTitleRecords"] <= prior_corpus["storedLongFormRecords"]
     assert -1 <= float(long_transfer["shortsTransfer"]["hookHold"]["spearman"]) <= 1
+    deconfounding = artifact["deconfoundingAudit"]
+    assert deconfounding["status"] == "complete"
+    assert deconfounding["primarySpecification"]["usesTerminalRetention"] is False
+    assert deconfounding["leakageAudit"]["equalTotalWeightPerSourceVideo"] is True
     print(json.dumps({
         "status": "verified",
         "hooks": artifact["audit"]["hooks"],

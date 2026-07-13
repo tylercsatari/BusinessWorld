@@ -374,9 +374,9 @@ def main() -> None:
         survival = hook_outcomes.get("survivalModel") or {}
         survival_validation = survival.get("validation") or {}
         registry.append({
-            "id": "hook-survival-length-adjusted",
+            "id": "hook-hold-entry-indexed",
             "stage": "whole-hook-survival-axis",
-            "method": "nested rewatch-normalized duration-adjusted direct text axis",
+            "method": "nested future-free entry-indexed duration-adjusted direct text axis",
             "representation": "complete-hook Gemini text embedding",
             "pcaDimensions": 16,
             "ridgeAlpha": 10.0,
@@ -855,8 +855,8 @@ def main() -> None:
             "interpretation": (
                 "Hook Hold is exposed as an unbounded z-coordinate with out-of-fold calibration and "
                 "empirical error, while its percentile is secondary. It remains diagnostic because "
-                "it fails strict past-to-future validation and is not robust to a future-free "
-                "entry-normalized target. The Long Quant title-market prior is visible but remains "
+                "it fails strict past-to-future validation and disagrees with the retrospective "
+                "terminal-conditioned sensitivity. The Long Quant title-market prior is visible but remains "
                 "independent because it does not transfer to Shorts hold."
             ),
         },
@@ -988,9 +988,10 @@ def main() -> None:
                 "future transfer prevents promotion"
             ),
             "forwardResponseSeparated": (
-                "only forward lags can be selected; reverse-time windows are controls, exact-cover "
-                "boundaries stay frozen, and expanding-window validation reruns lag selection using "
-                "past videos only"
+                "entry-indexed retention is primary; terminal-conditioned targets are retrospective "
+                "sensitivities; every fit is source-equal, only forward lags can be selected, "
+                "reverse-time windows are controls, exact-cover boundaries stay frozen, and "
+                "expanding-window validation reruns lag selection using past videos only"
             ),
             "hookOutcomesSeparated": (
                 "whole-hook and category-specific component outcome axes use frozen boundaries, "

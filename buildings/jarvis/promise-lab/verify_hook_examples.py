@@ -33,7 +33,7 @@ def main() -> None:
     for row in result["examples"]:
         assert row["text"] not in training_texts
         assert abs(float(row["summary"]["holdZ"])) < 10
-        assert "predictedEndpointHoldLiftPercentagePoints" in row["summary"]
+        assert "predictedHoldLiftPercentagePoints" in row["summary"]
         score = row["score"]
         market = score["trainingReward"]
         assert score["primaryScore"] == market
@@ -84,8 +84,12 @@ def main() -> None:
                    for component in score["components"])
         forecast = outcomes["retentionForecast"]
         assert forecast["status"] == outcome_model["curveModel"]["validation"]["status"]
-        assert forecast["normalizationAvailable"] is False
-        assert "measured audience-retention curve" in forecast[
+        assert forecast["normalizationAvailable"] is True
+        assert forecast["availableCurveModes"] == ["entry", "absolute"]
+        assert forecast["measuredCurveAvailable"] is False
+        assert forecast["terminalSensitivityAvailable"] is False
+        assert forecast["primaryNormalization"] == "entry-indexed"
+        assert "measured audience-retention" in forecast[
             "normalizationUnavailableReason"
         ]
         assert len(forecast["timesSeconds"]) == 41
@@ -93,6 +97,9 @@ def main() -> None:
         assert abs(float(forecast["progressFractions"][0])) < 1e-9
         assert abs(float(forecast["progressFractions"][-1]) - 1) < 1e-9
         assert len(forecast["predictedPercent"]) == 41
+        assert len(forecast["entryIndexedPredictedPercent"]) == 41
+        assert abs(float(forecast["entryIndexedPredictedPercent"][0]) - 100) < 1e-6
+        assert len(forecast["observedAbsolutePredictedPercent"]) == 41
         assert "rewatchAdjustedPredictedPercent" not in forecast
         assert abs(float(forecast["timesSeconds"][-1])
                    - float(forecast["responseEndSeconds"])) < 1e-5

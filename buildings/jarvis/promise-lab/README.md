@@ -39,15 +39,16 @@ Stages:
 12. `run_hook_quality.py`: nested held-out retention-information direction,
    source bootstraps, full-context component deletions, O(n²) local pair
    interactions, domain checks, and latency falsification.
-13. `run_forward_response.py`: nested forward-only lag selection, text-free
-   natural-drop adjustment, conditional category-specific component diagnostics,
-   exact-statistic source inference, and chronological lag-selection validation.
+13. `run_forward_response.py`: source-equal component-response diagnostics across
+   816 normalization, natural-drop, ridge, and lag specifications; nested
+   forward-only selection, reverse-time controls, family-wide inference, and
+   chronological validation.
 14. `run_hook_outcomes.py`: grouped out-of-fold whole-hook and category-specific
    component predictions for viewed percentage, five-second retention, average
-   retention, and log views; a nested endpoint-normalized, duration-neutral hook
-   terminal-conditioned survival diagnostic, normalization sensitivity,
-   chronological validation, and observed plus normalized 41-position forecasts
-   bounded by each source's analyzed hook endpoint.
+   retention, and log views; future-free entry-indexed Hook Hold, retrospective
+   terminal-conditioned and endpoint sensitivities, chronological validation,
+   and observed plus normalized 41-position forecasts bounded by each source's
+   analyzed hook endpoint.
 15. `run_market_reward.py`: one external-only transcript-to-market direction,
    nested channel-and-copy-grouped validation, frozen percentile ladder,
    zero-owned-label transfer tests, empirical domain support, and exact local

@@ -737,7 +737,11 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
             "outcomes": outcomes,
         })
 
-    curve_model = outcome_model["curveModel"]
+    curve_model = (
+        outcome_model.get("entryNormalizedCurveModel")
+        or outcome_model["curveModel"]
+    )
+    observed_curve_model = outcome_model.get("observedAbsoluteCurveModel")
     progress = np.asarray(curve_model["progressFractions"], np.float32)
     rate = outcome_model.get("speakingRate") or {}
     response_lag = float(outcome_model.get("responseLagSeconds") or 0)
@@ -752,8 +756,24 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
     response_end = spoken_end + response_lag
     times = progress * response_end
     predicted = apply_linear_model(primitives["full"], curve_model)[0]
+    predicted[0] = 100.0
     lower = predicted + np.asarray(curve_model["residualP10ByTime"], np.float32)
     upper = predicted + np.asarray(curve_model["residualP90ByTime"], np.float32)
+    lower[0] = 100.0
+    upper[0] = 100.0
+    observed_predicted = None
+    observed_lower = None
+    observed_upper = None
+    if observed_curve_model:
+        observed_predicted = apply_linear_model(
+            primitives["full"], observed_curve_model,
+        )[0]
+        observed_lower = observed_predicted + np.asarray(
+            observed_curve_model["residualP10ByTime"], np.float32,
+        )
+        observed_upper = observed_predicted + np.asarray(
+            observed_curve_model["residualP90ByTime"], np.float32,
+        )
     words = estimated_token_timeline(
         partition["tokens"], partition["owners"], times, predicted,
         mean_words_per_second, response_lag,
@@ -767,21 +787,39 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
     }
     for word in words:
         second = float(word["responseSeconds"])
-        word["observedAbsolutePredictedRetentionPercent"] = interpolate_series(
+        word["entryIndexedPredictedRetentionPercent"] = interpolate_series(
             times, predicted, second,
         )
-        word["observedAbsolutePredictionP10"] = interpolate_series(
+        word["entryIndexedPredictionP10"] = interpolate_series(
             times, lower, second,
         )
-        word["observedAbsolutePredictionP90"] = interpolate_series(
+        word["entryIndexedPredictionP90"] = interpolate_series(
             times, upper, second,
         )
         without_word = apply_linear_model(
             primitives["context"][singleton_lookup[int(word["tokenIndex"])]], curve_model,
         )[0]
-        word["observedForecastDeletionContributionByTime"] = (
+        without_word[0] = 100.0
+        word["entryIndexedForecastDeletionContributionByTime"] = (
             predicted - without_word
         ).astype(float).tolist()
+        if observed_curve_model:
+            word["observedAbsolutePredictedRetentionPercent"] = interpolate_series(
+                times, observed_predicted, second,
+            )
+            word["observedAbsolutePredictionP10"] = interpolate_series(
+                times, observed_lower, second,
+            )
+            word["observedAbsolutePredictionP90"] = interpolate_series(
+                times, observed_upper, second,
+            )
+            observed_without = apply_linear_model(
+                primitives["context"][singleton_lookup[int(word["tokenIndex"])]],
+                observed_curve_model,
+            )[0]
+            word["observedForecastDeletionContributionByTime"] = (
+                observed_predicted - observed_without
+            ).astype(float).tolist()
     spoken_end = max((float(word["spokenEndSeconds"]) for word in words), default=spoken_end)
     response_end = max((float(word["responseSeconds"]) for word in words), default=response_end)
     survival_model = outcome_model["survivalModel"]
@@ -814,9 +852,9 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
         "spokenHookEndSeconds": spoken_end,
         "expectedCarryPercentPerSecond": expected_carry,
         "predictedCarryPercentPerSecond": predicted_carry,
-        "predictedAdjustedRetentionAtResponseEnd": predicted_end,
+        "predictedEntryIndexedRetentionAtResponseEnd": predicted_end,
         "durationBaselineRetentionAtResponseEnd": baseline_end,
-        "predictedEndpointHoldLiftPercentagePoints": predicted_end - baseline_end,
+        "predictedHoldLiftPercentagePoints": predicted_end - baseline_end,
         "scoreScale": score_scale,
         "targetContract": survival_model["targetContract"],
     }
@@ -847,18 +885,42 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
         "longTitleMarketPrior": long_prior,
         "retentionForecast": {
             "status": (curve_model.get("validation") or {}).get("status"),
-            "normalizationAvailable": False,
+            "normalizationAvailable": True,
+            "availableCurveModes": (
+                ["entry", "absolute"] if observed_curve_model else ["entry"]
+            ),
+            "measuredCurveAvailable": False,
+            "terminalSensitivityAvailable": False,
+            "primaryNormalization": "entry-indexed",
             "normalizationUnavailableReason": (
-                "Replay normalization requires a measured audience-retention curve and "
-                "measured terminal retention. Text alone supplies neither input."
+                "Terminal-conditioned replay sensitivity requires a measured audience-retention "
+                "curve and measured terminal retention. Text alone supplies neither input."
             ),
             "progressFractions": progress.astype(float).tolist(),
             "timesSeconds": times.astype(float).tolist(),
             "predictedPercent": predicted.astype(float).tolist(),
             "predictionP10": lower.astype(float).tolist(),
             "predictionP90": upper.astype(float).tolist(),
+            "entryIndexedPredictedPercent": predicted.astype(float).tolist(),
+            "entryIndexedPredictionP10": lower.astype(float).tolist(),
+            "entryIndexedPredictionP90": upper.astype(float).tolist(),
+            "observedAbsolutePredictedPercent": (
+                observed_predicted.astype(float).tolist()
+                if observed_predicted is not None else None
+            ),
+            "observedAbsolutePredictionP10": (
+                observed_lower.astype(float).tolist()
+                if observed_lower is not None else None
+            ),
+            "observedAbsolutePredictionP90": (
+                observed_upper.astype(float).tolist()
+                if observed_upper is not None else None
+            ),
             "validation": curve_model.get("validation"),
-            "observedAbsoluteValidation": curve_model.get("validation"),
+            "entryIndexedValidation": curve_model.get("validation"),
+            "observedAbsoluteValidation": (
+                observed_curve_model.get("validation") if observed_curve_model else None
+            ),
             "speakingRate": rate,
             "responseLagSeconds": response_lag,
             "spokenHookEndSeconds": spoken_end,
@@ -1135,7 +1197,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
         "map": {
             "x": survival_score.get("mapX"),
             "y": survival_score.get("mapY"),
-            "xDefinition": "frozen terminal-conditioned hook-survival diagnostic",
+            "xDefinition": "frozen future-free entry-indexed Hook Hold diagnostic",
             "yDefinition": "largest remaining semantic direction orthogonal to the diagnostic",
         },
         "retainedInformation": {

@@ -59,7 +59,7 @@ HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
 OUTPUT_PATH = CACHE / "hook-outcomes.json"
 MODEL_PATH = CACHE / "hook-outcome-model.json"
-METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v10"
+METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v12"
 CURVE_PROGRESS = np.linspace(0.0, 1.0, 41, dtype=np.float32)
 FORECAST_FORMULA = (
     "y_hat(p_j) = intercept_j + unit(GeminiEmbedding(complete hook)) dot "
@@ -764,7 +764,7 @@ def main() -> None:
         full_features, curve_target, response_end,
         seed=OUTCOME_SEED + 9001,
     )
-    survival_validation = scalar_validation(
+    terminal_survival_validation = scalar_validation(
         nested_survival["scorePrediction"], nested_survival["scoreTarget"],
         nested_survival["scoreBaseline"], repeats=args.inference_repeats,
         seed=OUTCOME_SEED + 9002,
@@ -780,30 +780,42 @@ def main() -> None:
         seed=OUTCOME_SEED + 9202,
     )
     normalization_q = bh_fdr([
-        survival_validation["rankInference"]["p"],
+        terminal_survival_validation["rankInference"]["p"],
         entry_survival_validation["rankInference"]["p"],
         observed_survival_validation["rankInference"]["p"],
     ])
-    survival_validation["normalizationFamilyQ"] = normalization_q[0]
+    terminal_survival_validation["normalizationFamilyQ"] = normalization_q[0]
     entry_survival_validation["normalizationFamilyQ"] = normalization_q[1]
     observed_survival_validation["normalizationFamilyQ"] = normalization_q[2]
-    chronological_survival = forward_chain_survival(
+    chronological_terminal_survival = forward_chain_survival(
         full_features, adjusted_curve_target, response_end, chronology,
         seed=OUTCOME_SEED + 19001,
     )
-    chronological_survival_validation = scalar_validation(
-        chronological_survival["prediction"], chronological_survival["target"],
-        chronological_survival["baselinePrediction"],
+    chronological_terminal_validation = scalar_validation(
+        chronological_terminal_survival["prediction"],
+        chronological_terminal_survival["target"],
+        chronological_terminal_survival["baselinePrediction"],
         repeats=args.inference_repeats, seed=OUTCOME_SEED + 19002,
     )
-    chronological_survival_validation["splits"] = chronological_survival["splits"]
+    chronological_terminal_validation["splits"] = chronological_terminal_survival["splits"]
+    chronological_entry_survival = forward_chain_survival(
+        full_features, entry_normalized_curve_target, response_end, chronology,
+        seed=OUTCOME_SEED + 19101,
+    )
+    chronological_entry_validation = scalar_validation(
+        chronological_entry_survival["prediction"],
+        chronological_entry_survival["target"],
+        chronological_entry_survival["baselinePrediction"],
+        repeats=args.inference_repeats, seed=OUTCOME_SEED + 19102,
+    )
+    chronological_entry_validation["splits"] = chronological_entry_survival["splits"]
     chronological_block_sensitivity = []
     for blocks in (4, 5, 6, 8, 10):
         if blocks == 5:
-            block_validation = chronological_survival_validation
+            block_validation = chronological_entry_validation
         else:
             block_result = forward_chain_survival(
-                full_features, adjusted_curve_target, response_end, chronology,
+                full_features, entry_normalized_curve_target, response_end, chronology,
                 seed=OUTCOME_SEED + 19001 + blocks, blocks=blocks,
             )
             block_validation = scalar_validation(
@@ -819,14 +831,21 @@ def main() -> None:
             "rankPermutationP": block_validation["rankInference"]["p"],
             "maeImprovementFraction": block_validation["maeImprovementFraction"],
         })
-    survival_validation.update({
+    terminal_survival_validation.update({
         "foldDirectionMedianCosine": nested_survival["foldDirectionMedianCosine"],
         "foldDirectionPositiveFraction": nested_survival["foldDirectionPositiveFraction"],
-        "familyQ": survival_validation["normalizationFamilyQ"],
-        "chronologicalValidation": chronological_survival_validation,
+        "familyQ": terminal_survival_validation["normalizationFamilyQ"],
+        "chronologicalValidation": chronological_terminal_validation,
+    })
+    entry_survival_validation.update({
+        "foldDirectionMedianCosine": entry_survival["foldDirectionMedianCosine"],
+        "foldDirectionPositiveFraction": entry_survival["foldDirectionPositiveFraction"],
+        "familyQ": entry_survival_validation["normalizationFamilyQ"],
+        "chronologicalValidation": chronological_entry_validation,
     })
     normalization_sensitivity = {
-        "terminalConditioned": survival_validation,
+        "primary": "entryNormalizedNoFutureAnchor",
+        "terminalConditioned": terminal_survival_validation,
         "entryNormalizedNoFutureAnchor": entry_survival_validation,
         "observedAbsolute": observed_survival_validation,
         "chronologicalBlockSensitivity": chronological_block_sensitivity,
@@ -841,9 +860,9 @@ def main() -> None:
             nested_survival["scoreTarget"], entry_survival["scoreTarget"],
         ),
         "robustAcrossNormalizationChoices": bool(
-            survival_validation["normalizationFamilyQ"] <= .05
-            and survival_validation["heldoutSpearman"] > 0
-            and survival_validation["maeImprovementFraction"] > 0
+            terminal_survival_validation["normalizationFamilyQ"] <= .05
+            and terminal_survival_validation["heldoutSpearman"] > 0
+            and terminal_survival_validation["maeImprovementFraction"] > 0
             and entry_survival_validation["normalizationFamilyQ"] <= .05
             and entry_survival_validation["heldoutSpearman"] > 0
             and entry_survival_validation["maeImprovementFraction"] > 0
@@ -853,6 +872,7 @@ def main() -> None:
             "positive held-out Spearman, positive MAE improvement, and BH q <= 0.05"
         ),
     }
+    survival_validation = entry_survival_validation
     survival_validation["status"] = (
         "validated-random-future-and-normalization-robust"
         if survival_validation["heldoutSpearman"] > 0
@@ -860,9 +880,9 @@ def main() -> None:
         and survival_validation["normalizationFamilyQ"] <= .05
         and normalization_sensitivity["robustAcrossNormalizationChoices"]
         and normalization_sensitivity["temporalRobustAcrossBlockCounts"]
-        and chronological_survival_validation["heldoutSpearman"] > 0
-        and chronological_survival_validation["maeImprovementFraction"] > 0
-        and chronological_survival_validation["rankInference"]["p"] <= .05
+        and chronological_entry_validation["heldoutSpearman"] > 0
+        and chronological_entry_validation["maeImprovementFraction"] > 0
+        and chronological_entry_validation["rankInference"]["p"] <= .05
         else "normalization-and-time-sensitive-diagnostic"
     )
     adjusted_curve_metrics = curve_validation(
@@ -891,6 +911,32 @@ def main() -> None:
         and chronological_adjusted_curve_metrics["pairedImprovementInference"]["ciLow"] > 0
         else "random-fold-only-diagnostic"
     )
+    entry_curve_metrics = curve_validation(
+        entry_survival["curvePrediction"], entry_survival["curveTarget"],
+        entry_survival["curveBaseline"], CURVE_PROGRESS,
+        repeats=args.inference_repeats, seed=OUTCOME_SEED + 9103,
+    )
+    chronological_entry_curve = forward_chain_linear(
+        full_features, entry_normalized_curve_target, chronology,
+        seed=OUTCOME_SEED + 19104,
+    )
+    chronological_entry_curve_metrics = curve_validation(
+        chronological_entry_curve["prediction"], entry_normalized_curve_target,
+        chronological_entry_curve["baselinePrediction"], CURVE_PROGRESS,
+        repeats=args.inference_repeats, seed=OUTCOME_SEED + 19105,
+    )
+    chronological_entry_curve_metrics["splits"] = chronological_entry_curve["splits"]
+    entry_curve_metrics["chronologicalValidation"] = chronological_entry_curve_metrics
+    entry_curve_metrics["status"] = (
+        "validated-random-and-future-rough-forecast"
+        if entry_curve_metrics["maeImprovementFraction"] > 0
+        and entry_curve_metrics["pairedImprovementInference"]["p"] <= .05
+        and entry_curve_metrics["pairedImprovementInference"]["ciLow"] > 0
+        and chronological_entry_curve_metrics["maeImprovementFraction"] > 0
+        and chronological_entry_curve_metrics["pairedImprovementInference"]["p"] <= .05
+        and chronological_entry_curve_metrics["pairedImprovementInference"]["ciLow"] > 0
+        else "random-fold-only-diagnostic"
+    )
     normalization = {
         "methodVersion": "terminal-conditioned-additive-replay-envelope-v1",
         "progressFractions": CURVE_PROGRESS,
@@ -915,8 +961,8 @@ def main() -> None:
             "terminal anchor. No shared time-decay curve is fitted."
         ),
     }
-    adjusted_end = adjusted_curve_target[:, -1]
-    carry_rate = per_second_survival(adjusted_end, response_end)
+    entry_end = entry_normalized_curve_target[:, -1]
+    carry_rate = per_second_survival(entry_end, response_end)
     length_baseline = fit_duration_baseline(response_end, carry_rate)
     expected_carry = apply_duration_baseline(response_end, length_baseline)
     survival_target = carry_rate - expected_carry
@@ -931,7 +977,7 @@ def main() -> None:
         "ridgeAlpha": FIXED_ALPHA,
         "lengthBaseline": length_baseline,
         "trainingTargetSorted": np.sort(survival_target),
-        "trainingOOFPredictionSorted": np.sort(nested_survival["scorePrediction"]),
+        "trainingOOFPredictionSorted": np.sort(entry_survival["scorePrediction"]),
         "scoreScale": {
             "label": "Hook Hold z-score",
             "formula": "(predicted excess carry - mean OOF prediction) / SD of OOF predictions",
@@ -949,14 +995,14 @@ def main() -> None:
         },
         "normalizationSensitivity": normalization_sensitivity,
         "targetContract": {
-            "label": "Terminal-conditioned length-adjusted survival diagnostic",
+            "label": "Future-free entry-indexed length-adjusted survival diagnostic",
             "unit": "excess geometric retention carry percentage points per second",
             "higherMeans": (
-                "the hook loses less endpoint-normalized retention than the ordinary "
+                "the hook loses less entry-indexed retention than the ordinary "
                 "drop for a hook with the same response duration"
             ),
             "formula": (
-                "100 * exp(log(R_endpoint_normalized(response_end) / 100) / response_end) "
+                "100 * exp(log(R(response_end) / R(0)) / response_end) "
                 "minus the out-of-fold duration-only expected carry rate"
             ),
             "responseEnd": (
@@ -965,8 +1011,8 @@ def main() -> None:
             ),
             "responseLagContract": response_lag_contract,
             "claimBoundary": (
-                "diagnostic only unless the direction validates on future videos and under a "
-                "future-free entry-normalized target; the current corpus fails both gates"
+                "future-free with respect to the full-video endpoint, but still observational; "
+                "diagnostic unless the direction validates on later videos and across normalizations"
             ),
         },
     })
@@ -985,6 +1031,32 @@ def main() -> None:
         "residualP90ByTime": adjusted_curve_metrics["residualP90ByTime"],
         "validation": adjusted_curve_metrics,
         "normalization": normalization,
+    }
+    entry_normalization = {
+        "methodVersion": "future-free-entry-indexed-retention-v1",
+        "formula": "R_entry_indexed(t) = 100 * R(t) / R(0)",
+        "inputs": [
+            "observed audience-retention curve through the analyzed hook R(t)",
+            "observed entry retention R(0)",
+        ],
+        "usesFullVideoTerminal": False,
+        "definition": (
+            "A future-free scale correction. It removes the absolute entry level but does not "
+            "claim to identify replay counts or causal first-pass retention."
+        ),
+    }
+    entry_curve_fitted = fit_full_linear(
+        full_features, entry_normalized_curve_target, include_map=False,
+        seed=OUTCOME_SEED + 9104,
+    )
+    entry_curve_model = {
+        "coefficient": np.round(entry_curve_fitted["coefficient"], 8),
+        "intercept": np.round(entry_curve_fitted["intercept"], 8),
+        "progressFractions": CURVE_PROGRESS,
+        "residualP10ByTime": entry_curve_metrics["residualP10ByTime"],
+        "residualP90ByTime": entry_curve_metrics["residualP90ByTime"],
+        "validation": entry_curve_metrics,
+        "normalization": entry_normalization,
     }
     entry_inflation = curve_target[:, 0] - 100.0
     opening_half_second = np.asarray([
@@ -1093,8 +1165,16 @@ def main() -> None:
     adjusted_curve_high = nested_survival["curvePrediction"] + np.asarray(
         adjusted_curve_metrics["residualP90ByTime"], np.float32,
     )
+    entry_curve_low = entry_survival["curvePrediction"] + np.asarray(
+        entry_curve_metrics["residualP10ByTime"], np.float32,
+    )
+    entry_curve_high = entry_survival["curvePrediction"] + np.asarray(
+        entry_curve_metrics["residualP90ByTime"], np.float32,
+    )
     adjusted_curve_low[:, 0] = 100.0
     adjusted_curve_high[:, 0] = 100.0
+    entry_curve_low[:, 0] = 100.0
+    entry_curve_high[:, 0] = 100.0
 
     long_title_transfer = {
         "status": "independent-not-blended",
@@ -1106,7 +1186,7 @@ def main() -> None:
         },
         "shortsTransfer": {
             "hookHold": correlation_audit(
-                long_title_prediction, nested_survival["scoreTarget"],
+                long_title_prediction, entry_survival["scoreTarget"],
             ),
             **{
                 target_name: correlation_audit(long_title_prediction, target)
@@ -1168,7 +1248,7 @@ def main() -> None:
                 str(int(base["category"]))
             )
             forward_row["percentileBasis"] = (
-                "predicted unexpected endpoint-normalized slope among training components "
+                "predicted unexpected entry-indexed slope among training components "
                 "in the same frozen category"
             )
             forward_row["higherMeans"] = (
@@ -1273,10 +1353,20 @@ def main() -> None:
         )
         adjusted_lower_curve = np.asarray(adjusted_curve_low[source_index], float)
         adjusted_upper_curve = np.asarray(adjusted_curve_high[source_index], float)
+        entry_prediction_curve = np.asarray(
+            entry_survival["curvePrediction"][source_index], float,
+        )
+        entry_actual_curve = np.asarray(
+            entry_survival["curveTarget"][source_index], float,
+        )
+        entry_lower_curve = np.asarray(entry_curve_low[source_index], float)
+        entry_upper_curve = np.asarray(entry_curve_high[source_index], float)
         observed_fold = int(curve_crossfit["foldIndex"][source_index])
         observed_fold_model = curve_crossfit["foldModels"][observed_fold]
         adjusted_fold = int(nested_survival["foldIndex"][source_index])
         adjusted_fold_model = nested_survival["curveFoldModels"][adjusted_fold]
+        entry_fold = int(entry_survival["foldIndex"][source_index])
+        entry_fold_model = entry_survival["curveFoldModels"][entry_fold]
         for word in words:
             second = float(word["responseSeconds"])
             word["observedAbsolutePredictedRetentionPercent"] = word[
@@ -1285,18 +1375,38 @@ def main() -> None:
             word["observedAbsoluteActualRetentionPercent"] = word.get(
                 "actualRetentionPercent"
             )
-            word["predictedRetentionPercent"] = interpolate_series(
+            word["terminalConditionedPredictedRetentionPercent"] = interpolate_series(
                 source_curve_times, adjusted_prediction_curve, second,
             )
-            word["predictedRetentionP10"] = interpolate_series(
+            word["terminalConditionedPredictionP10"] = interpolate_series(
                 source_curve_times, adjusted_lower_curve, second,
             )
-            word["predictedRetentionP90"] = interpolate_series(
+            word["terminalConditionedPredictionP90"] = interpolate_series(
                 source_curve_times, adjusted_upper_curve, second,
             )
-            word["actualRetentionPercent"] = interpolate_series(
+            word["terminalConditionedActualRetentionPercent"] = interpolate_series(
                 source_curve_times, adjusted_actual_curve, second,
             )
+            word["entryIndexedPredictedRetentionPercent"] = interpolate_series(
+                source_curve_times, entry_prediction_curve, second,
+            )
+            word["entryIndexedPredictionP10"] = interpolate_series(
+                source_curve_times, entry_lower_curve, second,
+            )
+            word["entryIndexedPredictionP90"] = interpolate_series(
+                source_curve_times, entry_upper_curve, second,
+            )
+            word["entryIndexedActualRetentionPercent"] = interpolate_series(
+                source_curve_times, entry_actual_curve, second,
+            )
+            word["predictedRetentionPercent"] = word[
+                "entryIndexedPredictedRetentionPercent"
+            ]
+            word["predictedRetentionP10"] = word["entryIndexedPredictionP10"]
+            word["predictedRetentionP90"] = word["entryIndexedPredictionP90"]
+            word["actualRetentionPercent"] = word[
+                "entryIndexedActualRetentionPercent"
+            ]
             global_index = int(word["singletonGlobalSpanIndex"])
             word["singletonAtlasIndex"] = int(word_atlas_by_global[global_index])
             context_vector = np.asarray(context_store[global_index], np.float32)
@@ -1306,12 +1416,19 @@ def main() -> None:
             adjusted_without = apply_linear_model(
                 context_vector, adjusted_fold_model,
             )[0]
+            entry_without = apply_linear_model(
+                context_vector, entry_fold_model,
+            )[0]
             adjusted_without[0] = 100.0
+            entry_without[0] = 100.0
             word["observedForecastDeletionContributionByTime"] = (
                 prediction_curve - observed_without
             ).astype(float).tolist()
             word["rewatchAdjustedForecastDeletionContributionByTime"] = (
                 adjusted_prediction_curve - adjusted_without
+            ).astype(float).tolist()
+            word["entryIndexedForecastDeletionContributionByTime"] = (
+                entry_prediction_curve - entry_without
             ).astype(float).tolist()
         point = quality_points.get(video_id) or {}
         hook_outcomes = {}
@@ -1335,13 +1452,13 @@ def main() -> None:
                 "fold": int(values["foldIndex"][source_index]),
                 "validationStatus": validation["status"],
             }
-        survival_prediction = float(nested_survival["scorePrediction"][source_index])
-        survival_actual = float(nested_survival["scoreTarget"][source_index])
+        survival_prediction = float(entry_survival["scorePrediction"][source_index])
+        survival_actual = float(entry_survival["scoreTarget"][source_index])
         survival_expected = float(
-            nested_survival["expectedCarryPercentPerSecond"][source_index]
+            entry_survival["expectedCarryPercentPerSecond"][source_index]
         )
         survival_carry = float(
-            nested_survival["carryPercentPerSecond"][source_index]
+            entry_survival["carryPercentPerSecond"][source_index]
         )
         survival_predicted_carry = survival_expected + survival_prediction
         hold_mean = float(survival_model["scoreScale"]["predictionMean"])
@@ -1349,14 +1466,12 @@ def main() -> None:
         residual_std = max(float(survival_model["scoreScale"]["residualStd"]), 1e-9)
         hold_z = (survival_prediction - hold_mean) / hold_std
         actual_hold_z = (survival_actual - hold_mean) / hold_std
-        expected_end = float(
-            100.0 * (max(survival_expected, 1e-4) / 100.0)
-            ** response_end[source_index]
-        )
-        predicted_end = float(
-            100.0 * (max(survival_predicted_carry, 1e-4) / 100.0)
-            ** response_end[source_index]
-        )
+        expected_end = float(100.0 * (
+            max(survival_expected, 1e-4) / 100.0
+        ) ** response_end[source_index])
+        predicted_end = float(100.0 * (
+            max(survival_predicted_carry, 1e-4) / 100.0
+        ) ** response_end[source_index])
         component_offset = component_offsets[source_index]
         component_count = int(partition["componentCount"])
         hooks.append({
@@ -1378,11 +1493,11 @@ def main() -> None:
                 "holdZ": float(hold_z),
                 "actualHoldZ": float(actual_hold_z),
                 "percentile": percentile(
-                    np.asarray(nested_survival["scorePrediction"], float),
+                    np.asarray(entry_survival["scorePrediction"], float),
                     survival_prediction,
                 ),
                 "actualPercentile": percentile(
-                    np.asarray(nested_survival["scoreTarget"], float),
+                    np.asarray(entry_survival["scoreTarget"], float),
                     survival_actual,
                 ),
                 "predictedOOF": survival_prediction,
@@ -1395,21 +1510,21 @@ def main() -> None:
                 "predictionP90": survival_prediction + survival_validation["residualP90"],
                 "mapX": float(survival_x[source_index]),
                 "mapY": float(survival_y[source_index]),
-                "fold": int(nested_survival["foldIndex"][source_index]),
+                "fold": int(entry_survival["foldIndex"][source_index]),
                 "validationStatus": survival_validation["status"],
                 "responseEndSeconds": float(response_end[source_index]),
                 "spokenHookEndSeconds": float(spoken_end[source_index]),
                 "actualCarryPercentPerSecond": survival_carry,
                 "expectedCarryPercentPerSecond": survival_expected,
                 "predictedCarryPercentPerSecond": survival_predicted_carry,
-                "actualAdjustedRetentionAtResponseEnd": float(
+                "actualEntryIndexedRetentionAtResponseEnd": float(
                     100.0 * (survival_carry / 100.0) ** response_end[source_index]
                 ),
-                "predictedAdjustedRetentionAtResponseEnd": float(
+                "predictedEntryIndexedRetentionAtResponseEnd": float(
                     predicted_end
                 ),
                 "durationBaselineRetentionAtResponseEnd": expected_end,
-                "predictedEndpointHoldLiftPercentagePoints": predicted_end - expected_end,
+                "predictedHoldLiftPercentagePoints": predicted_end - expected_end,
                 "scoreScale": survival_model["scoreScale"],
                 "higherMeans": survival_model["targetContract"]["higherMeans"],
             },
@@ -1462,14 +1577,38 @@ def main() -> None:
             ],
             "retentionForecast": {
                 "normalizationAvailable": True,
-                "normalizationMethod": normalization["methodVersion"],
+                "availableCurveModes": ["entry", "absolute", "terminal"],
+                "measuredCurveAvailable": True,
+                "terminalSensitivityAvailable": True,
+                "primaryNormalization": "entry-indexed",
+                "normalizationMethod": entry_normalization["methodVersion"],
+                "normalizationContracts": {
+                    "entryIndexed": entry_normalization,
+                    "terminalConditioned": normalization,
+                    "observedAbsolute": {
+                        "formula": "R(t)",
+                        "usesFullVideoTerminal": False,
+                        "definition": "the measured aggregate audience-retention curve",
+                    },
+                },
                 "terminalRetentionPercent": float(terminal[source_index]),
+                "entryIndexedValidation": entry_curve_metrics,
+                "observedAbsoluteValidation": curve_metrics,
+                "terminalConditionedValidation": adjusted_curve_metrics,
                 "progressFractions": CURVE_PROGRESS,
                 "timesSeconds": source_curve_times,
                 "actualPercent": curve_target[source_index],
                 "predictedOOFPercent": prediction_curve,
                 "predictionP10": lower_curve,
                 "predictionP90": upper_curve,
+                "entryIndexedActualPercent": entry_actual_curve,
+                "entryIndexedPredictedOOFPercent": entry_prediction_curve,
+                "entryIndexedPredictionP10": entry_lower_curve,
+                "entryIndexedPredictionP90": entry_upper_curve,
+                "terminalConditionedActualPercent": adjusted_actual_curve,
+                "terminalConditionedPredictedOOFPercent": adjusted_prediction_curve,
+                "terminalConditionedPredictionP10": adjusted_lower_curve,
+                "terminalConditionedPredictionP90": adjusted_upper_curve,
                 "rewatchAdjustedActualPercent": adjusted_actual_curve,
                 "rewatchAdjustedPredictedOOFPercent": adjusted_prediction_curve,
                 "rewatchAdjustedPredictionP10": adjusted_lower_curve,
@@ -1488,6 +1627,13 @@ def main() -> None:
                 "rewatchAdjustedBaselineMAEPercentagePoints": float(np.mean(np.abs(
                     nested_survival["curveBaseline"][source_index]
                     - adjusted_actual_curve
+                ))),
+                "entryIndexedSourceMAEPercentagePoints": float(np.mean(np.abs(
+                    entry_prediction_curve - entry_actual_curve
+                ))),
+                "entryIndexedBaselineMAEPercentagePoints": float(np.mean(np.abs(
+                    entry_survival["curveBaseline"][source_index]
+                    - entry_actual_curve
                 ))),
                 "spokenHookEndSeconds": float(spoken_end[source_index]),
                 "responseEndSeconds": float(response_end[source_index]),
@@ -1541,17 +1687,20 @@ def main() -> None:
         "targets": TARGETS,
         "hookModels": hook_models,
         "componentModels": component_models,
-        "curveModel": curve_model,
+        "curveModel": entry_curve_model,
+        "observedAbsoluteCurveModel": curve_model,
         "survivalModel": survival_model,
         "localAttributionCalibration": attribution_calibration,
         "longTitlePrior": long_title_prior,
         "longTitleTransfer": long_title_transfer,
+        "entryNormalizedCurveModel": entry_curve_model,
         "rewatchAdjustedCurveModel": adjusted_curve_model,
         "semanticProjection": partition_model.get("browseProjection"),
         "rewatchAudit": rewatch_audit,
         "speakingRate": rate,
         "responseLagSeconds": response_lag,
         "responseLagContract": response_lag_contract,
+        "deconfoundingAudit": forward_summary.get("deconfoundingAudit"),
     }
     summary = {
         "version": 2,
@@ -1600,17 +1749,20 @@ def main() -> None:
         "longTitleTransfer": long_title_transfer,
         "curveModel": {
             "progressFractions": CURVE_PROGRESS,
-            "validation": curve_metrics,
+            "validation": entry_curve_metrics,
+            "primaryNormalization": "entry-indexed",
+            "entryIndexedValidation": entry_curve_metrics,
+            "observedAbsoluteValidation": curve_metrics,
             "rewatchAdjustedValidation": adjusted_curve_metrics,
             "speakingRate": rate,
             "responseLagSeconds": response_lag,
             "responseLagContract": response_lag_contract,
             "definition": (
-                "The complete-hook embedding predicts observed absolute retention and the "
-                "endpoint-normalized target at 41 normalized positions between the first and "
-                "last analyzed hook word. Stored hooks also show the measured additive replay "
-                "envelope. No output exists after the analyzed hook endpoint. Text-only inputs "
-                "cannot be replay-normalized."
+                "The complete-hook embedding predicts three explicitly separated curves at 41 "
+                "positions between the first and last analyzed hook word: future-free entry-indexed "
+                "retention (primary), observed absolute retention, and terminal-conditioned replay "
+                "sensitivity. No output exists after the analyzed hook endpoint. Text-only inputs "
+                "cannot be retrospectively replay-normalized."
             ),
             "formula": FORECAST_FORMULA,
         },
@@ -1621,6 +1773,7 @@ def main() -> None:
         "wordEmbeddingAtlas": word_atlas,
         "fullHookEmbeddingAtlas": full_hook_atlas,
         "rewatchAudit": rewatch_audit,
+        "deconfoundingAudit": forward_summary.get("deconfoundingAudit"),
         "hooks": hooks,
         "audit": {
             "hooks": len(hooks),

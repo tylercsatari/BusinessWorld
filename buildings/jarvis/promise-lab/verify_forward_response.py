@@ -30,7 +30,7 @@ def main() -> None:
     assert summary["validationStatus"] == model["validationStatus"]
     assert summary["validationStatus"] == (
         "validated-random-and-future"
-        if summary["validated"] else "random-fold-only-conditional-diagnostic"
+        if summary["validated"] else "deconfounded-but-unvalidated-diagnostic"
     )
     assert "post-hoc manual-probe-selected" in summary["categoryClaimStatus"]
     contract = summary["metricContract"]
@@ -40,11 +40,45 @@ def main() -> None:
     assert contract["causalClaim"] is False
     selection = summary["selection"]
     inference = selection["sourceInference"]
-    assert "equal-category Fisher-mean" in inference["policy"]
+    assert "source-equal" in inference["policy"]
     assert abs(inference["rho"] - selection["nestedHeldoutCategoryBalancedSpearman"]) < 1e-6
     chronological = selection["chronological"]
     assert chronological["validationDesign"].startswith("expanding-window")
     assert chronological["evaluatedRows"] > 0
+    audit = summary["deconfoundingAudit"]
+    assert audit["status"] == "complete"
+    assert audit["testedSpecificationCount"] == 4 * 4 * 3 * 17
+    assert len(audit["specificationRows"]) == audit["testedSpecificationCount"]
+    assert audit["baselineRidgeAlphaSensitivity"] == [1.0, 10.0, 100.0]
+    primary = audit["primarySpecification"]
+    assert primary["normalizationId"] == "entry_indexed"
+    assert primary["baselineId"] == "past_trajectory"
+    assert primary["usesTerminalRetention"] is False
+    assert primary["futureFree"] is True
+    leakage = audit["leakageAudit"]
+    assert leakage["sourceGroupedOuterFolds"] is True
+    assert leakage["categoryBlindNaturalBaseline"] is True
+    assert leakage["equalTotalWeightPerSourceVideo"] is True
+    assert leakage["primaryTargetUsesFullVideoTerminal"] is False
+    assert leakage["primaryPastTrajectoryOverlapsResponseWindow"] is False
+    assert leakage["primaryPastTrajectoryUsesPostUtteranceMeasurements"] is False
+    assert leakage["globallyOOFPredictedEntryUsedInsideOuterFold"] is False
+    assert leakage["terminalConditionedResultsRestrictedToSensitivity"] is True
+    assert audit["familyInference"]["supportedSpecificationCount"] <= audit[
+        "testedSpecificationCount"
+    ]
+    assert audit["exploratoryLagGate"]["decision"]
+    if not audit["processingLagSupported"]:
+        assert contract["selectedLagSeconds"] == 0
+    for row in audit["matchedForwardReverse"]:
+        assert row["commonRows"] > 0 and row["sourceVideos"] > 0
+        assert 0 <= row["oneSidedBootstrapP"] <= 1
+        if row["forwardMinusAbsReverse"] is not None:
+            assert row["differenceCiLow"] <= row["forwardMinusAbsReverse"] <= row[
+                "differenceCiHigh"
+            ]
+        else:
+            assert row["differenceCiLow"] is row["differenceCiHigh"] is None
 
     components = summary["components"]
     relationships = summary["relationships"]
@@ -70,8 +104,14 @@ def main() -> None:
             row["responseWindowStartSeconds"] - row["spokenStartSeconds"]
             - contract["selectedLagSeconds"]
         ) < 1e-5
-        assert row["unexpectedObservedSlope"] is not None
-        assert row["predictedUnexpectedSlopeOOF"] is not None
+        assert "entryIndexedObservedSlope" in row
+        assert "terminalConditionedReplayObservedSlope" in row
+        assert "endpointAffineObservedSlope" in row
+        assert "naturalExpectedSlopeOOF" in row
+        assert "entryIndexedResidualSlope" in row
+        assert (row["unexpectedObservedSlope"] is None) == (
+            row["predictedUnexpectedSlopeOOF"] is None
+        )
         assert 0 <= row["axisPercentile"] <= 100
 
     for category, category_model in model["component"]["modelsByCategory"].items():

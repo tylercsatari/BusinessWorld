@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -20,6 +21,7 @@ FORWARD_SEED = 20260712
 FIXED_DIMENSIONS = 16
 FIXED_SEMANTIC_ALPHA = 10.0
 FIXED_BASELINE_ALPHA = 10.0
+MIN_CATEGORY_SOURCES = 8
 
 
 @dataclass(frozen=True)
@@ -88,8 +90,11 @@ def interaction_features(pair: np.ndarray, left: np.ndarray, right: np.ndarray) 
 def _impute_scale(train: np.ndarray, test: np.ndarray) -> tuple[np.ndarray, np.ndarray, dict]:
     train = np.asarray(train, np.float32)
     test = np.asarray(test, np.float32)
-    median = np.nanmedian(np.where(np.isfinite(train), train, np.nan), axis=0)
-    median = np.where(np.isfinite(median), median, 0).astype(np.float32)
+    median = np.zeros(train.shape[1], np.float32)
+    for column in range(train.shape[1]):
+        values = train[np.isfinite(train[:, column]), column]
+        if len(values):
+            median[column] = float(np.median(values))
     train = np.where(np.isfinite(train), train, median)
     test = np.where(np.isfinite(test), test, median)
     scaler = StandardScaler().fit(train)
@@ -97,6 +102,96 @@ def _impute_scale(train: np.ndarray, test: np.ndarray) -> tuple[np.ndarray, np.n
         "median": median.astype(float).tolist(),
         "mean": scaler.mean_.astype(float).tolist(),
         "scale": scaler.scale_.astype(float).tolist(),
+    }
+
+
+def source_equal_weights(groups: np.ndarray) -> np.ndarray:
+    """Give every source video equal total weight without duplicating rows."""
+    groups = np.asarray(groups).astype(str)
+    if not len(groups):
+        return np.asarray([], np.float32)
+    _, inverse, counts = np.unique(groups, return_inverse=True, return_counts=True)
+    weights = 1.0 / counts[inverse]
+    weights *= len(weights) / max(float(weights.sum()), EPS)
+    return weights.astype(np.float32)
+
+
+def weighted_spearman(prediction: np.ndarray, target: np.ndarray,
+                      groups: np.ndarray | None = None) -> float:
+    """Spearman correlation with equal total weight per source video."""
+    prediction = np.asarray(prediction, float)
+    target = np.asarray(target, float)
+    valid = np.isfinite(prediction + target)
+    if valid.sum() < 3:
+        return float("nan")
+    prediction = prediction[valid]
+    target = target[valid]
+    left = rankdata(prediction).astype(float)
+    right = rankdata(target).astype(float)
+    if groups is None:
+        weights = np.ones(len(left), float)
+    else:
+        weights = source_equal_weights(np.asarray(groups).astype(str)[valid]).astype(float)
+    weights /= max(float(weights.sum()), EPS)
+    left -= float(np.sum(weights * left))
+    right -= float(np.sum(weights * right))
+    left_scale = math.sqrt(float(np.sum(weights * left ** 2)))
+    right_scale = math.sqrt(float(np.sum(weights * right ** 2)))
+    if left_scale <= EPS or right_scale <= EPS:
+        return float("nan")
+    return float(np.sum(weights * left * right) / (left_scale * right_scale))
+
+
+def _shared_natural_residuals(train: np.ndarray, test: np.ndarray,
+                              target: np.ndarray, natural: np.ndarray,
+                              groups: np.ndarray,
+                              baseline_alpha: float) -> tuple[np.ndarray, np.ndarray, dict]:
+    """Fit one category-blind natural-drop model on outer-training sources only."""
+    target = np.asarray(target, float)
+    natural = np.asarray(natural, np.float32)
+    groups = np.asarray(groups).astype(str)
+    train = np.asarray(train, int)
+    test = np.asarray(test, int)
+    if np.intersect1d(train, test).size:
+        raise ValueError("natural baseline train and test rows overlap")
+    valid_train = np.isfinite(target[train])
+    valid_test = np.isfinite(target[test])
+    fit = train[valid_train]
+    evaluate = test[valid_test]
+    train_residual = np.full(len(target), np.nan, np.float32)
+    test_residual = np.full(len(target), np.nan, np.float32)
+    baseline_prediction = np.full(len(target), np.nan, np.float32)
+    if len(fit) < 8 or not len(evaluate):
+        return train_residual, test_residual, {
+            "prediction": baseline_prediction,
+            "fitRows": int(len(fit)),
+            "fitSources": int(len(set(groups[fit]))),
+            "categoryBlind": True,
+            "sourceWeighting": "each source video has equal total weight",
+            "trainResidual": train_residual,
+            "testResidual": test_residual,
+        }
+    natural_train, natural_test, transform = _impute_scale(
+        natural[fit], natural[evaluate],
+    )
+    model = Ridge(alpha=float(baseline_alpha)).fit(
+        natural_train, target[fit], sample_weight=source_equal_weights(groups[fit]),
+    )
+    train_prediction = model.predict(natural_train)
+    test_prediction = model.predict(natural_test)
+    train_residual[fit] = (target[fit] - train_prediction).astype(np.float32)
+    test_residual[evaluate] = (target[evaluate] - test_prediction).astype(np.float32)
+    baseline_prediction[evaluate] = test_prediction.astype(np.float32)
+    return train_residual, test_residual, {
+        "prediction": baseline_prediction,
+        "fitRows": int(len(fit)),
+        "fitSources": int(len(set(groups[fit]))),
+        "ridgeAlpha": float(baseline_alpha),
+        "sourceWeighting": "each source video has equal total weight",
+        "categoryBlind": True,
+        "transform": transform,
+        "trainResidual": train_residual,
+        "testResidual": test_residual,
     }
 
 
@@ -171,50 +266,107 @@ def _prepare_category_fold(features: np.ndarray, train: np.ndarray, test: np.nda
 
 def _predict_prepared(prepared: list[dict], target: np.ndarray,
                       natural: np.ndarray, semantic_alpha: float,
-                      baseline_alpha: float) -> tuple[np.ndarray, np.ndarray]:
+                      baseline_alpha: float, groups: np.ndarray | None = None,
+                      shared_natural_baseline: bool = False,
+                      outer_train: np.ndarray | None = None,
+                      outer_test: np.ndarray | None = None,
+                      ) -> tuple[np.ndarray, np.ndarray, dict]:
     prediction = np.full(len(target), np.nan, np.float32)
     residual = np.full(len(target), np.nan, np.float32)
+    baseline_meta = {"categoryBlind": False}
+    shared_train = shared_test = None
+    if shared_natural_baseline:
+        if groups is None:
+            raise ValueError("shared natural baseline requires source groups")
+        if outer_train is None or outer_test is None:
+            if not prepared:
+                raise ValueError("shared natural baseline requires a non-empty fold")
+            outer_train = np.unique(np.concatenate([
+                row["train"] for row in prepared
+            ])).astype(int)
+            outer_test = np.unique(np.concatenate([
+                row["test"] for row in prepared
+            ])).astype(int)
+        shared_train, shared_test, baseline_meta = _shared_natural_residuals(
+            outer_train, outer_test, target, natural, groups, baseline_alpha,
+        )
     for row in prepared:
         train = row["train"]
         test = row["test"]
-        valid_train = np.isfinite(target[train])
-        valid_test = np.isfinite(target[test])
+        valid_train = np.isfinite(shared_train[train] if shared_natural_baseline else target[train])
+        valid_test = np.isfinite(shared_test[test] if shared_natural_baseline else target[test])
         if valid_train.sum() < 8 or not valid_test.any():
             continue
         fit = train[valid_train]
         evaluate = test[valid_test]
-        natural_train, natural_test, _ = _impute_scale(
-            natural[fit], natural[evaluate]
+        if shared_natural_baseline:
+            train_residual = shared_train[fit]
+            test_residual = shared_test[evaluate]
+        else:
+            natural_train, natural_test, _ = _impute_scale(
+                natural[fit], natural[evaluate]
+            )
+            baseline = Ridge(alpha=float(baseline_alpha)).fit(
+                natural_train, target[fit],
+                sample_weight=(
+                    source_equal_weights(np.asarray(groups)[fit])
+                    if groups is not None else None
+                ),
+            )
+            train_residual = target[fit] - baseline.predict(natural_train)
+            test_residual = target[evaluate] - baseline.predict(natural_test)
+        semantic_weights = (
+            source_equal_weights(np.asarray(groups)[fit])
+            if groups is not None else None
         )
-        baseline = Ridge(alpha=float(baseline_alpha)).fit(
-            natural_train, target[fit]
-        )
-        train_residual = target[fit] - baseline.predict(natural_train)
-        test_residual = target[evaluate] - baseline.predict(natural_test)
         semantic = Ridge(alpha=float(semantic_alpha)).fit(
             row["trainScores"][valid_train], train_residual,
+            sample_weight=semantic_weights,
         )
         prediction[evaluate] = semantic.predict(
             row["testScores"][valid_test]
         ).astype(np.float32)
         residual[evaluate] = test_residual.astype(np.float32)
-    return prediction, residual
+    return prediction, residual, baseline_meta
 
 
 def category_balanced_spearman(prediction: np.ndarray, target: np.ndarray,
-                               categories: np.ndarray) -> tuple[float, dict[str, float]]:
+                               categories: np.ndarray,
+                               groups: np.ndarray | None = None,
+                               minimum_sources: int = 3,
+                               required_categories: tuple[int, ...] | None = None,
+                               ) -> tuple[float, dict[str, float | None]]:
+    """Equal-category Fisher mean with equal total weight per source in each category."""
     prediction = np.asarray(prediction, float)
     target = np.asarray(target, float)
     categories = np.asarray(categories, int)
+    source_groups = (
+        np.arange(len(categories)).astype(str)
+        if groups is None else np.asarray(groups).astype(str)
+    )
     by_category = {}
     fisher = []
-    for category in sorted(set(categories)):
+    expected = (
+        tuple(sorted(set(categories)))
+        if required_categories is None else tuple(required_categories)
+    )
+    for category in expected:
         selected = categories == category
-        value = spearman(prediction[selected], target[selected])
-        by_category[str(int(category))] = float(value)
+        finite = selected & np.isfinite(prediction + target)
+        if len(set(source_groups[finite])) < int(minimum_sources):
+            by_category[str(int(category))] = None
+            continue
+        value = weighted_spearman(
+            prediction[selected], target[selected],
+            source_groups[selected],
+        )
+        by_category[str(int(category))] = float(value) if np.isfinite(value) else None
         if np.isfinite(value):
             fisher.append(np.arctanh(np.clip(value, -.999999, .999999)))
-    balanced = float(np.tanh(np.mean(fisher))) if fisher else float("nan")
+    balanced = (
+        float(np.tanh(np.mean(fisher)))
+        if len(fisher) == len(expected) and fisher else float("nan")
+    )
     return balanced, by_category
 
 
@@ -226,7 +378,8 @@ def crossfit_category_axis(features: np.ndarray, target: np.ndarray,
                            baseline_alpha: float = FIXED_BASELINE_ALPHA,
                            seed: int = FORWARD_SEED,
                            outer_splits: list[tuple[np.ndarray, np.ndarray]] | None = None,
-                           validation_design: str = "grouped random folds") -> dict:
+                           validation_design: str = "grouped random folds",
+                           shared_natural_baseline: bool = False) -> dict:
     features = np.asarray(features, np.float32)
     groups = np.asarray(groups).astype(str)
     categories = np.asarray(categories, int)
@@ -234,6 +387,8 @@ def crossfit_category_axis(features: np.ndarray, target: np.ndarray,
     residual = np.full(len(groups), np.nan, np.float32)
     fold_index = np.full(len(groups), -1, np.int16)
     direction_rows: dict[str, list[np.ndarray]] = {}
+    baseline_prediction = np.full(len(groups), np.nan, np.float32)
+    baseline_rows = []
     splits = outer_splits
     if splits is None:
         splitter = GroupKFold(n_splits=min(folds, len(set(groups))))
@@ -244,33 +399,61 @@ def crossfit_category_axis(features: np.ndarray, target: np.ndarray,
         prepared = _prepare_category_fold(
             features, train, test, categories, dimensions, seed + fold * 101,
         )
-        fold_prediction, fold_residual = _predict_prepared(
+        fold_prediction, fold_residual, baseline_meta = _predict_prepared(
             prepared, target, natural, semantic_alpha, baseline_alpha,
+            groups=groups, shared_natural_baseline=shared_natural_baseline,
+            outer_train=train, outer_test=test,
         )
         selected = np.isfinite(fold_prediction + fold_residual)
         prediction[selected] = fold_prediction[selected]
         residual[selected] = fold_residual[selected]
         fold_index[selected] = fold
+        fold_baseline = np.asarray(
+            baseline_meta.get("prediction", np.asarray([])), float,
+        )
+        if fold_baseline.ndim == 1 and len(fold_baseline) == len(groups):
+            valid_baseline = np.isfinite(fold_baseline)
+            baseline_prediction[valid_baseline] = fold_baseline[valid_baseline]
+        baseline_rows.append({
+            key: value for key, value in baseline_meta.items()
+            if key not in {
+                "prediction", "transform", "trainResidual", "testResidual",
+            }
+        })
+        shared_train_residual = baseline_meta.get("trainResidual")
         for row in prepared:
             train_positions = row["train"]
-            valid = np.isfinite(target[train_positions])
+            train_target = (
+                np.asarray(shared_train_residual)[train_positions]
+                if shared_natural_baseline else target[train_positions]
+            )
+            valid = np.isfinite(train_target)
             if valid.sum() < 8:
                 continue
-            natural_train, _, _ = _impute_scale(
-                natural[train_positions][valid], natural[train_positions][valid]
-            )
-            baseline = Ridge(alpha=float(baseline_alpha)).fit(
-                natural_train, target[train_positions][valid]
-            )
-            train_residual = target[train_positions][valid] - baseline.predict(natural_train)
+            if shared_natural_baseline:
+                train_residual = train_target[valid]
+            else:
+                natural_train, _, _ = _impute_scale(
+                    natural[train_positions][valid], natural[train_positions][valid]
+                )
+                baseline = Ridge(alpha=float(baseline_alpha)).fit(
+                    natural_train, target[train_positions][valid],
+                    sample_weight=source_equal_weights(groups[train_positions][valid]),
+                )
+                train_residual = target[train_positions][valid] - baseline.predict(natural_train)
             semantic = Ridge(alpha=float(semantic_alpha)).fit(
                 row["trainScores"][valid], train_residual,
+                sample_weight=source_equal_weights(groups[train_positions][valid]),
             )
             coefficient = row["reducer"].components_.T @ (
                 semantic.coef_ / np.maximum(row["scaler"].scale_, EPS)
             )
             direction_rows.setdefault(str(row["category"]), []).append(row_unit(coefficient))
-    balanced, by_category = category_balanced_spearman(prediction, residual, categories)
+    balanced, by_category = category_balanced_spearman(
+        prediction, residual, categories, groups,
+        minimum_sources=MIN_CATEGORY_SOURCES,
+        required_categories=tuple(sorted(set(categories))),
+    )
     cosines = {}
     for category, directions in direction_rows.items():
         values = []
@@ -288,6 +471,9 @@ def crossfit_category_axis(features: np.ndarray, target: np.ndarray,
         "heldoutSpearman": balanced,
         "heldoutSpearmanByCategory": by_category,
         "foldDirectionStability": cosines,
+        "naturalBaselinePrediction": baseline_prediction,
+        "naturalBaselineFolds": baseline_rows,
+        "naturalBaselineCategoryBlind": bool(shared_natural_baseline),
         "validationDesign": validation_design,
         "evaluatedRows": int(np.isfinite(prediction + residual).sum()),
         "unevaluatedRows": int((~np.isfinite(prediction + residual)).sum()),
@@ -301,7 +487,8 @@ def nested_select_candidate(features: np.ndarray,
                             folds: int = 5, inner_folds: int = 4,
                             seed: int = FORWARD_SEED,
                             outer_splits: list[tuple[np.ndarray, np.ndarray]] | None = None,
-                            validation_design: str = "nested grouped random folds") -> dict:
+                            validation_design: str = "nested grouped random folds",
+                            shared_natural_baseline: bool = False) -> dict:
     """Select the response ruler inside each outer training fold, then test once."""
     features = np.asarray(features, np.float32)
     groups = np.asarray(groups).astype(str)
@@ -322,34 +509,64 @@ def nested_select_candidate(features: np.ndarray,
         for inner_fold, (inner_train, inner_test) in enumerate(
             inner_splitter.split(train, groups=groups[train])
         ):
-            inner_prepared.append(_prepare_category_fold(
-                features, train[inner_train], train[inner_test], categories,
-                FIXED_DIMENSIONS, seed + fold * 1009 + inner_fold * 101,
-            ))
+            inner_train_rows = train[inner_train]
+            inner_test_rows = train[inner_test]
+            inner_prepared.append({
+                "prepared": _prepare_category_fold(
+                    features, inner_train_rows, inner_test_rows, categories,
+                    FIXED_DIMENSIONS, seed + fold * 1009 + inner_fold * 101,
+                ),
+                "train": inner_train_rows,
+                "test": inner_test_rows,
+            })
         inner_scores = []
         for candidate_id in candidate_ids:
             inner_prediction = np.full(len(groups), np.nan, np.float32)
             inner_residual = np.full(len(groups), np.nan, np.float32)
-            for prepared in inner_prepared:
-                local_prediction, local_residual = _predict_prepared(
+            for inner in inner_prepared:
+                prepared = inner["prepared"]
+                local_prediction, local_residual, _ = _predict_prepared(
                     prepared, targets[candidate_id], naturals[candidate_id],
                     FIXED_SEMANTIC_ALPHA, FIXED_BASELINE_ALPHA,
+                    groups=groups,
+                    shared_natural_baseline=shared_natural_baseline,
+                    outer_train=inner["train"],
+                    outer_test=inner["test"],
                 )
                 selected = np.isfinite(local_prediction + local_residual)
                 inner_prediction[selected] = local_prediction[selected]
                 inner_residual[selected] = local_residual[selected]
             inner_score, _ = category_balanced_spearman(
                 inner_prediction[train], inner_residual[train], categories[train],
+                groups[train],
+                minimum_sources=MIN_CATEGORY_SOURCES,
+                required_categories=tuple(sorted(set(categories))),
             )
             inner_scores.append((float(inner_score), candidate_id))
-        inner_scores.sort(key=lambda row: (-np.nan_to_num(row[0], nan=-1.0), row[1]))
-        selected_score, selected_id = inner_scores[0]
+        supported_scores = [row for row in inner_scores if np.isfinite(row[0])]
+        supported_scores.sort(key=lambda row: (-row[0], row[1]))
+        if not supported_scores:
+            selected_rows.append({
+                "fold": fold,
+                "selectedCandidate": None,
+                "innerCategoryBalancedSpearman": None,
+                "runnerUpCandidate": None,
+                "runnerUpSpearman": None,
+                "trainSources": len(set(groups[train])),
+                "testSources": len(set(groups[test])),
+                "status": "insufficient-independent-video-support",
+            })
+            continue
+        selected_score, selected_id = supported_scores[0]
         outer_prepared = _prepare_category_fold(
             features, train, test, categories, FIXED_DIMENSIONS, seed + fold * 101,
         )
-        fold_prediction, fold_residual = _predict_prepared(
+        fold_prediction, fold_residual, _ = _predict_prepared(
             outer_prepared, targets[selected_id], naturals[selected_id],
             FIXED_SEMANTIC_ALPHA, FIXED_BASELINE_ALPHA,
+            groups=groups,
+            shared_natural_baseline=shared_natural_baseline,
+            outer_train=train, outer_test=test,
         )
         selected = np.isfinite(fold_prediction + fold_residual)
         prediction[selected] = fold_prediction[selected]
@@ -358,16 +575,26 @@ def nested_select_candidate(features: np.ndarray,
             "fold": fold,
             "selectedCandidate": selected_id,
             "innerCategoryBalancedSpearman": selected_score,
-            "runnerUpCandidate": inner_scores[1][1] if len(inner_scores) > 1 else None,
-            "runnerUpSpearman": inner_scores[1][0] if len(inner_scores) > 1 else None,
+            "runnerUpCandidate": supported_scores[1][1] if len(supported_scores) > 1 else None,
+            "runnerUpSpearman": supported_scores[1][0] if len(supported_scores) > 1 else None,
             "trainSources": len(set(groups[train])),
             "testSources": len(set(groups[test])),
+            "status": "selected-inside-training-fold",
         })
-    balanced, by_category = category_balanced_spearman(prediction, residual, categories)
+    balanced, by_category = category_balanced_spearman(
+        prediction, residual, categories, groups,
+        minimum_sources=MIN_CATEGORY_SOURCES,
+        required_categories=tuple(sorted(set(categories))),
+    )
     counts = {candidate_id: 0 for candidate_id in candidate_ids}
     for row in selected_rows:
-        counts[row["selectedCandidate"]] += 1
-    final_id = max(candidate_ids, key=lambda value: (counts[value], -candidate_ids.index(value)))
+        if row["selectedCandidate"] in counts:
+            counts[row["selectedCandidate"]] += 1
+    supported_fold_count = sum(counts.values())
+    final_id = (
+        max(candidate_ids, key=lambda value: (counts[value], -candidate_ids.index(value)))
+        if supported_fold_count else None
+    )
     return {
         "prediction": prediction,
         "targetResidual": residual,
@@ -376,7 +603,11 @@ def nested_select_candidate(features: np.ndarray,
         "folds": selected_rows,
         "selectionCounts": {key: value for key, value in counts.items() if value},
         "selectedCandidate": final_id,
-        "selectedFraction": counts[final_id] / max(1, len(selected_rows)),
+        "selectedFraction": (
+            counts[final_id] / supported_fold_count if final_id is not None else 0.0
+        ),
+        "supportedSelectionFolds": int(supported_fold_count),
+        "unsupportedSelectionFolds": int(len(selected_rows) - supported_fold_count),
         "validationDesign": validation_design,
         "evaluatedRows": int(np.isfinite(prediction + residual).sum()),
         "unevaluatedRows": int((~np.isfinite(prediction + residual)).sum()),
@@ -465,20 +696,99 @@ def fit_full_axis(features: np.ndarray, target: np.ndarray, natural: np.ndarray,
 
 
 def fit_full_category_axes(features: np.ndarray, target: np.ndarray, natural: np.ndarray,
-                           categories: np.ndarray) -> dict[str, dict]:
+                           categories: np.ndarray, groups: np.ndarray | None = None,
+                           shared_natural_baseline: bool = False) -> dict[str, dict]:
+    features = np.asarray(features, np.float32)
+    target = np.asarray(target, float)
+    natural = np.asarray(natural, np.float32)
     categories = np.asarray(categories, int)
+    if not shared_natural_baseline:
+        output = {}
+        for category in sorted(set(categories)):
+            selected = np.flatnonzero(categories == category)
+            model = fit_full_axis(
+                features[selected], target[selected], natural[selected],
+                seed=FORWARD_SEED + int(category),
+            )
+            projection = np.full(len(categories), np.nan, np.float32)
+            projection[selected] = model.pop("projection")
+            model["projection"] = projection
+            model["rowIndices"] = selected.astype(int)
+            output[str(int(category))] = model
+        return output
+
+    if groups is None:
+        raise ValueError("shared full natural baseline requires source groups")
+    groups = np.asarray(groups).astype(str)
+    valid = np.isfinite(target) & np.all(np.isfinite(features), axis=1)
+    positions = np.flatnonzero(valid)
+    if len(positions) < max(8, FIXED_DIMENSIONS + 2):
+        raise ValueError("insufficient finite rows for a shared natural baseline")
+    natural_scores, _, natural_meta = _impute_scale(
+        natural[positions], natural[positions],
+    )
+    baseline = Ridge(alpha=float(FIXED_BASELINE_ALPHA)).fit(
+        natural_scores, target[positions],
+        sample_weight=source_equal_weights(groups[positions]),
+    )
+    residual = np.full(len(target), np.nan, np.float32)
+    residual[positions] = (
+        target[positions] - baseline.predict(natural_scores)
+    ).astype(np.float32)
+    shared_model = {
+        "coefficient": baseline.coef_.astype(float).tolist(),
+        "intercept": float(baseline.intercept_),
+        "transform": natural_meta,
+        "categoryBlind": True,
+        "sourceWeighting": "each source video has equal total weight",
+        "fitRows": int(len(positions)),
+        "fitSources": int(len(set(groups[positions]))),
+    }
     output = {}
     for category in sorted(set(categories)):
         selected = np.flatnonzero(categories == category)
-        model = fit_full_axis(
-            features[selected], target[selected], natural[selected],
-            seed=FORWARD_SEED + int(category),
+        local_valid = np.isfinite(residual[selected]) & np.all(
+            np.isfinite(features[selected]), axis=1,
         )
+        local_positions = np.flatnonzero(local_valid)
+        fit = selected[local_positions]
+        dimension = min(FIXED_DIMENSIONS, len(fit) - 1, features.shape[1])
+        if len(fit) < max(8, dimension + 2):
+            raise ValueError(f"insufficient category {category} rows for full axis")
+        reducer = PCA(
+            n_components=max(1, dimension), svd_solver="randomized",
+            random_state=FORWARD_SEED + int(category),
+        ).fit(features[fit])
+        pca_scores = reducer.transform(features[fit])
+        scaler = StandardScaler().fit(pca_scores)
+        semantic = Ridge(alpha=float(FIXED_SEMANTIC_ALPHA)).fit(
+            scaler.transform(pca_scores), residual[fit],
+            sample_weight=source_equal_weights(groups[fit]),
+        )
+        coefficient = reducer.components_.T @ (
+            semantic.coef_ / np.maximum(scaler.scale_, EPS)
+        )
+        direction = row_unit(coefficient)
+        category_projection = features[selected] @ direction
+        if spearman(category_projection[local_positions], residual[fit]) < 0:
+            direction = -direction
+            category_projection = -category_projection
         projection = np.full(len(categories), np.nan, np.float32)
-        projection[selected] = model.pop("projection")
-        model["projection"] = projection
-        model["rowIndices"] = selected.astype(int)
-        output[str(int(category))] = model
+        projection[selected] = category_projection.astype(np.float32)
+        output[str(int(category))] = {
+            "direction": direction.astype(np.float32),
+            "projection": projection,
+            "trainingProjectionSorted": np.sort(
+                category_projection[local_positions]
+            ).astype(np.float32),
+            "observedResidual": residual[fit].astype(np.float32),
+            "observedPositions": local_positions.astype(int),
+            "fitSpearman": spearman(
+                category_projection[local_positions], residual[fit],
+            ),
+            "naturalModel": shared_model,
+            "rowIndices": selected.astype(int),
+        }
     return output
 
 
@@ -493,11 +803,15 @@ def source_signflip(prediction: np.ndarray, target: np.ndarray, groups: np.ndarr
     groups = groups[valid]
     x = rankdata(prediction).astype(float)
     y = rankdata(target).astype(float)
-    x = (x - x.mean()) / (x.std() + EPS)
-    y = (y - y.mean()) / (y.std() + EPS)
+    weights = source_equal_weights(groups).astype(float)
+    weights /= max(float(weights.sum()), EPS)
+    x -= float(np.sum(weights * x))
+    y -= float(np.sum(weights * y))
+    x /= math.sqrt(float(np.sum(weights * x ** 2))) + EPS
+    y /= math.sqrt(float(np.sum(weights * y ** 2))) + EPS
     unique = sorted(set(groups))
     contributions = np.asarray([
-        np.sum(x[groups == group] * y[groups == group]) / len(x)
+        np.sum(weights[groups == group] * x[groups == group] * y[groups == group])
         for group in unique
     ], float)
     observed = float(contributions.sum())
@@ -509,9 +823,17 @@ def source_signflip(prediction: np.ndarray, target: np.ndarray, groups: np.ndarr
         null[start:start + count] = np.abs(signs @ contributions)
     pvalue = float((1 + np.sum(null >= abs(observed))) / (repeats + 1))
     bootstrap = np.empty(repeats, float)
+    group_rows = {group: np.flatnonzero(groups == group) for group in unique}
     for index in range(repeats):
-        sample = rng.integers(0, len(unique), size=len(unique))
-        bootstrap[index] = contributions[sample].sum()
+        sample = rng.choice(unique, size=len(unique), replace=True)
+        positions = np.concatenate([group_rows[group] for group in sample])
+        bootstrap_groups = np.concatenate([
+            np.repeat(f"{draw}:{group}", len(group_rows[group]))
+            for draw, group in enumerate(sample)
+        ])
+        bootstrap[index] = weighted_spearman(
+            prediction[positions], target[positions], bootstrap_groups,
+        )
     return {
         "rho": observed,
         "p": pvalue,
@@ -519,7 +841,10 @@ def source_signflip(prediction: np.ndarray, target: np.ndarray, groups: np.ndarr
         "ciHigh": float(np.quantile(bootstrap, .975)),
         "sourceVideos": len(unique),
         "repeats": int(repeats),
-        "policy": "source-video sign flips and source-video bootstrap",
+        "policy": (
+            "source-video sign flips and source-video bootstrap on source-equal "
+            "weighted Spearman ranks"
+        ),
     }
 
 
@@ -532,6 +857,7 @@ def category_balanced_source_inference(prediction: np.ndarray, target: np.ndarra
     target = np.asarray(target, float)
     groups = np.asarray(groups).astype(str)
     categories = np.asarray(categories, int)
+    expected_categories = tuple(sorted(set(categories)))
     valid = np.isfinite(prediction + target)
     prediction = prediction[valid]
     target = target[valid]
@@ -541,22 +867,50 @@ def category_balanced_source_inference(prediction: np.ndarray, target: np.ndarra
     group_index = {group: index for index, group in enumerate(unique)}
     contribution_rows = []
     observed_by_category = {}
-    for category in sorted(set(categories)):
+    available_categories = []
+    for category in expected_categories:
         selected = categories == category
+        if len(set(groups[selected])) < MIN_CATEGORY_SOURCES:
+            observed_by_category[str(int(category))] = None
+            contribution_rows.append(np.zeros(len(unique), float))
+            available_categories.append(False)
+            continue
+        available_categories.append(True)
         x = rankdata(prediction[selected]).astype(float)
         y = rankdata(target[selected]).astype(float)
-        x = (x - x.mean()) / (x.std() + EPS)
-        y = (y - y.mean()) / (y.std() + EPS)
+        category_groups = groups[selected]
+        weights = source_equal_weights(category_groups).astype(float)
+        weights /= max(float(weights.sum()), EPS)
+        x -= float(np.sum(weights * x))
+        y -= float(np.sum(weights * y))
+        x /= math.sqrt(float(np.sum(weights * x ** 2))) + EPS
+        y /= math.sqrt(float(np.sum(weights * y ** 2))) + EPS
         contributions = np.zeros(len(unique), float)
-        for value, group in zip(x * y / len(x), groups[selected]):
+        for value, group in zip(weights * x * y, category_groups):
             contributions[group_index[group]] += value
         rho = float(contributions.sum())
         observed_by_category[str(int(category))] = rho
         contribution_rows.append(contributions)
-    observed = float(np.tanh(np.mean([
-        np.arctanh(np.clip(value, -.999999, .999999))
-        for value in observed_by_category.values()
-    ])))
+    observed = (
+        float(np.tanh(np.mean([
+            np.arctanh(np.clip(value, -.999999, .999999))
+            for value in observed_by_category.values() if value is not None
+        ]))) if all(available_categories) else float("nan")
+    )
+    if not np.isfinite(observed):
+        return {
+            "rho": None,
+            "rhoByCategory": observed_by_category,
+            "p": 1.0,
+            "ciLow": None,
+            "ciHigh": None,
+            "sourceVideos": len(unique),
+            "repeats": int(repeats),
+            "policy": (
+                "unsupported because at least one declared semantic category has fewer "
+                f"than {MIN_CATEGORY_SOURCES} independent source videos"
+            ),
+        }
     rng = np.random.default_rng(seed)
     exceed = 0
     batch = 256
@@ -567,27 +921,37 @@ def category_balanced_source_inference(prediction: np.ndarray, target: np.ndarra
             signs @ contributions for contributions in contribution_rows
         ])
         null = np.tanh(np.mean(np.arctanh(np.clip(
-            null_by_category, -.999999, .999999,
-        )), axis=1))
-        exceed += int(np.sum(np.abs(null) >= abs(observed)))
+            null_by_category[:, np.asarray(available_categories, bool)],
+            -.999999, .999999,
+        )), axis=1)) if any(available_categories) else np.zeros(count)
+        if np.isfinite(observed):
+            exceed += int(np.sum(np.abs(null) >= abs(observed)))
     group_rows = {group: np.flatnonzero(groups == group) for group in unique}
     bootstrap = np.empty(repeats, float)
     for index in range(repeats):
         sample = rng.choice(unique, size=len(unique), replace=True)
         positions = np.concatenate([group_rows[group] for group in sample])
+        bootstrap_groups = np.concatenate([
+            np.repeat(f"{draw}:{group}", len(group_rows[group]))
+            for draw, group in enumerate(sample)
+        ])
         bootstrap[index], _ = category_balanced_spearman(
             prediction[positions], target[positions], categories[positions],
+            bootstrap_groups,
+            minimum_sources=MIN_CATEGORY_SOURCES,
+            required_categories=expected_categories,
         )
+    finite_bootstrap = bootstrap[np.isfinite(bootstrap)]
     return {
         "rho": observed,
         "rhoByCategory": observed_by_category,
-        "p": float((1 + exceed) / (repeats + 1)),
-        "ciLow": float(np.quantile(bootstrap, .025)),
-        "ciHigh": float(np.quantile(bootstrap, .975)),
+        "p": float((1 + exceed) / (repeats + 1)) if np.isfinite(observed) else 1.0,
+        "ciLow": float(np.quantile(finite_bootstrap, .025)) if len(finite_bootstrap) else None,
+        "ciHigh": float(np.quantile(finite_bootstrap, .975)) if len(finite_bootstrap) else None,
         "sourceVideos": len(unique),
         "repeats": int(repeats),
         "policy": (
             "source-video wild sign null and source-video bootstrap on the exact "
-            "equal-category Fisher-mean Spearman statistic"
+            "equal-category, source-equal Fisher-mean weighted Spearman statistic"
         ),
     }

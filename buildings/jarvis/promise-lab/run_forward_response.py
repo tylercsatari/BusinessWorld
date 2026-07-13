@@ -14,17 +14,22 @@ from sklearn.decomposition import PCA
 
 from axes import finite_correlation, spearman
 from cluster_outcomes import (
-    endpoint_normalize_curve,
     entry_terminal_diagnostic,
     exact_token_timings,
     retention_window_slope,
     span_interval,
+)
+from deconfounding import (
+    build_deconfounding_audit,
+    natural_baseline_features,
+    retention_curve_families,
 )
 from embedding_store import R2_PREFIX, EmbeddingStore, R2Store, json_ready
 from forward_response import (
     FIXED_BASELINE_ALPHA,
     FIXED_DIMENSIONS,
     FIXED_SEMANTIC_ALPHA,
+    MIN_CATEGORY_SOURCES,
     ResponseCandidate,
     category_balanced_source_inference,
     category_balanced_spearman,
@@ -42,7 +47,6 @@ from forward_response import (
 )
 from hook_quality import retention_inputs
 from hook_score_core import local_counterfactual_texts, percentile
-from latency_study import natural_drop_features
 from run_cluster_outcomes import load_timing_records
 from sequence import tokenize
 
@@ -54,7 +58,7 @@ OUTPUT_PATH = CACHE / "forward-response.json"
 MODEL_PATH = CACHE / "forward-response-model.json"
 HOOK_QUALITY_PATH = CACHE / "hook-quality.json"
 HOOK_MODEL_PATH = CACHE / "hook-quality-model.json"
-METHOD_VERSION = "variable-component-forward-response-v3"
+METHOD_VERSION = "variable-component-forward-response-v5"
 
 
 def read_json(path: Path):
@@ -155,7 +159,7 @@ def measurements(candidate: ResponseCandidate, normalized_curves: list[np.ndarra
                  starts: np.ndarray, ends: np.ndarray,
                  source_indices: np.ndarray, entries: np.ndarray,
                  terminals: np.ndarray, amplitudes: np.ndarray,
-                 predicted_entries: np.ndarray) -> dict:
+                 baseline_mode: str = "past_trajectory") -> dict:
     left, right = candidate_intervals(starts, ends, candidate)
     target = np.full(len(starts), np.nan, np.float32)
     raw = np.full(len(starts), np.nan, np.float32)
@@ -170,10 +174,10 @@ def measurements(candidate: ResponseCandidate, normalized_curves: list[np.ndarra
             raw_curves[source_index], durations[source_index],
             float(left[index]), float(right[index]),
         )
-    natural = natural_drop_features(
-        left, right, durations[source_indices], entries[source_indices],
-        terminals[source_indices], amplitudes[source_indices],
-        predicted_entries[source_indices], include_endpoints=True,
+    natural = natural_baseline_features(
+        baseline_mode, normalized_curves, source_indices, left, right,
+        durations, entries, terminals, amplitudes,
+        history_starts=starts,
     )
     return {
         "target": target,
@@ -235,6 +239,10 @@ def lag_bootstrap(results: dict[str, dict], candidates: list[ResponseCandidate],
     for repeat in range(repeats):
         sample = rng.choice(unique, size=len(unique), replace=True)
         positions = np.concatenate([group_rows[group] for group in sample])
+        bootstrap_groups = np.concatenate([
+            np.repeat(f"{draw}:{group}", len(group_rows[group]))
+            for draw, group in enumerate(sample)
+        ])
         scored = []
         for candidate in candidates:
             result = results[candidate.id]
@@ -242,6 +250,9 @@ def lag_bootstrap(results: dict[str, dict], candidates: list[ResponseCandidate],
                 np.asarray(result["prediction"])[positions],
                 np.asarray(result["targetResidual"])[positions],
                 categories[positions],
+                bootstrap_groups,
+                minimum_sources=MIN_CATEGORY_SOURCES,
+                required_categories=tuple(sorted(set(categories))),
             )
             scored.append((float(value), candidate.id))
         scored.sort(key=lambda row: (-np.nan_to_num(row[0], nan=-1.0), row[1]))
@@ -284,46 +295,58 @@ def main() -> None:
     source_indices = np.asarray([row["sourceIndex"] for row in component_rows], int)
     groups = np.asarray([row["videoId"] for row in component_rows]).astype(str)
     categories = np.asarray([row["category"] for row in component_rows], int)
+    hook_starts = np.full(len(corpus), np.nan, np.float32)
+    hook_ends = np.full(len(corpus), np.nan, np.float32)
+    for source_index in range(len(corpus)):
+        selected = source_indices == source_index
+        valid_starts = starts[selected][np.isfinite(starts[selected])]
+        valid_ends = ends[selected][np.isfinite(ends[selected])]
+        if len(valid_starts) and len(valid_ends):
+            hook_starts[source_index] = valid_starts.min()
+            hook_ends[source_index] = valid_ends.max()
 
     token_counts = np.asarray([int(row["tokenCount"]) for row in manifest["hooks"]], int)
     curve_inputs = retention_inputs(corpus, token_counts)
-    normalized_curves = [np.asarray(row, float) for row in curve_inputs["normalizedCurves"]]
     raw_curves = [np.asarray(row.get("curve") or [], float) for row in corpus]
     durations = np.asarray([float(row.get("duration_s") or np.nan) for row in corpus], float)
     entries = np.asarray([float(row.get("entry", np.nan)) for row in curve_inputs["curveMeta"]], float)
     terminals = np.asarray([float(row.get("terminal", np.nan)) for row in curve_inputs["curveMeta"]], float)
     amplitudes = np.asarray([float(row.get("amplitude", np.nan)) for row in curve_inputs["curveMeta"]], float)
     entry_diagnostic = entry_terminal_diagnostic(entries, terminals, durations)
-    predicted_entries = np.asarray(entry_diagnostic["predictedEntryOOF"], float)
+    curve_families = retention_curve_families(raw_curves, terminals)
+    normalized_curves = curve_families["entry_indexed"]
 
     forward_candidates = [row for row in response_candidates() if row.anchor == "phrase"]
     forward_measurements = {
         row.id: measurements(
             row, normalized_curves, raw_curves, durations, starts, ends,
-            source_indices, entries, terminals, amplitudes, predicted_entries,
+            source_indices, entries, terminals, amplitudes,
         ) for row in forward_candidates
     }
     targets = {key: value["target"] for key, value in forward_measurements.items()}
     naturals = {key: value["natural"] for key, value in forward_measurements.items()}
     selection = nested_select_candidate(
         features, targets, naturals, groups, categories,
+        shared_natural_baseline=True,
     )
     chronological_selection = nested_select_candidate(
         features, targets, naturals, groups, categories,
         outer_splits=chronological_component_splits(corpus, groups),
         validation_design="expanding-window past-to-future with train-only lag selection",
         seed=20260730,
+        shared_natural_baseline=True,
     )
     candidate_by_id = {row.id: row for row in forward_candidates}
-    selected_id = selection["selectedCandidate"]
-    selected_candidate = candidate_by_id[selected_id]
-    selected_measurement = forward_measurements[selected_id]
+    exploratory_selected_id = selection["selectedCandidate"]
+    if exploratory_selected_id is None:
+        raise RuntimeError("no forward lag had enough independent-video support")
 
     forward_rows = []
     forward_results = {}
     for candidate in forward_candidates:
         result = crossfit_category_axis(
             features, targets[candidate.id], naturals[candidate.id], groups, categories,
+            shared_natural_baseline=True,
         )
         forward_results[candidate.id] = result
         forward_rows.append(candidate_payload(
@@ -333,7 +356,75 @@ def main() -> None:
         forward_results, forward_candidates, groups, categories,
     )
 
+    exploratory_candidate = candidate_by_id[exploratory_selected_id]
+    preliminary_deconfounding = build_deconfounding_audit(
+        semantic_prediction=forward_results[exploratory_selected_id]["prediction"],
+        raw_curves=raw_curves, durations=durations, starts=starts, ends=ends,
+        source_indices=source_indices, groups=groups, categories=categories,
+        entries=entries, terminals=terminals, amplitudes=amplitudes,
+        selected_lag=exploratory_candidate.lag, hook_ends=hook_ends,
+        repeats=min(args.inference_repeats, 2048),
+    )
+    zero_id = next(row.id for row in forward_candidates if row.lag == 0)
+    selected_id = (
+        exploratory_selected_id
+        if preliminary_deconfounding["processingLagSupported"] else zero_id
+    )
+    selected_candidate = candidate_by_id[selected_id]
+    selected_measurement = forward_measurements[selected_id]
     fixed = forward_results[selected_id]
+    deconfounding_audit = (
+        preliminary_deconfounding
+        if selected_id == exploratory_selected_id else
+        build_deconfounding_audit(
+            semantic_prediction=fixed["prediction"],
+            raw_curves=raw_curves, durations=durations, starts=starts, ends=ends,
+            source_indices=source_indices, groups=groups, categories=categories,
+            entries=entries, terminals=terminals, amplitudes=amplitudes,
+            selected_lag=selected_candidate.lag, hook_ends=hook_ends,
+            repeats=min(args.inference_repeats, 2048),
+        )
+    )
+    exploratory_primary = preliminary_deconfounding["primarySpecification"]
+    exploratory_reverse = next((
+        row for row in preliminary_deconfounding["matchedForwardReverse"]
+        if np.isclose(
+            float(row["absoluteLagSeconds"]), float(exploratory_candidate.lag),
+        )
+    ), None)
+    exploratory_consensus = next((
+        row for row in preliminary_deconfounding["futureFreeConsensusByLag"]
+        if np.isclose(float(row["lagSeconds"]), float(exploratory_candidate.lag))
+    ), None)
+    failed_gates = []
+    if not (exploratory_primary.get("familyMaxNullP", 1) <= .05):
+        failed_gates.append("family-wide max-null p did not pass 0.05")
+    if not exploratory_consensus or exploratory_consensus.get("minimumRho") is None \
+            or exploratory_consensus["minimumRho"] <= 0:
+        failed_gates.append("not every future-free specification was positive")
+    if exploratory_candidate.lag <= 0:
+        failed_gates.append("the exploratory winner was not a positive delay")
+    elif not exploratory_reverse or exploratory_reverse.get("differenceCiLow") is None \
+            or exploratory_reverse["differenceCiLow"] <= 0 \
+            or exploratory_reverse.get("oneSidedBootstrapP", 1) > .05:
+        failed_gates.append("forward lag did not beat its matched reverse-time control")
+    deconfounding_audit["exploratoryLagGate"] = {
+        "candidate": exploratory_selected_id,
+        "lagSeconds": float(exploratory_candidate.lag),
+        "supported": bool(preliminary_deconfounding["processingLagSupported"]),
+        "heldoutCategoryBalancedSpearman": exploratory_primary.get(
+            "heldoutCategoryBalancedSpearman"
+        ),
+        "familyMaxNullP": exploratory_primary.get("familyMaxNullP"),
+        "futureFreeConsensus": exploratory_consensus,
+        "matchedForwardReverse": exploratory_reverse,
+        "failedGates": failed_gates,
+        "decision": (
+            "serve the exploratory lag"
+            if preliminary_deconfounding["processingLagSupported"] else
+            "reject the exploratory lag and serve the predeclared zero-delay fallback"
+        ),
+    }
     fixed_inference = category_balanced_source_inference(
         fixed["prediction"], fixed["targetResidual"], groups,
         categories,
@@ -344,9 +435,16 @@ def main() -> None:
         categories,
         repeats=args.inference_repeats, seed=20260713,
     )
+    chronological_fixed = crossfit_category_axis(
+        features, targets[selected_id], naturals[selected_id], groups, categories,
+        outer_splits=chronological_component_splits(corpus, groups),
+        validation_design="expanding-window past-to-future at the served lag",
+        seed=20260801,
+        shared_natural_baseline=True,
+    )
     chronological_inference = category_balanced_source_inference(
-        chronological_selection["prediction"],
-        chronological_selection["targetResidual"], groups,
+        chronological_fixed["prediction"],
+        chronological_fixed["targetResidual"], groups,
         categories,
         repeats=args.inference_repeats, seed=20260731,
     )
@@ -362,18 +460,31 @@ def main() -> None:
     for candidate in control_candidates:
         measured = measurements(
             candidate, normalized_curves, raw_curves, durations, starts, ends,
-            source_indices, entries, terminals, amplitudes, predicted_entries,
+            source_indices, entries, terminals, amplitudes,
         )
         result = crossfit_category_axis(
             features, measured["target"], measured["natural"], groups, categories,
+            shared_natural_baseline=True,
         )
-        control_max = max(control_max, abs(float(result["heldoutSpearman"])))
+        if np.isfinite(result["heldoutSpearman"]):
+            control_max = max(control_max, abs(float(result["heldoutSpearman"])))
         control_rows.append(candidate_payload(
             candidate, result, measured["measured"], "reverse-time falsification control",
         ))
 
+    endpoint_measurement = measurements(
+        selected_candidate, curve_families["endpoint_affine"], raw_curves,
+        durations, starts, ends, source_indices, entries, terminals, amplitudes,
+        baseline_mode="endpoint_conditioned",
+    )
+    replay_measurement = measurements(
+        selected_candidate, curve_families["terminal_replay"], raw_curves,
+        durations, starts, ends, source_indices, entries, terminals, amplitudes,
+        baseline_mode="endpoint_conditioned",
+    )
     category_models = fit_full_category_axes(
-        features, selected_measurement["target"], selected_measurement["natural"], categories,
+        features, selected_measurement["target"], selected_measurement["natural"],
+        categories, groups=groups, shared_natural_baseline=True,
     )
     component_axis = np.full(len(component_rows), np.nan, np.float32)
     component_map_y = np.full(len(component_rows), np.nan, np.float32)
@@ -431,9 +542,25 @@ def main() -> None:
                 float(selected_measurement["raw"][index])
                 if np.isfinite(selected_measurement["raw"][index]) else None
             ),
-            "endpointNormalizedObservedSlope": (
+            "entryIndexedObservedSlope": (
                 float(selected_measurement["target"][index])
                 if np.isfinite(selected_measurement["target"][index]) else None
+            ),
+            "terminalConditionedReplayObservedSlope": (
+                float(replay_measurement["target"][index])
+                if np.isfinite(replay_measurement["target"][index]) else None
+            ),
+            "endpointAffineObservedSlope": (
+                float(endpoint_measurement["target"][index])
+                if np.isfinite(endpoint_measurement["target"][index]) else None
+            ),
+            "naturalExpectedSlopeOOF": (
+                float(fixed["naturalBaselinePrediction"][index])
+                if np.isfinite(fixed["naturalBaselinePrediction"][index]) else None
+            ),
+            "entryIndexedResidualSlope": (
+                float(fixed["targetResidual"][index])
+                if np.isfinite(fixed["targetResidual"][index]) else None
             ),
             "unexpectedObservedSlope": (
                 float(component_observed[index]) if np.isfinite(component_observed[index]) else None
@@ -482,19 +609,10 @@ def main() -> None:
         composite_axis_coordinate[np.isfinite(composite_axis_coordinate)]
     )
 
-    hook_starts = np.full(len(corpus), np.nan, np.float32)
-    hook_ends = np.full(len(corpus), np.nan, np.float32)
-    for source_index in range(len(corpus)):
-        selected = source_indices == source_index
-        valid_starts = starts[selected][np.isfinite(starts[selected])]
-        valid_ends = ends[selected][np.isfinite(ends[selected])]
-        if len(valid_starts) and len(valid_ends):
-            hook_starts[source_index] = valid_starts.min()
-            hook_ends[source_index] = valid_ends.max()
     hook_measurement = measurements(
         selected_candidate, normalized_curves, raw_curves, durations,
         hook_starts, hook_ends, np.arange(len(corpus)), entries, terminals,
-        amplitudes, predicted_entries,
+        amplitudes,
     )
     hook_features = row_unit(np.asarray(
         np.load(VECTOR_DIR / "full.npy", mmap_mode="r"), np.float32,
@@ -523,7 +641,7 @@ def main() -> None:
                 float(hook_measurement["raw"][index])
                 if np.isfinite(hook_measurement["raw"][index]) else None
             ),
-            "endpointNormalizedObservedSlope": (
+            "entryIndexedObservedSlope": (
                 float(hook_measurement["target"][index])
                 if np.isfinite(hook_measurement["target"][index]) else None
             ),
@@ -751,22 +869,36 @@ def main() -> None:
         if np.isfinite(duration) and count > 1:
             resolution.append(duration / (count - 1))
     metric_contract = {
-        "name": "forward unexpected retention slope",
-        "unit": "endpoint-normalized retention amplitude per second",
+        "name": "future-free unexpected retention slope",
+        "unit": "entry-indexed retention fraction per second",
         "higherMeans": "the retention curve falls less, or rises more, than the text-free expectation",
         "selectedCandidate": selected_id,
         "selectedLagSeconds": selected_candidate.lag,
+        "exploratorySelectedCandidate": exploratory_selected_id,
+        "exploratorySelectedLagSeconds": exploratory_candidate.lag,
+        "positiveProcessingLagSupported": deconfounding_audit["processingLagSupported"],
+        "servedLagReason": (
+            "the exploratory lag passed the full deconfounding and reverse-time gate"
+            if deconfounding_audit["processingLagSupported"] else
+            "no positive delay was identified, so the operational window has zero added lag"
+        ),
         "anchor": selected_candidate.anchor,
         "windowDefinition": selected_candidate.definition,
         "selectionPolicy": (
             "within each outer source-video fold, choose only among 0s to 5s forward shifts "
             "of the same exact spoken interval using equal-weight Fisher-mean Spearman across "
-            "the four frozen categories; test the choice once on untouched source videos"
+            "the four frozen categories; a positive winner is served only after the complete "
+            "normalization/baseline/lag max-null and matched reverse-time controls pass"
         ),
-        "normalization": "(retention - terminal) / (entry - terminal)",
+        "normalization": "R(t) / R(0); no terminal or post-response value enters the primary target",
         "naturalDropBaseline": (
-            "ridge fit without text from exact window timing, video duration, entry, terminal, "
-            "amplitude, and out-of-fold entry expected from terminal retention"
+            "one category-blind source-held-out ridge using exact timing, duration, and measured "
+            "trajectory ending one source-native sample before the spoken component begins; "
+            "every source video has equal total weight"
+        ),
+        "deployableInput": (
+            "the saved semantic axis scores only the exact component embedding plus its deletion-influence "
+            "embedding; measured past trajectory is used only to isolate the training outcome"
         ),
         "reverseTimePolicy": "negative lags are falsification controls and can never be selected",
         "nativeCurveMedianSampleSeconds": float(np.median(resolution)),
@@ -774,23 +906,26 @@ def main() -> None:
         "causalClaim": False,
     }
     random_fold_supported = bool(
-        nested_inference["p"] <= .05
-        and nested_inference["ciLow"] > 0
+        fixed_inference["p"] <= .05
+        and fixed_inference["ciLow"] is not None
+        and fixed_inference["ciLow"] > 0
         and fixed["heldoutSpearman"] > control_max
+        and deconfounding_audit["primarySpecification"]["familyMaxNullP"] <= .05
     )
     future_supported = bool(
         chronological_inference["p"] <= .05
+        and chronological_inference["ciLow"] is not None
         and chronological_inference["ciLow"] > 0
-        and chronological_selection["heldoutSpearman"] > 0
+        and chronological_fixed["heldoutSpearman"] > 0
         and all(
             value > 0 for value in
-            chronological_selection["heldoutSpearmanByCategory"].values()
+            chronological_fixed["heldoutSpearmanByCategory"].values()
         )
     )
     validated = bool(random_fold_supported and future_supported)
     validation_status = (
         "validated-random-and-future"
-        if validated else "random-fold-only-conditional-diagnostic"
+        if validated else "deconfounded-but-unvalidated-diagnostic"
     )
     model = {
         "version": 2,
@@ -821,17 +956,18 @@ def main() -> None:
                 "heldoutSpearmanByCategory": fixed["heldoutSpearmanByCategory"],
                 "sourceInference": fixed_inference,
                 "chronologicalValidation": {
-                    "heldoutCategoryBalancedSpearman": chronological_selection["heldoutSpearman"],
-                    "heldoutSpearmanByCategory": chronological_selection["heldoutSpearmanByCategory"],
+                    "heldoutCategoryBalancedSpearman": chronological_fixed["heldoutSpearman"],
+                    "heldoutSpearmanByCategory": chronological_fixed["heldoutSpearmanByCategory"],
                     "sourceInference": chronological_inference,
-                    "selectionCounts": chronological_selection["selectionCounts"],
-                    "folds": chronological_selection["folds"],
-                    "evaluatedRows": chronological_selection["evaluatedRows"],
-                    "unevaluatedWarmupRows": chronological_selection["unevaluatedRows"],
-                    "validationDesign": chronological_selection["validationDesign"],
+                    "exploratorySelectionCounts": chronological_selection["selectionCounts"],
+                    "exploratorySelectionFolds": chronological_selection["folds"],
+                    "evaluatedRows": chronological_fixed["evaluatedRows"],
+                    "unevaluatedWarmupRows": chronological_fixed["unevaluatedRows"],
+                    "validationDesign": chronological_fixed["validationDesign"],
                 },
             },
         },
+        "deconfoundingAudit": deconfounding_audit,
         "wholeHook": {
             "accepted": False,
             "definition": (
@@ -902,7 +1038,12 @@ def main() -> None:
         "validationStatus": validation_status,
         "categoryClaimStatus": model["categoryClaimStatus"],
         "metricContract": metric_contract,
+        "deconfoundingAudit": deconfounding_audit,
         "selection": {
+            "role": "exploratory lag search; the served lag is separately gated",
+            "exploratorySelectedCandidate": exploratory_selected_id,
+            "servedCandidate": selected_id,
+            "servedLagSeconds": selected_candidate.lag,
             "nestedHeldoutCategoryBalancedSpearman": selection["heldoutSpearman"],
             "nestedHeldoutSpearmanByCategory": selection["heldoutSpearmanByCategory"],
             "sourceInference": nested_inference,
@@ -959,7 +1100,9 @@ def main() -> None:
                 key: response.get(key) for key in (
                     "spokenStartSeconds", "spokenEndSeconds", "responseWindowStartSeconds",
                     "responseWindowEndSeconds", "rawObservedSlope",
-                    "endpointNormalizedObservedSlope", "unexpectedObservedSlope",
+                    "entryIndexedObservedSlope", "terminalConditionedReplayObservedSlope",
+                    "endpointAffineObservedSlope", "naturalExpectedSlopeOOF",
+                    "entryIndexedResidualSlope", "unexpectedObservedSlope",
                     "predictedUnexpectedSlopeOOF", "axisCoordinate", "axisPercentile", "mapY", "fold",
                 )
             }

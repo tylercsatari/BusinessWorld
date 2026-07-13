@@ -1,6 +1,6 @@
 # Promise Lab Methodology Audit
 
-Date: 2026-07-12
+Date: 2026-07-13
 
 This audit covers the complete path from exhaustive hook-span embeddings through
 canonical partitions, category-conditioned component analyses, whole-hook outcome
@@ -19,12 +19,12 @@ The two owned-outcome candidate axes fail the required generalization tests:
 | Candidate | Random-fold result | Future-only result | Decision |
 | --- | --- | --- | --- |
 | Retained-information axis | rho 0.2211, permutation p 0.00146 | rho 0.039-0.076 across 4-10 chronological blocks, all p >= 0.29 | diagnostic |
-| Terminal-conditioned survival | rho 0.2557, permutation p 0.00098, MAE gain 4.61% | five-block rho -0.1742, MAE gain -5.33%; not robust across block counts | diagnostic |
+| Future-free entry-indexed Hook Hold | rho 0.1346, permutation p 0.0537, MAE gain 1.18% | rho 0.0383, p 0.6424, MAE gain -4.77%; not robust across block counts or normalizations | diagnostic |
 
-The terminal-conditioned survival result is also normalization-sensitive. A
-future-free entry-normalized target gives rho 0.1353 with p 0.0517. The two model
-predictions correlate at -0.3081, so they are not interchangeable measurements of
-one stable latent property.
+Hook Hold is normalization-sensitive. Its entry-indexed and terminal-conditioned
+targets correlate at only 0.0455, while the two model predictions correlate at
+-0.3084. They are not interchangeable measurements of one stable latent property.
+The terminal-conditioned result is now a retrospective sensitivity only.
 
 Market Hold takes a different route. It is selected on 5,353 non-owned
 first-five-second transcript embeddings, with channel and duplicate text held
@@ -97,10 +97,12 @@ Fix:
 
 Corrected component-response result:
 
-- nested selected-lag rho -0.0515, p 0.4825
-- fixed 0-second rho 0.0492, p 0.5570
-- maximum reverse-time control absolute rho 0.2927
-- future-only lag choices vary across 0, 1, 2, and 5 seconds
+- predeclared zero-lag rho 0.0407, p 0.5658, 95% CI [-0.1080, 0.1863]
+- zero-lag family max-null p 1.0 across the complete 816-cell family
+- exploratory +0.5-second rho 0.2160, family p 0.8443
+- matched +0.5-second forward-minus-absolute-reverse rho 0.0119, 95% CI
+  [-0.3536, 0.1787]
+- fixed zero-lag chronological rho 0.2747, p 0.0557, with one category negative
 - no component lag or category response axis is promoted
 
 ### 4. Random folds were treated as temporal generalization
@@ -128,9 +130,10 @@ hook alone and does not identify replay counts or first-pass viewers.
 
 Fix:
 
-- Terminal-conditioned, future-free entry-normalized, and observed-absolute
-  targets are fitted and reported separately.
-- Promotion requires agreement with the future-free normalization.
+- Future-free entry-indexed is the primary observational target.
+- Observed-absolute, terminal-conditioned, and endpoint-affine targets are fitted
+  and reported separately.
+- Promotion requires robustness across the declared normalization family.
 - The UI shows target and prediction correlations across normalizations.
 - The terminal-conditioned percentile remains available only as a diagnostic.
 
@@ -254,7 +257,8 @@ Fix:
 - Every exact component is deleted from the literal input and rescored with the
   same frozen whole-hook Market Hold model used by training.
 - Every component pair receives that same model's local second-order interaction.
-- Hook Hold is retained as a clearly separate terminal-conditioned diagnostic.
+- Hook Hold is retained as a clearly separate future-free entry-indexed diagnostic;
+  terminal-conditioned replay is a retrospective sensitivity only.
 - The identical operation is retained separately for viewed percentage,
   five-second retention, average retention, log views, and the 41-position
   within-hook curve forecast.
@@ -287,6 +291,41 @@ Fix:
   library, example evaluation, and UI replay that exact artifact.
 - Visuals, titles, cluster labels, retention curves, and topical relevance do not
   enter the primary reward. Topical relevance is an explicit separate constraint.
+
+### 15. Rewatch, ordinary drop, and delay were tested one choice at a time
+
+A single replay correction or best-looking lag can manufacture a clean semantic
+axis. Component rows also overrepresent videos with more components unless fits
+and correlations explicitly rebalance them.
+
+Fix:
+
+- The declared family contains four normalizations, four category-blind natural
+  baselines, three ridge strengths, and 17 lags from -3 through +5 seconds: 816
+  cells total.
+- Every fit and reported correlation gives each source video equal total weight.
+- A cell is available only when every frozen category has at least eight
+  independent source videos; 720 cells pass and 96 remain explicitly unavailable.
+- The primary target is `R(t) / R(0)`. It avoids full-video endpoint information,
+  but it does not claim to identify causal first-pass retention from aggregate
+  curves.
+- The primary natural-drop model is category-blind and uses timing plus measured
+  trajectory ending one source-native sample before the spoken component starts.
+  Missing history has an explicit availability flag and fold-local imputation.
+- Terminal-conditioned and endpoint-affine normalizations are retrospective
+  sensitivity analyses. They cannot be produced from text alone.
+- A positive lag must survive the full family max-null, stay positive across every
+  future-free specification, and beat the mirrored reverse-time window on exactly
+  matched rows with a paired source bootstrap.
+
+Result:
+
+- The exploratory selector favors +0.5 seconds, but its family p is 0.8443 and its
+  matched forward-minus-reverse 95% interval is [-0.3536, 0.1787].
+- The predeclared zero-lag cell is itself weak: rho 0.0407, p 0.5658, family p 1.0.
+- No processing delay is identified. The served timing contract is zero added lag.
+- These negative controls prevent an attractive lag plot from becoming a claimed
+  human-processing mechanism.
 
 ## What remains valid
 
@@ -321,6 +360,11 @@ validated causal effects.
 - Only 208 videos from one channel are available. Channel-era and content-strategy
   drift are inseparable from calendar time.
 - Retention curves are observational aggregates, not randomized outcomes.
+- Entry indexing removes scale inflation at the first measured point but cannot
+  separate first-pass viewers from replay viewers. Terminal conditioning is only
+  a sensitivity because aggregate retention does not identify replay counts.
+- Viewer processing delay is unresolved rather than estimated at zero; zero is the
+  neutral operational fallback after every tested positive delay failed its gate.
 - The manual probe conditions downstream category interpretation.
 - Gemini embedding geometry may encode topic, wording, and production era together.
 - Component response is weak and unstable after conservative partitioning.

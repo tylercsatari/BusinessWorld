@@ -141,7 +141,7 @@ pair `(i,j)`, the primary relationship is:
 
 Every whole, component, and pair therefore uses the same coordinate as model
 training. Conditional cluster labels calibrate effect percentiles for display but
-never enter the score. Hook Hold remains a separate terminal-conditioned
+never enter the score. Hook Hold remains a separate future-free entry-indexed
 diagnostic:
 
 `hold_effect(i) = HookHold(full) - HookHold(without i)`
@@ -170,28 +170,57 @@ the deletion leaves text, but it deliberately includes the duration change.
 
 ## 7. Component response and lag
 
-The component study tests the exact spoken interval shifted from 0 through 5
-seconds in 0.5-second increments. Negative shifts are falsification controls.
-Within each outer source fold, lag selection uses training videos only.
+The component study tests the exact spoken interval across 17 shifts from -3
+through +5 seconds in 0.5-second increments. Negative shifts are falsification
+controls and can never be selected. Within each outer source fold, forward-lag
+selection uses training videos only. Rows are weighted so each source video has
+equal total influence.
 
 The displayed statistic is the equal-category Fisher mean of category-specific
 Spearman correlations. Its source-video wild null and source bootstrap operate on
 that exact statistic.
 
+The robustness family contains 816 declared cells: four retention
+normalizations, four category-blind natural-drop baselines, three ridge strengths,
+and 17 lags. Of these, 720 have at least eight independent source videos in every
+category; unsupported cells are unavailable, not assigned a neutral score.
+
 Corrected result:
 
-- nested selected-lag rho -0.0515, p 0.4825
-- fixed 0-second rho 0.0492, p 0.5570
-- reverse-time maximum absolute rho 0.2927
-- future-fold lag choices span 0, 1, 2, and 5 seconds
+- predeclared future-free zero-lag rho 0.0407, p 0.5658, 95% CI
+  [-0.1080, 0.1863]
+- its family-wide max-null p is 1.0
+- exploratory +0.5-second rho 0.2160, but family-wide p is 0.8443
+- on exactly matched rows, +0.5-second forward rho is 0.0331 and reverse rho is
+  -0.0212; forward minus absolute reverse is 0.0119 with 95% CI
+  [-0.3536, 0.1787]
+- the fixed zero-lag chronological rho is 0.2747, p 0.0557, with one category
+  negative and its confidence interval crossing zero
 
-No response lag or component response axis validates. The coordinates remain
-visible as conditional diagnostics. Because lag is unvalidated, whole-hook timing
-uses the exact spoken hook end with zero added lag.
+The nested exploratory selector prefers +0.5 seconds in three supported random
+folds, but two folds lack sufficient independent category support. Only one of
+four chronological selection folds is supportable. Those incomplete results do
+not override the family and reverse controls. No response lag or component
+response axis validates, so whole-hook timing uses the exact spoken hook end with
+zero added lag.
 
-## 8. Terminal-conditioned survival diagnostic
+## 8. Future-free Hook Hold and replay sensitivities
 
-For measured source curves, terminal-conditioned replay correction is:
+Hook Hold's primary measured target is entry-indexed:
+
+`R_entry(t) = 100 * R(t) / R(0)`
+
+At exact spoken hook end `T`, the duration-neutral target is:
+
+`carry_entry = 100 * exp(log(R(T) / R(0)) / T)`
+
+The train-fold duration-only expectation from `T`, `T^2`, and `log(T)` is
+subtracted. No full-video endpoint enters this target. Random folds give rho
+0.1346, p 0.0537, and 1.18% MAE improvement. Past-to-future validation gives rho
+0.0383, p 0.6424, and -4.77% MAE improvement. It is therefore a diagnostic, not
+the training reward.
+
+For measured source curves, a separate terminal-conditioned replay sensitivity is:
 
 `C(t) = max(R(0)-100, 0) * clip((R(t)-F)/(R(0)-F), 0, 1)`
 
@@ -201,22 +230,16 @@ For measured source curves, terminal-conditioned replay correction is:
 observational sensitivity index, not identified replay counts and not a target
 available from text alone.
 
-At exact spoken hook end `T`:
+At exact spoken hook end `T`, its retrospective carry is:
 
 `carry = 100 * exp(log(R_terminal(T)/100) / T)`
 
-A fold-fitted duration baseline using `T`, `T^2`, and `log(T)` is subtracted.
-Random folds give rho 0.2557, p 0.00098, and 4.61% MAE improvement.
-
-It is not promoted because:
-
-- five-block future rho is -0.1742 with -5.33% MAE improvement;
-- chronological sensitivity is not robust across 4-10 blocks;
-- future-free entry normalization gives rho 0.1353, p 0.0517;
-- terminal and entry-normalized model predictions correlate at -0.3081.
-
-The displayed percentile is only the rank of this terminal-conditioned diagnostic
-among the 208 training predictions.
+It is not an estimate of replay counts or causal first-pass retention. The
+terminal-conditioned and entry-indexed targets correlate only 0.0455, while their
+model predictions correlate -0.3084. That disagreement is direct evidence that
+normalization choice changes the semantic conclusion. Terminal replay and
+endpoint-affine results are therefore retrospective sensitivities only and are
+unavailable when scoring text without a measured curve.
 
 ## 9. Direct outcomes and retention curves
 
@@ -225,11 +248,13 @@ retention, average retention, and log views. Random-fold correlations are positi
 but none passes the multiplicity-corrected future-only gate. These planes remain
 visible with both random and chronological validation.
 
-The observed-absolute curve forecast uses 41 normalized positions from 0% to
-100% of each source's analyzed hook. Each source maps that grid to its own exact
-caption-derived endpoint. The same complete-hook model is used throughout, and
-no value is emitted after that endpoint. Random-fold and strict future tests are
-both shown; the forecast remains diagnostic unless the promotion rule passes.
+The primary entry-indexed curve forecast uses 41 normalized positions from 0% to
+100% of each source's analyzed hook. It has random-fold MAE 4.075 percentage
+points versus 4.471 for the text-free baseline. Its chronological MAE is 4.532
+versus 4.727, but the paired source bootstrap is not significant (p 0.0630 and a
+95% interval crossing zero). Observed-absolute and terminal-conditioned curves
+are fitted and reported separately. Each source maps the 41-position grid to its
+own exact caption-derived endpoint; no value is emitted after that endpoint.
 
 ## 10. Live scorer output
 
@@ -241,7 +266,8 @@ Every scored hook returns:
 - category-blind raw boundary posteriors
 - one complete non-overlapping partition and its top-two score gap
 - conditional category labels
-- retained-information and terminal-conditioned diagnostics
+- retained-information, future-free Hook Hold, and retrospective terminal
+  sensitivity diagnostics
 - four direct outcome predictions
 - a diagnostic 41-position retention forecast bounded by the analyzed hook
 - every component deletion and pair deletion input

@@ -11,6 +11,7 @@ from forward_response import (
     crossfit_category_axis,
     interaction_features,
     response_candidates,
+    source_equal_weights,
 )
 
 
@@ -34,6 +35,32 @@ class ForwardResponseTests(unittest.TestCase):
         )
         self.assertAlmostEqual(value, 1.0, places=5)
         self.assertEqual(set(by_category), {"0", "1"})
+
+    def test_category_balance_refuses_a_tiny_cluster(self):
+        prediction = np.arange(24, dtype=float)
+        target = prediction.copy()
+        categories = np.repeat([0, 1], [20, 4])
+        groups = np.arange(24).astype(str)
+        value, by_category = category_balanced_spearman(
+            prediction, target, categories, groups,
+            minimum_sources=8, required_categories=(0, 1),
+        )
+        self.assertTrue(np.isnan(value))
+        self.assertIsNone(by_category["1"])
+
+    def test_inference_refuses_a_missing_declared_category(self):
+        prediction = np.arange(40, dtype=float)
+        target = prediction.copy()
+        categories = np.repeat([0, 1], 20)
+        categories[-20:] = 1
+        target[categories == 1] = np.nan
+        inference = category_balanced_source_inference(
+            prediction, target, np.arange(40).astype(str), categories,
+            repeats=16,
+        )
+        self.assertIsNone(inference["rho"])
+        self.assertIsNone(inference["ciLow"])
+        self.assertEqual(inference["p"], 1.0)
 
     def test_component_features_preserve_equal_block_energy(self):
         raw = np.asarray([[3.0, 0.0], [0.0, 4.0]])
@@ -82,6 +109,27 @@ class ForwardResponseTests(unittest.TestCase):
         left, _ = candidate_intervals(np.asarray([2.0]), np.asarray([3.0]), control)
         self.assertEqual(float(left[0]), 1.0)
         self.assertTrue(all(row.lag >= 0 for row in response_candidates()))
+
+    def test_shared_baseline_is_category_blind_and_source_equal(self):
+        rng = np.random.default_rng(19)
+        groups = np.repeat(np.arange(48).astype(str), 4)
+        categories = np.tile(np.arange(4), 48)
+        natural = rng.normal(size=(len(groups), 3)).astype(np.float32)
+        features = rng.normal(size=(len(groups), 20)).astype(np.float32)
+        target = natural[:, 0] + .4 * features[:, 0] + rng.normal(
+            scale=.1, size=len(groups),
+        )
+        result = crossfit_category_axis(
+            features, target, natural, groups, categories,
+            dimensions=8, semantic_alpha=1.0,
+            shared_natural_baseline=True,
+        )
+        self.assertTrue(result["naturalBaselineCategoryBlind"])
+        self.assertTrue(all(
+            row["categoryBlind"] for row in result["naturalBaselineFolds"]
+        ))
+        weights = source_equal_weights(np.asarray(["a", "b", "b", "b"]))
+        self.assertAlmostEqual(float(weights[:1].sum()), float(weights[1:].sum()))
 
 
 if __name__ == "__main__":
