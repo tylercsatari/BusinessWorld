@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 import time
 from collections import Counter
 from pathlib import Path
@@ -42,6 +43,149 @@ def finite(value):
 def median_field(rows, field):
     values = [float(row[field]) for row in rows if finite(row.get(field))]
     return float(np.median(values)) if values else None
+
+
+def semantic_horizon_contract(hook_outcomes):
+    forecasts = [
+        row.get("retentionForecast") or {}
+        for row in hook_outcomes.get("hooks") or []
+    ]
+    endpoints = np.asarray([
+        float(row["responseEndSeconds"])
+        for row in forecasts if finite(row.get("responseEndSeconds"))
+    ], float)
+    spoken = np.asarray([
+        float(row["spokenHookEndSeconds"])
+        for row in forecasts if finite(row.get("spokenHookEndSeconds"))
+    ], float)
+    positions = sorted(set(len(row.get("timesSeconds") or []) for row in forecasts))
+    words = sum(len(row.get("words") or []) for row in forecasts)
+    return {
+        "scope": "exact analyzed hook only",
+        "sourceHooks": len(forecasts),
+        "responseEndSecondsSorted": np.sort(endpoints).astype(float).tolist(),
+        "minimumResponseEndSeconds": float(np.min(endpoints)) if len(endpoints) else None,
+        "p10ResponseEndSeconds": float(np.quantile(endpoints, .1)) if len(endpoints) else None,
+        "medianResponseEndSeconds": float(np.median(endpoints)) if len(endpoints) else None,
+        "p90ResponseEndSeconds": float(np.quantile(endpoints, .9)) if len(endpoints) else None,
+        "maximumResponseEndSeconds": float(np.max(endpoints)) if len(endpoints) else None,
+        "minimumSpokenEndSeconds": float(np.min(spoken)) if len(spoken) else None,
+        "maximumSpokenEndSeconds": float(np.max(spoken)) if len(spoken) else None,
+        "outputPositionsPerHook": positions,
+        "wordOutputs": words,
+        "postHookOutputPoints": int((hook_outcomes.get("audit") or {}).get(
+            "postHookOutputPoints", 0
+        )),
+        "claim": (
+            "Every semantic forecast position, word, and component ends at that source's exact "
+            "analyzed hook endpoint. Fixed-second outcomes after that endpoint are downstream "
+            "labels only; they are never represented as analyzed transcript."
+        ),
+    }
+
+
+def axis_target_window(target):
+    target = str(target or "")
+    if target.startswith("transfer_"):
+        return {
+            "kind": "counterfactual-no-video-time",
+            "label": "Long Quant counterfactual across target hook contexts; no viewer-time window",
+            "startSeconds": None, "endSeconds": None, "relativeToHookEnd": False,
+        }
+    match = re.fullmatch(r"measured_retention_(\d+)s", target)
+    if match:
+        second = float(match.group(1))
+        return {
+            "kind": "absolute-video-second-point",
+            "label": f"observed retention at video second {second:g}",
+            "startSeconds": second, "endSeconds": second, "relativeToHookEnd": False,
+        }
+    match = re.fullmatch(r"measured_retention_(mean|slope)_(\d+)_(\d+)s", target)
+    if match:
+        start, end = float(match.group(2)), float(match.group(3))
+        measure = "mean retention" if match.group(1) == "mean" else "retention slope"
+        return {
+            "kind": "absolute-video-second-window",
+            "label": f"observed {measure} from video second {start:g} to {end:g}",
+            "startSeconds": start, "endSeconds": end, "relativeToHookEnd": False,
+        }
+    match = re.fullmatch(r"measured_hold_after_hook_(\d+)s", target)
+    if match:
+        end = float(match.group(1))
+        return {
+            "kind": "post-hook-relative-window",
+            "label": f"observed change from exact hook end to {end:g} seconds after hook end",
+            "startSeconds": 0.0, "endSeconds": end, "relativeToHookEnd": True,
+        }
+    match = re.fullmatch(r"measured_retention_(\d+)pct_duration", target)
+    if match:
+        percent = int(match.group(1))
+        return {
+            "kind": "video-duration-relative-point",
+            "label": f"observed retention at {percent}% of each source video's duration",
+            "startSeconds": None, "endSeconds": None, "relativeToHookEnd": False,
+        }
+    if target == "measured_retention_hook_end":
+        return {
+            "kind": "hook-end-point", "label": "observed retention at the exact hook endpoint",
+            "startSeconds": None, "endSeconds": None, "relativeToHookEnd": False,
+        }
+    if target == "measured_drop_entry_to_hook_end":
+        return {
+            "kind": "within-hook-window", "label": "observed retention change from entry to exact hook end",
+            "startSeconds": 0.0, "endSeconds": None, "relativeToHookEnd": False,
+        }
+    if target == "measured_early_slope_change_0_3_to_3_8s":
+        return {
+            "kind": "absolute-video-second-comparison",
+            "label": "observed 3-8 second slope minus observed 0-3 second slope",
+            "startSeconds": 0.0, "endSeconds": 8.0, "relativeToHookEnd": False,
+        }
+    labels = {
+        "measured_keep_rate": "video-level viewed-versus-swiped outcome",
+        "measured_avg_retention": "video-level average percentage viewed",
+        "measured_log_views": "video-level log10 measured views",
+        "measured_entry_rewatch": "observed entry retention above 100% at video start",
+    }
+    return {
+        "kind": "video-level-or-declared-target",
+        "label": labels.get(target, "declared target in the axis artifact"),
+        "startSeconds": None, "endSeconds": None, "relativeToHookEnd": False,
+    }
+
+
+def axis_lineage_contract(experiment, semantic_horizon):
+    window = axis_target_window(experiment.get("target"))
+    endpoints = np.asarray(semantic_horizon.get("responseEndSecondsSorted") or [], float)
+    outcome_end = window.get("endSeconds")
+    if window.get("relativeToHookEnd"):
+        beyond = len(endpoints)
+    elif finite(outcome_end) and len(endpoints):
+        beyond = int(np.sum(endpoints < float(outcome_end)))
+    else:
+        beyond = None
+    representation = str(experiment.get("representation") or "")
+    input_scope = {
+        "raw": "exact contiguous component text",
+        "influence": "exact component deletion-influence vector inside its source hook",
+        "nonadditive": "exact component non-additive semantic vector inside its source hook",
+        "context": "retained source-hook context after the exact component is removed",
+    }.get(representation, representation or "declared semantic representation")
+    return {
+        "target": experiment.get("target"),
+        "targetDefinition": experiment.get("targetDefinition"),
+        "targetChannel": experiment.get("targetChannel"),
+        "status": axis_claim_status(experiment),
+        "semanticInput": input_scope,
+        "semanticInputHorizon": "the exact analyzed source hook only",
+        "outcomeWindow": window,
+        "sourceHooksWhoseSemanticInputEndsBeforeOutcomeWindow": beyond,
+        "sourceHooks": len(endpoints),
+        "claim": (
+            "The plane embeds hook-derived text only. The outcome window supplies a label for "
+            "association testing; it does not imply transcript was analyzed through that time."
+        ),
+    }
 
 
 def representation_indicators(atlas):
@@ -346,6 +490,112 @@ def main() -> None:
         row for row in selected_axes
         if row.get("targetChannel") == "observed YouTube outcome"
     ]
+    semantic_horizon = semantic_horizon_contract(hook_outcomes)
+    axis_lineage = {
+        str((row.get("experiment") or {}).get("target") or ""): axis_lineage_contract(
+            row.get("experiment") or {}, semantic_horizon,
+        )
+        for row in axes.get("maps") or []
+        if (row.get("experiment") or {}).get("target")
+    }
+    hook_rows = hook_outcomes.get("hooks") or []
+    partition_rows = canonical_partitions.get("rows") or []
+    boundary_gaps = sum(max(0, int(row.get("tokenCount") or 0) - 1)
+                        for row in partition_rows)
+    outcome_axis_maps = len(axes.get("maps") or [])
+    hook_components = int((hook_outcomes.get("audit") or {}).get("components") or 0)
+    hook_relationships = int((hook_outcomes.get("audit") or {}).get("relationships") or 0)
+    visualization_errors = []
+    if int(semantic_horizon.get("postHookOutputPoints") or 0) != 0:
+        visualization_errors.append("post-hook semantic outputs are present")
+    if semantic_horizon.get("outputPositionsPerHook") != [41]:
+        visualization_errors.append("retention forecasts do not all expose exactly 41 positions")
+    if len(axis_lineage) != outcome_axis_maps:
+        visualization_errors.append("one or more outcome-axis maps lack target lineage")
+    if partition_rows and any(not row.get("boundaryTrace") for row in partition_rows):
+        visualization_errors.append("one or more canonical partitions lack a full boundary trace")
+    if partition_rows and any(
+        len((row.get("boundaryTrace") or {}).get("gapCutProbabilitiesOOF") or [])
+        != max(0, int(row.get("tokenCount") or 0) - 1)
+        for row in partition_rows
+    ):
+        visualization_errors.append("one or more boundary traces omit candidate token gaps")
+    visualization_contract = {
+        "status": (
+            "complete" if hook_rows and outcome_axis_maps and not visualization_errors
+            else "incomplete"
+        ),
+        "errors": visualization_errors,
+        "semanticInputHorizon": semantic_horizon,
+        "axisTargetLineage": axis_lineage,
+        "channels": [
+            {
+                "id": "partition-boundaries", "label": "Category-blind partition evidence",
+                "outputs": boundary_gaps, "graphs": len(partition_rows),
+                "visibleAs": "one probability trace plus exact token ownership per hook",
+                "view": "Hook scorer / Hook library",
+            },
+            {
+                "id": "complete-hook-planes", "label": "Complete-hook semantic scores",
+                "outputs": 7, "graphs": 7,
+                "visibleAs": "seven named embedding planes with numeric color scales",
+                "view": "Hook scorer / Hook library",
+            },
+            {
+                "id": "market-transfer", "label": "Market Hold transfer",
+                "outputs": 4, "graphs": 4,
+                "visibleAs": "Market Hold z against each untouched owned outcome",
+                "view": "Hook scorer / Hook library",
+            },
+            {
+                "id": "long-title-transfer", "label": "Long-title prior transfer",
+                "outputs": 5, "graphs": 5,
+                "visibleAs": "long-form title prediction against Hook Hold and four Shorts outcomes",
+                "view": "Hook scorer / Hook library",
+            },
+            {
+                "id": "retention-forecast", "label": "Within-hook retention forecast",
+                "outputs": sum(len((row.get("retentionForecast") or {}).get("timesSeconds") or [])
+                               for row in hook_rows),
+                "graphs": len(hook_rows),
+                "visibleAs": "seconds and normalized progress, component windows, every word, band, actual",
+                "view": "Hook scorer / Hook library",
+            },
+            {
+                "id": "word-semantics", "label": "Word singleton semantics and influence",
+                "outputs": int(semantic_horizon.get("wordOutputs") or 0),
+                "graphs": int(semantic_horizon.get("wordOutputs") or 0) * 2,
+                "visibleAs": "singleton embedding and 41-position deletion trace for every selectable word",
+                "view": "Hook scorer / Hook library",
+            },
+            {
+                "id": "component-planes", "label": "Component diagnostics",
+                "outputs": hook_components * 8, "graphs": hook_components * 8,
+                "visibleAs": "eight named same-category planes for every emergent component",
+                "view": "Hook scorer / Hook library",
+            },
+            {
+                "id": "relationship-matrices", "label": "Pair relationships",
+                "outputs": hook_relationships * 4, "graphs": len(hook_rows) * 4,
+                "visibleAs": "four full component-by-component matrices with formulas",
+                "view": "Hook scorer / Hook library",
+            },
+            {
+                "id": "legacy-outcome-axes", "label": "Required-confound outcome directions",
+                "outputs": outcome_axis_maps, "graphs": outcome_axis_maps * 3,
+                "visibleAs": "semantic plane, grouped-source prediction check, and horizon lineage per target",
+                "view": "Outcome axes",
+            },
+        ],
+        "assertions": {
+            "postHookSemanticOutputs": int(semantic_horizon.get("postHookOutputPoints") or 0),
+            "axisTargetsWithLineage": len(axis_lineage),
+            "axisTargetsWithMaps": outcome_axis_maps,
+            "boundaryHooksWithTraces": sum(bool(row.get("boundaryTrace")) for row in partition_rows),
+            "boundaryHooks": len(partition_rows),
+            "retentionPositionCounts": semantic_horizon.get("outputPositionsPerHook"),
+        },
+    }
     top_transfer = {}
     for metric in swaps.get("metricNames") or []:
         ranked = sorted(
@@ -466,6 +716,7 @@ def main() -> None:
                 "legacy source-grouped support: observed targets have no chronological "
                 "replication and remain diagnostic"
             ),
+            "targetLineage": axis_lineage,
             "interpretation": (
                 "All model-predicted transfer targets have source-grouped support on raw source-span "
                 "semantics. Five observed-outcome targets survive the legacy grouped-random null only "
@@ -474,6 +725,7 @@ def main() -> None:
                 "YouTube outcomes."
             ),
         },
+        "visualizationContract": visualization_contract,
         "manualProbe": {
             "status": manual_probe.get("status"),
             "policy": manual_probe.get("policy"),

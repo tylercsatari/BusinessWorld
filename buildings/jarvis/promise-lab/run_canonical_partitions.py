@@ -331,6 +331,31 @@ def main() -> None:
             "tokenCount": len(tokens),
             "tokens": token_rows,
             "chunks": chunks,
+            "boundaryTrace": {
+                "gapCutProbabilitiesOOF": boundary_probability[
+                    boundary_slice
+                ].astype(float).tolist(),
+                "gapCutProbabilitiesServing": serving_boundary_probability[
+                    boundary_slice
+                ].astype(float).tolist(),
+                "gapAboveNullLabels": boundary_target[
+                    boundary_slice
+                ].astype(int).tolist(),
+                "selectedCutTokenOffsets": sorted(full_boundaries),
+                "gapCount": max(0, len(tokens) - 1),
+                "probabilitySource": (
+                    "source-held-out fold prediction for stored hooks; the serving line is the "
+                    "mean of the same frozen fold models"
+                ),
+                "auditThreshold": 0.5,
+                "auditThresholdRole": (
+                    "classifier operating-point audit only; it never chooses the exact cover"
+                ),
+                "decoderPolicy": (
+                    "maximum joint Bernoulli cut/non-cut posterior over every compatible "
+                    "contiguous exact cover"
+                ),
+            },
             "componentCount": component_count,
             "coverage": 1.0,
             "overlapCount": 0,

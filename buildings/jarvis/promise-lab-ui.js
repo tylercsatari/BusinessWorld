@@ -12,7 +12,7 @@
             view: 'overview', data: {}, loading: {}, errors: {},
             hookId: null, hook: null, componentId: null, representation: 'influence',
             mapIndex: 0, mapPage: 0, metric: 'ctrviews', sourceId: null, source: null,
-            axisIndex: 0, registryPage: 0, hookQuery: '', registryQuery: '', registryStage: 'all',
+            axisIndex: 0, pendingAxisTarget: null, registryPage: 0, hookQuery: '', registryQuery: '', registryStage: 'all',
             atlasScope: 'supported', focusedCluster: null, projectionMethod: savedProjectionMethod,
             savedPointIndex: null,
             clusterOutcomeCluster: 2, clusterOutcomeFamily: 'performance',
@@ -106,6 +106,11 @@
         }
         function validationColor(validation) {
             return String((validation || {}).status || '').startsWith('validated') ? C.green : C.amber;
+        }
+        function supportedEvidence(validation) {
+            const status = String((validation || {}).status || '');
+            return status.startsWith('validated')
+                || (status.includes('supported') && !status.includes('not-supported'));
         }
         function legacyAxisClaim(experiment) {
             if (!axisRandomFoldSupported(experiment)) return 'NOT SUPPORTED';
@@ -516,6 +521,7 @@
                 load('hookQuality', api('hook-quality'));
                 load('hookOutcomes', api('hook-outcomes'));
                 load('marketReward', api('market-reward'));
+                load('canonicalPartitions', api('canonical-partitions'));
                 load('hookExamples', api('hook-example-results'));
                 resumePendingHookScore();
             }
@@ -523,6 +529,7 @@
                 load('hookQuality', api('hook-quality'));
                 load('hookOutcomes', api('hook-outcomes'));
                 load('marketReward', api('market-reward'));
+                load('canonicalPartitions', api('canonical-partitions'));
             }
             if (state.view === 'overview') { load('findings'); load('manualProbe', api('manual-probe')); }
             if (state.view === 'saved') {
@@ -541,7 +548,7 @@
                 }
             }
             if (state.view === 'swaps') load('swaps');
-            if (state.view === 'axes') load('axes');
+            if (state.view === 'axes') { load('axes'); load('findings'); }
             if (state.view === 'registry') load('registry');
         }
 
@@ -957,6 +964,134 @@
             return (((focus.row || {}).outcomes || {})[target] || null);
         }
 
+        function continuousMetricLegend(values, formatter, label) {
+            const finite = (values || []).map(numeric).filter(Number.isFinite);
+            if (!finite.length) return `<div style="font-size:7px;color:${C.faint};margin-top:3px">${esc(label)} has no finite values.</div>`;
+            const [low, high] = bounds(finite), middle = (low + high) / 2;
+            return `<div data-pl-continuous-legend style="margin-top:4px"><div role="img" aria-label="Blue is low ${esc(label)} and red is high ${esc(label)}" style="height:6px;border:1px solid ${C.border};background:linear-gradient(90deg,${outcomePalette.low},${outcomePalette.middle},${outcomePalette.high})"></div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;font-size:6.8px;margin-top:2px"><span style="color:${outcomePalette.low}">LOW ${esc(formatter(low))}</span><span style="color:${C.mute};text-align:center">${esc(label)} ${esc(formatter(middle))}</span><span style="color:${outcomePalette.high};text-align:right">HIGH ${esc(formatter(high))}</span></div></div>`;
+        }
+
+        function hookOutcomeObservedSpec(target) {
+            const outcomeRows = (state.data.hookOutcomes || {}).hooks || [];
+            const marketRows = (state.data.marketReward || {}).hooks || [];
+            if (target === 'market') return {
+                label: 'measured 5s retention',
+                values: marketRows.map(row => numeric((((row || {}).outcomes || {}).retention_5s || {}).actual)),
+                format: value => `${fmt(value, 1)}%`,
+            };
+            if (target === 'survival') return {
+                label: 'observed excess carry',
+                values: outcomeRows.map(row => numeric((row.survivalScore || {}).actual)),
+                format: value => `${signed(value, 3)} pp/s`,
+            };
+            if (target === 'quality') return {
+                label: 'observed retained-info residual',
+                values: outcomeRows.map(row => numeric((row.overallScore || {}).observedResidual)),
+                format: value => signed(value, 3),
+            };
+            return {
+                label: `measured ${(((state.data.hookOutcomes || {}).targets || {})[target] || {}).shortLabel || target}`,
+                values: outcomeRows.map(row => numeric(((row.outcomes || {})[target] || {}).actual)),
+                format: value => formatHookOutcomeValue(value, target, true),
+            };
+        }
+
+        function canonicalPartitionFor(videoId) {
+            return (((state.data.canonicalPartitions || {}).rows || []).find(
+                row => String(row.videoId) === String(videoId)
+            ) || null);
+        }
+
+        function partitionForFocus(focus) {
+            if (!focus) return null;
+            if (focus.type === 'live') return (focus.result || {}).partition || null;
+            return canonicalPartitionFor((focus.row || {}).videoId);
+        }
+
+        function boundaryTracePanel(focus) {
+            const partition = partitionForFocus(focus);
+            if (!partition) return '';
+            const tokens = partition.tokens || [], chunks = partition.chunks || [];
+            const trace = partition.boundaryTrace || {};
+            const probabilities = (trace.gapCutProbabilitiesOOF || partition.boundaryProbabilities || []).map(numeric);
+            const serving = (trace.gapCutProbabilitiesServing || []).map(numeric);
+            const targets = trace.gapAboveNullLabels || [];
+            const selectedCuts = new Set((trace.selectedCutTokenOffsets || chunks.slice(0, -1).map(row => Number(row.end))).map(Number));
+            const complete = tokens.length > 0 && probabilities.length === Math.max(0, tokens.length - 1);
+            const sourceLabel = focus.type === 'stored' ? 'source-held-out gap probabilities' : 'frozen serving fold-ensemble probabilities';
+            return `<section data-pl-boundary-trace style="border:1px solid ${complete ? C.cyan : C.amber}55;background:${C.card};padding:11px;margin:10px 0"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:280px;flex:1"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">Every possible token boundary · ${esc(sourceLabel)}</div><div style="font-size:14px;color:${C.text};font-weight:900;margin-top:2px">${tokens.length} tokens · ${probabilities.length} candidate gaps · ${selectedCuts.size} selected cuts</div><div style="font-size:8.5px;color:${C.dim};line-height:1.55;margin-top:3px">Each bar is the learned probability of cutting at that exact adjacent-token gap. The decoder jointly compares every compatible cut/non-cut pattern and chooses one contiguous exact cover. The visible 0.5 line is the classifier audit point only; it does not choose cuts.</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${stat('token coverage', partition.coverage == null || Number(partition.coverage) === 1 ? 'exactly once' : 'FAILED', partition.coverage == null || Number(partition.coverage) === 1 ? C.green : C.red)}${stat('overlap', Number(partition.overlapCount || 0), Number(partition.overlapCount || 0) === 0 ? C.green : C.red)}${stat('top-two gap', fmt(partition.scoreGap, 4), C.amber)}${stat('covers compared', Number(partition.partitionsCompared || 0).toLocaleString(), C.purple)}</div></div>${complete ? `<canvas data-pl-canvas="boundary-trace" style="width:100%;height:245px;display:block;margin-top:8px"></canvas>` : `<div style="border-left:3px solid ${C.amber};padding:8px;margin-top:8px;color:${C.amber};font-size:8.5px">This older stored partition has selected-edge evidence only. Rebuild the canonical artifact to expose every rejected gap.</div>`}<div style="overflow-x:auto;margin-top:8px"><div style="display:flex;align-items:stretch;min-width:max-content;padding-bottom:4px">${tokens.map((token, index) => { const owner = Number(token.owner), chunk = chunks[owner] || {}, semantic = token.semantic || {}, probability = probabilities[index], selected = selectedCuts.has(index + 1), target = Number(targets[index]); return `<div style="display:flex;align-items:stretch"><div style="width:92px;border-bottom:4px solid ${clusterColor(chunk.category)};border-left:3px solid ${clusterColor(semantic.category)};background:${C.card2};padding:5px;box-sizing:border-box"><div style="font-size:8.5px;color:${C.text};font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(token.text || '')}">${esc(token.text || '')}</div><div style="font-size:6.8px;color:${C.mute};margin-top:2px">token ${index} · owner ${owner + 1}/C${chunk.category}<br>alone C${semantic.category}</div></div>${index < tokens.length - 1 ? `<div title="gap ${index + 1}: p(cut) ${fmt(probability, 4)}${target === 1 ? ' · geometric target above null' : ''}" style="width:48px;background:${selected ? C.cyan + '22' : 'transparent'};border-left:2px solid ${selected ? C.cyan : C.border};border-right:2px solid ${selected ? C.cyan : C.border};display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:6.8px;color:${selected ? C.cyan : C.mute};font-weight:900"><span>${selected ? 'CUT' : 'KEEP'}</span><span>${fmt(probability, 3)}</span>${serving.length ? `<span style="color:${C.faint}">serve ${fmt(serving[index], 3)}</span>` : ''}</div>` : ''}</div>`; }).join('')}</div></div><div style="font-size:7.5px;color:${C.mute};line-height:1.5;margin-top:5px"><b style="color:${C.text}">Token card bottom:</b> owning non-overlapping component category. <b style="color:${C.text}">Token card left:</b> that token embedded alone. <b style="color:${C.text}">Gap:</b> exact p(cut), selected decision, and serving probability when both stored OOF and serving traces exist. Outcomes and supplied examples enter none of these probabilities.</div></section>`;
+        }
+
+        function marketTransferPanel(focus) {
+            const market = state.data.marketReward || {}, transfer = market.transferValidation || {};
+            const targets = (state.data.hookOutcomes || {}).targets || {};
+            const rows = [
+                ['viewed_percent', (targets.viewed_percent || {}).shortLabel || 'viewed %'],
+                ['retention_5s', (targets.retention_5s || {}).shortLabel || '5s retention'],
+                ['average_retention', (targets.average_retention || {}).shortLabel || 'average retention'],
+                ['log_views', (targets.log_views || {}).shortLabel || 'views'],
+            ];
+            if (!(market.hooks || []).length) return '';
+            return `<section data-pl-market-transfer style="margin:10px 0"><div style="font-size:11px;color:${C.text};font-weight:900">Market Hold transfer · all four untouched owned outcomes</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin:2px 0 7px">X is the frozen external-only Market Hold z-coordinate. Y is the measured owned-channel outcome. These are transfer plots, not training fit; the selected hook is ringed in cyan.</div><div class="pl-map-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:7px">${rows.map(([target, label]) => { const validation = transfer[target] || {}, supported = supportedEvidence(validation); return `<div style="background:${C.card};border:1px solid ${supported ? C.green + '55' : C.amber + '44'};padding:8px"><div style="display:flex;justify-content:space-between;gap:6px"><b style="font-size:8.5px;color:${C.text}">${esc(label)}</b><span style="font-size:7px;color:${supported ? C.green : C.amber};font-weight:900">${supported ? 'SUPPORTED TRANSFER' : 'UNSUPPORTED'}</span></div><canvas data-pl-canvas="market-transfer" data-pl-market-target="${target}" style="width:100%;height:180px;display:block;margin-top:4px"></canvas><div style="font-size:7px;color:${C.mute}">rho ${fmt(validation.heldoutSpearman, 3)} · q ${fmt(validation.familyQ, 5)} · recent-half rho ${fmt(validation.recentHalfSpearman, 3)}</div></div>`; }).join('')}</div></section>`;
+        }
+
+        function longTitleTransferPanel(focus) {
+            const outcomes = state.data.hookOutcomes || {}, transfer = outcomes.longTitleTransfer || {};
+            const prior = transfer.prior || {}, corpus = prior.corpus || {}, validation = prior.validation || {};
+            const targets = outcomes.targets || {}, audits = transfer.shortsTransfer || {};
+            const rows = [
+                ['hookHold', 'Hook Hold target'],
+                ['viewed_percent', (targets.viewed_percent || {}).shortLabel || 'viewed %'],
+                ['retention_5s', (targets.retention_5s || {}).shortLabel || '5s retention'],
+                ['average_retention', (targets.average_retention || {}).shortLabel || 'average retention'],
+                ['log_views', (targets.log_views || {}).shortLabel || 'Shorts views'],
+            ];
+            if (!(outcomes.hooks || []).length) return '';
+            return `<section data-pl-long-title-transfer style="background:${C.card};border:1px solid ${C.amber}55;padding:10px;margin-top:8px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:280px;flex:1"><div style="font-size:8px;color:${C.amber};font-weight:900;text-transform:uppercase">Long Quant title market prior · separate, never blended</div><div style="font-size:15px;color:${C.text};font-weight:900;margin-top:2px">${Number(corpus.embeddedTitleRecords || 0).toLocaleString()} embedded long-form titles → five visible Shorts transfer tests</div><div style="font-size:8px;color:${C.dim};line-height:1.55;margin-top:3px">X is predicted long-form log10 views from the unchanged Long Quant title direction applied to each complete Shorts hook. Y is the measured Shorts target. The direction predicts long-form titles (held-out rho ${fmt(validation.heldoutSpearman, 3)}) but does not transfer to Shorts hold, so it remains a contextual prior only.</div></div><span style="font-size:7.5px;color:${C.amber};font-weight:900;border:1px solid ${C.amber}66;padding:5px 7px">INDEPENDENT · NOT BLENDED</span></div><div class="pl-map-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:7px;margin-top:8px">${rows.map(([target, label]) => { const audit = audits[target] || {}; return `<div style="background:${C.card2};padding:7px"><div style="display:flex;justify-content:space-between;gap:6px"><b style="font-size:8px;color:${C.text}">${esc(label)}</b><span style="font-size:7px;color:${C.red}">rho ${fmt(audit.spearman, 3)}</span></div><canvas data-pl-canvas="long-title-transfer" data-pl-long-title-target="${target}" style="width:100%;height:175px;display:block;margin-top:3px"></canvas><div style="font-size:6.8px;color:${C.mute}">p ${fmt(audit.spearmanP, 4)} · n ${audit.rows || 0}</div></div>`; }).join('')}</div></section>`;
+        }
+
+        function legacyAxisValueFormatter(experiment) {
+            const target = String((experiment || {}).target || '');
+            return value => {
+                value = numeric(value);
+                if (!Number.isFinite(value)) return '-';
+                if (target.startsWith('transfer_')) return `${signed(value, 2)} percentile points`;
+                if (target === 'measured_log_views') return `${fmt(value, 2)} log10 (about ${formatCompactNumber(10 ** value)} views)`;
+                if (target === 'measured_keep_rate' || target === 'measured_avg_retention') return `${fmt(value, 1)}%`;
+                if (target.includes('_slope_')) return `${signed(value * 100, 2)} pp/s`;
+                if (target.startsWith('measured_hold_after_hook_')) return `${signed(value * 100, 2)} pp`;
+                if (target.startsWith('measured_')) return `${fmt(value * 100, 1)}%`;
+                return fmt(value, 3);
+            };
+        }
+
+        function axisLineageFor(map) {
+            const target = String(((map || {}).experiment || {}).target || '');
+            return (((state.data.findings || {}).axis || {}).targetLineage || {})[target]
+                || (((state.data.findings || {}).visualizationContract || {}).axisTargetLineage || {})[target]
+                || null;
+        }
+
+        function axisHorizonPanel(map) {
+            const lineage = axisLineageFor(map);
+            if (!lineage) return `<div data-pl-horizon-lineage style="border-left:3px solid ${C.amber};padding:8px;color:${C.amber};font-size:8.5px">Target lineage is missing from this artifact. This axis is not presented as fully traceable until the findings artifact is rebuilt.</div>`;
+            const horizon = (((state.data.findings || {}).visualizationContract || {}).semanticInputHorizon) || {};
+            const window = lineage.outcomeWindow || {};
+            const sourceHooks = Number(lineage.sourceHooks || horizon.sourceHooks || 0);
+            const before = lineage.sourceHooksWhoseSemanticInputEndsBeforeOutcomeWindow;
+            const afterCopy = before == null
+                ? 'This target has no single fixed viewer-time endpoint.'
+                : `${Number(before).toLocaleString()} of ${sourceHooks.toLocaleString()} source hooks stop before the target window ends.`;
+            return `<section data-pl-horizon-lineage style="background:${C.card2};border:1px solid ${C.border2};padding:10px;margin:9px 0"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:280px;flex:1"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">Input horizon versus outcome horizon</div><div style="font-size:14px;color:${C.text};font-weight:900;margin-top:2px">Hook-derived semantics stop at each exact hook endpoint</div><div style="font-size:8.5px;color:${C.dim};line-height:1.55;margin-top:3px">Semantic input: ${esc(lineage.semanticInput || '')}. Outcome label: ${esc(window.label || lineage.targetDefinition || '')}. ${esc(afterCopy)} A later target is only a measured label used to test association; it is never represented as unseen words or a post-hook semantic forecast.</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${stat('semantic hooks', sourceHooks, C.cyan)}${stat('hook endpoints', `${fmt(horizon.minimumResponseEndSeconds, 2)}–${fmt(horizon.maximumResponseEndSeconds, 2)}s`, C.green)}${stat('target kind', window.kind || 'declared', C.amber)}${stat('claim', lineage.status || 'diagnostic', axisRandomFoldSupported((map || {}).experiment || {}) ? C.green : C.red)}</div></div><canvas data-pl-canvas="axis-horizon" style="width:100%;height:230px;display:block;margin-top:8px"></canvas><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:5px;font-size:8px;line-height:1.5"><div style="border-left:3px solid ${C.cyan};padding-left:7px;color:${C.dim}"><b style="color:${C.text}">CYAN DISTRIBUTION</b><br>Exact response endpoint of every analyzed hook. Median ${fmt(horizon.medianResponseEndSeconds, 2)}s; maximum ${fmt(horizon.maximumResponseEndSeconds, 2)}s.</div><div style="border-left:3px solid ${C.red};padding-left:7px;color:${C.dim}"><b style="color:${C.text}">RED TARGET</b><br>${esc(window.label || 'No fixed viewer-time window')}. ${esc(afterCopy)}</div></div></section>`;
+        }
+
+        function visualizationContractPanel() {
+            const contract = (state.data.findings || {}).visualizationContract;
+            if (!contract) return '';
+            const horizon = contract.semanticInputHorizon || {}, assertions = contract.assertions || {};
+            return `<section data-pl-visualization-contract style="border:1px solid ${contract.status === 'complete' ? C.green : C.amber}66;background:${C.card};padding:11px;margin:0 0 10px"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:300px;flex:1"><div style="font-size:8px;color:${C.green};font-weight:900;text-transform:uppercase">Visualization completeness contract</div><div style="font-size:17px;color:${C.text};font-weight:900;margin-top:2px">Every emitted analytical channel has a named visible graph</div><div style="font-size:8.5px;color:${C.dim};line-height:1.55;margin-top:4px">The contract is generated from the artifacts, not a hand-maintained UI promise. Semantic curves contain ${esc((horizon.outputPositionsPerHook || []).join(', '))} positions per hook, stop at ${fmt(horizon.minimumResponseEndSeconds, 2)}–${fmt(horizon.maximumResponseEndSeconds, 2)}s, and contain ${Number(assertions.postHookSemanticOutputs || 0)} post-hook semantic outputs.</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${stat('channels', (contract.channels || []).length, C.cyan)}${stat('axis lineage', `${assertions.axisTargetsWithLineage || 0}/${assertions.axisTargetsWithMaps || 0}`, C.green)}${stat('boundary traces', `${assertions.boundaryHooksWithTraces || 0}/${assertions.boundaryHooks || 0}`, C.green)}${stat('post-hook outputs', assertions.postHookSemanticOutputs || 0, Number(assertions.postHookSemanticOutputs || 0) === 0 ? C.green : C.red)}</div></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:7px;margin-top:9px">${(contract.channels || []).map(row => `<button data-pl-contract-view="${row.view && row.view.startsWith('Outcome') ? 'axes' : row.view && row.view.includes('library') ? 'library' : 'scorer'}" style="text-align:left;background:${C.card2};border:1px solid ${C.border};padding:8px;cursor:pointer"><div style="display:flex;justify-content:space-between;gap:6px"><b style="font-size:8.5px;color:${C.text}">${esc(row.label || row.id || '')}</b><b style="font-size:8px;color:${C.cyan}">${Number(row.graphs || 0).toLocaleString()} graph${Number(row.graphs || 0) === 1 ? '' : 's'}</b></div><div style="font-size:7.5px;color:${C.dim};line-height:1.45;margin-top:3px">${Number(row.outputs || 0).toLocaleString()} outputs · ${esc(row.visibleAs || '')}<br><span style="color:${C.mute}">${esc(row.view || '')}</span></div></button>`).join('')}</div></section>`;
+        }
+
         function outcomePredictionStrip(focus) {
             if (!focus) return '';
             const targets = (state.data.hookOutcomes || {}).targets || {};
@@ -996,11 +1131,12 @@
                 ...hookOutcomeOrder.map(id => ({ id, label: (targets[id] || {}).shortLabel || id, definition: (targets[id] || {}).definition || '' }))];
             return `<div style="margin:14px 0 10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:7px"><div><div style="font-size:12px;color:${C.text};font-weight:900">All seven complete-hook embedding planes</div><div style="font-size:8.5px;color:${C.mute};margin-top:2px">Every point is one of ${Number((outcomes.hooks || []).length).toLocaleString()} hooks. X is the named frozen score; Y is its orthogonal semantic direction. Market Hold is colored by measured five-second retention; other planes use their declared observed target. A cyan ring is the current hook.</div></div><div style="font-size:8px;color:${C.dim}">Click a training point to inspect predicted versus actual without leaving this view.</div></div><div class="pl-map-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:8px">${axes.map(axis => {
                 const validation = hookOutcomeValidation(axis.id), value = hookOutcomePayload(focus, axis.id) || {};
+                const observedSpec = hookOutcomeObservedSpec(axis.id);
                 const prediction = axis.id === 'market' ? value.percentile : axis.id === 'survival' ? value.holdZ : axis.id === 'quality' ? value.percentile : (focus && focus.type === 'stored' ? value.predictedOOF : value.prediction);
                 const display = ['market', 'quality', 'survival'].includes(axis.id)
                     ? (Number.isFinite(numeric(prediction)) ? (axis.id === 'survival' ? `${signed(prediction, 2)}σ` : `${fmt(prediction, 1)}th`) : '-')
                     : formatHookOutcomeValue(prediction, axis.id);
-                return `<section style="background:${C.card};border:1px solid ${validationColor(validation)}44;padding:9px;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start"><div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(axis.label)}</div><div style="font-size:7.5px;color:${C.mute};line-height:1.4;margin-top:2px">${esc(axis.definition)}</div></div><div style="text-align:right;white-space:nowrap"><b style="font-size:13px;color:${C.cyan}">${esc(display)}</b><div style="font-size:7px;color:${validationColor(validation)};font-weight:900">${validationLabel(validation)}</div></div></div><canvas data-pl-canvas="hook-outcome-axis" data-pl-outcome-target="${axis.id}" style="width:100%;height:220px;display:block;margin-top:5px"></canvas><div style="font-size:7.5px;color:${C.mute};margin-top:3px">held-out rho ${fmt(validation.heldoutSpearman, 3)} · q ${fmt(validation.familyQ, 4)}</div></section>`;
+                return `<section style="background:${C.card};border:1px solid ${validationColor(validation)}44;padding:9px;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start"><div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(axis.label)}</div><div style="font-size:7.5px;color:${C.mute};line-height:1.4;margin-top:2px">${esc(axis.definition)}</div></div><div style="text-align:right;white-space:nowrap"><b style="font-size:13px;color:${C.cyan}">${esc(display)}</b><div style="font-size:7px;color:${validationColor(validation)};font-weight:900">${validationLabel(validation)}</div></div></div><div style="display:flex;justify-content:space-between;gap:6px;font-size:6.8px;color:${C.mute};margin-top:5px"><span>← lower ${esc(axis.label)}</span><span>higher ${esc(axis.label)} →</span></div><canvas data-pl-canvas="hook-outcome-axis" data-pl-outcome-target="${axis.id}" style="width:100%;height:220px;display:block"></canvas><div style="font-size:6.8px;color:${C.faint};text-align:center">X = named score · Y = outcome-blind orthogonal semantic coordinate</div>${continuousMetricLegend(observedSpec.values, observedSpec.format, observedSpec.label)}<div style="font-size:7.5px;color:${C.mute};margin-top:3px">held-out rho ${fmt(validation.heldoutSpearman, 3)} · q ${fmt(validation.familyQ, 4)}</div></section>`;
             }).join('')}</div></div>${outcomePointInspector()}`;
         }
 
@@ -1088,7 +1224,7 @@
             }).join('');
             const curve = (outcomes.curveModel || {}).rewatchAdjustedValidation || {};
             const prior = outcomes.longTitleTransfer || {}, priorTransfer = (prior.shortsTransfer || {}).hookHold || {}, corpus = ((prior.prior || {}).corpus || {}), priorValidation = ((prior.prior || {}).validation || {});
-            return `<section style="margin:12px 0"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:7px"><div><div style="font-size:13px;color:${C.text};font-weight:900">Out-of-fold prediction accuracy and uncertainty</div><div style="font-size:8.5px;color:${C.mute};line-height:1.5;margin-top:2px">Every dot was predicted by a model that did not train on that hook. The diagonal is perfect calibration; large vertical spread is uncertainty. Signal/error is prediction SD ÷ residual RMSE, a forecast analogue for the requested Sharpe-style question, not a financial Sharpe ratio.</div></div><div style="font-size:8px;color:${C.dim}">Calibration slope ideal = 1 · R² ideal = 1 · coverage is empirical, not Gaussian</div></div><div class="pl-map-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px">${cards}</div><div class="pl-split" style="display:grid;grid-template-columns:minmax(280px,1.2fr) minmax(280px,.8fr);gap:8px;margin-top:8px"><div style="background:${C.card};padding:9px"><div style="font-size:9px;color:${C.text};font-weight:900">Retention-curve error by second</div><canvas data-pl-canvas="curve-accuracy" style="width:100%;height:220px;display:block;margin-top:4px"></canvas><div style="font-size:7.5px;color:${C.mute};line-height:1.45;margin-top:4px">Cyan = hook-text model MAE; gray = text-free baseline MAE. Source curve MAE: median ${fmt(curve.sourceMAEP50PercentagePoints, 2)} pp · 80% ${fmt(curve.sourceMAEP80PercentagePoints, 2)} pp · 90% ${fmt(curve.sourceMAEP90PercentagePoints, 2)} pp.</div></div><div style="background:${C.card};padding:9px;border-left:3px solid ${C.amber}"><div style="font-size:8px;color:${C.amber};font-weight:900;text-transform:uppercase">Long Quant title market prior · separate channel</div><div style="font-size:17px;color:${C.text};font-weight:900;margin:3px 0">${Number(corpus.embeddedTitleRecords || 0).toLocaleString()} embedded / ${Number(corpus.storedLongFormRecords || 0).toLocaleString()} stored titles</div><div style="font-size:8px;color:${C.dim};line-height:1.6">The frozen 1536D Long Quant title direction predicts long-form log views with held-out rho <b style="color:${C.text}">${fmt(priorValidation.heldoutSpearman, 3)}</b> and RMSE ${fmt(priorValidation.heldoutRMSELog10Views, 3)} log10 views. Applied unchanged to these Shorts hooks, its hold correlation is only <b style="color:${C.red}">${fmt(priorTransfer.spearman, 3)}</b>. It is therefore visible as a market-context prior but <b style="color:${C.amber}">not blended into Hook Hold</b>. Stored records without an embedding are not silently counted as modeled titles.</div></div></div></section>`;
+            return `<section style="margin:12px 0"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:7px"><div><div style="font-size:13px;color:${C.text};font-weight:900">Out-of-fold prediction accuracy and uncertainty</div><div style="font-size:8.5px;color:${C.mute};line-height:1.5;margin-top:2px">Every dot was predicted by a model that did not train on that hook. The diagonal is perfect calibration; large vertical spread is uncertainty. Signal/error is prediction SD ÷ residual RMSE, a forecast analogue for the requested Sharpe-style question, not a financial Sharpe ratio.</div></div><div style="font-size:8px;color:${C.dim}">Calibration slope ideal = 1 · R² ideal = 1 · coverage is empirical, not Gaussian</div></div><div class="pl-map-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px">${cards}</div><div class="pl-split" style="display:grid;grid-template-columns:minmax(280px,1.2fr) minmax(280px,.8fr);gap:8px;margin-top:8px"><div style="background:${C.card};padding:9px"><div style="font-size:9px;color:${C.text};font-weight:900">Retention-curve error by normalized hook position</div><canvas data-pl-canvas="curve-accuracy" style="width:100%;height:220px;display:block;margin-top:4px"></canvas><div style="font-size:7.5px;color:${C.mute};line-height:1.45;margin-top:4px">Cyan = hook-text model MAE; gray = text-free baseline MAE. X is 0–100% of each source's own analyzed hook, not a shared number of seconds. Source curve MAE: median ${fmt(curve.sourceMAEP50PercentagePoints, 2)} pp · 80% ${fmt(curve.sourceMAEP80PercentagePoints, 2)} pp · 90% ${fmt(curve.sourceMAEP90PercentagePoints, 2)} pp.</div></div><div style="background:${C.card};padding:9px;border-left:3px solid ${C.amber}"><div style="font-size:8px;color:${C.amber};font-weight:900;text-transform:uppercase">Long Quant title market prior · separate channel</div><div style="font-size:17px;color:${C.text};font-weight:900;margin:3px 0">${Number(corpus.embeddedTitleRecords || 0).toLocaleString()} embedded / ${Number(corpus.storedLongFormRecords || 0).toLocaleString()} stored titles</div><div style="font-size:8px;color:${C.dim};line-height:1.6">The frozen 1536D Long Quant title direction predicts long-form log views with held-out rho <b style="color:${C.text}">${fmt(priorValidation.heldoutSpearman, 3)}</b> and RMSE ${fmt(priorValidation.heldoutRMSELog10Views, 3)} log10 views. Applied unchanged to these Shorts hooks, its hold correlation is only <b style="color:${C.red}">${fmt(priorTransfer.spearman, 3)}</b>. It is therefore visible as a market-context prior but <b style="color:${C.amber}">not blended into Hook Hold</b>. Stored records without an embedding are not silently counted as modeled titles.</div></div></div>${longTitleTransferPanel(focus)}</section>`;
         }
 
         function survivalMethodPanel() {
@@ -1140,6 +1276,24 @@
             return { ...row, coordinate: focusType === 'live' ? row.prediction : row.predictedOOF, status: (row.validation || {}).status || row.validationStatus, rho: (row.validation || {}).heldoutSpearman ?? row.heldoutSpearman };
         }
 
+        function componentObservedSpec(category, axis) {
+            const values = [];
+            ((state.data.hookOutcomes || {}).hooks || []).forEach(source => (source.components || []).forEach(component => {
+                if (Number(component.category) !== Number(category)) return;
+                if (axis === 'market') values.push(numeric((((marketRewardRow(source.videoId) || {}).outcomes || {}).retention_5s || {}).actual));
+                else if (axis === 'hold') values.push(numeric((source.survivalScore || {}).actual));
+                else if (axis === 'broad') values.push(numeric((source.overallScore || {}).observedResidual));
+                else if (axis === 'forward') values.push(numeric((component.forwardResponse || {}).unexpectedObservedSlope));
+                else values.push(numeric(((component.outcomes || {})[axis] || {}).actual));
+            }));
+            const targets = (state.data.hookOutcomes || {}).targets || {};
+            if (axis === 'market') return { values, label: 'measured 5s retention', format: value => `${fmt(value, 1)}%` };
+            if (axis === 'hold') return { values, label: 'observed excess carry', format: value => `${signed(value, 3)} pp/s` };
+            if (axis === 'broad') return { values, label: 'observed retained-info residual', format: value => signed(value, 3) };
+            if (axis === 'forward') return { values, label: 'unexpected normalized slope', format: value => `${signed(value, 4)}/s` };
+            return { values, label: `measured ${(targets[axis] || {}).shortLabel || axis}`, format: value => formatHookOutcomeValue(value, axis, true) };
+        }
+
         function componentOutcomePointInspector() {
             if (!state.outcomeComponentPointKey) return '';
             const [videoId, componentIndex] = String(state.outcomeComponentPointKey).split(':');
@@ -1175,7 +1329,8 @@
                 const status = String(value.status || 'diagnostic-not-validated');
                 const color = status.startsWith('validated') ? C.green : C.amber;
                 const display = ['market', 'hold'].includes(axis.id) ? `${signed(value.coordinate, 2)}σ` : ['broad', 'forward'].includes(axis.id) ? `${fmt(value.percentile, 1)}th` : formatHookOutcomeValue(value.coordinate, axis.id);
-                return `<div style="flex:0 0 270px;background:${C.card};border:1px solid ${color}44;padding:8px;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px"><div style="min-width:0"><div style="font-size:8px;color:${clusterColor(component.category)};font-weight:900">COMPONENT ${index + 1} · CLUSTER ${component.category}</div><div title="${esc(component.text || '')}" style="font-size:8px;color:${C.text};font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc(component.text || '')}</div></div><div style="text-align:right;white-space:nowrap"><b style="font-size:12px;color:${C.cyan}">${esc(display)}</b><div style="font-size:6.5px;color:${color};font-weight:900">${status.startsWith('validated') ? 'VALIDATED' : 'DIAGNOSTIC'}</div></div></div><canvas data-pl-canvas="component-score-axis" data-pl-component-index="${index}" data-pl-component-category="${component.category}" data-pl-component-axis="${axis.id}" style="width:100%;height:190px;display:block;margin-top:4px"></canvas><div style="font-size:7px;color:${C.mute};margin-top:2px">${axis.id === 'broad' ? `deletion effect ${signed(value.coordinate, 4)}` : axis.id === 'forward' ? `axis ${signed(value.coordinate, 4)} · rho ${fmt(value.rho, 3)}` : `percentile ${fmt(value.percentile, 1)}th · rho ${fmt(value.rho, 3)}`}</div></div>`;
+                const observedSpec = componentObservedSpec(component.category, axis.id);
+                return `<div style="flex:0 0 290px;background:${C.card};border:1px solid ${color}44;padding:8px;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px"><div style="min-width:0"><div style="font-size:8px;color:${clusterColor(component.category)};font-weight:900">COMPONENT ${index + 1} · CLUSTER ${component.category}</div><div title="${esc(component.text || '')}" style="font-size:8px;color:${C.text};font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc(component.text || '')}</div></div><div style="text-align:right;white-space:nowrap"><b style="font-size:12px;color:${C.cyan}">${esc(display)}</b><div style="font-size:6.5px;color:${color};font-weight:900">${status.startsWith('validated') ? 'VALIDATED' : 'DIAGNOSTIC'}</div></div></div><div style="display:flex;justify-content:space-between;gap:4px;font-size:6.6px;color:${C.mute};margin-top:4px"><span>← lower named score</span><span>higher named score →</span></div><canvas data-pl-canvas="component-score-axis" data-pl-component-index="${index}" data-pl-component-category="${component.category}" data-pl-component-axis="${axis.id}" style="width:100%;height:190px;display:block"></canvas><div style="font-size:6.8px;color:${C.faint};text-align:center">X = named component score · Y = orthogonal semantic coordinate</div>${continuousMetricLegend(observedSpec.values, observedSpec.format, observedSpec.label)}<div style="font-size:7px;color:${C.mute};margin-top:2px">${axis.id === 'broad' ? `deletion effect ${signed(value.coordinate, 4)}` : axis.id === 'forward' ? `axis ${signed(value.coordinate, 4)} · rho ${fmt(value.rho, 3)}` : `percentile ${fmt(value.percentile, 1)}th · rho ${fmt(value.rho, 3)}`}</div></div>`;
             }).join('')}</div></section>`).join('')}</div>`;
         }
 
@@ -1188,13 +1343,14 @@
 
         function hookLibraryDetail(row) {
             const focus = { type: 'stored', row };
-            return `<section data-pl-library-detail style="border:1px solid ${C.cyan}66;background:${C.card2};padding:12px;margin:0 0 10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">Held-out source audit</div><div style="font-size:15px;color:${C.text};font-weight:900;margin-top:3px">${esc(row.title || row.videoId || '')}</div><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:3px">${esc(row.text || '')}</div></div>${button('Close detail', 'data-pl-library-close')}</div>${marketScoreCard(focus)}${survivalScoreCard(row.survivalScore, true)}${outcomePredictionStrip(focus)}${predictionAccuracyPanel(focus)}${retentionForecastPanel(row.retentionForecast, true)}${hookOutcomeAxisGallery(focus)}<div style="margin:12px 0"><div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px"><div style="font-size:11px;color:${C.text};font-weight:900">${(row.components || []).length} evidence-selected components</div><div style="font-size:8px;color:${C.cyan};font-weight:900">SCROLL ALL COMPONENTS →</div></div><div class="pl-component-summary-strip" style="display:flex;gap:7px;overflow-x:auto;overscroll-behavior-x:contain;padding-bottom:7px">${(row.components || []).map((component, index) => { const boundary = component.boundaryEvidence || {}, hold = component.hookHoldContribution || {}, market = ((marketRewardRow(row.videoId) || {}).components || [])[index] || {}, direct = component.wholeHookOutcomeContributions || {}, marketValue = numeric(market.effectZ); return `<div style="flex:0 0 295px;border-left:3px solid ${clusterColor(component.category)};background:${C.card};padding:8px;min-width:0"><div style="font-size:7.5px;color:${clusterColor(component.category)};font-weight:900">COMPONENT ${index + 1} · CLUSTER ${component.category} · TOKENS ${component.startToken}-${component.endToken}</div><div style="font-size:9px;color:${C.text};font-weight:800;line-height:1.4;margin:3px 0;overflow-wrap:anywhere">${esc(component.text || '')}</div><div style="font-size:7px;color:${C.mute};line-height:1.45;margin:4px 0">cut evidence L ${boundary.leftProbability == null ? 'hook edge' : fmt(boundary.leftProbability, 3)} · R ${boundary.rightProbability == null ? 'hook edge' : fmt(boundary.rightProbability, 3)} · category confidence ${fmt(Number(boundary.categoryProbability || 0) * 100, 1)}%</div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px;margin:6px 0"><span style="font-size:7.5px;color:${C.mute}">Market Hold deletion effect</span><b style="font-size:16px;color:${marketValue >= 0 ? C.green : C.red}">${signed(marketValue, 2)}σ</b></div><div style="font-size:7.5px;color:${C.dim};line-height:1.5">${fmt(market.percentile, 1)}th same-cluster effect · Hook Hold diagnostic ${signed(hold.effectHoldZ, 2)}σ<br>${hookOutcomeOrder.map(target => `${esc((((state.data.hookOutcomes || {}).targets || {})[target] || {}).shortLabel || target)} ${formatHookOutcomeEffect((direct[target] || {}).effect, target)}`).join(' · ')}</div><div style="height:1px;background:${C.border};margin:6px 0"></div><div style="font-size:7.5px;color:${C.dim};line-height:1.5;overflow-wrap:anywhere">conditional response ${fmt((component.forwardResponse || {}).axisPercentile, 1)}th · broad deletion ${signed((component.broadRetainedInformation || {}).deletionEffect, 4)} / ${fmt((component.broadRetainedInformation || {}).percentile, 1)}th<br>${hookOutcomeOrder.map(target => `${esc((((state.data.hookOutcomes || {}).targets || {})[target] || {}).shortLabel || target)} component plane ${fmt(((component.outcomes || {})[target] || {}).percentile, 0)}th`).join(' · ')}</div></div>`; }).join('')}</div></div><div class="pl-split" style="display:grid;grid-template-columns:minmax(280px,.65fr) minmax(0,1.35fr);gap:10px"><div><div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:5px">${(row.relationships || []).length} component relationships</div>${libraryRelationships(row)}<div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:5px">Market Hold is the primary relationship metric; Hook Hold and conditional response remain separate diagnostics.</div></div><div style="font-size:8.5px;color:${C.dim};line-height:1.6"><b style="color:${C.text}">Traceability:</b> whole-hook predictions are stored source-held-out values. Headline component and pair explanations are frozen full-fit model counterfactuals so they use the same serving coordinate as new text; they are model explanations, not independent outcomes. Exact captions time ${((row.retentionForecast || {}).words || []).length} words; every token belongs to one and only one component. Rewatch-adjusted curve MAE for this source is ${fmt((row.retentionForecast || {}).rewatchAdjustedSourceMAEPercentagePoints, 2)} percentage points versus ${fmt((row.retentionForecast || {}).rewatchAdjustedBaselineMAEPercentagePoints, 2)} for the text-free baseline.</div></div>${componentScoreGallery(focus)}</section>`;
+            return `<section data-pl-library-detail style="border:1px solid ${C.cyan}66;background:${C.card2};padding:12px;margin:0 0 10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">Held-out source audit</div><div style="font-size:15px;color:${C.text};font-weight:900;margin-top:3px">${esc(row.title || row.videoId || '')}</div><div style="font-size:10px;color:${C.dim};line-height:1.5;margin-top:3px">${esc(row.text || '')}</div></div>${button('Close detail', 'data-pl-library-close')}</div>${marketScoreCard(focus)}${marketTransferPanel(focus)}${survivalScoreCard(row.survivalScore, true)}${outcomePredictionStrip(focus)}${predictionAccuracyPanel(focus)}${retentionForecastPanel(row.retentionForecast, true)}${hookOutcomeAxisGallery(focus)}${boundaryTracePanel(focus)}<div style="margin:12px 0"><div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px"><div style="font-size:11px;color:${C.text};font-weight:900">${(row.components || []).length} evidence-selected components</div><div style="font-size:8px;color:${C.cyan};font-weight:900">SCROLL ALL COMPONENTS →</div></div><div class="pl-component-summary-strip" style="display:flex;gap:7px;overflow-x:auto;overscroll-behavior-x:contain;padding-bottom:7px">${(row.components || []).map((component, index) => { const boundary = component.boundaryEvidence || {}, hold = component.hookHoldContribution || {}, market = ((marketRewardRow(row.videoId) || {}).components || [])[index] || {}, direct = component.wholeHookOutcomeContributions || {}, marketValue = numeric(market.effectZ); return `<div style="flex:0 0 295px;border-left:3px solid ${clusterColor(component.category)};background:${C.card};padding:8px;min-width:0"><div style="font-size:7.5px;color:${clusterColor(component.category)};font-weight:900">COMPONENT ${index + 1} · CLUSTER ${component.category} · TOKENS ${component.startToken}-${component.endToken}</div><div style="font-size:9px;color:${C.text};font-weight:800;line-height:1.4;margin:3px 0;overflow-wrap:anywhere">${esc(component.text || '')}</div><div style="font-size:7px;color:${C.mute};line-height:1.45;margin:4px 0">cut evidence L ${boundary.leftProbability == null ? 'hook edge' : fmt(boundary.leftProbability, 3)} · R ${boundary.rightProbability == null ? 'hook edge' : fmt(boundary.rightProbability, 3)} · category confidence ${fmt(Number(boundary.categoryProbability || 0) * 100, 1)}%</div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px;margin:6px 0"><span style="font-size:7.5px;color:${C.mute}">Market Hold deletion effect</span><b style="font-size:16px;color:${marketValue >= 0 ? C.green : C.red}">${signed(marketValue, 2)}σ</b></div><div style="font-size:7.5px;color:${C.dim};line-height:1.5">${fmt(market.percentile, 1)}th same-cluster effect · Hook Hold diagnostic ${signed(hold.effectHoldZ, 2)}σ<br>${hookOutcomeOrder.map(target => `${esc((((state.data.hookOutcomes || {}).targets || {})[target] || {}).shortLabel || target)} ${formatHookOutcomeEffect((direct[target] || {}).effect, target)}`).join(' · ')}</div><div style="height:1px;background:${C.border};margin:6px 0"></div><div style="font-size:7.5px;color:${C.dim};line-height:1.5;overflow-wrap:anywhere">conditional response ${fmt((component.forwardResponse || {}).axisPercentile, 1)}th · broad deletion ${signed((component.broadRetainedInformation || {}).deletionEffect, 4)} / ${fmt((component.broadRetainedInformation || {}).percentile, 1)}th<br>${hookOutcomeOrder.map(target => `${esc((((state.data.hookOutcomes || {}).targets || {})[target] || {}).shortLabel || target)} component plane ${fmt(((component.outcomes || {})[target] || {}).percentile, 0)}th`).join(' · ')}</div></div>`; }).join('')}</div></div><div class="pl-split" style="display:grid;grid-template-columns:minmax(280px,.65fr) minmax(0,1.35fr);gap:10px"><div><div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:5px">${(row.relationships || []).length} component relationships</div>${libraryRelationships(row)}<div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:5px">Market Hold is the primary relationship metric; Hook Hold and conditional response remain separate diagnostics.</div></div><div style="font-size:8.5px;color:${C.dim};line-height:1.6"><b style="color:${C.text}">Traceability:</b> whole-hook predictions are stored source-held-out values. Headline component and pair explanations are frozen full-fit model counterfactuals so they use the same serving coordinate as new text; they are model explanations, not independent outcomes. Exact captions time ${((row.retentionForecast || {}).words || []).length} words; every token belongs to one and only one component. Rewatch-adjusted curve MAE for this source is ${fmt((row.retentionForecast || {}).rewatchAdjustedSourceMAEPercentagePoints, 2)} percentage points versus ${fmt((row.retentionForecast || {}).rewatchAdjustedBaselineMAEPercentagePoints, 2)} for the text-free baseline.</div></div>${componentScoreGallery(focus)}</section>`;
         }
 
         function renderHookLibrary() {
             const outcomes = state.data.hookOutcomes;
             if (!outcomes) return loading('hookOutcomes');
             if (!state.data.marketReward) return loading('marketReward');
+            if (!state.data.canonicalPartitions) return loading('canonicalPartitions');
             const query = state.hookLibraryQuery.trim().toLowerCase();
             let rows = (outcomes.hooks || []).filter(row => !query || `${row.title || ''} ${row.text || ''} ${row.videoId || ''}`.toLowerCase().includes(query));
             const metricValue = row => state.hookLibraryMetric === 'market'
@@ -1221,7 +1377,7 @@
             const interactionTable = `<div style="overflow:auto;max-height:520px"><table style="width:max-content;min-width:100%;border-collapse:collapse;font-size:8px"><thead><tr><th style="padding:4px;color:${C.mute}">component</th>${components.map((component, index) => `<th style="min-width:44px;padding:4px;color:${clusterColor(component.category)}">${index + 1}</th>`).join('')}</tr></thead><tbody>${components.map((component, left) => `<tr><th style="padding:4px;color:${clusterColor(component.category)}">${left + 1}</th>${components.map((__, right) => { const row = left < right ? pairLookup[`${left}-${right}`] : right < left ? pairLookup[`${right}-${left}`] : null; const value = row && numeric(row.interaction); const alpha = row ? Math.min(.38, .08 + Math.abs(value) * 7) : 0; const background = !row ? C.card2 : value >= 0 ? `rgba(74,222,128,${alpha})` : `rgba(248,113,113,${alpha})`; return `<td title="${row ? `80% interval ${signed(row.bootstrapP10, 4)} to ${signed(row.bootstrapP90, 4)}` : ''}" style="min-width:44px;padding:6px;text-align:center;background:${background};color:${row ? C.text : C.faint};border:1px solid ${C.border}">${row ? signed(value, 3) : '·'}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`;
             const forwardInteractionTable = `<div style="overflow:auto;max-height:520px"><table style="width:max-content;min-width:100%;border-collapse:collapse;font-size:8px"><thead><tr><th style="padding:4px;color:${C.mute}">component</th>${components.map((component, index) => `<th style="min-width:44px;padding:4px;color:${clusterColor(component.category)}">${index + 1}</th>`).join('')}</tr></thead><tbody>${components.map((component, left) => `<tr><th style="padding:4px;color:${clusterColor(component.category)}">${left + 1}</th>${components.map((__, right) => { const row = left < right ? pairLookup[`${left}-${right}`] : right < left ? pairLookup[`${right}-${left}`] : null; const response = row && row.forwardResponse; const value = response && numeric(response.interaction); const score = response && numeric(response.percentile); const alpha = response ? Math.min(.4, .08 + Math.abs(score - 50) / 120) : 0; const background = !response ? C.card2 : score >= 50 ? `rgba(74,222,128,${alpha})` : `rgba(248,113,113,${alpha})`; return `<td title="${response ? `${esc(response.categoryPair)} · coordinate ${signed(value, 4)}` : ''}" style="min-width:44px;padding:6px;text-align:center;background:${background};color:${response ? C.text : C.faint};border:1px solid ${C.border}">${response ? `${fmt(score, 0)}th` : '·'}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`;
             const retained = ((result.retainedInformation || {}).score || {}), local = result.localCounterfactuals || {};
-            return `<div data-pl-hook-score-result><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${stat('Market Hold', `${fmt(market.percentile, 1)}th`, C.green)}${stat('Market z', `${signed(market.z, 2)}σ`, C.green)}${stat('training reward', market.reward == null ? 'withheld' : fmt(market.reward, 3), market.reward == null ? C.red : C.green)}${stat('market nearest cosine', fmt(market.domainNearestCosine, 3), market.eligibleForTraining ? C.green : C.red)}${stat('Hook Hold diagnostic', `${signed(score.holdZ, 2)}σ`, C.amber)}${stat('Hook future rho', fmt(confidence.chronologicalHeldoutSpearman, 3), C.red)}${stat('retained info diagnostic', `${fmt(retained.percentile, 1)}th`, C.amber)}${stat('partition certainty', `${fmt(confidence.partitionScoreGapPercentile, 1)}th`, C.amber)}</div>${card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:300px;flex:1"><div style="font-size:8px;color:${C.green};font-weight:900;text-transform:uppercase">Complete frozen training contract</div><div style="font-size:16px;color:${C.text};font-weight:900;margin-top:3px">One Market Hold score, ${components.length} component effects, ${pairs.length} relationship effects</div><div style="font-size:8.5px;color:${C.dim};line-height:1.55;margin-top:4px">Headline = percentile on one external-only frozen text direction. Component = MarketHold(full) − MarketHold(without that exact component), in score σ. Relationship = the second-order Market Hold interaction after deleting each component and both together. Categories choose neither the reward nor its threshold. Hook Hold, forward response, and direct outcomes remain separate diagnostics.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('token coverage', scoreCoverage.tokensOwnedExactlyOnce ? 'exactly once' : 'FAILED', scoreCoverage.tokensOwnedExactlyOnce ? C.green : C.red)}${stat('components', `${scoreCoverage.componentsScored || 0}/${scoreCoverage.componentsExpected || components.length}`, C.cyan)}${stat('relationships', `${scoreCoverage.relationshipsScored || 0}/${scoreCoverage.relationshipsExpected || pairs.length}`, C.purple)}${stat('reward status', market.eligibleForTraining ? 'eligible' : 'withheld', market.eligibleForTraining ? C.green : C.red)}</div></div>`, 'margin-bottom:10px;border-color:' + C.green + '66')}${survivalScoreCard(score, false)}${outcomePredictionStrip(focus)}${retentionForecastPanel(outcomes.retentionForecast, false)}
+            return `<div data-pl-hook-score-result><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${stat('Market Hold', `${fmt(market.percentile, 1)}th`, C.green)}${stat('Market z', `${signed(market.z, 2)}σ`, C.green)}${stat('training reward', market.reward == null ? 'withheld' : fmt(market.reward, 3), market.reward == null ? C.red : C.green)}${stat('market nearest cosine', fmt(market.domainNearestCosine, 3), market.eligibleForTraining ? C.green : C.red)}${stat('Hook Hold diagnostic', `${signed(score.holdZ, 2)}σ`, C.amber)}${stat('Hook future rho', fmt(confidence.chronologicalHeldoutSpearman, 3), C.red)}${stat('retained info diagnostic', `${fmt(retained.percentile, 1)}th`, C.amber)}${stat('partition certainty', `${fmt(confidence.partitionScoreGapPercentile, 1)}th`, C.amber)}</div>${card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:300px;flex:1"><div style="font-size:8px;color:${C.green};font-weight:900;text-transform:uppercase">Complete frozen training contract</div><div style="font-size:16px;color:${C.text};font-weight:900;margin-top:3px">One Market Hold score, ${components.length} component effects, ${pairs.length} relationship effects</div><div style="font-size:8.5px;color:${C.dim};line-height:1.55;margin-top:4px">Headline = percentile on one external-only frozen text direction. Component = MarketHold(full) − MarketHold(without that exact component), in score σ. Relationship = the second-order Market Hold interaction after deleting each component and both together. Categories choose neither the reward nor its threshold. Hook Hold, forward response, and direct outcomes remain separate diagnostics.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('token coverage', scoreCoverage.tokensOwnedExactlyOnce ? 'exactly once' : 'FAILED', scoreCoverage.tokensOwnedExactlyOnce ? C.green : C.red)}${stat('components', `${scoreCoverage.componentsScored || 0}/${scoreCoverage.componentsExpected || components.length}`, C.cyan)}${stat('relationships', `${scoreCoverage.relationshipsScored || 0}/${scoreCoverage.relationshipsExpected || pairs.length}`, C.purple)}${stat('reward status', market.eligibleForTraining ? 'eligible' : 'withheld', market.eligibleForTraining ? C.green : C.red)}</div></div>`, 'margin-bottom:10px;border-color:' + C.green + '66')}${survivalScoreCard(score, false)}${outcomePredictionStrip(focus)}${retentionForecastPanel(outcomes.retentionForecast, false)}${boundaryTracePanel(focus)}
             ${card(`<div style="font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:4px">Exact complete-hook embedding input</div><div style="font-size:14px;color:${C.text};font-weight:900;line-height:1.45">${esc((result.input || {}).fullHookEmbeddingInput || '')}</div><div style="font-size:8px;color:${C.dim};margin-top:6px">${esc((result.input || {}).embeddingModel || '')} · ${(result.input || {}).embeddingDimensions || 0}D · ${(result.input || {}).spanEmbeddingInputs || 0} exact span/context inputs · ${(result.input || {}).tokenCount || 0} tokens (${fmt((result.input || {}).trainingTokenCountPercentile, 1)}th training-length percentile; observed training range ${(result.input || {}).trainingTokenCountMinimum || '-'}–${(result.input || {}).trainingTokenCountMaximum || '-'}) · generative LLM: no</div>${(result.input || {}).outsideTrainingLengthRange ? `<div style="font-size:8px;color:${C.red};font-weight:900;margin-top:5px">LENGTH EXTRAPOLATION: this opening is outside every measured training-hook length. The decomposition is still exact, but the predictive coordinates are out of measured length support.</div>` : ''}`, 'margin-bottom:10px;border-color:' + C.cyan + '55')}
             ${card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px"><div><div style="font-size:11px;color:${C.text};font-weight:900">Variable-count exact-cover decomposition · ${components.length} components</div><div style="font-size:8px;color:${C.mute};margin-top:2px">Every token has one owner and zero overlap. Four is the category vocabulary, not the component count. Boundaries use no outcome and no supplied example labels. Component scores below use the exact same frozen Market Hold coordinate as the training reward.</div></div><div style="font-size:8px;color:${C.amber}">top-two gap ${fmt(confidence.partitionScoreGap, 5)} · ${fmt(confidence.partitionScoreGapPercentile, 1)}th training percentile</div></div><div style="display:flex;gap:4px;overflow-x:auto;margin-bottom:9px;padding-bottom:4px">${components.map(component => `<span style="flex:0 0 auto;border-bottom:4px solid ${clusterColor(component.category)};background:${C.card2};padding:6px 7px;font-size:10px;color:${C.text}">${esc(component.text)}</span>`).join('')}</div><div style="display:flex;gap:8px;overflow-x:auto;overscroll-behavior-x:contain;padding-bottom:7px">${components.map(component => { const response = component.forwardResponse || {}, hold = component.hookHoldContribution || {}, marketEffect = component.marketHoldContribution || {}, direct = component.wholeHookOutcomeContributions || {}, marketValue = numeric(marketEffect.effectZ); return `<div style="flex:0 0 300px;border-left:3px solid ${clusterColor(component.category)};padding:8px 10px;background:${C.card2}"><div style="font-size:8px;color:${clusterColor(component.category)};font-weight:900">COMPONENT ${component.index + 1} · CLUSTER ${component.category}</div><div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.4;margin:3px 0">${esc(component.text)}</div><div style="font-size:7px;color:${C.mute};line-height:1.45">cut evidence L ${component.leftBoundaryProbability == null ? 'hook edge' : fmt(component.leftBoundaryProbability, 3)} · R ${component.rightBoundaryProbability == null ? 'hook edge' : fmt(component.rightBoundaryProbability, 3)} · category confidence ${fmt(Number(component.categoryProbability || 0) * 100, 1)}%</div><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;margin:7px 0 5px"><span style="font-size:8px;color:${C.mute}">Market Hold deletion effect<br><span style="font-size:7px">higher = reward falls when removed</span></span><b style="font-size:20px;color:${marketValue >= 0 ? C.green : C.red}">${signed(marketValue, 2)}σ</b></div><div style="font-size:8px;color:${C.dim};line-height:1.55">${fmt(marketEffect.percentile, 1)}th among training C${component.category} Market effects · Hook Hold diagnostic ${signed(hold.effectHoldZ, 2)}σ · fixed-duration endpoint ${signed(hold.fixedDurationEndpointEffectPercentagePoints, 2)} pp</div><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px;margin-top:6px">${hookOutcomeOrder.map(target => `<span style="font-size:7px;color:${C.mute};border-left:2px solid ${C.border};padding-left:4px">${esc((((outcomes.targets || {})[target] || {}).shortLabel) || target)}<br><b style="color:${C.text}">${formatHookOutcomeEffect((direct[target] || {}).effect, target)}</b></span>`).join('')}</div><div style="height:1px;background:${C.border};margin:7px 0"></div><div style="font-size:7.8px;color:${C.dim};line-height:1.55">conditional response ${fmt(response.percentile, 1)}th · coordinate ${signed(response.axisCoordinate, 4)} · category rho ${fmt(response.heldoutSpearmanForCategory, 3)}<br>retained-information deletion ${signed(component.retainedInformationDeletionEffect, 4)} · ${fmt(component.categoryContributionPercentile, 1)}th · bootstrap ${signed(component.bootstrapP10, 4)} to ${signed(component.bootstrapP90, 4)}</div></div>`; }).join('')}</div>`, 'margin-bottom:10px')}
             <div class="pl-split" style="display:grid;grid-template-columns:minmax(280px,.8fr) minmax(0,1.2fr);gap:10px;margin-bottom:10px">${card(`<div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:5px">${pairs.length} local relationship measurements</div><div style="font-size:8px;color:${C.green};font-weight:900;line-height:1.5;margin-bottom:5px">MARKET HOLD INTERACTION · SAME METRIC AS TRAINING REWARD</div>${marketInteractionTable}<div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:6px">Each cell is MarketHold(full) − MarketHold(without left) − MarketHold(without right) + MarketHold(without both), in frozen score σ. Positive means the pair contributes beyond its separate local deletions inside this model.</div><div style="height:1px;background:${C.border};margin:9px 0"></div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-bottom:5px">Hook Hold interaction · separate diagnostic</div>${holdInteractionTable}<div style="height:1px;background:${C.border};margin:9px 0"></div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-bottom:5px">Conditional forward-response interaction · separate diagnostic</div>${forwardInteractionTable}<div style="height:1px;background:${C.border};margin:9px 0"></div><div style="font-size:9px;color:${C.text};font-weight:900;margin-bottom:4px">Broad retained-information local interaction</div>${interactionTable}`)}${card(`<div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:5px">Exact local counterfactual embedding inputs</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-bottom:6px">One full-context deletion per component and one two-component deletion per pair. Source order and all retained source characters are preserved.</div><div style="max-height:460px;overflow:auto">${(local.componentDeletions || []).map(row => { const component = components[Number(row.removedComponent)] || {}, hold = component.hookHoldContribution || {}, marketEffect = row.marketHold || {}; return `<details style="border-top:1px solid ${C.border};padding:5px 0"><summary style="cursor:pointer;color:${C.dim};font-size:8.5px">remove component ${Number(row.removedComponent) + 1} · Market ${signed(marketEffect.effectZ, 2)}σ · Hook diagnostic ${signed(hold.effectHoldZ, 2)}σ</summary><div style="font-size:9px;color:${C.text};line-height:1.5;padding:5px 8px"><b>exact embedded text:</b> ${esc(row.embeddingInput || '(empty hook; fitted intercept)')}<br><b>Market Hold:</b> ${signed(marketEffect.fullCoordinate, 4)} full − ${signed(marketEffect.withoutCoordinate, 4)} without = ${signed(marketEffect.effectZ, 4)}σ<br><b>Hook Hold diagnostic:</b> ${signed(hold.effectRawCarryPointsPerSecond, 4)} carry pp/s</div></details>`; }).join('')}${(local.pairDeletions || []).map(row => { const marketEffect = row.marketHold || {}; return `<details style="border-top:1px solid ${C.border};padding:5px 0"><summary style="cursor:pointer;color:${C.dim};font-size:8.5px">remove components ${(row.removedComponents || []).map(value => value + 1).join(' + ')} · Market interaction ${signed(marketEffect.interactionZ, 2)}σ</summary><div style="font-size:9px;color:${C.text};line-height:1.5;padding:5px 8px"><b>without pair:</b> ${esc(row.embeddingInput || '(empty hook; fitted intercept)')}<br><b>pair retained alone:</b> ${esc(row.retainedPairEmbeddingInput || '(empty)')}<br><b>Market interaction:</b> ${signed(marketEffect.interactionZ, 4)}σ · ${fmt(marketEffect.percentile, 1)}th same-category-sequence percentile</div></details>`; }).join('')}</div>`)}</div>${componentScoreGallery(focus)}
@@ -1233,12 +1389,13 @@
             if (!summary) return loading('hookQuality');
             if (!outcomes) return loading('hookOutcomes');
             if (!market) return loading('marketReward');
+            if (!state.data.canonicalPartitions) return loading('canonicalPartitions');
             if (!examples) return loading('hookExamples');
             const model = summary.model || {}, result = state.hookScoreResult;
             const survival = (outcomes.survivalModel || {}).validation || {};
             const marketExternal = market.externalTraining || {}, marketTransfer = (market.transferValidation || {}).retention_5s || {};
             return `${partitionMethodPanel(summary)}${card(`<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"><label style="flex:1;min-width:280px"><span style="display:flex;justify-content:space-between;gap:8px;font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:4px"><span>Complete hook or longer spoken opening</span><span data-pl-hook-score-count>${state.hookScoreText.length.toLocaleString()}/1,200 characters</span></span><textarea data-pl-hook-score-input maxlength="1200" rows="3" ${state.hookScoreLoading ? 'disabled' : ''} style="width:100%;box-sizing:border-box;resize:vertical;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:8px;font:10px/1.45 inherit;border-radius:6px;cursor:${state.hookScoreLoading ? 'wait' : 'text'}">${esc(state.hookScoreText)}</textarea><span style="display:block;font-size:7.5px;color:${C.mute};line-height:1.45;margin-top:3px">The exact scorer never truncates. Length support is reported against the measured 8–57-token training range; longer openings are computed but explicitly marked as extrapolations.</span></label><button data-pl-run-hook-score ${state.hookScoreLoading ? 'disabled' : ''} style="height:34px;border:1px solid ${C.cyan};background:${C.cyan}20;color:${C.cyan};padding:0 13px;border-radius:6px;font-size:10px;font-weight:900;cursor:${state.hookScoreLoading ? 'wait' : 'pointer'}">${state.hookScoreLoading ? 'Scoring…' : 'Score hook'}</button></div>${state.hookScoreError ? `<div data-pl-hook-score-error style="font-size:9px;color:${C.red};margin-top:7px">${esc(state.hookScoreError)}</div>` : ''}`, 'margin-bottom:10px')}
-                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${stat('external training hooks', Number(marketExternal.nonOwnedTrainingRows || 0).toLocaleString(), C.cyan)}${stat('external nested OOF rho', fmt((marketExternal.selectedValidation || {}).heldoutSpearman, 3), C.text)}${stat('owned 5s transfer rho', fmt(marketTransfer.heldoutSpearman, 3), C.green)}${stat('recent-half 5s rho', fmt(marketTransfer.recentHalfSpearman, 3), C.green)}${stat('owned labels in reward fit', marketExternal.ownedOutcomeLabelsUsedToFitOrSelectAxis ? 'YES' : 'NO', marketExternal.ownedOutcomeLabelsUsedToFitOrSelectAxis ? C.red : C.green)}${stat('generative LLM', 'NO', C.green)}</div>${marketScoreCard(activeHookOutcomeFocus())}${survivalMethodPanel()}${predictionAccuracyPanel(activeHookOutcomeFocus())}
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${stat('external training hooks', Number(marketExternal.nonOwnedTrainingRows || 0).toLocaleString(), C.cyan)}${stat('external nested OOF rho', fmt((marketExternal.selectedValidation || {}).heldoutSpearman, 3), C.text)}${stat('owned 5s transfer rho', fmt(marketTransfer.heldoutSpearman, 3), C.green)}${stat('recent-half 5s rho', fmt(marketTransfer.recentHalfSpearman, 3), C.green)}${stat('owned labels in reward fit', marketExternal.ownedOutcomeLabelsUsedToFitOrSelectAxis ? 'YES' : 'NO', marketExternal.ownedOutcomeLabelsUsedToFitOrSelectAxis ? C.red : C.green)}${stat('generative LLM', 'NO', C.green)}</div>${marketScoreCard(activeHookOutcomeFocus())}${marketTransferPanel(activeHookOutcomeFocus())}${survivalMethodPanel()}${predictionAccuracyPanel(activeHookOutcomeFocus())}
             ${card(`<div style="font-size:9px;color:${C.dim};line-height:1.55"><b style="color:${C.green}">Training contract:</b> Market Hold is the one frozen reward because it was selected outside your channel and transferred to untouched five-second retention. Hook Hold, direct viewed/retention/views forecasts, word forecasts, and category-response axes remain visible diagnostics. Market Hold still is not a causal promise truth: promotion beyond training proxy requires randomized same-topic variants.</div>`, 'margin-bottom:10px;border-color:' + C.green + '55')}
             ${hookOutcomeAxisGallery(activeHookOutcomeFocus())}${forwardResponsePanel(summary)}${hookExamplePanel(examples)}${state.hookScoreLoading ? card(`<div data-pl-hook-score-progress style="font-size:10px;color:${C.cyan}">${esc(state.hookScoreStatus || 'Scoring hook')}</div>`, 'margin-bottom:10px') : hookScoreResultPanel(result)}`;
         }
@@ -1277,7 +1434,7 @@
                 ${stat('complete hooks', counts.hooks || 0, C.cyan)}${stat('embedding texts', Number(counts.embeddingTexts || 0).toLocaleString(), C.purple)}
                 ${stat('boundary runs', Number(counts.boundaryExperiments || 0).toLocaleString(), C.amber)}${stat('cluster runs', Number(counts.clusterExperiments || 0).toLocaleString(), C.green)}
                 ${stat('cluster maps', Number(counts.clusterMaps || 0) + Number(counts.allSpanClusterMaps || 0), C.orange)}${stat('all spans', Number(counts.allContiguousSpans || 0).toLocaleString(), C.purple)}${stat('swap rows', Number(counts.swapRows || 0).toLocaleString(), C.cyan)}${stat('axis runs', Number(counts.axisExperiments || 0).toLocaleString(), C.purple)}
-            </div>${card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:300px;flex:1"><div style="font-size:9px;color:${promotionColor};font-weight:900;text-transform:uppercase">Current promotion decision</div><div style="font-size:18px;color:${C.text};font-weight:900;margin-top:2px">${promotionHeadline}</div><div style="font-size:9px;color:${C.dim};line-height:1.55;margin-top:4px">${promotionCopy}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('external nested OOF rho', fmt((marketExternal.selectedValidation || {}).heldoutSpearman, 3), C.text)}${stat('owned 5s rho', fmt(marketTransfer.heldoutSpearman, 3), marketPromoted ? C.green : C.red)}${stat('recent-half rho', fmt(marketTransfer.recentHalfSpearman, 3), marketPromoted ? C.green : C.red)}${stat('owned labels fit axis', marketExternal.ownedOutcomeLabelsUsedToFitOrSelectAxis ? 'yes' : 'no', marketExternal.ownedOutcomeLabelsUsedToFitOrSelectAxis ? C.red : C.green)}</div></div>`, 'margin-bottom:10px;border-color:' + promotionColor + '66')}${manualProbeSummary()}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:9px;margin-bottom:10px">
+            </div>${visualizationContractPanel()}${card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:300px;flex:1"><div style="font-size:9px;color:${promotionColor};font-weight:900;text-transform:uppercase">Current promotion decision</div><div style="font-size:18px;color:${C.text};font-weight:900;margin-top:2px">${promotionHeadline}</div><div style="font-size:9px;color:${C.dim};line-height:1.55;margin-top:4px">${promotionCopy}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('external nested OOF rho', fmt((marketExternal.selectedValidation || {}).heldoutSpearman, 3), C.text)}${stat('owned 5s rho', fmt(marketTransfer.heldoutSpearman, 3), marketPromoted ? C.green : C.red)}${stat('recent-half rho', fmt(marketTransfer.recentHalfSpearman, 3), marketPromoted ? C.green : C.red)}${stat('owned labels fit axis', marketExternal.ownedOutcomeLabelsUsedToFitOrSelectAxis ? 'yes' : 'no', marketExternal.ownedOutcomeLabelsUsedToFitOrSelectAxis ? C.red : C.green)}</div></div>`, 'margin-bottom:10px;border-color:' + promotionColor + '66')}${manualProbeSummary()}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:9px;margin-bottom:10px">
                 ${card(`<div style="font-size:11px;font-weight:900;color:${C.cyan};margin-bottom:5px">Canonical partition · current</div><div style="font-size:24px;font-weight:900;color:${C.text}">${canonical.components || 0}</div><div style="font-size:10px;color:${C.dim}">non-overlapping components across ${canonical.hooks || 0} hooks · observed range ${canonicalValidation.minimumComponents || '-'}–${canonicalValidation.maximumComponents || '-'}</div><div style="font-size:9px;color:${C.mute};margin-top:5px">${(canonicalValidation.componentCountHistogram || {})['1'] || 0} hooks stay whole · AUC ${fmt(canonicalValidation.boundaryHeldoutAuc, 3)} · AP ${fmt(canonicalValidation.boundaryHeldoutAveragePrecision, 3)} · category-blind boundaries.</div>`)}
                 ${card(`<div style="font-size:11px;font-weight:900;color:${C.amber};margin-bottom:5px">Legacy exhaustive boundary search · superseded</div><div style="font-size:24px;font-weight:900;color:${C.text}">${boundary.supportedMultiSegmentHooks || 0}</div><div style="font-size:10px;color:${C.dim}">search artifacts passed their original geometric null, but are not the current components</div><div style="font-size:9px;color:${C.mute};margin-top:5px">Some selected 31–37 near-token fragments, revealing a degenerate objective. They remain inspectable provenance only; scoring and libraries use the canonical exact cover above.</div>`)}
                 ${card(`<div style="font-size:11px;font-weight:900;color:${C.green};margin-bottom:5px">Two outcome-blind atlases</div><div style="font-size:24px;font-weight:900;color:${C.text}">${Number(cluster.experiments || 0).toLocaleString()} + ${Number(cluster.allContiguousExperiments || 0).toLocaleString()}</div><div style="font-size:10px;color:${C.dim}">evidence-supported candidates plus every contiguous span across 12 semantic and residual views</div><div style="font-size:9px;color:${C.mute};margin-top:5px">${Number(cluster.mapsVisible || 0) + Number(cluster.allContiguousMapsVisible || 0)} maps are inspectable · cross-scope consensus rho ${fmt(consensusAgreement.spearman, 3)}. Families remain unnamed.</div>`)}
@@ -1297,7 +1454,7 @@
                 ${card(`<div style="font-size:11px;font-weight:900;color:${C.amber};margin-bottom:6px">Legacy exploratory partitions · provenance only</div><div style="font-size:8px;color:${C.mute};margin-bottom:6px">These rows beat the original searched geometric null, but token-level fragmentation exposed objective degeneracy. They do not feed the canonical partition, scorer, or component library.</div>${supportedHooks.length ? supportedHooks.map(row => { const seg = row.segmentation || {}; return `<button data-pl-hook="${esc(row.videoId)}" data-pl-open-hooks style="width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid ${C.border};padding:6px 0;cursor:pointer"><div style="font-size:9px;color:${C.text};font-weight:800;line-height:1.35">${esc(row.text)}</div><div style="font-size:8px;color:${C.mute}">${seg.segmentCount || '-'} legacy segments · searched p ${fmt(seg.searchWideP, 3)} · superseded</div></button>`; }).join('') : boundary.supportedMultiSegmentHooks ? `<div style="font-size:9px;color:${C.dim}">The legacy detail artifact is still building.</div>` : `<div style="font-size:9px;color:${C.dim}">No hook passed the searched null.</div>`}`)}
                 ${card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px"><div><div style="font-size:11px;font-weight:900;color:${C.cyan}">Cross-context transfer indicators</div><div style="font-size:8px;color:${C.mute}">Long Quant model-predicted counterfactuals, never observed viewer outcomes.</div></div></div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">${(swap.metricNames || []).map(name => button(metricLabel(name), `data-pl-metric="${name}"`, state.metric === name)).join('')}</div>${transferRows.map(row => `<button data-pl-source="${esc(row.sourceId)}" data-pl-open-swaps style="width:100%;display:flex;justify-content:space-between;gap:8px;border:0;border-bottom:1px solid ${C.border};background:transparent;padding:5px 0;cursor:pointer;text-align:left"><div style="font-size:9px;color:${C.text};font-weight:800">${esc(row.text)}</div><div style="text-align:right;white-space:nowrap"><b style="font-size:9px;color:${Number(row.meanDeltaAcrossContexts) >= 0 ? C.green : C.red}">${signed(row.meanDeltaAcrossContexts, 2)}</b><div style="font-size:7.5px;color:${C.mute}">${pct(Number(row.positiveContextRate || 0) * 100)} positive</div></div></button>`).join('') || `<div style="font-size:9px;color:${C.dim}">Transfer surface is still building.</div>`}`)}
                 </div>
-                ${card(`<div style="font-size:11px;font-weight:900;color:${C.purple};margin-bottom:3px">Selected required-confound outcome directions</div><div style="font-size:8px;color:${C.mute};margin-bottom:7px">One predeclared adjusted configuration per target. Highlighted rows survived the target-wide max-null and cross-target FDR in grouped random folds; none is called chronologically validated.</div><div style="overflow:auto;max-height:480px"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['evidence channel', 'target', 'input / confounds', 'grouped-random result'].map(label => `<th style="text-align:left;color:${C.mute};padding:4px;border-bottom:1px solid ${C.border}">${label}</th>`).join('')}</tr></thead><tbody>${axisRows.map(row => `<tr><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${esc(row.targetChannel || '')}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.text}"><b>${esc(row.target || '')}</b><br><span style="color:${C.mute}">${esc(row.targetDefinition || '')}</span></td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${esc(row.representation || '')} · ${esc(row.confounds || '')}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${axisRandomFoldSupported(row) ? C.green : C.dim};white-space:nowrap">rho ${fmt(row.heldoutSpearman, 3)}<br>p ${fmt(row.searchWideP, 3)} · q ${fmt(row.searchWideQ, 3)}<br>${esc(row.status || '')}</td></tr>`).join('') || `<tr><td colspan="4" style="padding:8px;color:${C.dim}">Outcome-axis search is still building.</td></tr>`}</tbody></table></div>`, 'margin-top:10px')} `;
+                ${card(`<div style="font-size:11px;font-weight:900;color:${C.purple};margin-bottom:3px">Selected required-confound outcome directions</div><div style="font-size:8px;color:${C.mute};margin-bottom:7px">One predeclared adjusted configuration per target. Every row opens the exact semantic plane, grouped-source check, color scale, and input-versus-outcome horizon. Highlighted rows survived the target-wide max-null and cross-target FDR in grouped random folds; none is called chronologically validated.</div><div style="overflow:auto;max-height:480px"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['evidence channel', 'target and outcome window', 'input / confounds', 'grouped-random result'].map(label => `<th style="text-align:left;color:${C.mute};padding:4px;border-bottom:1px solid ${C.border}">${label}</th>`).join('')}</tr></thead><tbody>${axisRows.map(row => { const lineage = (axis.targetLineage || {})[row.target] || {}, window = lineage.outcomeWindow || {}; return `<tr><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${esc(row.targetChannel || '')}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.text}"><button data-pl-open-axis-target="${esc(row.target || '')}" style="border:0;background:transparent;color:${C.cyan};font:inherit;font-weight:900;padding:0;cursor:pointer;text-align:left">${esc(row.target || '')} →</button><br><span style="color:${C.mute}">${esc(row.targetDefinition || '')}</span>${window.label ? `<br><span style="color:${C.amber}">target window: ${esc(window.label)}</span>` : ''}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${esc(row.representation || '')} · ${esc(row.confounds || '')}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${axisRandomFoldSupported(row) ? C.green : C.dim};white-space:nowrap">rho ${fmt(row.heldoutSpearman, 3)}<br>p ${fmt(row.searchWideP, 3)} · q ${fmt(row.searchWideQ, 3)}<br>${esc(row.status || '')}</td></tr>`; }).join('') || `<tr><td colspan="4" style="padding:8px;color:${C.dim}">Outcome-axis search is still building.</td></tr>`}</tbody></table></div>`, 'margin-top:10px')} `;
         }
 
         function hookRows() {
@@ -1428,17 +1585,26 @@
         function renderAxes() {
             const axes = state.data.axes;
             if (!axes) return loading('axes');
-            const maps = axes.maps || [], map = maps[Math.max(0, Math.min(state.axisIndex, maps.length - 1))] || {};
+            if (!state.data.findings) return loading('findings');
+            const maps = axes.maps || [];
+            if (state.pendingAxisTarget) {
+                const targetIndex = maps.findIndex(row => String((row.experiment || {}).target) === String(state.pendingAxisTarget));
+                if (targetIndex >= 0) state.axisIndex = targetIndex;
+                state.pendingAxisTarget = null;
+            }
+            const map = maps[Math.max(0, Math.min(state.axisIndex, maps.length - 1))] || {};
             const selectedExperiments = maps.map(row => row.experiment || {});
             const modelAxes = selectedExperiments.filter(row => row.targetChannel === 'Long Quant model-predicted counterfactual');
             const observedAxes = selectedExperiments.filter(row => row.targetChannel === 'observed YouTube outcome');
             const validatedModel = modelAxes.filter(axisRandomFoldSupported);
             const validatedObserved = observedAxes.filter(axisRandomFoldSupported);
             const validatedObservedSpan = validatedObserved.filter(row => ['raw', 'influence', 'nonadditive'].includes(row.representation));
+            const selectedExperiment = map.experiment || {};
+            const observedFormatter = legacyAxisValueFormatter(selectedExperiment);
             return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px">${stat('axis experiments', Number(axes.experimentCount || 0).toLocaleString(), C.purple)}${stat('model source-grouped', `${validatedModel.length}/${modelAxes.length}`, C.green)}${stat('observed random-fold', `${validatedObserved.length}/${observedAxes.length}`, C.amber)}${stat('observed span support', validatedObservedSpan.length, C.amber)}${stat('source videos', axes.sourceVideos || 0, C.cyan)}${stat('confound sets', (axes.confoundSets || []).length, C.orange)}</div>
                     ${card(`<div style="font-size:9px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">Current result:</b> model-predicted transfer is source-grouped supported on raw source-span semantics. Observed-retention axes are random-fold diagnostics on retained hook context with no chronological replication. No observed raw, influence, or non-additive source-span axis passed. Outcome metrics measure candidate directions; they are not themselves semantic component names.</div>`, 'margin-bottom:9px')}
-                    <div class="pl-split" style="display:grid;grid-template-columns:minmax(280px,.65fr) minmax(0,1.35fr);gap:9px">${card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:7px">Selected required-confound direction per target</div><div style="max-height:620px;overflow:auto">${maps.map((row, index) => { const exp = row.experiment || {}; const claimColor = axisRandomFoldSupported(exp) ? (exp.targetChannel === 'observed YouTube outcome' ? C.amber : C.green) : C.dim; return `<button data-pl-axis="${index}" style="width:100%;text-align:left;background:${index === state.axisIndex ? C.cyan + '12' : 'transparent'};border:0;border-bottom:1px solid ${C.border};padding:7px;cursor:pointer"><div style="display:flex;justify-content:space-between;gap:6px"><b style="font-size:9px;color:${C.text}">${esc(exp.target || '')}</b><b style="font-size:9px;color:${claimColor}">rho ${fmt(exp.heldoutSpearman, 3)}</b></div><div style="font-size:8px;color:${C.mute}">${esc(exp.representation || '')} · ${exp.pcaDimensions || '-'}D · ${esc(exp.confounds || '')} · search q ${fmt(exp.searchWideQ, 3)}</div></button>`; }).join('')}</div>`)}
-                    ${card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:3px">${esc((map.experiment || {}).target || 'No axis built')}</div><div style="font-size:9px;color:${C.mute};margin-bottom:4px">${esc((map.experiment || {}).targetDefinition || '')}</div><div style="font-size:8px;color:${C.faint};margin-bottom:9px">channel: ${esc((map.experiment || {}).targetChannel || '')} · semantic input: ${esc(representationLabel((map.experiment || {}).representation || ''))} · unit: ${esc((map.experiment || {}).targetUnit || '')} · required confounds: ${esc((map.experiment || {}).validationConfoundsRequired || 'none')} · claim: ${esc(legacyAxisClaim(map.experiment || {}))}</div><div style="font-size:9px;font-weight:900;color:${C.cyan};margin-bottom:3px">Semantic embedding plane</div><canvas data-pl-canvas="axis" style="width:100%;height:300px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin:4px 0 10px">Horizontal position is the final fitted semantic direction; vertical position is an outcome-blind background component. Color is the selected channel's target value.</div><div style="font-size:9px;font-weight:900;color:${C.green};margin-bottom:3px">Grouped-source prediction check</div><canvas data-pl-canvas="axis-oof" style="width:100%;height:300px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px">Horizontal is grouped out-of-fold prediction; vertical is the residualized target. Every fold keeps one source video's components together and residualizes both features and targets against the selected confounds. This is not a later-video test.</div>`)}</div>`;
+                    <div class="pl-split" style="display:grid;grid-template-columns:minmax(280px,.65fr) minmax(0,1.35fr);gap:9px">${card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:7px">Selected required-confound direction per target</div><div style="max-height:720px;overflow:auto">${maps.map((row, index) => { const exp = row.experiment || {}; const lineage = axisLineageFor(row) || {}, window = lineage.outcomeWindow || {}; const claimColor = axisRandomFoldSupported(exp) ? (exp.targetChannel === 'observed YouTube outcome' ? C.amber : C.green) : C.dim; return `<button data-pl-axis="${index}" style="width:100%;text-align:left;background:${index === state.axisIndex ? C.cyan + '12' : 'transparent'};border:0;border-bottom:1px solid ${C.border};padding:7px;cursor:pointer"><div style="display:flex;justify-content:space-between;gap:6px"><b style="font-size:9px;color:${C.text}">${esc(exp.target || '')}</b><b style="font-size:9px;color:${claimColor}">rho ${fmt(exp.heldoutSpearman, 3)}</b></div><div style="font-size:8px;color:${C.mute}">${esc(exp.representation || '')} · ${exp.pcaDimensions || '-'}D · ${esc(exp.confounds || '')} · search q ${fmt(exp.searchWideQ, 3)}</div><div style="font-size:7px;color:${C.amber};margin-top:2px">${esc(window.label || 'declared target without a fixed viewer-time window')}</div></button>`; }).join('')}</div>`)}
+                    ${card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:3px">${esc(selectedExperiment.target || 'No axis built')}</div><div style="font-size:9px;color:${C.mute};margin-bottom:4px">${esc(selectedExperiment.targetDefinition || '')}</div><div style="font-size:8px;color:${C.faint};margin-bottom:9px">channel: ${esc(selectedExperiment.targetChannel || '')} · semantic input: ${esc(representationLabel(selectedExperiment.representation || ''))} · target unit/source: ${esc(selectedExperiment.targetUnit || '')} · required confounds: ${esc(selectedExperiment.validationConfoundsRequired || 'none')} · claim: ${esc(legacyAxisClaim(selectedExperiment))}</div>${axisHorizonPanel(map)}<div style="font-size:9px;font-weight:900;color:${C.cyan};margin-bottom:3px">Semantic embedding plane</div><canvas data-pl-canvas="axis" style="width:100%;height:300px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin:4px 0">Horizontal position is the final fitted semantic direction; vertical position is an outcome-blind background component. Point color is the raw selected target below, before confound residualization.</div>${continuousMetricLegend(map.observed || [], observedFormatter, selectedExperiment.targetDefinition || selectedExperiment.target || 'target value')}<div style="font-size:9px;font-weight:900;color:${C.green};margin:11px 0 3px">Grouped-source prediction check</div><canvas data-pl-canvas="axis-oof" style="width:100%;height:300px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px">Horizontal is grouped out-of-fold prediction; vertical is the residualized target. Every fold keeps one source video's components together and residualizes both features and targets against the selected confounds. This is not a later-video test and does not extend the semantic input beyond the exact source hook.</div>`)}</div>`;
         }
 
         function renderRegistry() {
@@ -1941,7 +2107,7 @@
             canvas.dataset.plSourcePoints = String(values.length);
             canvas.dataset.plFinitePoints = String(values.filter(Number.isFinite).length);
             const { context, width, height } = canvasContext(canvas);
-            const left = 42, right = 10, top = 20, bottom = 25;
+            const left = 42, right = 10, top = 20, bottom = 40;
             let [low, high] = bounds([...values, 0]);
             const padding = Math.max(.05, (high - low) * .12);
             low -= padding; high += padding;
@@ -1960,10 +2126,17 @@
             context.fillStyle = C.mute; context.font = '8px sans-serif';
             [0, .25, .5, .75, 1].forEach(fraction => {
                 const pointIndex = Math.round(fraction * (times.length - 1));
-                context.fillText(`${fmt((progress[pointIndex] ?? fraction) * 100, 0)}%`, x(times[pointIndex]) - 7, height - 7);
+                context.textAlign = fraction === 0 ? 'left' : fraction === 1 ? 'right' : 'center';
+                context.fillText(`${fmt(times[pointIndex], 2)}s`, x(times[pointIndex]), height - 19);
+                context.fillText(`${fmt((progress[pointIndex] ?? fraction) * 100, 0)}% hook`, x(times[pointIndex]), height - 7);
             });
+            context.textAlign = 'right'; context.fillStyle = C.cyan;
+            context.fillText(`analysis stops ${fmt(times[times.length - 1], 2)}s`, width - right, 10);
+            context.textAlign = 'left';
             context.fillStyle = clusterColor(word.singletonCategory);
             context.fillText(`word C${word.singletonCategory} local deletion effect`, left, 10);
+            canvas.dataset.plEndpointSeconds = String(times[times.length - 1]);
+            canvas.dataset.plProgressEndpoint = String(progress[progress.length - 1]);
         }
 
         function drawRetentionForecast(canvas, mini = false) {
@@ -1980,7 +2153,7 @@
             const high = (adjusted ? (forecast.rewatchAdjustedPredictionP90 || []) : (forecast.predictionP90 || [])).map(numeric);
             if (!times.length || !predicted.length) return;
             const { context, width, height } = canvasContext(canvas);
-            const left = mini ? 3 : 42, right = mini ? 3 : 12, top = mini ? 4 : 18, bottom = mini ? 4 : 25;
+            const left = mini ? 3 : 42, right = mini ? 3 : 12, top = mini ? 4 : 24, bottom = mini ? 4 : 42;
             const values = [...predicted, ...actual, ...low, ...high].filter(Number.isFinite);
             let [minY, maxY] = bounds(values);
             const padding = Math.max(2, (maxY - minY) * .08);
@@ -1995,6 +2168,8 @@
                     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return;
                     context.globalAlpha = .08; context.fillStyle = clusterColor(windowRow.category);
                     context.fillRect(x(start), top, Math.max(1, x(end) - x(start)), height - top - bottom);
+                    context.globalAlpha = 1; context.fillStyle = clusterColor(windowRow.category); context.font = '7px sans-serif';
+                    context.fillText(`C${windowRow.category}`, x(start) + 2, top + 8);
                 });
                 context.globalAlpha = 1; context.strokeStyle = C.border2; context.lineWidth = 1;
                 for (let index = 0; index <= 4; index++) {
@@ -2004,8 +2179,13 @@
                 }
                 [0, .25, .5, .75, 1].forEach(fraction => {
                     const pointIndex = Math.round(fraction * (times.length - 1));
-                    context.fillText(`${fmt((progress[pointIndex] ?? fraction) * 100, 0)}%`, x(times[pointIndex]) - 7, height - 7);
+                    context.textAlign = fraction === 0 ? 'left' : fraction === 1 ? 'right' : 'center';
+                    context.fillText(`${fmt(times[pointIndex], 2)}s`, x(times[pointIndex]), height - 20);
+                    context.fillText(`${fmt((progress[pointIndex] ?? fraction) * 100, 0)}% hook`, x(times[pointIndex]), height - 7);
                 });
+                context.textAlign = 'left';
+                context.strokeStyle = C.cyan; context.lineWidth = 1; context.setLineDash([4, 3]);
+                context.beginPath(); context.moveTo(x(maxX) - 1, top); context.lineTo(x(maxX) - 1, height - bottom); context.stroke(); context.setLineDash([]);
             }
             const band = times.map((time, index) => [x(time), y(high[index]), y(low[index])])
                 .filter(point => point.every(Number.isFinite));
@@ -2035,7 +2215,13 @@
                 });
                 context.fillStyle = C.cyan; context.font = '8px sans-serif'; context.fillText(adjusted ? 'predicted normalized' : 'predicted observed', left, 10);
                 if (actual.length) { context.fillStyle = C.green; context.fillText('actual', left + 62, 10); }
+                context.fillStyle = C.cyan; context.textAlign = 'right'; context.fillText(`analysis stops ${fmt(maxX, 2)}s`, width - right, 10); context.textAlign = 'left';
             }
+            canvas.dataset.plForecastPositions = String(times.length);
+            canvas.dataset.plForecastWords = String((forecast.words || []).length);
+            canvas.dataset.plForecastComponents = String((forecast.componentWindows || []).length);
+            canvas.dataset.plEndpointSeconds = String(maxX);
+            canvas.dataset.plProgressEndpoint = String(progress[progress.length - 1]);
         }
 
         function continuousColors(values) {
@@ -2203,6 +2389,191 @@
             canvas.dataset.plCurveAccuracyPoints = String(progress.length);
         }
 
+        function drawBoundaryTrace(canvas) {
+            const partition = partitionForFocus(activeHookOutcomeFocus());
+            if (!partition) return;
+            const trace = partition.boundaryTrace || {};
+            const probabilities = (trace.gapCutProbabilitiesOOF || partition.boundaryProbabilities || []).map(numeric);
+            const serving = (trace.gapCutProbabilitiesServing || []).map(numeric);
+            const targets = (trace.gapAboveNullLabels || []).map(Number);
+            const chunks = partition.chunks || [];
+            const selectedCuts = new Set((trace.selectedCutTokenOffsets || chunks.slice(0, -1).map(row => Number(row.end))).map(Number));
+            if (!probabilities.length) return;
+            const { context, width, height } = canvasContext(canvas);
+            const pad = { left: 34, right: 10, top: 26, bottom: 34 };
+            const plotWidth = width - pad.left - pad.right, plotHeight = height - pad.top - pad.bottom;
+            const y = value => pad.top + (1 - Math.max(0, Math.min(1, numeric(value)))) * plotHeight;
+            const slot = plotWidth / probabilities.length;
+            [0, .5, 1].forEach(value => {
+                context.strokeStyle = value === .5 ? C.amber : C.border2;
+                context.setLineDash(value === .5 ? [4, 3] : []);
+                context.beginPath(); context.moveTo(pad.left, y(value)); context.lineTo(width - pad.right, y(value)); context.stroke();
+                context.fillStyle = value === .5 ? C.amber : C.mute; context.font = '8px sans-serif';
+                context.fillText(fmt(value, 1), 3, y(value) + 3);
+            });
+            context.setLineDash([]);
+            probabilities.forEach((value, index) => {
+                if (!Number.isFinite(value)) return;
+                const selected = selectedCuts.has(index + 1), barWidth = Math.max(1, slot * .72);
+                const left = pad.left + index * slot + (slot - barWidth) / 2;
+                context.fillStyle = selected ? C.cyan : C.purple;
+                context.globalAlpha = selected ? .9 : .48;
+                context.fillRect(left, y(value), barWidth, Math.max(1, y(0) - y(value)));
+                if (targets[index] === 1) {
+                    context.globalAlpha = 1; context.fillStyle = C.red;
+                    context.beginPath(); context.arc(left + barWidth / 2, Math.max(pad.top + 2, y(value) - 4), 2, 0, Math.PI * 2); context.fill();
+                }
+                if (selected) {
+                    context.globalAlpha = 1; context.fillStyle = C.cyan; context.font = '7px sans-serif'; context.textAlign = 'center';
+                    context.fillText(`CUT ${index + 1}`, left + barWidth / 2, height - 20);
+                }
+            });
+            context.globalAlpha = 1;
+            if (serving.length === probabilities.length) {
+                context.strokeStyle = C.green; context.lineWidth = 1.4; context.beginPath(); let started = false;
+                serving.forEach((value, index) => {
+                    if (!Number.isFinite(value)) return;
+                    const px = pad.left + (index + .5) * slot, py = y(value);
+                    if (started) context.lineTo(px, py); else context.moveTo(px, py);
+                    started = true;
+                });
+                context.stroke();
+            }
+            context.textAlign = 'left'; context.font = '8px sans-serif';
+            context.fillStyle = C.purple; context.fillText('OOF p(cut)', pad.left, 10);
+            context.fillStyle = C.green; context.fillText('serving ensemble', pad.left + 62, 10);
+            context.fillStyle = C.red; context.fillText('red dot = geometric audit label', pad.left + 148, 10);
+            context.fillStyle = C.mute; context.fillText('adjacent-token gap →', Math.max(pad.left, width - 112), height - 6);
+            canvas.dataset.plBoundaryGaps = String(probabilities.length);
+            canvas.dataset.plBoundarySelectedCuts = String(selectedCuts.size);
+            canvas.dataset.plBoundaryProbabilitiesComplete = String(probabilities.every(Number.isFinite));
+        }
+
+        function drawTransferScatter(canvas, points, selectedIndex, liveX, xLabel, yLabel) {
+            const visible = (points || []).map((point, index) => ({ point, index })).filter(row =>
+                Array.isArray(row.point) && row.point.every(Number.isFinite));
+            if (!visible.length) return;
+            const { context, width, height } = canvasContext(canvas);
+            const pad = { left: 38, right: 10, top: 14, bottom: 31 };
+            let xb = bounds(visible.map(row => row.point[0])), yb = bounds(visible.map(row => row.point[1]));
+            const xMargin = Math.max(1e-6, (xb[1] - xb[0]) * .06), yMargin = Math.max(1e-6, (yb[1] - yb[0]) * .06);
+            xb = [xb[0] - xMargin, xb[1] + xMargin]; yb = [yb[0] - yMargin, yb[1] + yMargin];
+            const x = value => pad.left + (value - xb[0]) / ((xb[1] - xb[0]) || 1) * (width - pad.left - pad.right);
+            const y = value => height - pad.bottom - (value - yb[0]) / ((yb[1] - yb[0]) || 1) * (height - pad.top - pad.bottom);
+            [0, .5, 1].forEach(fraction => {
+                const xv = xb[0] + fraction * (xb[1] - xb[0]), yv = yb[0] + fraction * (yb[1] - yb[0]);
+                context.strokeStyle = C.border2; context.lineWidth = 1;
+                context.beginPath(); context.moveTo(x(xv), pad.top); context.lineTo(x(xv), height - pad.bottom); context.stroke();
+                context.beginPath(); context.moveTo(pad.left, y(yv)); context.lineTo(width - pad.right, y(yv)); context.stroke();
+                context.fillStyle = C.mute; context.font = '7px sans-serif'; context.textAlign = 'center';
+                context.fillText(Number(xv).toPrecision(3), x(xv), height - 17);
+                context.textAlign = 'right'; context.fillText(Number(yv).toPrecision(3), pad.left - 3, y(yv) + 2);
+            });
+            const colors = continuousColors(visible.map(row => row.point[1]));
+            visible.forEach((row, index) => {
+                context.globalAlpha = .55; context.fillStyle = colors[index];
+                context.beginPath(); context.arc(x(row.point[0]), y(row.point[1]), 2, 0, Math.PI * 2); context.fill();
+                if (row.index === selectedIndex) {
+                    context.globalAlpha = 1; context.strokeStyle = C.cyan; context.lineWidth = 2;
+                    context.beginPath(); context.arc(x(row.point[0]), y(row.point[1]), 5, 0, Math.PI * 2); context.stroke();
+                }
+            });
+            if (Number.isFinite(liveX)) {
+                context.globalAlpha = 1; context.strokeStyle = C.cyan; context.lineWidth = 1.5; context.setLineDash([4, 3]);
+                context.beginPath(); context.moveTo(x(liveX), pad.top); context.lineTo(x(liveX), height - pad.bottom); context.stroke(); context.setLineDash([]);
+                context.fillStyle = C.cyan; context.font = '7px sans-serif'; context.textAlign = 'center'; context.fillText('new text; Y unmeasured', x(liveX), pad.top + 8);
+            }
+            context.globalAlpha = 1; context.fillStyle = C.mute; context.font = '7px sans-serif'; context.textAlign = 'center';
+            context.fillText(xLabel, pad.left + (width - pad.left - pad.right) / 2, height - 5);
+            context.save(); context.translate(8, pad.top + (height - pad.top - pad.bottom) / 2); context.rotate(-Math.PI / 2); context.fillText(yLabel, 0, 0); context.restore();
+            context.textAlign = 'left';
+            canvas.dataset.plSourcePoints = String(visible.length);
+            canvas.dataset.plSelectedPoint = selectedIndex == null ? '' : String(selectedIndex);
+        }
+
+        function drawMarketTransfer(canvas) {
+            const target = canvas.dataset.plMarketTarget;
+            const rows = (state.data.marketReward || {}).hooks || [];
+            const points = rows.map(row => [
+                numeric((row.score || {}).z), numeric((((row.outcomes || {})[target]) || {}).actual),
+            ]);
+            const focus = activeHookOutcomeFocus();
+            const selected = focus && focus.type === 'stored'
+                ? rows.findIndex(row => String(row.videoId) === String(focus.row.videoId)) : null;
+            const liveX = focus && focus.type === 'live' ? numeric((focus.result.trainingReward || {}).z) : NaN;
+            const label = (((state.data.hookOutcomes || {}).targets || {})[target] || {}).shortLabel || target;
+            const yLabel = target === 'log_views' ? 'measured log10 Shorts views' : `measured ${label} (%)`;
+            drawTransferScatter(canvas, points, selected >= 0 ? selected : null, liveX, 'Market Hold z', yLabel);
+        }
+
+        function drawLongTitleTransfer(canvas) {
+            const target = canvas.dataset.plLongTitleTarget;
+            const rows = (state.data.hookOutcomes || {}).hooks || [];
+            const points = rows.map(row => [
+                numeric((row.longTitleMarketPrior || {}).predictedLog10LongFormViews),
+                target === 'hookHold' ? numeric((row.survivalScore || {}).actual) : numeric(((row.outcomes || {})[target] || {}).actual),
+            ]);
+            const focus = activeHookOutcomeFocus();
+            const selected = focus && focus.type === 'stored'
+                ? rows.findIndex(row => String(row.videoId) === String(focus.row.videoId)) : null;
+            const label = target === 'hookHold'
+                ? 'observed excess carry (pp/s)'
+                : target === 'log_views'
+                    ? 'measured log10 Shorts views'
+                    : `measured ${((((state.data.hookOutcomes || {}).targets || {})[target] || {}).shortLabel || target)} (%)`;
+            drawTransferScatter(canvas, points, selected >= 0 ? selected : null, NaN, 'predicted long-form log10 views', label);
+        }
+
+        function drawAxisHorizon(canvas) {
+            const axes = state.data.axes || {}, map = (axes.maps || [])[state.axisIndex] || {};
+            const lineage = axisLineageFor(map);
+            const horizon = (((state.data.findings || {}).visualizationContract || {}).semanticInputHorizon) || {};
+            const endpoints = (horizon.responseEndSecondsSorted || []).map(numeric).filter(Number.isFinite);
+            if (!lineage || !endpoints.length) return;
+            const window = lineage.outcomeWindow || {};
+            const median = numeric(horizon.medianResponseEndSeconds);
+            let targetStart = numeric(window.startSeconds), targetEnd = numeric(window.endSeconds);
+            if (window.relativeToHookEnd) { targetStart = median; targetEnd = median + Math.max(0, targetEnd); }
+            if (window.kind === 'hook-end-point') { targetStart = median; targetEnd = median; }
+            if (window.kind === 'within-hook-window' && !Number.isFinite(targetEnd)) { targetStart = 0; targetEnd = median; }
+            const fixedTarget = Number.isFinite(targetStart) || Number.isFinite(targetEnd);
+            const maxX = Math.max(...endpoints, fixedTarget ? Math.max(targetStart || 0, targetEnd || 0) : 0) * 1.08 || 1;
+            const { context, width, height } = canvasContext(canvas);
+            const pad = { left: 34, right: 12, top: 28, bottom: 30 }, bins = 16;
+            const counts = Array(bins).fill(0);
+            endpoints.forEach(value => { counts[Math.min(bins - 1, Math.max(0, Math.floor(value / maxX * bins)))] += 1; });
+            const peak = Math.max(1, ...counts), x = value => pad.left + value / maxX * (width - pad.left - pad.right);
+            const y = value => height - pad.bottom - value / peak * (height - pad.top - pad.bottom);
+            context.fillStyle = C.cyan; context.globalAlpha = .62;
+            counts.forEach((count, index) => {
+                const x0 = pad.left + index / bins * (width - pad.left - pad.right), x1 = pad.left + (index + 1) / bins * (width - pad.left - pad.right);
+                context.fillRect(x0 + 1, y(count), Math.max(1, x1 - x0 - 2), height - pad.bottom - y(count));
+            });
+            context.globalAlpha = 1;
+            if (fixedTarget) {
+                const start = Number.isFinite(targetStart) ? targetStart : targetEnd;
+                const end = Number.isFinite(targetEnd) ? targetEnd : targetStart;
+                context.fillStyle = C.red; context.globalAlpha = start === end ? .95 : .2;
+                if (start === end) context.fillRect(x(end) - 1.5, pad.top, 3, height - pad.top - pad.bottom);
+                else context.fillRect(x(Math.min(start, end)), pad.top, Math.max(3, x(Math.max(start, end)) - x(Math.min(start, end))), height - pad.top - pad.bottom);
+                context.globalAlpha = 1; context.fillStyle = C.red; context.font = '8px sans-serif'; context.textAlign = end > maxX * .8 ? 'right' : 'left';
+                context.fillText(window.relativeToHookEnd ? `median hook end + ${fmt(numeric(window.endSeconds), 1)}s` : (start === end ? `target ${fmt(end, 1)}s` : `target ${fmt(start, 1)}–${fmt(end, 1)}s`), x(end) + (end > maxX * .8 ? -4 : 4), 12);
+            } else {
+                context.fillStyle = C.amber; context.font = '8px sans-serif'; context.textAlign = 'right'; context.fillText('target has no single fixed viewer-time coordinate', width - pad.right, 12);
+            }
+            context.strokeStyle = C.green; context.lineWidth = 1.5; context.setLineDash([4, 3]);
+            context.beginPath(); context.moveTo(x(median), pad.top); context.lineTo(x(median), height - pad.bottom); context.stroke(); context.setLineDash([]);
+            [0, .25, .5, .75, 1].forEach(fraction => {
+                const value = fraction * maxX; context.fillStyle = C.mute; context.font = '7px sans-serif'; context.textAlign = 'center';
+                context.fillText(`${fmt(value, 1)}s`, x(value), height - 9);
+            });
+            context.textAlign = 'left'; context.fillStyle = C.cyan; context.fillText('hook semantic endpoints', pad.left, 12);
+            context.fillStyle = C.green; context.fillText(`median ${fmt(median, 2)}s`, Math.min(width - 65, x(median) + 4), pad.top + 9);
+            canvas.dataset.plSemanticEndpoints = String(endpoints.length);
+            canvas.dataset.plOutcomeKind = String(window.kind || '');
+            canvas.dataset.plHooksBeforeOutcome = lineage.sourceHooksWhoseSemanticInputEndsBeforeOutcomeWindow == null ? '' : String(lineage.sourceHooksWhoseSemanticInputEndsBeforeOutcomeWindow);
+        }
+
         function drawCanvases() {
             document.querySelectorAll('#pl-root canvas[data-pl-canvas]').forEach(canvas => {
                 const kind = canvas.dataset.plCanvas;
@@ -2211,6 +2582,10 @@
                 if (kind === 'component-score-axis') return drawComponentScoreAxis(canvas);
                 if (kind === 'prediction-calibration') return drawPredictionCalibration(canvas);
                 if (kind === 'curve-accuracy') return drawCurveAccuracy(canvas);
+                if (kind === 'boundary-trace') return drawBoundaryTrace(canvas);
+                if (kind === 'market-transfer') return drawMarketTransfer(canvas);
+                if (kind === 'long-title-transfer') return drawLongTitleTransfer(canvas);
+                if (kind === 'axis-horizon') return drawAxisHorizon(canvas);
                 if (kind === 'retention-forecast') return drawRetentionForecast(canvas, false);
                 if (kind === 'library-retention-mini') return drawRetentionForecast(canvas, true);
                 if (kind === 'word-embedding-map') return drawWordEmbeddingMap(canvas);
@@ -2385,6 +2760,13 @@
         function handleClick(event) {
             const target = event.target;
             const view = target.closest('[data-pl-view]'); if (view) { state.view = view.dataset.plView; ensureView(); paint(); return true; }
+            const contractView = target.closest('[data-pl-contract-view]');
+            if (contractView) { state.view = contractView.dataset.plContractView; ensureView(); paint(); return true; }
+            const openAxisTarget = target.closest('[data-pl-open-axis-target]');
+            if (openAxisTarget) {
+                state.pendingAxisTarget = openAxisTarget.dataset.plOpenAxisTarget;
+                state.view = 'axes'; ensureView(); paint(); return true;
+            }
             if (target.closest('[data-pl-refresh]')) { Object.keys(state.data).forEach(key => delete state.data[key]); state.hook = null; state.source = null; state.focusedCluster = null; state.clusterOutcomeTarget = null; state.clusterOutcomeDetail = null; state.clusterOutcomePointIndex = null; state.latencyDetail = null; state.latencyPointGlobalIndex = null; state.hookQualityPointIndex = null; state.forwardResponseComponentIndex = null; ensureView(); return true; }
             if (target.closest('[data-pl-run-hook-score]')) { scoreHookText(); return true; }
             const forecastWord = target.closest('[data-pl-forecast-word]');
