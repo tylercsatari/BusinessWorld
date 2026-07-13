@@ -7,9 +7,9 @@ services:
     # dashboard and FREEZES auto-deploys until approved — which silently blocked
     # every deploy. The plan is managed in the dashboard instead (keep it on the
     # 2 GB / Standard plan there). Omitting it lets auto-deploys flow again.
-    # Use `python3 -m pip` so the deps land in the SAME python3 the server spawns
-    # (a bare `pip` installed into a different interpreter, so spawned python3
-    # couldn't find numpy — the raw-upload "No module named numpy" failure).
-    buildCommand: npm install && (python3 -m pip install -r requirements.txt || python3 -m pip install --break-system-packages -r requirements.txt || pip install -r requirements.txt)
+    # npm's postinstall verifies the complete Python scoring stack in the same
+    # interpreter used at runtime. start.sh repeats that idempotent check so a
+    # dashboard build-command override cannot launch a partially configured app.
+    buildCommand: npm install
     startCommand: bash start.sh
     autoDeploy: true

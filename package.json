@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "postinstall": "bash scripts/ensure-python-deps.sh",
     "start": "bash start.sh"
   },
   "dependencies": {

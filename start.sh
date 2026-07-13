@@ -14,17 +14,9 @@ fi
 
 export PATH="$HOME/.local/bin:$PATH"
 
-# Ensure the RUNTIME python3 (the exact one the server spawns for Python scorers) has
-# numpy + boto3 + requests. Doing this here — not just at build time — guarantees they land
-# in the interpreter that actually runs, regardless of build/runtime python drift.
-echo "Ensuring python3 deps (numpy, boto3, requests) for scoring…"
-python3 -c "import numpy, boto3, requests" 2>/dev/null \
-  && echo "  python3 already has numpy+boto3+requests" \
-  || python3 -m pip install --user --quiet numpy boto3 requests 2>/dev/null \
-  || python3 -m pip install --user --break-system-packages --quiet numpy boto3 requests 2>/dev/null \
-  || pip install --user --quiet numpy boto3 requests 2>/dev/null \
-  || echo "  WARNING: could not install numpy/boto3/requests — scoring will be unavailable"
-python3 -c "import numpy, boto3, requests" 2>/dev/null && echo "  ✓ python3 scoring deps OK" || echo "  ✗ python3 still missing scoring deps"
+# Verify the exact runtime interpreter has the complete scorer stack. The same
+# script runs during npm postinstall, so this is normally an instant import check.
+bash scripts/ensure-python-deps.sh
 
 # Check tools
 command -v yt-dlp &> /dev/null && echo "yt-dlp: $(yt-dlp --version 2>/dev/null || echo 'found')" || echo "WARNING: yt-dlp not available"
