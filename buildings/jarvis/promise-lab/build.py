@@ -28,7 +28,8 @@ def main() -> None:
         "verify-cluster-outcomes", "latency-study", "verify-latency-study",
         "canonical-partitions", "verify-canonical-partitions", "hook-quality",
         "verify-hook-quality", "forward-response", "verify-forward-response",
-        "hook-outcomes", "verify-hook-outcomes", "hook-examples", "verify-hook-examples", "ui",
+        "hook-outcomes", "verify-hook-outcomes", "hook-examples", "verify-hook-examples",
+        "verify-methodology", "ui",
     ),
                         default="interventions")
     parser.add_argument("--no-upload", action="store_true")
@@ -62,6 +63,7 @@ def main() -> None:
         ("verify-hook-outcomes", "verify_hook_outcomes.py"),
         ("hook-examples", "run_hook_examples.py"),
         ("verify-hook-examples", "verify_hook_examples.py"),
+        ("verify-methodology", "verify_methodology_contract.py"),
         ("ui", "build_ui.py"),
     ]
     start = next(index for index, item in enumerate(order) if item[0] == args.from_stage)
@@ -72,7 +74,7 @@ def main() -> None:
             "verify-latency-study", "verify-canonical-partitions",
             "verify-hook-quality", "verify-forward-response",
             "verify-hook-outcomes",
-            "verify-hook-examples", "ui",
+            "verify-hook-examples", "verify-methodology", "ui",
         }
         extra = ["--no-upload"] if args.no_upload and supports_no_upload else []
         if args.no_upload and stage == "ui":

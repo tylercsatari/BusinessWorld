@@ -20,16 +20,17 @@ def main() -> None:
     atlas = json.loads((CACHE / "all-span-atlas.json").read_text(encoding="utf-8"))
     frozen = next(row for row in atlas["maps"] if row["id"] == MAP_ID)
     labels = np.asarray(frozen["labels"], int)
+    corpus_count = len(json.loads((CACHE / "corpus.json").read_text(encoding="utf-8"))["rows"])
     lags = np.asarray(summary["lagsSeconds"], float)
     assert summary["status"] == "complete"
     assert summary["mapId"] == MAP_ID
-    assert summary["clusterCount"] == 4
+    assert summary["clusterCount"] == len(np.unique(labels))
     assert len(lags) == 23
     assert np.isclose(lags[0], -3) and np.isclose(lags[-1], 8)
     assert np.allclose(np.diff(lags), .5)
     assert len(summary["windows"]) == 5
-    assert summary["timingAudit"]["exactHooks"] == 203
-    assert len(summary["sourceCurves"]) == 208
+    assert 0 <= summary["timingAudit"]["exactHooks"] <= corpus_count
+    assert len(summary["sourceCurves"]) == corpus_count
     assert len(summary["sourceEqualNaturalDrop"]) == 33
     assert summary["method"]["causalClaim"] is False
     assert summary["curveResolution"]["curvePointsPerVideo"] == 100

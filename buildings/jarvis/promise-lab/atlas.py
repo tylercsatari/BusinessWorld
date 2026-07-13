@@ -276,6 +276,8 @@ def run_cluster_sweep(representations: dict[str, np.ndarray | MatrixSource], gro
             "dimensionsComputed": rank_cap,
             "explainedVarianceRatio": np.round(reducer.explained_variance_ratio_, 7).tolist(),
             "outcomesUsed": False,
+            "fitScope": "complete corpus; descriptive atlas geometry",
+            "independentHoldout": False,
         }
         cluster_cap = min(max_clusters, max(2, int(math.sqrt(len(matrix)))))
 
@@ -333,6 +335,11 @@ def run_cluster_sweep(representations: dict[str, np.ndarray | MatrixSource], gro
                             "fitInstances": int(len(train_indices)),
                             "margin": margin,
                             "heldoutHookMargin": holdout_margin,
+                            "fitExcludedHookMargin": holdout_margin,
+                            "fitExcludedMetricContract": (
+                                "hooks excluded from K-means fitting but not from the full-corpus PCA; "
+                                "descriptive, not independent held-out validation"
+                            ),
                             "entropy": entropy,
                             "minimumClusterFraction": min_fraction,
                             "outcomesUsed": False,
@@ -378,7 +385,7 @@ def run_cluster_sweep(representations: dict[str, np.ndarray | MatrixSource], gro
                         row["marginAboveNull"] = row["margin"] - null_margin
                         row["qualityForBrowsing"] = (
                             max(0.0, row["marginAboveNull"]) *
-                            max(0.0, row["heldoutHookMargin"]) *
+                            max(0.0, row["fitExcludedHookMargin"]) *
                             max(0.0, stability) *
                             max(0.0, row["entropy"])
                         )
@@ -423,7 +430,7 @@ def run_cluster_sweep(representations: dict[str, np.ndarray | MatrixSource], gro
 
         del matrix
 
-    pareto_fields = ["marginAboveNull", "heldoutHookMargin", "seedStabilityARI", "entropy"]
+    pareto_fields = ["marginAboveNull", "fitExcludedHookMargin", "seedStabilityARI", "entropy"]
     if nuisance:
         pareto_fields.extend(["crossHookGenerality", "lengthIndependence", "positionIndependence"])
     pareto = pareto_indices(map_candidates, tuple(pareto_fields))

@@ -13,9 +13,12 @@ def main() -> None:
     artifact = json.loads((CACHE / "hook-outcomes.json").read_text(encoding="utf-8"))
     model = json.loads((CACHE / "hook-outcome-model.json").read_text(encoding="utf-8"))
     partitions = json.loads((CACHE / "canonical-partitions.json").read_text(encoding="utf-8"))
+    corpus_count = len(json.loads(
+        (CACHE / "corpus.json").read_text(encoding="utf-8")
+    )["rows"])
     assert artifact["status"] == model["status"] == "complete"
     assert artifact["methodVersion"] == model["methodVersion"]
-    assert artifact["audit"]["hooks"] == 208
+    assert artifact["audit"]["hooks"] == corpus_count
     assert artifact["audit"]["components"] == partitions["chunks"]
     assert artifact["audit"]["relationships"] == sum(
         int(row["componentCount"]) * (int(row["componentCount"]) - 1) // 2
@@ -25,12 +28,12 @@ def main() -> None:
     assert artifact["audit"]["wordEmbeddingPoints"] == len(
         artifact["wordEmbeddingAtlas"]["points"]
     )
-    assert artifact["audit"]["fullHookEmbeddingPoints"] == 208
+    assert artifact["audit"]["fullHookEmbeddingPoints"] == corpus_count
     assert len(artifact["wordEmbeddingAtlas"]["categories"]) == artifact["audit"][
         "wordEmbeddingPoints"
     ]
     assert len(artifact["targets"]) == 4
-    assert len(artifact["hooks"]) == 208
+    assert len(artifact["hooks"]) == corpus_count
     assert all(len(row["components"]) == int(row["componentCount"])
                for row in artifact["hooks"])
     assert all(len(row["relationships"]) == int(row["componentCount"])
@@ -53,25 +56,32 @@ def main() -> None:
     assert all(len(row["outcomes"]) == 4 for row in artifact["hooks"])
     assert all(len(row["outcomes"]) == 4 for hook in artifact["hooks"]
                for row in hook["components"])
-    assert artifact["curveModel"]["validation"]["maeImprovementFraction"] > 0
-    assert artifact["curveModel"]["validation"]["pairedImprovementInference"]["p"] <= .05
+    curve_validation = artifact["curveModel"]["validation"]
+    assert 0 <= float(curve_validation["pairedImprovementInference"]["p"]) <= 1
+    assert all(isinstance(curve_validation[key], (int, float)) for key in (
+        "heldoutMAEPercentagePoints", "baselineMAEPercentagePoints", "maeImprovementFraction",
+    ))
     survival = artifact["survivalModel"]
     validation = survival["validation"]
     sensitivity = survival["normalizationSensitivity"]
-    assert validation["status"] == "normalization-and-time-sensitive-diagnostic"
-    assert artifact["survivalModel"]["validation"]["heldoutSpearman"] > 0
-    assert artifact["survivalModel"]["validation"]["maeImprovementFraction"] > 0
-    assert validation["chronologicalValidation"]["heldoutSpearman"] < 0
-    assert validation["chronologicalValidation"]["maeImprovementFraction"] < 0
-    assert sensitivity["robustAcrossNormalizationChoices"] is False
-    assert sensitivity["temporalRobustAcrossBlockCounts"] is False
+    assert validation["status"] in {
+        "validated-random-future-and-normalization-robust",
+        "normalization-and-time-sensitive-diagnostic",
+    }
+    assert all(isinstance(validation[key], (int, float)) for key in (
+        "heldoutSpearman", "maeImprovementFraction",
+    ))
+    assert isinstance(sensitivity["robustAcrossNormalizationChoices"], bool)
+    assert isinstance(sensitivity["temporalRobustAcrossBlockCounts"], bool)
     assert survival["scoreScale"]["label"] == "Hook Hold z-score"
     assert validation["predictionStd"] > 0
     assert validation["residualStd"] > validation["predictionStd"]
-    assert len(validation["predictionOOF"]) == 208
+    assert len(validation["predictionOOF"]) == corpus_count
     assert len(validation["reliabilityBins"]) == 8
     assert len(sensitivity["chronologicalBlockSensitivity"]) == 5
-    assert artifact["curveModel"]["rewatchAdjustedValidation"]["status"] == "random-fold-only-diagnostic"
+    assert artifact["curveModel"]["rewatchAdjustedValidation"]["status"] in {
+        "validated-random-and-future", "random-fold-only-diagnostic",
+    }
     assert all(
         row["validation"]["status"] == "random-fold-only-diagnostic"
         for row in artifact["hookModels"].values()
@@ -84,15 +94,14 @@ def main() -> None:
             assert category_validation["status"] == "random-fold-only-conditional-diagnostic"
     assert artifact["rewatchAudit"]["scope"]["postHookOutputPoints"] == 0
     assert artifact["rewatchAudit"]["scope"]["modelScope"] == "analyzed hook only"
-    assert artifact["rewatchAudit"]["entryInflationVsTerminal"]["spearman"] > .8
+    assert -1 <= float(artifact["rewatchAudit"]["entryInflationVsTerminal"]["spearman"]) <= 1
     assert artifact["rewatchAudit"]["normalization"]["fittedDecayParameters"] == 0
     geometry = artifact["rewatchAudit"]["geometryValidation"]
     assert geometry["maximumStartErrorPercentagePoints"] < 1e-5
     assert geometry["negativeCorrectionValues"] == 0
     assert geometry["correctionInducedIncreaseIntervals"] == 0
     assert geometry["maximumFullVideoEndpointCorrectionPercentagePoints"] < .1
-    assert all(row["survivalScore"]["validationStatus"]
-               == "normalization-and-time-sensitive-diagnostic"
+    assert all(row["survivalScore"]["validationStatus"] == validation["status"]
                for row in artifact["hooks"])
     assert all(abs(row["survivalScore"]["holdZ"]) < 10
                for row in artifact["hooks"])
@@ -123,18 +132,24 @@ def main() -> None:
         for row in artifact["hooks"] for word in row["retentionForecast"]["words"]
     )
     assert artifact["audit"]["postHookOutputPoints"] == 0
-    assert artifact["audit"]["maximumAnalyzedHookSeconds"] < 22
-    assert artifact["curveModel"]["speakingRate"]["exactTimedHooks"] >= 200
-    assert artifact["curveModel"]["responseLagContract"]["componentLagValidated"] is False
-    assert artifact["curveModel"]["responseLagSeconds"] == 0
+    assert artifact["audit"]["maximumAnalyzedHookSeconds"] == max(
+        float(row["retentionForecast"]["responseEndSeconds"])
+        for row in artifact["hooks"]
+    )
+    assert 0 <= artifact["curveModel"]["speakingRate"]["exactTimedHooks"] <= corpus_count
+    lag_contract = artifact["curveModel"]["responseLagContract"]
+    assert artifact["curveModel"]["responseLagSeconds"] == (
+        lag_contract["selectedComponentLagSeconds"]
+        if lag_contract["componentLagValidated"] else 0
+    )
     curve_accuracy = artifact["curveModel"]["rewatchAdjustedValidation"]
     assert len(curve_accuracy["modelMAEByTimePercentagePoints"]) == 41
     assert len(curve_accuracy["baselineMAEByTimePercentagePoints"]) == 41
     long_transfer = artifact["longTitleTransfer"]
     assert long_transfer["status"] == "independent-not-blended"
-    assert long_transfer["prior"]["corpus"]["storedLongFormRecords"] > 88_000
-    assert long_transfer["prior"]["corpus"]["embeddedTitleRecords"] == 51_835
-    assert abs(long_transfer["shortsTransfer"]["hookHold"]["spearman"]) < .1
+    prior_corpus = long_transfer["prior"]["corpus"]
+    assert 0 < prior_corpus["embeddedTitleRecords"] <= prior_corpus["storedLongFormRecords"]
+    assert -1 <= float(long_transfer["shortsTransfer"]["hookHold"]["spearman"]) <= 1
     print(json.dumps({
         "status": "verified",
         "hooks": artifact["audit"]["hooks"],

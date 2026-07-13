@@ -165,6 +165,71 @@ Fix:
   when their grouped-random p values pass FDR, because the category map was
   selected post hoc and chronological component replication has not been run.
 
+### 9. Learned context confounds saw held-out rows
+
+The legacy axis search projected semantic context through a PCA basis fitted on
+the complete component matrix before grouped folds were created. Outcomes did
+not enter that PCA, but held-out feature geometry still influenced the training
+representation, making the result transductive rather than strictly held out.
+
+Fix:
+
+- Semantic-context imputation and PCA are fitted independently inside every
+  training fold and only then applied to held-out source videos.
+- The final descriptive direction may fit the full training corpus, but it is
+  stored separately from out-of-fold predictions.
+- Axis artifacts record train-fold-only preprocessing and use
+  `multiplicity-controlled-random-fold-association`, never `validated`, for
+  grouped-random support.
+
+### 10. Resume checkpoints were not fully bound to their inputs
+
+Several expensive stages previously checked only a method version or row count.
+A changed hook under the same video ID, or changed atlas assignments with the
+same dimensions, could therefore reuse stale downstream arrays.
+
+Fix:
+
+- Tensor resumes require exact text, atom fingerprint, model, dimensions, span
+  count, pair count, and intervention version.
+- Discovery inherits the tensor fingerprint and model contract.
+- The all-span store requires corpus, model, dimensions, and intervention
+  identity.
+- Swap routing hashes every routing-relevant row, map label/weight, influence
+  matrix, and recomposition setting.
+- Published aggregates iterate active corpus IDs instead of globbing every file
+  left in a cache directory.
+
+### 11. Atlas fit-excluded margins were labeled as held out
+
+K-means excluded a subset of source hooks per seed, but atlas PCA was fitted once
+on the complete outcome-blind corpus. Calling the resulting centroid margin
+"held-out" overstated its independence. Retained-map ranking also combines
+several outcome-blind diagnostics with fixed exponents for browsing convenience.
+
+Fix:
+
+- The UI labels it `fit-excluded margin (full-corpus PCA)` and states that it is
+  descriptive.
+- The exact `qualityForBrowsing` formula, 300-map retention limit,
+  representation quotas, and conditional manual selection are exposed.
+- The manual k=4 map remains a saved Pareto-front visualization, not evidence
+  that four categories are universally correct.
+
+### 12. Verifiers encoded the current empirical conclusion
+
+Some checks required exactly 208 rows, positive correlations, a failed future
+test, or current Long Quant corpus counts. Legitimate new data could therefore
+fail solely because the scientific result changed.
+
+Fix:
+
+- Counts now derive from the active corpus and linked artifacts.
+- Empirical signs and p-values are checked for finiteness and correct status
+  propagation, not for a preferred conclusion.
+- A cross-artifact methodology verifier checks source lineage, cache signatures,
+  train-fold-only axes, percentile bounds, and zero post-hook output.
+
 ## What remains valid
 
 - The exhaustive contiguous-span and token-pair embedding lattice is mechanical.

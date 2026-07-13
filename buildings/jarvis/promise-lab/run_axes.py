@@ -208,22 +208,23 @@ def main() -> None:
             ),
         }
 
-    # Semantic context confound is derived outcome-blind and folded inside the
-    # axis learner through this fixed candidate representation.
-    context_confounds = PCA(n_components=min(16, len(source_rows) - 1),
-                            svd_solver="randomized", random_state=1729).fit_transform(
-                                representations["context"]
-                            ).astype(np.float32)
+    context_source = representations["context"]
+    empty = np.empty((len(source_rows), 0), np.float32)
+    context_spec = lambda fixed: {
+        "fixed": np.asarray(fixed, np.float32),
+        "pcaSource": context_source,
+        "pcaDimensions": min(16, len(source_rows) - 1),
+    }
     confounds = {
-        "none": np.empty((len(source_rows), 0), np.float32),
+        "none": empty,
         "surface": surface,
         "timing": timing,
-        "semantic_context": context_confounds,
+        "semantic_context": context_spec(empty),
         "entry_delivery_swipe": entry_delivery,
-        "surface_timing_context": np.column_stack([surface, timing, context_confounds]),
-        "surface_timing_context_entry_delivery_swipe": np.column_stack([
-            surface, timing, context_confounds, entry_delivery
-        ]),
+        "surface_timing_context": context_spec(np.column_stack([surface, timing])),
+        "surface_timing_context_entry_delivery_swipe": context_spec(np.column_stack([
+            surface, timing, entry_delivery,
+        ])),
     }
     r2 = None if args.no_upload else R2Store()
     last_progress = {"local": 0.0, "remote": 0.0, "printed": -1}
@@ -307,7 +308,11 @@ def main() -> None:
         "experimentCount": len(experiments),
         "nullRepeats": args.null_repeats,
         "minimumAttainableP": 1 / (args.null_repeats + 1),
-        "validatedCount": sum(row["status"] == "validated" for row in experiments),
+        "validatedCount": 0,
+        "randomFoldSupportedCount": sum(
+            row["status"] == "multiplicity-controlled-random-fold-association"
+            for row in experiments
+        ),
         "bestByTarget": best_by_target,
         "maps": maps,
         "elapsedSeconds": round(time.time() - started, 2),
@@ -320,7 +325,8 @@ def main() -> None:
         "status": "complete",
         "stage": "all Promise Lab v4 analyses complete",
         "axisExperiments": len(experiments),
-        "validatedAxes": summary["validatedCount"],
+        "validatedAxes": 0,
+        "randomFoldSupportedAxes": summary["randomFoldSupportedCount"],
         "updatedAt": int(time.time() * 1000),
     }
     atomic_json(CACHE / "progress.json", complete_progress)

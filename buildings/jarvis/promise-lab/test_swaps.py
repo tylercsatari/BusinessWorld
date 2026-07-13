@@ -2,10 +2,42 @@ import unittest
 
 import numpy as np
 
-from swaps import build_dual_scope_swap_plan, build_swap_plan, coassociation_rows, crossed_effects
+from swaps import (
+    build_dual_scope_swap_plan, build_swap_plan, coassociation_rows, crossed_effects,
+    routing_input_signature,
+)
 
 
 class SwapTests(unittest.TestCase):
+    def test_routing_signature_changes_with_every_routing_input_family(self):
+        candidates = [{
+            "id": "a", "videoId": "v", "text": "alpha", "hookText": "alpha beta",
+            "start": 0, "end": 1, "selectedExploratory": True,
+        }]
+        spans = [{
+            "id": "a", "videoId": "v", "text": "alpha", "hookText": "alpha beta",
+            "start": 0, "end": 1,
+        }]
+        maps = [{"id": "m", "labels": [0], "qualityForBrowsing": 1.0}]
+        influence = np.asarray([[1.0, 0.0]], np.float32)
+        contract = {"version": "one"}
+        baseline = routing_input_signature(
+            candidates, maps, influence, spans, maps, influence, contract,
+        )
+        changed_text = routing_input_signature(
+            [{**candidates[0], "text": "changed"}], maps, influence,
+            spans, maps, influence, contract,
+        )
+        changed_map = routing_input_signature(
+            candidates, [{**maps[0], "qualityForBrowsing": 2.0}], influence,
+            spans, maps, influence, contract,
+        )
+        changed_vector = routing_input_signature(
+            candidates, maps, np.asarray([[0.0, 1.0]], np.float32),
+            spans, maps, influence, contract,
+        )
+        self.assertEqual(len({baseline, changed_text, changed_map, changed_vector}), 4)
+
     def test_vectorized_coassociation_matches_direct_weighted_comparison(self):
         labels = np.asarray([
             [0, 0, 1, 1, 2],

@@ -788,9 +788,13 @@ def main() -> None:
             "predictionStd": survival_validation["predictionStd"],
             "residualStd": survival_validation["residualStd"],
             "unit": "standard deviations of out-of-fold predicted excess carry",
-            "zeroMeans": "the mean predicted hold coordinate among the 208 measured hooks",
+            "zeroMeans": (
+                f"the mean predicted hold coordinate among the {len(corpus)} measured hooks"
+            ),
             "higherMeans": "the model predicts more retention hold than the duration-only expectation",
-            "percentileRole": "secondary rank within the current 208-hook calibration set only",
+            "percentileRole": (
+                f"secondary rank within the current {len(corpus)}-hook calibration set only"
+            ),
         },
         "normalizationSensitivity": normalization_sensitivity,
         "targetContract": {

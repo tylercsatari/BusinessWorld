@@ -55,7 +55,7 @@ def representation_indicators(atlas):
             "representation": name,
             "maps": len(rows),
             "medianMarginAboveNull": median_field(rows, "marginAboveNull"),
-            "medianHeldoutHookMargin": median_field(rows, "heldoutHookMargin"),
+            "medianFitExcludedHookMargin": median_field(rows, "heldoutHookMargin"),
             "medianSeedStabilityARI": median_field(rows, "seedStabilityARI"),
             "medianLengthNMI": median_field(rows, "lengthNMI"),
             "medianPositionNMI": median_field(rows, "positionNMI"),
@@ -68,7 +68,7 @@ def representation_indicators(atlas):
             "bestMap": {
                 key: best.get(key) for key in (
                     "pcaDimensions", "geometry", "clusterCount", "qualityForBrowsing",
-                    "marginAboveNull", "seedStabilityARI", "lengthNMI", "positionNMI",
+                    "marginAboveNull", "heldoutHookMargin", "seedStabilityARI", "lengthNMI", "positionNMI",
                     "crossHookGenerality", "crossScopeBestARI",
                 )
             },
@@ -112,7 +112,7 @@ def compact_registry_row(row):
         "offsetSeconds", "frozenMapId", "frozenLabelsChanged",
         "nullRepeats", "minimumAttainableP",
         "bestPredictiveForTarget", "validationConfoundsRequired", "targetUnit",
-        "multipleTestingFamily", "status", "outcomesUsed",
+        "multipleTestingFamily", "confoundPreprocessing", "status", "outcomesUsed",
     )
     return {key: row.get(key) for key in keep if key in row}
 
@@ -120,6 +120,12 @@ def compact_registry_row(row):
 def axis_claim_status(row):
     """Translate legacy grouped-holdout support into its actual claim level."""
     status = row.get("status")
+    if status == "multiplicity-controlled-random-fold-association":
+        if row.get("targetChannel") == "observed YouTube outcome":
+            return "source-grouped-observed-diagnostic"
+        if row.get("targetChannel") == "Long Quant model-predicted counterfactual":
+            return "source-grouped-model-transfer-supported"
+        return "source-grouped-supported"
     if status != "validated":
         return status
     if row.get("targetChannel") == "observed YouTube outcome":
@@ -165,8 +171,12 @@ def main() -> None:
     cross_scope_registry = load_jsonl_gz("cross-scope-experiments.jsonl.gz")
     axis_registry = load_jsonl_gz("axis-experiments.jsonl.gz")
     cluster_outcome_registry = load_jsonl_gz("cluster-outcomes-experiments.jsonl.gz")
-    metadata_rows = [json.loads(path.read_text(encoding="utf-8"))
-                     for path in (CACHE / "metadata").glob("*.json")]
+    active_ids = [str(row["id"]) for row in corpus.get("rows") or []]
+    metadata_rows = [
+        json.loads((CACHE / "metadata" / f"{video_id}.json").read_text(encoding="utf-8"))
+        for video_id in active_ids
+        if (CACHE / "metadata" / f"{video_id}.json").exists()
+    ]
     if len(metadata_rows) > int(interventions.get("hooksComplete") or 0):
         interventions = {
             **interventions,
@@ -286,14 +296,19 @@ def main() -> None:
         key=lambda row: float(row.get("qualityForBrowsing") or 0),
         default={},
     )
-    validated_axes = [row for row in axis_registry if row.get("status") == "validated"]
+    supported_axes = [
+        row for row in axis_registry
+        if row.get("status") in {
+            "validated", "multiplicity-controlled-random-fold-association",
+        }
+    ]
     selected_axes = [row for row in axis_registry if row.get("selectedForTarget")]
     validated_model_axes = [
-        row for row in validated_axes
+        row for row in supported_axes
         if row.get("targetChannel") == "Long Quant model-predicted counterfactual"
     ]
     validated_observed_axes = [
-        row for row in validated_axes
+        row for row in supported_axes
         if row.get("targetChannel") == "observed YouTube outcome"
     ]
     observed_span_axes = [
@@ -355,15 +370,40 @@ def main() -> None:
             "candidateInstances": atlas.get("candidateInstances", 0),
             "experiments": len(cluster_registry),
             "mapsVisible": atlas.get("mapCount", len(atlas.get("maps") or [])),
-            "bestOutcomeBlindConfiguration": compact_registry_row(best_cluster) if best_cluster else None,
+            "highestBrowsingHeuristicConfiguration": (
+                compact_registry_row(best_cluster) if best_cluster else None
+            ),
             "allContiguousSpanInstances": all_span_atlas.get("spanInstances", 0),
             "allContiguousExperiments": len(all_span_cluster_registry),
             "allContiguousMapsVisible": all_span_atlas.get(
                 "mapCount", len(all_span_atlas.get("maps") or [])
             ),
-            "bestAllContiguousConfiguration": (
+            "highestAllContiguousBrowsingHeuristic": (
                 compact_registry_row(best_all_span_cluster) if best_all_span_cluster else None
             ),
+            "retentionPolicy": {
+                "mapLimitPerScope": 300,
+                "selection": (
+                    "Pareto-first, then the stored outcome-blind qualityForBrowsing heuristic "
+                    "with representation quotas; retained maps are a browsing subset, not an "
+                    "exhaustive scientific winner set"
+                ),
+                "fitExcludedHookMargin": (
+                    "centroid margin on hooks excluded from K-means fitting, conditional on a "
+                    "PCA basis fitted to the complete corpus; descriptive and not independent "
+                    "held-out validation"
+                ),
+                "qualityFormula": (
+                    "positive margin-above-null x fit-excluded margin x seed ARI x entropy; "
+                    "all-span maps additionally multiply cross-hook generality^0.5, "
+                    "length independence, and position independence^0.5"
+                ),
+                "manualWinnerConditionalOnRetainedMaps": True,
+                "manualWinnerPareto": bool(next((
+                    row.get("pareto") for row in all_span_atlas.get("maps") or []
+                    if row.get("id") == manual_projection.get("mapId")
+                ), False)),
+            },
             "crossScope": {
                 "consensusAgreement": cross_scope.get("consensusAgreement"),
                 "bestARIDistribution": cross_scope.get("bestARIDistribution"),
@@ -383,17 +423,18 @@ def main() -> None:
         },
         "axis": {
             "experiments": len(axis_registry),
-            "validated": len(validated_axes),
-            "validatedIds": [row["id"] for row in validated_axes[:100]],
+            "validated": 0,
+            "randomFoldSupported": len(supported_axes),
+            "randomFoldSupportedIds": [row["id"] for row in supported_axes[:100]],
             "selectedByTarget": [compact_axis_registry_row(row) for row in selected_axes],
             "modelTransferTargets": len(selected_model_axes),
             "modelTransferValidated": len(validated_model_axes),
             "observedTargets": len(selected_observed_axes),
             "observedValidated": len(validated_observed_axes),
             "observedSourceSpanValidated": len(observed_span_axes),
-            "validatedByChannel": dict(Counter(row.get("targetChannel") for row in validated_axes)),
-            "validatedByRepresentation": dict(Counter(
-                row.get("representation") for row in validated_axes
+            "supportedByChannel": dict(Counter(row.get("targetChannel") for row in supported_axes)),
+            "supportedByRepresentation": dict(Counter(
+                row.get("representation") for row in supported_axes
             )),
             "validatedModelTransfer": [compact_axis_registry_row(row) for row in validated_model_axes],
             "validatedObserved": [compact_axis_registry_row(row) for row in validated_observed_axes],
@@ -562,7 +603,10 @@ def main() -> None:
         "status": findings["status"],
         "builtAt": int(time.time() * 1000),
         "title": "Promise Lab: first-principles semantic component discovery",
-        "source": "208 complete Shorts hooks already embedded in the Long Quant text space",
+        "source": (
+            f"{len(corpus.get('rows') or [])} complete Shorts hooks already embedded in the "
+            "Long Quant text space"
+        ),
         "embeddingModel": MODEL,
         "embeddingDimensions": DIMENSIONS,
         "semanticRules": 0,

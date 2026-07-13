@@ -36,6 +36,43 @@ def experiment_id(video_id: str, method: str, segments: int) -> str:
     return hashlib.sha1(f"boundary:{video_id}:{method}:{segments}".encode()).hexdigest()[:20]
 
 
+def cache_matches_source(cached: dict, metadata: dict, null_repeats: int,
+                         bootstrap_repeats: int) -> bool:
+    """Require boundary results to identify the exact intervention source."""
+    fingerprint = metadata.get("fingerprint")
+    cached_fingerprint = cached.get("sourceFingerprint")
+    fingerprint_matches = (
+        cached_fingerprint == fingerprint
+        if cached_fingerprint is not None
+        else cached.get("text") == metadata.get("text")
+    )
+    return bool(
+        cached.get("methodVersion") == METHOD_VERSION
+        and cached.get("interventionVersion") == metadata.get("interventionVersion")
+        and cached.get("text") == metadata.get("text")
+        and fingerprint_matches
+        and int(cached.get("nullRepeats") or 0) == null_repeats
+        and int(cached.get("bootstrapRepeats") or 0) == bootstrap_repeats
+        and (
+            cached.get("embeddingModel") in (None, metadata.get("embeddingModel"))
+        )
+        and int(cached.get("embeddingDimensions") or metadata.get("embeddingDimensions") or 0)
+        == int(metadata.get("embeddingDimensions") or 0)
+    )
+
+
+def attach_source_contract(result: dict, metadata: dict) -> bool:
+    """Backfill identity fields on legacy results without changing their analysis."""
+    contract = {
+        "sourceFingerprint": metadata.get("fingerprint"),
+        "embeddingModel": metadata.get("embeddingModel"),
+        "embeddingDimensions": metadata.get("embeddingDimensions"),
+    }
+    changed = any(result.get(key) != value for key, value in contract.items())
+    result.update(contract)
+    return changed
+
+
 def collect_result(registry: list[dict], hook_summaries: list[dict],
                    video_id: str, result: dict) -> None:
     for row in result.get("experiments") or []:
@@ -88,11 +125,11 @@ def main() -> None:
         output_path = DISCOVERY_DIR / f"{video_id}.json"
         cached = json.loads(output_path.read_text(encoding="utf-8")) if output_path.exists() else None
         metadata = json.loads((META_DIR / f"{video_id}.json").read_text(encoding="utf-8"))
-        if (cached and not args.force and cached.get("methodVersion") == METHOD_VERSION
-                and cached.get("interventionVersion") == metadata.get("interventionVersion")
-                and int(cached.get("nullRepeats") or 0) == args.null_repeats
-                and int(cached.get("bootstrapRepeats") or 0) == args.bootstrap_repeats):
+        if (cached and not args.force and cache_matches_source(
+                cached, metadata, args.null_repeats, args.bootstrap_repeats)):
             result = cached
+            if attach_source_contract(result, metadata):
+                atomic_json(output_path, result)
         else:
             with np.load(tensor_path, allow_pickle=False) as loaded:
                 arrays = {name: loaded[name] for name in loaded.files}
@@ -110,6 +147,9 @@ def main() -> None:
                 "tokens": metadata["tokens"],
                 "outcomesUsed": False,
                 "interventionVersion": metadata.get("interventionVersion"),
+                "sourceFingerprint": metadata.get("fingerprint"),
+                "embeddingModel": metadata.get("embeddingModel"),
+                "embeddingDimensions": metadata.get("embeddingDimensions"),
                 "candidateCount": len(result.get("candidates") or []),
                 "interactionMatrix": np.round(arrays["pair_norms"], 5).tolist(),
                 "tokenInfluenceNorm": np.round(
@@ -142,16 +182,39 @@ def main() -> None:
     # and registry always come from the complete per-hook artifact set.
     registry = []
     hook_summaries = []
-    for discovery_path in sorted(DISCOVERY_DIR.glob("*.json")):
+    corpus = json.loads((CACHE / "corpus.json").read_text(encoding="utf-8"))["rows"]
+    active_ids = [str(row["id"]) for row in corpus]
+    missing = [video_id for video_id in active_ids
+               if not (DISCOVERY_DIR / f"{video_id}.json").exists()]
+    if missing:
+        raise RuntimeError(f"active corpus is missing discovery artifacts: {missing[:5]}")
+    for video_id in active_ids:
+        discovery_path = DISCOVERY_DIR / f"{video_id}.json"
         result = json.loads(discovery_path.read_text(encoding="utf-8"))
-        collect_result(registry, hook_summaries, discovery_path.stem, result)
+        metadata = json.loads((META_DIR / f"{video_id}.json").read_text(encoding="utf-8"))
+        stored_null_repeats = int(result.get("nullRepeats") or 0)
+        stored_bootstrap_repeats = int(result.get("bootstrapRepeats") or 0)
+        if not cache_matches_source(
+                result, metadata, stored_null_repeats, stored_bootstrap_repeats):
+            raise RuntimeError(f"stale discovery artifact for active hook {video_id}")
+        if attach_source_contract(result, metadata):
+            atomic_json(discovery_path, result)
+        collect_result(registry, hook_summaries, video_id, result)
         if r2:
             r2.put_json(
-                f"{R2_PREFIX}/discovery/{discovery_path.stem}.json.gz",
+                f"{R2_PREFIX}/discovery/{video_id}.json.gz",
                 result,
                 gzip_payload=True,
             )
 
+    null_budgets = sorted({int(row.get("nullRepeats") or 0) for row in (
+        json.loads((DISCOVERY_DIR / f"{video_id}.json").read_text(encoding="utf-8"))
+        for video_id in active_ids
+    )})
+    bootstrap_budgets = sorted({int(row.get("bootstrapRepeats") or 0) for row in (
+        json.loads((DISCOVERY_DIR / f"{video_id}.json").read_text(encoding="utf-8"))
+        for video_id in active_ids
+    )})
     summary = {
         "version": 4,
         "status": "complete",
@@ -159,8 +222,10 @@ def main() -> None:
         "hooks": len(hook_summaries),
         "experiments": len(registry),
         "candidateInstances": sum(len(row.get("candidates") or []) for row in hook_summaries),
-        "nullRepeats": args.null_repeats,
-        "bootstrapRepeats": args.bootstrap_repeats,
+        "nullRepeats": null_budgets[0] if len(null_budgets) == 1 else None,
+        "nullRepeatBudgets": null_budgets,
+        "bootstrapRepeats": bootstrap_budgets[0] if len(bootstrap_budgets) == 1 else None,
+        "bootstrapRepeatBudgets": bootstrap_budgets,
         "outcomesUsed": False,
         "elapsedSeconds": round(time.time() - started, 2),
         "rows": hook_summaries,

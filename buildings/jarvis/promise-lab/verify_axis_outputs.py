@@ -46,8 +46,13 @@ def main() -> None:
     for row in selected:
         if row.get("confounds") != row.get("validationConfoundsRequired"):
             raise RuntimeError(f"selected axis {row.get('id')} used the wrong confound family")
-        if row.get("status") not in {"validated", "target-selected-not-validated"}:
+        if row.get("status") not in {
+            "multiplicity-controlled-random-fold-association",
+            "target-selected-not-supported",
+        }:
             raise RuntimeError(f"selected axis {row.get('id')} has an invalid status")
+        if "train-fold-only" not in str(row.get("confoundPreprocessing") or ""):
+            raise RuntimeError(f"selected axis {row.get('id')} has an unsafe confound contract")
         for field in ("heldoutSpearman", "heldoutPearson", "heldoutR2", "searchWideP", "searchWideQ"):
             if not np.isfinite(float(row.get(field))):
                 raise RuntimeError(f"selected axis {row.get('id')} has non-finite {field}")
@@ -96,15 +101,21 @@ def main() -> None:
         if any(error > 1e-5 for error in direction_norm_error.values()):
             raise RuntimeError("one or more direction tensors are not normalized")
 
-    validated = [row for row in selected if row["status"] == "validated"]
-    if len(validated) != int(summary.get("validatedCount") or 0):
-        raise RuntimeError("validated axis count differs from its summary")
+    supported = [
+        row for row in selected
+        if row["status"] == "multiplicity-controlled-random-fold-association"
+    ]
+    if int(summary.get("validatedCount") or 0) != 0:
+        raise RuntimeError("random-fold-only axes must not be called validated")
+    if len(supported) != int(summary.get("randomFoldSupportedCount") or 0):
+        raise RuntimeError("supported axis count differs from its summary")
     print(json.dumps({
         "status": "verified",
         "experiments": len(registry),
         "targets": len(target_names),
         "selected": len(selected),
-        "validated": len(validated),
+        "validated": 0,
+        "randomFoldSupported": len(supported),
         "componentInstances": source_count,
         "minimumOOFRows": min(valid_oof.values(), default=0),
         "maximumDirectionNormError": max(direction_norm_error.values(), default=0),

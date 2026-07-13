@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import hashlib
+import json
 
 import numpy as np
 
@@ -10,6 +12,55 @@ from sequence import replace_span, tokenize
 
 
 EPS = 1e-9
+
+
+def _update_rows(digest, rows: list[dict], fields: tuple[str, ...]) -> None:
+    for row in rows:
+        payload = [row.get(field) for field in fields]
+        digest.update(json.dumps(
+            payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True,
+        ).encode("utf-8"))
+        digest.update(b"\n")
+
+
+def _update_maps(digest, maps: list[dict]) -> None:
+    for row in maps:
+        digest.update(json.dumps([
+            row.get("id"), float(row.get("qualityForBrowsing") or 0.0),
+        ], separators=(",", ":")).encode("utf-8"))
+        labels = np.ascontiguousarray(row.get("labels") or [], dtype="<i2")
+        digest.update(np.asarray(labels.shape, dtype="<i8").tobytes())
+        digest.update(labels.tobytes())
+
+
+def _update_matrix(digest, matrix: np.ndarray, chunk_rows: int = 4096) -> None:
+    matrix = np.asarray(matrix)
+    digest.update(np.asarray(matrix.shape, dtype="<i8").tobytes())
+    for start in range(0, len(matrix), chunk_rows):
+        values = np.ascontiguousarray(matrix[start:start + chunk_rows], dtype="<f4")
+        digest.update(values.tobytes())
+
+
+def routing_input_signature(candidates: list[dict], candidate_maps: list[dict],
+                            candidate_influence: np.ndarray, spans: list[dict],
+                            all_span_maps: list[dict], all_span_influence: np.ndarray,
+                            contract: dict) -> str:
+    """Hash every value that can alter deterministic dual-atlas routing."""
+    digest = hashlib.sha256()
+    digest.update(json.dumps(
+        contract, ensure_ascii=False, separators=(",", ":"), sort_keys=True,
+    ).encode("utf-8"))
+    _update_rows(digest, candidates, (
+        "id", "videoId", "text", "hookText", "start", "end", "selectedExploratory",
+    ))
+    _update_maps(digest, candidate_maps)
+    _update_matrix(digest, candidate_influence)
+    _update_rows(digest, spans, (
+        "id", "videoId", "text", "hookText", "start", "end",
+    ))
+    _update_maps(digest, all_span_maps)
+    _update_matrix(digest, all_span_influence)
+    return digest.hexdigest()
 
 
 def map_weight(row: dict) -> float:

@@ -520,7 +520,7 @@ def main() -> None:
         },
         "scoreDefinition": (
             "cosine projection of a unit Gemini hook embedding onto the frozen quality direction; "
-            "display score is its percentile among the 208 training hooks"
+            f"display score is its percentile among the {len(features)} training hooks"
         ),
         "componentDefinition": (
             "exact full-context deletion effect for each evidence-selected component; pair "

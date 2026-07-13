@@ -14,6 +14,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 EPS = 1e-9
+RANDOM_FOLD_SUPPORTED = "multiplicity-controlled-random-fold-association"
 
 
 def impute_from_train(train: np.ndarray, *others: np.ndarray) -> tuple[np.ndarray, ...]:
@@ -30,6 +31,58 @@ def impute_from_train(train: np.ndarray, *others: np.ndarray) -> tuple[np.ndarra
         return values
 
     return (fill(train), *(fill(values) for values in others))
+
+
+def prepare_fold_confounds(confounds, train: np.ndarray,
+                           test: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Fit every learned confound transformation on the training fold only."""
+    if confounds is None:
+        return np.empty((len(train), 0), np.float32), np.empty((len(test), 0), np.float32)
+    if not isinstance(confounds, dict):
+        values = np.asarray(confounds, np.float32)
+        if values.ndim != 2 or not values.shape[1]:
+            return np.empty((len(train), 0), np.float32), np.empty((len(test), 0), np.float32)
+        return impute_from_train(values[train], values[test])
+
+    train_blocks = []
+    test_blocks = []
+    source_value = confounds.get("pcaSource")
+    row_count = len(source_value) if source_value is not None else 0
+    fixed = np.asarray(
+        confounds.get("fixed", np.empty((row_count, 0))), np.float32,
+    )
+    if fixed.ndim != 2 or len(fixed) < max(np.max(train), np.max(test)) + 1:
+        raise ValueError("fixed confounds do not align with the modeled rows")
+    if fixed.shape[1]:
+        train_fixed, test_fixed = impute_from_train(fixed[train], fixed[test])
+        train_blocks.append(train_fixed)
+        test_blocks.append(test_fixed)
+
+    source = source_value
+    if source is not None:
+        source = np.asarray(source, np.float32)
+        if source.ndim != 2 or len(source) != len(fixed):
+            raise ValueError("PCA confound source does not align with the fixed confounds")
+        train_source, test_source = impute_from_train(source[train], source[test])
+        dimensions = min(
+            int(confounds.get("pcaDimensions") or 0), len(train) - 1, source.shape[1],
+        )
+        if dimensions > 0:
+            reducer = PCA(
+                n_components=dimensions, svd_solver="randomized", random_state=1729,
+            ).fit(train_source)
+            train_blocks.append(reducer.transform(train_source).astype(np.float32))
+            test_blocks.append(reducer.transform(test_source).astype(np.float32))
+
+    if not train_blocks:
+        return np.empty((len(train), 0), np.float32), np.empty((len(test), 0), np.float32)
+    return np.column_stack(train_blocks), np.column_stack(test_blocks)
+
+
+def confound_preprocessing_label(confounds) -> str:
+    if isinstance(confounds, dict) and confounds.get("pcaSource") is not None:
+        return "fixed columns plus train-fold-only semantic-context PCA"
+    return "fixed columns with train-fold-only imputation and scaling"
 
 
 def finite_correlation(left, right) -> float:
@@ -86,8 +139,8 @@ def foldwise_predictions(features: np.ndarray, target: np.ndarray, groups: np.nd
         test_features = features[test].copy()
         train_y = target[train].copy()
         test_y = target[test].copy()
-        if confounds is not None and confounds.shape[1]:
-            train_c, test_c = impute_from_train(confounds[train], confounds[test])
+        train_c, test_c = prepare_fold_confounds(confounds, train, test)
+        if train_c.shape[1]:
             confound_scaler = StandardScaler().fit(train_c)
             train_c = confound_scaler.transform(train_c)
             test_c = confound_scaler.transform(test_c)
@@ -175,6 +228,7 @@ def search_axes(representations: dict[str, np.ndarray], targets: dict[str, dict]
                             "targetDefinition": target_meta["definition"],
                             "n": int(valid.sum()),
                             "groupedBy": "source video",
+                            "confoundPreprocessing": confound_preprocessing_label(confounds),
                             "heldoutSpearman": rho,
                             "heldoutPearson": pearson,
                             "heldoutR2": r2,
@@ -282,9 +336,9 @@ def search_axes(representations: dict[str, np.ndarray], targets: dict[str, dict]
             "max-null within target; Benjamini-Hochberg across target families"
         )
         row["status"] = (
-            "validated" if selected and row["searchWideQ"] <= .05
+            RANDOM_FOLD_SUPPORTED if selected and row["searchWideQ"] <= .05
             and row["heldoutSpearman"] > 0 else
-            "target-selected-not-validated" if selected else "not-selected"
+            "target-selected-not-supported" if selected else "not-selected"
         )
 
     return experiments, prediction_lookup
@@ -296,8 +350,9 @@ def fit_direction(features: np.ndarray, target: np.ndarray, confounds: np.ndarra
     x = np.asarray(features[valid], np.float32)
     all_x = np.asarray(features, np.float32).copy()
     y = np.asarray(target[valid], float)
-    if confounds is not None and confounds.shape[1]:
-        c, all_c = impute_from_train(confounds[valid], confounds)
+    valid_indices = np.flatnonzero(valid)
+    c, all_c = prepare_fold_confounds(confounds, valid_indices, np.arange(len(features)))
+    if c.shape[1]:
         cscale = StandardScaler().fit(c)
         c = cscale.transform(c)
         all_c = cscale.transform(all_c)

@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 
 from embedding_store import DIMENSIONS, MODEL, R2_PREFIX, EmbeddingStore, R2Store
-from interventions import INTERVENTION_VERSION, build_tensor, make_plan
+from interventions import INTERVENTION_VERSION, build_tensor, make_plan, plan_fingerprint
 
 
 HERE = Path(__file__).resolve().parent
@@ -75,6 +75,20 @@ def publish_progress(r2: R2Store | None, progress: dict) -> None:
     atomic_json(PROGRESS_PATH, progress)
     if r2 is not None:
         r2.put_json(f"{R2_PREFIX}/progress.json", progress)
+
+
+def can_resume_tensor(metadata: dict, plan, video_id: str) -> bool:
+    """Accept a cached tensor only when every upstream identity still matches."""
+    return bool(
+        metadata.get("videoId") == video_id
+        and metadata.get("text") == plan.text
+        and metadata.get("fingerprint") == plan_fingerprint(plan)
+        and metadata.get("interventionVersion") == INTERVENTION_VERSION
+        and metadata.get("embeddingModel") == MODEL
+        and int(metadata.get("embeddingDimensions") or 0) == DIMENSIONS
+        and int(metadata.get("spanCount") or -1) == len(plan.spans)
+        and int(metadata.get("tokenPairCount") or -1) == len(plan.pairs)
+    )
 
 
 def main() -> None:
@@ -140,8 +154,9 @@ def main() -> None:
             meta_path = META_DIR / f"{video_id}.json"
             existing_metadata = (json.loads(meta_path.read_text(encoding="utf-8"))
                                  if meta_path.exists() else {})
+            plan = make_plan(hook["hookText"])
             if (tensor_path.exists() and meta_path.exists() and not args.force
-                    and existing_metadata.get("interventionVersion") == INTERVENTION_VERSION):
+                    and can_resume_tensor(existing_metadata, plan, video_id)):
                 skipped += 1
                 completed += 1
                 metadata = existing_metadata
@@ -155,7 +170,6 @@ def main() -> None:
                 print(f"[{position}/{len(corpus)}] {video_id}: resumed existing tensor", flush=True)
                 continue
 
-            plan = make_plan(hook["hookText"])
             vectors = store.embed_many(plan.required_texts)
             arrays, metadata = build_tensor(plan, vectors)
             metadata.update({

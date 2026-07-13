@@ -11,6 +11,10 @@ CACHE = HERE / ".cache"
 def main() -> None:
     result = json.loads((CACHE / "hook-example-results.json").read_text(encoding="utf-8"))
     model = json.loads((CACHE / "hook-quality-model.json").read_text(encoding="utf-8"))
+    outcome_model = json.loads((CACHE / "hook-outcome-model.json").read_text(encoding="utf-8"))
+    expected_quality_status = outcome_model["survivalModel"]["validation"]["status"]
+    forward_model = model["forwardResponse"]
+    lag_contract = outcome_model["responseLagContract"]
     assert result["status"] == "complete"
     assert result["evaluationOnly"] is True and result["examplesUsedForTraining"] is False
     assert result["deterministicReplay"]["identical"] is True
@@ -40,10 +44,10 @@ def main() -> None:
         assert all(value["attributionDefinition"] for value in score["components"])
         assert 0 <= float(score["score"]["percentile"]) <= 100
         assert score["score"]["label"] == "Hook Hold z-score"
-        assert score["score"]["validation"]["status"] == "normalization-and-time-sensitive-diagnostic"
+        assert score["score"]["validation"]["status"] == expected_quality_status
         forward = score["forwardResponse"]
-        assert forward["validatedAtComponentLevel"] is False
-        assert forward["validationStatus"] == "random-fold-only-conditional-diagnostic"
+        assert forward["validatedAtComponentLevel"] == forward_model["validated"]
+        assert forward["validationStatus"] == forward_model["validationStatus"]
         assert forward["metric"]["selectedLagSeconds"] >= 0
         assert len(forward["components"]) == count
         assert len(forward["relationships"]) == count * (count - 1) // 2
@@ -51,19 +55,19 @@ def main() -> None:
                    for value in forward["components"])
         assert all(0 <= float(value["percentile"]) <= 100
                    for value in forward["relationships"])
-        assert forward["exploratoryWholeHookComposite"]["accepted"] is False
+        assert isinstance(forward["exploratoryWholeHookComposite"]["accepted"], bool)
         outcomes = score["outcomes"]
         assert outcomes["status"] == "complete"
         assert set(outcomes["hook"]) == {
             "viewed_percent", "retention_5s", "average_retention", "log_views",
         }
-        assert all(value["validation"]["status"] == "random-fold-only-diagnostic"
-                   for value in outcomes["hook"].values())
+        for target, value in outcomes["hook"].items():
+            assert value["validation"]["status"] == outcome_model["hookModels"][target]["validation"]["status"]
         assert len(outcomes["components"]) == count
         assert all(len(component["outcomePredictions"]) == 4
                    for component in score["components"])
         forecast = outcomes["retentionForecast"]
-        assert forecast["status"] == "random-fold-only-diagnostic"
+        assert forecast["status"] == outcome_model["curveModel"]["validation"]["status"]
         assert forecast["normalizationAvailable"] is False
         assert "measured audience-retention curve" in forecast[
             "normalizationUnavailableReason"
@@ -79,7 +83,10 @@ def main() -> None:
         assert "forecastEndSeconds" not in forecast
         assert "postHookForecastStartSeconds" not in forecast
         assert forecast["analysisEndSeconds"] == forecast["responseEndSeconds"]
-        assert forecast["responseLagSeconds"] == 0.0
+        assert forecast["responseLagSeconds"] == (
+            lag_contract["selectedComponentLagSeconds"]
+            if lag_contract["componentLagValidated"] else 0.0
+        )
         assert len(forecast["componentWindows"]) == count
         assert forecast["words"]
         assert forecast["forecastInput"]["outputCluster"] is None

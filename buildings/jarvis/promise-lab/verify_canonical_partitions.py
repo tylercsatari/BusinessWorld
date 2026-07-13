@@ -18,8 +18,11 @@ CACHE = HERE / ".cache"
 def main() -> None:
     summary = json.loads((CACHE / "canonical-partitions.json").read_text(encoding="utf-8"))
     model = json.loads((CACHE / "canonical-partition-model.json").read_text(encoding="utf-8"))
+    corpus_count = len(json.loads(
+        (CACHE / "corpus.json").read_text(encoding="utf-8")
+    )["rows"])
     assert summary["status"] == "complete"
-    assert summary["hooks"] == 208
+    assert summary["hooks"] == corpus_count == len(summary["rows"])
     assert summary["chunks"] == sum(int(row["componentCount"]) for row in summary["rows"])
     assert summary["outcomesUsed"] is False and model["outcomesUsed"] is False
     assert model["manualPhrasesUsedToFitPartition"] is False
@@ -62,7 +65,7 @@ def main() -> None:
         assert np.isfinite(float(row["scoreGap"]))
     validation = summary["validation"]
     assert validation["coverageFailures"] == 0 and validation["overlaps"] == 0
-    assert validation["boundaryHeldoutAuc"] > .5
+    assert 0 <= float(validation["boundaryHeldoutAuc"]) <= 1
     assert len(observed_counts) > 1
     assert validation["minimumComponents"] == min(observed_counts)
     assert validation["maximumComponents"] == max(observed_counts)

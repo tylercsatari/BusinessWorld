@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 
 from embedding_store import DIMENSIONS, MODEL, R2_PREFIX, EmbeddingStore, R2Store, json_ready
-from swaps import build_dual_scope_swap_plan, crossed_effects
+from swaps import build_dual_scope_swap_plan, crossed_effects, routing_input_signature
 from text_space import METRICS, LongQuantTextSpace
 
 
@@ -59,7 +59,7 @@ def plan_signature(plan: list[dict]) -> str:
     return digest.hexdigest()
 
 
-def open_score_arrays(work_dir: Path, row_count: int, signature: str,
+def open_score_arrays(work_dir: Path, row_count: int, signature: str, input_signature: str,
                       mode: str, unit_count: int):
     work_dir.mkdir(parents=True, exist_ok=True)
     state_path = work_dir / "state.json"
@@ -68,6 +68,7 @@ def open_score_arrays(work_dir: Path, row_count: int, signature: str,
         state = json.loads(state_path.read_text(encoding="utf-8"))
     resumable = (
         state.get("planSignature") == signature
+        and state.get("inputSignature") == input_signature
         and int(state.get("rowCount") or -1) == row_count
         and state.get("mode") == mode
         and int(state.get("unitCount") or -1) == unit_count
@@ -80,6 +81,7 @@ def open_score_arrays(work_dir: Path, row_count: int, signature: str,
         state = {
             "version": 4,
             "planSignature": signature,
+            "inputSignature": input_signature,
             "rowCount": row_count,
             "mode": mode,
             "unitCount": unit_count,
@@ -139,6 +141,15 @@ def main() -> None:
     all_span_influence = np.load(
         CACHE / "all-span-vectors" / "influence.npy", mmap_mode="r"
     )
+    input_signature = routing_input_signature(
+        candidates, maps, influence, all_spans, all_span_maps, all_span_influence,
+        {
+            "embeddingModel": MODEL,
+            "embeddingDimensions": DIMENSIONS,
+            "recompositionVersion": RECOMPOSITION_VERSION,
+            "routingUniverse": "all-contiguous-spans",
+        },
+    )
     routing_state = {}
     routing_clock = {"remote": 0.0, "printedMaps": -1, "printedSources": -1}
 
@@ -176,6 +187,7 @@ def main() -> None:
                    if score_state_path.exists() else {})
     can_resume_plan = (
         cached_plan_path.exists()
+        and cached_summary.get("inputSignature") == input_signature
         and cached_summary.get("planSignature")
         and cached_summary.get("planSignature") == score_state.get("planSignature")
         and int(cached_summary.get("swapRows") or 0) == int(score_state.get("rowCount") or -1)
@@ -242,6 +254,7 @@ def main() -> None:
         "embeddingModel": MODEL,
         "embeddingDimensions": DIMENSIONS,
         "recompositionVersion": RECOMPOSITION_VERSION,
+        "inputSignature": input_signature,
         "planSignature": signature,
     }
 
@@ -293,7 +306,8 @@ def main() -> None:
         raise RuntimeError(f"Long Quant ANN recall is below the required 0.95: {recall}")
     score_mode = "unique-recomposed-text-v1"
     score_arrays, score_state, score_state_path = open_score_arrays(
-        CACHE / "swap-score-work", len(plan), signature, score_mode, len(unique_texts)
+        CACHE / "swap-score-work", len(plan), signature, input_signature,
+        score_mode, len(unique_texts)
     )
     next_unit = min(len(unique_texts), max(0, int(score_state.get("nextUnit") or 0)))
     unique_texts_embedded = int(score_state.get("uniqueTextsEmbedded") or 0)
@@ -324,6 +338,7 @@ def main() -> None:
             score_state = {
                 "version": 4,
                 "planSignature": signature,
+                "inputSignature": input_signature,
                 "rowCount": len(plan),
                 "mode": score_mode,
                 "unitCount": len(unique_texts),

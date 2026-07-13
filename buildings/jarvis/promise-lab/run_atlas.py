@@ -32,7 +32,11 @@ def atomic_json(path: Path, value) -> None:
 
 
 def load_candidates(limit_hooks: int = 0):
-    discovery_paths = sorted((CACHE / "discovery").glob("*.json"))
+    corpus = json.loads((CACHE / "corpus.json").read_text(encoding="utf-8"))["rows"]
+    discovery_paths = [CACHE / "discovery" / f"{row['id']}.json" for row in corpus]
+    missing = [path.stem for path in discovery_paths if not path.exists()]
+    if missing:
+        raise RuntimeError(f"active corpus is missing discovery artifacts: {missing[:5]}")
     if limit_hooks:
         discovery_paths = discovery_paths[:limit_hooks]
     rows = []

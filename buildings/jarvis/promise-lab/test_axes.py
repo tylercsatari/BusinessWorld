@@ -2,10 +2,23 @@ import unittest
 
 import numpy as np
 
-from axes import foldwise_prediction, search_axes
+from axes import RANDOM_FOLD_SUPPORTED, foldwise_prediction, prepare_fold_confounds, search_axes
 
 
 class AxisTests(unittest.TestCase):
+    def test_semantic_context_pca_is_fit_without_the_test_fold(self):
+        source = np.zeros((8, 2), np.float32)
+        source[:6, 0] = np.asarray([-3, -2, -1, 1, 2, 3], np.float32)
+        source[6:, 1] = np.asarray([1000, -1000], np.float32)
+        train, test = np.arange(6), np.arange(6, 8)
+        train_c, test_c = prepare_fold_confounds({
+            "fixed": np.empty((8, 0), np.float32),
+            "pcaSource": source,
+            "pcaDimensions": 1,
+        }, train, test)
+        self.assertGreater(abs(np.corrcoef(train_c[:, 0], source[train, 0])[0, 1]), .99)
+        np.testing.assert_allclose(test_c, 0, atol=1e-5)
+
     def test_grouped_axis_generalizes_on_planted_direction(self):
         rng = np.random.RandomState(31)
         groups = np.asarray([f"g{i // 2}" for i in range(80)])
@@ -76,6 +89,9 @@ class AxisTests(unittest.TestCase):
         selected = [row for row in experiments if row["selectedForTarget"]]
         self.assertEqual(len(selected), 1)
         self.assertEqual(selected[0]["confounds"], "full")
+        self.assertIn(selected[0]["status"], {
+            RANDOM_FOLD_SUPPORTED, "target-selected-not-supported",
+        })
         self.assertEqual(set(lookup), {selected[0]["id"]})
         self.assertIsNotNone(selected[0]["searchWideQ"])
         self.assertTrue(all(row["searchWideQ"] is None for row in experiments

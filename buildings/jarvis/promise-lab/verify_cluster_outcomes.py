@@ -20,24 +20,27 @@ def main() -> None:
     atlas = json.loads((CACHE / "all-span-atlas.json").read_text(encoding="utf-8"))
     frozen = next(row for row in atlas["maps"] if row["id"] == MAP_ID)
     labels = np.asarray(frozen["labels"], int)
+    corpus_count = len(json.loads((CACHE / "corpus.json").read_text(encoding="utf-8"))["rows"])
+    target_count = len(summary["targetDefinitions"])
+    cluster_count = len(np.unique(labels))
     assert summary["status"] == "complete"
     assert summary["mapId"] == MAP_ID
-    assert summary["clusterCount"] == 4
-    assert summary["targetFamiliesPerCluster"] == 25
-    assert summary["selectedFamilyCount"] == 100
-    assert summary["experimentCount"] == 6000
+    assert summary["clusterCount"] == cluster_count
+    assert summary["targetFamiliesPerCluster"] == target_count
+    assert summary["selectedFamilyCount"] == cluster_count * target_count
+    assert summary["experimentCount"] > summary["selectedFamilyCount"]
     assert summary["validatedFamilyCount"] == 0
     assert summary["randomFoldSupportedFamilyCount"] >= 0
     assert summary["validation"]["labelsChanged"] is False
     assert summary["validation"]["newClusteringFit"] is False
-    assert summary["timingAudit"]["exactHooks"] == 203
-    assert summary["timingAudit"]["textMismatchHooks"] == 5
+    assert summary["timingAudit"]["exactHooks"] + summary["timingAudit"]["textMismatchHooks"] \
+        + summary["timingAudit"]["missingWordHooks"] == corpus_count
     selected_ids = set()
     for cluster in summary["clusters"]:
         label = int(cluster["label"])
         assert cluster["spanInstances"] == int((labels == label).sum())
-        assert cluster["sourceVideos"] == 208
-        assert len(cluster["targets"]) == 25
+        assert cluster["sourceVideos"] == corpus_count
+        assert len(cluster["targets"]) == target_count
         for target in cluster["targets"]:
             selected_ids.add(target["id"])
             assert target["cluster"] == label
@@ -56,11 +59,11 @@ def main() -> None:
             assert len(detail["points"]["x"]) == cluster["spanInstances"]
             assert len(detail["points"]["globalIndices"]) == cluster["spanInstances"]
             assert len(detail["validation"]["predictedOOF"]) > 0
-    assert len(selected_ids) == 100
+    assert len(selected_ids) == cluster_count * target_count
     print(json.dumps({
         "status": "verified",
         "mapId": MAP_ID,
-        "clusters": 4,
+        "clusters": cluster_count,
         "families": len(selected_ids),
         "experiments": summary["experimentCount"],
         "validated": summary["validatedFamilyCount"],

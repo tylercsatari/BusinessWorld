@@ -47,6 +47,13 @@ def make_plan(text: str) -> InterventionPlan:
     return InterventionPlan(text, tokens, spans, pairs, list(dict.fromkeys(required)))
 
 
+def plan_fingerprint(plan: InterventionPlan) -> str:
+    """Identify the exact normalized source and atom sequence used by a tensor."""
+    return hashlib.sha256(
+        (plan.text + "\0" + "\n".join(token.text for token in plan.tokens)).encode("utf-8")
+    ).hexdigest()
+
+
 def _lookup(vectors: dict[str, np.ndarray], text: str, dim: int) -> np.ndarray:
     if not text:
         return np.zeros(dim, np.float32)
@@ -98,9 +105,7 @@ def build_tensor(plan: InterventionPlan, vectors: dict[str, np.ndarray]) -> tupl
                                               (np.linalg.norm(effect) + np.linalg.norm(additive) + EPS))
         span_surface.append(raw_text)
 
-    fingerprint = hashlib.sha256(
-        (plan.text + "\0" + "\n".join(token.text for token in plan.tokens)).encode("utf-8")
-    ).hexdigest()
+    fingerprint = plan_fingerprint(plan)
     arrays = {
         "full": full,
         "token_effects": token_effects,

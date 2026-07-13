@@ -24,9 +24,14 @@ def main() -> None:
     hook_quality = read("hook-quality.json")
     hook_model = read("hook-quality-model.json")
     partitions = read("canonical-partitions.json")
+    corpus_count = len(read("corpus.json")["rows"])
     assert summary["status"] == model["status"] == "complete"
-    assert summary["validated"] is False and model["validated"] is False
-    assert summary["validationStatus"] == "random-fold-only-conditional-diagnostic"
+    assert summary["validated"] == model["validated"]
+    assert summary["validationStatus"] == model["validationStatus"]
+    assert summary["validationStatus"] == (
+        "validated-random-and-future"
+        if summary["validated"] else "random-fold-only-conditional-diagnostic"
+    )
     assert "post-hoc manual-probe-selected" in summary["categoryClaimStatus"]
     contract = summary["metricContract"]
     assert contract["selectedLagSeconds"] >= 0
@@ -44,7 +49,7 @@ def main() -> None:
     components = summary["components"]
     relationships = summary["relationships"]
     hooks = summary["hooks"]
-    assert len(hooks) == 208
+    assert len(hooks) == corpus_count == len(partitions["rows"])
     assert len(components) == partitions["chunks"]
     assert len(relationships) == sum(
         int(row["componentCount"]) * (int(row["componentCount"]) - 1) // 2
@@ -74,9 +79,11 @@ def main() -> None:
         assert len(direction) == 3072
         assert abs(np.linalg.norm(direction) - 1) < 1e-5
         assert np.isfinite(category_model["validation"]["heldoutSpearman"])
-    assert model["wholeHook"]["accepted"] is False
-    assert model["directFullHookEmbeddingFalsification"]["accepted"] is False
-    assert model["relationship"]["standaloneObservedResidualAudit"]["accepted"] is False
+    for result in (
+        model["wholeHook"], model["directFullHookEmbeddingFalsification"],
+        model["relationship"]["standaloneObservedResidualAudit"],
+    ):
+        assert isinstance(result["accepted"], bool)
     assert all(row["responseAxisInteraction"] is not None for row in relationships)
     assert all(0 <= row["responseInteractionPercentile"] <= 100 for row in relationships)
 

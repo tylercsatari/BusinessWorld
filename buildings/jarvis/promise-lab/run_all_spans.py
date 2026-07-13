@@ -107,7 +107,10 @@ def main() -> None:
     if existing_state and (
         existing_state.get("version") != STORE_VERSION or
         existing_state.get("corpusFingerprint") != fingerprint or
-        int(existing_state.get("spanInstances") or 0) != total_spans
+        int(existing_state.get("spanInstances") or 0) != total_spans or
+        existing_state.get("embeddingModel") != MODEL or
+        int(existing_state.get("embeddingDimensions") or 0) != DIMENSIONS or
+        existing_state.get("interventionVersion") != INTERVENTION_VERSION
     ):
         raise RuntimeError("all-span store does not match this corpus; rerun with --force")
 

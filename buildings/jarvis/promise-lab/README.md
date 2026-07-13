@@ -25,8 +25,10 @@ Stages:
    consensus agreement, and post-fit boundary-enrichment audits.
 7. `run_swaps.py`: evidence-supported sources routed into the complete target
    span universe using equal-scope outcome-blind atlas consensus.
-8. `run_axes.py`: held-out directions for model-predicted transfer plus observed
-   views, keep rate, retention levels, windows, slopes, and hook-end hold.
+8. `run_axes.py`: source-grouped random-fold directions for model-predicted
+   transfer plus observed views, keep rate, retention levels, windows, slopes,
+   and hook-end hold. Learned context PCA is fitted inside each training fold;
+   these associations are not later-video validations.
 9. `run_manual_probe.py`: a separated post-hoc comparison of manual selections
    against already-retained map and cluster IDs; it creates no new maps.
 10. `run_manual_projection.py`: reconstruct the winning map's exact four
@@ -61,8 +63,8 @@ projection also has `verify_manual_projection.py`, which checks the frozen-label
 hash, all coordinate shapes and finiteness, basis orthonormality, and the declared
 winner. `verify_forward_response.py` checks exact-statistic grouped inference,
 future-only lag selection, reverse-time controls, timing windows, every component
-and pair, and rejected aggregate audits. `verify_hook_outcomes.py` checks all 208
-source-held-out predictions, 324 components, 175 relationships, curve shape,
+and pair, and rejected aggregate audits. `verify_hook_outcomes.py` checks every
+active source-held-out prediction, component, relationship, curve shape,
 timing coverage, replay-envelope geometry, normalization and temporal sensitivity,
 uncertainty arrays, and improvement over the text-free baselines. Together these
 gates check exact character slices, complete variable-cover and local-deletion identity, vector finiteness and
@@ -85,6 +87,21 @@ batch size, and resumable 8,192-text scoring checkpoints; environment variables
 can lower those values when an account has tighter request quotas. Successful
 requests inside an interrupted checkpoint remain in the exact-text cache and
 are reused on restart; a completed pass clears that transient cache.
+
+Every resumable stage is bound to upstream identity. Intervention tensors check
+normalized source text, atom fingerprint, model, dimensions, and method version.
+Discovery artifacts inherit that fingerprint. The all-span store checks the
+complete corpus fingerprint. Swap routing hashes every routing-relevant
+candidate/span, map assignment and weight, influence vector, and recomposition
+setting before a checkpoint can be reused. Aggregates are compiled only from IDs
+in the active corpus, so orphaned cache files cannot silently enter a new run.
+
+The atlas field historically named `heldoutHookMargin` is a fit-excluded margin:
+those hooks were excluded from K-means fitting, but the outcome-blind PCA basis
+was fitted on the complete corpus. It is descriptive, not independent held-out
+evidence. `qualityForBrowsing` is a disclosed map-retention heuristic; the saved
+manual map is conditional on the retained map set rather than a universal
+taxonomy selected by scientific validation.
 
 `verify_embedding_parity.py` compares a local full-hook tensor with the pooled
 48-coordinate preview stored by the existing Long Quant scorer. Tests use
