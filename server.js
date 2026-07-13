@@ -1701,7 +1701,18 @@ const server = http.createServer(async (req, res) => {
             } catch (e) { gemini = 'FAIL: ' + String(e.message || e).slice(0, 120); }
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ rawPython: RAW_PYTHON, deps, detail, ffmpeg, ytdlp, hasGeminiKey: !!process.env.GEMINI_API_KEY, gemini, hasR2: !!process.env.R2_ACCESS_KEY_ID }));
+        res.end(JSON.stringify({
+            rawPython: RAW_PYTHON,
+            deps,
+            detail,
+            ffmpeg,
+            ytdlp,
+            hasGeminiKey: !!process.env.GEMINI_API_KEY,
+            gemini,
+            hasR2: !!process.env.R2_ACCESS_KEY_ID,
+            gitCommit: process.env.RENDER_GIT_COMMIT || null,
+            promiseScorerServingContract: 'sklearn-fit-only-v1',
+        }));
         return;
     }
 
