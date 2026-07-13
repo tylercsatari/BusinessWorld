@@ -5,15 +5,6 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (
-    average_precision_score,
-    balanced_accuracy_score,
-    matthews_corrcoef,
-    roc_auc_score,
-)
-from sklearn.model_selection import GroupKFold
-from sklearn.preprocessing import StandardScaler
 
 from hook_score_core import (
     apply_category_transform,
@@ -229,6 +220,8 @@ def _row_weights(groups: np.ndarray) -> np.ndarray:
 def _operating_point(target: np.ndarray, prediction: np.ndarray,
                      weights: np.ndarray) -> dict:
     """Audit the classifier's natural Bernoulli decision without tuning a threshold."""
+    from sklearn.metrics import balanced_accuracy_score, matthews_corrcoef
+
     threshold = .5
     decision = np.asarray(prediction, float) >= threshold
     return {
@@ -243,6 +236,11 @@ def _crossfit_regularization(features: np.ndarray, target: np.ndarray,
                              groups: np.ndarray, weights: np.ndarray,
                              candidates: tuple[float, ...],
                              folds: int = 4) -> tuple[float, list[dict], np.ndarray]:
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import average_precision_score, roc_auc_score
+    from sklearn.model_selection import GroupKFold
+    from sklearn.preprocessing import StandardScaler
+
     groups = np.asarray(groups).astype(str)
     splitter = GroupKFold(n_splits=min(folds, len(set(groups))))
     predictions = {
@@ -278,6 +276,11 @@ def fit_boundary_model(features: np.ndarray, target: np.ndarray, groups: np.ndar
                        feature_names: tuple[str, ...] = BOUNDARY_FEATURE_NAMES,
                        regularization_grid: tuple[float, ...] = REGULARIZATION_GRID,
                        ) -> tuple[dict, np.ndarray, np.ndarray]:
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import average_precision_score, roc_auc_score
+    from sklearn.model_selection import GroupKFold
+    from sklearn.preprocessing import StandardScaler
+
     features = np.asarray(features, np.float32)
     target = np.asarray(target, int)
     groups = np.asarray(groups).astype(str)

@@ -59,6 +59,23 @@ def interpolate_series(times: np.ndarray, values: np.ndarray, second: float) -> 
     return float(np.interp(float(second), times[valid], values[valid]))
 
 
+def duration_baseline_features(response_seconds: np.ndarray) -> np.ndarray:
+    seconds = np.maximum(np.asarray(response_seconds, float), 1e-4)
+    return np.column_stack([seconds, seconds ** 2, np.log(seconds)]).astype(np.float32)
+
+
+def apply_duration_baseline(response_seconds: np.ndarray | float,
+                            model: dict) -> np.ndarray:
+    """Apply the frozen duration adjustment without importing training libraries."""
+    scalar = np.ndim(response_seconds) == 0
+    values = np.asarray([response_seconds] if scalar else response_seconds, float)
+    prediction = (
+        duration_baseline_features(values) @ np.asarray(model["coefficient"], float)
+        + float(model["intercept"])
+    )
+    return prediction[0] if scalar else prediction
+
+
 def estimated_token_timeline(tokens: list[dict], owners: np.ndarray | list[int],
                              times: np.ndarray, prediction: np.ndarray,
                              words_per_second: float, response_lag: float,

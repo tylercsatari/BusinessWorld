@@ -1,4 +1,7 @@
+import subprocess
+import sys
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -16,6 +19,28 @@ def scalar_model(coefficient):
 
 
 class LocalAttributionTest(unittest.TestCase):
+    def test_serving_import_does_not_require_sklearn(self):
+        code = """
+import builtins
+real_import = builtins.__import__
+def blocked_import(name, *args, **kwargs):
+    if name == 'sklearn' or name.startswith('sklearn.'):
+        raise ModuleNotFoundError('blocked serving-only dependency: ' + name)
+    return real_import(name, *args, **kwargs)
+builtins.__import__ = blocked_import
+import score_hook
+print(score_hook.SCORER_VERSION)
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=Path(__file__).resolve().parent,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("deterministic-variable-hook-scorer", result.stdout)
+
     def test_component_and_pair_effects_use_the_same_whole_hook_model(self):
         tokens = [
             {"index": 0, "text": "alpha"},

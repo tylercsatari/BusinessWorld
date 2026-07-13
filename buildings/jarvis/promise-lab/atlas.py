@@ -9,9 +9,6 @@ from dataclasses import dataclass
 from typing import Callable
 
 import numpy as np
-from sklearn.cluster import MiniBatchKMeans
-from sklearn.decomposition import PCA
-from sklearn.metrics import adjusted_rand_score
 
 
 EPS = 1e-9
@@ -265,6 +262,10 @@ def run_cluster_sweep(representations: dict[str, np.ndarray | MatrixSource], gro
                       nuisance: dict[str, np.ndarray] | None = None,
                       experiment_namespace: str = "candidate",
                       stability_sample: int = 0) -> AtlasSweep:
+    from sklearn.cluster import MiniBatchKMeans
+    from sklearn.decomposition import PCA
+    from sklearn.metrics import adjusted_rand_score
+
     groups = np.asarray(groups).astype(str)
     experiments = []
     map_candidates = []

@@ -11,16 +11,6 @@ from __future__ import annotations
 import re
 
 import numpy as np
-from scipy.stats import spearmanr
-from sklearn.decomposition import PCA
-from sklearn.linear_model import LinearRegression, Ridge
-from sklearn.model_selection import GroupKFold, KFold
-
-from hook_outcomes import (
-    chronological_splits,
-    rank_permutation_inference,
-    scalar_validation,
-)
 from hook_score_core import percentile, row_unit
 
 
@@ -88,6 +78,10 @@ def _selection_key(row: dict) -> tuple:
 def _grouped_alpha_validation(features: np.ndarray, target: np.ndarray,
                               groups: np.ndarray, alpha: float,
                               folds: int) -> dict:
+    from scipy.stats import spearmanr
+    from sklearn.linear_model import Ridge
+    from sklearn.model_selection import GroupKFold
+
     prediction = np.full(len(target), np.nan, np.float32)
     directions = []
     splitter = GroupKFold(n_splits=min(folds, len(set(groups))))
@@ -114,6 +108,11 @@ def _grouped_alpha_validation(features: np.ndarray, target: np.ndarray,
 def fit_external_axis(features: np.ndarray, target: np.ndarray,
                       groups: np.ndarray, folds: int = 5) -> dict:
     """Validate nested grouped selection, then freeze one external-only axis."""
+    from scipy.stats import spearmanr
+    from sklearn.decomposition import PCA
+    from sklearn.linear_model import Ridge
+    from sklearn.model_selection import GroupKFold
+
     features = row_unit(np.asarray(features, np.float32))
     target = np.asarray(target, np.float32)
     groups = np.asarray(groups).astype(str)
@@ -227,6 +226,10 @@ def _compact_validation(validation: dict) -> dict:
 def fixed_transfer_validation(score: np.ndarray, target: np.ndarray,
                               chronology: np.ndarray, seed: int) -> dict:
     """Evaluate a fully external score on owned outcomes without refitting it."""
+    from scipy.stats import spearmanr
+
+    from hook_outcomes import rank_permutation_inference
+
     score = np.asarray(score, float)
     target = np.asarray(target, float)
     chronology = np.asarray(chronology).astype(str)
@@ -269,6 +272,11 @@ def fixed_transfer_validation(score: np.ndarray, target: np.ndarray,
 def fit_monotone_calibration(score_z: np.ndarray, target: np.ndarray,
                              chronology: np.ndarray, seed: int) -> dict:
     """Map the fixed ranking to interpretable units without changing direction."""
+    from sklearn.linear_model import LinearRegression
+    from sklearn.model_selection import KFold
+
+    from hook_outcomes import chronological_splits, scalar_validation
+
     score_z = np.asarray(score_z, np.float32)
     target = np.asarray(target, np.float32)
     prediction = np.full(len(target), np.nan, np.float32)

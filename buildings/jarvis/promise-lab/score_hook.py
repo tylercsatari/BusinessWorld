@@ -21,8 +21,8 @@ from canonical_partition import (
 )
 from component_lattice import build_component_lattice
 from embedding_store import EmbeddingStore, R2Store, json_ready
-from hook_outcomes import apply_duration_baseline
 from hook_score_core import (
+    apply_duration_baseline,
     apply_linear_model,
     apply_category_transform,
     category_log_probabilities,

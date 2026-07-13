@@ -12,7 +12,9 @@ from sklearn.preprocessing import StandardScaler
 
 from axes import finite_correlation, spearman
 from hook_score_core import (
+    apply_duration_baseline,
     apply_linear_model,
+    duration_baseline_features,
     outcome_prediction_payload,
     row_unit,
 )
@@ -114,11 +116,6 @@ def per_second_survival(end_retention: np.ndarray,
     ).astype(np.float32)
 
 
-def duration_baseline_features(response_seconds: np.ndarray) -> np.ndarray:
-    seconds = np.maximum(np.asarray(response_seconds, float), 1e-4)
-    return np.column_stack([seconds, seconds ** 2, np.log(seconds)]).astype(np.float32)
-
-
 def fit_duration_baseline(response_seconds: np.ndarray, target: np.ndarray,
                           alpha: float = FIXED_ALPHA) -> dict:
     features = duration_baseline_features(response_seconds)
@@ -133,17 +130,6 @@ def fit_duration_baseline(response_seconds: np.ndarray, target: np.ndarray,
         "ridgeAlpha": float(alpha),
         "features": ["response seconds", "response seconds squared", "log response seconds"],
     }
-
-
-def apply_duration_baseline(response_seconds: np.ndarray | float,
-                            model: dict) -> np.ndarray:
-    scalar = np.ndim(response_seconds) == 0
-    values = np.asarray([response_seconds] if scalar else response_seconds, float)
-    prediction = (
-        duration_baseline_features(values) @ np.asarray(model["coefficient"], float)
-        + float(model["intercept"])
-    )
-    return prediction[0] if scalar else prediction
 
 
 def _splitter(count: int, groups: np.ndarray | None, folds: int, seed: int):
