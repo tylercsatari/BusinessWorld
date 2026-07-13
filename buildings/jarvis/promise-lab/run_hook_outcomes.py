@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import time
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -19,7 +20,7 @@ from cluster_outcomes import (
     retention_at,
     span_interval,
 )
-from embedding_store import R2_PREFIX, R2Store, json_ready
+from embedding_store import EmbeddingStore, R2_PREFIX, R2Store, json_ready
 from hook_outcomes import (
     FIXED_ALPHA,
     FIXED_DIMENSIONS,
@@ -45,6 +46,7 @@ from hook_score_core import (
     enrich_word_semantics,
     estimated_token_timeline,
     interpolate_series,
+    local_counterfactual_texts,
     percentile,
     row_unit,
 )
@@ -57,7 +59,7 @@ HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
 OUTPUT_PATH = CACHE / "hook-outcomes.json"
 MODEL_PATH = CACHE / "hook-outcome-model.json"
-METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v9"
+METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v10"
 CURVE_PROGRESS = np.linspace(0.0, 1.0, 41, dtype=np.float32)
 FORECAST_FORMULA = (
     "y_hat(p_j) = intercept_j + unit(GeminiEmbedding(complete hook)) dot "
@@ -178,6 +180,155 @@ def source_mean(values: np.ndarray, source_indices: np.ndarray,
         if np.isfinite(selected).any():
             output[source] = float(np.nanmean(selected))
     return output
+
+
+def local_attribution_calibration(partitions: list[dict],
+                                  full_features: np.ndarray,
+                                  context_store: np.ndarray,
+                                  survival_model: dict,
+                                  hook_models: dict[str, dict]) -> tuple[dict, dict]:
+    """Calibrate frozen-model deletion effects and pair interactions.
+
+    These values describe the fitted model, not causal effects. Component
+    deletions use the exact all-span retained-context vectors. Pair deletions
+    reuse the same exact counterfactual texts and embedding cache as the broad
+    retained-information analysis.
+    """
+    required = []
+    texts_by_video = {}
+    for partition in partitions:
+        owners = np.asarray([
+            int(token["owner"]) for token in partition["tokens"]
+        ], int)
+        texts = local_counterfactual_texts(
+            partition["text"], tokenize(partition["text"]), owners,
+            int(partition["componentCount"]),
+        )
+        texts_by_video[str(partition["videoId"])] = texts
+        required.extend(value for value in texts["withoutPair"].values() if value)
+    store = EmbeddingStore(CACHE / "hook-quality-embeddings.sqlite3")
+    try:
+        pair_embeddings = store.embed_many(required)
+    finally:
+        store.close()
+
+    scalar_models = {"hook_hold": survival_model, **hook_models}
+    component_values = {
+        metric: defaultdict(list) for metric in scalar_models
+    }
+    pair_values = {
+        metric: defaultdict(list) for metric in scalar_models
+    }
+    source_attributions = {}
+    zero = np.zeros(full_features.shape[1], np.float32)
+    for source_index, partition in enumerate(partitions):
+        full = row_unit(full_features[source_index])
+        chunks = partition["chunks"]
+        categories = [int(chunk["category"]) for chunk in chunks]
+        contexts = np.asarray([
+            row_unit(np.asarray(context_store[int(chunk["globalSpanIndex"])], np.float32))
+            for chunk in chunks
+        ], np.float32)
+        texts = texts_by_video[str(partition["videoId"])]
+        pair_contexts = {}
+        for left in range(len(chunks)):
+            for right in range(left + 1, len(chunks)):
+                text = texts["withoutPair"][(left, right)]
+                pair_contexts[(left, right)] = (
+                    row_unit(pair_embeddings[text]) if text else zero
+                )
+        source_row = {
+            "videoId": str(partition["videoId"]),
+            "components": [{
+                "index": index,
+                "category": categories[index],
+                "effects": {},
+            } for index in range(len(chunks))],
+            "relationships": [{
+                "left": left,
+                "right": right,
+                "categorySequence": f"{categories[left]}->{categories[right]}",
+                "interactions": {},
+            } for left in range(len(chunks))
+              for right in range(left + 1, len(chunks))],
+        }
+        relationship_lookup = {
+            (int(row["left"]), int(row["right"])): row
+            for row in source_row["relationships"]
+        }
+        for metric, model in scalar_models.items():
+            full_score = float(apply_linear_model(full, model)[0, 0])
+            without_scores = np.asarray([
+                float(apply_linear_model(context, model)[0, 0])
+                for context in contexts
+            ], float)
+            for index, category in enumerate(categories):
+                effect = full_score - without_scores[index]
+                component_values[metric][str(category)].append(effect)
+                source_row["components"][index]["effects"][metric] = float(effect)
+            for left in range(len(chunks)):
+                for right in range(left + 1, len(chunks)):
+                    without_pair = float(apply_linear_model(
+                        pair_contexts[(left, right)], model,
+                    )[0, 0])
+                    pair_key = f"{categories[left]}->{categories[right]}"
+                    interaction = (
+                        full_score - without_scores[left] - without_scores[right]
+                        + without_pair
+                    )
+                    pair_values[metric][pair_key].append(interaction)
+                    relationship_lookup[(left, right)]["interactions"][metric] = float(
+                        interaction
+                    )
+        source_attributions[str(partition["videoId"])] = source_row
+    calibration = {
+        "method": (
+            "local effects from the frozen full-fit linear model: component = full minus "
+            "without component; pair = full minus without left minus without right plus "
+            "without both"
+        ),
+        "claimBoundary": (
+            "model-relative local counterfactual diagnostics; not additive Shapley values, "
+            "causal effects, or independently held-out component outcomes"
+        ),
+        "componentsByCategory": {
+            metric: {
+                category: np.sort(values).astype(float).tolist()
+                for category, values in rows.items()
+            } for metric, rows in component_values.items()
+        },
+        "pairsByCategorySequence": {
+            metric: {
+                pair: np.sort(values).astype(float).tolist()
+                for pair, values in rows.items()
+            } for metric, rows in pair_values.items()
+        },
+    }
+    hold_std = max(float(
+        (survival_model.get("scoreScale") or {}).get("predictionStd") or 1
+    ), 1e-9)
+    for source in source_attributions.values():
+        for row in source["components"]:
+            category = str(int(row["category"]))
+            row["effectHoldZ"] = row["effects"]["hook_hold"] / hold_std
+            row["percentiles"] = {
+                metric: percentile(
+                    np.asarray(calibration["componentsByCategory"][metric][category], float),
+                    value,
+                ) for metric, value in row["effects"].items()
+            }
+        for row in source["relationships"]:
+            sequence = row["categorySequence"]
+            row["interactionHoldZ"] = row["interactions"]["hook_hold"] / hold_std
+            row["percentiles"] = {
+                metric: percentile(
+                    np.asarray(
+                        calibration["pairsByCategorySequence"][metric][sequence], float,
+                    ),
+                    value,
+                ) for metric, value in row["interactions"].items()
+            }
+    return calibration, source_attributions
 
 
 def speaking_rate(hooks: list[dict], timing_records: dict) -> tuple[dict, dict]:
@@ -819,6 +970,9 @@ def main() -> None:
             ),
         },
     })
+    attribution_calibration, source_attributions = local_attribution_calibration(
+        partitions, full_features, context_store, survival_model, hook_models,
+    )
     adjusted_curve_fitted = fit_full_linear(
         full_features, adjusted_curve_target, include_map=False,
         seed=OUTCOME_SEED + 9004,
@@ -996,10 +1150,18 @@ def main() -> None:
             quality_relations[(
                 str(point["videoId"]), int(relation["left"]), int(relation["right"]),
             )] = relation
+    headline_relations = {
+        (str(source["videoId"]), int(row["left"]), int(row["right"])): row
+        for source in source_attributions.values()
+        for row in source["relationships"]
+    }
 
     components = []
     for index, base in enumerate(component_base):
         quality_row = quality_components.get((str(base["videoId"]), int(base["component"]))) or {}
+        local_row = source_attributions[str(base["videoId"])]["components"][
+            int(base["component"])
+        ]
         forward_row = dict(quality_row.get("forwardResponse") or {})
         if forward_row:
             forward_row["heldoutSpearmanForCategory"] = forward_category_rho.get(
@@ -1032,6 +1194,23 @@ def main() -> None:
                 ),
             },
             "forwardResponse": forward_row or None,
+            "hookHoldContribution": {
+                "metric": "Hook Hold",
+                "effectRawCarryPointsPerSecond": local_row["effects"]["hook_hold"],
+                "effectHoldZ": local_row["effectHoldZ"],
+                "categoryPercentile": local_row["percentiles"]["hook_hold"],
+                "definition": (
+                    "frozen full-fit score(full hook) minus score(exact hook with this "
+                    "component removed)"
+                ),
+                "claimBoundary": attribution_calibration["claimBoundary"],
+            },
+            "wholeHookOutcomeContributions": {
+                target_name: {
+                    "effect": local_row["effects"][target_name],
+                    "categoryPercentile": local_row["percentiles"][target_name],
+                } for target_name in targets
+            },
             "outcomes": {},
         }
         for target_name in targets:
@@ -1250,6 +1429,33 @@ def main() -> None:
                     **(quality_relations.get((video_id, left, right)) or {}),
                     "left": left,
                     "right": right,
+                    "hookHoldInteraction": {
+                        "metric": "Hook Hold",
+                        "interactionRawCarryPointsPerSecond": headline_relations[
+                            (video_id, left, right)
+                        ]["interactions"]["hook_hold"],
+                        "interactionHoldZ": headline_relations[
+                            (video_id, left, right)
+                        ]["interactionHoldZ"],
+                        "categorySequencePercentile": headline_relations[
+                            (video_id, left, right)
+                        ]["percentiles"]["hook_hold"],
+                        "definition": (
+                            "frozen full-fit score(full) - score(without left) - "
+                            "score(without right) + score(without both)"
+                        ),
+                        "claimBoundary": attribution_calibration["claimBoundary"],
+                    },
+                    "wholeHookOutcomeInteractions": {
+                        target_name: {
+                            "interaction": headline_relations[
+                                (video_id, left, right)
+                            ]["interactions"][target_name],
+                            "categorySequencePercentile": headline_relations[
+                                (video_id, left, right)
+                            ]["percentiles"][target_name],
+                        } for target_name in targets
+                    },
                 }
                 for left in range(component_count)
                 for right in range(left + 1, component_count)
@@ -1337,6 +1543,7 @@ def main() -> None:
         "componentModels": component_models,
         "curveModel": curve_model,
         "survivalModel": survival_model,
+        "localAttributionCalibration": attribution_calibration,
         "longTitlePrior": long_title_prior,
         "longTitleTransfer": long_title_transfer,
         "rewatchAdjustedCurveModel": adjusted_curve_model,
@@ -1368,6 +1575,27 @@ def main() -> None:
             "lengthBaseline": length_baseline,
             "normalizationSensitivity": normalization_sensitivity,
             "scoreScale": survival_model["scoreScale"],
+        },
+        "localAttributionCalibration": {
+            "method": attribution_calibration["method"],
+            "claimBoundary": attribution_calibration["claimBoundary"],
+            "componentCalibrationCounts": {
+                metric: {
+                    category: len(values)
+                    for category, values in rows.items()
+                }
+                for metric, rows in attribution_calibration[
+                    "componentsByCategory"
+                ].items()
+            },
+            "pairCalibrationCounts": {
+                metric: {
+                    pair: len(values) for pair, values in rows.items()
+                }
+                for metric, rows in attribution_calibration[
+                    "pairsByCategorySequence"
+                ].items()
+            },
         },
         "longTitleTransfer": long_title_transfer,
         "curveModel": {

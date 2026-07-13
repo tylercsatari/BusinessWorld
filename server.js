@@ -826,8 +826,9 @@ function requestIsLoopback(req) {
 async function handlePromiseHookScore(req, res) {
     try {
         const body = await readBody(req);
-        const text = String(body.text || '').replace(/\s+/g, ' ').trim().slice(0, 1200);
+        const text = String(body.text || '').replace(/\s+/g, ' ').trim();
         if (text.length < 8) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type a complete hook to score"}'); return; }
+        if (text.length > 1200) { res.writeHead(413, { 'Content-Type': 'application/json' }); res.end('{"error":"the exact scorer accepts up to 1,200 characters per analyzed opening; the input was not truncated"}'); return; }
         if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
         const scoreRunner = job => {
             if (job) { job.status = 'queued'; job.ts = Date.now(); }

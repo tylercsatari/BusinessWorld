@@ -131,6 +131,7 @@ def main() -> None:
     )
 
     outcomes = read("hook-outcomes.json")
+    outcome_model = read("hook-outcome-model.json")
     assert outcomes["audit"]["hooks"] == len(corpus)
     assert outcomes["audit"]["postHookOutputPoints"] == 0
     assert outcomes["rewatchAudit"]["scope"]["postHookOutputPoints"] == 0
@@ -139,6 +140,23 @@ def main() -> None:
             - float(row["retentionForecast"]["responseEndSeconds"])) < 1e-5
         for row in outcomes["hooks"]
     )
+    attribution = outcome_model["localAttributionCalibration"]
+    expected_components = sum(
+        int(row["componentCount"]) for row in outcomes["hooks"]
+    )
+    expected_pairs = sum(
+        int(row["componentCount"]) * (int(row["componentCount"]) - 1) // 2
+        for row in outcomes["hooks"]
+    )
+    for metric in ("hook_hold", *outcome_model["targets"].keys()):
+        component_rows = attribution["componentsByCategory"][metric]
+        pair_rows = attribution["pairsByCategorySequence"][metric]
+        assert sum(len(values) for values in component_rows.values()) == expected_components
+        assert sum(len(values) for values in pair_rows.values()) == expected_pairs
+        assert all(np.isfinite(np.asarray(values, float)).all()
+                   for values in component_rows.values())
+        assert all(np.isfinite(np.asarray(values, float)).all()
+                   for values in pair_rows.values())
 
     checked_percentiles = 0
     for artifact_name in (
@@ -158,6 +176,8 @@ def main() -> None:
         "axisConfounds": "train-fold-only",
         "chronologicallyValidatedLegacyAxes": 0,
         "postHookOutputPoints": 0,
+        "headlineComponentAttributions": expected_components,
+        "headlinePairInteractions": expected_pairs,
         "percentilesChecked": checked_percentiles,
     }, indent=2))
 

@@ -230,6 +230,29 @@ Fix:
 - A cross-artifact methodology verifier checks source lineage, cache signatures,
   train-fold-only axes, percentile bounds, and zero post-hook output.
 
+### 13. Component scores were disconnected from the headline metric
+
+The live scorer exposed a whole-hook Hook Hold coordinate, but component cards
+primarily showed a separate category-conditioned response axis. That did not
+answer the operational question "how much does this component change this hook's
+headline score?" Pair relationships had the same mismatch.
+
+Fix:
+
+- Every exact component is deleted from the literal input and rescored with the
+  same frozen whole-hook Hook Hold model.
+- Every component pair receives the same model's local second-order interaction.
+- The identical operation is retained separately for viewed percentage,
+  five-second retention, average retention, log views, and the 41-position
+  within-hook curve forecast.
+- Effects are calibrated against frozen-model effects from training components
+  in the same conditional category or category sequence.
+- The UI keeps these model-relative effects separate from the older
+  category-response and retained-information diagnostics. They remain local
+  counterfactual model explanations, not causal or additive Shapley values.
+- Live input length is never silently truncated. Token count and measured
+  training-length support are returned with every score.
+
 ## What remains valid
 
 - The exhaustive contiguous-span and token-pair embedding lattice is mechanical.

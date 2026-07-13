@@ -88,7 +88,24 @@ deletion effects are diagnostic, not validated transfer.
 
 ## 5. Components and relationships
 
-For each exact-cover component `i`, broad attribution is:
+For each exact-cover component `i`, every frozen whole-hook scalar model now
+receives the exact counterfactual text with that component removed. The headline
+Hook Hold attribution is:
+
+`hold_effect(i) = HookHold(full) - HookHold(without i)`
+
+The same calculation is retained separately for viewed percentage, five-second
+retention, average retention, log views, and all 41 within-hook retention
+forecast positions. Effects are ranked only against model-relative training
+effects from components in the same conditional category.
+
+For each pair `(i,j)`, the headline relationship is:
+
+`hold_interaction(i,j) = HookHold(full) - HookHold(without i) - HookHold(without j) + HookHold(without i,j)`
+
+This makes the whole input, every component, and every relationship use the same
+headline coordinate. The older broad retained-information attribution remains a
+separate channel:
 
 `effect(i) = value(full) - value(without i)`
 
@@ -96,8 +113,10 @@ For each pair `(i,j)`, the local second-order interaction is:
 
 `interaction(i,j) = value(full) - value(without i) - value(without j) + value(without i,j)`
 
-These are local deletion effects, not Shapley values. They do not claim global
-additivity or causal contribution.
+All are local deletion effects, not Shapley values. They do not claim global
+additivity or causal contribution. A fixed-duration endpoint effect isolates the
+semantic model change; a natural-duration endpoint effect is also reported when
+the deletion leaves text, but it deliberately includes the duration change.
 
 ## 6. Component response and lag
 
@@ -174,8 +193,12 @@ Every scored hook returns:
 - four direct outcome predictions
 - a diagnostic 41-position retention forecast bounded by the analyzed hook
 - every component deletion and pair deletion input
+- Hook Hold component effects and pair interactions in the same units as the
+  headline, plus separate direct-outcome and curve effects
 - every available component and relationship map
 - nearest-training-hook similarity
+- token count relative to the measured 8-57-token training range; longer inputs
+  are explicitly marked as extrapolations and are never silently truncated
 - explicit random-fold, temporal, normalization, and domain status
 
 The scorer is deterministic for a fixed model artifact and exact input text.

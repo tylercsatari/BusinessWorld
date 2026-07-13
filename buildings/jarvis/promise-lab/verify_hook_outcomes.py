@@ -56,6 +56,14 @@ def main() -> None:
     assert all(len(row["outcomes"]) == 4 for row in artifact["hooks"])
     assert all(len(row["outcomes"]) == 4 for hook in artifact["hooks"]
                for row in hook["components"])
+    attribution = model["localAttributionCalibration"]
+    expected_components = artifact["audit"]["components"]
+    expected_relationships = artifact["audit"]["relationships"]
+    for metric in ("hook_hold", *artifact["targets"].keys()):
+        assert sum(len(values) for values in
+                   attribution["componentsByCategory"][metric].values()) == expected_components
+        assert sum(len(values) for values in
+                   attribution["pairsByCategorySequence"][metric].values()) == expected_relationships
     curve_validation = artifact["curveModel"]["validation"]
     assert 0 <= float(curve_validation["pairedImprovementInference"]["p"]) <= 1
     assert all(isinstance(curve_validation[key], (int, float)) for key in (
@@ -155,6 +163,7 @@ def main() -> None:
         "hooks": artifact["audit"]["hooks"],
         "components": artifact["audit"]["components"],
         "relationships": artifact["audit"]["relationships"],
+        "headlineAttributionMetrics": len(attribution["componentsByCategory"]),
         "curveMAE": artifact["curveModel"]["validation"]["heldoutMAEPercentagePoints"],
         "curveBaselineMAE": artifact["curveModel"]["validation"]["baselineMAEPercentagePoints"],
         "survivalRho": artifact["survivalModel"]["validation"]["heldoutSpearman"],

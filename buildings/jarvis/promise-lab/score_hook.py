@@ -44,7 +44,7 @@ REMOTE_PREFIX = "longform/promise-lab-v4"
 MODEL_FILE = "hook-quality-model.json"
 PARTITION_FILE = "canonical-partition-model.json"
 OUTCOME_MODEL_FILE = "hook-outcome-model.json"
-SCORER_VERSION = "deterministic-variable-hook-scorer-v9"
+SCORER_VERSION = "deterministic-variable-hook-scorer-v10"
 
 
 def _decode_json(payload: bytes) -> dict:
@@ -420,6 +420,267 @@ def _prediction_interval(payload: dict, model: dict) -> dict:
     return payload
 
 
+def _scalar_prediction(feature: np.ndarray, model: dict) -> float:
+    return float(apply_linear_model(np.asarray(feature, np.float32), model)[0, 0])
+
+
+def _score_local_attributions(primitives: dict, partition: dict,
+                              counter_vectors: dict, components: list[dict],
+                              interactions: list[dict], outcomes: dict,
+                              outcome_model: dict) -> dict:
+    """Apply the frozen whole-hook models to exact local counterfactuals."""
+    calibration = outcome_model.get("localAttributionCalibration") or {}
+    component_calibration = calibration.get("componentsByCategory") or {}
+    pair_calibration = calibration.get("pairsByCategorySequence") or {}
+    survival_model = outcome_model["survivalModel"]
+    scale = survival_model.get("scoreScale") or {}
+    prediction_std = max(float(scale.get("predictionStd") or 1), 1e-9)
+    hold_full = _scalar_prediction(primitives["full"], survival_model)
+    hold_without = {
+        index: _scalar_prediction(value, survival_model)
+        for index, value in counter_vectors["withoutOne"].items()
+    }
+    hold_without_pair = {
+        key: _scalar_prediction(value, survival_model)
+        for key, value in counter_vectors["withoutPair"].items()
+    }
+    direct_models = outcome_model.get("hookModels") or {}
+    direct_full = {
+        target: _scalar_prediction(primitives["full"], model)
+        for target, model in direct_models.items()
+    }
+    direct_without = {
+        target: {
+            index: _scalar_prediction(value, model)
+            for index, value in counter_vectors["withoutOne"].items()
+        } for target, model in direct_models.items()
+    }
+    direct_without_pair = {
+        target: {
+            key: _scalar_prediction(value, model)
+            for key, value in counter_vectors["withoutPair"].items()
+        } for target, model in direct_models.items()
+    }
+    curve_model = outcome_model["curveModel"]
+    curve_full = apply_linear_model(primitives["full"], curve_model)[0]
+    curve_without = {
+        index: apply_linear_model(value, curve_model)[0]
+        for index, value in counter_vectors["withoutOne"].items()
+    }
+    curve_without_pair = {
+        key: apply_linear_model(value, curve_model)[0]
+        for key, value in counter_vectors["withoutPair"].items()
+    }
+
+    tokens = partition["tokens"]
+    owners = np.asarray(partition["owners"], int)
+    lexical = np.asarray([
+        any(character.isalnum() or character == "_" for character in str(token.get("text") or ""))
+        for token in tokens
+    ], bool)
+    words_per_second = max(float(
+        (outcome_model.get("speakingRate") or {}).get("meanWordsPerSecond") or 1
+    ), 1e-9)
+    response_lag = float(outcome_model.get("responseLagSeconds") or 0)
+    full_response_seconds = float(outcomes["survivalScore"]["responseEndSeconds"])
+
+    def response_seconds_without(removed: set[int]) -> float | None:
+        retained = int(np.sum(lexical & ~np.isin(owners, list(removed))))
+        return retained / words_per_second + response_lag if retained else None
+
+    def endpoint(lift: float, seconds: float | None) -> float | None:
+        if seconds is None or seconds <= 0:
+            return None
+        expected = float(apply_duration_baseline(
+            seconds, survival_model["lengthBaseline"],
+        ))
+        carry = max(expected + float(lift), 1e-4)
+        return float(100.0 * (carry / 100.0) ** seconds)
+
+    full_endpoint = endpoint(hold_full, full_response_seconds)
+    component_rows = []
+    for component in components:
+        index = int(component["index"])
+        category = str(int(component["category"]))
+        effect = hold_full - hold_without[index]
+        samples = np.asarray(
+            ((component_calibration.get("hook_hold") or {}).get(category) or []),
+            float,
+        )
+        natural_seconds = response_seconds_without({index})
+        fixed_without_endpoint = endpoint(hold_without[index], full_response_seconds)
+        natural_without_endpoint = endpoint(hold_without[index], natural_seconds)
+        direct = {}
+        for target, full_value in direct_full.items():
+            target_effect = full_value - direct_without[target][index]
+            target_samples = np.asarray(
+                ((component_calibration.get(target) or {}).get(category) or []),
+                float,
+            )
+            direct[target] = {
+                "fullPrediction": full_value,
+                "withoutPrediction": direct_without[target][index],
+                "effect": target_effect,
+                "categoryPercentile": (
+                    percentile(target_samples, target_effect)
+                    if len(target_samples) else None
+                ),
+            }
+        curve_effect = curve_full - curve_without[index]
+        attribution = {
+            "metric": "Hook Hold",
+            "fullRawCoordinate": hold_full,
+            "withoutRawCoordinate": hold_without[index],
+            "effectRawCarryPointsPerSecond": effect,
+            "effectHoldZ": effect / prediction_std,
+            "categoryPercentile": (
+                percentile(samples, effect) if len(samples) else None
+            ),
+            "fixedDurationEndpointEffectPercentagePoints": (
+                full_endpoint - fixed_without_endpoint
+                if full_endpoint is not None and fixed_without_endpoint is not None else None
+            ),
+            "naturalDurationEndpointEffectPercentagePoints": (
+                full_endpoint - natural_without_endpoint
+                if full_endpoint is not None and natural_without_endpoint is not None else None
+            ),
+            "withoutResponseEndSeconds": natural_seconds,
+            "counterfactualLeavesText": natural_seconds is not None,
+            "higherMeans": (
+                "the frozen whole-hook model predicts less hold after this component is removed"
+            ),
+            "definition": "score(full hook) minus score(exact hook with this component removed)",
+            "claimBoundary": calibration.get("claimBoundary"),
+        }
+        component["hookHoldContribution"] = attribution
+        component["wholeHookOutcomeContributions"] = direct
+        component["retentionForecastContribution"] = {
+            "progressFractions": curve_model.get("progressFractions"),
+            "effectByProgressPercentagePoints": curve_effect.astype(float).tolist(),
+            "effectAtAnalyzedEndpointPercentagePoints": float(curve_effect[-1]),
+            "meanEffectPercentagePoints": float(np.mean(curve_effect)),
+            "definition": (
+                "complete-hook forecast minus the same frozen forecast after deleting this component"
+            ),
+        }
+        component_rows.append({
+            "index": index,
+            "text": component["text"],
+            "category": int(category),
+            **attribution,
+        })
+
+    pair_rows = []
+    for row in interactions:
+        left = int(row["left"]); right = int(row["right"])
+        key = (left, right)
+        category_pair = f"{components[left]['category']}->{components[right]['category']}"
+        value = (
+            hold_full - hold_without[left] - hold_without[right]
+            + hold_without_pair[key]
+        )
+        samples = np.asarray(
+            ((pair_calibration.get("hook_hold") or {}).get(category_pair) or []),
+            float,
+        )
+        fixed_pair_endpoint = endpoint(hold_without_pair[key], full_response_seconds)
+        fixed_left_endpoint = endpoint(hold_without[left], full_response_seconds)
+        fixed_right_endpoint = endpoint(hold_without[right], full_response_seconds)
+        natural_pair_seconds = response_seconds_without({left, right})
+        natural_left_seconds = response_seconds_without({left})
+        natural_right_seconds = response_seconds_without({right})
+        natural_pair_endpoint = endpoint(hold_without_pair[key], natural_pair_seconds)
+        natural_left_endpoint = endpoint(hold_without[left], natural_left_seconds)
+        natural_right_endpoint = endpoint(hold_without[right], natural_right_seconds)
+        direct = {}
+        for target, full_value in direct_full.items():
+            target_value = (
+                full_value - direct_without[target][left]
+                - direct_without[target][right]
+                + direct_without_pair[target][key]
+            )
+            target_samples = np.asarray(
+                ((pair_calibration.get(target) or {}).get(category_pair) or []),
+                float,
+            )
+            direct[target] = {
+                "interaction": target_value,
+                "categorySequencePercentile": (
+                    percentile(target_samples, target_value)
+                    if len(target_samples) else None
+                ),
+            }
+        curve_value = (
+            curve_full - curve_without[left] - curve_without[right]
+            + curve_without_pair[key]
+        )
+        attribution = {
+            "metric": "Hook Hold",
+            "interactionRawCarryPointsPerSecond": value,
+            "interactionHoldZ": value / prediction_std,
+            "categorySequencePercentile": (
+                percentile(samples, value) if len(samples) else None
+            ),
+            "fixedDurationEndpointInteractionPercentagePoints": (
+                full_endpoint - fixed_left_endpoint - fixed_right_endpoint
+                + fixed_pair_endpoint
+                if all(item is not None for item in (
+                    full_endpoint, fixed_left_endpoint, fixed_right_endpoint,
+                    fixed_pair_endpoint,
+                )) else None
+            ),
+            "naturalDurationEndpointInteractionPercentagePoints": (
+                full_endpoint - natural_left_endpoint - natural_right_endpoint
+                + natural_pair_endpoint
+                if all(item is not None for item in (
+                    full_endpoint, natural_left_endpoint, natural_right_endpoint,
+                    natural_pair_endpoint,
+                )) else None
+            ),
+            "definition": (
+                "score(full) - score(without left) - score(without right) + score(without both)"
+            ),
+            "claimBoundary": calibration.get("claimBoundary"),
+        }
+        row["hookHoldInteraction"] = attribution
+        row["wholeHookOutcomeInteractions"] = direct
+        row["retentionForecastInteraction"] = {
+            "interactionAtAnalyzedEndpointPercentagePoints": float(curve_value[-1]),
+            "meanInteractionPercentagePoints": float(np.mean(curve_value)),
+        }
+        pair_rows.append({"left": left, "right": right, **attribution})
+
+    return {
+        "status": "complete",
+        "headlineMetric": {
+            "label": "Hook Hold z-score",
+            "value": outcomes["survivalScore"]["holdZ"],
+            "validationStatus": (
+                (outcomes["survivalScore"].get("validation") or {}).get("status")
+            ),
+        },
+        "componentMetric": (
+            "local Hook Hold deletion effect in the same frozen whole-hook coordinate"
+        ),
+        "relationshipMetric": (
+            "local second-order Hook Hold interaction in the same frozen whole-hook coordinate"
+        ),
+        "components": component_rows,
+        "relationships": pair_rows,
+        "coverage": {
+            "componentsScored": len(component_rows),
+            "componentsExpected": len(components),
+            "relationshipsScored": len(pair_rows),
+            "relationshipsExpected": len(components) * (len(components) - 1) // 2,
+            "tokensOwnedExactlyOnce": bool(
+                len(owners) == len(tokens) and np.all(owners >= 0)
+            ),
+        },
+        "calibrationMethod": calibration.get("method"),
+        "claimBoundary": calibration.get("claimBoundary"),
+    }
+
+
 def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
                     outcome_model: dict) -> dict:
     targets = outcome_model.get("targets") or {}
@@ -759,6 +1020,10 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
     outcomes = _score_outcomes(
         primitives, partition, components, outcome_model,
     )
+    scorecard = _score_local_attributions(
+        primitives, partition, counter_vectors, components, interactions,
+        outcomes, outcome_model,
+    )
 
     validation = model["validation"]
     retained_score = {
@@ -778,6 +1043,11 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
     }
     survival_score = outcomes["survivalScore"]
     survival_validation = survival_score.get("validation") or {}
+    token_count = len(primitives["tokens"])
+    lexical_token_count = int(np.sum(primitives["lexical"]))
+    training_token_counts = np.asarray([
+        len(tokenize(str(value))) for value in model.get("trainingTexts") or []
+    ], int)
     stable_payload = f"{SCORER_VERSION}\0{model['methodVersion']}\0{primitives['text']}"
     return {
         "version": 2,
@@ -793,6 +1063,23 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             "spanEmbeddingInputs": primitives["embeddingInputs"],
             "localCounterfactualEmbeddingInputs": len(set(required)),
             "emergentComponentCount": component_count,
+            "tokenCount": token_count,
+            "lexicalTokenCount": lexical_token_count,
+            "trainingTokenCountMinimum": (
+                int(training_token_counts.min()) if len(training_token_counts) else None
+            ),
+            "trainingTokenCountMaximum": (
+                int(training_token_counts.max()) if len(training_token_counts) else None
+            ),
+            "trainingTokenCountPercentile": (
+                percentile(training_token_counts, token_count)
+                if len(training_token_counts) else None
+            ),
+            "outsideTrainingLengthRange": bool(
+                len(training_token_counts)
+                and (token_count < training_token_counts.min()
+                     or token_count > training_token_counts.max())
+            ),
             "generativeLlmUsed": False,
         },
         "score": survival_score,
@@ -822,8 +1109,8 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
         "map": {
             "x": survival_score.get("mapX"),
             "y": survival_score.get("mapY"),
-        "xDefinition": "frozen terminal-conditioned hook-survival diagnostic",
-        "yDefinition": "largest remaining semantic direction orthogonal to the diagnostic",
+            "xDefinition": "frozen terminal-conditioned hook-survival diagnostic",
+            "yDefinition": "largest remaining semantic direction orthogonal to the diagnostic",
         },
         "retainedInformation": {
             "score": retained_score,
@@ -843,6 +1130,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
         },
         "components": components,
         "pairInteractions": interactions,
+        "scorecard": scorecard,
         "localCounterfactuals": {
             "definition": counter_texts["definition"],
             "componentDeletions": [{
@@ -875,10 +1163,22 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             "outcomeUsedForQualityAxis": True,
             "examplesUsedForTraining": False,
             "componentAttribution": model["componentDefinition"],
-            "forwardResponseOutcomeUsedForTiming": bool(forward_response),
+            "forwardResponseDiagnosticsComputed": bool(forward_response),
+            "forwardResponseLagAdoptedForWholeHook": bool(
+                outcome_model.get("responseLagSeconds")
+            ),
             "forwardResponseBoundariesChanged": False,
             "outcomeModelsUseFrozenBoundaries": True,
-            "outcomePredictionsAreHeldoutValidated": True,
+            "outcomePredictionsHaveRandomFoldDiagnostics": True,
+            "outcomePredictionsPassPromotionGate": bool(
+                all(
+                    str((row.get("validation") or {}).get("status") or "").startswith(
+                        "validated"
+                    )
+                    for row in (outcome_model.get("hookModels") or {}).values()
+                )
+                and str(survival_validation.get("status") or "").startswith("validated")
+            ),
         },
     }
 
