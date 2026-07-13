@@ -112,12 +112,39 @@ def component_response_windows(words: list[dict], component_count: int,
         end = max(float(row["spokenEndSeconds"]) for row in selected)
         output.append({
             "component": component,
+            "category": int(selected[0]["componentCategory"]),
             "spokenStartSeconds": start,
             "spokenEndSeconds": end,
             "responseWindowStartSeconds": start + float(response_lag),
             "responseWindowEndSeconds": end + float(response_lag),
         })
     return output
+
+
+def enrich_word_semantics(words: list[dict], tokens: list[dict],
+                          chunks: list[dict]) -> list[dict]:
+    """Attach the singleton span and exact owner-category trace to timed words."""
+    token_by_index = {int(row["index"]): row for row in tokens}
+    chunk_by_index = {int(row["index"]): row for row in chunks}
+    for word in words:
+        token = token_by_index[int(word["tokenIndex"])]
+        component = chunk_by_index[int(word["component"])]
+        semantic = token.get("semantic") or {}
+        word.update({
+            "componentCategory": int(component["category"]),
+            "componentText": str(component.get("text") or ""),
+            "singletonCategory": semantic.get("category"),
+            "singletonFrozenAtlasCategory": semantic.get("frozenAtlasCategory"),
+            "singletonCategoryProbability": semantic.get("categoryProbability"),
+            "singletonCategoryDistribution": semantic.get("categoryDistribution"),
+            "singletonCategoryCoordinates4D": semantic.get("categoryCoordinates4D"),
+            "singletonEmbeddingX": semantic.get("mapX"),
+            "singletonEmbeddingY": semantic.get("mapY"),
+            "singletonGlobalSpanIndex": semantic.get("globalSpanIndex"),
+            "singletonEmbeddingInput": str(token.get("text") or ""),
+            "singletonCategorySource": semantic.get("categorySource"),
+        })
+    return words
 
 
 def percentile(sorted_values: np.ndarray, value: float) -> float:

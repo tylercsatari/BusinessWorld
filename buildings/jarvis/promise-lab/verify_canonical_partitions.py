@@ -33,6 +33,7 @@ def main() -> None:
     assert model["constraints"]["chunkCount"] is None
     assert model["constraints"]["maximumComponentCount"] is None
     assert model["constraints"]["manualSplitPenalty"] is None
+    assert np.asarray(model["browseProjection"]["basis4x2"]).shape == (4, 2)
     observed_counts = set()
     for row in summary["rows"]:
         tokens = tokenize(row["text"])
@@ -53,6 +54,10 @@ def main() -> None:
             assert len(probability) == 4 and np.isclose(probability.sum(), 1, atol=1e-5)
             cursor = int(chunk["end"])
         assert cursor == len(tokens)
+        assert len(row["forecastSemanticInput"]["categoryCoordinates4D"]) == 4
+        assert 0 <= int(row["forecastSemanticInput"]["category"]) <= 3
+        assert all(len(token["semantic"]["categoryCoordinates4D"]) == 4
+                   for token in row["tokens"])
         assert np.isfinite(float(row["score"]))
         assert np.isfinite(float(row["scoreGap"]))
     validation = summary["validation"]
@@ -61,6 +66,10 @@ def main() -> None:
     assert len(observed_counts) > 1
     assert validation["minimumComponents"] == min(observed_counts)
     assert validation["maximumComponents"] == max(observed_counts)
+    trace = validation["semanticTrace"]
+    assert trace["singletonCategoryAgreementWithFrozenAtlas"] > .99
+    assert trace["fullHookCategoryAgreementWithFrozenAtlas"] > .98
+    assert trace["savedProjectionMaximumAbsoluteError"] < 5e-5
     print(json.dumps({
         "status": "verified", "hooks": summary["hooks"], "chunks": summary["chunks"],
         "overlaps": 0, "coverageFailures": 0,

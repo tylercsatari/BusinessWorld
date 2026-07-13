@@ -29,6 +29,7 @@
             hookLibraryQuery: '', hookLibraryMetric: 'overall', hookLibrarySelectedId: null,
             outcomePointVideoId: null, outcomeComponentPointKey: null,
             retentionCurveMode: 'adjusted',
+            forecastWordIndex: 0,
         };
         let progressTimer = null;
         let resizeTimer = null;
@@ -226,7 +227,10 @@
         async function settleHookScore(request, operation) {
             try {
                 const value = await operation;
-                if (request === hookScoreRequest) state.hookScoreResult = value;
+                if (request === hookScoreRequest) {
+                    state.hookScoreResult = value;
+                    state.forecastWordIndex = 0;
+                }
             } catch (error) {
                 if (request === hookScoreRequest) {
                     state.hookScoreResult = null;
@@ -950,11 +954,33 @@
             const words = (forecast || {}).words || [];
             if (!words.length) return '';
             const adjusted = forecast.normalizationAvailable === true && state.retentionCurveMode === 'adjusted';
-            return `<div style="overflow:auto;margin-top:8px"><div style="display:flex;gap:4px;min-width:max-content;padding-bottom:4px">${words.map(word => {
+            const selectedIndex = Math.max(0, Math.min(words.length - 1, Number(state.forecastWordIndex || 0)));
+            const selected = words[selectedIndex] || {};
+            const contribution = (adjusted
+                ? selected.rewatchAdjustedForecastDeletionContributionByTime
+                : selected.observedForecastDeletionContributionByTime) || [];
+            const coordinates = selected.singletonCategoryCoordinates4D || [];
+            const distribution = selected.singletonCategoryDistribution || [];
+            const frozenWordLabel = selected.singletonFrozenAtlasCategory == null
+                ? 'not available for new text'
+                : `C${selected.singletonFrozenAtlasCategory}`;
+            return `<div style="margin-top:10px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:5px"><div><div style="font-size:10px;color:${C.text};font-weight:900">Every word · exact singleton embedding and forecast trace</div><div style="font-size:8px;color:${C.mute};margin-top:2px">Top border = owning component category. Left border = this word embedded alone. Cyan outline = selection, never another cluster.</div></div><div style="font-size:8px;color:${C.cyan};font-weight:900">${words.length} / ${words.length} WORDS EXPOSED</div></div><div style="overflow:auto"><div style="display:flex;gap:4px;min-width:max-content;padding-bottom:4px">${words.map((word, index) => {
                 const actual = numeric(adjusted ? word.actualRetentionPercent : word.observedAbsoluteActualRetentionPercent);
                 const predicted = numeric(adjusted ? word.predictedRetentionPercent : word.observedAbsolutePredictedRetentionPercent);
-                return `<div style="width:92px;border-top:3px solid ${clusterColor(word.component)};background:${C.card2};padding:6px;box-sizing:border-box"><div style="font-size:9px;color:${C.text};font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(word.text || '')}">${esc(word.text || '')}</div><div style="font-size:7.5px;color:${C.mute};line-height:1.45;margin-top:3px">response ${fmt(word.responseSeconds, 2)}s<br>pred ${pct(predicted)}${Number.isFinite(actual) ? `<br>actual ${pct(actual)}<br><b style="color:${actual >= predicted ? C.green : C.red}">${signed(actual - predicted, 1)} pp</b>` : ''}</div></div>`;
-            }).join('')}</div></div>`;
+                const active = index === selectedIndex;
+                return `<button data-pl-forecast-word="${index}" style="width:118px;border:1px solid ${active ? C.cyan : C.border};border-top:4px solid ${clusterColor(word.componentCategory)};border-left:4px solid ${clusterColor(word.singletonCategory)};background:${active ? C.cyan + '12' : C.card2};padding:6px;box-sizing:border-box;text-align:left;cursor:pointer"><div style="font-size:9px;color:${C.text};font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(word.text || '')}">${esc(word.text || '')}</div><div style="font-size:7px;color:${C.dim};line-height:1.45;margin-top:3px">word C${word.singletonCategory} · component ${Number(word.component) + 1}/C${word.componentCategory}<br>x ${fmt(word.singletonEmbeddingX, 2)} · y ${fmt(word.singletonEmbeddingY, 2)}<br>response ${fmt(word.responseSeconds, 2)}s · pred ${pct(predicted)}${Number.isFinite(actual) ? `<br>actual ${pct(actual)} · <b style="color:${actual >= predicted ? C.green : C.red}">${signed(actual - predicted, 1)} pp</b>` : ''}</div></button>`;
+            }).join('')}</div></div><div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px;margin-top:8px"><div style="border-left:3px solid ${clusterColor(selected.singletonCategory)};background:${C.card2};padding:9px"><div style="font-size:8px;color:${clusterColor(selected.singletonCategory)};font-weight:900;text-transform:uppercase">Selected word ${selectedIndex + 1}/${words.length} · singleton cluster ${selected.singletonCategory}</div><div style="font-size:15px;color:${C.text};font-weight:900;margin:3px 0">${esc(selected.singletonEmbeddingInput || selected.text || '')}</div><div style="font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Exact embedding input:</b> ${esc(selected.singletonEmbeddingInput || '')}<br><b style="color:${C.text}">Word-alone assignment:</b> C${selected.singletonCategory} at ${fmt(Number(selected.singletonCategoryProbability || 0) * 100, 2)}% · frozen atlas label ${esc(frozenWordLabel)}<br><b style="color:${C.text}">Four-category probabilities:</b> ${distribution.map((value, index) => `C${index} ${fmt(Number(value) * 100, 2)}%`).join(' · ')}<br><b style="color:${C.text}">Whitened 4D:</b> [${coordinates.map(value => fmt(value, 4)).join(', ')}]<br><b style="color:${C.text}">Saved 2D:</b> x ${fmt(selected.singletonEmbeddingX, 5)} · y ${fmt(selected.singletonEmbeddingY, 5)}<br><b style="color:${C.text}">Owner:</b> component ${Number(selected.component) + 1}, C${selected.componentCategory}: ${esc(selected.componentText || '')}<br><b style="color:${C.text}">Timing:</b> spoken ${fmt(selected.spokenStartSeconds, 3)}–${fmt(selected.spokenEndSeconds, 3)}s · response ${fmt(selected.responseSeconds, 3)}s</div><canvas data-pl-canvas="word-embedding-map" style="width:100%;height:260px;display:block;margin-top:7px"></canvas><div style="font-size:7.5px;color:${C.mute};margin-top:3px">All ${Number(((state.data.hookOutcomes || {}).wordEmbeddingAtlas || {}).points?.length || 0).toLocaleString()} stored lexical singleton embeddings. Colors are only C0–C3. Cyan ring is this selected word.</div></div><div style="background:${C.card2};padding:9px"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">Selected word → all 41 forecast outputs</div><div style="font-size:12px;color:${C.text};font-weight:900;margin:3px 0">Local deletion contribution across 0–20 seconds</div><canvas data-pl-canvas="word-forecast-contribution" style="width:100%;height:260px;display:block;margin-top:7px"></canvas><div style="font-size:8px;color:${C.dim};line-height:1.55;margin-top:4px"><b style="color:${C.text}">Formula:</b> forecast(complete hook) − forecast(the same hook with only “${esc(selected.singletonEmbeddingInput || '')}” deleted). Positive means the word raises predicted retention at that output second; negative lowers it. ${contribution.length} stored values are shown. This is a local deletion diagnostic, not an additive or causal word score.</div></div></div></div>`;
+        }
+
+        function forecastArchitecturePanel(forecast) {
+            const input = (forecast || {}).forecastInput || {};
+            const projection = (state.data.hookOutcomes || {}).semanticProjection || {};
+            const trace = (state.data.hookOutcomes || {}).semanticTraceValidation || {};
+            if (!input.text) return '';
+            const frozenInputLabel = input.frozenAtlasCategory == null
+                ? 'not available for new text'
+                : `C${input.frozenAtlasCategory}`;
+            return `<div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(300px,.95fr);gap:9px;margin-top:9px"><div style="background:${C.card2};padding:10px;border-left:3px solid ${clusterColor(input.category)}"><div style="font-size:8px;color:${clusterColor(input.category)};font-weight:900;text-transform:uppercase">Complete-hook forecast input · semantic C${input.category}</div><div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.45;margin:4px 0">${esc(input.text || '')}</div><div style="font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Exact model input:</b> complete hook text above<br><b style="color:${C.text}">Embedding:</b> ${esc(input.embeddingModel || '')}, ${Number(input.embeddingDimensions || 0).toLocaleString()} dimensions<br><b style="color:${C.text}">Input semantic assignment:</b> C${input.category}, ${fmt(Number(input.categoryProbability || 0) * 100, 2)}% · frozen atlas ${esc(frozenInputLabel)}<br><b style="color:${C.text}">Saved plane:</b> ${esc(projection.methodLabel || projection.methodId || '')} · x ${fmt(input.mapX, 5)} · y ${fmt(input.mapY, 5)}<br><b style="color:${C.text}">Forecast:</b> ${esc(input.formula || '')}</div><canvas data-pl-canvas="forecast-input-map" style="width:100%;height:250px;display:block;margin-top:7px"></canvas><div style="font-size:7.5px;color:${C.mute};margin-top:3px">All 208 stored complete-hook inputs. Category colors are C0–C3; the cyan ring is the current input. Serving/frozen agreement: words ${pct(Number(trace.singletonCategoryAgreementWithFrozenAtlas || 0) * 100)}, complete hooks ${pct(Number(trace.fullHookCategoryAgreementWithFrozenAtlas || 0) * 100)}.</div></div><div style="background:${C.card2};padding:10px;border-left:3px solid ${C.amber}"><div style="font-size:8px;color:${C.amber};font-weight:900;text-transform:uppercase">Post-hook forecast output · no semantic cluster</div><div style="font-size:16px;color:${C.text};font-weight:900;margin:4px 0">41 scalar retention outputs</div><div style="font-size:9px;color:${C.dim};line-height:1.65">The model emits one retention value for each half-second from 0 to 20 seconds. Those numbers are not text embeddings, so assigning them C0, C1, C2, C3, or a new cyan category would be false.<br><br><b style="color:${C.text}">Post-hook region:</b> after ${fmt(forecast.responseEndSeconds, 2)}s, the same complete-hook vector continues to drive the curve. No new words, components, or semantic categories enter.<br><br><b style="color:${C.text}">Cyan means:</b> predicted line or selected-point ring only.<br><b style="color:${C.text}">Amber means:</b> time outside word/component attribution.<br><b style="color:${C.text}">Cluster vocabulary:</b> exactly C0, C1, C2, C3.</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">${[0,1,2,3].map(category => `<span style="border-left:4px solid ${clusterColor(category)};padding:4px 6px;background:${C.card};font-size:8px;color:${C.text};font-weight:900">C${category}</span>`).join('')}<span style="border:1px solid ${C.cyan};padding:4px 6px;font-size:8px;color:${C.cyan};font-weight:900">CYAN RING/LINE = SELECTION/PREDICTION</span></div></div></div>`;
         }
 
         function retentionForecastPanel(forecast, stored = false) {
@@ -977,7 +1003,7 @@
             const modeNote = normalizationAvailable
                 ? `Terminal anchor ${pct(forecast.terminalRetentionPercent)} · correction at 20s ${pct((forecast.replayCorrectionPercent || []).slice(-1)[0])}`
                 : esc(forecast.normalizationUnavailableReason || 'A measured curve and terminal retention are required for replay normalization.');
-            return `<section style="border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};padding:12px 0;margin:12px 0"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:280px;flex:1"><div style="font-size:12px;color:${C.text};font-weight:900">${title}</div><div style="font-size:8.5px;color:${C.dim};line-height:1.5;margin-top:3px">${stored ? 'Cyan is the source-held-out forecast; green is the measured curve.' : 'Cyan is a rough frozen-model forecast from text; it is not a measured or replay-normalized retention curve.'} Word response points use ${esc(forecast.wordTimingPolicy || 'library-average speaking rate')} and the selected ${fmt(forecast.responseLagSeconds == null ? 0 : forecast.responseLagSeconds, 1)}s diagnostic lag.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:7px">${modeControls}<span style="font-size:7.5px;color:${C.mute}">${modeNote}</span></div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('curve MAE', `${fmt(validation.heldoutMAEPercentagePoints, 2)} pp`, C.cyan)}${stat('baseline MAE', `${fmt(validation.baselineMAEPercentagePoints, 2)} pp`, C.dim)}${stat('improvement', pct(Number(validation.maeImprovementFraction || 0) * 100), C.green)}${stat('timewise rho', fmt(validation.meanTimewiseSpearman, 3), C.purple)}${stat('average speech', `${fmt(speaking.meanWordsPerSecond, 2)} words/s`, C.amber)}</div></div><canvas data-pl-canvas="retention-forecast" style="width:100%;height:360px;display:block;margin-top:7px"></canvas><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:6px;font-size:8px;line-height:1.5"><div style="border-left:2px solid ${C.green};padding-left:7px;color:${C.dim}"><b style="color:${C.text}">WORDS SPOKEN</b><br>0 → ${fmt(forecast.spokenHookEndSeconds, 2)}s. Every visible word has exactly one component.</div><div style="border-left:2px solid ${C.cyan};padding-left:7px;color:${C.dim}"><b style="color:${C.text}">${stored ? 'OBSERVED RESPONSE' : 'MODELED RESPONSE WINDOW'}</b><br>Extends through ${fmt(responseEnd, 2)}s because the selected response lag is forward-only.</div><div style="border-left:2px solid ${C.amber};padding-left:7px;color:${C.dim}"><b style="color:${C.text}">POST-HOOK FORECAST</b><br>${fmt(responseEnd, 2)} → ${fmt(forecastEnd, 0)}s uses the complete-hook embedding only. No unseen words or categories are invented.</div></div><div style="font-size:8px;color:${C.mute};margin-top:6px">Band coverage ${pct(Number(validation.empiricalBandCoverage || 0) * 100)} · paired improvement p ${fmt((validation.pairedImprovementInference || {}).p, 4)} · 41 model grid points from 0 to 20 seconds. All 208 training sources are at least 22 seconds. ${stored ? 'The measured source curve is interpolated on that grid and the cyan line is source-held-out.' : 'This text-only line is a random-fold population forecast, not inferred observed retention for this unsampled hook.'} It remains observational, not causal.</div>${retentionWordTable(forecast)}</section>`;
+            return `<section style="border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};padding:12px 0;margin:12px 0"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:280px;flex:1"><div style="font-size:12px;color:${C.text};font-weight:900">${title}</div><div style="font-size:8.5px;color:${C.dim};line-height:1.5;margin-top:3px">${stored ? 'Cyan is the source-held-out forecast; green is the measured curve.' : 'Cyan is a rough frozen-model forecast from text; it is not a measured or replay-normalized retention curve.'} Word response points use ${esc(forecast.wordTimingPolicy || 'library-average speaking rate')} and the selected ${fmt(forecast.responseLagSeconds == null ? 0 : forecast.responseLagSeconds, 1)}s diagnostic lag.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:7px">${modeControls}<span style="font-size:7.5px;color:${C.mute}">${modeNote}</span></div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('curve MAE', `${fmt(validation.heldoutMAEPercentagePoints, 2)} pp`, C.cyan)}${stat('baseline MAE', `${fmt(validation.baselineMAEPercentagePoints, 2)} pp`, C.dim)}${stat('improvement', pct(Number(validation.maeImprovementFraction || 0) * 100), C.green)}${stat('timewise rho', fmt(validation.meanTimewiseSpearman, 3), C.purple)}${stat('average speech', `${fmt(speaking.meanWordsPerSecond, 2)} words/s`, C.amber)}</div></div>${forecastArchitecturePanel(forecast)}<canvas data-pl-canvas="retention-forecast" style="width:100%;height:360px;display:block;margin-top:9px"></canvas><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:6px;font-size:8px;line-height:1.5"><div style="border-left:2px solid ${C.green};padding-left:7px;color:${C.dim}"><b style="color:${C.text}">WORDS SPOKEN</b><br>0 → ${fmt(forecast.spokenHookEndSeconds, 2)}s. Every visible word has exactly one component.</div><div style="border-left:2px solid ${C.cyan};padding-left:7px;color:${C.dim}"><b style="color:${C.text}">${stored ? 'OBSERVED RESPONSE' : 'MODELED RESPONSE WINDOW'}</b><br>Extends through ${fmt(responseEnd, 2)}s because the selected response lag is forward-only.</div><div style="border-left:2px solid ${C.amber};padding-left:7px;color:${C.dim}"><b style="color:${C.text}">POST-HOOK FORECAST</b><br>${fmt(responseEnd, 2)} → ${fmt(forecastEnd, 0)}s uses the complete-hook embedding only. No unseen words or categories are invented.</div></div><div style="font-size:8px;color:${C.mute};margin-top:6px">Band coverage ${pct(Number(validation.empiricalBandCoverage || 0) * 100)} · paired improvement p ${fmt((validation.pairedImprovementInference || {}).p, 4)} · 41 model grid points from 0 to 20 seconds. All 208 training sources are at least 22 seconds. ${stored ? 'The measured source curve is interpolated on that grid and the cyan line is source-held-out.' : 'This text-only line is a random-fold population forecast, not inferred observed retention for this unsampled hook.'} It remains observational, not causal.</div>${retentionWordTable(forecast)}</section>`;
         }
 
         function survivalScoreCard(score, stored = false) {
@@ -1390,9 +1416,14 @@
                 const selected = selectedIds && selectedIds.has(originalIndex);
                 const focused = Number.isInteger(focusedId) && focusedId === originalIndex;
                 context.globalAlpha = selected || focused ? 1 : alphas ? Number(alphas[originalIndex] ?? .42) : .42;
-                context.fillStyle = selected ? C.cyan : colors ? colors[originalIndex] : C.cyan;
+                context.fillStyle = colors ? colors[originalIndex] : C.cyan;
                 const radius = focused ? 5 : selected ? 4 : alphas && Number(alphas[originalIndex]) > .5 ? 2.1 : 1.6;
                 context.beginPath(); context.arc(point[0], point[1], radius, 0, Math.PI * 2); context.fill();
+                if (selected) {
+                    context.strokeStyle = C.cyan;
+                    context.lineWidth = 2;
+                    context.beginPath(); context.arc(point[0], point[1], radius + 2, 0, Math.PI * 2); context.stroke();
+                }
                 if (focused) {
                     context.strokeStyle = C.text;
                     context.lineWidth = 2;
@@ -1739,6 +1770,91 @@
                 : ((focus.row || {}).retentionForecast || null);
         }
 
+        function drawSemanticTraceMap(canvas, atlas, selectedPoint, selectedIndex) {
+            if (!atlas || !(atlas.points || []).length) return;
+            const points = (atlas.points || []).map(point => [numeric(point[0]), numeric(point[1])]);
+            const colors = (atlas.categories || []).map(clusterColor);
+            const selected = new Set();
+            if (selectedIndex != null && Number.isInteger(Number(selectedIndex)) && Number(selectedIndex) >= 0
+                && Number(selectedIndex) < points.length) {
+                selected.add(Number(selectedIndex));
+            } else if (selectedPoint && selectedPoint.every(Number.isFinite)) {
+                selected.add(points.length);
+                points.push(selectedPoint);
+                colors.push(clusterColor(canvas.dataset.plSelectedCategory));
+            }
+            canvas.dataset.plSourcePoints = String((atlas.points || []).length);
+            return scatter(canvas, points, colors, selected, null, true);
+        }
+
+        function drawWordEmbeddingMap(canvas) {
+            const forecast = activeRetentionForecast(canvas);
+            const words = (forecast || {}).words || [];
+            if (!words.length) return;
+            const index = Math.max(0, Math.min(words.length - 1, Number(state.forecastWordIndex || 0)));
+            const word = words[index] || {};
+            canvas.dataset.plSelectedCategory = String(word.singletonCategory);
+            return drawSemanticTraceMap(
+                canvas, (state.data.hookOutcomes || {}).wordEmbeddingAtlas,
+                [numeric(word.singletonEmbeddingX), numeric(word.singletonEmbeddingY)],
+                word.singletonAtlasIndex,
+            );
+        }
+
+        function drawForecastInputMap(canvas) {
+            const forecast = activeRetentionForecast(canvas);
+            const input = (forecast || {}).forecastInput || {};
+            canvas.dataset.plSelectedCategory = String(input.category);
+            return drawSemanticTraceMap(
+                canvas, (state.data.hookOutcomes || {}).fullHookEmbeddingAtlas,
+                [numeric(input.mapX), numeric(input.mapY)], input.atlasIndex,
+            );
+        }
+
+        function drawWordForecastContribution(canvas) {
+            const forecast = activeRetentionForecast(canvas);
+            const words = (forecast || {}).words || [];
+            if (!words.length) return;
+            const index = Math.max(0, Math.min(words.length - 1, Number(state.forecastWordIndex || 0)));
+            const word = words[index] || {};
+            const adjusted = forecast.normalizationAvailable === true && state.retentionCurveMode === 'adjusted';
+            const values = ((adjusted
+                ? word.rewatchAdjustedForecastDeletionContributionByTime
+                : word.observedForecastDeletionContributionByTime) || []).map(numeric);
+            const times = (forecast.timesSeconds || []).map(numeric);
+            if (!times.length || values.length !== times.length) return;
+            canvas.dataset.plSourcePoints = String(values.length);
+            canvas.dataset.plFinitePoints = String(values.filter(Number.isFinite).length);
+            const { context, width, height } = canvasContext(canvas);
+            const left = 42, right = 10, top = 20, bottom = 25;
+            let [low, high] = bounds([...values, 0]);
+            const padding = Math.max(.05, (high - low) * .12);
+            low -= padding; high += padding;
+            const x = value => left + (value - times[0]) / ((times[times.length - 1] - times[0]) || 1) * (width - left - right);
+            const y = value => height - bottom - (value - low) / ((high - low) || 1) * (height - top - bottom);
+            const responseEnd = numeric(forecast.responseEndSeconds);
+            if (Number.isFinite(responseEnd)) {
+                context.globalAlpha = .1; context.fillStyle = C.amber;
+                context.fillRect(x(responseEnd), top, Math.max(0, width - right - x(responseEnd)), height - top - bottom);
+            }
+            context.globalAlpha = 1; context.strokeStyle = C.border2; context.lineWidth = 1;
+            [low, 0, high].forEach(value => {
+                context.beginPath(); context.moveTo(left, y(value)); context.lineTo(width - right, y(value)); context.stroke();
+                context.fillStyle = C.mute; context.font = '8px sans-serif'; context.fillText(`${signed(value, 2)} pp`, 2, y(value) + 3);
+            });
+            context.strokeStyle = clusterColor(word.singletonCategory); context.lineWidth = 2.4; context.beginPath();
+            times.forEach((time, pointIndex) => pointIndex
+                ? context.lineTo(x(time), y(values[pointIndex]))
+                : context.moveTo(x(time), y(values[pointIndex])));
+            context.stroke();
+            context.fillStyle = C.mute; context.font = '8px sans-serif';
+            [0, 5, 10, 15, 20].forEach(second => context.fillText(`${second}s`, x(second) - 6, height - 7));
+            context.fillStyle = clusterColor(word.singletonCategory);
+            context.fillText(`word C${word.singletonCategory} local deletion effect`, left, 10);
+            context.fillStyle = C.amber;
+            context.fillText('post-hook outputs', Math.min(width - 88, x(responseEnd) + 4), top + 10);
+        }
+
         function drawRetentionForecast(canvas, mini = false) {
             const forecast = activeRetentionForecast(canvas);
             if (!forecast) return;
@@ -1765,7 +1881,7 @@
                     const start = Math.max(minX, numeric(windowRow.responseWindowStartSeconds));
                     const end = Math.min(maxX, numeric(windowRow.responseWindowEndSeconds));
                     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return;
-                    context.globalAlpha = .08; context.fillStyle = clusterColor(windowRow.component);
+                    context.globalAlpha = .08; context.fillStyle = clusterColor(windowRow.category);
                     context.fillRect(x(start), top, Math.max(1, x(end) - x(start)), height - top - bottom);
                 });
                 const responseEnd = numeric(forecast.responseEndSeconds);
@@ -1809,7 +1925,7 @@
                 (forecast.words || []).forEach(word => {
                     const value = numeric(adjusted ? word.predictedRetentionPercent : word.observedAbsolutePredictedRetentionPercent), time = numeric(word.responseSeconds);
                     if (!Number.isFinite(value) || !Number.isFinite(time) || time < minX || time > maxX) return;
-                    context.fillStyle = clusterColor(word.component); context.beginPath(); context.arc(x(time), y(value), 2.5, 0, Math.PI * 2); context.fill();
+                    context.fillStyle = clusterColor(word.componentCategory); context.beginPath(); context.arc(x(time), y(value), 2.5, 0, Math.PI * 2); context.fill();
                 });
                 context.fillStyle = C.cyan; context.font = '8px sans-serif'; context.fillText(adjusted ? 'predicted normalized' : 'predicted observed', left, 10);
                 if (actual.length) { context.fillStyle = C.green; context.fillText('actual', left + 62, 10); }
@@ -1902,6 +2018,9 @@
                 if (kind === 'component-score-axis') return drawComponentScoreAxis(canvas);
                 if (kind === 'retention-forecast') return drawRetentionForecast(canvas, false);
                 if (kind === 'library-retention-mini') return drawRetentionForecast(canvas, true);
+                if (kind === 'word-embedding-map') return drawWordEmbeddingMap(canvas);
+                if (kind === 'forecast-input-map') return drawForecastInputMap(canvas);
+                if (kind === 'word-forecast-contribution') return drawWordForecastContribution(canvas);
                 if (kind === 'hook-quality-axis') {
                     const summary = state.data.hookQuality || {};
                     const rows = ((summary.axis || {}).points || []);
@@ -2073,6 +2192,12 @@
             const view = target.closest('[data-pl-view]'); if (view) { state.view = view.dataset.plView; ensureView(); paint(); return true; }
             if (target.closest('[data-pl-refresh]')) { Object.keys(state.data).forEach(key => delete state.data[key]); state.hook = null; state.source = null; state.focusedCluster = null; state.clusterOutcomeTarget = null; state.clusterOutcomeDetail = null; state.clusterOutcomePointIndex = null; state.latencyDetail = null; state.latencyPointGlobalIndex = null; state.hookQualityPointIndex = null; state.forwardResponseComponentIndex = null; ensureView(); return true; }
             if (target.closest('[data-pl-run-hook-score]')) { scoreHookText(); return true; }
+            const forecastWord = target.closest('[data-pl-forecast-word]');
+            if (forecastWord) {
+                const scrollX = window.scrollX, scrollY = window.scrollY;
+                state.forecastWordIndex = Number(forecastWord.dataset.plForecastWord || 0);
+                paint(); window.scrollTo(scrollX, scrollY); return true;
+            }
             const retentionMode = target.closest('[data-pl-retention-mode]');
             if (retentionMode) {
                 const scrollX = window.scrollX, scrollY = window.scrollY;
@@ -2087,6 +2212,7 @@
             if (libraryHook) {
                 const scrollX = window.scrollX, scrollY = window.scrollY;
                 state.hookLibrarySelectedId = libraryHook.dataset.plLibraryHook;
+                state.forecastWordIndex = 0;
                 paint(); window.scrollTo(scrollX, scrollY); return true;
             }
             const example = target.closest('[data-pl-hook-example]');
@@ -2098,6 +2224,7 @@
                     state.hookScoreResult = row.score;
                     state.hookScoreError = null;
                     state.hookQualityPointIndex = null;
+                    state.forecastWordIndex = 0;
                     paint();
                 }
                 return true;

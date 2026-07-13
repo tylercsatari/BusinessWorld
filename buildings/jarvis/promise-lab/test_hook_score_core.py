@@ -2,7 +2,11 @@ import unittest
 
 import numpy as np
 
-from hook_score_core import local_counterfactual_texts
+from hook_score_core import (
+    component_response_windows,
+    enrich_word_semantics,
+    local_counterfactual_texts,
+)
 from sequence import tokenize
 
 
@@ -25,6 +29,22 @@ class HookScoreCoreTest(unittest.TestCase):
         self.assertEqual(values["withoutOne"][0], "")
         self.assertEqual(values["withoutPair"], {})
         self.assertEqual(values["pairOnly"], {})
+
+    def test_word_semantics_preserve_singleton_and_owner_categories(self):
+        words = [{"tokenIndex": 0, "component": 0,
+                  "spokenStartSeconds": 0, "spokenEndSeconds": .2}]
+        tokens = [{"index": 0, "text": "word", "semantic": {
+            "category": 1, "frozenAtlasCategory": 1, "categoryProbability": .9,
+            "categoryDistribution": [.03, .9, .05, .02],
+            "categoryCoordinates4D": [1, 2, 3, 4], "mapX": .2, "mapY": -.1,
+            "globalSpanIndex": 7, "categorySource": "test",
+        }}]
+        chunks = [{"index": 0, "category": 3, "text": "word"}]
+        enrich_word_semantics(words, tokens, chunks)
+        self.assertEqual(words[0]["singletonCategory"], 1)
+        self.assertEqual(words[0]["componentCategory"], 3)
+        windows = component_response_windows(words, 1, .5)
+        self.assertEqual(windows[0]["category"], 3)
 
 
 if __name__ == "__main__":

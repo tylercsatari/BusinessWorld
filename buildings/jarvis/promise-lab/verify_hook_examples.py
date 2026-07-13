@@ -72,6 +72,14 @@ def main() -> None:
         assert forecast["responseLagSeconds"] == 0.0
         assert len(forecast["componentWindows"]) == count
         assert forecast["words"]
+        assert forecast["forecastInput"]["outputCluster"] is None
+        assert 0 <= int(forecast["forecastInput"]["category"]) <= 3
+        assert all(
+            len(word["observedForecastDeletionContributionByTime"]) == 41
+            and 0 <= int(word["singletonCategory"]) <= 3
+            and 0 <= int(word["componentCategory"]) <= 3
+            for word in forecast["words"]
+        )
     winner_fraction = result["machineVariantResult"]["bootstrapWinnerFractions"]["unexpected-use"]
     assert 0 <= float(winner_fraction) <= 1
     print(json.dumps({

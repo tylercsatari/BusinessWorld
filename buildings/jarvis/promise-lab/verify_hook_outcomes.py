@@ -22,6 +22,13 @@ def main() -> None:
         for row in partitions["rows"]
     )
     assert artifact["audit"]["componentCoverageFailures"] == 0
+    assert artifact["audit"]["wordEmbeddingPoints"] == len(
+        artifact["wordEmbeddingAtlas"]["points"]
+    )
+    assert artifact["audit"]["fullHookEmbeddingPoints"] == 208
+    assert len(artifact["wordEmbeddingAtlas"]["categories"]) == artifact["audit"][
+        "wordEmbeddingPoints"
+    ]
     assert len(artifact["targets"]) == 4
     assert len(artifact["hooks"]) == 208
     assert all(len(row["components"]) == int(row["componentCount"])
@@ -78,6 +85,20 @@ def main() -> None:
                for row in artifact["hooks"])
     assert all(len(row["retentionForecast"]["componentWindows"])
                == int(row["componentCount"]) for row in artifact["hooks"])
+    assert all(row["retentionForecast"]["forecastInput"]["outputCluster"] is None
+               for row in artifact["hooks"])
+    assert all(0 <= int(row["retentionForecast"]["forecastInput"]["category"]) <= 3
+               for row in artifact["hooks"])
+    assert all(0 <= int(window["category"]) <= 3
+               for row in artifact["hooks"]
+               for window in row["retentionForecast"]["componentWindows"])
+    assert all(
+        len(word["observedForecastDeletionContributionByTime"]) == 41
+        and len(word["rewatchAdjustedForecastDeletionContributionByTime"]) == 41
+        and 0 <= int(word["singletonCategory"]) <= 3
+        and 0 <= int(word["componentCategory"]) <= 3
+        for row in artifact["hooks"] for word in row["retentionForecast"]["words"]
+    )
     assert all(row["retentionForecast"]["responseEndSeconds"] < 20
                for row in artifact["hooks"])
     assert artifact["curveModel"]["speakingRate"]["exactTimedHooks"] >= 200

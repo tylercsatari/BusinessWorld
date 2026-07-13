@@ -27,6 +27,7 @@ from hook_score_core import (
     combined_component_features,
     component_response_windows,
     decode_variable_chunks,
+    enrich_word_semantics,
     estimated_token_timeline,
     interpolate_series,
     outcome_prediction_payload,
@@ -43,7 +44,7 @@ REMOTE_PREFIX = "longform/promise-lab-v4"
 MODEL_FILE = "hook-quality-model.json"
 PARTITION_FILE = "canonical-partition-model.json"
 OUTCOME_MODEL_FILE = "hook-outcome-model.json"
-SCORER_VERSION = "deterministic-variable-hook-scorer-v6"
+SCORER_VERSION = "deterministic-variable-hook-scorer-v7"
 
 
 def _decode_json(payload: bytes) -> dict:
@@ -135,6 +136,12 @@ def decode_partition(primitives: dict, partition_model: dict) -> dict:
         primitives["raw"], partition_model["categoryTransform"],
     )
     logp = category_log_probabilities(category_values, partition_model["categoryModel"])
+    browse = partition_model.get("browseProjection") or {}
+    basis = np.asarray(browse.get("basis4x2") or [], np.float32)
+    if basis.shape != (4, 2):
+        raise RuntimeError("canonical semantic browse projection is unavailable")
+    semantic_points = category_values @ basis
+    semantic_categories = np.argmax(logp, axis=1)
     features = boundary_features(
         primitives["full"], primitives["raw"], primitives["context"],
         primitives["influence"], primitives["nonadditive"],
@@ -162,6 +169,11 @@ def decode_partition(primitives: dict, partition_model: dict) -> dict:
             "category": category,
             "categoryProbability": float(probability[category]),
             "categoryDistribution": probability.astype(float).tolist(),
+            "frozenAtlasCategory": None,
+            "categoryCoordinates4D": category_values[span_index].astype(float).tolist(),
+            "mapX": float(semantic_points[span_index, 0]),
+            "mapY": float(semantic_points[span_index, 1]),
+            "categorySource": "serving Gaussian assignment into the frozen four-category vocabulary",
             "leftBoundaryProbability": chunk.get("leftBoundaryProbability"),
             "rightBoundaryProbability": chunk.get("rightBoundaryProbability"),
             "leftBoundaryPosterior": (
@@ -178,6 +190,38 @@ def decode_partition(primitives: dict, partition_model: dict) -> dict:
     gap_calibration = np.asarray(
         partition_model["partitionCalibration"]["scoreGapsSorted"], float,
     )
+    lookup = {
+        (int(start), int(end)): index
+        for index, (start, end) in enumerate(zip(primitives["starts"], primitives["ends"]))
+    }
+    token_rows = []
+    for token in tokens:
+        span_index = lookup[(int(token.index), int(token.index + 1))]
+        probability = np.exp(logp[span_index])
+        category = int(semantic_categories[span_index])
+        token_rows.append({
+            "index": token.index,
+            "text": token.text,
+            "start": token.start,
+            "end": token.end,
+            "owner": int(owners[token.index]),
+            "semantic": {
+                "globalSpanIndex": None,
+                "category": category,
+                "frozenAtlasCategory": None,
+                "categoryProbability": float(probability[category]),
+                "categoryDistribution": probability.astype(float).tolist(),
+                "categoryCoordinates4D": category_values[span_index].astype(float).tolist(),
+                "mapX": float(semantic_points[span_index, 0]),
+                "mapY": float(semantic_points[span_index, 1]),
+                "categorySource": (
+                    "serving Gaussian assignment into the frozen four-category vocabulary"
+                ),
+            },
+        })
+    full_index = lookup[(0, len(tokens))]
+    full_probability = np.exp(logp[full_index])
+    full_category = int(semantic_categories[full_index])
     return {
         **{key: decoded[key] for key in (
             "score", "runnerUpScore", "scoreGap", "topTwoPosteriorProxy",
@@ -196,10 +240,21 @@ def decode_partition(primitives: dict, partition_model: dict) -> dict:
             )
         },
         "owners": owners,
-        "tokens": [{
-            "index": token.index, "text": token.text,
-            "start": token.start, "end": token.end, "owner": int(owners[token.index]),
-        } for token in tokens],
+        "tokens": token_rows,
+        "forecastSemanticInput": {
+            "globalSpanIndex": None,
+            "text": primitives["text"],
+            "category": full_category,
+            "frozenAtlasCategory": None,
+            "categoryProbability": float(full_probability[full_category]),
+            "categoryDistribution": full_probability.astype(float).tolist(),
+            "categoryCoordinates4D": category_values[full_index].astype(float).tolist(),
+            "mapX": float(semantic_points[full_index, 0]),
+            "mapY": float(semantic_points[full_index, 1]),
+            "categorySource": (
+                "serving Gaussian assignment into the frozen four-category vocabulary"
+            ),
+        },
         "coverage": 1.0,
         "overlapCount": 0,
     }
@@ -431,6 +486,12 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
         float(rate.get("meanWordsPerSecond") or 1), response_lag,
         lower, upper,
     )
+    enrich_word_semantics(words, partition["tokens"], partition["chunks"])
+    singleton_lookup = {
+        int(token["index"]): int(np.flatnonzero(
+            (starts == int(token["index"])) & (ends == int(token["index"]) + 1)
+        )[0]) for token in partition["tokens"]
+    }
     for word in words:
         second = float(word["responseSeconds"])
         word["observedAbsolutePredictedRetentionPercent"] = interpolate_series(
@@ -442,6 +503,12 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
         word["observedAbsolutePredictionP90"] = interpolate_series(
             times, upper, second,
         )
+        without_word = apply_linear_model(
+            primitives["context"][singleton_lookup[int(word["tokenIndex"])]], curve_model,
+        )[0]
+        word["observedForecastDeletionContributionByTime"] = (
+            predicted - without_word
+        ).astype(float).tolist()
     spoken_end = max((float(word["spokenEndSeconds"]) for word in words), default=0.0)
     response_end = max((float(word["responseSeconds"]) for word in words), default=0.0)
     survival_model = outcome_model["survivalModel"]
@@ -498,6 +565,24 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
             "forecastScope": (
                 "word and component attribution ends at responseEndSeconds; later points are "
                 "a whole-hook text forecast without additional word/category attribution"
+            ),
+            "forecastInput": {
+                **partition["forecastSemanticInput"],
+                "embeddingModel": outcome_model.get("embeddingModel"),
+                "embeddingDimensions": outcome_model.get("embeddingDimensions"),
+                "formula": (
+                    "y_hat(t_j) = intercept_j + unit(GeminiEmbedding(complete hook)) "
+                    "dot coefficient_j for 41 half-second outputs"
+                ),
+                "outputCluster": None,
+                "outputClusterReason": (
+                    "the 41 forecast values are scalar retention outputs, not semantic embeddings"
+                ),
+            },
+            "wordContributionDefinition": (
+                "local deletion diagnostic at every time: complete-hook forecast minus the "
+                "forecast from the same model after deleting exactly this token; values are "
+                "not additive Shapley effects"
             ),
             "wordTimingPolicy": "library-average speaking rate",
             "words": words,

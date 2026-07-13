@@ -208,6 +208,7 @@ def crossfit_linear(features: np.ndarray, target: np.ndarray,
     baseline = np.full_like(target, np.nan, dtype=np.float32)
     fold_index = np.full(len(features), -1, np.int16)
     directions = []
+    fold_models = []
     for fold, (train, test) in enumerate(
         _splitter(len(features), groups, folds, seed)
     ):
@@ -215,6 +216,7 @@ def crossfit_linear(features: np.ndarray, target: np.ndarray,
             features, target, np.asarray(train, int), dimensions, alpha,
             seed + fold * 101,
         )
+        fold_models.append(model)
         prediction[test] = apply_linear_model(features[test], model)
         baseline[test] = np.nanmean(target[model["rows"]], axis=0)
         fold_index[test] = fold
@@ -229,6 +231,7 @@ def crossfit_linear(features: np.ndarray, target: np.ndarray,
         "prediction": prediction[:, 0] if scalar else prediction,
         "baselinePrediction": baseline[:, 0] if scalar else baseline,
         "foldIndex": fold_index,
+        "foldModels": fold_models,
         "foldDirectionMedianCosine": float(np.median(cosines)) if cosines else None,
         "foldDirectionPositiveFraction": (
             float(np.mean(np.asarray(cosines) > 0)) if cosines else None
@@ -297,6 +300,7 @@ def survival_crossfit(features: np.ndarray, adjusted_curves: np.ndarray,
     curve_target = np.full_like(adjusted, np.nan, dtype=np.float32)
     fold_index = np.full(count, -1, np.int16)
     directions = []
+    curve_fold_models = []
     splits = KFold(
         n_splits=min(folds, count), shuffle=True, random_state=seed,
     ).split(np.arange(count))
@@ -330,6 +334,7 @@ def survival_crossfit(features: np.ndarray, adjusted_curves: np.ndarray,
             features, adjusted, train, FIXED_DIMENSIONS, FIXED_ALPHA,
             seed + 7001 + fold * 101,
         )
+        curve_fold_models.append(curve_model)
         curve_prediction[test] = apply_linear_model(features[test], curve_model)
         curve_baseline[test] = np.mean(adjusted[train], axis=0)
         curve_target[test] = adjusted[test]
@@ -353,6 +358,7 @@ def survival_crossfit(features: np.ndarray, adjusted_curves: np.ndarray,
         "curveBaseline": curve_baseline,
         "curveTarget": curve_target,
         "foldIndex": fold_index,
+        "curveFoldModels": curve_fold_models,
         "foldDirectionMedianCosine": float(np.median(cosines)) if cosines else None,
         "foldDirectionPositiveFraction": (
             float(np.mean(np.asarray(cosines) > 0)) if cosines else None

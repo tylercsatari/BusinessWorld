@@ -40,8 +40,10 @@ from hook_outcomes import (
     terminal_conditioned_replay_correction,
 )
 from hook_score_core import (
+    apply_linear_model,
     combined_component_features,
     component_response_windows,
+    enrich_word_semantics,
     estimated_token_timeline,
     interpolate_series,
     percentile,
@@ -56,8 +58,12 @@ HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
 OUTPUT_PATH = CACHE / "hook-outcomes.json"
 MODEL_PATH = CACHE / "hook-outcome-model.json"
-METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v6"
+METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v7"
 CURVE_TIMES = np.arange(0.0, 20.0001, .5, dtype=np.float32)
+FORECAST_FORMULA = (
+    "y_hat(t_j) = intercept_j + unit(GeminiEmbedding(complete hook)) dot "
+    "coefficient_j for 41 half-second outputs"
+)
 
 TARGETS = {
     "viewed_percent": {
@@ -271,7 +277,9 @@ def main() -> None:
 
     corpus = read_json(CACHE / "corpus.json")["rows"]
     manifest = read_json(CACHE / "all-span-manifest.json")
-    partitions = read_json(CACHE / "canonical-partitions.json")["rows"]
+    partition_artifact = read_json(CACHE / "canonical-partitions.json")
+    partition_model = read_json(CACHE / "canonical-partition-model.json")
+    partitions = partition_artifact["rows"]
     quality = read_json(CACHE / "hook-quality.json")
     if [str(row["id"]) for row in corpus] != [str(row["videoId"]) for row in partitions]:
         raise RuntimeError("Promise Lab corpus and canonical partitions differ")
@@ -280,6 +288,47 @@ def main() -> None:
         np.load(CACHE / "all-span-vectors" / "full.npy", mmap_mode="r"),
         np.float32,
     ))
+    context_store = np.load(
+        CACHE / "all-span-vectors" / "context.npy", mmap_mode="r",
+    )
+
+    word_atlas = {
+        "points": [], "categories": [], "frozenAtlasCategories": [],
+        "globalSpanIndices": [], "videoIds": [], "tokenIndices": [], "texts": [],
+    }
+    full_hook_atlas = {
+        "points": [], "categories": [], "frozenAtlasCategories": [],
+        "globalSpanIndices": [], "videoIds": [], "texts": [],
+    }
+    word_atlas_by_global = {}
+    full_atlas_by_global = {}
+    for partition in partitions:
+        for token in partition.get("tokens") or []:
+            if not normalized_caption_atom(token.get("text")):
+                continue
+            semantic = token["semantic"]
+            global_index = int(semantic["globalSpanIndex"])
+            word_atlas_by_global[global_index] = len(word_atlas["points"])
+            word_atlas["points"].append([semantic["mapX"], semantic["mapY"]])
+            word_atlas["categories"].append(int(semantic["category"]))
+            word_atlas["frozenAtlasCategories"].append(
+                int(semantic["frozenAtlasCategory"])
+            )
+            word_atlas["globalSpanIndices"].append(global_index)
+            word_atlas["videoIds"].append(str(partition["videoId"]))
+            word_atlas["tokenIndices"].append(int(token["index"]))
+            word_atlas["texts"].append(str(token.get("text") or ""))
+        semantic = partition["forecastSemanticInput"]
+        global_index = int(semantic["globalSpanIndex"])
+        full_atlas_by_global[global_index] = len(full_hook_atlas["points"])
+        full_hook_atlas["points"].append([semantic["mapX"], semantic["mapY"]])
+        full_hook_atlas["categories"].append(int(semantic["category"]))
+        full_hook_atlas["frozenAtlasCategories"].append(
+            int(semantic["frozenAtlasCategory"])
+        )
+        full_hook_atlas["globalSpanIndices"].append(global_index)
+        full_hook_atlas["videoIds"].append(str(partition["videoId"]))
+        full_hook_atlas["texts"].append(str(partition.get("text") or ""))
     raw_components, influence_components, component_base = component_vector_rows(partitions)
     component_features = combined_component_features(
         raw_components, influence_components,
@@ -945,6 +994,7 @@ def main() -> None:
             lower_curve, upper_curve, duration, rate["meanWordsPerSecond"],
             response_lag,
         )
+        enrich_word_semantics(words, partition["tokens"], partition["chunks"])
         adjusted_prediction_curve = np.asarray(
             nested_survival["curvePrediction"][source_index], float,
         )
@@ -953,6 +1003,10 @@ def main() -> None:
         )
         adjusted_lower_curve = np.asarray(adjusted_curve_low[source_index], float)
         adjusted_upper_curve = np.asarray(adjusted_curve_high[source_index], float)
+        observed_fold = int(curve_crossfit["foldIndex"][source_index])
+        observed_fold_model = curve_crossfit["foldModels"][observed_fold]
+        adjusted_fold = int(nested_survival["foldIndex"][source_index])
+        adjusted_fold_model = nested_survival["curveFoldModels"][adjusted_fold]
         for word in words:
             second = float(word["responseSeconds"])
             word["observedAbsolutePredictedRetentionPercent"] = word[
@@ -973,6 +1027,22 @@ def main() -> None:
             word["actualRetentionPercent"] = interpolate_series(
                 CURVE_TIMES, adjusted_actual_curve, second,
             )
+            global_index = int(word["singletonGlobalSpanIndex"])
+            word["singletonAtlasIndex"] = int(word_atlas_by_global[global_index])
+            context_vector = np.asarray(context_store[global_index], np.float32)
+            observed_without = apply_linear_model(
+                context_vector, observed_fold_model,
+            )[0]
+            adjusted_without = apply_linear_model(
+                context_vector, adjusted_fold_model,
+            )[0]
+            adjusted_without[0] = 100.0
+            word["observedForecastDeletionContributionByTime"] = (
+                prediction_curve - observed_without
+            ).astype(float).tolist()
+            word["rewatchAdjustedForecastDeletionContributionByTime"] = (
+                adjusted_prediction_curve - adjusted_without
+            ).astype(float).tolist()
         point = quality_points.get(video_id) or {}
         hook_outcomes = {}
         for target_name in targets:
@@ -1107,6 +1177,24 @@ def main() -> None:
                     "word and component attribution ends at responseEndSeconds; later points are "
                     "a whole-hook text forecast without additional word/category attribution"
                 ),
+                "forecastInput": {
+                    **partition["forecastSemanticInput"],
+                    "atlasIndex": int(full_atlas_by_global[
+                        int(partition["forecastSemanticInput"]["globalSpanIndex"])
+                    ]),
+                    "embeddingModel": manifest.get("embeddingModel"),
+                    "embeddingDimensions": manifest.get("embeddingDimensions"),
+                    "formula": FORECAST_FORMULA,
+                    "outputCluster": None,
+                    "outputClusterReason": (
+                        "the 41 forecast values are scalar retention outputs, not semantic embeddings"
+                    ),
+                },
+                "wordContributionDefinition": (
+                    "source-held-out local deletion diagnostic at every time: complete-hook "
+                    "forecast minus the same fold model forecast after deleting exactly this "
+                    "token; values are not additive Shapley effects"
+                ),
                 "wordTimingPolicy": (
                     "exact captions" if (timings.get(video_id) or {}).get("status") == "exact"
                     else "library-average speaking rate"
@@ -1137,6 +1225,7 @@ def main() -> None:
         "curveModel": curve_model,
         "survivalModel": survival_model,
         "rewatchAdjustedCurveModel": adjusted_curve_model,
+        "semanticProjection": partition_model.get("browseProjection"),
         "rewatchAudit": rewatch_audit,
         "speakingRate": rate,
         "responseLagSeconds": response_lag,
@@ -1178,7 +1267,14 @@ def main() -> None:
                 "the exact spoken hook plus the response-lag contract; later points are only a "
                 "whole-hook continuation forecast. Text-only inputs cannot be replay-normalized."
             ),
+            "formula": FORECAST_FORMULA,
         },
+        "semanticProjection": partition_model.get("browseProjection"),
+        "semanticTraceValidation": (partition_artifact.get("validation") or {}).get(
+            "semanticTrace"
+        ),
+        "wordEmbeddingAtlas": word_atlas,
+        "fullHookEmbeddingAtlas": full_hook_atlas,
         "rewatchAudit": rewatch_audit,
         "hooks": hooks,
         "audit": {
@@ -1187,6 +1283,8 @@ def main() -> None:
             "relationships": relationship_total,
             "outcomeTargets": len(TARGETS),
             "curvePointsPerHook": len(CURVE_TIMES),
+            "wordEmbeddingPoints": len(word_atlas["points"]),
+            "fullHookEmbeddingPoints": len(full_hook_atlas["points"]),
             "forecastEndSeconds": float(CURVE_TIMES[-1]),
             "minimumSourceDurationSeconds": float(np.min(durations)),
             "sourcesShorterThanForecast": int(np.sum(durations < CURVE_TIMES[-1])),

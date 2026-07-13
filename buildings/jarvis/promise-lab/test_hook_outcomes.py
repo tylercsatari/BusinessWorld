@@ -37,6 +37,7 @@ class HookOutcomeTests(unittest.TestCase):
         target = np.repeat(rng.normal(size=30), 4)
         result = crossfit_linear(features, target, groups=groups, dimensions=6)
         self.assertTrue(np.isfinite(result["prediction"]).all())
+        self.assertEqual(len(result["foldModels"]), 5)
         for group in set(groups):
             self.assertEqual(len(set(result["foldIndex"][groups == group])), 1)
 

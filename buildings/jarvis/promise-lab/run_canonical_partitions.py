@@ -31,7 +31,7 @@ CACHE = HERE / ".cache"
 STORE = CACHE / "all-span-vectors"
 SUMMARY_PATH = CACHE / "canonical-partitions.json"
 MODEL_PATH = CACHE / "canonical-partition-model.json"
-METHOD_VERSION = "variable-exact-cover-four-category-v3"
+METHOD_VERSION = "variable-exact-cover-four-category-v4"
 
 
 def read_json(path: Path):
@@ -113,12 +113,26 @@ def main() -> None:
     discovery = read_json(CACHE / "discovery-summary.json")
     atlas = read_json(CACHE / "all-span-atlas.json")
     probe = read_json(CACHE / "manual-probe.json")
+    manual_projection = read_json(CACHE / "manual-projection.json")
     winner = probe["winner"]
     transform, category_values, frozen_labels = reconstruct_frozen_transform(
         atlas, manifest, winner,
     )
     category_model = fit_category_model(category_values, frozen_labels, 4)
     category_logp = category_log_probabilities(category_values, category_model)
+    selected_projection = next(
+        row for row in manual_projection["methods"]
+        if row["id"] == manual_projection["selectedMethod"]
+    )
+    if manual_projection["mapId"] != winner["mapId"]:
+        raise ValueError("saved semantic projection does not use the canonical category map")
+    browse_basis = np.asarray(selected_projection["basis4x2"], np.float32)
+    browse_points = category_values @ browse_basis
+    stored_browse_points = np.asarray(selected_projection["points"], np.float32)
+    browse_error = np.abs(browse_points - stored_browse_points)
+    if float(browse_error.max()) > 5e-5:
+        raise ValueError("saved semantic projection does not reproduce from frozen 4D coordinates")
+    predicted_categories = np.argmax(category_logp, axis=1).astype(np.int16)
 
     raw_store = np.load(STORE / "raw.npy", mmap_mode="r")
     context_store = np.load(STORE / "context.npy", mmap_mode="r")
@@ -221,6 +235,10 @@ def main() -> None:
             "purpose": "new-text fold-ensemble stability audit; it cannot choose stored covers",
         }
         token_owner = np.full(len(tokens), -1, int)
+        span_lookup = {
+            (int(row["start"]), int(row["end"])): local
+            for local, row in enumerate(selected_rows)
+        }
         chunks = []
         for chunk_index, chunk in enumerate(partition["chunks"]):
             local = int(chunk["spanIndex"])
@@ -240,6 +258,11 @@ def main() -> None:
                 "category": int(chunk["category"]),
                 "categoryProbability": float(probability[int(chunk["category"])]),
                 "categoryDistribution": probability.astype(float).tolist(),
+                "frozenAtlasCategory": int(frozen_labels[global_index]),
+                "categoryCoordinates4D": category_values[global_index].astype(float).tolist(),
+                "mapX": float(browse_points[global_index, 0]),
+                "mapY": float(browse_points[global_index, 1]),
+                "categorySource": "serving Gaussian assignment into the frozen four-category vocabulary",
                 "leftBoundaryProbability": chunk["leftBoundaryProbability"],
                 "rightBoundaryProbability": chunk["rightBoundaryProbability"],
                 "leftBoundaryProbabilityOOF": (
@@ -271,19 +294,61 @@ def main() -> None:
         if ((token_owner < 0).any()
                 or set(token_owner.tolist()) != set(range(component_count))):
             raise ValueError(f"{hook['videoId']} did not receive a variable exact cover")
+        token_rows = []
+        for token in tokens:
+            local = span_lookup[(int(token.index), int(token.index + 1))]
+            global_index = begin + local
+            probability = np.exp(category_logp[global_index])
+            category = int(predicted_categories[global_index])
+            token_rows.append({
+                "index": token.index,
+                "text": token.text,
+                "start": token.start,
+                "end": token.end,
+                "owner": int(token_owner[token.index]),
+                "semantic": {
+                    "globalSpanIndex": global_index,
+                    "category": category,
+                    "frozenAtlasCategory": int(frozen_labels[global_index]),
+                    "categoryProbability": float(probability[category]),
+                    "categoryDistribution": probability.astype(float).tolist(),
+                    "categoryCoordinates4D": category_values[global_index].astype(float).tolist(),
+                    "mapX": float(browse_points[global_index, 0]),
+                    "mapY": float(browse_points[global_index, 1]),
+                    "categorySource": (
+                        "serving Gaussian assignment into the frozen four-category vocabulary"
+                    ),
+                },
+            })
+        full_local = span_lookup[(0, len(tokens))]
+        full_global = begin + full_local
+        full_probability = np.exp(category_logp[full_global])
+        full_category = int(predicted_categories[full_global])
         partition.update({
             "videoId": hook["videoId"],
             "title": hook.get("title") or "",
             "text": hook["text"],
             "tokenCount": len(tokens),
-            "tokens": [{"index": token.index, "text": token.text,
-                        "start": token.start, "end": token.end,
-                        "owner": int(token_owner[token.index])} for token in tokens],
+            "tokens": token_rows,
             "chunks": chunks,
             "componentCount": component_count,
             "coverage": 1.0,
             "overlapCount": 0,
             "categoriesUsed": sorted(set(chunk["category"] for chunk in chunks)),
+            "forecastSemanticInput": {
+                "globalSpanIndex": full_global,
+                "text": hook["text"],
+                "category": full_category,
+                "frozenAtlasCategory": int(frozen_labels[full_global]),
+                "categoryProbability": float(full_probability[full_category]),
+                "categoryDistribution": full_probability.astype(float).tolist(),
+                "categoryCoordinates4D": category_values[full_global].astype(float).tolist(),
+                "mapX": float(browse_points[full_global, 0]),
+                "mapY": float(browse_points[full_global, 1]),
+                "categorySource": (
+                    "serving Gaussian assignment into the frozen four-category vocabulary"
+                ),
+            },
         })
         gaps.append(float(partition["scoreGap"] or 0))
         component_counts.append(component_count)
@@ -328,6 +393,17 @@ def main() -> None:
         },
         "categoryTransform": transform,
         "categoryModel": category_model,
+        "browseProjection": {
+            "mapId": manual_projection["mapId"],
+            "methodId": selected_projection["id"],
+            "methodLabel": selected_projection["label"],
+            "basis4x2": selected_projection["basis4x2"],
+            "labelsChanged": False,
+            "categoryCount": 4,
+            "categoryClaimStatus": (
+                "post-hoc frozen category vocabulary; the 2D plane changes display geometry only"
+            ),
+        },
         "boundaryModel": boundary_model,
         "boundaryTarget": {
             "positive": (
@@ -391,6 +467,22 @@ def main() -> None:
             "hooksUsingAllFourCategories": int(sum(
                 row["categoriesUsed"] == [0, 1, 2, 3] for row in decoded
             )),
+            "semanticTrace": {
+                "allSpanCategoryAgreementWithFrozenAtlas": float(np.mean(
+                    predicted_categories == frozen_labels
+                )),
+                "singletonCategoryAgreementWithFrozenAtlas": float(np.mean([
+                    int(token["semantic"]["category"])
+                    == int(token["semantic"]["frozenAtlasCategory"])
+                    for row in decoded for token in row["tokens"]
+                ])),
+                "fullHookCategoryAgreementWithFrozenAtlas": float(np.mean([
+                    int(row["forecastSemanticInput"]["category"])
+                    == int(row["forecastSemanticInput"]["frozenAtlasCategory"])
+                    for row in decoded
+                ])),
+                "savedProjectionMaximumAbsoluteError": float(browse_error.max()),
+            },
         },
         "rows": decoded,
     }
