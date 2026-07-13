@@ -215,7 +215,7 @@ Observed YouTube targets:
 - retention at fixed seconds and fixed duration fractions;
 - early-window means and least-squares slopes;
 - retention at the stored hook end;
-- post-hook hold at multiple offsets;
+- hook-bounded response windows at multiple forward offsets;
 - entry rewatch, entry-to-hook drop, and early slope change.
 
 Each target is crossed with:

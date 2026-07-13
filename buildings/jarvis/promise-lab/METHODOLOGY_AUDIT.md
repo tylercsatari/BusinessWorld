@@ -172,9 +172,10 @@ Fix:
 - Outcome-blind atlases remain separate from outcome axes.
 - The saved four-cluster map is a valid frozen visualization.
 - Random-fold predictions are genuinely out of fold.
-- The 0-20 second observed-absolute curve forecast improves random-fold MAE by
-  7.43% over the mean-curve baseline, but remains a random-fold diagnostic because
-  strict future validation does not meet the promotion gate.
+- The observed-absolute curve forecast is measured at 41 normalized positions
+  inside each source's analyzed hook. Its random-fold and strict future metrics
+  are reported separately, and it remains diagnostic unless both promotion gates
+  pass.
 - Supplied example sentences remain evaluation-only and deterministic.
 
 ## Claim levels
@@ -197,8 +198,10 @@ No current whole-hook or component score reaches level 3.
 - The manual probe conditions downstream category interpretation.
 - Gemini embedding geometry may encode topic, wording, and production era together.
 - Component response is weak and unstable after conservative partitioning.
-- A 20-second forecast horizon is supported by source duration, but it is a model
-  display horizon, not evidence that unseen post-hook words were inferred.
+- The available exact timing records end with the extracted hooks; none reaches
+  22 seconds. The current model therefore emits nothing after each analyzed hook
+  endpoint. Extending the same algorithm requires transcript and timing data for
+  the additional words first.
 - Percentiles are ranks against this 208-hook corpus, not calibrated probabilities.
 
 ## Promotion gate for a future hook score

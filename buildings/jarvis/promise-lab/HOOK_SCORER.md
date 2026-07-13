@@ -156,12 +156,11 @@ retention, average retention, and log views. Random-fold correlations are positi
 but none passes the multiplicity-corrected future-only gate. These planes remain
 visible with both random and chronological validation.
 
-The observed-absolute 0-20 second curve forecast uses 41 half-second points. All
-208 sources are at least 22 seconds long, so the horizon is supported by measured
-training curves. Random-fold MAE is 5.381 percentage points versus 5.813 for the
-mean-curve baseline, a 7.43% improvement. The strict future test does not satisfy
-the promotion rule, so the UI labels it diagnostic. Post-hook points use the
-complete-hook embedding only; no unseen words or categories are invented.
+The observed-absolute curve forecast uses 41 normalized positions from 0% to
+100% of each source's analyzed hook. Each source maps that grid to its own exact
+caption-derived endpoint. The same complete-hook model is used throughout, and
+no value is emitted after that endpoint. Random-fold and strict future tests are
+both shown; the forecast remains diagnostic unless the promotion rule passes.
 
 ## 9. Live scorer output
 
@@ -173,7 +172,7 @@ Every scored hook returns:
 - conditional category labels
 - retained-information and terminal-conditioned diagnostics
 - four direct outcome predictions
-- a diagnostic 0-20 second retention forecast
+- a diagnostic 41-position retention forecast bounded by the analyzed hook
 - every component deletion and pair deletion input
 - every available component and relationship map
 - nearest-training-hook similarity

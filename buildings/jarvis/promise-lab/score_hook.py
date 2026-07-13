@@ -44,7 +44,7 @@ REMOTE_PREFIX = "longform/promise-lab-v4"
 MODEL_FILE = "hook-quality-model.json"
 PARTITION_FILE = "canonical-partition-model.json"
 OUTCOME_MODEL_FILE = "hook-outcome-model.json"
-SCORER_VERSION = "deterministic-variable-hook-scorer-v8"
+SCORER_VERSION = "deterministic-variable-hook-scorer-v9"
 
 
 def _decode_json(payload: bytes) -> dict:
@@ -475,15 +475,25 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
         })
 
     curve_model = outcome_model["curveModel"]
-    times = np.asarray(curve_model["timesSeconds"], np.float32)
+    progress = np.asarray(curve_model["progressFractions"], np.float32)
+    rate = outcome_model.get("speakingRate") or {}
+    response_lag = float(outcome_model.get("responseLagSeconds") or 0)
+    mean_words_per_second = float(rate.get("meanWordsPerSecond") or 1)
+    lexical_count = sum(
+        any(character.isalnum() or character == "_" for character in str(token.get("text") or ""))
+        for token in partition["tokens"]
+    )
+    if lexical_count < 1:
+        raise RuntimeError("a hook must contain at least one lexical token")
+    spoken_end = lexical_count / max(mean_words_per_second, 1e-9)
+    response_end = spoken_end + response_lag
+    times = progress * response_end
     predicted = apply_linear_model(primitives["full"], curve_model)[0]
     lower = predicted + np.asarray(curve_model["residualP10ByTime"], np.float32)
     upper = predicted + np.asarray(curve_model["residualP90ByTime"], np.float32)
-    rate = outcome_model.get("speakingRate") or {}
-    response_lag = float(outcome_model.get("responseLagSeconds") or 0)
     words = estimated_token_timeline(
         partition["tokens"], partition["owners"], times, predicted,
-        float(rate.get("meanWordsPerSecond") or 1), response_lag,
+        mean_words_per_second, response_lag,
         lower, upper,
     )
     enrich_word_semantics(words, partition["tokens"], partition["chunks"])
@@ -509,8 +519,8 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
         word["observedForecastDeletionContributionByTime"] = (
             predicted - without_word
         ).astype(float).tolist()
-    spoken_end = max((float(word["spokenEndSeconds"]) for word in words), default=0.0)
-    response_end = max((float(word["responseSeconds"]) for word in words), default=0.0)
+    spoken_end = max((float(word["spokenEndSeconds"]) for word in words), default=spoken_end)
+    response_end = max((float(word["responseSeconds"]) for word in words), default=response_end)
     survival_model = outcome_model["survivalModel"]
     survival_payload = _prediction_interval(
         outcome_prediction_payload(primitives["full"], survival_model),
@@ -579,6 +589,7 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
                 "Replay normalization requires a measured audience-retention curve and "
                 "measured terminal retention. Text alone supplies neither input."
             ),
+            "progressFractions": progress.astype(float).tolist(),
             "timesSeconds": times.astype(float).tolist(),
             "predictedPercent": predicted.astype(float).tolist(),
             "predictionP10": lower.astype(float).tolist(),
@@ -589,19 +600,18 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
             "responseLagSeconds": response_lag,
             "spokenHookEndSeconds": spoken_end,
             "responseEndSeconds": response_end,
-            "postHookForecastStartSeconds": response_end,
-            "forecastEndSeconds": float(times[-1]),
+            "analysisEndSeconds": response_end,
             "forecastScope": (
-                "word and component attribution ends at responseEndSeconds; later points are "
-                "a whole-hook text forecast without additional word/category attribution"
+                "all 41 outputs lie between the first analyzed hook word and the final "
+                "analyzed hook response; there are no post-hook outputs"
             ),
             "forecastInput": {
                 **partition["forecastSemanticInput"],
                 "embeddingModel": outcome_model.get("embeddingModel"),
                 "embeddingDimensions": outcome_model.get("embeddingDimensions"),
                 "formula": (
-                    "y_hat(t_j) = intercept_j + unit(GeminiEmbedding(complete hook)) "
-                    "dot coefficient_j for 41 half-second outputs"
+                    "y_hat(p_j) = intercept_j + unit(GeminiEmbedding(complete hook)) "
+                    "dot coefficient_j for 41 normalized positions inside the analyzed hook"
                 ),
                 "outputCluster": None,
                 "outputClusterReason": (
@@ -609,7 +619,7 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
                 ),
             },
             "wordContributionDefinition": (
-                "local deletion diagnostic at every time: complete-hook forecast minus the "
+                "local deletion diagnostic at every within-hook position: complete-hook forecast minus the "
                 "forecast from the same model after deleting exactly this token; values are "
                 "not additive Shapley effects"
             ),

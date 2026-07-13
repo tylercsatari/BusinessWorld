@@ -34,7 +34,6 @@ from hook_outcomes import (
     forward_chain_linear,
     forward_chain_survival,
     per_second_survival,
-    response_end_values,
     scalar_validation,
     survival_crossfit,
     terminal_conditioned_replay_correction,
@@ -58,11 +57,11 @@ HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
 OUTPUT_PATH = CACHE / "hook-outcomes.json"
 MODEL_PATH = CACHE / "hook-outcome-model.json"
-METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v8"
-CURVE_TIMES = np.arange(0.0, 20.0001, .5, dtype=np.float32)
+METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v9"
+CURVE_PROGRESS = np.linspace(0.0, 1.0, 41, dtype=np.float32)
 FORECAST_FORMULA = (
-    "y_hat(t_j) = intercept_j + unit(GeminiEmbedding(complete hook)) dot "
-    "coefficient_j for 41 half-second outputs"
+    "y_hat(p_j) = intercept_j + unit(GeminiEmbedding(complete hook)) dot "
+    "coefficient_j for 41 normalized positions p_j inside the analyzed hook"
 )
 
 TARGETS = {
@@ -223,8 +222,6 @@ def hook_time_windows(partitions: list[dict], timings: dict,
             end = lexical / max(float(mean_wps), 1e-4)
         if not np.isfinite(end) or end <= 0:
             raise RuntimeError(f"hook has no usable spoken duration: {video_id}")
-        if end + response_lag > float(CURVE_TIMES[-1]):
-            raise RuntimeError(f"hook response extends beyond the 20-second model: {video_id}")
         spoken_end.append(float(end))
         response_end.append(float(end + response_lag))
     return np.asarray(spoken_end, np.float32), np.asarray(response_end, np.float32)
@@ -241,12 +238,13 @@ def terminal_retention_percent(row: dict) -> float:
 def exact_or_estimated_words(partition: dict, timing: dict, actual_curve: np.ndarray,
                              predicted_curve: np.ndarray, lower: np.ndarray,
                              upper: np.ndarray, duration: float,
-                             mean_wps: float, response_lag: float) -> list[dict]:
+                             mean_wps: float, response_lag: float,
+                             curve_times: np.ndarray) -> list[dict]:
     tokens = partition.get("tokens") or []
     owners = np.asarray([int(row["owner"]) for row in tokens], int)
     if timing.get("status") != "exact":
         rows = estimated_token_timeline(
-            tokens, owners, CURVE_TIMES, predicted_curve, mean_wps,
+            tokens, owners, curve_times, predicted_curve, mean_wps,
             response_lag, lower, upper,
         )
         for row in rows:
@@ -269,13 +267,13 @@ def exact_or_estimated_words(partition: dict, timing: dict, actual_curve: np.nda
             "spokenEndSeconds": float(ends[index]),
             "responseSeconds": response_second,
             "predictedRetentionPercent": interpolate_series(
-                CURVE_TIMES, predicted_curve, response_second,
+                curve_times, predicted_curve, response_second,
             ),
             "predictedRetentionP10": interpolate_series(
-                CURVE_TIMES, lower, response_second,
+                curve_times, lower, response_second,
             ),
             "predictedRetentionP90": interpolate_series(
-                CURVE_TIMES, upper, response_second,
+                curve_times, upper, response_second,
             ),
             "actualRetentionPercent": retention_at(
                 actual_curve, duration, response_second,
@@ -518,13 +516,33 @@ def main() -> None:
             "validation"
         ] = validation
 
+    timing_records = load_timing_records(manifest["hooks"], args.timing_workers)
+    rate, timings = speaking_rate(manifest["hooks"], timing_records)
+    forward_summary = quality.get("forwardResponse") or {}
+    selected_response_lag = float(
+        (forward_summary.get("metricContract") or {}).get("selectedLagSeconds", 0.0)
+    )
+    response_lag = selected_response_lag if forward_summary.get("validated") else 0.0
+    response_lag_contract = {
+        "seconds": response_lag,
+        "selectedComponentLagSeconds": selected_response_lag,
+        "componentLagValidated": bool(forward_summary.get("validated")),
+        "policy": (
+            "use the selected component lag only after random-fold and future-only validation; "
+            "otherwise use the neutral spoken-hook endpoint with zero added lag"
+        ),
+    }
+    spoken_end, response_end = hook_time_windows(
+        partitions, timings, rate["meanWordsPerSecond"], response_lag,
+    )
+    curve_times = response_end[:, None] * CURVE_PROGRESS[None, :]
     curve_target = np.asarray([
         [
             retention_at(
                 row.get("curve") or [], float(row.get("duration_s") or np.nan),
                 float(second),
-            ) * 100 for second in CURVE_TIMES
-        ] for row in corpus
+            ) * 100 for second in curve_times[source_index]
+        ] for source_index, row in enumerate(corpus)
     ], np.float32)
     curve_crossfit = crossfit_linear(
         full_features, curve_target, groups=None,
@@ -532,7 +550,7 @@ def main() -> None:
     )
     curve_metrics = curve_validation(
         curve_crossfit["prediction"], curve_target,
-        curve_crossfit["baselinePrediction"], CURVE_TIMES,
+        curve_crossfit["baselinePrediction"], CURVE_PROGRESS,
         repeats=args.inference_repeats, seed=OUTCOME_SEED + 7002,
     )
     chronological_curve = forward_chain_linear(
@@ -540,7 +558,7 @@ def main() -> None:
     )
     chronological_curve_metrics = curve_validation(
         chronological_curve["prediction"], curve_target,
-        chronological_curve["baselinePrediction"], CURVE_TIMES,
+        chronological_curve["baselinePrediction"], CURVE_PROGRESS,
         repeats=args.inference_repeats, seed=OUTCOME_SEED + 17002,
     )
     chronological_curve_metrics["splits"] = chronological_curve["splits"]
@@ -562,31 +580,12 @@ def main() -> None:
     curve_model = {
         "coefficient": np.round(curve_fitted["coefficient"], 8),
         "intercept": np.round(curve_fitted["intercept"], 8),
-        "timesSeconds": CURVE_TIMES,
+        "progressFractions": CURVE_PROGRESS,
         "residualP10ByTime": curve_metrics["residualP10ByTime"],
         "residualP90ByTime": curve_metrics["residualP90ByTime"],
         "validation": curve_metrics,
     }
 
-    timing_records = load_timing_records(manifest["hooks"], args.timing_workers)
-    rate, timings = speaking_rate(manifest["hooks"], timing_records)
-    forward_summary = quality.get("forwardResponse") or {}
-    selected_response_lag = float(
-        (forward_summary.get("metricContract") or {}).get("selectedLagSeconds", 0.0)
-    )
-    response_lag = selected_response_lag if forward_summary.get("validated") else 0.0
-    response_lag_contract = {
-        "seconds": response_lag,
-        "selectedComponentLagSeconds": selected_response_lag,
-        "componentLagValidated": bool(forward_summary.get("validated")),
-        "policy": (
-            "use the selected component lag only after random-fold and future-only validation; "
-            "otherwise use the neutral spoken-hook endpoint with zero added lag"
-        ),
-    }
-    spoken_end, response_end = hook_time_windows(
-        partitions, timings, rate["meanWordsPerSecond"], response_lag,
-    )
     durations = np.asarray([
         float(row.get("duration_s") or np.nan) for row in corpus
     ], np.float32)
@@ -604,15 +603,15 @@ def main() -> None:
     ).astype(np.float32)
     nested_survival = survival_crossfit(
         full_features, adjusted_curve_target, response_end,
-        CURVE_TIMES, seed=OUTCOME_SEED + 9001,
+        seed=OUTCOME_SEED + 9001,
     )
     entry_survival = survival_crossfit(
         full_features, entry_normalized_curve_target, response_end,
-        CURVE_TIMES, seed=OUTCOME_SEED + 9001,
+        seed=OUTCOME_SEED + 9001,
     )
     observed_survival = survival_crossfit(
         full_features, curve_target, response_end,
-        CURVE_TIMES, seed=OUTCOME_SEED + 9001,
+        seed=OUTCOME_SEED + 9001,
     )
     survival_validation = scalar_validation(
         nested_survival["scorePrediction"], nested_survival["scoreTarget"],
@@ -638,8 +637,8 @@ def main() -> None:
     entry_survival_validation["normalizationFamilyQ"] = normalization_q[1]
     observed_survival_validation["normalizationFamilyQ"] = normalization_q[2]
     chronological_survival = forward_chain_survival(
-        full_features, adjusted_curve_target, response_end, CURVE_TIMES,
-        chronology, seed=OUTCOME_SEED + 19001,
+        full_features, adjusted_curve_target, response_end, chronology,
+        seed=OUTCOME_SEED + 19001,
     )
     chronological_survival_validation = scalar_validation(
         chronological_survival["prediction"], chronological_survival["target"],
@@ -653,8 +652,8 @@ def main() -> None:
             block_validation = chronological_survival_validation
         else:
             block_result = forward_chain_survival(
-                full_features, adjusted_curve_target, response_end, CURVE_TIMES,
-                chronology, seed=OUTCOME_SEED + 19001 + blocks, blocks=blocks,
+                full_features, adjusted_curve_target, response_end, chronology,
+                seed=OUTCOME_SEED + 19001 + blocks, blocks=blocks,
             )
             block_validation = scalar_validation(
                 block_result["prediction"], block_result["target"],
@@ -717,7 +716,7 @@ def main() -> None:
     )
     adjusted_curve_metrics = curve_validation(
         nested_survival["curvePrediction"], nested_survival["curveTarget"],
-        nested_survival["curveBaseline"], CURVE_TIMES,
+        nested_survival["curveBaseline"], CURVE_PROGRESS,
         repeats=args.inference_repeats, seed=OUTCOME_SEED + 9003,
     )
     chronological_adjusted_curve = forward_chain_linear(
@@ -726,7 +725,7 @@ def main() -> None:
     )
     chronological_adjusted_curve_metrics = curve_validation(
         chronological_adjusted_curve["prediction"], adjusted_curve_target,
-        chronological_adjusted_curve["baselinePrediction"], CURVE_TIMES,
+        chronological_adjusted_curve["baselinePrediction"], CURVE_PROGRESS,
         repeats=args.inference_repeats, seed=OUTCOME_SEED + 19005,
     )
     chronological_adjusted_curve_metrics["splits"] = chronological_adjusted_curve["splits"]
@@ -743,10 +742,11 @@ def main() -> None:
     )
     normalization = {
         "methodVersion": "terminal-conditioned-additive-replay-envelope-v1",
-        "timesSeconds": CURVE_TIMES,
+        "progressFractions": CURVE_PROGRESS,
         "formula": (
-            "C(t) = max(R(0)-100, 0) * clip((R(t)-F) / (R(0)-F), 0, 1); "
-            "R_normalized(t) = R_observed(t) - C(t)"
+            "for source-specific t = p * analyzed_hook_end: "
+            "C(p) = max(R(0)-100, 0) * clip((R(t)-F) / (R(0)-F), 0, 1); "
+            "R_normalized(p) = R_observed(t) - C(p)"
         ),
         "inputs": [
             "observed audience-retention curve R(t)",
@@ -764,9 +764,7 @@ def main() -> None:
             "terminal anchor. No shared time-decay curve is fitted."
         ),
     }
-    adjusted_end = response_end_values(
-        adjusted_curve_target, CURVE_TIMES, response_end,
-    )
+    adjusted_end = adjusted_curve_target[:, -1]
     carry_rate = per_second_survival(adjusted_end, response_end)
     length_baseline = fit_duration_baseline(response_end, carry_rate)
     expected_carry = apply_duration_baseline(response_end, length_baseline)
@@ -824,17 +822,29 @@ def main() -> None:
     adjusted_curve_model = {
         "coefficient": np.round(adjusted_curve_fitted["coefficient"], 8),
         "intercept": np.round(adjusted_curve_fitted["intercept"], 8),
-        "timesSeconds": CURVE_TIMES,
+        "progressFractions": CURVE_PROGRESS,
         "residualP10ByTime": adjusted_curve_metrics["residualP10ByTime"],
         "residualP90ByTime": adjusted_curve_metrics["residualP90ByTime"],
         "validation": adjusted_curve_metrics,
         "normalization": normalization,
     }
     entry_inflation = curve_target[:, 0] - 100.0
-    opening_half_second = curve_target[:, 1] - curve_target[:, 0]
-    opening_three_seconds = (
-        curve_target[:, int(round(3.0 / .5))] - curve_target[:, 0]
-    ) / 3.0
+    opening_half_second = np.asarray([
+        retention_at(
+            row.get("curve") or [], float(row.get("duration_s") or np.nan),
+            min(0.5, float(response_end[source_index])),
+        ) * 100.0 - curve_target[source_index, 0]
+        for source_index, row in enumerate(corpus)
+    ], np.float32)
+    opening_three_seconds = np.asarray([
+        (
+            retention_at(
+                row.get("curve") or [], float(row.get("duration_s") or np.nan),
+                min(3.0, float(response_end[source_index])),
+            ) * 100.0 - curve_target[source_index, 0]
+        ) / max(min(3.0, float(response_end[source_index])), 1e-6)
+        for source_index, row in enumerate(corpus)
+    ], np.float32)
     entry_diagnostic = entry_terminal_diagnostic(
         curve_target[:, 0], terminal, durations, seed=OUTCOME_SEED + 9010,
     )
@@ -887,21 +897,24 @@ def main() -> None:
             "maximumFullVideoEndpointCorrectionPercentagePoints": float(np.max(
                 native_endpoint_correction
             )),
-            "medianCorrectionAt20SecondsPercentagePoints": float(np.median(
+            "medianCorrectionAtAnalyzedHookEndPercentagePoints": float(np.median(
                 replay_correction[:, -1]
             )),
-            "p90CorrectionAt20SecondsPercentagePoints": float(np.quantile(
+            "p90CorrectionAtAnalyzedHookEndPercentagePoints": float(np.quantile(
                 replay_correction[:, -1], .9
             )),
         },
         "scope": {
             "videos": len(corpus),
             "minimumVideoDurationSeconds": float(np.min(durations)),
-            "videosShorterThan20Seconds": int(np.sum(durations < 20.0)),
             "medianSpokenHookEndSeconds": float(np.median(spoken_end)),
             "maximumSpokenHookEndSeconds": float(np.max(spoken_end)),
+            "minimumResponseEndSeconds": float(np.min(response_end)),
             "medianResponseEndSeconds": float(np.median(response_end)),
             "maximumResponseEndSeconds": float(np.max(response_end)),
+            "curveProgressPoints": len(CURVE_PROGRESS),
+            "postHookOutputPoints": 0,
+            "modelScope": "analyzed hook only",
         },
         "claimBoundary": (
             "This is an endpoint-conditioned replay envelope, not identified replay counts "
@@ -1060,12 +1073,13 @@ def main() -> None:
         prediction_curve = np.asarray(curve_crossfit["prediction"][source_index], float)
         lower_curve = np.asarray(curve_low[source_index], float)
         upper_curve = np.asarray(curve_high[source_index], float)
+        source_curve_times = np.asarray(curve_times[source_index], float)
         actual_curve = np.asarray(corpus_row.get("curve") or [], float)
         duration = float(corpus_row.get("duration_s") or np.nan)
         words = exact_or_estimated_words(
             partition, timings.get(video_id) or {}, actual_curve, prediction_curve,
             lower_curve, upper_curve, duration, rate["meanWordsPerSecond"],
-            response_lag,
+            response_lag, source_curve_times,
         )
         enrich_word_semantics(words, partition["tokens"], partition["chunks"])
         adjusted_prediction_curve = np.asarray(
@@ -1089,16 +1103,16 @@ def main() -> None:
                 "actualRetentionPercent"
             )
             word["predictedRetentionPercent"] = interpolate_series(
-                CURVE_TIMES, adjusted_prediction_curve, second,
+                source_curve_times, adjusted_prediction_curve, second,
             )
             word["predictedRetentionP10"] = interpolate_series(
-                CURVE_TIMES, adjusted_lower_curve, second,
+                source_curve_times, adjusted_lower_curve, second,
             )
             word["predictedRetentionP90"] = interpolate_series(
-                CURVE_TIMES, adjusted_upper_curve, second,
+                source_curve_times, adjusted_upper_curve, second,
             )
             word["actualRetentionPercent"] = interpolate_series(
-                CURVE_TIMES, adjusted_actual_curve, second,
+                source_curve_times, adjusted_actual_curve, second,
             )
             global_index = int(word["singletonGlobalSpanIndex"])
             word["singletonAtlasIndex"] = int(word_atlas_by_global[global_index])
@@ -1240,11 +1254,9 @@ def main() -> None:
                 "normalizationAvailable": True,
                 "normalizationMethod": normalization["methodVersion"],
                 "terminalRetentionPercent": float(terminal[source_index]),
-                "timesSeconds": CURVE_TIMES,
-                "actualPercent": np.asarray([
-                    retention_at(actual_curve, duration, float(second)) * 100
-                    for second in CURVE_TIMES
-                ], np.float32),
+                "progressFractions": CURVE_PROGRESS,
+                "timesSeconds": source_curve_times,
+                "actualPercent": curve_target[source_index],
                 "predictedOOFPercent": prediction_curve,
                 "predictionP10": lower_curve,
                 "predictionP90": upper_curve,
@@ -1269,11 +1281,10 @@ def main() -> None:
                 ))),
                 "spokenHookEndSeconds": float(spoken_end[source_index]),
                 "responseEndSeconds": float(response_end[source_index]),
-                "postHookForecastStartSeconds": float(response_end[source_index]),
-                "forecastEndSeconds": float(CURVE_TIMES[-1]),
+                "analysisEndSeconds": float(response_end[source_index]),
                 "forecastScope": (
-                    "word and component attribution ends at responseEndSeconds; later points are "
-                    "a whole-hook text forecast without additional word/category attribution"
+                    "all 41 outputs lie between the first analyzed hook word and the final "
+                    "analyzed hook response; there are no post-hook outputs"
                 ),
                 "forecastInput": {
                     **partition["forecastSemanticInput"],
@@ -1285,7 +1296,7 @@ def main() -> None:
                     "formula": FORECAST_FORMULA,
                     "outputCluster": None,
                     "outputClusterReason": (
-                        "the 41 forecast values are scalar retention outputs, not semantic embeddings"
+                        "the 41 within-hook retention values are scalar outputs, not semantic embeddings"
                     ),
                 },
                 "wordContributionDefinition": (
@@ -1334,7 +1345,7 @@ def main() -> None:
     summary = {
         "version": 2,
         "status": "complete",
-        "stage": "held-out hook outcome maps and first-seconds retention forecast",
+        "stage": "held-out hook outcome maps and within-hook retention forecast",
         "methodVersion": METHOD_VERSION,
         "targets": TARGETS,
         "hookModels": {
@@ -1356,7 +1367,7 @@ def main() -> None:
         },
         "longTitleTransfer": long_title_transfer,
         "curveModel": {
-            "timesSeconds": CURVE_TIMES,
+            "progressFractions": CURVE_PROGRESS,
             "validation": curve_metrics,
             "rewatchAdjustedValidation": adjusted_curve_metrics,
             "speakingRate": rate,
@@ -1364,10 +1375,10 @@ def main() -> None:
             "responseLagContract": response_lag_contract,
             "definition": (
                 "The complete-hook embedding predicts observed absolute retention and the "
-                "endpoint-normalized training target at 0.5-second steps. Stored hooks also "
-                "show the measured additive replay envelope. Word/category attribution ends at "
-                "the exact spoken hook plus the response-lag contract; later points are only a "
-                "whole-hook continuation forecast. Text-only inputs cannot be replay-normalized."
+                "endpoint-normalized target at 41 normalized positions between the first and "
+                "last analyzed hook word. Stored hooks also show the measured additive replay "
+                "envelope. No output exists after the analyzed hook endpoint. Text-only inputs "
+                "cannot be replay-normalized."
             ),
             "formula": FORECAST_FORMULA,
         },
@@ -1384,12 +1395,13 @@ def main() -> None:
             "components": len(components),
             "relationships": relationship_total,
             "outcomeTargets": len(TARGETS),
-            "curvePointsPerHook": len(CURVE_TIMES),
+            "curvePointsPerHook": len(CURVE_PROGRESS),
             "wordEmbeddingPoints": len(word_atlas["points"]),
             "fullHookEmbeddingPoints": len(full_hook_atlas["points"]),
-            "forecastEndSeconds": float(CURVE_TIMES[-1]),
             "minimumSourceDurationSeconds": float(np.min(durations)),
-            "sourcesShorterThanForecast": int(np.sum(durations < CURVE_TIMES[-1])),
+            "minimumAnalyzedHookSeconds": float(np.min(response_end)),
+            "maximumAnalyzedHookSeconds": float(np.max(response_end)),
+            "postHookOutputPoints": 0,
             "exactTimedHooks": rate["exactTimedHooks"],
             "componentCoverageFailures": sum(
                 int(row.get("coverage", 0) != 1 or row.get("overlapCount", 0) != 0)

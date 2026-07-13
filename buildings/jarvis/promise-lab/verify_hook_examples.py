@@ -69,9 +69,16 @@ def main() -> None:
             "normalizationUnavailableReason"
         ]
         assert len(forecast["timesSeconds"]) == 41
+        assert len(forecast["progressFractions"]) == 41
+        assert abs(float(forecast["progressFractions"][0])) < 1e-9
+        assert abs(float(forecast["progressFractions"][-1]) - 1) < 1e-9
         assert len(forecast["predictedPercent"]) == 41
         assert "rewatchAdjustedPredictedPercent" not in forecast
-        assert forecast["responseEndSeconds"] < forecast["forecastEndSeconds"]
+        assert abs(float(forecast["timesSeconds"][-1])
+                   - float(forecast["responseEndSeconds"])) < 1e-5
+        assert "forecastEndSeconds" not in forecast
+        assert "postHookForecastStartSeconds" not in forecast
+        assert forecast["analysisEndSeconds"] == forecast["responseEndSeconds"]
         assert forecast["responseLagSeconds"] == 0.0
         assert len(forecast["componentWindows"]) == count
         assert forecast["words"]

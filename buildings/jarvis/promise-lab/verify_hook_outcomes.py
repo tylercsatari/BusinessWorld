@@ -39,6 +39,17 @@ def main() -> None:
     assert len(set(int(row["componentCount"]) for row in artifact["hooks"])) > 1
     assert all(len(row["retentionForecast"]["timesSeconds"]) == 41
                for row in artifact["hooks"])
+    assert all(len(row["retentionForecast"]["progressFractions"]) == 41
+               for row in artifact["hooks"])
+    assert all(abs(row["retentionForecast"]["progressFractions"][0]) < 1e-9
+               and abs(row["retentionForecast"]["progressFractions"][-1] - 1) < 1e-9
+               for row in artifact["hooks"])
+    assert all(abs(row["retentionForecast"]["timesSeconds"][-1]
+                   - row["retentionForecast"]["responseEndSeconds"]) < 1e-5
+               for row in artifact["hooks"])
+    assert all("forecastEndSeconds" not in row["retentionForecast"]
+               and "postHookForecastStartSeconds" not in row["retentionForecast"]
+               for row in artifact["hooks"])
     assert all(len(row["outcomes"]) == 4 for row in artifact["hooks"])
     assert all(len(row["outcomes"]) == 4 for hook in artifact["hooks"]
                for row in hook["components"])
@@ -71,7 +82,8 @@ def main() -> None:
         assert "no chronological" in aggregate["claimBoundary"]
         for category_validation in component_model["validationByCategory"].values():
             assert category_validation["status"] == "random-fold-only-conditional-diagnostic"
-    assert artifact["rewatchAudit"]["scope"]["videosShorterThan20Seconds"] == 0
+    assert artifact["rewatchAudit"]["scope"]["postHookOutputPoints"] == 0
+    assert artifact["rewatchAudit"]["scope"]["modelScope"] == "analyzed hook only"
     assert artifact["rewatchAudit"]["entryInflationVsTerminal"]["spearman"] > .8
     assert artifact["rewatchAudit"]["normalization"]["fittedDecayParameters"] == 0
     geometry = artifact["rewatchAudit"]["geometryValidation"]
@@ -110,8 +122,8 @@ def main() -> None:
         and 0 <= int(word["componentCategory"]) <= 3
         for row in artifact["hooks"] for word in row["retentionForecast"]["words"]
     )
-    assert all(row["retentionForecast"]["responseEndSeconds"] < 20
-               for row in artifact["hooks"])
+    assert artifact["audit"]["postHookOutputPoints"] == 0
+    assert artifact["audit"]["maximumAnalyzedHookSeconds"] < 22
     assert artifact["curveModel"]["speakingRate"]["exactTimedHooks"] >= 200
     assert artifact["curveModel"]["responseLagContract"]["componentLagValidated"] is False
     assert artifact["curveModel"]["responseLagSeconds"] == 0

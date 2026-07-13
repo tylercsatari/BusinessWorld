@@ -54,6 +54,7 @@ class HookOutcomeTests(unittest.TestCase):
         self.assertEqual(len(result["residualP10ByTime"]), 3)
         self.assertEqual(len(result["modelMAEByTimePercentagePoints"]), 3)
         self.assertEqual(len(result["baselineMAEByTimePercentagePoints"]), 3)
+        np.testing.assert_allclose(result["progressFractions"], [0, .5, 1])
 
     def test_scalar_validation_exposes_calibration_and_empirical_error(self):
         target = np.asarray([1, 2, 3, 4, 5, 6, 7, 8], float)

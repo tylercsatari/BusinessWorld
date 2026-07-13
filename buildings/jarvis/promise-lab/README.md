@@ -26,7 +26,7 @@ Stages:
 7. `run_swaps.py`: evidence-supported sources routed into the complete target
    span universe using equal-scope outcome-blind atlas consensus.
 8. `run_axes.py`: held-out directions for model-predicted transfer plus observed
-   views, keep rate, retention levels, windows, slopes, and post-hook hold.
+   views, keep rate, retention levels, windows, slopes, and hook-end hold.
 9. `run_manual_probe.py`: a separated post-hoc comparison of manual selections
    against already-retained map and cluster IDs; it creates no new maps.
 10. `run_manual_projection.py`: reconstruct the winning map's exact four
@@ -44,7 +44,8 @@ Stages:
    component predictions for viewed percentage, five-second retention, average
    retention, and log views; a nested endpoint-normalized, duration-neutral hook
    terminal-conditioned survival diagnostic, normalization sensitivity,
-   chronological validation, and observed plus normalized 41-point forecasts.
+   chronological validation, and observed plus normalized 41-position forecasts
+   bounded by each source's analyzed hook endpoint.
 15. `run_hook_examples.py`: deterministic evaluation of the supplied example
    problem, kept entirely out of training and model selection.
 16. `build_ui.py`: browser artifacts, cluster representatives, findings, the

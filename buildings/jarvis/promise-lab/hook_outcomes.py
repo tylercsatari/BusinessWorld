@@ -281,14 +281,13 @@ def fit_full_linear(features: np.ndarray, target: np.ndarray,
 
 
 def survival_crossfit(features: np.ndarray, adjusted_curves: np.ndarray,
-                      response_seconds: np.ndarray, times: np.ndarray,
+                      response_seconds: np.ndarray,
                       folds: int = 5,
                       seed: int = OUTCOME_SEED) -> dict:
     """Cross-fit duration correction and semantics for a declared curve target."""
     features = row_unit(np.asarray(features, np.float32))
     adjusted = np.asarray(adjusted_curves, np.float32)
     response_seconds = np.asarray(response_seconds, np.float32)
-    times = np.asarray(times, np.float32)
     count = len(features)
     score_prediction = np.full(count, np.nan, np.float32)
     score_baseline = np.full(count, np.nan, np.float32)
@@ -307,10 +306,7 @@ def survival_crossfit(features: np.ndarray, adjusted_curves: np.ndarray,
     for fold, (train, test) in enumerate(splits):
         train = np.asarray(train, int)
         test = np.asarray(test, int)
-        fold_carry = per_second_survival(
-            response_end_values(adjusted, times, response_seconds),
-            response_seconds,
-        )
+        fold_carry = per_second_survival(adjusted[:, -1], response_seconds)
         length_model = fit_duration_baseline(
             response_seconds[train], fold_carry[train],
         )
@@ -420,7 +416,7 @@ def forward_chain_linear(features: np.ndarray, target: np.ndarray,
 
 
 def forward_chain_survival(features: np.ndarray, adjusted_curves: np.ndarray,
-                           response_seconds: np.ndarray, times: np.ndarray,
+                           response_seconds: np.ndarray,
                            chronology: np.ndarray,
                            seed: int = OUTCOME_SEED,
                            blocks: int = 5) -> dict:
@@ -428,9 +424,7 @@ def forward_chain_survival(features: np.ndarray, adjusted_curves: np.ndarray,
     features = row_unit(np.asarray(features, np.float32))
     adjusted = np.asarray(adjusted_curves, np.float32)
     response_seconds = np.asarray(response_seconds, np.float32)
-    carry = per_second_survival(
-        response_end_values(adjusted, times, response_seconds), response_seconds,
-    )
+    carry = per_second_survival(adjusted[:, -1], response_seconds)
     prediction = np.full(len(features), np.nan, np.float32)
     baseline = np.full(len(features), np.nan, np.float32)
     target = np.full(len(features), np.nan, np.float32)
@@ -608,7 +602,7 @@ def paired_curve_improvement(prediction: np.ndarray, target: np.ndarray,
 
 
 def curve_validation(prediction: np.ndarray, target: np.ndarray,
-                     baseline: np.ndarray, times: np.ndarray,
+                     baseline: np.ndarray, progress: np.ndarray,
                      repeats: int = 4096,
                      seed: int = OUTCOME_SEED) -> dict:
     prediction = np.asarray(prediction, float)
@@ -655,7 +649,7 @@ def curve_validation(prediction: np.ndarray, target: np.ndarray,
         "pairedImprovementInference": paired_curve_improvement(
             prediction, target, baseline, repeats=repeats, seed=seed,
         ),
-        "timesSeconds": np.asarray(times, float),
+        "progressFractions": np.asarray(progress, float),
         "sources": int(target.shape[0]),
         "inputSources": input_sources,
         "unevaluatedSources": int(input_sources - target.shape[0]),
