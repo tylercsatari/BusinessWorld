@@ -44,7 +44,7 @@ REMOTE_PREFIX = "longform/promise-lab-v4"
 MODEL_FILE = "hook-quality-model.json"
 PARTITION_FILE = "canonical-partition-model.json"
 OUTCOME_MODEL_FILE = "hook-outcome-model.json"
-SCORER_VERSION = "deterministic-variable-hook-scorer-v7"
+SCORER_VERSION = "deterministic-variable-hook-scorer-v8"
 
 
 def _decode_json(payload: bytes) -> dict:
@@ -521,12 +521,20 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
     ))
     predicted_lift = float(survival_payload["prediction"])
     predicted_carry = expected_carry + predicted_lift
+    score_scale = survival_model.get("scoreScale") or {}
+    hold_z = (
+        predicted_lift - float(score_scale.get("predictionMean") or 0)
+    ) / max(float(score_scale.get("predictionStd") or 1), 1e-9)
+    baseline_end = float(
+        100.0 * (max(expected_carry, 1e-4) / 100.0) ** max(response_end, 1e-4)
+    )
     predicted_end = float(
         100.0 * (max(predicted_carry, 1e-4) / 100.0) ** max(response_end, 1e-4)
     )
     survival_score = {
         **survival_payload,
-        "label": "Terminal-conditioned hook-survival diagnostic percentile",
+        "label": "Hook Hold z-score",
+        "holdZ": float(hold_z),
         "higherMeans": survival_model["targetContract"]["higherMeans"],
         "definition": survival_model["targetContract"]["formula"],
         "responseEndSeconds": response_end,
@@ -534,8 +542,28 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
         "expectedCarryPercentPerSecond": expected_carry,
         "predictedCarryPercentPerSecond": predicted_carry,
         "predictedAdjustedRetentionAtResponseEnd": predicted_end,
+        "durationBaselineRetentionAtResponseEnd": baseline_end,
+        "predictedEndpointHoldLiftPercentagePoints": predicted_end - baseline_end,
+        "scoreScale": score_scale,
         "targetContract": survival_model["targetContract"],
     }
+    long_prior_model = outcome_model.get("longTitlePrior") or {}
+    long_coefficient = np.asarray(long_prior_model.get("coefficient") or [], np.float32)
+    long_prior = None
+    if long_coefficient.shape == primitives["full"].shape:
+        predicted_long_views = float(
+            primitives["full"] @ long_coefficient
+            + float(long_prior_model.get("intercept") or 0)
+        )
+        long_prior = {
+            "predictedLog10LongFormViews": predicted_long_views,
+            "z": float(
+                (predicted_long_views - float(long_prior_model.get("trainingPredictionMean") or 0))
+                / max(float(long_prior_model.get("trainingPredictionStd") or 1), 1e-9)
+            ),
+            "blendedIntoHookHold": False,
+            "claimBoundary": long_prior_model.get("claimBoundary"),
+        }
     return {
         "status": "complete",
         "methodVersion": outcome_model.get("methodVersion"),
@@ -543,6 +571,7 @@ def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
         "hook": hook_predictions,
         "components": component_predictions,
         "survivalScore": survival_score,
+        "longTitleMarketPrior": long_prior,
         "retentionForecast": {
             "status": (curve_model.get("validation") or {}).get("status"),
             "normalizationAvailable": False,

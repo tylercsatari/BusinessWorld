@@ -10,6 +10,7 @@ from hook_outcomes import (
     fit_duration_baseline,
     fit_full_linear,
     per_second_survival,
+    scalar_validation,
     terminal_conditioned_replay_correction,
 )
 from hook_score_core import apply_linear_model, outcome_prediction_payload
@@ -51,6 +52,19 @@ class HookOutcomeTests(unittest.TestCase):
         self.assertLess(result["heldoutMAEPercentagePoints"], result["baselineMAEPercentagePoints"])
         self.assertGreater(result["maeImprovementFraction"], 0)
         self.assertEqual(len(result["residualP10ByTime"]), 3)
+        self.assertEqual(len(result["modelMAEByTimePercentagePoints"]), 3)
+        self.assertEqual(len(result["baselineMAEByTimePercentagePoints"]), 3)
+
+    def test_scalar_validation_exposes_calibration_and_empirical_error(self):
+        target = np.asarray([1, 2, 3, 4, 5, 6, 7, 8], float)
+        prediction = np.asarray([1.2, 1.8, 3.1, 3.7, 5.4, 5.8, 7.2, 7.7], float)
+        baseline = np.full(8, target.mean())
+        result = scalar_validation(prediction, target, baseline, repeats=64)
+        self.assertGreater(result["calibrationSlope"], 0)
+        self.assertGreater(result["signalToErrorRatio"], 0)
+        self.assertEqual(len(result["predictionOOF"]), 8)
+        self.assertEqual(len(result["targetObserved"]), 8)
+        self.assertGreaterEqual(result["coverageWithinTwoResidualSD"], .5)
 
     def test_terminal_conditioned_correction_is_additive_and_endpoint_anchored(self):
         curves = np.asarray([

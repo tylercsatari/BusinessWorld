@@ -54,6 +54,11 @@ def main() -> None:
     assert validation["chronologicalValidation"]["maeImprovementFraction"] < 0
     assert sensitivity["robustAcrossNormalizationChoices"] is False
     assert sensitivity["temporalRobustAcrossBlockCounts"] is False
+    assert survival["scoreScale"]["label"] == "Hook Hold z-score"
+    assert validation["predictionStd"] > 0
+    assert validation["residualStd"] > validation["predictionStd"]
+    assert len(validation["predictionOOF"]) == 208
+    assert len(validation["reliabilityBins"]) == 8
     assert len(sensitivity["chronologicalBlockSensitivity"]) == 5
     assert artifact["curveModel"]["rewatchAdjustedValidation"]["status"] == "random-fold-only-diagnostic"
     assert all(
@@ -76,6 +81,12 @@ def main() -> None:
     assert geometry["maximumFullVideoEndpointCorrectionPercentagePoints"] < .1
     assert all(row["survivalScore"]["validationStatus"]
                == "normalization-and-time-sensitive-diagnostic"
+               for row in artifact["hooks"])
+    assert all(abs(row["survivalScore"]["holdZ"]) < 10
+               for row in artifact["hooks"])
+    assert all(row["survivalScore"]["label"] == "Hook Hold z-score"
+               for row in artifact["hooks"])
+    assert all(row["longTitleMarketPrior"]["blendedIntoHookHold"] is False
                for row in artifact["hooks"])
     assert all(row["retentionForecast"]["normalizationAvailable"] is True
                for row in artifact["hooks"])
@@ -104,6 +115,14 @@ def main() -> None:
     assert artifact["curveModel"]["speakingRate"]["exactTimedHooks"] >= 200
     assert artifact["curveModel"]["responseLagContract"]["componentLagValidated"] is False
     assert artifact["curveModel"]["responseLagSeconds"] == 0
+    curve_accuracy = artifact["curveModel"]["rewatchAdjustedValidation"]
+    assert len(curve_accuracy["modelMAEByTimePercentagePoints"]) == 41
+    assert len(curve_accuracy["baselineMAEByTimePercentagePoints"]) == 41
+    long_transfer = artifact["longTitleTransfer"]
+    assert long_transfer["status"] == "independent-not-blended"
+    assert long_transfer["prior"]["corpus"]["storedLongFormRecords"] > 88_000
+    assert long_transfer["prior"]["corpus"]["embeddedTitleRecords"] == 51_835
+    assert abs(long_transfer["shortsTransfer"]["hookHold"]["spearman"]) < .1
     print(json.dumps({
         "status": "verified",
         "hooks": artifact["audit"]["hooks"],

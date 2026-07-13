@@ -58,7 +58,7 @@ HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
 OUTPUT_PATH = CACHE / "hook-outcomes.json"
 MODEL_PATH = CACHE / "hook-outcome-model.json"
-METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v7"
+METHOD_VERSION = "variable-component-hook-outcome-and-retention-forecast-v8"
 CURVE_TIMES = np.arange(0.0, 20.0001, .5, dtype=np.float32)
 FORECAST_FORMULA = (
     "y_hat(t_j) = intercept_j + unit(GeminiEmbedding(complete hook)) dot "
@@ -144,6 +144,23 @@ def compact_model(fitted: dict, validation: dict) -> dict:
         "trainingPredictionSorted": np.sort(prediction),
         "validation": validation,
     }
+
+
+def add_log_view_error_scale(validation: dict) -> None:
+    """Expose log-view error in the multiplicative units people actually feel."""
+    validation["multiplicativeErrorP50"] = float(10 ** validation["absoluteErrorP50"])
+    validation["multiplicativeErrorP80"] = float(10 ** validation["absoluteErrorP80"])
+    validation["multiplicativeErrorP90"] = float(10 ** validation["absoluteErrorP90"])
+
+
+def apply_long_title_prior(features: np.ndarray, prior: dict) -> np.ndarray:
+    coefficient = np.asarray(prior.get("coefficient") or [], np.float32)
+    if coefficient.shape != (features.shape[1],):
+        raise RuntimeError("Long Quant title prior and Promise Lab embedding dimensions differ")
+    return (
+        row_unit(np.asarray(features, np.float32)) @ coefficient
+        + float(prior.get("intercept") or 0)
+    ).astype(np.float32)
 
 
 def map_values(features: np.ndarray, fitted: dict) -> tuple[np.ndarray, np.ndarray]:
@@ -339,6 +356,11 @@ def main() -> None:
     hook_groups = np.asarray([str(row["id"]) for row in corpus])
     chronology = np.asarray([str(row.get("published") or "") for row in corpus])
     targets = outcome_targets(corpus)
+    long_title_prior = read_json(CACHE / "long-title-prior.json")
+    long_title_prediction = apply_long_title_prior(full_features, long_title_prior)
+    long_title_z = (
+        long_title_prediction - float(long_title_prior["trainingPredictionMean"])
+    ) / max(float(long_title_prior["trainingPredictionStd"]), 1e-9)
 
     hook_models = {}
     hook_values = {}
@@ -354,6 +376,8 @@ def main() -> None:
             repeats=args.inference_repeats,
             seed=OUTCOME_SEED + target_index * 101,
         )
+        if target_name == "log_views":
+            add_log_view_error_scale(validation)
         validation["foldDirectionMedianCosine"] = crossfit["foldDirectionMedianCosine"]
         validation["foldDirectionPositiveFraction"] = crossfit["foldDirectionPositiveFraction"]
         temporal = forward_chain_linear(
@@ -365,6 +389,8 @@ def main() -> None:
             repeats=args.inference_repeats,
             seed=OUTCOME_SEED + 12100 + target_index,
         )
+        if target_name == "log_views":
+            add_log_view_error_scale(temporal_validation)
         temporal_validation["splits"] = temporal["splits"]
         temporal_validation["evaluatedRows"] = temporal["evaluatedRows"]
         temporal_validation["unevaluatedWarmupRows"] = temporal["unevaluatedWarmupRows"]
@@ -757,6 +783,17 @@ def main() -> None:
         "lengthBaseline": length_baseline,
         "trainingTargetSorted": np.sort(survival_target),
         "trainingOOFPredictionSorted": np.sort(nested_survival["scorePrediction"]),
+        "scoreScale": {
+            "label": "Hook Hold z-score",
+            "formula": "(predicted excess carry - mean OOF prediction) / SD of OOF predictions",
+            "predictionMean": survival_validation["predictionMean"],
+            "predictionStd": survival_validation["predictionStd"],
+            "residualStd": survival_validation["residualStd"],
+            "unit": "standard deviations of out-of-fold predicted excess carry",
+            "zeroMeans": "the mean predicted hold coordinate among the 208 measured hooks",
+            "higherMeans": "the model predicts more retention hold than the duration-only expectation",
+            "percentileRole": "secondary rank within the current 208-hook calibration set only",
+        },
         "normalizationSensitivity": normalization_sensitivity,
         "targetContract": {
             "label": "Terminal-conditioned length-adjusted survival diagnostic",
@@ -887,6 +924,42 @@ def main() -> None:
     )
     adjusted_curve_low[:, 0] = 100.0
     adjusted_curve_high[:, 0] = 100.0
+
+    long_title_transfer = {
+        "status": "independent-not-blended",
+        "prior": {
+            key: long_title_prior.get(key) for key in (
+                "methodVersion", "embeddingInput", "target", "corpus",
+                "validation", "claimBoundary",
+            )
+        },
+        "shortsTransfer": {
+            "hookHold": correlation_audit(
+                long_title_prediction, nested_survival["scoreTarget"],
+            ),
+            **{
+                target_name: correlation_audit(long_title_prediction, target)
+                for target_name, target in targets.items()
+            },
+        },
+        "shortsLogViewsDistribution": {
+            "mean": float(np.mean(targets["log_views"])),
+            "std": float(np.std(targets["log_views"])),
+            "p10": float(np.quantile(targets["log_views"], .1)),
+            "p90": float(np.quantile(targets["log_views"], .9)),
+        },
+        "priorPredictionOnShortsHooks": {
+            "mean": float(np.mean(long_title_prediction)),
+            "std": float(np.std(long_title_prediction)),
+            "p10": float(np.quantile(long_title_prediction, .1)),
+            "p90": float(np.quantile(long_title_prediction, .9)),
+        },
+        "decision": (
+            "Keep this long-form title-market direction visible and separate. Its global "
+            "transfer to Shorts hold is near zero, so adding it to Hook Hold would reduce "
+            "interpretability without held-out evidence."
+        ),
+    }
 
     quality_points = {
         str(row["videoId"]): row for row in (quality.get("axis") or {}).get("points") or []
@@ -1074,6 +1147,19 @@ def main() -> None:
             nested_survival["carryPercentPerSecond"][source_index]
         )
         survival_predicted_carry = survival_expected + survival_prediction
+        hold_mean = float(survival_model["scoreScale"]["predictionMean"])
+        hold_std = max(float(survival_model["scoreScale"]["predictionStd"]), 1e-9)
+        residual_std = max(float(survival_model["scoreScale"]["residualStd"]), 1e-9)
+        hold_z = (survival_prediction - hold_mean) / hold_std
+        actual_hold_z = (survival_actual - hold_mean) / hold_std
+        expected_end = float(
+            100.0 * (max(survival_expected, 1e-4) / 100.0)
+            ** response_end[source_index]
+        )
+        predicted_end = float(
+            100.0 * (max(survival_predicted_carry, 1e-4) / 100.0)
+            ** response_end[source_index]
+        )
         component_offset = component_offsets[source_index]
         component_count = int(partition["componentCount"])
         hooks.append({
@@ -1091,7 +1177,9 @@ def main() -> None:
                 "observedResidual": point.get("oofTargetResidual"),
             },
             "survivalScore": {
-                "label": "Terminal-conditioned survival diagnostic percentile",
+                "label": "Hook Hold z-score",
+                "holdZ": float(hold_z),
+                "actualHoldZ": float(actual_hold_z),
                 "percentile": percentile(
                     np.asarray(nested_survival["scorePrediction"], float),
                     survival_prediction,
@@ -1103,6 +1191,9 @@ def main() -> None:
                 "predictedOOF": survival_prediction,
                 "actual": survival_actual,
                 "residual": survival_actual - survival_prediction,
+                "errorStandardDeviations": float(
+                    (survival_actual - survival_prediction) / residual_std
+                ),
                 "predictionP10": survival_prediction + survival_validation["residualP10"],
                 "predictionP90": survival_prediction + survival_validation["residualP90"],
                 "mapX": float(survival_x[source_index]),
@@ -1118,10 +1209,17 @@ def main() -> None:
                     100.0 * (survival_carry / 100.0) ** response_end[source_index]
                 ),
                 "predictedAdjustedRetentionAtResponseEnd": float(
-                    100.0 * (max(survival_predicted_carry, 1e-4) / 100.0)
-                    ** response_end[source_index]
+                    predicted_end
                 ),
+                "durationBaselineRetentionAtResponseEnd": expected_end,
+                "predictedEndpointHoldLiftPercentagePoints": predicted_end - expected_end,
+                "scoreScale": survival_model["scoreScale"],
                 "higherMeans": survival_model["targetContract"]["higherMeans"],
+            },
+            "longTitleMarketPrior": {
+                "predictedLog10LongFormViews": float(long_title_prediction[source_index]),
+                "z": float(long_title_z[source_index]),
+                "blendedIntoHookHold": False,
             },
             "outcomes": hook_outcomes,
             "componentOffset": component_offset,
@@ -1224,6 +1322,8 @@ def main() -> None:
         "componentModels": component_models,
         "curveModel": curve_model,
         "survivalModel": survival_model,
+        "longTitlePrior": long_title_prior,
+        "longTitleTransfer": long_title_transfer,
         "rewatchAdjustedCurveModel": adjusted_curve_model,
         "semanticProjection": partition_model.get("browseProjection"),
         "rewatchAudit": rewatch_audit,
@@ -1252,7 +1352,9 @@ def main() -> None:
             "targetContract": survival_model["targetContract"],
             "lengthBaseline": length_baseline,
             "normalizationSensitivity": normalization_sensitivity,
+            "scoreScale": survival_model["scoreScale"],
         },
+        "longTitleTransfer": long_title_transfer,
         "curveModel": {
             "timesSeconds": CURVE_TIMES,
             "validation": curve_metrics,

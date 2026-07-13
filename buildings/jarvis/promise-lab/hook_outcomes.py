@@ -505,13 +505,64 @@ def scalar_validation(prediction: np.ndarray, target: np.ndarray,
     residual = target[valid] - prediction[valid]
     mae = float(np.mean(np.abs(residual)))
     baseline_mae = float(np.mean(np.abs(target[valid] - baseline[valid])))
-    return {
+    prediction_valid = prediction[valid]
+    target_valid = target[valid]
+    baseline_valid = baseline[valid]
+    prediction_mean = float(np.mean(prediction_valid))
+    prediction_std = float(np.std(prediction_valid))
+    target_mean = float(np.mean(target_valid))
+    target_std = float(np.std(target_valid))
+    residual_mean = float(np.mean(residual))
+    residual_std = float(np.std(residual))
+    rmse = float(np.sqrt(np.mean(residual ** 2)))
+    if prediction_std > EPS:
+        calibration_slope, calibration_intercept = np.polyfit(
+            prediction_valid, target_valid, 1,
+        )
+    else:
+        calibration_slope, calibration_intercept = np.nan, target_mean
+    order = np.argsort(prediction_valid, kind="stable")
+    reliability = []
+    for index, selected in enumerate(np.array_split(order, min(8, len(order)))):
+        if not len(selected):
+            continue
+        reliability.append({
+            "bin": index,
+            "rows": int(len(selected)),
+            "predictionMean": float(np.mean(prediction_valid[selected])),
+            "predictionMin": float(np.min(prediction_valid[selected])),
+            "predictionMax": float(np.max(prediction_valid[selected])),
+            "observedMean": float(np.mean(target_valid[selected])),
+            "observedStd": float(np.std(target_valid[selected])),
+        })
+    absolute = np.abs(residual)
+    result = {
         "heldoutSpearman": spearman(prediction, target),
         "heldoutPearson": finite_correlation(prediction, target),
-        "heldoutR2": float(r2_score(target[valid], prediction[valid])),
+        "heldoutR2": float(r2_score(target_valid, prediction_valid)),
         "heldoutMAE": mae,
         "baselineMAE": baseline_mae,
         "maeImprovementFraction": float(1 - mae / max(baseline_mae, EPS)),
+        "heldoutRMSE": rmse,
+        "predictionMean": prediction_mean,
+        "predictionStd": prediction_std,
+        "targetMean": target_mean,
+        "targetStd": target_std,
+        "residualMean": residual_mean,
+        "residualStd": residual_std,
+        "signalToErrorRatio": float(prediction_std / max(rmse, EPS)),
+        "calibrationSlope": float(calibration_slope),
+        "calibrationIntercept": float(calibration_intercept),
+        "absoluteErrorP50": float(np.quantile(absolute, .5)),
+        "absoluteErrorP80": float(np.quantile(absolute, .8)),
+        "absoluteErrorP90": float(np.quantile(absolute, .9)),
+        "coverageWithinHalfResidualSD": float(np.mean(absolute <= .5 * residual_std)),
+        "coverageWithinOneResidualSD": float(np.mean(absolute <= residual_std)),
+        "coverageWithinTwoResidualSD": float(np.mean(absolute <= 2 * residual_std)),
+        "reliabilityBins": reliability,
+        "predictionOOF": prediction_valid.astype(np.float32),
+        "targetObserved": target_valid.astype(np.float32),
+        "baselineOOF": baseline_valid.astype(np.float32),
         "residualP10": float(np.quantile(residual, .1)),
         "residualMedian": float(np.median(residual)),
         "residualP90": float(np.quantile(residual, .9)),
@@ -520,6 +571,7 @@ def scalar_validation(prediction: np.ndarray, target: np.ndarray,
         ),
         "rows": int(valid.sum()),
     }
+    return result
 
 
 def paired_curve_improvement(prediction: np.ndarray, target: np.ndarray,
@@ -579,11 +631,22 @@ def curve_validation(prediction: np.ndarray, target: np.ndarray,
     covered = (target >= prediction + low) & (target <= prediction + high)
     mae = float(np.nanmean(absolute))
     baseline_mae = float(np.nanmean(baseline_absolute))
+    source_mae = np.nanmean(absolute, axis=1)
+    model_mae_by_time = np.nanmean(absolute, axis=0)
+    baseline_mae_by_time = np.nanmean(baseline_absolute, axis=0)
     return {
         "heldoutMAEPercentagePoints": mae,
         "baselineMAEPercentagePoints": baseline_mae,
         "maeImprovementFraction": float(1 - mae / max(baseline_mae, EPS)),
-        "medianSourceMAEPercentagePoints": float(np.nanmedian(np.nanmean(absolute, axis=1))),
+        "medianSourceMAEPercentagePoints": float(np.nanmedian(source_mae)),
+        "sourceMAEP50PercentagePoints": float(np.nanquantile(source_mae, .5)),
+        "sourceMAEP80PercentagePoints": float(np.nanquantile(source_mae, .8)),
+        "sourceMAEP90PercentagePoints": float(np.nanquantile(source_mae, .9)),
+        "modelMAEByTimePercentagePoints": model_mae_by_time.astype(np.float32),
+        "baselineMAEByTimePercentagePoints": baseline_mae_by_time.astype(np.float32),
+        "modelRMSEByTimePercentagePoints": np.sqrt(
+            np.nanmean(residual ** 2, axis=0)
+        ).astype(np.float32),
         "meanTimewiseSpearman": float(np.mean(per_time_rho)),
         "timewiseSpearman": [float(value) for value in per_time_rho],
         "residualP10ByTime": low.astype(np.float32),

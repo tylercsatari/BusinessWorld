@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import gzip
 import json
 from pathlib import Path
@@ -18,6 +19,12 @@ def read(name, fallback=None):
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--full", action="store_true",
+        help="embed the large discovery and clustering artifacts as well as scorer data",
+    )
+    args = parser.parse_args()
     hooks = {}
     for path in (CACHE / "discovery").glob("*.json"):
         hooks[path.stem] = json.loads(path.read_text(encoding="utf-8"))
@@ -30,24 +37,24 @@ def main() -> None:
         "manifest": read("manifest.json", {"version": 4, "status": "building", "counts": {}, "separation": {}}),
         "progress": read("progress.json", {"version": 4, "status": "building", "stage": "real partial build"}),
         "findings": read("findings.json", {}),
-        "corpus": read("corpus.json", {"rows": []}),
-        "discovery": read("discovery-summary.json", {"rows": []}),
-        "atlas": read("atlas.json", {"candidates": [], "maps": [], "projections": {}}),
+        "corpus": read("corpus.json", {"rows": []}) if args.full else {"rows": []},
+        "discovery": read("discovery-summary.json", {"rows": []}) if args.full else {"rows": []},
+        "atlas": read("atlas.json", {"candidates": [], "maps": [], "projections": {}}) if args.full else {"candidates": [], "maps": [], "projections": {}},
         "all-span-atlas": read(
             "all-span-atlas.json", {"spans": [], "maps": [], "projections": {}}
-        ),
-        "manual-probe": read("manual-probe.json", None),
-        "manual-projection": read("manual-projection.json", None),
-        "cluster-outcomes": read("cluster-outcomes.json", None),
-        "latency-study": read("latency-study.json", None),
+        ) if args.full else {"spans": [], "maps": [], "projections": {}},
+        "manual-probe": read("manual-probe.json", None) if args.full else None,
+        "manual-projection": read("manual-projection.json", None) if args.full else None,
+        "cluster-outcomes": read("cluster-outcomes.json", None) if args.full else None,
+        "latency-study": read("latency-study.json", None) if args.full else None,
         "canonical-partitions": read("canonical-partitions.json", None),
         "hook-quality": read("hook-quality.json", None),
         "hook-outcomes": read("hook-outcomes.json", None),
         "hook-example-results": read("hook-example-results.json", None),
-        "cross-scope": read("cross-scope.json", {}),
-        "swaps": read("swaps.json", None),
-        "axes": read("axes.json", None),
-        "registry": read("registry.json", {"rows": [], "stageCounts": {}}),
+        "cross-scope": read("cross-scope.json", {}) if args.full else {},
+        "swaps": read("swaps.json", None) if args.full else None,
+        "axes": read("axes.json", None) if args.full else None,
+        "registry": read("registry.json", {"rows": [], "stageCounts": {}}) if args.full else {"rows": [], "stageCounts": {}},
         "hooks": hooks,
         "swapSources": swap_sources,
     }

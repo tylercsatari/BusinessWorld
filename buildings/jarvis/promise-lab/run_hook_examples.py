@@ -135,8 +135,12 @@ def main() -> None:
             **spec,
             "score": result,
             "summary": {
+                "holdZ": result["score"]["holdZ"],
                 "percentile": result["score"]["percentile"],
                 "axisCoordinate": result["score"]["prediction"],
+                "predictedEndpointHoldLiftPercentagePoints": result["score"][
+                    "predictedEndpointHoldLiftPercentagePoints"
+                ],
                 "predictedCarryPercentPerSecond": result["score"][
                     "predictedCarryPercentPerSecond"
                 ],
@@ -196,9 +200,9 @@ def main() -> None:
                 for local, index in enumerate(machine_positions)
             },
             "meaning": (
-                "ranking is the frozen terminal-conditioned survival diagnostic; winner fractions are "
+                "ranking is the frozen Hook Hold diagnostic coordinate; winner fractions are "
                 "reported only for the separate retained-information bootstrap and do not replace "
-                "the survival ranking"
+                "the Hook Hold ranking"
             ),
         },
         "allExampleRanking": [EXAMPLES[index]["id"] for index in all_rank],

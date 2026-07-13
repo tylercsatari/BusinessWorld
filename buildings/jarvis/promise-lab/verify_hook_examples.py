@@ -26,6 +26,8 @@ def main() -> None:
     training_texts = set(model["trainingTexts"])
     for row in result["examples"]:
         assert row["text"] not in training_texts
+        assert abs(float(row["summary"]["holdZ"])) < 10
+        assert "predictedEndpointHoldLiftPercentagePoints" in row["summary"]
         score = row["score"]
         assert score["input"]["generativeLlmUsed"] is False
         count = int(score["partition"]["componentCount"])
@@ -37,6 +39,7 @@ def main() -> None:
         assert score["partition"]["overlapCount"] == 0
         assert all(value["attributionDefinition"] for value in score["components"])
         assert 0 <= float(score["score"]["percentile"]) <= 100
+        assert score["score"]["label"] == "Hook Hold z-score"
         assert score["score"]["validation"]["status"] == "normalization-and-time-sensitive-diagnostic"
         forward = score["forwardResponse"]
         assert forward["validatedAtComponentLevel"] is False

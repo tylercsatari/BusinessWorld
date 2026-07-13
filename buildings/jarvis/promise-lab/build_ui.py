@@ -529,12 +529,18 @@ def main() -> None:
                     "normalizationSensitivity"
                 )
             ),
+            "scoreScale": (
+                (hook_outcomes.get("survivalModel") or {}).get("scoreScale")
+            ),
+            "longTitleTransfer": hook_outcomes.get("longTitleTransfer"),
             "rewatchAudit": hook_outcomes.get("rewatchAudit"),
             "speakingRate": ((hook_outcomes.get("curveModel") or {}).get("speakingRate")),
             "interpretation": (
-                "The terminal-conditioned survival percentile remains a diagnostic because it fails "
-                "strict past-to-future validation and is not robust to a future-free entry-normalized "
-                "target. No universal better-or-worse hook score is currently promoted."
+                "Hook Hold is exposed as an unbounded z-coordinate with out-of-fold calibration and "
+                "empirical error, while its percentile is secondary. It remains diagnostic because "
+                "it fails strict past-to-future validation and is not robust to a future-free "
+                "entry-normalized target. The Long Quant title-market prior is visible but remains "
+                "independent because it does not transfer to Shorts hold."
             ),
         },
     }
