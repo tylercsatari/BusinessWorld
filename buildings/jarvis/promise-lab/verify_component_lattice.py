@@ -106,18 +106,24 @@ def main() -> None:
                 or partition_contract.get("selectionUsesOutcomes") is not False
                 or partition_contract.get("tokenOwnership") != [1] * n):
             raise RuntimeError(f"predictor partition contract failed for {row['videoId']}")
+        timing_contract = detail.get("timingContract") or {}
+        if (
+            timing_contract.get("source") != "source-media-ctc-estimated-intervals"
+            or timing_contract.get("mediaAligned") is not True
+            or timing_contract.get("exact") is not False
+            or not timing_contract.get("boundaryEstimator")
+            or not timing_contract.get("timingResolutionSeconds")
+        ):
+            raise RuntimeError(
+                f"source-media timing provenance missing for {row['videoId']}"
+            )
         spans += len(detail["nodes"]); edges += len(detail["edges"])
         timing[detail["timingContract"]["source"]] += 1
     if seen_resolutions != REQUIRED_RESOLUTIONS:
         raise RuntimeError(f"resolution family coverage differs: {seen_resolutions}")
     if spans != summary["spanCount"] or edges != summary["edgeCount"]:
         raise RuntimeError("summary lattice counts do not equal detail artifacts")
-    expected_timing = Counter(
-        "corpus-mean-speaking-rate"
-        if (row.get("retentionForecast") or {}).get("wordTimingPolicy") == "library-average speaking rate"
-        else "exact-caption-alignment"
-        for row in outcomes["hooks"]
-    )
+    expected_timing = Counter({"source-media-ctc-estimated-intervals": len(outcomes["hooks"])})
     if timing != expected_timing:
         raise RuntimeError(f"lattice timing provenance differs from source timing policy: {timing} != {expected_timing}")
     print(json.dumps({

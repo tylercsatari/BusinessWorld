@@ -242,7 +242,7 @@ async function main() {
         assert(inspectorText.includes('missing phrase'), inspectorText);
         assert(inspectorText.includes('point color (Raw phrase slope +2s): not measured'));
         assert(inspectorText.includes('measured slope window: 4.000s → 5.000s'));
-        await page.getByText('Exact phrase response trace · global span 1', { exact: true }).waitFor();
+        await page.getByText('Media-aligned phrase response trace · global span 1', { exact: true }).waitFor();
         const latencyText = await page.locator('#pl-root').innerText();
         assert(latencyText.includes('No tested cluster establishes a response latency'));
         assert(latencyText.includes('0.0s → 1.0s'));

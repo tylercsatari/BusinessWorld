@@ -146,8 +146,8 @@ Fix:
 
 - A component lag enters whole-hook timing only after random-fold and future-only
   validation.
-- Otherwise the response endpoint is the exact spoken hook end with zero added
-  lag.
+- Otherwise the response endpoint is the source-media CTC-aligned hook end with
+  zero added lag. This is an acoustic boundary estimate, not hand-labeled truth.
 - The fallback and its reason are stored in `responseLagContract`.
 
 ### 7. Tests required the preferred conclusion
@@ -368,12 +368,14 @@ validated causal effects.
 - The manual probe conditions downstream category interpretation.
 - Gemini embedding geometry may encode topic, wording, and production era together.
 - Component response is weak and unstable after conservative partitioning.
-- The opening extension now uses every transcript word whose observed, quantized
-  source start is before 20.0 seconds. Equal-start collisions are resolved
-  deterministically inside the next distinct timestamp interval and word ends
-  are inferred, so this is source-aligned timing rather than exact word-boundary
-  timing. Retention through 20 seconds is interpolated from each measured source
-  curve; no value beyond 20 seconds is emitted. The original endpoint-calibrated
+- The opening extension keeps the canonical transcript text unchanged and forces
+  its words onto deterministic Wav2Vec2 CTC frames from the downloaded source
+  media. The median frame width is about 20 ms. These are acoustic-model boundary
+  estimates, not hand-labeled truth; confidence, free-decode error, review words,
+  and independent Whisper free-decode agreement are stored for the declared
+  audit subset. Retention
+  through 20 seconds is interpolated from each measured source curve using actual
+  media duration; no value beyond 20 seconds is emitted. The endpoint-calibrated
   Hook Hold score is not relabeled as a 20-second score: the extension reports a
   separate source-grouped component-response diagnostic and marks semantic
   lengths outside the measured hook range as extrapolations. Reverse controls
@@ -384,6 +386,29 @@ validated causal effects.
   the complete outcome-blind representation has not been refit inside outer
   folds or replicated on later videos. Full-fit percentiles are therefore shown
   only as exploratory geometry, never as validated scores.
+- Decoded audio sample zero is checked against the source video/container clock.
+  The current maximum absolute origin delta is 0.000 seconds; builds hard-fail
+  above 0.030 seconds. This prevents a correct acoustic transcript from being
+  shifted wholesale against the analytics-retention timeline.
+- Curated hook text and the opening transcript occasionally disagree lexically.
+  All 4,142 canonical hook words use one outcome-blind projection onto opening
+  CTC intervals. Of 208 hooks, 158 are zero-edit normalized prefixes and 50 use
+  the same character edit path to an acoustic opening-word endpoint. Canonical
+  text and order are unchanged. Estimated boundaries inside one acoustic word
+  are labeled as such and excluded from timing-sensitive outcomes unless both
+  component edges have acoustic support. No legacy hook endpoint or neighboring
+  anchor interpolation participates in placement.
+- The independent Whisper-base audit covers all 208 videos. It is keyed only by
+  source-media hash, model hash, and horizon, so later projection revisions reuse
+  the same free decode rather than silently changing the reference. Agreement
+  statistics are regenerated on every build. Current median ordered-word start
+  disagreement is 0.100 seconds, the 95th percentile across per-video p95
+  disagreements is 0.289 seconds, and median lexical coverage is 97.59%. This is
+  model agreement, not timing ground truth. Hook-end pairing uses the complete
+  independently decoded opening as following context, so repeated words cannot
+  pair to a later occurrence. It independently pairs 204 of 208 endpoints with
+  median absolute end disagreement 0.046 seconds and p95 0.146 seconds; four
+  endpoints remain explicitly unmatched.
 - Percentiles are ranks against this 208-hook corpus, not calibrated probabilities.
 - Market Hold percentiles are ranks against 5,353 external transcript scores, not
   probabilities. The direction can still encode topic, channel style, language,

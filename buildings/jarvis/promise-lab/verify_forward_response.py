@@ -94,9 +94,10 @@ def main() -> None:
     assert counts == Counter({
         str(row["videoId"]): int(row["componentCount"]) for row in partitions["rows"]
     })
-    exact = [row for row in components if row["spokenStartSeconds"] is not None]
-    assert len(exact) == summary["timingAudit"]["componentsWithExactPositiveDuration"]
-    for row in exact:
+    timed = [row for row in components if row["spokenStartSeconds"] is not None]
+    assert len(timed) == summary["timingAudit"]["componentsWithAcousticBoundarySupport"]
+    assert summary["timingAudit"]["hooksWithAcousticEndpointSupport"] == corpus_count
+    for row in timed:
         spoken_width = row["spokenEndSeconds"] - row["spokenStartSeconds"]
         response_width = row["responseWindowEndSeconds"] - row["responseWindowStartSeconds"]
         assert abs(spoken_width - response_width) < 1e-5
@@ -139,7 +140,7 @@ def main() -> None:
         "validationStatus": summary["validationStatus"],
         "componentRows": len(components),
         "relationshipRows": len(relationships),
-        "exactTimedComponents": len(exact),
+        "acousticallySupportedTimedComponents": len(timed),
         "status": "verified",
     }, indent=2))
 

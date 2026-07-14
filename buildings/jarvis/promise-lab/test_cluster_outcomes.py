@@ -16,20 +16,49 @@ from cluster_outcomes import (
     span_interval,
 )
 from sequence import tokenize
+from run_cluster_outcomes import global_inputs_cache_key
 
 
 class ClusterOutcomeTests(unittest.TestCase):
+    def test_global_timing_cache_key_tracks_media_clock_inputs(self):
+        corpus = [{"id": "video", "duration_s": 10.25, "curve": [1, .8, .6, .5]}]
+        hooks = [{"videoId": "video", "text": "hello world"}]
+        spans = [{"videoId": "video", "hookIndex": 0, "start": 0, "end": 1}]
+        timing = {"video": {
+            "words": [{"w": "hello", "t": .1, "d": .2}],
+            "mediaAlignmentAudit": {"mappedCoverage": 1.0},
+            "canonicalTextTimingAudit": {"status": "already-exact-token-cover"},
+            "mediaAlignmentConfidence": "high",
+            "mediaAlignmentMethodVersion": "test",
+        }}
+        baseline = global_inputs_cache_key(corpus, hooks, spans, timing)
+        self.assertEqual(baseline, global_inputs_cache_key(corpus, hooks, spans, timing))
+        changed_duration = [{**corpus[0], "duration_s": 10.5}]
+        self.assertNotEqual(
+            baseline, global_inputs_cache_key(changed_duration, hooks, spans, timing)
+        )
+        changed_timing = {"video": {
+            **timing["video"],
+            "words": [{"w": "hello", "t": .15, "d": .2}],
+        }}
+        self.assertNotEqual(
+            baseline, global_inputs_cache_key(corpus, hooks, spans, changed_timing)
+        )
+
     def test_exact_timing_maps_split_number_tokens_inside_one_caption_word(self):
         text = "I walked 10,000 steps."
         words = [
-            {"w": "I", "t": 0.0, "d": 0.2},
-            {"w": "walked", "t": 0.2, "d": 0.4},
-            {"w": "10000", "t": 0.6, "d": 0.5},
-            {"w": "steps", "t": 1.1, "d": 0.4},
+            {"w": "I", "t": 0.0, "d": 0.2, "boundaryAcoustic": True},
+            {"w": "walked", "t": 0.2, "d": 0.4, "boundaryAcoustic": True},
+            {"w": "10000", "t": 0.6, "d": 0.5, "boundaryAcoustic": True},
+            {"w": "steps", "t": 1.1, "d": 0.4, "boundaryAcoustic": True},
         ]
         timing = exact_token_timings(text, words)
         tokens = tokenize(text)
-        self.assertEqual(timing["status"], "exact")
+        self.assertEqual(
+            timing["status"],
+            "media-aligned-token-cover-with-subword-estimates",
+        )
         number_start = next(token.index for token in tokens if token.text == "10")
         number_end = next(token.index for token in tokens if token.text == "000")
         self.assertAlmostEqual(timing["tokenStarts"][number_start], 0.6, places=5)
@@ -37,6 +66,11 @@ class ClusterOutcomeTests(unittest.TestCase):
         start, end = span_interval(timing, number_start, number_end + 1)
         self.assertAlmostEqual(start, 0.6, places=5)
         self.assertAlmostEqual(end, 1.1, places=5)
+        estimated_start, estimated_end = span_interval(
+            timing, number_end, number_end + 1,
+        )
+        self.assertTrue(np.isnan(estimated_start))
+        self.assertTrue(np.isnan(estimated_end))
 
     def test_mismatched_caption_is_excluded_instead_of_approximated(self):
         timing = exact_token_timings(
@@ -46,6 +80,28 @@ class ClusterOutcomeTests(unittest.TestCase):
         start, end = span_interval(timing, 0, 1)
         self.assertTrue(np.isnan(start))
         self.assertTrue(np.isnan(end))
+
+    def test_outer_acoustic_boundaries_survive_estimated_internal_split(self):
+        timing = exact_token_timings("alpha beta", [
+            {
+                "w": "alpha", "t": 0.1, "d": 0.3,
+                "startBoundaryAcoustic": True,
+                "endBoundaryAcoustic": False,
+                "boundaryAcoustic": False,
+            },
+            {
+                "w": "beta", "t": 0.4, "d": 0.3,
+                "startBoundaryAcoustic": False,
+                "endBoundaryAcoustic": True,
+                "boundaryAcoustic": False,
+            },
+        ])
+        whole_start, whole_end = span_interval(timing, 0, len(tokenize("alpha beta")))
+        self.assertAlmostEqual(whole_start, 0.1)
+        self.assertAlmostEqual(whole_end, 0.7)
+        alpha_start, alpha_end = span_interval(timing, 0, 1)
+        self.assertTrue(np.isnan(alpha_start))
+        self.assertTrue(np.isnan(alpha_end))
 
     def test_punctuation_only_interval_is_missing(self):
         timing = exact_token_timings(

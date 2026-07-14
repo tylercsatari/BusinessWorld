@@ -18,6 +18,7 @@ from cluster_outcomes import (
     exact_token_timings,
     retention_window_slope,
     span_interval,
+    timing_has_token_cover,
 )
 from deconfounding import (
     build_deconfounding_audit,
@@ -48,6 +49,7 @@ from forward_response import (
 from hook_quality import retention_inputs
 from hook_score_core import local_counterfactual_texts, percentile
 from run_cluster_outcomes import load_timing_records
+from media_alignment import apply_media_durations
 from sequence import tokenize
 
 
@@ -126,7 +128,9 @@ def timing_rows(hooks: list[dict], partitions: list[dict], workers: int) -> tupl
     starts = []
     ends = []
     status_counts = {}
-    exact_sources = set()
+    media_aligned_sources = set()
+    hook_starts = []
+    hook_ends = []
     for partition in partitions:
         video_id = str(partition["videoId"])
         record = records.get(video_id) or {}
@@ -135,8 +139,13 @@ def timing_rows(hooks: list[dict], partitions: list[dict], workers: int) -> tupl
         ) if record.get("words") else {"status": "missing-words"}
         status = str(timing.get("status"))
         status_counts[status] = status_counts.get(status, 0) + 1
-        if status == "exact":
-            exact_sources.add(video_id)
+        if timing_has_token_cover(timing):
+            media_aligned_sources.add(video_id)
+        hook_start, hook_end = span_interval(
+            timing, 0, len(partition.get("tokens") or []),
+        )
+        hook_starts.append(hook_start)
+        hook_ends.append(hook_end)
         for chunk in partition["chunks"]:
             start, end = span_interval(timing, int(chunk["start"]), int(chunk["end"]))
             starts.append(start)
@@ -144,12 +153,17 @@ def timing_rows(hooks: list[dict], partitions: list[dict], workers: int) -> tupl
     return {
         "starts": np.asarray(starts, np.float32),
         "ends": np.asarray(ends, np.float32),
+        "hookStarts": np.asarray(hook_starts, np.float32),
+        "hookEnds": np.asarray(hook_ends, np.float32),
     }, {
         "sources": len(partitions),
-        "exactSources": len(exact_sources),
+        "mediaAlignedSources": len(media_aligned_sources),
         "statusCounts": status_counts,
-        "componentsWithExactPositiveDuration": int(
+        "componentsWithAcousticBoundarySupport": int(
             np.isfinite(np.asarray(starts) + np.asarray(ends)).sum()
+        ),
+        "hooksWithAcousticEndpointSupport": int(
+            np.isfinite(np.asarray(hook_starts) + np.asarray(hook_ends)).sum()
         ),
     }
 
@@ -278,7 +292,9 @@ def main() -> None:
     args = parser.parse_args()
     started = time.time()
 
-    corpus = read_json(CACHE / "corpus.json")["rows"]
+    corpus = apply_media_durations(
+        read_json(CACHE / "corpus.json")["rows"], CACHE,
+    )
     manifest = read_json(CACHE / "all-span-manifest.json")
     partitions_payload = read_json(CACHE / "canonical-partitions.json")
     partitions = partitions_payload["rows"]
@@ -295,15 +311,20 @@ def main() -> None:
     source_indices = np.asarray([row["sourceIndex"] for row in component_rows], int)
     groups = np.asarray([row["videoId"] for row in component_rows]).astype(str)
     categories = np.asarray([row["category"] for row in component_rows], int)
-    hook_starts = np.full(len(corpus), np.nan, np.float32)
-    hook_ends = np.full(len(corpus), np.nan, np.float32)
-    for source_index in range(len(corpus)):
-        selected = source_indices == source_index
-        valid_starts = starts[selected][np.isfinite(starts[selected])]
-        valid_ends = ends[selected][np.isfinite(ends[selected])]
-        if len(valid_starts) and len(valid_ends):
-            hook_starts[source_index] = valid_starts.min()
-            hook_ends[source_index] = valid_ends.max()
+    hook_starts = np.asarray(timing["hookStarts"], np.float32)
+    hook_ends = np.asarray(timing["hookEnds"], np.float32)
+    if not np.isfinite(hook_starts + hook_ends).all():
+        missing = [
+            str(row["id"]) for row, start, end in zip(corpus, hook_starts, hook_ends)
+            if not np.isfinite(start + end)
+        ]
+        raise RuntimeError(
+            "stored hooks lack acoustically supported outer boundaries: "
+            + ", ".join(missing)
+        )
+    for row, end in zip(corpus, hook_ends):
+        row["legacyHookEndSec"] = row.get("hookEndSec")
+        row["mediaAlignedHookEndSec"] = float(end)
 
     token_counts = np.asarray([int(row["tokenCount"]) for row in manifest["hooks"]], int)
     curve_inputs = retention_inputs(corpus, token_counts)
@@ -886,13 +907,13 @@ def main() -> None:
         "windowDefinition": selected_candidate.definition,
         "selectionPolicy": (
             "within each outer source-video fold, choose only among 0s to 5s forward shifts "
-            "of the same exact spoken interval using equal-weight Fisher-mean Spearman across "
+            "of the same source-media CTC interval using equal-weight Fisher-mean Spearman across "
             "the four frozen categories; a positive winner is served only after the complete "
             "normalization/baseline/lag max-null and matched reverse-time controls pass"
         ),
         "normalization": "R(t) / R(0); no terminal or post-response value enters the primary target",
         "naturalDropBaseline": (
-            "one category-blind source-held-out ridge using exact timing, duration, and measured "
+            "one category-blind source-held-out ridge using media-aligned timing, actual duration, and measured "
             "trajectory ending one source-native sample before the spoken component begins; "
             "every source video has equal total weight"
         ),

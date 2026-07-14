@@ -1,4 +1,4 @@
-"""Cluster-conditioned outcome axes and exact retention timing primitives."""
+"""Cluster-conditioned outcome axes and source-media timing primitives."""
 
 from __future__ import annotations
 
@@ -29,8 +29,46 @@ def normalized_caption_atom(value: Any) -> str:
     )
 
 
+def _word_has_acoustic_boundaries(word: dict) -> bool:
+    if "startBoundaryAcoustic" in word or "endBoundaryAcoustic" in word:
+        return bool(
+            word.get("startBoundaryAcoustic") and word.get("endBoundaryAcoustic")
+        )
+    if "boundaryAcoustic" in word:
+        return bool(word["boundaryAcoustic"])
+    source = str(word.get("source") or "").casefold()
+    method = str(word.get("alignmentMethod") or "").casefold()
+    return bool(
+        source == "local-wav2vec2-ctc-forced-alignment"
+        or "direct canonical-hook ctc forced alignment" in method
+        or (
+            method.startswith("media-aligned ")
+            and "lexical match" in method
+            and "fallback" not in method
+        )
+    )
+
+
+def _word_boundary_is_acoustic(word: dict, side: str) -> bool:
+    key = "startBoundaryAcoustic" if side == "start" else "endBoundaryAcoustic"
+    if key in word:
+        return bool(word[key])
+    return _word_has_acoustic_boundaries(word)
+
+
+def timing_has_token_cover(timing: dict) -> bool:
+    return str(timing.get("status") or "").startswith((
+        "media-aligned-token-cover", "media-clock-token-cover",
+    ))
+
+
 def exact_token_timings(hook_text: str, words: list[dict]) -> dict[str, Any]:
-    """Map source tokens to caption time only when normalized text is an exact prefix."""
+    """Map canonical tokens onto source-media word intervals.
+
+    The historical name is retained for API compatibility. Exactness applies
+    only to normalized text coverage. Acoustic word boundaries and deterministic
+    within-word estimates are tracked separately and never conflated.
+    """
     tokens = tokenize(hook_text)
     token_atoms = [normalized_caption_atom(token.text) for token in tokens]
     source_stream = "".join(token_atoms)
@@ -47,47 +85,79 @@ def exact_token_timings(hook_text: str, words: list[dict]) -> dict[str, Any]:
 
     char_starts = []
     char_ends = []
+    char_start_acoustic = []
+    char_end_acoustic = []
     for word, atom in zip(words, word_atoms):
         if not atom:
             continue
         start = float(word.get("t") or 0)
         duration = max(0.0, float(word.get("d") or 0))
+        start_acoustic = _word_boundary_is_acoustic(word, "start")
+        end_acoustic = _word_boundary_is_acoustic(word, "end")
         for position in range(len(atom)):
             char_starts.append(start + duration * position / len(atom))
             char_ends.append(start + duration * (position + 1) / len(atom))
+            char_start_acoustic.append(bool(start_acoustic and position == 0))
+            char_end_acoustic.append(bool(end_acoustic and position == len(atom) - 1))
 
     token_starts = np.full(len(tokens), np.nan, np.float32)
     token_ends = np.full(len(tokens), np.nan, np.float32)
+    token_start_acoustic = np.zeros(len(tokens), bool)
+    token_end_acoustic = np.zeros(len(tokens), bool)
     cursor = 0
     for index, atom in enumerate(token_atoms):
         if not atom:
             continue
         token_starts[index] = char_starts[cursor]
         token_ends[index] = char_ends[cursor + len(atom) - 1]
+        token_start_acoustic[index] = char_start_acoustic[cursor]
+        token_end_acoustic[index] = char_end_acoustic[cursor + len(atom) - 1]
         cursor += len(atom)
 
     for index, atom in enumerate(token_atoms):
         if atom:
             continue
-        previous = next(
-            (float(token_ends[position]) for position in range(index - 1, -1, -1)
-             if np.isfinite(token_ends[position])),
+        following = next(
+            ((float(token_starts[position]), bool(token_start_acoustic[position]))
+             for position in range(index + 1, len(tokens))
+             if np.isfinite(token_starts[position])),
             None,
         )
-        following = next(
-            (float(token_starts[position]) for position in range(index + 1, len(tokens))
-             if np.isfinite(token_starts[position])),
+        previous = next(
+            ((float(token_ends[position]), bool(token_end_acoustic[position]))
+             for position in range(index - 1, -1, -1)
+             if np.isfinite(token_ends[position])),
             None,
         )
         boundary = previous if previous is not None else following
         if boundary is not None:
-            token_starts[index] = boundary
-            token_ends[index] = boundary
+            token_starts[index] = boundary[0]
+            token_ends[index] = boundary[0]
+            token_start_acoustic[index] = boundary[1]
+            token_end_acoustic[index] = boundary[1]
+
+    lexical = np.asarray([bool(atom) for atom in token_atoms], bool)
+    estimated_starts = int(np.sum(lexical & ~token_start_acoustic))
+    estimated_ends = int(np.sum(lexical & ~token_end_acoustic))
+    fallback_words = sum(not _word_has_acoustic_boundaries(word) for word in words)
+    status = (
+        "media-clock-token-cover-with-fallbacks" if fallback_words
+        else "media-aligned-token-cover-with-subword-estimates"
+        if estimated_starts or estimated_ends
+        else "media-aligned-token-cover"
+    )
 
     return {
-        "status": "exact",
+        "status": status,
         "tokenStarts": token_starts.astype(float).tolist(),
         "tokenEnds": token_ends.astype(float).tolist(),
+        "tokenStartBoundaryAcoustic": token_start_acoustic.tolist(),
+        "tokenEndBoundaryAcoustic": token_end_acoustic.tolist(),
+        "estimatedLexicalStartBoundaries": estimated_starts,
+        "estimatedLexicalEndBoundaries": estimated_ends,
+        "fallbackSourceWords": fallback_words,
+        "normalizedTextCoverageExact": True,
+        "timingExact": False,
         "sourceCharacters": len(source_stream),
         "captionCharacters": len(caption_stream),
     }
@@ -103,6 +173,21 @@ def span_interval(timing: dict, start: int, end: int) -> tuple[float, float]:
     valid_start = selected_starts[np.isfinite(selected_starts)]
     valid_end = selected_ends[np.isfinite(selected_ends)]
     if not len(valid_start) or not len(valid_end):
+        return float("nan"), float("nan")
+    start_support = np.asarray(
+        timing.get("tokenStartBoundaryAcoustic") or [], bool,
+    )
+    end_support = np.asarray(
+        timing.get("tokenEndBoundaryAcoustic") or [], bool,
+    )
+    finite_start_indices = np.flatnonzero(np.isfinite(starts[start:end])) + start
+    finite_end_indices = np.flatnonzero(np.isfinite(ends[start:end])) + start
+    if (
+        len(start_support) != len(starts) or len(end_support) != len(ends)
+        or not len(finite_start_indices) or not len(finite_end_indices)
+        or not bool(start_support[int(finite_start_indices[0])])
+        or not bool(end_support[int(finite_end_indices[-1])])
+    ):
         return float("nan"), float("nan")
     interval_start = float(valid_start.min())
     interval_end = float(valid_end.max())

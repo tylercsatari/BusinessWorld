@@ -142,7 +142,13 @@ def download_file(key, path):
     os.replace(tmp, path)
 
 
-def cache_vecs(chan):
+def cache_arrays(chan, names=("vecs",)):
+    """Return row-aligned arrays from one immutable raw-long archive revision.
+
+    The map is published separately and can briefly lead or lag the archive.
+    Any model that needs labels must therefore read vectors, IDs, and labels
+    from the same NPZ object instead of joining by row position against map.json.
+    """
     cdir = tempfile.gettempdir()
     etag = None
     try:
@@ -150,25 +156,55 @@ def cache_vecs(chan):
     except Exception:
         pass
     tag = cache_tag(etag)
-    npy = os.path.join(cdir, f"rawlong_{chan}_{tag}_vecs.npy")
-    if not os.path.exists(npy):
+    requested = tuple(dict.fromkeys(str(name) for name in names))
+    if not requested:
+        return {}
+    paths = {
+        name: os.path.join(cdir, f"rawlong_{chan}_{tag}_{name}.npy")
+        for name in requested
+    }
+    missing = [name for name, path in paths.items() if not os.path.exists(path)]
+    if missing:
         npz = os.path.join(cdir, f"rawlong_{chan}_{tag}.npz")
         if not os.path.exists(npz):
             download_file(f"raw-long/{chan}/embeddings.npz", npz)
         with zipfile.ZipFile(npz) as zf:
-            names = zf.namelist()
-            vec_name = "vecs.npy" if "vecs.npy" in names else next((n for n in names if n.endswith("/vecs.npy") or n.endswith("vecs.npy")), None)
-            if not vec_name:
-                raise RuntimeError(f"raw-long/{chan}/embeddings.npz missing vecs.npy")
-            tmp = npy + ".tmp"
-            with zf.open(vec_name) as src, open(tmp, "wb") as dst:
-                shutil.copyfileobj(src, dst, 1024 * 1024)
-            os.replace(tmp, npy)
+            members = zf.namelist()
+            for name in missing:
+                expected = f"{name}.npy"
+                member = expected if expected in members else next(
+                    (item for item in members if item.endswith("/" + expected)), None,
+                )
+                if not member:
+                    raise RuntimeError(
+                        f"raw-long/{chan}/embeddings.npz missing {expected}"
+                    )
+                tmp = paths[name] + ".tmp"
+                with zf.open(member) as src, open(tmp, "wb") as dst:
+                    shutil.copyfileobj(src, dst, 1024 * 1024)
+                os.replace(tmp, paths[name])
         try:
             os.remove(npz)
         except Exception:
             pass
-    return np.load(npy, mmap_mode="r")
+    arrays = {}
+    for name, path in paths.items():
+        if name == "ids":
+            # Historical raw-long bundles store only this small string array as
+            # dtype=object. Numeric model inputs remain non-pickle memmaps.
+            arrays[name] = np.load(path, allow_pickle=True)
+        else:
+            arrays[name] = np.load(path, mmap_mode="r", allow_pickle=False)
+    lengths = {name: len(value) for name, value in arrays.items()}
+    if len(set(lengths.values())) != 1:
+        raise RuntimeError(
+            f"raw-long/{chan}/embeddings.npz row mismatch: {lengths}"
+        )
+    return arrays
+
+
+def cache_vecs(chan):
+    return cache_arrays(chan, ("vecs",))["vecs"]
 
 
 def load_map(chan):

@@ -162,7 +162,7 @@ def main() -> None:
         float(row["retentionForecast"]["responseEndSeconds"])
         for row in artifact["hooks"]
     )
-    assert 0 <= artifact["curveModel"]["speakingRate"]["exactTimedHooks"] <= corpus_count
+    assert artifact["curveModel"]["speakingRate"]["mediaAlignedTimedHooks"] == corpus_count
     lag_contract = artifact["curveModel"]["responseLagContract"]
     assert artifact["curveModel"]["responseLagSeconds"] == (
         lag_contract["selectedComponentLagSeconds"]

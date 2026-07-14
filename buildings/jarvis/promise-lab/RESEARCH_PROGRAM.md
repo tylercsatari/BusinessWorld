@@ -268,7 +268,7 @@ The corrected category-blind exact cover contains 324 mutually exclusive chunks.
 The four category labels are applied afterward from the post-hoc selected map, so
 all category-specific results are conditional diagnostics.
 
-Selectable response windows are the exact spoken interval shifted only forward
+Selectable response windows are the source-media CTC interval shifted only forward
 from zero through five seconds in half-second increments. Reverse-time windows
 are controls. Lag selection happens inside each outer source-video fold, using
 an equal-category Fisher mean of inner held-out correlations. The response
@@ -292,8 +292,8 @@ Corrected evidence:
   across six representations on the same data.
 
 The result is a falsification: no component-response lag or category response axis
-currently validates. Whole-hook timing therefore uses exact spoken hook end with
-zero added lag.
+currently validates. Whole-hook timing therefore uses the acoustically aligned
+hook end with zero added lag.
 
 ## Required visual evidence
 
@@ -310,7 +310,7 @@ The UI must expose:
 - baseline-adjusted transfer bars for every Long Quant metric;
 - semantic axis planes;
 - grouped out-of-fold predicted-versus-observed plots;
-- the forward-only lag curve, all maps for every canonical component, exact spoken
+- the forward-only lag curve, all maps for every canonical component, media-aligned spoken
   and response windows, observed-minus-expected slopes, and held-out predictions;
 - the complete experiment registry.
 

@@ -170,9 +170,14 @@ the deletion leaves text, but it deliberately includes the duration change.
 
 ## 7. Component response and lag
 
-The component study tests the exact spoken interval across 17 shifts from -3
-through +5 seconds in 0.5-second increments. Negative shifts are falsification
-controls and can never be selected. Within each outer source fold, forward-lag
+The component study tests the shared source-media interval across 17 shifts from
+-3 through +5 seconds in 0.5-second increments. Every canonical hook uses the
+same deterministic character projection onto opening CTC word intervals. The
+projection ends only at an acoustic word boundary; internal boundaries that fall
+inside one acoustic word are explicitly estimated and are not eligible for a
+timing outcome unless both component edges are acoustic. Negative shifts are
+falsification controls and can never be selected.
+Within each outer source fold, forward-lag
 selection uses training videos only. Rows are weighted so each source video has
 equal total influence.
 
@@ -201,8 +206,9 @@ The nested exploratory selector prefers +0.5 seconds in three supported random
 folds, but two folds lack sufficient independent category support. Only one of
 four chronological selection folds is supportable. Those incomplete results do
 not override the family and reverse controls. No response lag or component
-response axis validates, so whole-hook timing uses the exact spoken hook end with
-zero added lag.
+response axis validates, so whole-hook timing uses the acoustically aligned hook
+end with zero added lag. CTC boundaries are deterministic model estimates, not
+hand-labeled timestamps.
 
 ## 8. Future-free Hook Hold and replay sensitivities
 
@@ -210,7 +216,7 @@ Hook Hold's primary measured target is entry-indexed:
 
 `R_entry(t) = 100 * R(t) / R(0)`
 
-At exact spoken hook end `T`, the duration-neutral target is:
+At acoustically aligned hook end `T`, the duration-neutral target is:
 
 `carry_entry = 100 * exp(log(R(T) / R(0)) / T)`
 
@@ -230,7 +236,7 @@ For measured source curves, a separate terminal-conditioned replay sensitivity i
 observational sensitivity index, not identified replay counts and not a target
 available from text alone.
 
-At exact spoken hook end `T`, its retrospective carry is:
+At acoustically aligned hook end `T`, its retrospective carry is:
 
 `carry = 100 * exp(log(R_terminal(T)/100) / T)`
 
@@ -254,7 +260,7 @@ points versus 4.471 for the text-free baseline. Its chronological MAE is 4.532
 versus 4.727, but the paired source bootstrap is not significant (p 0.0630 and a
 95% interval crossing zero). Observed-absolute and terminal-conditioned curves
 are fitted and reported separately. Each source maps the 41-position grid to its
-own exact caption-derived endpoint; no value is emitted after that endpoint.
+own source-media acoustic hook endpoint; no value is emitted after that endpoint.
 
 ## 10. Live scorer output
 

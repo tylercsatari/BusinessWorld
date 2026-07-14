@@ -16,6 +16,9 @@ CACHE = HERE / ".cache"
 
 def main() -> None:
     summary = json.loads((CACHE / "cluster-outcomes.json").read_text(encoding="utf-8"))
+    media_alignment = json.loads(
+        (CACHE / "media-alignment.json").read_text(encoding="utf-8")
+    )
     atlas = json.loads((CACHE / "all-span-atlas.json").read_text(encoding="utf-8"))
     manual_projection = json.loads(
         (CACHE / "manual-projection.json").read_text(encoding="utf-8")
@@ -36,8 +39,33 @@ def main() -> None:
     assert summary["randomFoldSupportedFamilyCount"] >= 0
     assert summary["validation"]["labelsChanged"] is False
     assert summary["validation"]["newClusteringFit"] is False
-    assert summary["timingAudit"]["exactHooks"] + summary["timingAudit"]["textMismatchHooks"] \
+    assert summary["timingAudit"]["tokenCoveredHooks"] + summary["timingAudit"]["textMismatchHooks"] \
         + summary["timingAudit"]["missingWordHooks"] == corpus_count
+    assert summary["timingAudit"]["tokenCoveredHooks"] == corpus_count
+    assert summary["timingAudit"]["mediaAlignedHooks"] == corpus_count
+    assert summary["timingAudit"]["textMismatchHooks"] == 0
+    assert summary["timingAudit"]["missingWordHooks"] == 0
+    assert sum(summary["timingAudit"]["mediaAlignmentConfidenceBands"].values()) \
+        == corpus_count
+    hook_alignment = summary["timingAudit"]["hookWordAlignment"]
+    assert hook_alignment["sourceMediaMappedWords"] > 0
+    assert hook_alignment["legacyAnchorInterpolatedWords"] == 0
+    assert 0 < hook_alignment["minimumMappedCoverage"] <= 1
+    assert hook_alignment["minimumMappedCoverage"] <= hook_alignment["meanMappedCoverage"] <= 1
+    assert sum(hook_alignment["canonicalTimingStatusCounts"].values()) == corpus_count
+    endpoint_reference = media_alignment["canonicalHookEndCorrectionSeconds"]
+    assert np.isclose(
+        hook_alignment["medianAbsoluteHookEndCorrectionSeconds"],
+        endpoint_reference["medianAbsolute"], atol=1e-12,
+    )
+    assert np.isclose(
+        hook_alignment["p95AbsoluteHookEndCorrectionSeconds"],
+        endpoint_reference["p95Absolute"], atol=1e-12,
+    )
+    assert np.isclose(
+        hook_alignment["maximumAbsoluteHookEndCorrectionSeconds"],
+        endpoint_reference["maximumAbsolute"], atol=1e-12,
+    )
     selected_ids = set()
     for cluster in summary["clusters"]:
         label = int(cluster["label"])
@@ -71,7 +99,7 @@ def main() -> None:
         "experiments": summary["experimentCount"],
         "validated": summary["validatedFamilyCount"],
         "randomFoldSupported": summary["randomFoldSupportedFamilyCount"],
-        "timedHooks": summary["timingAudit"]["exactHooks"],
+        "timedHooks": summary["timingAudit"]["tokenCoveredHooks"],
     }, indent=2))
 
 

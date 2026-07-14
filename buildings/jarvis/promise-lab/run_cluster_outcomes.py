@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
+import inspect
 import json
 import math
 import os
+import pickle
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -33,8 +36,14 @@ from cluster_outcomes import (
     retention_window_slope,
     search_target_axes,
     span_interval,
+    timing_has_token_cover,
 )
 from embedding_store import R2_PREFIX, R2Store, json_ready
+from media_alignment import (
+    MEDIA_ALIGNMENT_VERSION,
+    apply_media_durations,
+    load_media_alignment,
+)
 
 
 HERE = Path(__file__).resolve().parent
@@ -44,6 +53,9 @@ TIMING_DIR = CACHE / "hook-timing"
 DEFAULT_DIMENSIONS = [4, 8, 16, 32, 64]
 DEFAULT_ALPHAS = [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0]
 OFFSETS = list(range(6))
+GLOBAL_INPUT_CACHE_VERSION = "media-timed-global-inputs-v2"
+GLOBAL_INPUT_CACHE = CACHE / "media-timed-global-inputs.pkl.gz"
+GLOBAL_INPUT_CACHE_META = CACHE / "media-timed-global-inputs-meta.json"
 
 
 def atomic_json(path: Path, value) -> None:
@@ -86,7 +98,7 @@ def load_timing_records(hooks: list[dict], workers: int = 16) -> dict[str, dict]
         else:
             missing.append(video_id)
     if not missing:
-        return output
+        return retime_hook_records(output, hooks)
 
     store = R2Store()
 
@@ -108,6 +120,83 @@ def load_timing_records(hooks: list[dict], workers: int = 16) -> dict[str, dict]
         for job in as_completed(jobs):
             video_id, record = job.result()
             output[video_id] = record
+    return retime_hook_records(output, hooks)
+
+
+def retime_hook_records(records: dict[str, dict], hooks: list[dict] | None = None) -> dict[str, dict]:
+    """Keep curated hook words while moving them onto the shared acoustic clock."""
+    hook_by_id = {
+        str(row["videoId"]): row for row in (hooks or [])
+    }
+    output = {}
+    for video_id, record in records.items():
+        words = record.get("words") or []
+        if not words:
+            output[video_id] = record
+            continue
+        media = load_media_alignment(video_id, CACHE)
+        canonical_text = str(
+            (hook_by_id.get(video_id) or {}).get("text")
+            or record.get("hookText") or ""
+        )
+        hook_alignment = media.get("hookAlignment") or {}
+        resolved = hook_alignment.get("words") or []
+        if not resolved:
+            raise RuntimeError(
+                f"missing canonical-hook source-media alignment for {video_id}; "
+                "run build_media_alignment.py"
+            )
+        direct_cover = exact_token_timings(canonical_text, resolved)
+        if not timing_has_token_cover(direct_cover):
+            raise RuntimeError(
+                f"source-media hook alignment does not cover canonical text for {video_id}"
+            )
+        legacy_end = float(hook_alignment.get("legacyHookEndSeconds") or 0)
+        if legacy_end <= 0:
+            raise RuntimeError(
+                f"canonical hook alignment has no legacy endpoint audit for {video_id}"
+            )
+        aligned_end = max(
+            float(row["t"]) + float(row["d"]) for row in resolved
+        )
+        canonical_audit = {
+            "status": "canonical-hook-source-media-token-cover",
+            "canonicalWords": len(resolved),
+            "referenceWords": len(words),
+            "mappedCoverage": 1.0,
+            "canonicalWordsChanged": False,
+            "outcomesUsed": False,
+            "legacyCaptionWordsUsedForPlacement": False,
+        }
+        audit = {
+            "canonicalWords": len(resolved),
+            "sourceMediaMappedWords": len(resolved),
+            "legacyAnchorInterpolatedWords": 0,
+            "mappedCoverage": 1.0,
+            "alignmentConfidence": hook_alignment.get("confidenceBand"),
+            "alignmentStrategy": hook_alignment.get("alignmentStrategy"),
+            "alignedEndSeconds": aligned_end,
+            "sourceEndSeconds": legacy_end,
+            "outcomesUsed": False,
+        }
+        output[video_id] = {
+            **record,
+            "words": resolved,
+            "transcriptSource": (
+                "canonical hook text mapped to source-media opening CTC intervals"
+            ),
+            "mediaAlignmentAudit": audit,
+            "canonicalTextTimingAudit": canonical_audit,
+            "mediaAlignmentConfidence": hook_alignment.get("confidenceBand"),
+            "openingMediaAlignmentConfidence": media.get("alignment", {}).get("confidenceBand"),
+            "mediaAlignmentMethodVersion": MEDIA_ALIGNMENT_VERSION,
+            "mediaDurationSeconds": media.get("source", {}).get(
+                "mediaDurationSeconds"
+            ),
+            "analyticsDurationSeconds": media.get("source", {}).get(
+                "analyticsDurationSeconds"
+            ),
+        }
     return output
 
 
@@ -171,7 +260,7 @@ def target_definitions() -> dict[str, dict]:
             "unit": "retention ratio per second",
             "offsetSeconds": offset,
             "definition": (
-                "least-squares slope over the exact spoken span interval after shifting both "
+                "least-squares slope over the source-media CTC span interval after shifting both "
                 f"boundaries forward by {offset} second(s)"
             ),
         }
@@ -251,7 +340,15 @@ def build_global_inputs(corpus_rows: list[dict], hooks: list[dict], span_rows: l
     terminals = np.full(hook_count, np.nan, float)
     amplitudes = np.full(hook_count, np.nan, float)
     durations = np.full(hook_count, np.nan, float)
-    exact_hook_ids = []
+    token_covered_hook_ids = []
+    fully_acoustic_token_boundary_hook_ids = []
+    token_timing_status_counts = {}
+    alignment_bands = {"high": 0, "moderate": 0, "low": 0}
+    hook_alignment_coverages = []
+    hook_end_corrections = []
+    hook_words_source_mapped = 0
+    hook_words_legacy_interpolated = 0
+    canonical_timing_status_counts = {}
     mismatched_hook_ids = []
     missing_word_hook_ids = []
 
@@ -265,8 +362,35 @@ def build_global_inputs(corpus_rows: list[dict], hooks: list[dict], span_rows: l
         else:
             timing = {"status": "missing-words", "tokenStarts": [], "tokenEnds": []}
         timing_by_hook.append(timing)
-        if timing["status"] == "exact":
-            exact_hook_ids.append(video_id)
+        band = str(record.get("mediaAlignmentConfidence") or "")
+        if band in alignment_bands:
+            alignment_bands[band] += 1
+        media_audit = record.get("mediaAlignmentAudit") or {}
+        coverage = media_audit.get("mappedCoverage")
+        if coverage is not None:
+            hook_alignment_coverages.append(float(coverage))
+        hook_words_source_mapped += int(media_audit.get("sourceMediaMappedWords") or 0)
+        hook_words_legacy_interpolated += int(
+            media_audit.get("legacyAnchorInterpolatedWords") or 0
+        )
+        aligned_end = media_audit.get("alignedEndSeconds")
+        source_end = media_audit.get("sourceEndSeconds")
+        if aligned_end is not None and source_end is not None:
+            hook_end_corrections.append(float(aligned_end) - float(source_end))
+        canonical_status = str(
+            (record.get("canonicalTextTimingAudit") or {}).get("status") or "unknown"
+        )
+        canonical_timing_status_counts[canonical_status] = (
+            canonical_timing_status_counts.get(canonical_status, 0) + 1
+        )
+        timing_status = str(timing.get("status") or "unknown")
+        token_timing_status_counts[timing_status] = (
+            token_timing_status_counts.get(timing_status, 0) + 1
+        )
+        if timing_has_token_cover(timing):
+            token_covered_hook_ids.append(video_id)
+            if timing_status == "media-aligned-token-cover":
+                fully_acoustic_token_boundary_hook_ids.append(video_id)
         elif timing["status"] == "missing-words":
             missing_word_hook_ids.append(video_id)
         else:
@@ -334,17 +458,144 @@ def build_global_inputs(corpus_rows: list[dict], hooks: list[dict], span_rows: l
         "normalizedSlopes": normalized_slopes,
         "timingAudit": {
             "hooks": hook_count,
-            "exactHooks": len(exact_hook_ids),
-            "exactHookIds": exact_hook_ids,
+            "tokenCoveredHooks": len(token_covered_hook_ids),
+            "tokenCoveredHookIds": token_covered_hook_ids,
+            "mediaAlignedHooks": len(token_covered_hook_ids),
+            "fullyAcousticTokenBoundaryHooks": len(
+                fully_acoustic_token_boundary_hook_ids
+            ),
+            "fullyAcousticTokenBoundaryHookIds": (
+                fully_acoustic_token_boundary_hook_ids
+            ),
+            "tokenTimingStatusCounts": token_timing_status_counts,
+            "mediaAlignmentMethodVersion": MEDIA_ALIGNMENT_VERSION,
+            "mediaAlignmentConfidenceBands": alignment_bands,
+            "hookWordAlignment": {
+                "sourceMediaMappedWords": hook_words_source_mapped,
+                "legacyAnchorInterpolatedWords": hook_words_legacy_interpolated,
+                "meanMappedCoverage": float(np.mean(hook_alignment_coverages)),
+                "minimumMappedCoverage": float(np.min(hook_alignment_coverages)),
+                "p05MappedCoverage": float(np.quantile(hook_alignment_coverages, 0.05)),
+                "canonicalTimingStatusCounts": canonical_timing_status_counts,
+                "medianAbsoluteHookEndCorrectionSeconds": float(
+                    np.median(np.abs(hook_end_corrections))
+                ),
+                "p95AbsoluteHookEndCorrectionSeconds": float(
+                    np.quantile(np.abs(hook_end_corrections), 0.95)
+                ),
+                "maximumAbsoluteHookEndCorrectionSeconds": float(
+                    np.max(np.abs(hook_end_corrections))
+                ),
+            },
             "textMismatchHooks": len(mismatched_hook_ids),
             "textMismatchHookIds": mismatched_hook_ids,
             "missingWordHooks": len(missing_word_hook_ids),
             "missingWordHookIds": missing_word_hook_ids,
-            "spansWithExactPositiveDuration": int(np.isfinite(starts + ends).sum()),
+            "spansWithAcousticBoundarySupport": int(
+                np.isfinite(starts + ends).sum()
+            ),
             "spanInstances": span_count,
-            "policy": "no approximate timestamp is used; mismatches and zero-duration punctuation spans are missing",
+            "policy": (
+                "canonical hook text is placed on the source-media clock using normalized-prefix "
+                "or edit-distance projection onto opening CTC word intervals. "
+                "Within-word token subdivisions remain deterministic estimates; spans whose "
+                "outer boundaries fall inside a word are excluded from timing-sensitive "
+                "targets. No boundary is labeled hand-verified ground truth."
+            ),
         },
     }
+
+
+def global_inputs_cache_key(corpus_rows: list[dict], hooks: list[dict],
+                            span_rows: list[dict], timing_records: dict[str, dict]) -> str:
+    digest = hashlib.sha256(GLOBAL_INPUT_CACHE_VERSION.encode("ascii"))
+    digest.update(hashlib.sha256(
+        inspect.getsource(build_global_inputs).encode("utf-8")
+    ).digest())
+    digest.update(hashlib.sha256(
+        (HERE / "cluster_outcomes.py").read_bytes()
+    ).digest())
+
+    def add(value) -> None:
+        digest.update(json.dumps(
+            json_ready(value), sort_keys=True, separators=(",", ":"),
+            ensure_ascii=True, allow_nan=False,
+        ).encode("ascii"))
+        digest.update(b"\0")
+
+    for row in corpus_rows:
+        add({
+            "id": str(row["id"]), "duration_s": row.get("duration_s"),
+            "curve": row.get("curve") or [],
+        })
+    for row in hooks:
+        add({"videoId": str(row["videoId"]), "text": row.get("text") or ""})
+    for row in span_rows:
+        add({
+            "videoId": str(row["videoId"]), "hookIndex": row["hookIndex"],
+            "start": row["start"], "end": row["end"],
+        })
+    for video_id in sorted(timing_records):
+        record = timing_records[video_id]
+        add({
+            "videoId": video_id,
+            "words": [{
+                "w": row.get("w"), "t": row.get("t"), "d": row.get("d"),
+                "alignmentMethod": row.get("alignmentMethod"),
+                "boundaryAcoustic": row.get("boundaryAcoustic"),
+                "startBoundaryAcoustic": row.get("startBoundaryAcoustic"),
+                "endBoundaryAcoustic": row.get("endBoundaryAcoustic"),
+            } for row in record.get("words") or []],
+            "mediaAlignmentAudit": record.get("mediaAlignmentAudit") or {},
+            "canonicalTextTimingAudit": record.get("canonicalTextTimingAudit") or {},
+            "mediaAlignmentConfidence": record.get("mediaAlignmentConfidence"),
+            "mediaAlignmentMethodVersion": record.get("mediaAlignmentMethodVersion"),
+        })
+    return digest.hexdigest()
+
+
+def load_or_build_global_inputs(corpus_rows: list[dict], hooks: list[dict],
+                                span_rows: list[dict],
+                                timing_records: dict[str, dict]) -> dict:
+    """Share the expensive timing/slope matrix across outcome and latency stages."""
+    key = global_inputs_cache_key(corpus_rows, hooks, span_rows, timing_records)
+    if GLOBAL_INPUT_CACHE.exists() and GLOBAL_INPUT_CACHE_META.exists():
+        try:
+            metadata = read_json(GLOBAL_INPUT_CACHE_META)
+            if (
+                metadata.get("version") == GLOBAL_INPUT_CACHE_VERSION
+                and metadata.get("inputKey") == key
+            ):
+                with gzip.open(GLOBAL_INPUT_CACHE, "rb") as handle:
+                    cached = pickle.load(handle)
+                if (
+                    len(cached.get("spanStarts", [])) == len(span_rows)
+                    and len(cached.get("timingByHook", [])) == len(hooks)
+                ):
+                    print(
+                        f"reused media-timed global inputs for {len(hooks)} hooks and "
+                        f"{len(span_rows)} spans",
+                        flush=True,
+                    )
+                    return cached
+        except (
+            EOFError, OSError, pickle.PickleError, ValueError, TypeError,
+            AttributeError, json.JSONDecodeError,
+        ):
+            pass
+
+    value = build_global_inputs(corpus_rows, hooks, span_rows, timing_records)
+    temporary = GLOBAL_INPUT_CACHE.with_suffix(GLOBAL_INPUT_CACHE.suffix + ".tmp")
+    with gzip.open(temporary, "wb", compresslevel=5) as handle:
+        pickle.dump(value, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    os.replace(temporary, GLOBAL_INPUT_CACHE)
+    atomic_json(GLOBAL_INPUT_CACHE_META, {
+        "version": GLOBAL_INPUT_CACHE_VERSION,
+        "inputKey": key,
+        "hooks": len(hooks),
+        "spans": len(span_rows),
+    })
+    return value
 
 
 def performance_targets(selected: np.ndarray, global_inputs: dict) -> dict[str, np.ndarray]:
@@ -395,6 +646,7 @@ def main() -> None:
     atlas = read_json(CACHE / "all-span-atlas.json")
     manifest = read_json(CACHE / "all-span-manifest.json")
     corpus = read_json(CACHE / "corpus.json")
+    corpus["rows"] = apply_media_durations(corpus["rows"], CACHE)
     manual_projection = read_json(CACHE / "manual-projection.json")
     map_id = str(manual_projection.get("mapId") or "")
     if not map_id:
@@ -409,7 +661,9 @@ def main() -> None:
         raise RuntimeError("frozen labels and all-span rows do not align")
 
     timing_records = load_timing_records(hooks, args.timing_workers)
-    global_inputs = build_global_inputs(corpus["rows"], hooks, span_rows, timing_records)
+    global_inputs = load_or_build_global_inputs(
+        corpus["rows"], hooks, span_rows, timing_records,
+    )
     hook_indices = global_inputs["hookIndices"]
     video_ids = np.asarray([str(row["videoId"]) for row in span_rows])
     raw_store = np.load(VECTOR_DIR / "raw.npy", mmap_mode="r")
@@ -752,7 +1006,7 @@ def main() -> None:
         remote.put_json(f"{R2_PREFIX}/progress.json", {
             "version": 4,
             "status": "complete",
-            "stage": "four frozen clusters quantified against outcomes and exact phrase slopes",
+            "stage": "four frozen clusters quantified against outcomes and media-aligned phrase slopes",
             "clusterOutcomeGroupsComplete": total_targets,
             "clusterOutcomeGroupsTotal": total_targets,
             "experimentsComplete": len(all_experiments),
@@ -762,7 +1016,7 @@ def main() -> None:
         atomic_json(CACHE / "progress.json", {
             "version": 4,
             "status": "complete",
-            "stage": "four frozen clusters quantified against outcomes and exact phrase slopes",
+            "stage": "four frozen clusters quantified against outcomes and media-aligned phrase slopes",
             "clusterOutcomeGroupsComplete": total_targets,
             "clusterOutcomeGroupsTotal": total_targets,
             "experimentsComplete": len(all_experiments),

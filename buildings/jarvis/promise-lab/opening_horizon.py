@@ -1,4 +1,4 @@
-"""Exact fixed-horizon transcript and retention primitives for Promise Lab."""
+"""Media-aligned fixed-horizon transcript and retention primitives."""
 
 from __future__ import annotations
 
@@ -9,6 +9,11 @@ import numpy as np
 
 from cluster_outcomes import retention_at, retention_window_slope
 from deconfounding import NORMALIZATION_CONTRACTS, retention_curve_families
+from media_alignment import (
+    MEDIA_ALIGNMENT_VERSION,
+    load_media_alignment,
+    source_timeline_audit,
+)
 from sequence import normalize_source, tokenize
 
 
@@ -16,7 +21,7 @@ OPENING_HORIZON_SECONDS = 20.0
 OPENING_SAMPLE_STEP_SECONDS = 0.1
 FORWARD_LAGS_SECONDS = tuple(np.arange(0.0, 5.0001, 0.5).astype(float))
 REVERSE_CONTROL_LAGS_SECONDS = (-2.0, -1.0, -0.5)
-METHOD_VERSION = "exact-opening-20s-v2"
+METHOD_VERSION = "media-aligned-opening-20s-v3"
 
 
 def _word_text(row: dict) -> str:
@@ -31,6 +36,20 @@ def _word_start(row: dict) -> float:
         return float("nan")
 
 
+def _word_end(row: dict, start: float) -> float:
+    value = row.get("end", row.get("e"))
+    if value is None:
+        duration = row.get("duration", row.get("d"))
+        try:
+            value = start + float(duration)
+        except (TypeError, ValueError):
+            return float("nan")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float("nan")
+
+
 def _positive_median(values: list[float], fallback: float = 0.25) -> float:
     finite = np.asarray([value for value in values if np.isfinite(value) and value > 0], float)
     return float(np.median(finite)) if len(finite) else float(fallback)
@@ -38,13 +57,11 @@ def _positive_median(values: list[float], fallback: float = 0.25) -> float:
 
 def extract_opening_timeline(words: list[dict],
                              horizon_seconds: float = OPENING_HORIZON_SECONDS) -> dict:
-    """Build a non-overlapping opening timeline from quantized word timestamps.
+    """Build a non-overlapping opening timeline from the best supplied intervals.
 
-    Source records contain word starts but not reliable word ends. Equal timestamps
-    are source-quantization collisions, so collided words divide the interval to the
-    next distinct timestamp by source-character length. Multi-atom source words then
-    divide their resolved word interval the same way. No outcome or semantic label
-    participates in either timing operation.
+    Media-aligned records retain their acoustic start/end estimates. Legacy records
+    with starts only retain the deterministic collision/end resolver. No outcome or
+    semantic label participates in either operation.
     """
     horizon = float(horizon_seconds)
     observed = []
@@ -56,6 +73,19 @@ def extract_opening_timeline(words: list[dict],
                 "sourceIndex": source_index,
                 "text": text,
                 "sourceStartTimestampSeconds": start,
+                "sourceEndTimestampSeconds": _word_end(row, start),
+                "timingSource": row.get("source"),
+                "alignmentStatus": row.get("status"),
+                "alignmentConfidenceScore": row.get("confidenceScore"),
+                "acousticPosteriorGeometricMean": row.get(
+                    "acousticPosteriorGeometricMean"
+                ),
+                "freeDecodeCharacterCoverage": row.get(
+                    "freeDecodeCharacterCoverage"
+                ),
+                "startBoundaryAcoustic": row.get("startBoundaryAcoustic"),
+                "endBoundaryAcoustic": row.get("endBoundaryAcoustic"),
+                "canonicalIndex": row.get("canonicalIndex", source_index),
             })
     if not observed:
         raise ValueError("the video has no timestamped transcript words")
@@ -121,20 +151,33 @@ def extract_opening_timeline(words: list[dict],
         cumulative = np.concatenate([[0.0], np.cumsum(weights)])
         duration = resolved_end - source_start
         for local_index, row in enumerate(group_rows):
-            resolved_start = source_start + duration * cumulative[local_index] / cumulative[-1]
-            word_end = source_start + duration * cumulative[local_index + 1] / cumulative[-1]
+            explicit_end = float(row.get("sourceEndTimestampSeconds", float("nan")))
+            media_interval = (
+                len(group_rows) == 1 and np.isfinite(explicit_end)
+                and explicit_end > source_start
+            )
+            if media_interval:
+                resolved_start = source_start
+                word_end = min(horizon, resolved_end, explicit_end)
+            else:
+                resolved_start = source_start + duration * cumulative[local_index] / cumulative[-1]
+                word_end = source_start + duration * cumulative[local_index + 1] / cumulative[-1]
             row["resolvedStartSeconds"] = float(resolved_start)
             row["resolvedEndSeconds"] = float(word_end)
             row["start"] = float(resolved_start)
             row["end"] = float(word_end)
             row["startResolution"] = (
-                "observed source timestamp"
+                "media-aligned acoustic boundary"
+                if media_interval
+                else "observed source timestamp"
                 if len(group_rows) == 1 or local_index == 0
                 else "intra-collision character interpolation"
             )
             row["timestampCollisionGroupSize"] = len(group_rows)
             row["endInferredFrom"] = (
-                "next distinct observed word start"
+                "media-aligned acoustic boundary"
+                if media_interval
+                else "next distinct observed word start"
                 if group_index + 1 < len(groups)
                 else "median positive distinct transcript interval"
             )
@@ -201,6 +244,26 @@ def extract_opening_timeline(words: list[dict],
                 "timestampCollisionGroupSize": int(
                     row["timestampCollisionGroupSize"]
                 ),
+                "timingSource": row.get("timingSource"),
+                "alignmentStatus": row.get("alignmentStatus"),
+                "alignmentConfidenceScore": row.get(
+                    "alignmentConfidenceScore"
+                ),
+                "acousticPosteriorGeometricMean": row.get(
+                    "acousticPosteriorGeometricMean"
+                ),
+                "freeDecodeCharacterCoverage": row.get(
+                    "freeDecodeCharacterCoverage"
+                ),
+                "spokenStartBoundaryAcoustic": bool(
+                    media_interval and local_index == 0
+                ),
+                "spokenEndBoundaryAcoustic": bool(
+                    media_interval and local_index == len(lexical) - 1
+                ),
+                "timingEstimatedInsideAcousticWord": bool(
+                    not media_interval or len(lexical) > 1
+                ),
             })
         for token in members:
             if token_word_index[token.index] < 0:
@@ -213,7 +276,7 @@ def extract_opening_timeline(words: list[dict],
     supplied = {row["tokenIndex"] for row in timing_rows}
     if supplied != set(lexical_indices):
         missing = sorted(set(lexical_indices) - supplied)
-        raise ValueError(f"exact transcript timing does not cover lexical tokens: {missing[:8]}")
+        raise ValueError(f"source transcript timing does not cover lexical tokens: {missing[:8]}")
     if not timing_rows or max(row["spokenEndSeconds"] for row in timing_rows) > horizon + 1e-8:
         raise ValueError("opening timing extends beyond the fixed horizon")
     if any(
@@ -228,6 +291,12 @@ def extract_opening_timeline(words: list[dict],
     ):
         raise ValueError("resolved transcript tokens must have positive durations")
 
+    media_aligned_words = sum(
+        np.isfinite(float(row.get("sourceEndTimestampSeconds", float("nan"))))
+        and row.get("timingSource") == "local-wav2vec2-ctc-forced-alignment"
+        for row in selected
+    )
+    media_aligned = bool(media_aligned_words == len(selected))
     return {
         "version": 2,
         "methodVersion": METHOD_VERSION,
@@ -243,25 +312,39 @@ def extract_opening_timeline(words: list[dict],
         "spokenStartSeconds": float(min(row["start"] for row in selected)),
         "spokenEndSeconds": float(max(row["spokenEndSeconds"] for row in timing_rows)),
         "timingPolicy": (
+            "deterministic local CTC word boundaries on source-media PCM; canonical words "
+            "unchanged; character-proportional intra-word atoms"
+            if media_aligned else
             "observed quantized source starts; equal-start groups resolved within the next "
             "distinct boundary by character length; inferred word ends; character-proportional "
             "intra-word atoms"
         ),
         "timingExact": False,
-        "wordStartsAuthentic": True,
-        "sourceWordStartTimestampsObserved": True,
-        "resolvedWordStartsObserved": collision_groups == 0,
+        "wordStartsSourceSupported": True,
+        "mediaAligned": media_aligned,
+        "mediaAlignedWordCount": media_aligned_words,
+        "sourceWordStartTimestampsObserved": not media_aligned,
+        "resolvedWordStartsObserved": (not media_aligned and collision_groups == 0),
+        "wordStartsMediaAligned": media_aligned,
         "wordEndsObserved": False,
+        "wordEndsMediaAligned": media_aligned,
         "timestampCollisionGroups": collision_groups,
         "timestampCollisionWords": collision_words,
         "resolvedIntervalsNonoverlapping": True,
-        "tokenToSourceWordAlignmentExact": True,
+        "tokenToSourceWordSequenceCover": True,
         "timingExactScope": (
+            "Every canonical word is forced onto deterministic acoustic CTC frames on the "
+            "source-media clock. These are model-estimated boundaries, not hand-labeled exact "
+            "timestamps."
+            if media_aligned else
             "Source word-start timestamps and token ownership are observed. Equal source "
             "timestamps do not identify within-group order in time, so those starts are resolved "
             "inside the next distinct timestamp interval. Word ends are inferred."
         ),
         "wordEndPolicy": (
+            "Acoustic CTC word ends are retained, clipped at the next canonical start and the "
+            "20.0-second analysis boundary."
+            if media_aligned else
             "Each distinct timestamp group ends at the next distinct observed timestamp, clipped "
             "to 20.0s. Words sharing a timestamp divide that interval by character length; only "
             "a final group without a successor uses the median positive distinct interval."
@@ -271,18 +354,98 @@ def extract_opening_timeline(words: list[dict],
 
 def load_local_opening(video_id: str, project_root: Path,
                        horizon_seconds: float = OPENING_HORIZON_SECONDS) -> dict:
-    import json
-
-    path = project_root / "video_data" / str(video_id) / "analysis.json"
-    if not path.exists():
-        raise FileNotFoundError(f"missing transcript analysis: {path}")
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    cache_dir = Path(__file__).resolve().parent / ".cache"
+    alignment_path = cache_dir / "media-alignment" / f"{video_id}.json"
+    if not alignment_path.exists():
+        raise FileNotFoundError(
+            f"missing required source-media alignment for {video_id}; "
+            "run build_media_alignment.py"
+        )
+    alignment = load_media_alignment(str(video_id), cache_dir)
+    source_path = Path(alignment["source"]["path"])
+    if not source_path.is_absolute():
+        source_path = project_root / source_path
+    timeline_audit = alignment["source"].get("timelineAudit") or source_timeline_audit(
+        source_path
+    )
+    if not timeline_audit["withinAlignmentTolerance"]:
+        raise RuntimeError(f"source-media clock origin is not aligned for {video_id}")
     opening = extract_opening_timeline(
-        ((payload.get("transcript") or {}).get("words") or []),
+        [{
+            "word": row["w"],
+            "timestamp": row["t"],
+            "duration": row["d"],
+            "source": row.get("source"),
+            "status": row.get("status"),
+            "confidenceScore": row.get("confidenceScore"),
+            "acousticPosteriorGeometricMean": row.get(
+                "acousticPosteriorGeometricMean"
+            ),
+            "freeDecodeCharacterCoverage": row.get(
+                "freeDecodeCharacterCoverage"
+            ),
+            "canonicalIndex": row.get("canonicalIndex"),
+        } for row in alignment["words"]],
         horizon_seconds=horizon_seconds,
     )
-    opening["sourcePath"] = str(path.relative_to(project_root))
-    opening["sourceRecord"] = "analysis.json.transcript.words"
+    opening.update({
+        "sourcePath": str(alignment_path.relative_to(project_root)),
+        "sourceRecord": "media-alignment.words",
+        "sourceMediaOrigin": alignment["source"].get("origin"),
+        "sourceMediaPath": alignment["source"].get("path"),
+        "sourceTimelineAudit": timeline_audit,
+        "mediaAlignmentMethodVersion": MEDIA_ALIGNMENT_VERSION,
+        "mediaDurationSeconds": float(alignment["source"]["mediaDurationSeconds"]),
+        "analyticsDurationSeconds": float(
+            alignment["source"]["analyticsDurationSeconds"]
+        ),
+        "durationDeltaSeconds": float(alignment["source"]["durationDeltaSeconds"]),
+        "alignmentConfidence": alignment["alignment"]["confidenceBand"],
+        "alignmentCharacterErrorRate": float(
+            alignment["alignment"]["freeDecodeCharacterErrorRate"]
+        ),
+        "alignmentReviewWordFraction": float(
+            alignment["alignment"]["reviewWordFraction"]
+        ),
+        "timingResolutionSeconds": float(
+            alignment["alignment"]["secondsPerCtcFrame"]
+        ),
+        "alignmentReferenceAudits": alignment["alignment"].get(
+            "referenceAudits"
+        ) or {},
+    })
+    hook_alignment = alignment.get("hookAlignment") or {}
+    hook_words = hook_alignment.get("words") or []
+    if not hook_words:
+        raise RuntimeError(f"canonical hook has no source-media alignment for {video_id}")
+    if not (
+        hook_words[0].get("startBoundaryAcoustic")
+        and hook_words[-1].get("endBoundaryAcoustic")
+    ):
+        raise RuntimeError(f"canonical hook has no acoustic outer interval for {video_id}")
+    opening["alignedHookEndSeconds"] = float(
+        hook_alignment["alignedEndSeconds"]
+    )
+    opening["hookMediaAlignmentAudit"] = {
+        "alignmentStrategy": hook_alignment.get("alignmentStrategy"),
+        "confidenceBand": hook_alignment.get("confidenceBand"),
+        "alignmentCharacterErrorRate": hook_alignment.get(
+            "alignmentCharacterErrorRate"
+        ),
+        "reviewWordFraction": hook_alignment.get("reviewWordFraction"),
+        "estimatedBoundaryWords": sum(
+            not bool(row.get("boundaryAcoustic")) for row in hook_words
+        ),
+        "outerBoundariesAcoustic": True,
+        "legacyHookEndSeconds": hook_alignment.get("legacyHookEndSeconds"),
+        "hookEndCorrectionSeconds": hook_alignment.get("hookEndCorrectionSeconds"),
+        "referenceAudits": hook_alignment.get("referenceAudits") or {},
+        "outcomesUsed": False,
+    }
+    opening["hookCanonicalTextTimingAudit"] = hook_alignment.get(
+        "projectionAudit"
+    ) or {}
+    opening["hookAlignmentMethodVersion"] = hook_alignment.get("methodVersion")
     return opening
 
 
@@ -344,6 +507,7 @@ def component_measurements(component: dict, curve: list[float], duration_seconds
     families = retention_curve_families([raw], np.asarray([terminal], float))
     start = float(component["spokenStartSeconds"])
     end = float(component["spokenEndSeconds"])
+    timing_eligible = bool(component.get("outcomeTimingEligible", True))
 
     def rows_for(lags: tuple[float, ...], kind: str) -> list[dict]:
         rows = []
@@ -351,7 +515,7 @@ def component_measurements(component: dict, curve: list[float], duration_seconds
             left = start + float(lag)
             right = end + float(lag)
             eligible = (
-                left >= 0 and right > left
+                timing_eligible and left >= 0 and right > left
                 and right <= OPENING_HORIZON_SECONDS + 1e-9
                 and right <= float(duration_seconds) + 1e-9
             )
@@ -361,6 +525,11 @@ def component_measurements(component: dict, curve: list[float], duration_seconds
                 "windowStartSeconds": float(left),
                 "windowEndSeconds": float(right),
                 "measuredWithin20s": bool(eligible),
+                "acousticOuterBoundariesSupported": timing_eligible,
+                "exclusionReason": (
+                    None if timing_eligible
+                    else "component outer boundary falls inside an acoustic word interval"
+                ),
             }
             for family, curves in families.items():
                 values = curves[0]
@@ -397,3 +566,25 @@ def component_interval(tokens: list[dict], start: int, end: int) -> tuple[float,
     if not starts or not ends:
         raise ValueError("component has no timed source tokens")
     return min(starts), max(ends)
+
+
+def component_boundary_support(tokens: list[dict], start: int, end: int) -> dict:
+    selected = tokens[int(start):int(end)]
+    lexical = [
+        row for row in selected
+        if any(character.isalnum() or character == "_" for character in row["text"])
+    ]
+    measured = lexical or selected
+    if not measured:
+        raise ValueError("component has no timed source tokens")
+    first = measured[0]
+    last = measured[-1]
+    return {
+        "startBoundaryAcoustic": bool(first.get("spokenStartBoundaryAcoustic")),
+        "endBoundaryAcoustic": bool(last.get("spokenEndBoundaryAcoustic")),
+        "outcomeTimingEligible": bool(
+            first.get("spokenStartBoundaryAcoustic")
+            and last.get("spokenEndBoundaryAcoustic")
+            and float(last["spokenEndSeconds"]) > float(first["spokenStartSeconds"])
+        ),
+    }

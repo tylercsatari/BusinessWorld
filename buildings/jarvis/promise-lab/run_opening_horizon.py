@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and publish exact 20-second Promise Lab opening analyses."""
+"""Build and publish source-media-aligned 20-second opening analyses."""
 
 from __future__ import annotations
 
@@ -36,12 +36,14 @@ from hook_score_core import (
     row_unit,
     weighted_percentile,
 )
+from media_alignment import load_media_alignment, source_timeline_audit
 from opening_horizon import (
     FORWARD_LAGS_SECONDS,
     METHOD_VERSION,
     OPENING_HORIZON_SECONDS,
     REVERSE_CONTROL_LAGS_SECONDS,
     component_interval,
+    component_boundary_support,
     component_measurements,
     curve_payload,
     load_local_opening,
@@ -158,6 +160,12 @@ def content_key(source: dict, opening: dict, partition_model: dict,
         "curve": source.get("curve"),
         "durationSeconds": source.get("duration_s"),
         "originalHookEndSeconds": source.get("hookEndSec"),
+        "mediaAlignedHookEndSeconds": opening.get("alignedHookEndSeconds"),
+        "mediaDurationSeconds": opening.get("mediaDurationSeconds"),
+        "analyticsDurationSeconds": opening.get("analyticsDurationSeconds"),
+        "sourceTimelineAudit": opening.get("sourceTimelineAudit"),
+        "mediaAlignmentMethodVersion": opening.get("mediaAlignmentMethodVersion"),
+        "hookAlignmentMethodVersion": opening.get("hookAlignmentMethodVersion"),
         "text": opening["text"],
         "timingWords": opening["timingWords"],
         "partitionModel": model_hash(partition_model),
@@ -221,6 +229,14 @@ def build_one(source: dict, partition_model: dict, lattice_model: dict,
             full=primitives["full"], partition=partition,
             partition_model=partition_model,
             timing_words=opening["timingWords"], timing_policy=opening["timingPolicy"],
+            timing_metadata={
+                "mediaAligned": opening.get("mediaAligned"),
+                "timingExact": opening.get("timingExact"),
+                "boundaryEstimator": opening.get("mediaAlignmentMethodVersion"),
+                "alignmentConfidence": opening.get("alignmentConfidence"),
+                "timingResolutionSeconds": opening.get("timingResolutionSeconds"),
+                "claimBoundary": opening.get("timingExactScope"),
+            },
             prefix_transition_null=np.asarray(
                 lattice_model.get("prefixTransitionNullSorted") or [], np.float32,
             ),
@@ -240,11 +256,21 @@ def build_one(source: dict, partition_model: dict, lattice_model: dict,
             )
         os.replace(temporary_vectors, vector_path)
 
-        retention = curve_payload(source.get("curve") or [], source.get("duration_s"))
+        media_duration = float(
+            opening.get("mediaDurationSeconds") or source.get("duration_s")
+        )
+        retention = curve_payload(source.get("curve") or [], media_duration)
         node_lookup = {row["id"]: row for row in lattice["nodes"]}
         components = []
+        hook_end_seconds = float(
+            opening.get("alignedHookEndSeconds")
+            or source.get("hookEndSec") or 0
+        )
         for index, chunk in enumerate(partition["chunks"]):
             start, end = component_interval(
+                lattice["tokens"], int(chunk["start"]), int(chunk["end"]),
+            )
+            boundary_support = component_boundary_support(
                 lattice["tokens"], int(chunk["start"]), int(chunk["end"]),
             )
             component = {
@@ -261,13 +287,14 @@ def build_one(source: dict, partition_model: dict, lattice_model: dict,
                 "mapY": chunk.get("mapY"),
                 "spokenStartSeconds": start,
                 "spokenEndSeconds": end,
-                "insideOriginalHook": end <= float(source.get("hookEndSec") or 0) + 1e-9,
+                **boundary_support,
+                "insideOriginalHook": end <= hook_end_seconds + 1e-9,
                 "crossesOriginalHookCut": (
-                    start < float(source.get("hookEndSec") or 0) < end
+                    start < hook_end_seconds < end
                 ),
             }
             component["measurements"] = component_measurements(
-                component, source.get("curve") or [], float(source.get("duration_s")),
+                component, source.get("curve") or [], media_duration,
             )
             lattice_node = node_lookup.get(component["nodeId"]) or {}
             component["maps"] = lattice_node.get("maps") or {}
@@ -277,16 +304,25 @@ def build_one(source: dict, partition_model: dict, lattice_model: dict,
         lattice.update({
             "analysisScope": "source transcript and measured retention from 0.0 through 20.0 seconds",
             "analysisHorizonSeconds": OPENING_HORIZON_SECONDS,
-            "originalHookEndSeconds": source.get("hookEndSec"),
+            "originalHookEndSeconds": hook_end_seconds,
             "opening": {
-                key_name: opening[key_name] for key_name in (
+                key_name: opening.get(key_name) for key_name in (
                     "horizonSeconds", "wordCount", "tokenCount", "lexicalTokenCount",
                     "spokenStartSeconds", "spokenEndSeconds", "timingPolicy",
                     "timingExact", "wordEndPolicy", "sourcePath", "sourceRecord",
+                    "sourceMediaOrigin", "sourceMediaPath", "sourceTimelineAudit",
                     "sourceWordStartTimestampsObserved", "resolvedWordStartsObserved",
                     "timestampCollisionGroups", "timestampCollisionWords",
                     "resolvedIntervalsNonoverlapping", "wordEndsObserved",
-                    "tokenToSourceWordAlignmentExact", "timingExactScope",
+                    "tokenToSourceWordSequenceCover", "timingExactScope",
+                    "mediaAligned", "mediaAlignedWordCount", "wordStartsMediaAligned",
+                    "wordEndsMediaAligned", "mediaAlignmentMethodVersion",
+                    "mediaDurationSeconds", "analyticsDurationSeconds",
+                    "durationDeltaSeconds", "alignmentConfidence",
+                    "alignmentCharacterErrorRate", "alignmentReviewWordFraction",
+                    "timingResolutionSeconds", "alignmentReferenceAudits",
+                    "alignedHookEndSeconds", "hookMediaAlignmentAudit",
+                    "hookCanonicalTextTimingAudit", "hookAlignmentMethodVersion",
                 )
             },
             "retention": retention,
@@ -299,12 +335,21 @@ def build_one(source: dict, partition_model: dict, lattice_model: dict,
                 "viewedPercent": source.get("keep_rate"),
                 "averageRetention": source.get("avg_retention"),
                 "durationSeconds": source.get("duration_s"),
+                "mediaDurationSeconds": media_duration,
+                "analyticsDurationSeconds": source.get("duration_s"),
                 "originalHookEndSeconds": source.get("hookEndSec"),
+                "mediaAlignedHookEndSeconds": hook_end_seconds,
                 "published": source.get("published"),
             },
             "horizonContract": {
-                "semanticInput": "every transcript word whose observed source timestamp is before 20.0 seconds",
-                "outcomeInput": "the measured source retention curve interpolated only through 20.0 seconds",
+                "semanticInput": (
+                    "the unchanged canonical transcript forced onto source-media acoustic "
+                    "frames through 20.0 seconds"
+                ),
+                "outcomeInput": (
+                    "the measured analytics retention curve mapped to actual source-media "
+                    "duration and interpolated only through 20.0 seconds"
+                ),
                 "forecastBeyondSourceText": False,
                 "forecastBeyond20Seconds": False,
                 "fourCategoryModelReused": True,
@@ -390,6 +435,11 @@ def load_cached_source_structures(
             "canonicalComponents": components,
             "spanCount": int(detail.get("spanCount") or 0),
             "tokenCount": int(detail.get("tokenCount") or 0),
+            "mediaDurationSeconds": float(
+                (detail.get("opening") or {}).get("mediaDurationSeconds")
+                or (detail.get("sourceRecord") or {}).get("mediaDurationSeconds")
+                or source.get("duration_s")
+            ),
         }
     return details
 
@@ -507,7 +557,10 @@ def fit_responses(corpus: list[dict], details: dict[str, dict],
     source_indices = np.asarray(source_indices, int)
     categories = np.asarray(categories, int)
     groups = np.asarray(groups).astype(str)
-    durations = np.asarray([float(row["duration_s"]) for row in corpus], np.float32)
+    durations = np.asarray([
+        float(details[str(row["id"])].get("mediaDurationSeconds") or row["duration_s"])
+        for row in corpus
+    ], np.float32)
     raw_curves = [np.asarray(row.get("curve") or [], float) for row in corpus]
     entries = np.asarray([curve[0] for curve in raw_curves], np.float32)
     terminals = np.asarray([
@@ -1137,8 +1190,42 @@ def attach_length_support(detail: dict, support: dict) -> None:
         }
 
 
-def attach_timing_precision(detail: dict) -> None:
+def attach_timing_precision(detail: dict, alignment: dict | None = None) -> None:
     opening = detail.setdefault("opening", {})
+    video_id = str(detail.get("videoId") or "test-fixture")
+    alignment = alignment or load_media_alignment(video_id, CACHE)
+    source_path = Path(alignment["source"]["path"])
+    if not source_path.is_absolute():
+        source_path = ROOT / source_path
+    source_timeline = alignment["source"].get("timelineAudit") or source_timeline_audit(
+        source_path
+    )
+    if not source_timeline["withinAlignmentTolerance"]:
+        raise RuntimeError(f"source-media clock origin is not aligned for {video_id}")
+    opening.update({
+        "sourceMediaOrigin": alignment["source"].get("origin"),
+        "sourceMediaPath": alignment["source"].get("path"),
+        "sourceTimelineAudit": source_timeline,
+        "mediaAlignmentMethodVersion": alignment.get("methodVersion"),
+        "mediaDurationSeconds": float(alignment["source"]["mediaDurationSeconds"]),
+        "analyticsDurationSeconds": float(
+            alignment["source"]["analyticsDurationSeconds"]
+        ),
+        "durationDeltaSeconds": float(alignment["source"]["durationDeltaSeconds"]),
+        "alignmentConfidence": alignment["alignment"]["confidenceBand"],
+        "alignmentCharacterErrorRate": float(
+            alignment["alignment"]["freeDecodeCharacterErrorRate"]
+        ),
+        "alignmentReviewWordFraction": float(
+            alignment["alignment"]["reviewWordFraction"]
+        ),
+        "timingResolutionSeconds": float(
+            alignment["alignment"]["secondsPerCtcFrame"]
+        ),
+        "alignmentReferenceAudits": alignment["alignment"].get(
+            "referenceAudits"
+        ) or {},
+    })
     detail["openingAnalysisMethodVersion"] = METHOD_VERSION
     opening["methodVersion"] = METHOD_VERSION
     collision_groups = int(opening.get("timestampCollisionGroups") or 0)
@@ -1146,50 +1233,88 @@ def attach_timing_precision(detail: dict) -> None:
     resolved_starts_observed = bool(
         opening.get("resolvedWordStartsObserved", collision_groups == 0)
     )
+    media_aligned = bool(opening.get("mediaAligned"))
     contract = detail.setdefault("timingContract", {})
-    contract.update({
-        "source": "observed-quantized-word-starts-with-collision-resolution-and-inferred-ends",
-        "exact": False,
-        "sourceWordStartTimestampsObserved": True,
-        "sourceWordStartsObserved": True,
-        "resolvedWordStartsObserved": resolved_starts_observed,
-        "sourceWordEndsObserved": False,
-        "timestampCollisionGroups": collision_groups,
-        "timestampCollisionWords": collision_words,
-        "resolvedIntervalsNonoverlapping": bool(
-            opening.get("resolvedIntervalsNonoverlapping", True)
-        ),
-        "tokenToSourceWordAlignmentExact": True,
-        "collisionResolution": (
-            "words sharing one observed timestamp divide the interval to the next distinct "
-            "timestamp in source order, weighted by source-character length"
-        ),
-        "endInference": (
-            "each distinct timestamp group ends at the next distinct observed timestamp, "
-            "clipped at 20.0s"
-        ),
-        "claimBoundary": (
-            "Transcript words and their quantized source timestamps are observed. Equal timestamps "
-            "do not identify separate within-group starts, so those starts are deterministically "
-            "resolved inside the next distinct interval. Word ends are not present in analysis.json."
-        ),
-    })
+    if media_aligned:
+        contract.update({
+            "source": "local-wav2vec2-ctc-forced-alignment-on-source-media-pcm",
+            "exact": False,
+            "mediaAligned": True,
+            "boundaryEstimator": opening.get("mediaAlignmentMethodVersion"),
+            "alignmentConfidence": opening.get("alignmentConfidence"),
+            "alignmentCharacterErrorRate": opening.get(
+                "alignmentCharacterErrorRate"
+            ),
+            "alignmentReviewWordFraction": opening.get(
+                "alignmentReviewWordFraction"
+            ),
+            "timingResolutionSeconds": opening.get("timingResolutionSeconds"),
+            "sourceWordStartTimestampsObserved": False,
+            "sourceWordStartsObserved": False,
+            "resolvedWordStartsObserved": False,
+            "sourceWordStartsMediaAligned": True,
+            "sourceWordEndsObserved": False,
+            "sourceWordEndsMediaAligned": True,
+            "timestampCollisionGroups": collision_groups,
+            "timestampCollisionWords": collision_words,
+            "resolvedIntervalsNonoverlapping": bool(
+                opening.get("resolvedIntervalsNonoverlapping", True)
+            ),
+            "tokenToSourceWordSequenceCover": True,
+            "collisionResolution": "acoustic CTC frames resolve canonical word order directly",
+            "endInference": (
+                "CTC-estimated word end clipped at the next canonical start and 20.0 seconds"
+            ),
+            "claimBoundary": opening.get("timingExactScope"),
+        })
+    else:
+        contract.update({
+            "source": "observed-quantized-word-starts-with-collision-resolution-and-inferred-ends",
+            "exact": False,
+            "mediaAligned": False,
+            "sourceWordStartTimestampsObserved": True,
+            "sourceWordStartsObserved": True,
+            "resolvedWordStartsObserved": resolved_starts_observed,
+            "sourceWordEndsObserved": False,
+            "timestampCollisionGroups": collision_groups,
+            "timestampCollisionWords": collision_words,
+            "resolvedIntervalsNonoverlapping": bool(
+                opening.get("resolvedIntervalsNonoverlapping", True)
+            ),
+            "tokenToSourceWordSequenceCover": True,
+            "collisionResolution": (
+                "words sharing one observed timestamp divide the interval to the next distinct "
+                "timestamp in source order, weighted by source-character length"
+            ),
+            "endInference": (
+                "each distinct timestamp group ends at the next distinct observed timestamp, "
+                "clipped at 20.0s"
+            ),
+            "claimBoundary": (
+                "Transcript words and their quantized source timestamps are observed. Equal "
+                "timestamps are resolved deterministically; word ends are inferred."
+            ),
+        })
     opening.update({
         "timingExact": False,
-        "wordStartsAuthentic": True,
-        "sourceWordStartTimestampsObserved": True,
-        "resolvedWordStartsObserved": resolved_starts_observed,
+        "wordStartsSourceSupported": True,
+        "sourceWordStartTimestampsObserved": not media_aligned,
+        "resolvedWordStartsObserved": resolved_starts_observed if not media_aligned else False,
+        "wordStartsMediaAligned": media_aligned,
         "wordEndsObserved": False,
+        "wordEndsMediaAligned": media_aligned,
         "timestampCollisionGroups": collision_groups,
         "timestampCollisionWords": collision_words,
         "resolvedIntervalsNonoverlapping": bool(
             opening.get("resolvedIntervalsNonoverlapping", True)
         ),
-        "tokenToSourceWordAlignmentExact": True,
+        "tokenToSourceWordSequenceCover": True,
     })
 
 
 def summary_row(detail: dict) -> dict:
+    opening = detail.get("opening") or {}
+    timing = detail.get("timingContract") or {}
     response_values = [
         (row.get("opening20sResponse") or {}).get(
             "servingAxisPercentileFullFit",
@@ -1204,41 +1329,60 @@ def summary_row(detail: dict) -> dict:
         "text": detail.get("text"),
         "url": detail.get("url"),
         "tokenCount": detail.get("tokenCount"),
-        "wordCount": (detail.get("opening") or {}).get("wordCount"),
+        "wordCount": opening.get("wordCount"),
         "componentCount": len(detail.get("canonicalComponents") or []),
         "categorySequence": [
             int(row["category"]) for row in detail.get("canonicalComponents") or []
         ],
         "spanCount": detail.get("spanCount"),
         "edgeCount": len(detail.get("edges") or []),
-        "timingSource": (detail.get("timingContract") or {}).get("source"),
-        "timingExact": (detail.get("timingContract") or {}).get("exact"),
-        "wordStartsAuthentic": bool(
-            (detail.get("timingContract") or {}).get(
-                "sourceWordStartTimestampsObserved"
+        "timingSource": timing.get("source"),
+        "timingExact": timing.get("exact"),
+        "mediaAligned": bool(timing.get("mediaAligned")),
+        "wordStartsMediaAligned": bool(timing.get("sourceWordStartsMediaAligned")),
+        "wordEndsMediaAligned": bool(timing.get("sourceWordEndsMediaAligned")),
+        "alignmentConfidence": timing.get("alignmentConfidence"),
+        "alignmentCharacterErrorRate": timing.get("alignmentCharacterErrorRate"),
+        "alignmentReviewWordFraction": timing.get("alignmentReviewWordFraction"),
+        "timingResolutionSeconds": timing.get("timingResolutionSeconds"),
+        "mediaDurationSeconds": opening.get("mediaDurationSeconds"),
+        "analyticsDurationSeconds": opening.get("analyticsDurationSeconds"),
+        "durationDeltaSeconds": opening.get("durationDeltaSeconds"),
+        "sourceMediaOrigin": opening.get("sourceMediaOrigin"),
+        "sourceClockOffsetSeconds": (
+            (opening.get("sourceTimelineAudit") or {}).get(
+                "audioMinusReferenceStartSeconds"
             )
+        ),
+        "sourceClockReference": (
+            (opening.get("sourceTimelineAudit") or {}).get("referenceClock")
+        ),
+        "alignmentReferenceAudits": opening.get("alignmentReferenceAudits") or {},
+        "hookAlignmentReferenceAudits": (
+            (opening.get("hookMediaAlignmentAudit") or {}).get("referenceAudits")
+            or {}
+        ),
+        "wordStartsSourceSupported": bool(
+            timing.get("sourceWordStartTimestampsObserved")
+            or timing.get("sourceWordStartsMediaAligned")
         ),
         "sourceWordStartTimestampsObserved": bool(
-            (detail.get("timingContract") or {}).get(
-                "sourceWordStartTimestampsObserved"
-            )
+            timing.get("sourceWordStartTimestampsObserved")
         ),
         "resolvedWordStartsObserved": bool(
-            (detail.get("timingContract") or {}).get("resolvedWordStartsObserved")
+            timing.get("resolvedWordStartsObserved")
         ),
         "timestampCollisionGroups": int(
-            (detail.get("timingContract") or {}).get("timestampCollisionGroups") or 0
+            timing.get("timestampCollisionGroups") or 0
         ),
         "timestampCollisionWords": int(
-            (detail.get("timingContract") or {}).get("timestampCollisionWords") or 0
+            timing.get("timestampCollisionWords") or 0
         ),
         "resolvedIntervalsNonoverlapping": bool(
-            (detail.get("timingContract") or {}).get(
-                "resolvedIntervalsNonoverlapping"
-            )
+            timing.get("resolvedIntervalsNonoverlapping")
         ),
         "wordEndsObserved": bool(
-            (detail.get("timingContract") or {}).get("sourceWordEndsObserved")
+            timing.get("sourceWordEndsObserved")
         ),
         "originalHookEndSeconds": detail.get("originalHookEndSeconds"),
         "retentionAt5Seconds": retention_at(
@@ -1452,6 +1596,10 @@ def main() -> None:
                     "canonicalComponents": detail["canonicalComponents"],
                     "spanCount": int(detail.get("spanCount") or 0),
                     "tokenCount": int(detail.get("tokenCount") or 0),
+                    "mediaDurationSeconds": float(
+                        (detail.get("opening") or {}).get("mediaDurationSeconds")
+                        or source.get("duration_s")
+                    ),
                 }
                 del detail
                 gc.collect()
@@ -1523,19 +1671,126 @@ def main() -> None:
         detail = read_gzip_json(DETAILS / f"{source['id']}.json.gz")
         rows.append(summary_row(detail))
         del detail
+    aligned_rows = [row for row in rows if row.get("mediaAligned")]
+    confidence_bands = {
+        band: sum(row.get("alignmentConfidence") == band for row in aligned_rows)
+        for band in ("high", "moderate", "low")
+    }
+    character_errors = [
+        float(row["alignmentCharacterErrorRate"])
+        for row in aligned_rows if row.get("alignmentCharacterErrorRate") is not None
+    ]
+    review_fractions = [
+        float(row["alignmentReviewWordFraction"])
+        for row in aligned_rows if row.get("alignmentReviewWordFraction") is not None
+    ]
+    timing_resolutions = [
+        float(row["timingResolutionSeconds"])
+        for row in aligned_rows if row.get("timingResolutionSeconds") is not None
+    ]
+    source_clock_offsets = [
+        float(row["sourceClockOffsetSeconds"])
+        for row in aligned_rows if row.get("sourceClockOffsetSeconds") is not None
+    ]
+    independent_timing_audits = [
+        (row.get("alignmentReferenceAudits") or {}).get(
+            "independentWhisperBaseWords"
+        )
+        for row in aligned_rows
+    ]
+    independent_timing_audits = [
+        audit for audit in independent_timing_audits if audit
+    ]
+    independent_hook_timing_audits = [
+        (row.get("hookAlignmentReferenceAudits") or {}).get(
+            "independentWhisperBaseWords"
+        )
+        for row in aligned_rows
+    ]
+    independent_hook_timing_audits = [
+        audit for audit in independent_hook_timing_audits if audit
+    ]
+    independent_hook_endpoint_errors = [
+        float(audit["finalMatchedWordEndAbsoluteErrorSeconds"])
+        for audit in independent_hook_timing_audits
+        if audit.get("finalMatchedWordEndAbsoluteErrorSeconds") is not None
+    ]
     summary = {
         "version": 1,
         "status": "complete",
-        "stage": "exact 20-second opening analysis",
+        "stage": "media-aligned 20-second opening analysis",
         "methodVersion": METHOD_VERSION,
         "analysisHorizonSeconds": OPENING_HORIZON_SECONDS,
         "sourceVideos": len(rows),
         "sourceVideosWithExactTiming": sum(bool(row["timingExact"]) for row in rows),
+        "sourceVideosWithMediaAlignedWordIntervals": len(aligned_rows),
+        "sourceMediaOrigins": dict(sorted(Counter(
+            str(row.get("sourceMediaOrigin") or "unknown")
+            for row in aligned_rows
+        ).items())),
+        "mediaAlignmentConfidenceBands": confidence_bands,
+        "meanMediaAlignmentCharacterErrorRate": (
+            float(np.mean(character_errors)) if character_errors else None
+        ),
+        "meanMediaAlignmentReviewWordFraction": (
+            float(np.mean(review_fractions)) if review_fractions else None
+        ),
+        "mediaTimingResolutionSecondsMedian": (
+            float(np.median(timing_resolutions)) if timing_resolutions else None
+        ),
+        "maximumAbsoluteSourceClockOffsetSeconds": (
+            float(np.max(np.abs(source_clock_offsets)))
+            if source_clock_offsets else None
+        ),
+        "independentTimingAudit": {
+            "method": "Whisper free-decode word timestamps",
+            "auditedVideos": len(independent_timing_audits),
+            "medianMappedCoverage": (
+                float(np.median([
+                    float(audit["mappedCoverage"])
+                    for audit in independent_timing_audits
+                ])) if independent_timing_audits else None
+            ),
+            "medianStartAgreementSeconds": (
+                float(np.median([
+                    float(audit["startMedianAbsoluteErrorSeconds"])
+                    for audit in independent_timing_audits
+                ])) if independent_timing_audits else None
+            ),
+            "p95StartAgreementSeconds": (
+                float(np.quantile([
+                    float(audit["startP95AbsoluteErrorSeconds"])
+                    for audit in independent_timing_audits
+                ], 0.95)) if independent_timing_audits else None
+            ),
+            "p95Aggregation": (
+                "95th percentile across per-video 95th-percentile absolute word-start errors"
+            ),
+            "forcedCanonicalTextUsed": False,
+            "outcomesUsed": False,
+            "referenceIsGroundTruth": False,
+        },
+        "independentHookEndpointAudit": {
+            "method": "Whisper free-decode final matched word end",
+            "auditedVideos": len(independent_hook_timing_audits),
+            "auditedFinalHookEndpoints": len(independent_hook_endpoint_errors),
+            "medianEndAgreementSeconds": (
+                float(np.median(independent_hook_endpoint_errors))
+                if independent_hook_endpoint_errors else None
+            ),
+            "p95EndAgreementSeconds": (
+                float(np.quantile(independent_hook_endpoint_errors, 0.95))
+                if independent_hook_endpoint_errors else None
+            ),
+            "forcedCanonicalTextUsed": False,
+            "outcomesUsed": False,
+            "referenceIsGroundTruth": False,
+        },
         "sourceVideosWithObservedWordStartTimestamps": sum(
             bool(row["sourceWordStartTimestampsObserved"]) for row in rows
         ),
-        "sourceVideosWithAuthenticWordStarts": sum(
-            bool(row["sourceWordStartTimestampsObserved"]) for row in rows
+        "sourceVideosWithSourceSupportedWordStarts": sum(
+            bool(row["wordStartsSourceSupported"]) for row in rows
         ),
         "sourceVideosWithFullyObservedResolvedWordStarts": sum(
             bool(row["resolvedWordStartsObserved"]) for row in rows

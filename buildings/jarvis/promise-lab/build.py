@@ -23,7 +23,9 @@ def main() -> None:
     parser.add_argument("--from-stage", choices=(
         "interventions", "discovery", "atlas", "all-spans", "verify-all-spans",
         "all-span-atlas", "manual-probe", "manual-projection",
-        "verify-manual-projection", "cluster-outcomes",
+        "verify-manual-projection", "media-alignment", "audit-media-alignment",
+        "verify-media-alignment",
+        "cluster-outcomes",
         "verify-cluster-outcomes", "latency-study", "verify-latency-study",
         "canonical-partitions", "verify-canonical-partitions", "hook-quality",
         "verify-hook-quality", "forward-response", "verify-forward-response",
@@ -45,6 +47,9 @@ def main() -> None:
         ("manual-probe", "run_manual_probe.py"),
         ("manual-projection", "run_manual_projection.py"),
         ("verify-manual-projection", "verify_manual_projection.py"),
+        ("media-alignment", "build_media_alignment.py"),
+        ("audit-media-alignment", "audit_media_alignment.py"),
+        ("verify-media-alignment", "verify_media_alignment.py"),
         ("cluster-outcomes", "run_cluster_outcomes.py"),
         ("verify-cluster-outcomes", "verify_cluster_outcomes.py"),
         ("latency-study", "run_latency_study.py"),
@@ -73,7 +78,9 @@ def main() -> None:
     for stage, script in order[start:]:
         supports_no_upload = stage not in {
             "verify-all-spans",
-            "verify-manual-projection", "verify-cluster-outcomes",
+            "verify-manual-projection", "media-alignment", "audit-media-alignment",
+            "verify-media-alignment",
+            "verify-cluster-outcomes",
             "verify-latency-study", "verify-canonical-partitions",
             "verify-hook-quality", "verify-forward-response",
             "verify-hook-outcomes", "verify-market-reward",

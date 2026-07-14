@@ -29,7 +29,8 @@ from latency_study import (
     transfer_correlation_matrix,
     window_intervals,
 )
-from run_cluster_outcomes import build_global_inputs, load_timing_records
+from run_cluster_outcomes import load_or_build_global_inputs, load_timing_records
+from media_alignment import apply_media_durations
 
 
 HERE = Path(__file__).resolve().parent
@@ -249,6 +250,7 @@ def main() -> None:
     atlas = read_json(CACHE / "all-span-atlas.json")
     manifest = read_json(CACHE / "all-span-manifest.json")
     corpus = read_json(CACHE / "corpus.json")
+    corpus["rows"] = apply_media_durations(corpus["rows"], CACHE)
     manual_projection = read_json(CACHE / "manual-projection.json")
     map_id = str(manual_projection.get("mapId") or "")
     if not map_id:
@@ -260,7 +262,9 @@ def main() -> None:
     span_rows = manifest["rows"]
     hooks = manifest["hooks"]
     timing_records = load_timing_records(hooks, args.timing_workers)
-    global_inputs = build_global_inputs(corpus["rows"], hooks, span_rows, timing_records)
+    global_inputs = load_or_build_global_inputs(
+        corpus["rows"], hooks, span_rows, timing_records,
+    )
     hook_indices = global_inputs["hookIndices"].astype(int)
     video_ids = np.asarray([str(row["videoId"]) for row in span_rows])
     durations = global_inputs["durations"].astype(float)

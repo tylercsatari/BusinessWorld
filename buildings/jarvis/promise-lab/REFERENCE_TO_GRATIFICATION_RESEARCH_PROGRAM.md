@@ -108,7 +108,13 @@ At the start of this program:
 
 - 211 videos are indexed.
 - 208 have hooks and retention curves complete enough for the current study.
-- Each complete video has an exact hook text and hook endpoint.
+- Each complete video has an exact canonical hook text and a deterministic
+  source-media hook endpoint with an explicit confidence/audit record. Every
+  hook is projected onto the same opening CTC intervals: normalized zero-edit
+  prefixes and lexical variants use one character-edit algorithm, and the
+  endpoint must be an acoustic opening-word boundary. Internal within-word cuts
+  remain visible estimates and are excluded from timing-sensitive outcomes when
+  a component lacks acoustic support at either outer edge.
 - Each exact hook has a 1,536-dimensional `gemini-embedding-2` vector in the
   same text space used by Long Quant.
 - Published titles have vectors in the same space.
@@ -117,7 +123,12 @@ At the start of this program:
 - Retention curves contain 100 normalized samples across video duration.
 - Word-level transcript timelines contain 20 to 60 words and generally cover
   the first 3.8 to 12.7 seconds, with a median near 12.1 seconds.
-- 131 transcripts came from local Whisper and 77 from YouTube captions.
+- Source audio is resolved for all 208 videos: 133 from BusinessWorld media and
+  75 from a public YouTube audio cache. Canonical transcript text is unchanged;
+  Wav2Vec2 CTC supplies timing and Whisper-base independently audits all 208
+  openings. Full-opening lexical context pairs 204 final hook endpoints without
+  confusing repeated words; median endpoint disagreement is 0.046 seconds and
+  p95 is 0.146 seconds. Unpaired endpoints remain unavailable.
 - 189 hook cuts were selected by a model and 19 were selected by Tyler.
 - 45 stored hook-word counts disagree with the actual hook text; discrepancies
   reach 31 words. Word counts must be recomputed from source text, while the
@@ -131,7 +142,8 @@ reasons in the report.
 
 For video `i`:
 
-- `H_i` is the exact spoken hook.
+- `H_i` is the canonical hook transcript; its word intervals are deterministic
+  source-media CTC estimates and are never described as hand-labeled exact time.
 - `E(H_i)` is its existing Long Quant text embedding.
 - `T_i` is the published title and `E(T_i)` its embedding.
 - `W_i = {w_i1 ... w_im}` is the timestamped word sequence.
@@ -318,7 +330,7 @@ shapes.
 
 1. Absolute seconds from video start.
 2. Fraction of full video duration.
-3. Seconds relative to exact hook end.
+3. Seconds relative to the acoustically aligned hook end.
 4. Fraction of video relative to hook end.
 5. Seconds relative to each component's beginning and end.
 6. Word index relative to each component.
@@ -436,7 +448,7 @@ confound. It is not assumed to measure the spoken promise.
 
 ### 10.1 Timing and language delivery
 
-- exact hook duration,
+- acoustically aligned hook duration,
 - hook duration uncertainty,
 - hook endpoint selection method,
 - actual token count,
@@ -715,7 +727,8 @@ Until then the UI must say "candidate relationship," never "RTG score."
 The Long Quant Gratification tab becomes a research console with:
 
 - corpus integrity and exclusions,
-- source hook browser with exact words/timestamps,
+- source hook browser with exact canonical words and model-estimated acoustic
+  timestamps,
 - multi-resolution component lattice,
 - component/context graph,
 - unlabeled cluster explorer with numeric IDs,

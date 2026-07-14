@@ -18,7 +18,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 sys.path.insert(0, str(ROOT))
 
-from longquant_score import cache_vecs, load_map, r2_get  # noqa: E402
+from longquant_score import cache_arrays, load_map, r2_get  # noqa: E402
 from embedding_store import R2_PREFIX, R2Store, json_ready  # noqa: E402
 
 
@@ -32,27 +32,32 @@ def main() -> None:
     parser.add_argument("--no-upload", action="store_true")
     args = parser.parse_args()
 
-    vectors = cache_vecs("text")
+    archive = cache_arrays("text", ("vecs", "ids", "views"))
+    vectors = archive["vecs"]
+    row_ids = np.asarray(archive["ids"]).astype(str)
+    views = np.asarray(archive["views"], np.float32)
     mapping = load_map("text")
-    views = np.asarray(mapping.get("views") or [], np.float32)
+    if len(row_ids) != len(set(row_ids.tolist())):
+        raise RuntimeError("Long Quant embedding archive contains duplicate video IDs")
     valid = np.flatnonzero(np.isfinite(views) & (views > 0))
-    if len(valid) != len(vectors):
-        raise RuntimeError("Long Quant text vectors and observed view labels differ")
+    if len(valid) < 100:
+        raise RuntimeError("Long Quant embedding archive has too few observed view labels")
     target = np.log10(views[valid]).astype(np.float32)
     rng = np.random.default_rng(SEED)
-    order = rng.permutation(valid)
+    order = rng.permutation(len(valid))
     cut = int(round(len(order) * .7))
     train, test = order[:cut], order[cut:]
+    valid_vectors = vectors if len(valid) == len(vectors) else vectors[valid]
 
     heldout_model = Ridge(alpha=ALPHA, solver="lsqr", tol=1e-5).fit(
-        vectors[train], target[train],
+        valid_vectors[train], target[train],
     )
-    prediction = heldout_model.predict(vectors[test]).astype(np.float32)
+    prediction = heldout_model.predict(valid_vectors[test]).astype(np.float32)
     residual = target[test] - prediction
     full_model = Ridge(alpha=ALPHA, solver="lsqr", tol=1e-5).fit(
-        vectors[valid], target,
+        valid_vectors, target,
     )
-    training_prediction = full_model.predict(vectors[valid]).astype(np.float32)
+    training_prediction = full_model.predict(valid_vectors).astype(np.float32)
 
     stats = {}
     stats_payload = r2_get("longform/stats.json")
@@ -68,6 +73,10 @@ def main() -> None:
         "methodVersion": "long-quant-title-log-views-prior-v1",
         "embeddingInput": "complete hook text embedded in the same Gemini 1536D text space as Long Quant titles",
         "target": "log10 observed long-form views",
+        "rowIdentity": (
+            "vectors, IDs, and observed views are read from the same content-addressed "
+            "raw-long text embedding archive; map.json is never used as a positional label join"
+        ),
         "coefficient": np.round(np.asarray(full_model.coef_, np.float32), 8),
         "intercept": float(full_model.intercept_),
         "trainingPredictionMean": float(np.mean(training_prediction)),
@@ -77,8 +86,10 @@ def main() -> None:
         "corpus": {
             "storedLongFormRecords": stored,
             "embeddedTitleRecords": int(len(vectors)),
+            "labeledTitleRecords": int(len(valid)),
             "embeddedCoverageFraction": float(len(vectors) / max(stored, 1)),
             "mapReportedRecords": int(mapping.get("n") or len(vectors)),
+            "mapArchiveRowDelta": int((mapping.get("n") or 0) - len(vectors)),
             "mapUpdated": mapping.get("updated"),
         },
         "validation": {

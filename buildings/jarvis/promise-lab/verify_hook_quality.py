@@ -73,7 +73,8 @@ def main() -> None:
     assert len(latency["lagsSeconds"]) == 23
     assert len(latency["windows"]) == 5
     assert len(latency["rows"]) == 115
-    assert 0 <= latency["timingAudit"]["exactSources"] <= training_count
+    assert 0 <= latency["timingAudit"]["mediaAlignedSources"] <= training_count
+    assert 0 <= latency["timingAudit"]["componentsWithAcousticBoundarySupport"]
     assert (latency["selectedLagSeconds"] is not None) == bool(latency["latencySupported"])
     print(json.dumps({
         "status": "verified",

@@ -232,10 +232,35 @@ class ComponentLatticeTest(unittest.TestCase):
             timing_policy="observed quantized starts with inferred word ends",
         )
         self.assertFalse(contract["exact"])
-        self.assertTrue(contract["sourceAlignmentExact"])
+        self.assertTrue(contract["sourceAlignmentTokenCover"])
         self.assertTrue(contract["wordIntervalsInferred"])
         self.assertEqual(contract["source"], "source-aligned-inferred-intervals")
         self.assertEqual(timing[0]["sourceStartTimestampSeconds"], 0.1)
+
+    def test_media_aligned_intervals_carry_estimator_provenance(self):
+        tokens = tokenize("alpha beta")
+        words = [
+            {"tokenIndex": 0, "text": "alpha", "spokenStartSeconds": 0.1,
+             "spokenEndSeconds": 0.4, "alignmentStatus": "ctc-forced"},
+            {"tokenIndex": 1, "text": "beta", "spokenStartSeconds": 0.4,
+             "spokenEndSeconds": 0.8, "alignmentStatus": "ctc-forced"},
+        ]
+        timing, contract = exact_or_estimated_timing(
+            tokens, words, timing_policy="source-media CTC alignment",
+            timing_metadata={
+                "mediaAligned": True,
+                "timingExact": False,
+                "boundaryEstimator": "promise-media-clock-v1",
+                "alignmentConfidence": "high",
+                "timingResolutionSeconds": 0.02,
+                "claimBoundary": "estimated acoustic boundaries",
+            },
+        )
+        self.assertFalse(contract["exact"])
+        self.assertTrue(contract["mediaAligned"])
+        self.assertEqual(contract["source"], "source-media-ctc-estimated-intervals")
+        self.assertEqual(contract["boundaryEstimator"], "promise-media-clock-v1")
+        self.assertEqual(timing[0]["alignmentStatus"], "ctc-forced")
 
     def test_missing_spoken_token_forces_estimated_timing(self):
         tokens = tokenize("alpha beta")

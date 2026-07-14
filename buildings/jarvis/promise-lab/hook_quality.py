@@ -42,11 +42,12 @@ def retention_inputs(corpus: list[dict], token_counts: np.ndarray) -> dict:
         normalized_curves.append(curve)
         meta_rows.append(meta)
         duration = float(row.get("duration_s") or np.nan)
-        hook_end = float(row.get("hookEndSec") or np.nan)
+        hook_end = float(row.get("mediaAlignedHookEndSec") or np.nan)
         if len(curve):
             for column, second in enumerate((3.0, 5.0, 8.0, 10.0)):
                 matrix[index, column] = retention_at(curve, duration, second)
-            matrix[index, 4] = retention_at(curve, duration, hook_end)
+            if np.isfinite(duration + hook_end):
+                matrix[index, 4] = retention_at(curve, duration, hook_end)
             if np.isfinite(duration + hook_end) and hook_end + 5 <= duration:
                 values = [retention_at(curve, duration, second)
                           for second in np.linspace(hook_end, hook_end + 5, 21)]

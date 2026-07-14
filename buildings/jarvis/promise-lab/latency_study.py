@@ -31,7 +31,7 @@ DEFAULT_LAGS = np.round(np.arange(-3.0, 8.0001, 0.5), 2)
 DEFAULT_WINDOWS = (
     WindowSpec(
         "phrase", "Whole phrase shifted", "phrase", None,
-        "the exact spoken start-to-end interval, shifted by the tested lag",
+        "the source-media CTC start-to-end interval, shifted by the tested lag",
     ),
     WindowSpec(
         "onset_1s", "1s after phrase starts", "onset", 1.0,

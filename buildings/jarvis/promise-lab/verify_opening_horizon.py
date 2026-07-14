@@ -50,12 +50,34 @@ def verify_detail(detail: dict, summary_row: dict, model: dict) -> dict:
 
     opening = detail["opening"]
     timing = detail["timingContract"]
-    assert opening["sourceWordStartTimestampsObserved"] is True
+    assert opening["mediaAligned"] is True
+    assert opening["sourceWordStartTimestampsObserved"] is False
+    assert opening["wordStartsMediaAligned"] is True
+    assert opening["wordEndsMediaAligned"] is True
     assert opening["wordEndsObserved"] is False
     assert opening["resolvedIntervalsNonoverlapping"] is True
-    assert timing["sourceWordStartTimestampsObserved"] is True
+    assert timing["mediaAligned"] is True
+    assert timing["sourceWordStartTimestampsObserved"] is False
+    assert timing["sourceWordStartsMediaAligned"] is True
+    assert timing["sourceWordEndsMediaAligned"] is True
     assert timing["sourceWordEndsObserved"] is False
     assert timing["resolvedIntervalsNonoverlapping"] is True
+    assert timing["alignmentConfidence"] in {"high", "moderate", "low"}
+    assert 0 < float(timing["timingResolutionSeconds"]) < 0.03
+    assert float(opening["mediaDurationSeconds"]) >= OPENING_HORIZON_SECONDS
+    source_timeline = opening["sourceTimelineAudit"]
+    assert source_timeline["withinAlignmentTolerance"] is True
+    assert abs(float(source_timeline["audioMinusReferenceStartSeconds"])) <= 0.03
+    assert 0 < float(opening["alignedHookEndSeconds"]) <= OPENING_HORIZON_SECONDS
+    if timing["alignmentConfidence"] == "low":
+        independent = opening["alignmentReferenceAudits"][
+            "independentWhisperBaseWords"
+        ]
+        assert independent["forcedCanonicalTextUsed"] is False
+        assert independent["outcomesUsed"] is False
+        assert independent["referenceIsGroundTruth"] is False
+        assert 0 < float(independent["mappedCoverage"]) <= 1
+        assert float(independent["startMedianAbsoluteErrorSeconds"]) >= 0
 
     tokens = detail["tokens"]
     token_count = int(detail["tokenCount"])
@@ -167,6 +189,7 @@ def verify_detail(detail: dict, summary_row: dict, model: dict) -> dict:
 def main() -> None:
     summary = load_json(CACHE / "opening-20s.json")
     model = load_json(CACHE / "opening-20s-model.json")
+    media_alignment = load_json(CACHE / "media-alignment.json")
     corpus = load_json(CACHE / "corpus.json")["rows"]
     rows = summary["rows"]
     expected_ids = {str(row["id"]) for row in corpus}
@@ -180,7 +203,49 @@ def main() -> None:
     assert int(summary["embeddingDimensions"]) == int(model["embeddingDimensions"]) == DIMENSIONS
     assert int(summary["sourceVideos"]) == len(corpus) == len(rows)
     assert actual_ids == expected_ids
-    assert int(summary["sourceVideosWithObservedWordStartTimestamps"]) == len(rows)
+    assert media_alignment["status"] == "complete"
+    assert int(media_alignment["mediaAlignedVideos"]) == len(rows)
+    assert int(media_alignment["canonicalWords"]) > 0
+    assert sum(media_alignment["confidenceBands"].values()) == len(rows)
+    assert int(summary["sourceVideosWithObservedWordStartTimestamps"]) == 0
+    assert int(summary["sourceVideosWithMediaAlignedWordIntervals"]) == len(rows)
+    assert summary["sourceMediaOrigins"] == media_alignment["sourceOrigins"]
+    assert int(summary["sourceVideosWithSourceSupportedWordStarts"]) == len(rows)
+    assert sum(summary["mediaAlignmentConfidenceBands"].values()) == len(rows)
+    assert 0 < float(summary["mediaTimingResolutionSecondsMedian"]) < 0.03
+    assert float(summary["maximumAbsoluteSourceClockOffsetSeconds"]) <= 0.03
+    independent = summary["independentTimingAudit"]
+    alignment_independent = media_alignment["independentWhisperAudit"]
+    assert int(independent["auditedVideos"]) == int(
+        alignment_independent["auditedVideos"]
+    )
+    assert int(independent["auditedVideos"]) == len(rows)
+    assert independent["forcedCanonicalTextUsed"] is False
+    assert independent["outcomesUsed"] is False
+    assert independent["referenceIsGroundTruth"] is False
+    assert "per-video 95th-percentile" in independent["p95Aggregation"]
+    hook_endpoint = summary["independentHookEndpointAudit"]
+    alignment_hook_endpoint = media_alignment["independentWhisperHookAudit"]
+    assert int(hook_endpoint["auditedVideos"]) == int(
+        alignment_hook_endpoint["auditedVideos"]
+    ) == len(rows)
+    assert int(hook_endpoint["auditedFinalHookEndpoints"]) == int(
+        alignment_hook_endpoint["auditedFinalHookEndpoints"]
+    )
+    assert 0 < int(hook_endpoint["auditedFinalHookEndpoints"]) <= len(rows)
+    assert np.isclose(
+        float(hook_endpoint["medianEndAgreementSeconds"]),
+        float(alignment_hook_endpoint["medianFinalHookEndpointAgreementSeconds"]),
+        atol=1e-12,
+    )
+    assert np.isclose(
+        float(hook_endpoint["p95EndAgreementSeconds"]),
+        float(alignment_hook_endpoint["p95FinalHookEndpointAgreementSeconds"]),
+        atol=1e-12,
+    )
+    assert hook_endpoint["forcedCanonicalTextUsed"] is False
+    assert hook_endpoint["outcomesUsed"] is False
+    assert hook_endpoint["referenceIsGroundTruth"] is False
     assert int(summary["sourceVideosWithNonoverlappingResolvedIntervals"]) == len(rows)
     assert int(summary["categoryCount"]) == int(model["validation"]["categoryCount"]) == 4
     assert summary["partitionContract"]["variableComponentCount"] is True
@@ -210,7 +275,28 @@ def main() -> None:
     totals = {"tokens": 0, "components": 0, "spans": 0, "edges": 0}
     category_totals = {category: 0 for category in range(4)}
     component_counts = set()
+    media_rows = {
+        str(row["videoId"]): row for row in media_alignment["rows"]
+    }
+    assert set(media_rows) == expected_ids
     for index, row in enumerate(rows, start=1):
+        media_row = media_rows[str(row["videoId"])]
+        assert math.isclose(
+            float(row["mediaDurationSeconds"]),
+            float(media_row["mediaDurationSeconds"]),
+            rel_tol=0.0, abs_tol=1e-9,
+        )
+        assert math.isclose(
+            float(row["analyticsDurationSeconds"]),
+            float(media_row["analyticsDurationSeconds"]),
+            rel_tol=0.0, abs_tol=1e-9,
+        )
+        assert math.isclose(
+            float(row["durationDeltaSeconds"]),
+            float(media_row["mediaDurationSeconds"])
+            - float(media_row["analyticsDurationSeconds"]),
+            rel_tol=0.0, abs_tol=1e-9,
+        )
         checked = verify_detail(load_detail(str(row["videoId"])), row, model)
         component_counts.add(checked["components"])
         for key in totals:

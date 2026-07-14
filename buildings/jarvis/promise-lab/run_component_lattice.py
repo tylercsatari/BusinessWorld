@@ -22,6 +22,7 @@ from component_lattice import (
     prefix_transition_distances,
 )
 from embedding_store import DIMENSIONS, MODEL, R2_PREFIX, EmbeddingStore, R2Store, json_ready
+from media_alignment import load_media_alignment
 from sequence import tokenize
 
 
@@ -185,6 +186,21 @@ def main() -> None:
         partition = partition_by_id[video_id]
         outcome = outcome_by_id[video_id]
         source = corpus_by_id[video_id]
+        media_alignment = load_media_alignment(video_id, CACHE)
+        alignment_contract = {
+            "mediaAligned": True,
+            "timingExact": False,
+            "boundaryEstimator": media_alignment.get("methodVersion"),
+            "alignmentConfidence": (media_alignment.get("alignment") or {}).get(
+                "confidenceBand"
+            ),
+            "timingResolutionSeconds": (media_alignment.get("alignment") or {}).get(
+                "secondsPerCtcFrame"
+            ),
+            "claimBoundary": (media_alignment.get("timingContract") or {}).get(
+                "claimBoundary"
+            ),
+        }
         title = str(source.get("title") or "").strip()
         content_key = hashlib.sha256(json.dumps({
             "version": LATTICE_VERSION,
@@ -200,6 +216,8 @@ def main() -> None:
             "timing": {
                 "policy": (outcome.get("retentionForecast") or {}).get("wordTimingPolicy"),
                 "words": (outcome.get("retentionForecast") or {}).get("words"),
+                "mediaAlignmentInputKey": media_alignment.get("inputKey"),
+                "contract": alignment_contract,
             },
             "storedOutcome": outcome,
             "prefixTransitionNullHash": transition_null_hash,
@@ -223,6 +241,7 @@ def main() -> None:
                 partition=partition, partition_model=partition_model,
                 timing_words=(outcome.get("retentionForecast") or {}).get("words"),
                 timing_policy=(outcome.get("retentionForecast") or {}).get("wordTimingPolicy"),
+                timing_metadata=alignment_contract,
                 words_per_second=float((outcome_model.get("speakingRate") or {}).get("meanWordsPerSecond") or 1),
                 prefix_transition_null=transition_null,
                 idea_text=title, idea_vector=title_vectors.get(title),

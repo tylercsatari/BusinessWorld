@@ -18,6 +18,7 @@ from cluster_outcomes import (
     entry_terminal_diagnostic,
     exact_token_timings,
     span_interval,
+    timing_has_token_cover,
 )
 from embedding_store import R2_PREFIX, EmbeddingStore, R2Store, json_ready
 from hook_quality import (
@@ -42,6 +43,7 @@ from latency_study import (
     window_intervals,
 )
 from run_cluster_outcomes import load_timing_records
+from media_alignment import apply_media_durations
 from sequence import tokenize, without
 
 
@@ -90,15 +92,14 @@ def deterministic_orthogonal(features: np.ndarray, direction: np.ndarray) -> np.
 
 def component_latency(corpus: list[dict], hooks: list[dict], partitions: list[dict],
                       component_scores: np.ndarray, curve_inputs: dict,
-                      timing_workers: int, repeats: int) -> dict:
-    timing_records = load_timing_records(hooks, timing_workers)
+                      timing_records: dict, repeats: int) -> dict:
     hook_by_id = {str(row["videoId"]): row for row in hooks}
     corpus_by_id = {str(row["id"]): row for row in corpus}
     starts = []
     ends = []
     groups = []
     hook_indices = []
-    exact_sources = set()
+    media_aligned_sources = set()
     timing_status = defaultdict(int)
     for hook_index, partition in enumerate(partitions):
         video_id = str(partition["videoId"])
@@ -107,8 +108,8 @@ def component_latency(corpus: list[dict], hooks: list[dict], partitions: list[di
             str(hook_by_id[video_id]["text"]), record.get("words") or [],
         ) if record.get("words") else {"status": "missing-words"}
         timing_status[str(timing.get("status"))] += 1
-        if timing.get("status") == "exact":
-            exact_sources.add(video_id)
+        if timing_has_token_cover(timing):
+            media_aligned_sources.add(video_id)
         for chunk in partition["chunks"]:
             start, end = span_interval(timing, int(chunk["start"]), int(chunk["end"]))
             starts.append(start)
@@ -193,9 +194,12 @@ def component_latency(corpus: list[dict], hooks: list[dict], partitions: list[di
         "windows": [{"id": spec.id, "label": spec.label, "definition": spec.definition}
                     for spec in DEFAULT_WINDOWS],
         "timingAudit": {
-            "sources": len(partitions), "exactSources": len(exact_sources),
+            "sources": len(partitions),
+            "mediaAlignedSources": len(media_aligned_sources),
             "statusCounts": dict(timing_status),
-            "componentsWithExactPositiveDuration": int(np.isfinite(starts + ends).sum()),
+            "componentsWithAcousticBoundarySupport": int(
+                np.isfinite(starts + ends).sum()
+            ),
         },
         "naturalDrop": natural_drop,
         "measurement": measurement,
@@ -232,7 +236,7 @@ def main() -> None:
     started = time.time()
 
     corpus_payload = read_json(CACHE / "corpus.json")
-    corpus = corpus_payload["rows"]
+    corpus = apply_media_durations(corpus_payload["rows"], CACHE)
     manifest = read_json(CACHE / "all-span-manifest.json")
     partitions_payload = read_json(CACHE / "canonical-partitions.json")
     partition_model = read_json(CACHE / "canonical-partition-model.json")
@@ -241,6 +245,24 @@ def main() -> None:
         raise RuntimeError("corpus and all-span hook order do not match")
     if [str(row["id"]) for row in corpus] != [str(row["videoId"]) for row in partitions]:
         raise RuntimeError("canonical partition order does not match the corpus")
+
+    timing_records = load_timing_records(manifest["hooks"], args.timing_workers)
+    for corpus_row, hook, partition in zip(corpus, manifest["hooks"], partitions):
+        video_id = str(hook["videoId"])
+        record = timing_records.get(video_id) or {}
+        timing = exact_token_timings(
+            str(hook.get("text") or corpus_row.get("hookText") or ""),
+            record.get("words") or [],
+        )
+        _, hook_end = span_interval(
+            timing, 0, len(partition.get("tokens") or []),
+        )
+        if not np.isfinite(hook_end):
+            raise RuntimeError(
+                f"stored hook lacks an acoustically supported endpoint: {video_id}"
+            )
+        corpus_row["legacyHookEndSec"] = corpus_row.get("hookEndSec")
+        corpus_row["mediaAlignedHookEndSec"] = float(hook_end)
 
     features = row_unit(np.asarray(
         np.load(VECTOR_DIR / "full.npy", mmap_mode="r"), np.float32,
@@ -471,7 +493,7 @@ def main() -> None:
         )
     latency = component_latency(
         corpus, manifest["hooks"], partitions, np.asarray(component_oof_scores, float),
-        curve_inputs, args.timing_workers, args.latency_repeats,
+        curve_inputs, timing_records, args.latency_repeats,
     )
 
     full_projection = features @ direction

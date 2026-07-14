@@ -39,8 +39,14 @@ def main() -> None:
         assert score["primaryScore"] == market
         assert market["status"] == market_model["status"]
         assert 0 <= float(market["percentile"]) <= 100
-        assert market["modelEligibleForTraining"] is True
-        assert market["eligibleForTraining"] is market["domainEligibleForTraining"]
+        expected_model_eligible = (
+            market_model["status"] == "validated-cross-source-local-retention-proxy"
+        )
+        assert market["modelEligibleForTraining"] == expected_model_eligible
+        assert market["eligibleForTraining"] == bool(
+            market["modelEligibleForTraining"]
+            and market["domainEligibleForTraining"]
+        )
         if market["eligibleForTraining"]:
             assert abs(float(market["reward"]) - float(market["percentile"]) / 100) < 1e-9
         else:

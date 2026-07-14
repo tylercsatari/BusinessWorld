@@ -32,7 +32,13 @@ def main() -> None:
     assert np.isclose(lags[0], -3) and np.isclose(lags[-1], 8)
     assert np.allclose(np.diff(lags), .5)
     assert len(summary["windows"]) == 5
-    assert 0 <= summary["timingAudit"]["exactHooks"] <= corpus_count
+    assert summary["timingAudit"]["tokenCoveredHooks"] == corpus_count
+    assert summary["timingAudit"]["mediaAlignedHooks"] == corpus_count
+    assert summary["timingAudit"]["textMismatchHooks"] == 0
+    assert summary["timingAudit"]["missingWordHooks"] == 0
+    assert sum(summary["timingAudit"]["mediaAlignmentConfidenceBands"].values()) \
+        == corpus_count
+    assert summary["timingAudit"]["hookWordAlignment"]["minimumMappedCoverage"] > 0
     assert len(summary["sourceCurves"]) == corpus_count
     assert len(summary["sourceEqualNaturalDrop"]) == 33
     assert summary["method"]["causalClaim"] is False
@@ -78,7 +84,7 @@ def main() -> None:
         "clusters": len(summary["clusters"]),
         "lags": len(lags),
         "windows": len(summary["windows"]),
-        "timedHooks": summary["timingAudit"]["exactHooks"],
+        "timedHooks": summary["timingAudit"]["tokenCoveredHooks"],
         "curveResolutionMedianSeconds": summary["curveResolution"]["medianSampleSeconds"],
     }, indent=2))
 

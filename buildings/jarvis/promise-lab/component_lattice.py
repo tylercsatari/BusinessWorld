@@ -130,7 +130,8 @@ def _token_dict(token) -> dict:
 
 def exact_or_estimated_timing(tokens: list, words: list[dict] | None = None,
                               words_per_second: float = 3.9175191560311324,
-                              timing_policy: str | None = None) -> tuple[list[dict], dict]:
+                              timing_policy: str | None = None,
+                              timing_metadata: dict | None = None) -> tuple[list[dict], dict]:
     """Return one auditable timing row per source atom without changing tokenization."""
     token_rows = [_token_dict(token) for token in tokens]
     supplied = {int(row.get("tokenIndex", -1)): row for row in (words or [])}
@@ -151,14 +152,22 @@ def exact_or_estimated_timing(tokens: list, words: list[dict] | None = None,
             == str(token_rows[index]["text"]).casefold()
             for index in lexical_indices
         )
-    inferred_intervals = source_aligned and any(
-        marker in policy_text for marker in ("quantized", "inferred", "resolved")
-    )
-    timing_exact = source_aligned and not inferred_intervals
+    declared = timing_metadata or {}
+    media_aligned = bool(source_aligned and declared.get("mediaAligned"))
+    if timing_metadata is not None:
+        timing_exact = bool(source_aligned and declared.get("timingExact"))
+        inferred_intervals = bool(source_aligned and not timing_exact)
+    else:
+        inferred_intervals = source_aligned and any(
+            marker in policy_text for marker in ("quantized", "inferred", "resolved")
+        )
+        timing_exact = source_aligned and not inferred_intervals
     timing_source = (
+        "source-media-ctc-estimated-intervals"
+        if media_aligned else
         "source-aligned-inferred-intervals"
         if source_aligned and inferred_intervals else
-        "exact-caption-alignment"
+        "source-caption-token-cover"
         if source_aligned else
         "corpus-mean-speaking-rate"
     )
@@ -167,15 +176,29 @@ def exact_or_estimated_timing(tokens: list, words: list[dict] | None = None,
     for token in token_rows:
         index = token["index"]
         provenance = {}
+        start_boundary_acoustic = False
+        end_boundary_acoustic = False
+        timing_estimated_inside_word = False
         if source_aligned and index in supplied:
             source = supplied[index]
             start = float(source.get("spokenStartSeconds") or 0)
             end = float(source.get("spokenEndSeconds") or start)
+            start_boundary_acoustic = bool(
+                source.get("spokenStartBoundaryAcoustic")
+            )
+            end_boundary_acoustic = bool(
+                source.get("spokenEndBoundaryAcoustic")
+            )
+            timing_estimated_inside_word = bool(
+                source.get("timingEstimatedInsideAcousticWord")
+            )
             provenance = {
                 key: source[key] for key in (
                     "sourceWordIndex", "sourceWord", "sourceStartTimestampSeconds",
                     "resolvedSourceWordStartSeconds", "resolvedSourceWordEndSeconds",
                     "startResolution", "timestampCollisionGroupSize",
+                    "timingSource", "alignmentStatus", "alignmentConfidenceScore",
+                    "acousticPosteriorGeometricMean", "freeDecodeCharacterCoverage",
                 ) if key in source
             }
         elif source_aligned:
@@ -193,6 +216,14 @@ def exact_or_estimated_timing(tokens: list, words: list[dict] | None = None,
                 float(following.get("spokenStartSeconds") or 0)
             )
             start = end = boundary
+            if previous is not None:
+                start_boundary_acoustic = end_boundary_acoustic = bool(
+                    previous.get("spokenEndBoundaryAcoustic")
+                )
+            elif following is not None:
+                start_boundary_acoustic = end_boundary_acoustic = bool(
+                    following.get("spokenStartBoundaryAcoustic")
+                )
         else:
             lexical = any(character.isalnum() or character == "_" for character in token["text"])
             start = lexical_seen / max(words_per_second, EPS)
@@ -200,19 +231,64 @@ def exact_or_estimated_timing(tokens: list, words: list[dict] | None = None,
             end = lexical_seen / max(words_per_second, EPS)
         output.append({
             **token, "spokenStartSeconds": start, "spokenEndSeconds": end,
+            "spokenStartBoundaryAcoustic": start_boundary_acoustic,
+            "spokenEndBoundaryAcoustic": end_boundary_acoustic,
+            "timingEstimatedInsideAcousticWord": timing_estimated_inside_word,
             "timingSource": timing_source, **provenance,
         })
     return output, {
         "source": timing_source,
         "exact": timing_exact,
-        "sourceAlignmentExact": source_aligned,
+        "sourceAlignmentTokenCover": source_aligned,
         "wordIntervalsInferred": inferred_intervals,
+        "mediaAligned": media_aligned,
+        "boundaryEstimator": declared.get("boundaryEstimator"),
+        "alignmentConfidence": declared.get("alignmentConfidence"),
+        "timingResolutionSeconds": declared.get("timingResolutionSeconds"),
+        "lexicalStartBoundariesAcoustic": sum(
+            row["spokenStartBoundaryAcoustic"]
+            and any(character.isalnum() or character == "_" for character in row["text"])
+            for row in output
+        ),
+        "lexicalEndBoundariesAcoustic": sum(
+            row["spokenEndBoundaryAcoustic"]
+            and any(character.isalnum() or character == "_" for character in row["text"])
+            for row in output
+        ),
         "wordsPerSecond": None if source_aligned else float(words_per_second),
         "claimBoundary": (
+            str(declared.get("claimBoundary"))
+            if declared.get("claimBoundary") else
             "Stored source intervals are used when every lexical atom aligns; a supplied policy "
             "declares whether those intervals are observed or inferred. Unspoken punctuation gets "
             "a zero-duration adjacent boundary. Live or incomplete text uses the frozen corpus mean "
             "speaking rate and is explicitly an estimate."
+        ),
+    }
+
+
+def span_timing_interval(timing: list[dict], start: int, end: int) -> dict:
+    selected = timing[int(start):int(end)]
+    lexical = [
+        row for row in selected
+        if any(character.isalnum() or character == "_" for character in row["text"])
+    ]
+    measured = lexical or selected
+    if not measured:
+        raise ValueError("component has no timed source tokens")
+    first = measured[0]
+    last = measured[-1]
+    start_seconds = float(first["spokenStartSeconds"])
+    end_seconds = float(last["spokenEndSeconds"])
+    start_acoustic = bool(first.get("spokenStartBoundaryAcoustic"))
+    end_acoustic = bool(last.get("spokenEndBoundaryAcoustic"))
+    return {
+        "startSeconds": start_seconds,
+        "endSeconds": end_seconds,
+        "startBoundaryAcoustic": start_acoustic,
+        "endBoundaryAcoustic": end_acoustic,
+        "outcomeTimingEligible": bool(
+            start_acoustic and end_acoustic and end_seconds > start_seconds
         ),
     }
 
@@ -495,6 +571,7 @@ def build_component_lattice(*, text: str, tokens: list, starts: np.ndarray, ends
                             nonadditive: np.ndarray, full: np.ndarray, partition: dict,
                             partition_model: dict, timing_words: list[dict] | None = None,
                             timing_policy: str | None = None,
+                            timing_metadata: dict | None = None,
                             words_per_second: float = 3.9175191560311324,
                             prefix_transition_null: np.ndarray | None = None,
                             idea_text: str | None = None, idea_vector: np.ndarray | None = None,
@@ -512,7 +589,7 @@ def build_component_lattice(*, text: str, tokens: list, starts: np.ndarray, ends
     token_rows = [_token_dict(token) for token in tokens]
     n = len(token_rows)
     timing, timing_contract = exact_or_estimated_timing(
-        token_rows, timing_words, words_per_second, timing_policy,
+        token_rows, timing_words, words_per_second, timing_policy, timing_metadata,
     )
     lookup = {(int(start), int(end)): index for index, (start, end) in enumerate(zip(starts, ends))}
     expected = n * (n + 1) // 2
@@ -601,13 +678,21 @@ def build_component_lattice(*, text: str, tokens: list, starts: np.ndarray, ends
                 float(np.linalg.norm(prefix_transition)), title_zero,
             )
             resolutions = memberships[(start, end)]
+            timing_interval = span_timing_interval(timing, start, end)
             node = {
                 "id": f"span:{start}:{end}", "type": "component", "index": index,
                 "globalSpanIndex": (global_span_offset + index) if global_span_offset is not None else None,
                 "start": start, "end": end, "tokenCount": end - start, "text": span_text,
                 "charStart": token_rows[start]["start"], "charEnd": token_rows[end - 1]["end"],
-                "spokenStartSeconds": timing[start]["spokenStartSeconds"],
-                "spokenEndSeconds": timing[end - 1]["spokenEndSeconds"],
+                "spokenStartSeconds": timing_interval["startSeconds"],
+                "spokenEndSeconds": timing_interval["endSeconds"],
+                "spokenStartBoundaryAcoustic": timing_interval[
+                    "startBoundaryAcoustic"
+                ],
+                "spokenEndBoundaryAcoustic": timing_interval[
+                    "endBoundaryAcoustic"
+                ],
+                "outcomeTimingEligible": timing_interval["outcomeTimingEligible"],
                 "timingSource": timing_contract["source"],
                 "resolutions": resolutions, "candidateStatus": status,
                 "rejectionReasons": rejection,

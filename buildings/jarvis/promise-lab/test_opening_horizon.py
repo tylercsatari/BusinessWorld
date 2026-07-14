@@ -31,6 +31,7 @@ from embedding_store import DIMENSIONS
 from forward_response import ResponseCandidate
 from deconfounding import retention_curve_families
 from sequence import tokenize
+from media_alignment import retime_word_records_to_media
 
 
 HERE = Path(__file__).resolve().parent
@@ -38,6 +39,31 @@ ROOT = HERE.parents[2]
 
 
 class OpeningHorizonTest(unittest.TestCase):
+    @staticmethod
+    def timing_alignment_fixture():
+        return {
+            "methodVersion": "promise-media-clock-v1",
+            "source": {
+                "origin": "test-source",
+                "path": "unused.wav",
+                "mediaDurationSeconds": 30.0,
+                "analyticsDurationSeconds": 30.0,
+                "durationDeltaSeconds": 0.0,
+                "timelineAudit": {
+                    "withinAlignmentTolerance": True,
+                    "audioMinusReferenceStartSeconds": 0.0,
+                    "referenceClock": "container format",
+                },
+            },
+            "alignment": {
+                "confidenceBand": "high",
+                "freeDecodeCharacterErrorRate": 0.05,
+                "reviewWordFraction": 0.1,
+                "secondsPerCtcFrame": 0.02002,
+                "referenceAudits": {},
+            },
+        }
+
     def test_response_only_cache_loader_validates_structure_and_vector_alignment(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -64,7 +90,7 @@ class OpeningHorizonTest(unittest.TestCase):
                 full=np.zeros(DIMENSIONS, np.float16),
             )
             loaded = load_cached_source_structures(
-                [{"id": "source-1"}], details, vectors,
+                [{"id": "source-1", "duration_s": 40.0}], details, vectors,
             )
             self.assertEqual(loaded["source-1"]["tokenCount"], 1)
 
@@ -76,7 +102,7 @@ class OpeningHorizonTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(RuntimeError, "vectors differ"):
                 load_cached_source_structures(
-                    [{"id": "source-1"}], details, vectors,
+                    [{"id": "source-1", "duration_s": 40.0}], details, vectors,
                 )
 
     def test_parallel_source_scheduler_keeps_only_a_bounded_queue(self):
@@ -113,7 +139,7 @@ class OpeningHorizonTest(unittest.TestCase):
         self.assertEqual(result["wordCount"], 3)
         self.assertEqual(result["spokenEndSeconds"], 20.0)
         self.assertFalse(result["timingExact"])
-        self.assertTrue(result["wordStartsAuthentic"])
+        self.assertTrue(result["wordStartsSourceSupported"])
         self.assertTrue(result["sourceWordStartTimestampsObserved"])
         self.assertTrue(result["resolvedWordStartsObserved"])
         self.assertFalse(result["wordEndsObserved"])
@@ -166,6 +192,39 @@ class OpeningHorizonTest(unittest.TestCase):
             for row in result["timingWords"]
         ))
 
+    def test_explicit_acoustic_intervals_are_preserved_and_not_called_exact(self):
+        result = extract_opening_timeline([
+            {"word": "alpha", "t": 0.121, "d": 0.183,
+             "source": "local-wav2vec2-ctc-forced-alignment", "status": "supported"},
+            {"word": "beta", "t": 0.487, "d": 0.204,
+             "source": "local-wav2vec2-ctc-forced-alignment", "status": "review"},
+        ])
+        self.assertTrue(result["mediaAligned"])
+        self.assertFalse(result["timingExact"])
+        self.assertFalse(result["sourceWordStartTimestampsObserved"])
+        self.assertTrue(result["wordStartsMediaAligned"])
+        self.assertTrue(result["wordEndsMediaAligned"])
+        self.assertAlmostEqual(result["timingWords"][0]["spokenStartSeconds"], 0.121)
+        self.assertAlmostEqual(result["timingWords"][0]["spokenEndSeconds"], 0.304)
+        self.assertEqual(result["timingWords"][1]["alignmentStatus"], "review")
+
+    def test_curated_hook_cut_uses_the_same_media_clock_without_changing_words(self):
+        old = [
+            {"w": "alpha", "t": 0.2, "d": 0.2},
+            {"w": "beta", "t": 0.6, "d": 0.2},
+        ]
+        media = [
+            {"w": "alpha", "t": 0.11, "d": 0.18},
+            {"w": "beta", "t": 0.49, "d": 0.21},
+            {"w": "later", "t": 0.9, "d": 0.2},
+        ]
+        resolved, audit = retime_word_records_to_media(old, media)
+        self.assertEqual([row["w"] for row in resolved], ["alpha", "beta"])
+        self.assertAlmostEqual(resolved[0]["t"], 0.11)
+        self.assertAlmostEqual(resolved[-1]["t"] + resolved[-1]["d"], 0.70)
+        self.assertEqual(audit["mappedCoverage"], 1.0)
+        self.assertAlmostEqual(audit["alignedEndSeconds"], 0.70)
+
     def test_retention_payload_has_no_unobserved_values(self):
         curve = np.linspace(1.25, 0.55, 100).tolist()
         payload = curve_payload(curve, 40)
@@ -198,14 +257,21 @@ class OpeningHorizonTest(unittest.TestCase):
         corpus = json.loads((HERE / ".cache" / "corpus.json").read_text())
         self.assertEqual(len(corpus["rows"]), 208)
         token_counts = []
-        sources_with_collisions = 0
+        confidence_bands = {"high": 0, "moderate": 0, "low": 0}
         for row in corpus["rows"]:
             opening = load_local_opening(row["id"], ROOT)
             token_counts.append(opening["tokenCount"])
-            self.assertTrue(opening["wordStartsAuthentic"], row["id"])
-            self.assertTrue(opening["sourceWordStartTimestampsObserved"], row["id"])
+            self.assertTrue(opening["wordStartsSourceSupported"], row["id"])
+            self.assertTrue(opening["mediaAligned"], row["id"])
+            self.assertFalse(opening["sourceWordStartTimestampsObserved"], row["id"])
+            self.assertTrue(opening["wordStartsMediaAligned"], row["id"])
+            self.assertTrue(opening["wordEndsMediaAligned"], row["id"])
             self.assertFalse(opening["wordEndsObserved"], row["id"])
             self.assertTrue(opening["resolvedIntervalsNonoverlapping"], row["id"])
+            self.assertLess(opening["timingResolutionSeconds"], 0.03, row["id"])
+            self.assertGreater(opening["mediaDurationSeconds"], 20.0, row["id"])
+            self.assertGreater(opening["alignedHookEndSeconds"], 0.0, row["id"])
+            confidence_bands[opening["alignmentConfidence"]] += 1
             self.assertTrue(all(
                 left["spokenEndSeconds"] <= right["spokenStartSeconds"] + 1e-9
                 for left, right in zip(
@@ -216,13 +282,17 @@ class OpeningHorizonTest(unittest.TestCase):
                 timing["spokenEndSeconds"] > timing["spokenStartSeconds"]
                 for timing in opening["timingWords"]
             ), row["id"])
-            sources_with_collisions += int(opening["timestampCollisionGroups"] > 0)
+            self.assertEqual(opening["timestampCollisionGroups"], 0, row["id"])
             self.assertLessEqual(opening["spokenEndSeconds"], OPENING_HORIZON_SECONDS)
             self.assertGreaterEqual(float(row["duration_s"]), OPENING_HORIZON_SECONDS)
             self.assertGreaterEqual(len(row.get("curve") or []), 4)
         self.assertGreater(min(token_counts), 0)
         self.assertGreater(max(token_counts), min(token_counts))
-        self.assertGreater(sources_with_collisions, 0)
+        alignment_summary = json.loads(
+            (HERE / ".cache" / "media-alignment.json").read_text()
+        )
+        self.assertEqual(confidence_bands, alignment_summary["confidenceBands"])
+        self.assertEqual(sum(confidence_bands.values()), 208)
 
     def test_length_extrapolation_is_derived_from_the_measured_hook_corpus(self):
         corpus = json.loads((HERE / ".cache" / "corpus.json").read_text())["rows"]
@@ -272,7 +342,7 @@ class OpeningHorizonTest(unittest.TestCase):
 
     def test_timing_contract_does_not_call_inferred_word_ends_exact(self):
         detail = {"timingContract": {"exact": True}, "opening": {}}
-        attach_timing_precision(detail)
+        attach_timing_precision(detail, self.timing_alignment_fixture())
         self.assertFalse(detail["timingContract"]["exact"])
         self.assertTrue(
             detail["timingContract"]["sourceWordStartTimestampsObserved"]
@@ -280,6 +350,29 @@ class OpeningHorizonTest(unittest.TestCase):
         self.assertFalse(detail["timingContract"]["sourceWordEndsObserved"])
         self.assertEqual(detail["openingAnalysisMethodVersion"], METHOD_VERSION)
         self.assertEqual(detail["opening"]["methodVersion"], METHOD_VERSION)
+
+    def test_timing_contract_identifies_media_estimates_without_claiming_ground_truth(self):
+        detail = {
+            "timingContract": {"exact": True},
+            "opening": {
+                "mediaAligned": True,
+                "mediaAlignmentMethodVersion": "promise-media-clock-v1",
+                "alignmentConfidence": "high",
+                "alignmentCharacterErrorRate": 0.05,
+                "alignmentReviewWordFraction": 0.1,
+                "timingResolutionSeconds": 0.02002,
+                "resolvedIntervalsNonoverlapping": True,
+                "timingExactScope": "model-estimated boundaries",
+            },
+        }
+        attach_timing_precision(detail, self.timing_alignment_fixture())
+        timing = detail["timingContract"]
+        self.assertFalse(timing["exact"])
+        self.assertTrue(timing["mediaAligned"])
+        self.assertTrue(timing["sourceWordStartsMediaAligned"])
+        self.assertTrue(timing["sourceWordEndsMediaAligned"])
+        self.assertFalse(timing["sourceWordStartTimestampsObserved"])
+        self.assertEqual(timing["alignmentConfidence"], "high")
 
     def test_outcome_graph_refreshes_detail_edge_count(self):
         detail = {

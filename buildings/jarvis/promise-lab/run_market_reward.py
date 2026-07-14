@@ -25,6 +25,7 @@ from embedding_store import (
     json_ready,
 )
 from hook_score_core import local_counterfactual_texts, row_unit
+from media_alignment import apply_media_durations
 from market_reward import (
     connected_source_groups,
     fit_external_axis,
@@ -205,7 +206,9 @@ def main() -> None:
     prediction_mean = float(np.mean(external_prediction))
     prediction_std = float(np.std(external_prediction))
 
-    corpus = read_json(CACHE / "corpus.json")["rows"]
+    corpus = apply_media_durations(
+        read_json(CACHE / "corpus.json")["rows"], CACHE,
+    )
     partitions = read_json(CACHE / "canonical-partitions.json")["rows"]
     if [str(row["id"]) for row in corpus] != [str(row["videoId"]) for row in partitions]:
         raise RuntimeError("Market reward corpus and canonical partitions differ")

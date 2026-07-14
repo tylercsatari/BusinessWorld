@@ -19,6 +19,7 @@ from cluster_outcomes import (
     normalized_caption_atom,
     retention_at,
     span_interval,
+    timing_has_token_cover,
 )
 from embedding_store import EmbeddingStore, R2_PREFIX, R2Store, json_ready
 from hook_outcomes import (
@@ -44,13 +45,13 @@ from hook_score_core import (
     combined_component_features,
     component_response_windows,
     enrich_word_semantics,
-    estimated_token_timeline,
     interpolate_series,
     local_counterfactual_texts,
     percentile,
     row_unit,
 )
 from run_cluster_outcomes import load_timing_records
+from media_alignment import apply_media_durations
 from run_forward_response import component_vector_rows
 from sequence import tokenize
 
@@ -348,12 +349,15 @@ def speaking_rate(hooks: list[dict], timing_records: dict) -> tuple[dict, dict]:
             rates.append(lexical / (end - start))
     values = np.asarray(rates, float)
     return {
-        "definition": "source-equal arithmetic mean lexical words per exact aligned spoken second",
+        "definition": (
+            "source-equal arithmetic mean lexical words per source-media CTC-aligned "
+            "spoken second; outer boundaries must have direct acoustic support"
+        ),
         "meanWordsPerSecond": float(np.mean(values)),
         "medianWordsPerSecond": float(np.median(values)),
         "p10WordsPerSecond": float(np.quantile(values, .1)),
         "p90WordsPerSecond": float(np.quantile(values, .9)),
-        "exactTimedHooks": len(values),
+        "mediaAlignedTimedHooks": len(values),
         "hooks": len(hooks),
     }, timings
 
@@ -366,13 +370,15 @@ def hook_time_windows(partitions: list[dict], timings: dict,
         video_id = str(partition["videoId"])
         timing = timings.get(video_id) or {}
         tokens = partition.get("tokens") or []
-        if timing.get("status") == "exact":
-            _, end = span_interval(timing, 0, len(tokens))
-        else:
-            lexical = sum(bool(normalized_caption_atom(token.get("text"))) for token in tokens)
-            end = lexical / max(float(mean_wps), 1e-4)
+        if not timing_has_token_cover(timing):
+            raise RuntimeError(
+                f"stored hook has no canonical source-media token cover: {video_id}"
+            )
+        _, end = span_interval(timing, 0, len(tokens))
         if not np.isfinite(end) or end <= 0:
-            raise RuntimeError(f"hook has no usable spoken duration: {video_id}")
+            raise RuntimeError(
+                f"stored hook has no acoustically supported outer interval: {video_id}"
+            )
         spoken_end.append(float(end))
         response_end.append(float(end + response_lag))
     return np.asarray(spoken_end, np.float32), np.asarray(response_end, np.float32)
@@ -393,18 +399,18 @@ def exact_or_estimated_words(partition: dict, timing: dict, actual_curve: np.nda
                              curve_times: np.ndarray) -> list[dict]:
     tokens = partition.get("tokens") or []
     owners = np.asarray([int(row["owner"]) for row in tokens], int)
-    if timing.get("status") != "exact":
-        rows = estimated_token_timeline(
-            tokens, owners, curve_times, predicted_curve, mean_wps,
-            response_lag, lower, upper,
+    if not timing_has_token_cover(timing):
+        raise RuntimeError(
+            f"stored hook lacks source-media token timing: {partition.get('videoId')}"
         )
-        for row in rows:
-            row["actualRetentionPercent"] = retention_at(
-                actual_curve, duration, row["responseSeconds"],
-            ) * 100
-        return rows
     starts = np.asarray(timing.get("tokenStarts") or [], float)
     ends = np.asarray(timing.get("tokenEnds") or [], float)
+    start_acoustic = np.asarray(
+        timing.get("tokenStartBoundaryAcoustic") or [], bool,
+    )
+    end_acoustic = np.asarray(
+        timing.get("tokenEndBoundaryAcoustic") or [], bool,
+    )
     output = []
     for index, token in enumerate(tokens):
         if not normalized_caption_atom(token.get("text")):
@@ -416,6 +422,11 @@ def exact_or_estimated_words(partition: dict, timing: dict, actual_curve: np.nda
             "component": int(owners[index]),
             "spokenStartSeconds": float(starts[index]),
             "spokenEndSeconds": float(ends[index]),
+            "spokenStartBoundaryAcoustic": bool(start_acoustic[index]),
+            "spokenEndBoundaryAcoustic": bool(end_acoustic[index]),
+            "timingEstimatedInsideAcousticWord": bool(
+                not start_acoustic[index] or not end_acoustic[index]
+            ),
             "responseSeconds": response_second,
             "predictedRetentionPercent": interpolate_series(
                 curve_times, predicted_curve, response_second,
@@ -441,7 +452,9 @@ def main() -> None:
     args = parser.parse_args()
     started = time.time()
 
-    corpus = read_json(CACHE / "corpus.json")["rows"]
+    corpus = apply_media_durations(
+        read_json(CACHE / "corpus.json")["rows"], CACHE,
+    )
     manifest = read_json(CACHE / "all-span-manifest.json")
     partition_artifact = read_json(CACHE / "canonical-partitions.json")
     partition_model = read_json(CACHE / "canonical-partition-model.json")
@@ -1006,8 +1019,8 @@ def main() -> None:
                 "minus the out-of-fold duration-only expected carry rate"
             ),
             "responseEnd": (
-                "exact spoken hook end plus the component lag only if that lag validates in random "
-                "and future-only tests; otherwise exact spoken hook end with zero added lag"
+                "media-aligned acoustic hook end plus the component lag only if that lag validates "
+                "in random and future-only tests; otherwise the aligned hook end with zero added lag"
             ),
             "responseLagContract": response_lag_contract,
             "claimBoundary": (
@@ -1661,8 +1674,8 @@ def main() -> None:
                     "token; values are not additive Shapley effects"
                 ),
                 "wordTimingPolicy": (
-                    "exact captions" if (timings.get(video_id) or {}).get("status") == "exact"
-                    else "library-average speaking rate"
+                    "direct canonical-hook CTC word alignment; within-word token "
+                    "subdivisions are explicitly marked estimates"
                 ),
                 "words": words,
                 "componentWindows": component_response_windows(
@@ -1787,7 +1800,7 @@ def main() -> None:
             "minimumAnalyzedHookSeconds": float(np.min(response_end)),
             "maximumAnalyzedHookSeconds": float(np.max(response_end)),
             "postHookOutputPoints": 0,
-            "exactTimedHooks": rate["exactTimedHooks"],
+            "mediaAlignedTimedHooks": rate["mediaAlignedTimedHooks"],
             "componentCoverageFailures": sum(
                 int(row.get("coverage", 0) != 1 or row.get("overlapCount", 0) != 0)
                 for row in partitions

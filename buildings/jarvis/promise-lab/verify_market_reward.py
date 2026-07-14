@@ -17,6 +17,8 @@ TOLERANCE = 2e-5
 
 
 def close(left, right, tolerance=TOLERANCE):
+    if left is None or right is None:
+        return left is None and right is None
     return abs(float(left) - float(right)) <= tolerance
 
 
@@ -108,8 +110,13 @@ def main() -> None:
         )
         for key in ("coordinate", "z", "percentile", "reward", "mapX", "mapY"):
             assert close(row["score"][key], replay[key])
-        assert row["score"]["eligibleForTraining"] is True
-        assert close(row["score"]["reward"], row["score"]["percentile"] / 100)
+        assert row["score"]["eligibleForTraining"] == replay["eligibleForTraining"]
+        assert row["score"]["modelEligibleForTraining"] == replay["modelEligibleForTraining"]
+        assert row["score"]["domainEligibleForTraining"] == replay["domainEligibleForTraining"]
+        if row["score"]["eligibleForTraining"]:
+            assert close(row["score"]["reward"], row["score"]["percentile"] / 100)
+        else:
+            assert row["score"]["reward"] is None
         assert "validation" not in row["score"]
 
         components = row["components"]
