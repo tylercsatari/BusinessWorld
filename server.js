@@ -5233,15 +5233,21 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
 
             doc.fontSize(9).font('Helvetica-Bold').fillColor(grey).text('BILL TO', col2, topY, { width: colW });
             doc.fontSize(14).font('Helvetica-Bold').fillColor(dark).text(invoice.companyName || 'Company', col2, topY + 16, { width: colW });
+            // Start the address BELOW the (possibly wrapped) company name, and
+            // advance each line by its measured height — nothing can overlap.
+            let billToBottom = topY + 16 + doc.heightOfString(invoice.companyName || 'Company', { width: colW }) + 4;
             if (company?.address) {
                 const addrLines = company.address.split('\n');
-                let ay = topY + 34;
+                let ay = billToBottom;
                 doc.fontSize(10).font('Helvetica').fillColor('#666');
-                addrLines.forEach(line => { doc.text(line.trim(), col2, ay, { width: colW }); ay += 14; });
+                addrLines.forEach(line => { doc.text(line.trim(), col2, ay, { width: colW }); ay += doc.heightOfString(line.trim() || ' ', { width: colW }) + 2; });
+                billToBottom = ay;
             }
 
-            // Dates
-            const dateY = 210;
+            // Dates — BELOW both party blocks (the old fixed y=210 painted the
+            // grey boxes over the FROM email line and any long Bill To address).
+            const fromBottom = topY + 90 + 14;   // last FROM line + its height
+            const dateY = Math.max(fromBottom, billToBottom) + 14;
             doc.roundedRect(col1, dateY, 130, 42, 4).fill('#f8f9fa');
             doc.fontSize(8).font('Helvetica-Bold').fillColor('#888').text('INVOICE DATE', col1 + 10, dateY + 8, { width: 110 });
             doc.fontSize(12).font('Helvetica-Bold').fillColor(dark).text(invoice.invoiceDate || '', col1 + 10, dateY + 22, { width: 110 });
@@ -5250,43 +5256,65 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
             doc.fontSize(8).font('Helvetica-Bold').fillColor('#888').text('DUE DATE', col1 + 155, dateY + 8, { width: 110 });
             doc.fontSize(12).font('Helvetica-Bold').fillColor(dark).text(invoice.dueDate || '', col1 + 155, dateY + 22, { width: 110 });
 
-            // Table header
-            const tableY = 280;
-            doc.moveTo(col1, tableY + 20).lineTo(pageRight, tableY + 20).lineWidth(1).strokeColor('#e0e0e0').stroke();
-            doc.fontSize(9).font('Helvetica-Bold').fillColor('#888');
-            doc.text('DESCRIPTION', col1, tableY + 4, { width: 300 });
-            doc.text('AMOUNT', 400, tableY + 4, { width: pageRight - 400, align: 'right' });
-
-            // Line items
-            let rowY = tableY + 30;
+            // ── Line items: MEASURED flowing layout — text can never overlap ──
+            // Every block advances by its actual rendered height (heightOfString),
+            // long descriptions/deliverables/notes wrap, rows page-break cleanly
+            // (table header repeats), and dense invoices step down a type size so
+            // batch invoices still read like proper invoices.
             const items = invoice.lineItems || [{ description: invoice.companyName || 'Sponsored Video', amount: invoice.total || 0 }];
             const currency = invoice.currency || 'CAD';
-            doc.font('Helvetica').fontSize(11).fillColor(dark);
+            const many = items.length > 6;
+            const ROW_F = many ? 10 : 11;    // item title/amount size
+            const SUB_F = many ? 8.5 : 9;    // deliverables/notes size
+            const BOTTOM = 730;              // usable page bottom
+            const descW = 320;
+            const amtX = 400, amtW = pageRight - 400;
+
+            const tableHeader = (y) => {
+                doc.fontSize(9).font('Helvetica-Bold').fillColor('#888');
+                doc.text('DESCRIPTION', col1, y, { width: descW });
+                doc.text('AMOUNT', amtX, y, { width: amtW, align: 'right' });
+                doc.moveTo(col1, y + 16).lineTo(pageRight, y + 16).lineWidth(1).strokeColor('#e0e0e0').stroke();
+                return y + 26;
+            };
+            let rowY = tableHeader(dateY + 42 + 28);
+            const ensureRoom = (h, repeatHeader) => {
+                if (rowY + h <= BOTTOM) return;
+                doc.addPage();
+                rowY = repeatHeader ? tableHeader(56) : 56;
+            };
+
             items.forEach(li => {
-                doc.font('Helvetica-Bold').fontSize(11).fillColor(dark);
-                doc.text(li.description || '', col1, rowY, { width: 340 });
-                doc.text(`${currency} $${(li.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 400, rowY, { width: pageRight - 400, align: 'right' });
-                let subY = rowY + 16;
-                if (li.deliverables) {
-                    doc.font('Helvetica').fontSize(9).fillColor('#555');
-                    doc.text(`Deliverables: ${li.deliverables}`, col1, subY, { width: 340 });
-                    subY += 13;
-                }
-                if (li.notes) {
-                    doc.font('Helvetica').fontSize(9).fillColor('#555');
-                    doc.text(`Notes: ${li.notes}`, col1, subY, { width: 340 });
-                    subY += 13;
-                }
-                const rowH = subY - rowY + 8;
-                doc.moveTo(col1, rowY + rowH).lineTo(pageRight, rowY + rowH).lineWidth(0.5).strokeColor('#f0f0f0').stroke();
-                rowY += rowH + 4;
-                doc.font('Helvetica').fontSize(11).fillColor(dark);
+                const desc = li.description || '';
+                const amt = `${li.currency || currency} $${(li.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                const subs = [];
+                if (li.companyName) subs.push(`Client: ${li.companyName}`);   // batch invoices carry the client per line
+                if (li.deliverables) subs.push(`Deliverables: ${li.deliverables}`);
+                if (li.notes) subs.push(`Notes: ${li.notes}`);
+
+                // Measure the whole row first so it page-breaks as one unit.
+                doc.font('Helvetica-Bold').fontSize(ROW_F);
+                const headH = Math.max(doc.heightOfString(desc || ' ', { width: descW }), doc.heightOfString(amt, { width: amtW }));
+                doc.font('Helvetica').fontSize(SUB_F);
+                const subHs = subs.map(s => doc.heightOfString(s, { width: descW }));
+                const rowH = headH + subHs.reduce((a, h) => a + h + 3, 0) + 12;
+                ensureRoom(rowH, true);
+
+                doc.font('Helvetica-Bold').fontSize(ROW_F).fillColor(dark);
+                doc.text(desc, col1, rowY, { width: descW });
+                doc.text(amt, amtX, rowY, { width: amtW, align: 'right' });
+                let subY = rowY + headH + 3;
+                doc.font('Helvetica').fontSize(SUB_F).fillColor('#555');
+                subs.forEach((s, i) => { doc.text(s, col1, subY, { width: descW }); subY += subHs[i] + 3; });
+                doc.moveTo(col1, rowY + rowH - 5).lineTo(pageRight, rowY + rowH - 5).lineWidth(0.5).strokeColor('#f0f0f0').stroke();
+                rowY += rowH;
             });
 
-            // Totals
+            // Totals (page-break aware)
             const subtotalStr = `${currency} $${(invoice.subtotal || invoice.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             const totalStr = `${currency} $${(invoice.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+            ensureRoom(76);
             rowY += 10;
             doc.fontSize(11).font('Helvetica').fillColor('#888').text('Subtotal', 350, rowY, { width: 80, align: 'right' });
             doc.font('Helvetica-Bold').fillColor(dark).text(subtotalStr, 440, rowY, { width: pageRight - 440, align: 'right' });
@@ -5296,8 +5324,9 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
             doc.fontSize(16).font('Helvetica-Bold').fillColor(dark).text('Total', 350, rowY, { width: 80, align: 'right' });
             doc.text(totalStr, 440, rowY, { width: pageRight - 440, align: 'right' });
 
-            // Payment details
+            // Payment details (page-break aware)
             rowY += 40;
+            ensureRoom(84);
             doc.roundedRect(col1, rowY, pageRight - col1, 72, 4).fill('#f8f9fa');
             doc.fontSize(9).font('Helvetica-Bold').fillColor(grey).text('PAYMENT DETAILS', col1 + 12, rowY + 10, { width: 200 });
             doc.fontSize(10).font('Helvetica').fillColor('#888');
