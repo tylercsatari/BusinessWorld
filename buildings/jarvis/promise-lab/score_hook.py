@@ -33,6 +33,7 @@ from opening_predictor import (
     apply_scalar_stage,
     build_feature_stages,
     prediction_support,
+    temporal_attribution,
     views_from_retention5,
 )
 from sequence import all_spans, normalize_source, surface, tokenize, without_span
@@ -414,7 +415,8 @@ def _typed_prefix_features(primitives: dict, scope: dict,
     completion = np.minimum(completion, analysis_end)
     features = {}
     trace = []
-    for second in range(1, 21):
+
+    def add_prefix(second: float) -> None:
         completed = np.flatnonzero(completion <= second + 1e-9)
         cutoff = int(completed[-1] + 1) if len(completed) else 1
         cutoff = min(len(tokens), max(1, cutoff))
@@ -428,6 +430,12 @@ def _typed_prefix_features(primitives: dict, scope: dict,
             "usesWordsAfterThisSecond": False,
             "timingSource": scope["timingSource"],
         })
+
+    for second in range(1, 21):
+        add_prefix(float(second))
+    if 0.0 < analysis_end < 20.0 and abs(analysis_end - round(analysis_end)) > 1e-6:
+        add_prefix(float(analysis_end))
+        trace.sort(key=lambda row: float(row["second"]))
     return features, trace
 
 
@@ -446,24 +454,49 @@ def _typed_curve_payload(prefix_features: dict[int, np.ndarray], model: dict,
             second = int(round(float(row["second"])))
             semantic[second] = apply_scalar_stage(prefix_features[second], row["model"])
             baseline[second] = float(row["baselineMean"])
-        low = semantic + np.asarray(family["residualP10"], np.float32)
-        high = semantic + np.asarray(family["residualP90"], np.float32)
         display_times = model_times[model_times <= analysis_end + 1e-9]
         if not len(display_times) or display_times[-1] < analysis_end - 1e-6:
             display_times = np.append(display_times, analysis_end)
 
-        def sampled(values: np.ndarray) -> list[float]:
-            return np.interp(display_times, model_times, values).astype(float).tolist()
+        def semantic_at(second: float) -> float:
+            rounded = int(round(second))
+            if abs(second - rounded) <= 1e-6:
+                return float(semantic[rounded])
+            lower = int(math.floor(second))
+            upper = int(math.ceil(second))
+            feature = prefix_features.get(float(second))
+            if feature is None:
+                safe_keys = [key for key in prefix_features if float(key) <= second + 1e-9]
+                feature = prefix_features[max(safe_keys)] if safe_keys else prefix_features[1]
+            weight = second - lower
+            lower_value = (
+                float(family["timeZeroMean"])
+                if lower == 0 else
+                apply_scalar_stage(feature, temporal[lower - 1]["model"])
+            )
+            upper_value = apply_scalar_stage(feature, temporal[upper - 1]["model"])
+            return float(lower_value * (1.0 - weight) + upper_value * weight)
+
+        display_semantic = np.asarray([
+            semantic_at(float(second)) for second in display_times
+        ], np.float32)
+        display_baseline = np.interp(display_times, model_times, baseline).astype(np.float32)
+        display_low = display_semantic + np.interp(
+            display_times, model_times, np.asarray(family["residualP10"], np.float32),
+        )
+        display_high = display_semantic + np.interp(
+            display_times, model_times, np.asarray(family["residualP90"], np.float32),
+        )
 
         families[family_name] = {
             "timesSeconds": display_times.astype(float).tolist(),
-            "predicted": sampled(semantic),
-            "predictionP10": sampled(low),
-            "predictionP90": sampled(high),
+            "predicted": display_semantic.astype(float).tolist(),
+            "predictionP10": display_low.astype(float).tolist(),
+            "predictionP90": display_high.astype(float).tolist(),
             "actual": None,
             "stages": {
-                "baseline": sampled(baseline),
-                "semanticPrefix": sampled(semantic),
+                "baseline": display_baseline.astype(float).tolist(),
+                "semanticPrefix": display_semantic.astype(float).tolist(),
             },
             "fullModelHorizonSeconds": float(model_times[-1]),
             "displayStopsAtSuppliedText": True,
@@ -676,7 +709,11 @@ def score_text(text: str, model: dict | None = None,
         full=primitives["full"],
         partition=partition,
         partition_model=partition_model,
-        words_per_second=scope["wordsPerSecond"],
+        words_per_second=(
+            float(scope["analyzedLexicalTokens"]) / analysis_end
+            if scope.get("plannedSpokenSeconds") is not None
+            else scope["wordsPerSecond"]
+        ),
         prefix_transition_null=np.asarray(
             lattice_model.get("prefixTransitionNullSorted") or [], np.float32,
         ),
@@ -685,6 +722,26 @@ def score_text(text: str, model: dict | None = None,
         title_manifold=None,
         source_kind="typed-opening-predictor",
     )
+    lattice_nodes = {str(row.get("id")): row for row in lattice.get("nodes") or []}
+    for component in components:
+        node_id = str(
+            component.get("nodeId")
+            or f"span:{int(component['startToken'])}:{int(component['endToken'])}"
+        )
+        component["nodeId"] = node_id
+        node = lattice_nodes.get(node_id) or {}
+        for key in (
+            "spokenStartSeconds", "spokenEndSeconds", "timingSource",
+            "maps", "coordinates", "representations", "relations",
+            "descriptiveAttention", "resolutions", "categorySource",
+            "spokenStartBoundaryAcoustic", "spokenEndBoundaryAcoustic",
+        ):
+            if node.get(key) is not None:
+                component[key] = node[key]
+        component["measurements"] = None
+        component["measurementStatus"] = (
+            "unavailable for typed text because no observed audience retention curve was supplied"
+        )
     contributions = {
         "atAnalyzedEnd": _semantic_contribution(entry, analysis_end),
         "at5Seconds": _semantic_contribution(entry, 5.0) if analysis_end >= 5.0 else None,
@@ -709,6 +766,16 @@ def score_text(text: str, model: dict | None = None,
             "componentAndRelationshipCandidatesApplied": False,
         })
         contributions["at20Seconds"] = at20
+
+    attribution = temporal_attribution(entry, prefix_trace, components)
+    attribution_by_component = {
+        int(row["componentIndex"]): row
+        for row in attribution["componentLedger"]
+    }
+    for component in components:
+        component["timelineAttribution"] = attribution_by_component.get(
+            int(component["index"]),
+        )
 
     stable_payload = (
         f"{PREDICTOR_VERSION}\0{FEATURE_VERSION}\0{scope['analyzedText']}\0"
@@ -753,6 +820,7 @@ def score_text(text: str, model: dict | None = None,
         "actual": None,
         "curves": curves,
         "contributions": contributions,
+        "temporalAttribution": attribution,
         "partition": {key: value for key, value in partition.items() if key != "owners"},
         "componentLattice": lattice,
         "support": {

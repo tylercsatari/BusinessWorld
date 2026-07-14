@@ -3813,12 +3813,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const promisePathname = pathname;
     if (promisePathname === '/api/shortsquant/promise-lab/manifest' && req.method === 'GET') {
         await serveR2Gz(req, res, 'shorts/promise-lab-v1/manifest.json', 30e3,
-            { version: 7, productVersion: 'shorts-promise-lab-v3', status: 'building', counts: {}, artifacts: {} });
+            { version: 8, productVersion: 'shorts-promise-lab-v4', status: 'building', counts: {}, artifacts: {} });
         return;
     }
     if (promisePathname === '/api/shortsquant/promise-lab/progress' && req.method === 'GET') {
         await serveR2Gz(req, res, 'shorts/promise-lab-v1/progress.json', 5e3,
-            { version: 7, productVersion: 'shorts-promise-lab-v3', status: 'building', stage: 'waiting for first product artifact' });
+            { version: 8, productVersion: 'shorts-promise-lab-v4', status: 'building', stage: 'waiting for first product artifact' });
         return;
     }
     const promiseArtifacts = {

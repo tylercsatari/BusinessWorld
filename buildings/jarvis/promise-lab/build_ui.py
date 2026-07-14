@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import time
@@ -14,7 +15,7 @@ from embedding_store import DIMENSIONS, MODEL, R2_PREFIX, R2Store, json_ready
 
 HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
-PRODUCT_VERSION = "shorts-promise-lab-v3"
+PRODUCT_VERSION = "shorts-promise-lab-v4"
 
 BROWSER_ARTIFACTS = {
     "openingPredictions": ("opening-predictions.json", "opening-predictions.json.gz"),
@@ -40,6 +41,11 @@ API_ARTIFACTS = {
 def load_json(name: str) -> dict:
     path = CACHE / name
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+def load_gzip(path: Path) -> dict:
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 def sha256(path: Path) -> str | None:
@@ -86,6 +92,9 @@ def validate(artifacts: dict[str, dict], models: dict[str, dict]) -> list[str]:
           "browser and serving feature versions differ")
     check(all(int(row.get("componentCount") or 0) > 0 for row in rows),
           "a saved opening has no canonical components")
+    check(all(len(row.get("components") or []) == int(row.get("componentCount") or 0)
+              for row in rows),
+          "the opening library summary does not expose every component phrase")
     check(all((row.get("outputs") or {}).get("retainedAtAnalyzedEndPercent") is not None
               for row in rows), "a saved opening has no endpoint retention prediction")
     check((retention_model.get("trainingMethod") or {}).get("savedPredictionPolicy") == "source-level out-of-fold at every second",
@@ -108,6 +117,35 @@ def validate(artifacts: dict[str, dict], models: dict[str, dict]) -> list[str]:
           "saved four-cluster embedding is not persistent")
     check(set((projection.get("frozenPointIndex") or {}).get("labels") or []) == {0, 1, 2, 3},
           "saved embedding does not contain exactly the frozen four-category vocabulary")
+    ui_source = (HERE.parent / "promise-lab-ui.js").read_text(encoding="utf-8")
+    for marker in (
+        "function renderAnalysis(analysis, lattice)",
+        "Where every predicted drop comes from",
+        "Selected component inside the saved four-cluster embedding",
+        "Component evidence and response timing",
+        "Multi-resolution component lattice and edge graph",
+        "Analysis data ledger",
+    ):
+        check(marker in ui_source, f"shared analysis renderer is missing: {marker}")
+    for row in rows:
+        video_id = str(row.get("videoId") or "")
+        detail_path = CACHE / "opening-predictions" / f"{video_id}.json.gz"
+        check(detail_path.exists(), f"missing saved prediction detail: {video_id}")
+        if not detail_path.exists():
+            continue
+        detail = load_gzip(detail_path)
+        attribution = detail.get("temporalAttribution") or {}
+        curve = ((detail.get("curves") or {}).get("entryIndexed") or {})
+        components = detail.get("components") or []
+        check(len(attribution.get("steps") or []) == max(0, len(curve.get("timesSeconds") or []) - 1),
+              f"temporal ledger does not cover every curve transition: {video_id}")
+        check(len(attribution.get("componentLedger") or []) == len(components),
+              f"temporal ledger does not cover every component: {video_id}")
+        check(all(len(component.get("categoryDistribution") or []) == 4
+                  and len(component.get("categoryCoordinates4D") or []) == 4
+                  and component.get("timelineAttribution") is not None
+                  for component in components),
+              f"component evidence is incomplete: {video_id}")
     return errors
 
 
@@ -126,7 +164,7 @@ def main() -> None:
     model = models.get("opening-retention-model.json") or {}
     status = "complete" if not errors else "error"
     manifest = {
-        "version": 7,
+        "version": 8,
         "productVersion": PRODUCT_VERSION,
         "status": status,
         "errors": errors,
@@ -134,7 +172,8 @@ def main() -> None:
         "title": "Promise Lab",
         "description": (
             "One causal Shorts opening scorer and its 208-video measured library, using the "
-            "same prefix-by-prefix 20-second retention contract and four-cluster embedding."
+            "same prefix-by-prefix 20-second retention, attribution, component, graph, and "
+            "four-cluster embedding contract."
         ),
         "embeddingModel": MODEL,
         "embeddingDimensions": DIMENSIONS,
@@ -170,6 +209,18 @@ def main() -> None:
             "longFormReferenceUsed": False,
             "viewsRole": (model.get("viewsContract") or {}).get("promotionStatus") or "withheld",
         },
+        "visualizationContract": {
+            "sharedRenderer": "renderAnalysis(analysis, lattice)",
+            "typedAndSavedUseSameRenderer": True,
+            "temporalTransitionsVisible": True,
+            "everySelectedComponentVisible": True,
+            "savedEmbeddingIntegratedPerComponent": True,
+            "componentMeasurementsVisibleWhenObserved": True,
+            "allLatticeNodesVisible": True,
+            "allLatticeEdgeFamiliesSelectable": True,
+            "validationBySecondVisible": True,
+            "unavailableEvidenceIsExplicit": True,
+        },
         "counts": {
             "openings": int(predictions.get("sources") or 0),
             "openingComponents": int(opening.get("componentCount") or 0),
@@ -191,7 +242,7 @@ def main() -> None:
         },
     }
     progress = {
-        "version": 7,
+        "version": 8,
         "productVersion": PRODUCT_VERSION,
         "status": status,
         "stage": "current Shorts Promise Lab published" if not errors else "product validation failed",

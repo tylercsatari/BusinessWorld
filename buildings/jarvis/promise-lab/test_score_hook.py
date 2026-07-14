@@ -10,6 +10,7 @@ from score_hook import (
     _typed_curve_payload,
     _typed_prefix_features,
 )
+from opening_predictor import temporal_attribution
 from sequence import all_spans, tokenize
 
 
@@ -106,6 +107,58 @@ print(score_hook.PREDICTOR_VERSION)
         self.assertTrue(scope["inputWasLongerThan20Seconds"])
         self.assertIsNotNone(scope["excludedAfter20Seconds"])
         self.assertLess(scope["analyzedLexicalTokens"], scope["inputLexicalTokens"])
+
+    def test_fractional_endpoint_uses_its_own_completed_prefix(self):
+        text = "one two three four five six seven eight"
+        tokens = tokenize(text)
+        spans = all_spans(len(tokens))
+        starts = np.asarray([span.start for span in spans], int)
+        ends = np.asarray([span.end for span in spans], int)
+        raw = np.asarray([
+            [float(span.end), float(span.end - span.start)] for span in spans
+        ], np.float32)
+        features, trace = _typed_prefix_features({
+            "tokens": tokens, "starts": starts, "ends": ends,
+            "raw": raw, "text": text,
+        }, {
+            "plannedSpokenSeconds": 8.0, "wordsPerSecond": 1.0,
+            "timingSource": "test clock",
+        }, 7.5)
+        endpoint = next(row for row in trace if row["second"] == 7.5)
+        self.assertEqual(endpoint["tokenCount"], 8)
+        self.assertEqual(endpoint["prefixText"], text)
+        self.assertIn(7.5, features)
+
+    def test_temporal_attribution_accounts_for_every_transition(self):
+        curve = {
+            "timesSeconds": [0.0, 1.0, 2.0],
+            "predicted": [100.0, 90.0, 85.0],
+            "actual": [100.0, 88.0, 83.0],
+            "stages": {
+                "baseline": [100.0, 92.0, 87.0],
+                "semanticPrefix": [100.0, 90.0, 85.0],
+            },
+        }
+        trace = [
+            {"second": 1.0, "endToken": 2, "tokenCount": 2,
+             "prefixText": "one two"},
+            {"second": 2.0, "endToken": 4, "tokenCount": 4,
+             "prefixText": "one two three four"},
+        ]
+        components = [
+            {"index": 0, "startToken": 0, "endToken": 2,
+             "text": "one two", "category": 0},
+            {"index": 1, "startToken": 2, "endToken": 4,
+             "text": "three four", "category": 1},
+        ]
+        result = temporal_attribution(curve, trace, components)
+        self.assertEqual(len(result["steps"]), 2)
+        self.assertEqual(result["steps"][1]["enteredText"], "three four")
+        self.assertAlmostEqual(
+            sum(row["predictedDeltaPoints"] for row in result["componentLedger"]),
+            result["summary"]["totalPredictedDeltaPoints"],
+        )
+        self.assertFalse(result["steps"][0]["allocationIsCounterfactual"])
 
 
 if __name__ == "__main__":

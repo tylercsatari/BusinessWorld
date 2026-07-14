@@ -25,6 +25,7 @@ from opening_predictor import (
     PREDICTOR_VERSION,
     apply_scalar_stage,
     build_feature_stages,
+    temporal_attribution,
     views_from_retention5,
 )
 from sequence import normalize_source
@@ -755,6 +756,17 @@ def main() -> None:
                 "contribute zero because they were not promoted."
             ),
         }
+        attribution = temporal_attribution(
+            family_curves["entryIndexed"], record["prefixes"], components,
+        )
+        attribution_by_component = {
+            int(row["componentIndex"]): row
+            for row in attribution["componentLedger"]
+        }
+        for component in components:
+            component["timelineAttribution"] = attribution_by_component.get(
+                int(component["index"]),
+            )
         payload = {
             "version": 2,
             "status": "complete",
@@ -787,6 +799,7 @@ def main() -> None:
             "actual": actual,
             "curves": family_curves,
             "contributions": contributions,
+            "temporalAttribution": attribution,
             "validation": {
                 family_name: {
                     "randomFold": compact_curve_validation(family["validation"]),
@@ -806,6 +819,18 @@ def main() -> None:
             "tokenCount": record["tokenCount"],
             "componentCount": len(components),
             "categorySequence": [int(row["category"]) for row in components],
+            "components": [
+                {
+                    "index": int(component["index"]),
+                    "text": component.get("text"),
+                    "category": int(component["category"]),
+                    "startToken": int(component["startToken"]),
+                    "endToken": int(component["endToken"]),
+                    "mapX": component.get("mapX"),
+                    "mapY": component.get("mapY"),
+                }
+                for component in components
+            ],
             "outputs": outputs,
             "actual": actual,
             "predictionError": {

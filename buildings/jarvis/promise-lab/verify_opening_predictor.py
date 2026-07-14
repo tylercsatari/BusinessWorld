@@ -75,6 +75,11 @@ def main() -> None:
         assert video_id not in row_ids
         row_ids.add(video_id)
         detail = read_gzip(CACHE / "opening-predictions" / f"{video_id}.json.gz")
+        lattice = read_gzip(CACHE / "opening-20s" / f"{video_id}.json.gz")
+        assert len(row["components"]) == row["componentCount"]
+        assert [component["text"] for component in row["components"]] == [
+            component["text"] for component in detail["components"]
+        ]
         assert detail["sourceKind"] == "saved-opening-20s-causal-oof"
         assert detail["predictorVersion"] == PREDICTOR_VERSION
         assert detail["featureVersion"] == FEATURE_VERSION
@@ -93,6 +98,37 @@ def main() -> None:
                 right.get("startToken", right.get("start"))
             )
         assert len(detail["relationships"]) == max(0, len(components) - 1)
+        node_by_id = {node["id"]: node for node in lattice["nodes"]}
+        attribution = detail["temporalAttribution"]
+        assert len(attribution["steps"]) == 20
+        assert len(attribution["componentLedger"]) == len(components)
+        assert close(
+            sum(item["predictedDeltaPoints"]
+                for item in attribution["componentLedger"])
+            + attribution["summary"]["unassignedTimeModelDeltaPoints"],
+            attribution["summary"]["totalPredictedDeltaPoints"],
+        )
+        for step in attribution["steps"]:
+            assert close(
+                step["baselineDeltaPoints"] + step["semanticShapeDeltaPoints"],
+                step["predictedDeltaPoints"],
+            )
+            if step["enteredComponents"]:
+                assert close(
+                    sum(item["predictedDeltaPoints"]
+                        for item in step["enteredComponents"]),
+                    step["predictedDeltaPoints"],
+                )
+        for component in components:
+            assert len(component["categoryDistribution"]) == 4
+            assert len(component["categoryCoordinates4D"]) == 4
+            assert component["mapX"] is not None and component["mapY"] is not None
+            assert component["timelineAttribution"] == attribution["componentLedger"][
+                component["index"]
+            ]
+            node = node_by_id[component["nodeId"]]
+            assert node["text"] == component["text"]
+            assert node["representations"] and node["relations"]
         for curve in detail["curves"].values():
             assert curve["selectedStage"] == "semanticPrefix"
             assert set(curve["stages"]) == {"baseline", "semanticPrefix"}
@@ -120,6 +156,8 @@ def main() -> None:
         "horizonSeconds": 20,
         "causalTemporalModelsPerFamily": 20,
         "headlineStage": "semanticPrefix",
+        "completeTemporalAttribution": True,
+        "componentsLinkedToSavedEmbeddingAndLattice": True,
         "viewsPromotionStatus": model["viewsContract"]["promotionStatus"],
         "servingImportsSklearn": False,
     }, indent=2))

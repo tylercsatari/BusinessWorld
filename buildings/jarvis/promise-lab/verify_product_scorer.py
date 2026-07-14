@@ -58,6 +58,35 @@ def main() -> None:
     assert typed["provenance"]["sameTemporalModelFamilyAsSavedLibrary"] is True
     assert typed["outputs"]["viewsDiagnostic"]["status"] == "withheld"
     assert saved["outputs"]["viewsDiagnostic"]["status"] == "withheld"
+    for payload in (typed, saved):
+        attribution = payload["temporalAttribution"]
+        assert len(attribution["steps"]) == len(
+            payload["curves"]["entryIndexed"]["timesSeconds"]
+        ) - 1
+        assert len(attribution["componentLedger"]) == payload["componentCount"]
+        assert abs(
+            sum(row["predictedDeltaPoints"]
+                for row in attribution["componentLedger"])
+            + attribution["summary"]["unassignedTimeModelDeltaPoints"]
+            - attribution["summary"]["totalPredictedDeltaPoints"]
+        ) < 1e-4
+        nodes = {
+            row["id"]: row
+            for row in (payload.get("componentLattice") or {}).get("nodes", [])
+        }
+        if payload is saved:
+            nodes = {}
+        for component in payload["components"]:
+            assert len(component["categoryDistribution"]) == 4
+            assert len(component["categoryCoordinates4D"]) == 4
+            assert component["mapX"] is not None and component["mapY"] is not None
+            assert component["timelineAttribution"] == attribution["componentLedger"][
+                component["index"]
+            ]
+            if nodes:
+                node = nodes[component["nodeId"]]
+                assert node["text"] == component["text"]
+                assert node["representations"] and node["relations"]
     for row in typed["causalPrefixTrace"]:
         assert int(row["tokenCount"]) <= int(typed["tokenCount"])
 
@@ -85,6 +114,8 @@ print(score_hook.PREDICTOR_VERSION)
         "points": len(typed["predictionTimesSeconds"]),
         "components": typed["componentCount"],
         "samePartition": True,
+        "sharedTemporalAttribution": True,
+        "typedComponentsLinkedToLattice": True,
         "futureWordsUsedForEarlierPredictions": False,
         "views": "withheld",
         "servingImportsSklearn": False,

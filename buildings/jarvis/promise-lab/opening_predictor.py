@@ -244,3 +244,194 @@ def prediction_support(token_count: int, estimated_seconds: float, model: dict) 
         "analysisHorizonSeconds": float(model.get("analysisHorizonSeconds") or 20.0),
         "isExtrapolation": outside,
     }
+
+
+def temporal_attribution(curve: dict, prefix_trace: list[dict],
+                         components: list[dict]) -> dict:
+    """Account for every displayed retention transition without inventing causality.
+
+    The temporal predictor is a sequence of separately fitted per-second models.  A
+    transition can therefore move because the population time baseline changed,
+    because the semantic prefix changed relative to that baseline, or both.  This
+    ledger associates newly entered tokens with their exact-cover components and
+    allocates the transition by token overlap.  The allocation is exhaustive, but
+    it is descriptive accounting rather than an independent deletion intervention.
+    """
+    times_value = curve.get("timesSeconds")
+    predicted_value = curve.get("predicted")
+    times = np.asarray([] if times_value is None else times_value, float)
+    predicted = np.asarray([] if predicted_value is None else predicted_value, float)
+    stages = curve.get("stages") or {}
+    baseline_value = stages.get("baseline")
+    baseline = np.asarray([] if baseline_value is None else baseline_value, float)
+    actual_values = curve.get("actual")
+    actual = (
+        np.asarray(actual_values, float)
+        if actual_values is not None and len(actual_values) == len(times)
+        else None
+    )
+    if not len(times) or len(predicted) != len(times) or len(baseline) != len(times):
+        raise ValueError("temporal attribution requires aligned time, prediction, and baseline rows")
+
+    trace = sorted(
+        [dict(row) for row in prefix_trace if row.get("second") is not None],
+        key=lambda row: float(row["second"]),
+    )
+
+    def trace_at(second: float) -> dict:
+        eligible = [row for row in trace if float(row["second"]) <= second + 1e-6]
+        if eligible:
+            return eligible[-1]
+        return {"second": 0.0, "endToken": 0, "tokenCount": 0, "prefixText": ""}
+
+    component_rows = []
+    ledger_by_index = {}
+    for position, component in enumerate(components):
+        index = int(component.get("index", position))
+        row = {
+            "componentIndex": index,
+            "category": int(component.get("category", -1)),
+            "text": str(component.get("text") or ""),
+            "startToken": int(component.get("startToken", component.get("start", 0))),
+            "endToken": int(component.get("endToken", component.get("end", 0))),
+            "transitionIndices": [],
+            "predictedDeltaPoints": 0.0,
+            "predictedDropPoints": 0.0,
+            "baselineDeltaPoints": 0.0,
+            "semanticShapeDeltaPoints": 0.0,
+            "observedDeltaPoints": 0.0 if actual is not None else None,
+            "allocationRole": "token-overlap accounting; not a deletion counterfactual",
+        }
+        component_rows.append(row)
+        ledger_by_index[index] = row
+
+    steps = []
+    time_only_delta = 0.0
+    allocated_delta = 0.0
+    previous_trace = trace_at(float(times[0]))
+    previous_cutoff = int(previous_trace.get("endToken", previous_trace.get("tokenCount", 0)) or 0)
+    previous_prefix = str(previous_trace.get("prefixText") or "")
+    for step_index in range(1, len(times)):
+        second = float(times[step_index])
+        current_trace = trace_at(second)
+        cutoff = int(current_trace.get("endToken", current_trace.get("tokenCount", 0)) or 0)
+        prefix_text = str(current_trace.get("prefixText") or "")
+        entered_text = (
+            prefix_text[len(previous_prefix):].strip()
+            if previous_prefix and prefix_text.startswith(previous_prefix)
+            else prefix_text if not previous_prefix else ""
+        )
+        start_token = min(previous_cutoff, cutoff)
+        end_token = max(previous_cutoff, cutoff)
+        token_count = max(0, end_token - start_token)
+        predicted_delta = float(predicted[step_index] - predicted[step_index - 1])
+        baseline_delta = float(baseline[step_index] - baseline[step_index - 1])
+        semantic_delta = float(predicted_delta - baseline_delta)
+        observed_delta = (
+            float(actual[step_index] - actual[step_index - 1])
+            if actual is not None else None
+        )
+
+        entered_components = []
+        for position, component in enumerate(components):
+            index = int(component.get("index", position))
+            component_start = int(component.get("startToken", component.get("start", 0)))
+            component_end = int(component.get("endToken", component.get("end", 0)))
+            overlap = max(0, min(end_token, component_end) - max(start_token, component_start))
+            if not overlap:
+                continue
+            weight = float(overlap / max(1, token_count))
+            allocation = {
+                "componentIndex": index,
+                "category": int(component.get("category", -1)),
+                "text": str(component.get("text") or ""),
+                "overlapTokens": int(overlap),
+                "weight": weight,
+                "predictedDeltaPoints": float(predicted_delta * weight),
+                "predictedDropPoints": float(-predicted_delta * weight),
+                "baselineDeltaPoints": float(baseline_delta * weight),
+                "semanticShapeDeltaPoints": float(semantic_delta * weight),
+                "observedDeltaPoints": (
+                    float(observed_delta * weight) if observed_delta is not None else None
+                ),
+            }
+            entered_components.append(allocation)
+            ledger = ledger_by_index[index]
+            ledger["transitionIndices"].append(step_index - 1)
+            for key in (
+                "predictedDeltaPoints", "predictedDropPoints",
+                "baselineDeltaPoints", "semanticShapeDeltaPoints",
+            ):
+                ledger[key] = float(ledger[key] + allocation[key])
+            if observed_delta is not None:
+                ledger["observedDeltaPoints"] = float(
+                    ledger["observedDeltaPoints"] + allocation["observedDeltaPoints"]
+                )
+
+        if entered_components:
+            allocated_delta += predicted_delta
+        else:
+            time_only_delta += predicted_delta
+        active = [
+            int(component.get("index", position))
+            for position, component in enumerate(components)
+            if int(component.get("startToken", component.get("start", 0))) < cutoff
+        ]
+        completed = [
+            int(component.get("index", position))
+            for position, component in enumerate(components)
+            if previous_cutoff < int(component.get("endToken", component.get("end", 0))) <= cutoff
+        ]
+        steps.append({
+            "index": step_index - 1,
+            "startSeconds": float(times[step_index - 1]),
+            "endSeconds": second,
+            "startRetentionPercent": float(predicted[step_index - 1]),
+            "endRetentionPercent": float(predicted[step_index]),
+            "predictedDeltaPoints": predicted_delta,
+            "predictedDropPoints": -predicted_delta,
+            "baselineDeltaPoints": baseline_delta,
+            "semanticShapeDeltaPoints": semantic_delta,
+            "observedDeltaPoints": observed_delta,
+            "startToken": start_token,
+            "endToken": end_token,
+            "enteredTokenCount": token_count,
+            "enteredText": entered_text,
+            "prefixText": prefix_text,
+            "activeComponentIndices": active,
+            "completedComponentIndices": completed,
+            "enteredComponents": entered_components,
+            "driver": "prefix transition" if entered_components else "time model with unchanged prefix",
+            "allocationIsCounterfactual": False,
+        })
+        previous_cutoff = cutoff
+        previous_prefix = prefix_text
+
+    total_predicted_delta = float(predicted[-1] - predicted[0])
+    total_baseline_delta = float(baseline[-1] - baseline[0])
+    total_observed_delta = float(actual[-1] - actual[0]) if actual is not None else None
+    return {
+        "version": 1,
+        "method": "per-second causal-prefix transition ledger",
+        "headlineModel": "baseline(t) + semantic-prefix adjustment(t)",
+        "claimBoundary": (
+            "Every predicted transition is exact. Component allocation is exhaustive token-overlap "
+            "accounting, not a causal deletion score. Candidate deletion effects are reported separately."
+        ),
+        "timesSeconds": times.astype(float).tolist(),
+        "steps": steps,
+        "componentLedger": component_rows,
+        "summary": {
+            "startRetentionPercent": float(predicted[0]),
+            "endRetentionPercent": float(predicted[-1]),
+            "totalPredictedDeltaPoints": total_predicted_delta,
+            "totalPredictedDropPoints": -total_predicted_delta,
+            "totalBaselineDeltaPoints": total_baseline_delta,
+            "totalSemanticShapeDeltaPoints": float(total_predicted_delta - total_baseline_delta),
+            "totalObservedDeltaPoints": total_observed_delta,
+            "allocatedPrefixTransitionDeltaPoints": float(allocated_delta),
+            "unassignedTimeModelDeltaPoints": float(time_only_delta),
+            "transitionCount": len(steps),
+            "transitionsWithEnteredText": sum(bool(row["enteredComponents"]) for row in steps),
+        },
+    }
