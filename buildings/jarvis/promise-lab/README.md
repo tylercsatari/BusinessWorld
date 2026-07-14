@@ -1,144 +1,105 @@
 # Promise Lab
 
-Promise Lab turns spoken openings into one deterministic product contract:
+Promise Lab is the Shorts Quant opening-retention analyzer. It has one product
+contract for both saved openings and typed text:
 
-1. partition the exact text into a variable number of non-overlapping components;
-2. assign each component to the frozen four-category saved embedding;
-3. score the complete text on the frozen external Market Hold direction;
-4. explain each component and pair with exact local deletion counterfactuals; and
-5. show retention and outcome models as diagnostics, never blended into the headline score.
+1. align the supplied transcript to a media or declared speaking clock;
+2. split every analyzed token into one variable-count, non-overlapping cover;
+3. assign each selected component to the frozen four-category semantic map;
+4. embed only the transcript prefix completed by each second;
+5. apply the frozen scalar model for that second through 20 seconds; and
+6. show measured outcomes, uncertainty, components, and graph diagnostics
+   without promoting unvalidated channels.
 
-The source corpus is the existing `longform/hook-embeds/` collection. Text
-vectors use `gemini-embedding-2` at 1536 dimensions, matching Long Quant.
+The active product uses Shorts openings only. It does not use the Long Quant
+title manifold, a generative LLM, or a resident GPU.
 
 ## Product Surfaces
 
-- **Hook scorer** scores new text with the frozen serving models.
-- **Hook library** audits the same formula on measured source hooks.
-- **Saved embedding** preserves the selected four-category map and its outcome
-  and latency validation.
-- **20s analysis** applies the same variable exact cover, categories, lattice,
-  graph, and retention normalization through 20 seconds. Canonical words are
-  forced onto deterministic local Wav2Vec2 CTC boundaries from the downloaded
-  source media; analytics retention is mapped with actual media duration.
+- **Score opening** analyzes typed text with the frozen full-fit temporal model.
+- **Opening library** shows source-level out-of-fold predictions and measured
+  curves for all 208 aligned Shorts openings.
+- **Saved embedding** preserves the outcome-blind four-category component map.
 
-The media clock is a required build input, not a fallback. The current corpus
-resolves 133 videos from BusinessWorld media and caches public YouTube audio for
-the remaining 75. All 17,315 canonical opening words have deterministic acoustic
-intervals. The verifier independently checks source hashes, interval ordering,
-the decoded audio/video start origin, actual duration, transcript-clock
-agreement, and the claim boundary that CTC times are model estimates rather than
-hand-labeled truth. All 4,142 canonical hook words are projected onto those same
-opening intervals: 158 hooks are zero-edit normalized prefixes and 50 use the
-same deterministic edit-distance projection to an acoustic word endpoint. No
-legacy hook endpoint, outcome, semantic label, or anchor interpolation chooses a
-timestamp. Estimated within-word boundaries stay visible but are ineligible for
-timing-sensitive outcomes unless both outer edges are acoustic boundaries.
-Every video also has an independent Whisper-base free-decode audit. Current
-median per-video ordered-word start disagreement is 0.100 seconds; the 95th
-percentile across per-video p95 disagreements is 0.289 seconds; and median
-lexical coverage is 97.59%. These are agreement diagnostics, not hand-labeled
-accuracy claims. Final hook endpoints are independently paired with the full
-20-second opening as lexical context, which prevents a repeated final word from
-matching a later occurrence. Whisper independently pairs 204 of 208 hook
-endpoints; median end disagreement is 0.046 seconds and p95 is 0.146 seconds.
-The four unpaired endpoints remain visibly unavailable rather than inferred.
+Both scorer and library use the same partition decoder, four-category model,
+20-second temporal family, component schema, and UI renderer. Their only
+intentional differences are timing provenance and evaluation policy: saved
+openings use source-media word intervals plus out-of-fold predictions; typed
+openings use a supplied duration or the measured corpus speaking-rate
+distribution plus frozen full fits.
 
-The component lattice is embedded inside the scorer and library. It is not a
-separate product tab. Results, Hooks, Boundaries, Embeddings, Cluster atlas,
-Swaps, Outcome axes, Registry, Research contract, and Claude RTG were legacy
-browsing surfaces and are no longer published.
+## Retention Contract
 
-## Shared Score Contract
-
-The scorer and library use the same model artifacts and formulas:
+At second `t`:
 
 ```text
-headline       = frozen Market Hold coordinate and percentile
-component      = score(full) - score(without component)
-relationship   = score(full) - score(without A) - score(without B)
-                 + score(without A+B)
+prefix(t)      = transcript atoms acoustically completed by t
+prediction(t)  = mean retention at t + frozen semantic adjustment(prefix(t))
+headline(t)    = prediction(t) + 0 component points + 0 relationship points
 ```
 
-`Hook Hold`, direct viewed/retention/views forecasts, retention curves,
-component-response lag, and 20-second response geometry remain visible
-diagnostics. They are not alternate headline scores.
+Two curve families are displayed:
+
+- `entryIndexed` starts every opening at 100% and measures survival from entry.
+- `observedAbsolute` preserves the raw analytics curve, including rewatch lift.
+
+Component-deletion and adjacent-relationship effects are 20-second model
+counterfactuals. They stay visible but are withheld from the headline because
+they have not passed the promotion gate. The individualized view forecast is
+also withheld: its random-fold R2 is approximately 0.001 and its chronological
+R2 is negative.
+
+The current normalized-retention model has modest same-era signal and does not
+yet beat the mean curve in the past-to-future stress test. The UI reports those
+numbers directly instead of turning them into a fake virality percentile.
+
+## Timing
+
+All 208 saved openings are measured through 20 seconds. Canonical transcript
+words are aligned to downloaded source media with local CTC forced alignment;
+an independent Whisper free-decode pass audits the mapping. Times are model
+estimates, not hand-labeled ground truth. Typed text never forecasts beyond the
+words supplied by the user.
 
 ## Build
 
-`build.py` is the single orchestrated rebuild. Its current stages are:
+`build.py` is the active rebuild path:
 
-1. `run_interventions.py`
-2. `run_discovery.py`
-3. `run_atlas.py`
-4. `run_all_spans.py` and `verify_all_span_store.py`
-5. `run_all_span_atlas.py`
-6. `run_manual_probe.py`
-7. `run_manual_projection.py` and `verify_manual_projection.py`
-8. `build_media_alignment.py`, `audit_media_alignment.py`, and
-   `verify_media_alignment.py`
-9. `run_cluster_outcomes.py` and `verify_cluster_outcomes.py`
-10. `run_latency_study.py` and `verify_latency_study.py`
-11. `run_canonical_partitions.py` and `verify_canonical_partitions.py`
-12. `run_hook_quality.py` and `verify_hook_quality.py`
-13. `run_forward_response.py` and `verify_forward_response.py`
-14. `run_long_title_prior.py`
-15. `run_hook_outcomes.py` and `verify_hook_outcomes.py`
-16. `run_market_reward.py` and `verify_market_reward.py`
-17. `run_hook_examples.py` and `verify_hook_examples.py`
-18. `verify_product_scorer.py`, a measured-library serving canary
-19. `run_component_lattice.py` and `verify_component_lattice.py`
-20. `run_opening_horizon.py` and `verify_opening_horizon.py`
-21. `build_ui.py`, which validates and publishes only the four current surfaces.
+1. intervention/discovery and the saved component atlas;
+2. all contiguous span vectors and atlas projection;
+3. persistent manual projection;
+4. source-media alignment and independent timing verification;
+5. outcome-blind canonical partitions;
+6. Shorts-only opening lattice support;
+7. 20-second opening structures;
+8. causal temporal predictor and verification;
+9. typed/saved serving canary; and
+10. UI artifact validation and publication.
 
-Use `python build.py --no-upload` for a complete local rebuild and validation.
-Use `--from-stage` to resume from a named stage. `build_ui.py --no-upload`
-validates the current cached product without publishing.
+The old market-reward, hook-quality, long-title-prior, outcome-axis,
+component-response, example, and duplicate component-lattice stages are not in
+the active build.
 
-Discovery, atlas, all-span, and outcome/deconfounding code remains internal
-because current models consume it. Swap experiments, cross-scope browsing,
-generic outcome-axis publication, generated findings/registry artifacts, and
-the generated research-contract implementation have been removed.
+```bash
+python build.py --no-upload
+python build.py --from-stage opening-lattice --no-upload
+```
+
+Current generated data lives in `.cache/`. Browser artifacts and serving models
+are mirrored to `shorts/promise-lab-v1/` in R2.
 
 ## Verification
 
-- `verify_market_reward.py` replays every stored Market Hold score, component
-  deletion, and pair interaction.
-- `verify_component_lattice.py` checks exact live/stored primitive parity,
-  complete token ownership, and graph contracts.
-- `verify_hook_outcomes.py` checks every held-out source prediction, component,
-  relationship, curve, timing window, uncertainty array, and normalization.
-- `verify_opening_horizon.py` checks every 20-second detail, observed retention
-  horizon, media-aligned word timing, exact cover, graph edge family, and
-  fold-safe response candidate.
-- `verify_media_alignment.py` checks every current corpus media source, canonical words,
-  acoustic interval ordering, hashes, quality bands, and independent
-  Whisper free-decode agreement without treating either model as hand-labeled truth.
-  It also hard-fails when decoded audio time zero differs from the video/container
-  reference clock by more than 30 ms.
-- Cluster outcome and latency stages share one content-addressed timing/slope
-  matrix. Its key covers source duration, retention curves, hook text, spans,
-  retimed words, and the timing algorithms, so reuse removes duplicate work
-  without permitting stale measurements.
-- `test_visualization_contract.py` enforces the four-surface product, one shared
-  scorer/library contract, complete canvas handlers, and absence of legacy APIs.
+- `verify_media_alignment.py` audits media hashes, word order, source-clock
+  offsets, and independent timestamp agreement.
+- `verify_opening_horizon.py` checks all 208 exact covers and measured curves.
+- `verify_opening_predictor.py` checks 20 causal models per curve family, no
+  future-word leakage, OOF saved predictions, and the views promotion gate.
+- `verify_product_scorer.py` runs one opening through both saved and typed paths,
+  verifies the same partition and 21-point horizon, and blocks `sklearn` to
+  prove the Render serving path is NumPy-only.
+- `test_score_hook.py` covers causal prefix timing, 20-second support, explicit
+  scoping, and the no-`sklearn` import contract.
 
-Generated data lives in `.cache/`; only current browser artifacts and serving
-models are mirrored to `longform/promise-lab-v4/` in R2. Expensive stages are
-resumable and no resident GPU or always-on worker is required.
-
-## Saved Embedding
-
-`run_manual_probe.py` is a separated post-hoc interpretation layer. It compares
-manual selections against already retained maps and creates no embeddings,
-clusters, maps, or outcome axes. Its selected map supplies the conditional
-four-label overlay used downstream.
-
-`manual-projection.json` contains three 2D views of that same frozen map and a
-self-contained point index. Clicking a point never changes views or fetches the
-full atlas. The projection does not refit k-means or change membership.
-
-The deterministic scorer architecture is documented in
-[`HOOK_SCORER.md`](HOOK_SCORER.md). Corrected claim boundaries are in
-[`METHODOLOGY_AUDIT.md`](METHODOLOGY_AUDIT.md), and the Shorts/Long Quant
-comparison is in [`QUANT_TRANSFER_AUDIT.md`](QUANT_TRANSFER_AUDIT.md).
+The saved category map remains an outcome-blind semantic discovery artifact;
+it does not itself prove retention lift.

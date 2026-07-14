@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Canary the frozen serving scorer against one measured library hook."""
+"""Canary that typed and saved openings share the current causal contract."""
 
 from __future__ import annotations
 
+import gzip
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 from score_hook import score_text
-from sequence import normalize_source
 
 
 HERE = Path(__file__).resolve().parent
@@ -18,58 +20,74 @@ def read(name: str) -> dict:
     return json.loads((CACHE / name).read_text(encoding="utf-8"))
 
 
-def close(left, right, tolerance: float = 1e-7) -> bool:
-    if left is None or right is None:
-        return left is right
-    return abs(float(left) - float(right)) <= tolerance
+def read_gzip(path: Path) -> dict:
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def exact_cover(payload: dict) -> bool:
+    owners = [0] * int(payload["tokenCount"])
+    for component in payload["components"]:
+        start = int(component.get("startToken", component.get("start")))
+        end = int(component.get("endToken", component.get("end")))
+        for token in range(start, end):
+            owners[token] += 1
+    return owners == [1] * len(owners)
 
 
 def main() -> None:
-    outcomes = read("hook-outcomes.json")
-    market = read("market-reward.json")
-    partitions = read("canonical-partitions.json")
-
-    source = min(
-        outcomes["hooks"],
-        key=lambda row: (len(str(row["text"]).split()), str(row["videoId"])),
+    summary = read("opening-predictions.json")
+    source = min(summary["rows"], key=lambda row: (int(row["tokenCount"]), row["videoId"]))
+    saved = read_gzip(
+        CACHE / "opening-predictions" / f"{source['videoId']}.json.gz"
     )
-    video_id = str(source["videoId"])
-    stored_market = next(row for row in market["hooks"] if str(row["videoId"]) == video_id)
-    stored_partition = next(
-        row for row in partitions["rows"] if str(row["videoId"]) == video_id
-    )
-    live = score_text(source["text"])
+    typed = score_text(saved["text"], planned_duration_seconds=20.0)
 
-    assert normalize_source(source["text"]) == live["input"]["hookText"]
-    assert "score" not in live
-    assert "trainingReward" not in live
-    assert live["primaryScore"] is not live["hookHoldDiagnostic"]
-    for key in ("z", "percentile", "reward", "domainNearestCosine"):
-        assert close(live["primaryScore"].get(key), stored_market["score"].get(key)), key
-    assert live["primaryScore"]["eligibleForTraining"] == stored_market["score"][
-        "eligibleForTraining"
+    assert typed["predictorVersion"] == saved["predictorVersion"]
+    assert typed["featureVersion"] == saved["featureVersion"]
+    assert typed["sourceKind"] == "typed-opening-causal-full-fit"
+    assert saved["sourceKind"] == "saved-opening-20s-causal-oof"
+    assert typed["analysisHorizonSeconds"] == saved["analysisHorizonSeconds"] == 20.0
+    assert typed["predictionTimesSeconds"] == saved["predictionTimesSeconds"] == list(range(21))
+    assert exact_cover(typed) and exact_cover(saved)
+    assert typed["componentCount"] == saved["componentCount"]
+    assert [row["text"] for row in typed["components"]] == [
+        row["text"] for row in saved["components"]
     ]
+    assert typed["provenance"]["futureWordsUsedForEarlierPredictions"] is False
+    assert typed["provenance"]["sameTemporalModelFamilyAsSavedLibrary"] is True
+    assert typed["outputs"]["viewsDiagnostic"]["status"] == "withheld"
+    assert saved["outputs"]["viewsDiagnostic"]["status"] == "withheld"
+    for row in typed["causalPrefixTrace"]:
+        assert int(row["tokenCount"]) <= int(typed["tokenCount"])
 
-    components = live["components"]
-    ownership = [0] * int(live["input"]["tokenCount"])
-    for component in components:
-        for token in range(int(component["start"]), int(component["end"])):
-            ownership[token] += 1
-    assert ownership == [1] * len(ownership)
-    serving_boundaries = [int(value) for value in (
-        (stored_partition.get("servingEnsembleAudit") or {}).get("boundaries") or []
-    )]
-    live_boundaries = [int(row["end"]) for row in components[:-1]]
-    assert live_boundaries == serving_boundaries
+    code = """
+import builtins
+real_import = builtins.__import__
+def blocked(name, *args, **kwargs):
+    if name == 'sklearn' or name.startswith('sklearn.'):
+        raise ModuleNotFoundError(name)
+    return real_import(name, *args, **kwargs)
+builtins.__import__ = blocked
+import score_hook
+print(score_hook.PREDICTOR_VERSION)
+"""
+    serving = subprocess.run(
+        [sys.executable, "-c", code], cwd=HERE, capture_output=True,
+        text=True, timeout=30,
+    )
+    assert serving.returncode == 0, serving.stderr
 
     print(json.dumps({
         "status": "verified",
-        "videoId": video_id,
-        "text": source["text"],
-        "marketHoldPercentile": live["primaryScore"]["percentile"],
-        "components": len(components),
-        "servingBoundaries": live_boundaries,
-        "legacyScoreKeysPresent": [],
+        "videoId": source["videoId"],
+        "predictorVersion": typed["predictorVersion"],
+        "points": len(typed["predictionTimesSeconds"]),
+        "components": typed["componentCount"],
+        "samePartition": True,
+        "futureWordsUsedForEarlierPredictions": False,
+        "views": "withheld",
+        "servingImportsSklearn": False,
     }, indent=2))
 
 

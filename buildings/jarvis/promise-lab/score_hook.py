@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score one hook with the frozen Promise Lab axis without a generative LLM."""
+"""Score one Shorts opening with the shared causal 20-second predictor."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 import gzip
 import hashlib
 import json
+import math
 import os
 import sys
 import time
@@ -15,44 +16,34 @@ from pathlib import Path
 import numpy as np
 
 from atlas import REPRESENTATION_VERSION, span_additive_effects
-from canonical_partition import (
-    boundary_features,
-    boundary_probabilities,
-)
+from canonical_partition import boundary_features, boundary_probabilities
 from component_lattice import build_component_lattice
-from embedding_store import EmbeddingStore, R2Store, json_ready
+from embedding_store import EmbeddingStore, R2_PREFIX, R2Store, json_ready
 from hook_score_core import (
-    apply_duration_baseline,
-    apply_linear_model,
     apply_category_transform,
     category_log_probabilities,
-    combined_component_features,
-    component_response_windows,
     decode_support_calibrated_chunks,
     decode_variable_chunks,
-    enrich_word_semantics,
-    estimated_token_timeline,
-    interpolate_series,
-    outcome_prediction_payload,
-    local_counterfactual_texts,
     percentile,
     row_unit,
-    weighted_percentile,
 )
-from market_reward import local_market_effects, score_market_vector
+from opening_predictor import (
+    FEATURE_VERSION,
+    PREDICTOR_VERSION,
+    apply_scalar_stage,
+    build_feature_stages,
+    prediction_support,
+    views_from_retention5,
+)
 from sequence import all_spans, normalize_source, surface, tokenize, without_span
 
 
 HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
-REMOTE_PREFIX = "longform/promise-lab-v4"
-MODEL_FILE = "hook-quality-model.json"
 PARTITION_FILE = "canonical-partition-model.json"
-OUTCOME_MODEL_FILE = "hook-outcome-model.json"
-MARKET_MODEL_FILE = "market-reward-model.json"
-LATTICE_MODEL_FILE = "component-lattice-model.json"
+LATTICE_MODEL_FILE = "opening-lattice-model.json"
 OPENING_MODEL_FILE = "opening-20s-model.json"
-SCORER_VERSION = "deterministic-variable-hook-scorer-v14"
+OPENING_RETENTION_MODEL_FILE = "opening-retention-model.json"
 
 
 def _decode_json(payload: bytes) -> dict:
@@ -67,23 +58,23 @@ def load_artifact(filename: str, refresh: bool = False) -> dict:
     local = CACHE / filename
     if local.exists():
         return json.loads(local.read_text(encoding="utf-8"))
-    runtime = Path(os.environ.get("PROMISE_HOOK_RUNTIME_CACHE", "/tmp/businessworld-promise-hook"))
+    runtime = Path(os.environ.get(
+        "PROMISE_HOOK_RUNTIME_CACHE", "/tmp/businessworld-promise-hook",
+    ))
     runtime.mkdir(parents=True, exist_ok=True)
     cached = runtime / filename
     if cached.exists() and not refresh and time.time() - cached.stat().st_mtime < 3600:
         return json.loads(cached.read_text(encoding="utf-8"))
-    payload = R2Store().get_bytes(f"{REMOTE_PREFIX}/{filename}.gz")
+    payload = R2Store().get_bytes(f"{R2_PREFIX}/{filename}.gz")
     if not payload:
         raise RuntimeError(f"Promise Lab artifact is unavailable: {filename}")
     value = _decode_json(payload)
-    temporary = cached.with_suffix(cached.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, separators=(",", ":")), encoding="utf-8")
-    os.replace(temporary, cached)
+    cached.write_text(json.dumps(value, separators=(",", ":")), encoding="utf-8")
     return value
 
 
 def _embedding_cache_path() -> Path:
-    if CACHE.exists() and (CACHE / MODEL_FILE).exists():
+    if CACHE.exists() and (CACHE / PARTITION_FILE).exists():
         return CACHE / "hook-live-embeddings.sqlite3"
     return Path(os.environ.get(
         "PROMISE_HOOK_EMBED_CACHE", "/tmp/businessworld-promise-hook/embeddings.sqlite3",
@@ -91,6 +82,7 @@ def _embedding_cache_path() -> Path:
 
 
 def build_span_primitives(text: str, store: EmbeddingStore) -> dict:
+    """Embed the complete deterministic contiguous-span lattice for one opening."""
     text = normalize_source(text)
     tokens = tokenize(text)
     lexical = np.asarray([
@@ -98,7 +90,7 @@ def build_span_primitives(text: str, store: EmbeddingStore) -> dict:
         for token in tokens
     ], bool)
     if int(lexical.sum()) < 1:
-        raise ValueError("a hook needs at least one lexical atom")
+        raise ValueError("an opening needs at least one lexical atom")
     spans = all_spans(len(tokens))
     span_texts = [surface(tokens, span.start, span.end, source_text=text) for span in spans]
     context_texts = [without_span(tokens, span.start, span.end, source_text=text) for span in spans]
@@ -112,8 +104,10 @@ def build_span_primitives(text: str, store: EmbeddingStore) -> dict:
     ], np.float32)
     starts = np.asarray([span.start for span in spans], int)
     ends = np.asarray([span.end for span in spans], int)
-    lookup = {(int(start), int(end)): index
-              for index, (start, end) in enumerate(zip(starts, ends))}
+    lookup = {
+        (int(start), int(end)): index
+        for index, (start, end) in enumerate(zip(starts, ends))
+    }
 
     def stored_precision(values: np.ndarray) -> np.ndarray:
         return np.asarray(values, np.float16).astype(np.float32)
@@ -132,22 +126,17 @@ def build_span_primitives(text: str, store: EmbeddingStore) -> dict:
     def training_storage_precision(values: np.ndarray) -> np.ndarray:
         return row_unit(stored_precision(values))
 
-    full = row_unit(stored_full)
-    raw = row_unit(stored_raw)
-    contexts = row_unit(stored_context)
-    influence = training_storage_precision(influence_source)
-    nonadditive = training_storage_precision(nonadditive_source)
     return {
         "text": text,
         "tokens": tokens,
         "starts": starts,
         "ends": ends,
         "spanTexts": span_texts,
-        "raw": raw,
-        "context": contexts,
-        "influence": influence,
-        "nonadditive": nonadditive,
-        "full": full,
+        "raw": row_unit(stored_raw),
+        "context": row_unit(stored_context),
+        "influence": training_storage_precision(influence_source),
+        "nonadditive": training_storage_precision(nonadditive_source),
+        "full": row_unit(stored_full),
         "lexical": lexical,
         "embeddingInputs": len(set(required)),
         "trainingVectorStorageDtype": "float16",
@@ -158,6 +147,7 @@ def build_span_primitives(text: str, store: EmbeddingStore) -> dict:
 
 def decode_partition(primitives: dict, partition_model: dict,
                      horizon_extension: dict | None = None) -> dict:
+    """Select one outcome-blind, non-overlapping exact cover of every token."""
     category_values = apply_category_transform(
         primitives["raw"], partition_model["categoryTransform"],
     )
@@ -175,31 +165,33 @@ def decode_partition(primitives: dict, partition_model: dict,
     )
     boundary_model = partition_model["boundaryModel"]
     boundary_probability = boundary_probabilities(features, boundary_model)
-    decoded = decode_variable_chunks(
+    uncalibrated = decode_variable_chunks(
         primitives["starts"], primitives["ends"], boundary_probability,
         logp, primitives["lexical"],
     )
-    tokens = primitives["tokens"]
-    support_threshold = int(
-        (horizon_extension or {}).get("activationTokenThreshold") or 0
-    )
-    uncalibrated = decoded
-    if horizon_extension and len(tokens) > support_threshold:
+    extension = dict(horizon_extension or {})
+    threshold = int(extension.get("activationTokenThreshold", 0))
+    decoded = uncalibrated
+    if extension and len(primitives["tokens"]) > threshold:
         decoded = decode_support_calibrated_chunks(
             primitives["starts"], primitives["ends"], boundary_probability,
-            logp, primitives["lexical"], horizon_extension,
+            logp, primitives["lexical"], extension,
         )
+
+    tokens = primitives["tokens"]
     owners = np.full(len(tokens), -1, int)
     chunks = []
     for index, chunk in enumerate(decoded["chunks"]):
         span_index = int(chunk["spanIndex"])
-        start = int(chunk["start"]); end = int(chunk["end"])
+        start = int(chunk["start"])
+        end = int(chunk["end"])
         owners[start:end] = index
         probability = np.exp(logp[span_index])
         category = int(chunk["category"])
         chunks.append({
             "index": index,
-            "start": start, "end": end,
+            "start": start,
+            "end": end,
             "text": surface(tokens, start, end, source_text=primitives["text"]),
             "category": category,
             "categoryProbability": float(probability[category]),
@@ -219,12 +211,9 @@ def decode_partition(primitives: dict, partition_model: dict,
             ),
         })
     component_count = len(chunks)
-    if ((owners < 0).any()
-            or set(owners.tolist()) != set(range(component_count))):
+    if (owners < 0).any() or set(owners.tolist()) != set(range(component_count)):
         raise RuntimeError("decoder did not produce one exact non-overlapping owner per token")
-    gap_calibration = np.asarray(
-        partition_model["partitionCalibration"]["scoreGapsSorted"], float,
-    )
+
     lookup = {
         (int(start), int(end)): index
         for index, (start, end) in enumerate(zip(primitives["starts"], primitives["ends"]))
@@ -249,28 +238,29 @@ def decode_partition(primitives: dict, partition_model: dict,
                 "categoryCoordinates4D": category_values[span_index].astype(float).tolist(),
                 "mapX": float(semantic_points[span_index, 0]),
                 "mapY": float(semantic_points[span_index, 1]),
-                "categorySource": (
-                    "serving Gaussian assignment into the frozen four-category vocabulary"
-                ),
+                "categorySource": "serving Gaussian assignment into the frozen four-category vocabulary",
             },
         })
     full_index = lookup[(0, len(tokens))]
     full_probability = np.exp(logp[full_index])
     full_category = int(semantic_categories[full_index])
+    gap_calibration = np.asarray(
+        partition_model["partitionCalibration"]["scoreGapsSorted"], float,
+    )
     return {
-        **{key: decoded[key] for key in (
+        **{key: decoded.get(key) for key in (
             "score", "runnerUpScore", "scoreGap", "topTwoPosteriorProxy",
             "partitionsCompared", "objective", "complexityControl",
         )},
         "scoreGapPercentile": (
             None if decoded.get("horizonCalibration") else
-            percentile(gap_calibration, float(decoded["scoreGap"] or 0))
+            percentile(gap_calibration, float(decoded.get("scoreGap") or 0))
         ),
         "scoreGapCalibrationEligible": not bool(decoded.get("horizonCalibration")),
         "boundaryEvidenceMode": (
-            "support-calibrated long-horizon exact cover"
+            "support-calibrated opening exact cover"
             if decoded.get("horizonCalibration") else
-            "frozen serving ensemble over outcome-blind boundary evidence"
+            "frozen outcome-blind boundary evidence"
         ),
         "horizonCalibration": decoded.get("horizonCalibration"),
         "countPrior": decoded.get("countPrior"),
@@ -309,1176 +299,494 @@ def decode_partition(primitives: dict, partition_model: dict,
             "categoryCoordinates4D": category_values[full_index].astype(float).tolist(),
             "mapX": float(semantic_points[full_index, 0]),
             "mapY": float(semantic_points[full_index, 1]),
-            "categorySource": (
-                "serving Gaussian assignment into the frozen four-category vocabulary"
-            ),
+            "categorySource": "serving Gaussian assignment into the frozen four-category vocabulary",
         },
         "coverage": 1.0,
         "overlapCount": 0,
     }
 
 
-def _bootstrap_attribution(full: np.ndarray, singleton: np.ndarray,
-                           context: np.ndarray, pair_context: dict[tuple[int, int], np.ndarray],
-                           model: dict) -> tuple[np.ndarray, np.ndarray]:
-    directions = np.asarray(model.get("bootstrapDirections") or [], np.float32)
-    component_rows = []
-    pair_rows = []
-    for direction in directions:
-        full_score = float(full @ direction)
-        context_score = context @ direction
-        component_rows.append(full_score - context_score)
-        pair_rows.append([
-            float(full_score - context_score[left] - context_score[right]
-                  + pair_context[(left, right)] @ direction)
-            for left in range(len(singleton))
-            for right in range(left + 1, len(singleton))
-        ])
-    return np.asarray(component_rows, float), np.asarray(pair_rows, float)
-
-
-def _score_forward_response(primitives: dict, partition: dict,
-                            counter_vectors: dict, components: list[dict],
-                            interactions: list[dict], model: dict) -> dict | None:
-    forward = model.get("forwardResponse") or {}
-    if not forward or forward.get("status") != "complete":
-        return None
-    component_model = (forward.get("component") or {}).get("modelsByCategory") or {}
-    starts = np.asarray(primitives["starts"], int)
-    ends = np.asarray(primitives["ends"], int)
-    component_percentiles = []
-    for index, (chunk, component) in enumerate(zip(partition["chunks"], components)):
-        matches = np.flatnonzero(
-            (starts == int(chunk["start"])) & (ends == int(chunk["end"]))
-        )
-        if len(matches) != 1:
-            raise RuntimeError("decoded component is missing from the exact span tensor")
-        span_index = int(matches[0])
-        category = str(int(chunk["category"]))
-        category_model = component_model.get(category)
-        if not category_model:
-            raise RuntimeError(f"forward-response category model is missing: {category}")
-        feature = combined_component_features(
-            primitives["raw"][span_index:span_index + 1],
-            primitives["influence"][span_index:span_index + 1],
-        )[0]
-        coordinate = float(feature @ np.asarray(category_model["direction"], np.float32))
-        map_y = float(feature @ np.asarray(category_model["mapDirection"], np.float32))
-        axis_percentile = percentile(
-            np.asarray(category_model["trainingProjectionSorted"], float), coordinate,
-        )
-        validation = category_model.get("validation") or {}
-        component["forwardResponse"] = {
-            "label": "Predicted forward retention response",
-            "axisCoordinate": coordinate,
-            "mapY": map_y,
-            "percentile": axis_percentile,
-            "category": int(category),
-            "heldoutSpearmanForCategory": validation.get("heldoutSpearman"),
-            "foldDirectionStability": validation.get("foldDirectionStability"),
-            "metricId": (forward.get("metricContract") or {}).get("selectedCandidate"),
-        }
-        component_percentiles.append(axis_percentile)
-
-    relationship = forward.get("relationship") or {}
-    calibration = relationship.get("calibrationByCategoryPair") or {}
-    interaction_lookup = {
-        (int(row["left"]), int(row["right"])): row for row in interactions
-    }
-    full = primitives["full"]
-    full_feature = combined_component_features(full[None, :], full[None, :])[0]
-    component_raw = []
-    for chunk in partition["chunks"]:
-        span_index = int(np.flatnonzero(
-            (starts == int(chunk["start"])) & (ends == int(chunk["end"]))
-        )[0])
-        component_raw.append(primitives["raw"][span_index])
-    for right in range(1, len(components)):
-        category = str(int(components[right]["category"]))
-        direction = np.asarray(component_model[category]["direction"], np.float32)
-        for left in range(right):
-            without_left_feature = combined_component_features(
-                counter_vectors["withoutOne"][left][None, :],
-                row_unit(full - component_raw[left])[None, :],
-            )[0]
-            without_right_feature = combined_component_features(
-                counter_vectors["withoutOne"][right][None, :],
-                row_unit(full - component_raw[right])[None, :],
-            )[0]
-            pair_raw = counter_vectors["pairOnly"][(left, right)]
-            without_pair_feature = combined_component_features(
-                counter_vectors["withoutPair"][(left, right)][None, :],
-                row_unit(full - pair_raw)[None, :],
-            )[0]
-            interaction = float(
-                full_feature @ direction
-                - without_left_feature @ direction
-                - without_right_feature @ direction
-                + without_pair_feature @ direction
-            )
-            target = interaction_lookup[(left, right)]
-            category_pair = f"{components[left]['category']}->{components[right]['category']}"
-            samples = np.asarray(calibration.get(category_pair) or [], float)
-            target["forwardResponse"] = {
-                "interaction": interaction,
-                "percentile": (
-                    percentile(samples, interaction) if len(samples) else None
-                ),
-                "categoryPair": category_pair,
-                "definition": relationship.get("definition"),
-                "validationSource": relationship.get("validationSource"),
-            }
-
-    whole = forward.get("wholeHook") or {}
-    standalone = relationship.get("standaloneObservedResidualAudit") or {}
-    composite_coordinate = float(np.mean(component_percentiles))
-    composite_training = np.asarray(whole.get("trainingCompositeSorted") or [], float)
-    return {
-        "status": "complete",
-        "validatedAtComponentLevel": bool(forward.get("validated")),
-        "validationStatus": forward.get(
-            "validationStatus", "conditional-diagnostic"
-        ),
-        "categoryClaimStatus": forward.get("categoryClaimStatus"),
-        "metric": forward.get("metricContract"),
-        "componentValidation": (forward.get("component") or {}).get("validation"),
-        "components": [row["forwardResponse"] for row in components],
-        "relationships": [row.get("forwardResponse") for row in interactions],
-        "exploratoryWholeHookComposite": {
-            "accepted": False,
-            "coordinate": composite_coordinate,
-            "percentile": (
-                percentile(composite_training, composite_coordinate)
-                if len(composite_training) else None
-            ),
-            "definition": whole.get("definition"),
-            "validation": whole.get("validation"),
-            "reason": (
-                "the category-conditioned component coordinates remain visible as diagnostics, "
-                "but their equal-mean aggregate did not validate as a separate whole-hook target"
-            ),
-        },
-        "standaloneRelationshipAudit": {
-            "accepted": standalone.get("accepted"),
-            "selectedRepresentation": standalone.get("selectedRepresentation"),
-            "targetDefinition": standalone.get("targetDefinition"),
-            "validation": standalone.get("validation"),
-        },
-    }
-
-
-def _score_opening_20s_response(primitives: dict, partition_model: dict,
-                                model: dict | None) -> dict | None:
-    """Apply the longer-horizon component axes without fabricating a retention curve."""
-    if not model or model.get("status") not in {
-        "promoted", "exploratory-not-promoted", "complete",
-    }:
-        return None
-    promotion = model.get("promotion") or {}
-    promoted = bool(promotion.get("promoted"))
-    partition = decode_partition(
-        primitives, partition_model,
-        horizon_extension=model.get("partitionExtension"),
+def _prediction_text_scope(text: str, model: dict,
+                           planned_duration_seconds: float | None = None) -> dict:
+    normalized = normalize_source(text)
+    tokens = tokenize(normalized)
+    support = model.get("support") or {}
+    rate = float(support.get("medianWordsPerSecond") or 0.0)
+    if rate <= 0:
+        raise RuntimeError("the opening model has no measured speaking-rate support")
+    horizon = float(model.get("analysisHorizonSeconds") or 20.0)
+    lexical_indices = [
+        index for index, token in enumerate(tokens)
+        if any(character.isalnum() or character == "_" for character in token.text)
+    ]
+    if not lexical_indices:
+        raise ValueError("an opening needs at least one lexical atom")
+    supplied_duration = None
+    if planned_duration_seconds is not None:
+        supplied_duration = float(planned_duration_seconds)
+        if not math.isfinite(supplied_duration) or supplied_duration <= 0:
+            raise ValueError("planned spoken duration must be a positive number of seconds")
+    lexical_count = len(lexical_indices)
+    full_duration = supplied_duration if supplied_duration is not None else lexical_count / rate
+    if full_duration > horizon:
+        lexical_kept = max(1, int(np.floor(lexical_count * horizon / full_duration)))
+        cut = lexical_indices[min(lexical_kept, lexical_count) - 1] + 1
+        while cut < len(tokens) and not any(
+            character.isalnum() or character == "_" for character in tokens[cut].text
+        ):
+            cut += 1
+    else:
+        cut = len(tokens)
+    analyzed = surface(tokens, 0, cut, source_text=normalized)
+    remainder = surface(tokens, cut, len(tokens), source_text=normalized) if cut < len(tokens) else ""
+    analyzed_lexical = sum(
+        any(character.isalnum() or character == "_" for character in token.text)
+        for token in tokens[:cut]
     )
-    models = model.get("modelsByCategory") or {}
+    if supplied_duration is not None:
+        analyzed_seconds = min(horizon, supplied_duration)
+        timing_source = "user-supplied planned spoken duration"
+        timing_estimated = False
+    else:
+        analyzed_seconds = min(horizon, analyzed_lexical / rate)
+        timing_source = "measured corpus median speaking rate"
+        timing_estimated = True
+    slow_rate = float(support.get("measuredWordsPerSecondP10") or rate)
+    fast_rate = float(support.get("measuredWordsPerSecondP90") or rate)
+    return {
+        "inputText": normalized,
+        "analyzedText": analyzed,
+        "excludedAfter20Seconds": remainder or None,
+        "inputWasLongerThan20Seconds": bool(remainder),
+        "estimatedSpokenSeconds": float(analyzed_seconds),
+        "plannedSpokenSeconds": supplied_duration,
+        "timingEstimated": timing_estimated,
+        "timingSource": timing_source,
+        "estimatedDurationRangeSeconds": (
+            None if supplied_duration is not None else {
+                "fasterP90Rate": float(analyzed_lexical / max(fast_rate, 1e-9)),
+                "slowerP10Rate": float(analyzed_lexical / max(slow_rate, 1e-9)),
+            }
+        ),
+        "wordsPerSecond": rate,
+        "inputLexicalTokens": lexical_count,
+        "analyzedLexicalTokens": analyzed_lexical,
+        "modelTimingSupport": {
+            "p10WordsPerSecond": slow_rate,
+            "medianWordsPerSecond": rate,
+            "p90WordsPerSecond": fast_rate,
+        },
+    }
+
+
+def _selected_component_vectors(primitives: dict,
+                                partition: dict) -> tuple[np.ndarray, np.ndarray]:
     starts = np.asarray(primitives["starts"], int)
     ends = np.asarray(primitives["ends"], int)
-    rows = []
-    for index, chunk in enumerate(partition["chunks"]):
+    indices = []
+    for chunk in partition["chunks"]:
         matches = np.flatnonzero(
             (starts == int(chunk["start"])) & (ends == int(chunk["end"]))
         )
         if len(matches) != 1:
-            raise RuntimeError("20-second response component is absent from the span tensor")
-        category = str(int(chunk["category"]))
-        category_model = models.get(category)
-        if not category_model:
-            raise RuntimeError(f"20-second response category model is missing: {category}")
-        span_index = int(matches[0])
-        feature = combined_component_features(
-            primitives["raw"][span_index:span_index + 1],
-            primitives["influence"][span_index:span_index + 1],
-        )[0]
-        coordinate = float(feature @ np.asarray(category_model["direction"], np.float32))
-        map_y = float(feature @ np.asarray(category_model["mapDirection"], np.float32))
-        exploratory_percentile = weighted_percentile(
-            np.asarray(category_model["trainingProjectionSorted"], float),
-            np.asarray(category_model.get("trainingProjectionWeights") or np.ones(
-                len(category_model["trainingProjectionSorted"])
-            ), float),
-            coordinate,
-        )
-        response = {
-            "index": index,
-            "nodeId": f"span:{int(chunk['start'])}:{int(chunk['end'])}",
-            "startToken": int(chunk["start"]),
-            "endToken": int(chunk["end"]),
-            "tokenCount": int(chunk["end"]) - int(chunk["start"]),
-            "text": chunk["text"],
-            "label": "20-second opening component response",
-            "category": int(category),
-            "axisCoordinate": coordinate,
-            "axisPercentile": exploratory_percentile if promoted else None,
-            "mapY": map_y,
-            "servingAxisCoordinateFullFit": coordinate,
-            "servingAxisPercentileFullFit": exploratory_percentile,
-            "exploratoryFullFitPercentile": exploratory_percentile,
-            "servingMapYFullFit": map_y,
-            "servingAxisEvaluationEligible": False,
-            "selectedLagSeconds": model.get("selectedLagSeconds"),
-            "metricId": model.get("selectedCandidate"),
-            "observedRetentionAvailable": False,
-            "absoluteRetentionForecastAvailable": False,
-            "claim": (
-                "exploratory frozen semantic coordinate only; held-out promotion gates did "
-                "not pass, and a typed opening has no measured retention curve"
-                if not promoted else
-                "promoted frozen semantic response coordinate; a typed opening has no "
-                "measured retention curve, so the scorer does not invent one"
-            ),
-            "validation": category_model.get("validation"),
-        }
-        rows.append(response)
-    return {
-        "status": "promoted" if promoted else "exploratory-not-promoted",
-        "promotion": promotion,
-        "analysisHorizonSeconds": model.get("analysisHorizonSeconds"),
-        "selectedLagSeconds": model.get("selectedLagSeconds"),
-        "selectedCandidate": model.get("selectedCandidate"),
-        "components": rows,
-        "partition": {
-            key: value for key, value in partition.items() if key != "owners"
-        },
-        "componentCount": len(rows),
-        "exactNonoverlappingCover": bool(
-            partition.get("coverage") == 1 and partition.get("overlapCount") == 0
-        ),
-        "absoluteRetentionForecastAvailable": False,
-        "servingContract": model.get("servingContract"),
-        "validation": model.get("validation"),
-    }
+            raise RuntimeError("canonical component is missing from the exact span tensor")
+        indices.append(int(matches[0]))
+    selected = np.asarray(indices, int)
+    return primitives["raw"][selected], primitives["influence"][selected]
 
 
-def _prediction_interval(payload: dict, model: dict) -> dict:
-    validation = model.get("validation") or {}
-    prediction = float(payload["prediction"])
-    payload.update({
-        "predictionP10": prediction + float(validation.get("residualP10") or 0),
-        "predictionP90": prediction + float(validation.get("residualP90") or 0),
-        "validation": validation,
-    })
-    return payload
-
-
-def _scalar_prediction(feature: np.ndarray, model: dict) -> float:
-    return float(apply_linear_model(np.asarray(feature, np.float32), model)[0, 0])
-
-
-def _score_local_attributions(primitives: dict, partition: dict,
-                              counter_vectors: dict, components: list[dict],
-                              interactions: list[dict], outcomes: dict,
-                              outcome_model: dict) -> dict:
-    """Apply the frozen whole-hook models to exact local counterfactuals."""
-    calibration = outcome_model.get("localAttributionCalibration") or {}
-    component_calibration = calibration.get("componentsByCategory") or {}
-    pair_calibration = calibration.get("pairsByCategorySequence") or {}
-    survival_model = outcome_model["survivalModel"]
-    scale = survival_model.get("scoreScale") or {}
-    prediction_std = max(float(scale.get("predictionStd") or 1), 1e-9)
-    hold_full = _scalar_prediction(primitives["full"], survival_model)
-    hold_without = {
-        index: _scalar_prediction(value, survival_model)
-        for index, value in counter_vectors["withoutOne"].items()
+def _typed_prefix_features(primitives: dict, scope: dict,
+                           analysis_end: float) -> tuple[dict[int, np.ndarray], list[dict]]:
+    tokens = primitives["tokens"]
+    lookup = {
+        (int(start), int(end)): index
+        for index, (start, end) in enumerate(zip(primitives["starts"], primitives["ends"]))
     }
-    hold_without_pair = {
-        key: _scalar_prediction(value, survival_model)
-        for key, value in counter_vectors["withoutPair"].items()
-    }
-    direct_models = outcome_model.get("hookModels") or {}
-    direct_full = {
-        target: _scalar_prediction(primitives["full"], model)
-        for target, model in direct_models.items()
-    }
-    direct_without = {
-        target: {
-            index: _scalar_prediction(value, model)
-            for index, value in counter_vectors["withoutOne"].items()
-        } for target, model in direct_models.items()
-    }
-    direct_without_pair = {
-        target: {
-            key: _scalar_prediction(value, model)
-            for key, value in counter_vectors["withoutPair"].items()
-        } for target, model in direct_models.items()
-    }
-    curve_model = outcome_model["curveModel"]
-    curve_full = apply_linear_model(primitives["full"], curve_model)[0]
-    curve_without = {
-        index: apply_linear_model(value, curve_model)[0]
-        for index, value in counter_vectors["withoutOne"].items()
-    }
-    curve_without_pair = {
-        key: apply_linear_model(value, curve_model)[0]
-        for key, value in counter_vectors["withoutPair"].items()
-    }
-
-    tokens = partition["tokens"]
-    owners = np.asarray(partition["owners"], int)
     lexical = np.asarray([
-        any(character.isalnum() or character == "_" for character in str(token.get("text") or ""))
+        any(character.isalnum() or character == "_" for character in token.text)
         for token in tokens
     ], bool)
-    words_per_second = max(float(
-        (outcome_model.get("speakingRate") or {}).get("meanWordsPerSecond") or 1
-    ), 1e-9)
-    response_lag = float(outcome_model.get("responseLagSeconds") or 0)
-    full_response_seconds = float(outcomes["survivalScore"]["responseEndSeconds"])
+    lexical_total = int(lexical.sum())
+    if scope.get("plannedSpokenSeconds") is not None:
+        completion = np.cumsum(lexical) / lexical_total * analysis_end
+    else:
+        completion = np.cumsum(lexical) / float(scope["wordsPerSecond"])
+    completion = np.minimum(completion, analysis_end)
+    features = {}
+    trace = []
+    for second in range(1, 21):
+        completed = np.flatnonzero(completion <= second + 1e-9)
+        cutoff = int(completed[-1] + 1) if len(completed) else 1
+        cutoff = min(len(tokens), max(1, cutoff))
+        span_index = lookup[(0, cutoff)]
+        features[second] = np.asarray(primitives["raw"][span_index], np.float32)
+        trace.append({
+            "second": float(second),
+            "prefixText": surface(tokens, 0, cutoff, source_text=primitives["text"]),
+            "endToken": cutoff,
+            "tokenCount": cutoff,
+            "usesWordsAfterThisSecond": False,
+            "timingSource": scope["timingSource"],
+        })
+    return features, trace
 
-    def response_seconds_without(removed: set[int]) -> float | None:
-        retained = int(np.sum(lexical & ~np.isin(owners, list(removed))))
-        return retained / words_per_second + response_lag if retained else None
 
-    def endpoint(lift: float, seconds: float | None) -> float | None:
-        if seconds is None or seconds <= 0:
-            return None
-        expected = float(apply_duration_baseline(
-            seconds, survival_model["lengthBaseline"],
-        ))
-        carry = max(expected + float(lift), 1e-4)
-        return float(100.0 * (carry / 100.0) ** seconds)
+def _typed_curve_payload(prefix_features: dict[int, np.ndarray], model: dict,
+                         analysis_end: float) -> dict:
+    model_times = np.asarray(model["predictionTimesSeconds"], np.float32)
+    families = {}
+    for family_name, family in (model.get("families") or {}).items():
+        temporal = list(family.get("temporalModels") or [])
+        if len(temporal) != 20:
+            raise RuntimeError("the opening model does not contain 20 causal temporal fits")
+        semantic = np.full(len(model_times), np.nan, np.float32)
+        baseline = np.full(len(model_times), np.nan, np.float32)
+        semantic[0] = baseline[0] = float(family["timeZeroMean"])
+        for row in temporal:
+            second = int(round(float(row["second"])))
+            semantic[second] = apply_scalar_stage(prefix_features[second], row["model"])
+            baseline[second] = float(row["baselineMean"])
+        low = semantic + np.asarray(family["residualP10"], np.float32)
+        high = semantic + np.asarray(family["residualP90"], np.float32)
+        display_times = model_times[model_times <= analysis_end + 1e-9]
+        if not len(display_times) or display_times[-1] < analysis_end - 1e-6:
+            display_times = np.append(display_times, analysis_end)
 
-    full_endpoint = endpoint(hold_full, full_response_seconds)
+        def sampled(values: np.ndarray) -> list[float]:
+            return np.interp(display_times, model_times, values).astype(float).tolist()
+
+        families[family_name] = {
+            "timesSeconds": display_times.astype(float).tolist(),
+            "predicted": sampled(semantic),
+            "predictionP10": sampled(low),
+            "predictionP90": sampled(high),
+            "actual": None,
+            "stages": {
+                "baseline": sampled(baseline),
+                "semanticPrefix": sampled(semantic),
+            },
+            "fullModelHorizonSeconds": float(model_times[-1]),
+            "displayStopsAtSuppliedText": True,
+            "selectedStage": "semanticPrefix",
+            "causalPrefixOnly": True,
+        }
+    return families
+
+
+def _semantic_contribution(curve: dict, second: float) -> dict:
+    times = np.asarray(curve["timesSeconds"], float)
+    stages = curve["stages"]
+    baseline = float(np.interp(second, times, np.asarray(stages["baseline"], float)))
+    semantic = float(np.interp(
+        second, times, np.asarray(stages["semanticPrefix"], float),
+    ))
+    return {
+        "baselinePercent": baseline,
+        "semanticDeltaPoints": semantic - baseline,
+        "componentStructureDeltaPoints": None,
+        "relationshipDeltaPoints": None,
+        "selectedStage": "semanticPrefix",
+        "finalPercent": semantic,
+        "componentAndRelationshipCandidatesAvailable": False,
+    }
+
+
+def _typed_local_impacts(full: np.ndarray, raw: np.ndarray, influence: np.ndarray,
+                         components: list[dict], token_count: int, model: dict,
+                         analysis_end: float) -> tuple[list[dict], list[dict], dict | None]:
+    candidates = model.get("endpointCandidates") or {}
+    endpoint_eligible = analysis_end >= 19.999
+    relationship_models = {
+        family_name: (((family.get("stages") or {}).get("relationships") or {}).get("model"))
+        for family_name, family in candidates.items()
+    }
+    endpoint_eligible = endpoint_eligible and all(relationship_models.values())
+    full_points = {}
+    nested_values = None
+    if endpoint_eligible:
+        all_features = build_feature_stages(full, raw, influence, components, token_count)
+        full_points = {
+            family_name: apply_scalar_stage(all_features["relationships"], row)
+            for family_name, row in relationship_models.items()
+        }
+        entry_stages = candidates["entryIndexed"]["stages"]
+        nested_values = {
+            stage: apply_scalar_stage(all_features[stage], entry_stages[stage]["model"])
+            for stage in ("semantic", "components", "relationships")
+        }
+
     component_rows = []
     for component in components:
-        index = int(component["index"])
-        category = str(int(component["category"]))
-        effect = hold_full - hold_without[index]
-        samples = np.asarray(
-            ((component_calibration.get("hook_hold") or {}).get(category) or []),
-            float,
-        )
-        natural_seconds = response_seconds_without({index})
-        fixed_without_endpoint = endpoint(hold_without[index], full_response_seconds)
-        natural_without_endpoint = endpoint(hold_without[index], natural_seconds)
-        direct = {}
-        for target, full_value in direct_full.items():
-            target_effect = full_value - direct_without[target][index]
-            target_samples = np.asarray(
-                ((component_calibration.get(target) or {}).get(category) or []),
-                float,
-            )
-            direct[target] = {
-                "fullPrediction": full_value,
-                "withoutPrediction": direct_without[target][index],
-                "effect": target_effect,
-                "categoryPercentile": (
-                    percentile(target_samples, target_effect)
-                    if len(target_samples) else None
+        value = dict(component)
+        if endpoint_eligible and len(components) > 1:
+            feature = build_feature_stages(
+                full, raw, influence, components, token_count,
+                removed_components=[int(component["index"])],
+            )["relationships"]
+            impact = {
+                family_name: {
+                    "retention20sPoints": float(
+                        full_points[family_name] - apply_scalar_stage(feature, row)
+                    ),
+                }
+                for family_name, row in relationship_models.items()
+            }
+            value["predictionImpact"] = {
+                "available": True,
+                "candidateStage": "relationships-at-20s",
+                "appliedToHeadline": False,
+                "definition": (
+                    "candidate 20-second prediction(full exact cover) minus prediction after "
+                    "deleting this component and recomputing relationship features"
+                ),
+                **impact,
+            }
+        else:
+            value["predictionImpact"] = {
+                "available": False,
+                "appliedToHeadline": False,
+                "reason": (
+                    "component outcome attribution is fitted only for a complete 20-second opening"
+                    if len(components) > 1 else
+                    "deleting the only exact-cover component leaves no analyzable opening"
                 ),
             }
-        curve_effect = curve_full - curve_without[index]
-        attribution = {
-            "metric": "Hook Hold",
-            "fullRawCoordinate": hold_full,
-            "withoutRawCoordinate": hold_without[index],
-            "effectRawCarryPointsPerSecond": effect,
-            "effectHoldZ": effect / prediction_std,
-            "categoryPercentile": (
-                percentile(samples, effect) if len(samples) else None
-            ),
-            "fixedDurationEndpointEffectPercentagePoints": (
-                full_endpoint - fixed_without_endpoint
-                if full_endpoint is not None and fixed_without_endpoint is not None else None
-            ),
-            "naturalDurationEndpointEffectPercentagePoints": (
-                full_endpoint - natural_without_endpoint
-                if full_endpoint is not None and natural_without_endpoint is not None else None
-            ),
-            "withoutResponseEndSeconds": natural_seconds,
-            "counterfactualLeavesText": natural_seconds is not None,
-            "higherMeans": (
-                "the frozen whole-hook model predicts less hold after this component is removed"
-            ),
-            "definition": "score(full hook) minus score(exact hook with this component removed)",
-            "claimBoundary": calibration.get("claimBoundary"),
-        }
-        component["hookHoldContribution"] = attribution
-        component["wholeHookOutcomeContributions"] = direct
-        component["retentionForecastContribution"] = {
-            "progressFractions": curve_model.get("progressFractions"),
-            "effectByProgressPercentagePoints": curve_effect.astype(float).tolist(),
-            "effectAtAnalyzedEndpointPercentagePoints": float(curve_effect[-1]),
-            "meanEffectPercentagePoints": float(np.mean(curve_effect)),
-            "definition": (
-                "complete-hook forecast minus the same frozen forecast after deleting this component"
-            ),
-        }
-        component_rows.append({
-            "index": index,
-            "text": component["text"],
-            "category": int(category),
-            **attribution,
-        })
+        component_rows.append(value)
 
-    pair_rows = []
-    for row in interactions:
-        left = int(row["left"]); right = int(row["right"])
-        key = (left, right)
-        category_pair = f"{components[left]['category']}->{components[right]['category']}"
-        value = (
-            hold_full - hold_without[left] - hold_without[right]
-            + hold_without_pair[key]
-        )
-        samples = np.asarray(
-            ((pair_calibration.get("hook_hold") or {}).get(category_pair) or []),
-            float,
-        )
-        fixed_pair_endpoint = endpoint(hold_without_pair[key], full_response_seconds)
-        fixed_left_endpoint = endpoint(hold_without[left], full_response_seconds)
-        fixed_right_endpoint = endpoint(hold_without[right], full_response_seconds)
-        natural_pair_seconds = response_seconds_without({left, right})
-        natural_left_seconds = response_seconds_without({left})
-        natural_right_seconds = response_seconds_without({right})
-        natural_pair_endpoint = endpoint(hold_without_pair[key], natural_pair_seconds)
-        natural_left_endpoint = endpoint(hold_without[left], natural_left_seconds)
-        natural_right_endpoint = endpoint(hold_without[right], natural_right_seconds)
-        direct = {}
-        for target, full_value in direct_full.items():
-            target_value = (
-                full_value - direct_without[target][left]
-                - direct_without[target][right]
-                + direct_without_pair[target][key]
-            )
-            target_samples = np.asarray(
-                ((pair_calibration.get(target) or {}).get(category_pair) or []),
-                float,
-            )
-            direct[target] = {
-                "interaction": target_value,
-                "categorySequencePercentile": (
-                    percentile(target_samples, target_value)
-                    if len(target_samples) else None
-                ),
+    relationship_rows = []
+    for left, right in zip(components[:-1], components[1:]):
+        edge = (int(left["index"]), int(right["index"]))
+        impact = {}
+        if endpoint_eligible:
+            feature = build_feature_stages(
+                full, raw, influence, components, token_count, disabled_edges=[edge],
+            )["relationships"]
+            impact = {
+                family_name: {
+                    "retention20sPoints": float(
+                        full_points[family_name] - apply_scalar_stage(feature, row)
+                    ),
+                }
+                for family_name, row in relationship_models.items()
             }
-        curve_value = (
-            curve_full - curve_without[left] - curve_without[right]
-            + curve_without_pair[key]
-        )
-        attribution = {
-            "metric": "Hook Hold",
-            "interactionRawCarryPointsPerSecond": value,
-            "interactionHoldZ": value / prediction_std,
-            "categorySequencePercentile": (
-                percentile(samples, value) if len(samples) else None
-            ),
-            "fixedDurationEndpointInteractionPercentagePoints": (
-                full_endpoint - fixed_left_endpoint - fixed_right_endpoint
-                + fixed_pair_endpoint
-                if all(item is not None for item in (
-                    full_endpoint, fixed_left_endpoint, fixed_right_endpoint,
-                    fixed_pair_endpoint,
-                )) else None
-            ),
-            "naturalDurationEndpointInteractionPercentagePoints": (
-                full_endpoint - natural_left_endpoint - natural_right_endpoint
-                + natural_pair_endpoint
-                if all(item is not None for item in (
-                    full_endpoint, natural_left_endpoint, natural_right_endpoint,
-                    natural_pair_endpoint,
-                )) else None
-            ),
-            "definition": (
-                "score(full) - score(without left) - score(without right) + score(without both)"
-            ),
-            "claimBoundary": calibration.get("claimBoundary"),
-        }
-        row["hookHoldInteraction"] = attribution
-        row["wholeHookOutcomeInteractions"] = direct
-        row["retentionForecastInteraction"] = {
-            "interactionAtAnalyzedEndpointPercentagePoints": float(curve_value[-1]),
-            "meanInteractionPercentagePoints": float(np.mean(curve_value)),
-        }
-        pair_rows.append({"left": left, "right": right, **attribution})
-
-    return {
-        "status": "complete",
-        "headlineMetric": {
-            "label": "Hook Hold z-score",
-            "value": outcomes["survivalScore"]["holdZ"],
-            "validationStatus": (
-                (outcomes["survivalScore"].get("validation") or {}).get("status")
-            ),
-        },
-        "componentMetric": (
-            "local Hook Hold deletion effect in the same frozen whole-hook coordinate"
-        ),
-        "relationshipMetric": (
-            "local second-order Hook Hold interaction in the same frozen whole-hook coordinate"
-        ),
-        "components": component_rows,
-        "relationships": pair_rows,
-        "coverage": {
-            "componentsScored": len(component_rows),
-            "componentsExpected": len(components),
-            "relationshipsScored": len(pair_rows),
-            "relationshipsExpected": len(components) * (len(components) - 1) // 2,
-            "tokensOwnedExactlyOnce": bool(
-                len(owners) == len(tokens) and np.all(owners >= 0)
-            ),
-        },
-        "calibrationMethod": calibration.get("method"),
-        "claimBoundary": calibration.get("claimBoundary"),
-    }
-
-
-def _score_outcomes(primitives: dict, partition: dict, components: list[dict],
-                    outcome_model: dict) -> dict:
-    targets = outcome_model.get("targets") or {}
-    hook_models = outcome_model.get("hookModels") or {}
-    component_models = outcome_model.get("componentModels") or {}
-    hook_predictions = {}
-    for target_name, target_meta in targets.items():
-        model = hook_models[target_name]
-        hook_predictions[target_name] = {
-            **_prediction_interval(
-                outcome_prediction_payload(primitives["full"], model), model,
-            ),
-            "target": target_name,
-            "targetMeta": target_meta,
-        }
-
-    starts = np.asarray(primitives["starts"], int)
-    ends = np.asarray(primitives["ends"], int)
-    component_predictions = []
-    for chunk, component in zip(partition["chunks"], components):
-        matches = np.flatnonzero(
-            (starts == int(chunk["start"])) & (ends == int(chunk["end"]))
-        )
-        if len(matches) != 1:
-            raise RuntimeError("decoded component is missing from the outcome tensor")
-        span_index = int(matches[0])
-        feature = combined_component_features(
-            primitives["raw"][span_index:span_index + 1],
-            primitives["influence"][span_index:span_index + 1],
-        )[0]
-        category = str(int(chunk["category"]))
-        outcomes = {}
-        for target_name, target_meta in targets.items():
-            target_model = component_models[target_name]
-            model = target_model["modelsByCategory"][category]
-            outcomes[target_name] = {
-                **_prediction_interval(
-                    outcome_prediction_payload(feature, model), model,
-                ),
-                "target": target_name,
-                "targetMeta": target_meta,
-                "category": int(category),
-                "sourceAggregateValidation": target_model.get(
-                    "sourceAggregateValidation"
-                ),
-            }
-        component["outcomePredictions"] = outcomes
-        component_predictions.append({
-            "index": int(component["index"]),
-            "category": int(category),
-            "text": component["text"],
-            "outcomes": outcomes,
-        })
-
-    curve_model = (
-        outcome_model.get("entryNormalizedCurveModel")
-        or outcome_model["curveModel"]
-    )
-    observed_curve_model = outcome_model.get("observedAbsoluteCurveModel")
-    progress = np.asarray(curve_model["progressFractions"], np.float32)
-    rate = outcome_model.get("speakingRate") or {}
-    response_lag = float(outcome_model.get("responseLagSeconds") or 0)
-    mean_words_per_second = float(rate.get("meanWordsPerSecond") or 1)
-    lexical_count = sum(
-        any(character.isalnum() or character == "_" for character in str(token.get("text") or ""))
-        for token in partition["tokens"]
-    )
-    if lexical_count < 1:
-        raise RuntimeError("a hook must contain at least one lexical token")
-    spoken_end = lexical_count / max(mean_words_per_second, 1e-9)
-    response_end = spoken_end + response_lag
-    times = progress * response_end
-    predicted = apply_linear_model(primitives["full"], curve_model)[0]
-    predicted[0] = 100.0
-    lower = predicted + np.asarray(curve_model["residualP10ByTime"], np.float32)
-    upper = predicted + np.asarray(curve_model["residualP90ByTime"], np.float32)
-    lower[0] = 100.0
-    upper[0] = 100.0
-    observed_predicted = None
-    observed_lower = None
-    observed_upper = None
-    if observed_curve_model:
-        observed_predicted = apply_linear_model(
-            primitives["full"], observed_curve_model,
-        )[0]
-        observed_lower = observed_predicted + np.asarray(
-            observed_curve_model["residualP10ByTime"], np.float32,
-        )
-        observed_upper = observed_predicted + np.asarray(
-            observed_curve_model["residualP90ByTime"], np.float32,
-        )
-    words = estimated_token_timeline(
-        partition["tokens"], partition["owners"], times, predicted,
-        mean_words_per_second, response_lag,
-        lower, upper,
-    )
-    enrich_word_semantics(words, partition["tokens"], partition["chunks"])
-    singleton_lookup = {
-        int(token["index"]): int(np.flatnonzero(
-            (starts == int(token["index"])) & (ends == int(token["index"]) + 1)
-        )[0]) for token in partition["tokens"]
-    }
-    for word in words:
-        second = float(word["responseSeconds"])
-        word["entryIndexedPredictedRetentionPercent"] = interpolate_series(
-            times, predicted, second,
-        )
-        word["entryIndexedPredictionP10"] = interpolate_series(
-            times, lower, second,
-        )
-        word["entryIndexedPredictionP90"] = interpolate_series(
-            times, upper, second,
-        )
-        without_word = apply_linear_model(
-            primitives["context"][singleton_lookup[int(word["tokenIndex"])]], curve_model,
-        )[0]
-        without_word[0] = 100.0
-        word["entryIndexedForecastDeletionContributionByTime"] = (
-            predicted - without_word
-        ).astype(float).tolist()
-        if observed_curve_model:
-            word["observedAbsolutePredictedRetentionPercent"] = interpolate_series(
-                times, observed_predicted, second,
-            )
-            word["observedAbsolutePredictionP10"] = interpolate_series(
-                times, observed_lower, second,
-            )
-            word["observedAbsolutePredictionP90"] = interpolate_series(
-                times, observed_upper, second,
-            )
-            observed_without = apply_linear_model(
-                primitives["context"][singleton_lookup[int(word["tokenIndex"])]],
-                observed_curve_model,
-            )[0]
-            word["observedForecastDeletionContributionByTime"] = (
-                observed_predicted - observed_without
-            ).astype(float).tolist()
-    spoken_end = max((float(word["spokenEndSeconds"]) for word in words), default=spoken_end)
-    response_end = max((float(word["responseSeconds"]) for word in words), default=response_end)
-    survival_model = outcome_model["survivalModel"]
-    survival_payload = _prediction_interval(
-        outcome_prediction_payload(primitives["full"], survival_model),
-        survival_model,
-    )
-    expected_carry = float(apply_duration_baseline(
-        response_end, survival_model["lengthBaseline"],
-    ))
-    predicted_lift = float(survival_payload["prediction"])
-    predicted_carry = expected_carry + predicted_lift
-    score_scale = survival_model.get("scoreScale") or {}
-    hold_z = (
-        predicted_lift - float(score_scale.get("predictionMean") or 0)
-    ) / max(float(score_scale.get("predictionStd") or 1), 1e-9)
-    baseline_end = float(
-        100.0 * (max(expected_carry, 1e-4) / 100.0) ** max(response_end, 1e-4)
-    )
-    predicted_end = float(
-        100.0 * (max(predicted_carry, 1e-4) / 100.0) ** max(response_end, 1e-4)
-    )
-    survival_score = {
-        **survival_payload,
-        "label": "Hook Hold z-score",
-        "holdZ": float(hold_z),
-        "higherMeans": survival_model["targetContract"]["higherMeans"],
-        "definition": survival_model["targetContract"]["formula"],
-        "responseEndSeconds": response_end,
-        "spokenHookEndSeconds": spoken_end,
-        "expectedCarryPercentPerSecond": expected_carry,
-        "predictedCarryPercentPerSecond": predicted_carry,
-        "predictedEntryIndexedRetentionAtResponseEnd": predicted_end,
-        "durationBaselineRetentionAtResponseEnd": baseline_end,
-        "predictedHoldLiftPercentagePoints": predicted_end - baseline_end,
-        "scoreScale": score_scale,
-        "targetContract": survival_model["targetContract"],
-    }
-    long_prior_model = outcome_model.get("longTitlePrior") or {}
-    long_coefficient = np.asarray(long_prior_model.get("coefficient") or [], np.float32)
-    long_prior = None
-    if long_coefficient.shape == primitives["full"].shape:
-        predicted_long_views = float(
-            primitives["full"] @ long_coefficient
-            + float(long_prior_model.get("intercept") or 0)
-        )
-        long_prior = {
-            "predictedLog10LongFormViews": predicted_long_views,
-            "z": float(
-                (predicted_long_views - float(long_prior_model.get("trainingPredictionMean") or 0))
-                / max(float(long_prior_model.get("trainingPredictionStd") or 1), 1e-9)
-            ),
-            "blendedIntoHookHold": False,
-            "claimBoundary": long_prior_model.get("claimBoundary"),
-        }
-    return {
-        "status": "complete",
-        "methodVersion": outcome_model.get("methodVersion"),
-        "targets": targets,
-        "hook": hook_predictions,
-        "components": component_predictions,
-        "survivalScore": survival_score,
-        "longTitleMarketPrior": long_prior,
-        "retentionForecast": {
-            "status": (curve_model.get("validation") or {}).get("status"),
-            "normalizationAvailable": True,
-            "availableCurveModes": (
-                ["entry", "absolute"] if observed_curve_model else ["entry"]
-            ),
-            "measuredCurveAvailable": False,
-            "terminalSensitivityAvailable": False,
-            "primaryNormalization": "entry-indexed",
-            "normalizationUnavailableReason": (
-                "Terminal-conditioned replay sensitivity requires a measured audience-retention "
-                "curve and measured terminal retention. Text alone supplies neither input."
-            ),
-            "progressFractions": progress.astype(float).tolist(),
-            "timesSeconds": times.astype(float).tolist(),
-            "predictedPercent": predicted.astype(float).tolist(),
-            "predictionP10": lower.astype(float).tolist(),
-            "predictionP90": upper.astype(float).tolist(),
-            "entryIndexedPredictedPercent": predicted.astype(float).tolist(),
-            "entryIndexedPredictionP10": lower.astype(float).tolist(),
-            "entryIndexedPredictionP90": upper.astype(float).tolist(),
-            "observedAbsolutePredictedPercent": (
-                observed_predicted.astype(float).tolist()
-                if observed_predicted is not None else None
-            ),
-            "observedAbsolutePredictionP10": (
-                observed_lower.astype(float).tolist()
-                if observed_lower is not None else None
-            ),
-            "observedAbsolutePredictionP90": (
-                observed_upper.astype(float).tolist()
-                if observed_upper is not None else None
-            ),
-            "validation": curve_model.get("validation"),
-            "entryIndexedValidation": curve_model.get("validation"),
-            "observedAbsoluteValidation": (
-                observed_curve_model.get("validation") if observed_curve_model else None
-            ),
-            "speakingRate": rate,
-            "responseLagSeconds": response_lag,
-            "spokenHookEndSeconds": spoken_end,
-            "responseEndSeconds": response_end,
-            "analysisEndSeconds": response_end,
-            "forecastScope": (
-                "all 41 outputs lie between the first analyzed hook word and the final "
-                "analyzed hook response; there are no post-hook outputs"
-            ),
-            "forecastInput": {
-                **partition["forecastSemanticInput"],
-                "embeddingModel": outcome_model.get("embeddingModel"),
-                "embeddingDimensions": outcome_model.get("embeddingDimensions"),
-                "formula": (
-                    "y_hat(p_j) = intercept_j + unit(GeminiEmbedding(complete hook)) "
-                    "dot coefficient_j for 41 normalized positions inside the analyzed hook"
-                ),
-                "outputCluster": None,
-                "outputClusterReason": (
-                    "the 41 forecast values are scalar retention outputs, not semantic embeddings"
+        relationship_rows.append({
+            "left": edge[0],
+            "right": edge[1],
+            "leftCategory": int(left["category"]),
+            "rightCategory": int(right["category"]),
+            "predictionImpact": {
+                **impact,
+                "available": endpoint_eligible,
+                "candidateStage": "relationships-at-20s",
+                "appliedToHeadline": False,
+                "reason": None if endpoint_eligible else (
+                    "20-second endpoint relationship attribution is unavailable for shorter text"
                 ),
             },
-            "wordContributionDefinition": (
-                "local deletion diagnostic at every within-hook position: complete-hook forecast minus the "
-                "forecast from the same model after deleting exactly this token; values are "
-                "not additive Shapley effects"
-            ),
-            "wordTimingPolicy": "library-average speaking rate",
-            "words": words,
-            "componentWindows": component_response_windows(
-                words, len(components), response_lag,
-            ),
-        },
-    }
+        })
+    return component_rows, relationship_rows, nested_values
 
 
-def score_text(text: str, model: dict | None = None, partition_model: dict | None = None,
+def score_text(text: str, model: dict | None = None,
+               partition_model: dict | None = None,
                store: EmbeddingStore | None = None,
                outcome_model: dict | None = None,
-               market_model: dict | None = None, lattice_model: dict | None = None,
+               market_model: dict | None = None,
+               lattice_model: dict | None = None,
                opening_model: dict | None = None,
-               idea_text: str = "") -> dict:
-    model = model or load_artifact(MODEL_FILE)
+               idea_text: str = "",
+               opening_retention_model: dict | None = None,
+               planned_duration_seconds: float | None = None) -> dict:
+    """Score typed text with the exact temporal contract used by the saved library."""
+    del model, outcome_model, market_model
     partition_model = partition_model or load_artifact(PARTITION_FILE)
-    outcome_model = outcome_model or load_artifact(OUTCOME_MODEL_FILE)
-    market_model = market_model or load_artifact(MARKET_MODEL_FILE)
     lattice_model = lattice_model or load_artifact(LATTICE_MODEL_FILE)
-    if opening_model is None:
-        try:
-            opening_model = load_artifact(OPENING_MODEL_FILE)
-        except Exception:
-            opening_model = None
+    opening_model = opening_model or load_artifact(OPENING_MODEL_FILE)
+    retention_model = (
+        opening_retention_model or load_artifact(OPENING_RETENTION_MODEL_FILE)
+    )
+    scope = _prediction_text_scope(text, retention_model, planned_duration_seconds)
     idea_text = normalize_source(idea_text)
     owned_store = store is None
     store = store or EmbeddingStore(_embedding_cache_path())
     try:
-        primitives = build_span_primitives(text, store)
-        partition = decode_partition(primitives, partition_model)
-        component_count = int(partition["componentCount"])
-        counter_texts = local_counterfactual_texts(
-            primitives["text"], primitives["tokens"], partition["owners"],
-            component_count,
+        primitives = build_span_primitives(scope["analyzedText"], store)
+        extension = dict(opening_model.get("partitionExtension") or {})
+        extension["activationTokenThreshold"] = -1
+        partition = decode_partition(
+            primitives, partition_model, horizon_extension=extension,
         )
-        required = [
-            value for family in ("withoutOne", "withoutPair", "pairOnly")
-            for value in counter_texts[family].values() if value
-        ]
-        embedded = store.embed_many([*required, *([idea_text] if idea_text else [])])
-        idea_vector = row_unit(embedded[idea_text]) if idea_text else None
-        zero = np.zeros_like(primitives["full"])
-
-        def counter_vector(value: str) -> np.ndarray:
-            return row_unit(embedded[value]) if value else zero
-
-        counter_vectors = {
-            family: {key: counter_vector(value) for key, value in counter_texts[family].items()}
-            for family in ("withoutOne", "withoutPair", "pairOnly")
-        }
+        idea_vector = (
+            row_unit(store.embed_many([idea_text])[idea_text]) if idea_text else None
+        )
     finally:
         if owned_store:
             store.close()
 
-    direction = np.asarray(model["qualityDirection"], np.float32)
-    starts = np.asarray(primitives["starts"], int)
-    ends = np.asarray(primitives["ends"], int)
-    span_indices = np.asarray([
-        int(np.flatnonzero(
-            (starts == int(chunk["start"])) & (ends == int(chunk["end"]))
-        )[0]) for chunk in partition["chunks"]
-    ], int)
-    singleton_vectors = primitives["raw"][span_indices]
-    context_vectors = primitives["context"][span_indices]
-    full_coordinate = float(primitives["full"] @ direction)
-    singleton_scores = singleton_vectors @ direction
-    context_scores = context_vectors @ direction
-    deletion_effects = full_coordinate - context_scores
-    pair_context = counter_vectors["withoutPair"]
-    interactions = []
-    for left in range(component_count):
-        for right in range(left + 1, component_count):
-            interactions.append({
-                "left": left,
-                "right": right,
-                "interaction": float(
-                    full_coordinate - context_scores[left] - context_scores[right]
-                    + pair_context[(left, right)] @ direction
-                ),
-                "definition": "full - without left - without right + without both",
-            })
-    bootstrap_components, bootstrap_pairs = _bootstrap_attribution(
-        primitives["full"], singleton_vectors, context_vectors, pair_context, model,
+    raw, influence = _selected_component_vectors(primitives, partition)
+    components = [{
+        **chunk,
+        "startToken": int(chunk["start"]),
+        "endToken": int(chunk["end"]),
+    } for chunk in partition["chunks"]]
+    analysis_end = max(.01, float(scope["estimatedSpokenSeconds"]))
+    prefix_features, prefix_trace = _typed_prefix_features(
+        primitives, scope, analysis_end,
     )
-    training_projection = np.asarray(model["trainingProjectionsSorted"], float)
-    axis_percentile = percentile(training_projection, full_coordinate)
+    curves = _typed_curve_payload(prefix_features, retention_model, analysis_end)
+    entry = curves["entryIndexed"]
+    absolute = curves["observedAbsolute"]
+    endpoint = float(entry["predicted"][-1])
+    retention5 = None
+    views = None
+    if analysis_end >= 5.0:
+        retention5 = float(np.interp(
+            5.0, np.asarray(absolute["timesSeconds"], float),
+            np.asarray(absolute["predicted"], float),
+        ))
+        contract = retention_model["viewsContract"]
+        views = views_from_retention5(retention5, contract)
+        center_log = math.log10(max(1.0, views["estimate"]))
+        if contract.get("stackResidualP10Log10") is not None:
+            views["lower80"] = float(10 ** (
+                center_log + float(contract["stackResidualP10Log10"])
+            ))
+            views["upper80"] = float(10 ** (
+                center_log + float(contract["stackResidualP90Log10"])
+            ))
+            views["intervalMethod"] = (
+                "10th and 90th percentiles of partially OOF stack residuals"
+            )
+        views["promoted"] = bool(contract.get("individualizedForecastAvailable"))
+        views["status"] = str(contract.get("promotionStatus") or "withheld")
 
-    bootstrap_directions = np.asarray(model.get("bootstrapDirections") or [], np.float32)
-    bootstrap_training = np.asarray(model.get("bootstrapTrainingProjectionsSorted") or [], float)
-    bootstrap_coordinates = bootstrap_directions @ primitives["full"] if len(bootstrap_directions) else np.asarray([])
-    bootstrap_percentiles = np.asarray([
-        percentile(training, value)
-        for training, value in zip(bootstrap_training, bootstrap_coordinates)
-    ], float)
-
-    training_embeddings = np.asarray(model["trainingFullEmbeddings"], np.float32)
-    similarities = training_embeddings @ primitives["full"]
-    nearest_order = np.argsort(-similarities, kind="stable")[:5]
-    nearest = [{
-        "videoId": model["trainingIds"][index],
-        "text": model["trainingTexts"][index],
-        "cosine": float(similarities[index]),
-    } for index in nearest_order]
-    nearest_cosine = float(similarities[nearest_order[0]])
-    domain_percentile = percentile(
-        np.asarray(model["leaveOneOutNearestCosineSorted"], float), nearest_cosine,
+    components, relationships, endpoint_candidates = _typed_local_impacts(
+        primitives["full"], raw, influence, components, len(primitives["tokens"]),
+        retention_model, analysis_end,
     )
-
-    components = []
-    for index, (chunk, value) in enumerate(zip(partition["chunks"], deletion_effects)):
-        category_key = str(chunk["category"])
-        samples = bootstrap_components[:, index] if len(bootstrap_components) else np.asarray([])
-        components.append({
-            **chunk,
-            "retainedInformationDeletionEffect": float(value),
-            "categoryContributionPercentile": percentile(
-                np.asarray(model["categoryDeletionCalibration"][category_key], float), float(value),
-            ),
-            "singletonAxisCoordinate": float(singleton_scores[index]),
-            "withoutComponentAxisCoordinate": float(context_scores[index]),
-            "attributionDefinition": model["componentDefinition"],
-            "bootstrapP10": float(np.quantile(samples, .1)) if len(samples) else None,
-            "bootstrapMedian": float(np.median(samples)) if len(samples) else None,
-            "bootstrapP90": float(np.quantile(samples, .9)) if len(samples) else None,
-            "bootstrapPositiveFraction": float(np.mean(samples > 0)) if len(samples) else None,
-        })
-
-    for pair_index, row in enumerate(interactions):
-        left = int(row["left"]); right = int(row["right"])
-        pair_key = f"{components[left]['category']}->{components[right]['category']}"
-        calibration = np.asarray(model["pairInteractionCalibration"].get(pair_key) or [], float)
-        samples = bootstrap_pairs[:, pair_index] if len(bootstrap_pairs) else np.asarray([])
-        row.update({
-            "categoryPair": pair_key,
-            "interactionPercentile": percentile(calibration, row["interaction"]) if len(calibration) else None,
-            "bootstrapP10": float(np.quantile(samples, .1)) if len(samples) else None,
-            "bootstrapMedian": float(np.median(samples)) if len(samples) else None,
-            "bootstrapP90": float(np.quantile(samples, .9)) if len(samples) else None,
-            "bootstrapPositiveFraction": float(np.mean(samples > 0)) if len(samples) else None,
-        })
-
-    market_score = score_market_vector(primitives["full"], market_model)
-    market_local = local_market_effects(
-        primitives["full"], counter_vectors["withoutOne"],
-        counter_vectors["withoutPair"],
-        [int(component["category"]) for component in components], market_model,
-    )
-    if len(market_local["components"]) != len(components):
-        raise RuntimeError("Market Hold component attribution count differs")
-    if len(market_local["relationships"]) != len(interactions):
-        raise RuntimeError("Market Hold relationship attribution count differs")
-    for component, contribution in zip(components, market_local["components"]):
-        component["marketHoldContribution"] = contribution
-    for interaction, contribution in zip(interactions, market_local["relationships"]):
-        if (int(interaction["left"]), int(interaction["right"])) != (
-            int(contribution["left"]), int(contribution["right"]),
-        ):
-            raise RuntimeError("Market Hold relationship order differs")
-        interaction["marketHoldInteraction"] = contribution
-
-    forward_response = _score_forward_response(
-        primitives, partition, counter_vectors, components, interactions, model,
-    )
-    opening_20s_response = _score_opening_20s_response(
-        primitives, partition_model, opening_model,
-    )
-    outcomes = _score_outcomes(
-        primitives, partition, components, outcome_model,
-    )
-    component_lattice = build_component_lattice(
-        text=primitives["text"], tokens=primitives["tokens"],
-        starts=primitives["starts"], ends=primitives["ends"],
-        raw=primitives["raw"], context=primitives["context"],
-        influence=primitives["influence"], nonadditive=primitives["nonadditive"],
-        full=primitives["full"], partition=partition, partition_model=partition_model,
-        words_per_second=float((outcome_model.get("speakingRate") or {}).get(
-            "meanWordsPerSecond") or 1),
+    lattice = build_component_lattice(
+        text=primitives["text"],
+        tokens=primitives["tokens"],
+        starts=primitives["starts"],
+        ends=primitives["ends"],
+        raw=primitives["raw"],
+        context=primitives["context"],
+        influence=primitives["influence"],
+        nonadditive=primitives["nonadditive"],
+        full=primitives["full"],
+        partition=partition,
+        partition_model=partition_model,
+        words_per_second=scope["wordsPerSecond"],
         prefix_transition_null=np.asarray(
             lattice_model.get("prefixTransitionNullSorted") or [], np.float32,
         ),
-        idea_text=idea_text or None, idea_vector=idea_vector,
-        title_manifold=lattice_model.get("titleManifold"),
-        inference_outcomes=outcomes, source_kind="live-predictor",
+        idea_text=idea_text or None,
+        idea_vector=idea_vector,
+        title_manifold=None,
+        source_kind="typed-opening-predictor",
     )
-    scorecard = _score_local_attributions(
-        primitives, partition, counter_vectors, components, interactions,
-        outcomes, outcome_model,
-    )
+    contributions = {
+        "atAnalyzedEnd": _semantic_contribution(entry, analysis_end),
+        "at5Seconds": _semantic_contribution(entry, 5.0) if analysis_end >= 5.0 else None,
+        "definition": (
+            "baseline plus one causal prefix-semantic model at every plotted second; component "
+            "and relationship endpoint candidates are withheld"
+        ),
+    }
+    if endpoint_candidates is not None:
+        at20 = _semantic_contribution(entry, 20.0)
+        at20.update({
+            "componentStructureDeltaPoints": float(
+                endpoint_candidates["components"] - endpoint_candidates["semantic"]
+            ),
+            "relationshipDeltaPoints": float(
+                endpoint_candidates["relationships"] - endpoint_candidates["components"]
+            ),
+            "semanticCandidatePercent": endpoint_candidates["semantic"],
+            "componentsCandidatePercent": endpoint_candidates["components"],
+            "relationshipCandidatePercent": endpoint_candidates["relationships"],
+            "componentAndRelationshipCandidatesAvailable": True,
+            "componentAndRelationshipCandidatesApplied": False,
+        })
+        contributions["at20Seconds"] = at20
 
-    validation = model["validation"]
-    retained_score = {
-        "label": "Hook retained-information percentile",
-        "axisCoordinate": full_coordinate,
-        "percentile": axis_percentile,
-        "higherMeans": model["target"]["higherMeans"],
-        "definition": model["scoreDefinition"],
-    }
-    retained_map = {
-        "x": full_coordinate,
-        "y": float(primitives["full"] @ np.asarray(
-            model["mapOrthogonalDirection"], np.float32,
-        )),
-        "xDefinition": "frozen retained-information coordinate",
-        "yDefinition": "largest remaining semantic direction orthogonal to retained information",
-    }
-    survival_score = outcomes["survivalScore"]
-    survival_validation = survival_score.get("validation") or {}
-    token_count = len(primitives["tokens"])
-    lexical_token_count = int(np.sum(primitives["lexical"]))
-    training_token_counts = np.asarray([
-        len(tokenize(str(value))) for value in model.get("trainingTexts") or []
-    ], int)
     stable_payload = (
-        f"{SCORER_VERSION}\0{model['methodVersion']}\0{primitives['text']}"
-        f"\0{idea_text or ''}"
+        f"{PREDICTOR_VERSION}\0{FEATURE_VERSION}\0{scope['analyzedText']}\0"
+        f"{idea_text}\0{scope.get('plannedSpokenSeconds')}"
     )
     return {
-        "version": 2,
+        "version": 4,
         "status": "complete",
         "id": hashlib.sha256(stable_payload.encode("utf-8")).hexdigest()[:20],
-        "scorerVersion": SCORER_VERSION,
-        "modelVersion": model["methodVersion"],
+        "scorerVersion": PREDICTOR_VERSION,
+        "predictorVersion": PREDICTOR_VERSION,
+        "featureVersion": FEATURE_VERSION,
+        "sourceKind": "typed-opening-causal-full-fit",
         "input": {
-            "hookText": primitives["text"],
-            "embeddingModel": model["embeddingModel"],
-            "embeddingDimensions": model["embeddingDimensions"],
-            "trainingVectorStorageDtype": primitives["trainingVectorStorageDtype"],
-            "liveQuantizationMatchesTrainingStore": primitives["liveQuantizationMatchesTrainingStore"],
-            "fullHookEmbeddingInput": primitives["text"],
-            "primaryScoreEmbeddingInput": primitives["text"],
-            "spanEmbeddingInputs": primitives["embeddingInputs"],
-            "localCounterfactualEmbeddingInputs": len(set(required)),
-            "emergentComponentCount": component_count,
-            "tokenCount": token_count,
-            "lexicalTokenCount": lexical_token_count,
-            "trainingTokenCountMinimum": (
-                int(training_token_counts.min()) if len(training_token_counts) else None
-            ),
-            "trainingTokenCountMaximum": (
-                int(training_token_counts.max()) if len(training_token_counts) else None
-            ),
-            "trainingTokenCountPercentile": (
-                percentile(training_token_counts, token_count)
-                if len(training_token_counts) else None
-            ),
-            "outsideTrainingLengthRange": bool(
-                len(training_token_counts)
-                and (token_count < training_token_counts.min()
-                     or token_count > training_token_counts.max())
-            ),
-            "generativeLlmUsed": False,
+            **scope,
             "candidateIdeaAnchor": idea_text or None,
+            "generativeLlmUsed": False,
+            "forecastBeyondSuppliedText": False,
         },
-        "primaryScore": market_score,
-        "hookHoldDiagnostic": survival_score,
-        "confidence": {
-            "heldoutSpearman": survival_validation.get("heldoutSpearman"),
-            "heldoutPearson": survival_validation.get("heldoutPearson"),
-            "familyCorrectedRankPermutationP": (
-                (survival_validation.get("rankInference") or {}).get("p")
-            ),
-            "validationStatus": survival_validation.get("status"),
-            "chronologicalHeldoutSpearman": (
-                survival_validation.get("chronologicalValidation") or {}
-            ).get("heldoutSpearman"),
-            "normalizationRobust": (
-                (outcome_model.get("survivalModel") or {}).get(
-                    "normalizationSensitivity"
-                ) or {}
-            ).get("robustAcrossNormalizationChoices"),
-            "foldDirectionMedianCosine": survival_validation.get(
-                "foldDirectionMedianCosine"
-            ),
-            "nearestTrainingCosine": nearest_cosine,
-            "inDomainSimilarityPercentile": domain_percentile,
-            "partitionScoreGap": partition["scoreGap"],
-            "partitionScoreGapPercentile": partition["scoreGapPercentile"],
-        },
-        "map": {
-            "x": survival_score.get("mapX"),
-            "y": survival_score.get("mapY"),
-            "xDefinition": "frozen future-free entry-indexed Hook Hold diagnostic",
-            "yDefinition": "largest remaining semantic direction orthogonal to the diagnostic",
-        },
-        "retainedInformation": {
-            "score": retained_score,
-            "map": retained_map,
-            "confidence": {
-                "heldoutSpearman": validation["heldoutSpearman"],
-                "heldoutPearson": validation["heldoutPearson"],
-                "rankPermutationP": validation["rankPermutationP"],
-                "foldDirectionMedianCosine": validation["foldDirectionMedianCosine"],
-                "bootstrapPercentileP10": float(np.quantile(bootstrap_percentiles, .1)) if len(bootstrap_percentiles) else None,
-                "bootstrapPercentileMedian": float(np.median(bootstrap_percentiles)) if len(bootstrap_percentiles) else None,
-                "bootstrapPercentileP90": float(np.quantile(bootstrap_percentiles, .9)) if len(bootstrap_percentiles) else None,
-            },
-        },
-        "partition": {
-            key: value for key, value in partition.items() if key != "owners"
-        },
+        "analysisHorizonSeconds": analysis_end,
+        "modelHorizonSeconds": float(retention_model["analysisHorizonSeconds"]),
+        "predictionTimesSeconds": entry["timesSeconds"],
+        "originalHookEndSeconds": analysis_end,
+        "tokenCount": len(primitives["tokens"]),
+        "componentCount": len(components),
         "components": components,
-        "pairInteractions": interactions,
-        "scorecard": scorecard,
-        "trainingScorecard": {
-            "headline": "Market Hold",
-            "headlineFormula": market_model["rewardContract"]["primaryScore"],
-            "componentFormula": market_model["localCalibration"]["componentDefinition"],
-            "relationshipFormula": market_model["localCalibration"]["relationshipDefinition"],
-            "coverage": {
-                "tokensOwnedExactlyOnce": partition["coverage"] == 1
-                and partition["overlapCount"] == 0,
-                "componentsExpected": component_count,
-                "componentsScored": len(market_local["components"]),
-                "relationshipsExpected": component_count * (component_count - 1) // 2,
-                "relationshipsScored": len(market_local["relationships"]),
-            },
-        },
-        "localCounterfactuals": {
-            "definition": counter_texts["definition"],
-            "componentDeletions": [{
-                "removedComponent": index,
-                "embeddingInput": counter_texts["withoutOne"][index],
-                "axisCoordinate": float(context_scores[index]),
-                "effect": float(deletion_effects[index]),
-                "marketHold": market_local["components"][index],
-            } for index in range(component_count)],
-            "pairDeletions": [{
-                "removedComponents": [left, right],
-                "embeddingInput": counter_texts["withoutPair"][(left, right)],
-                "retainedPairEmbeddingInput": counter_texts["pairOnly"][(left, right)],
-                "axisCoordinate": float(pair_context[(left, right)] @ direction),
-                "interaction": float(interaction["interaction"]),
-                "marketHold": interaction["marketHoldInteraction"],
-            } for interaction in interactions
-              for left, right in [(int(interaction["left"]), int(interaction["right"]))]],
-        },
-        "nearestTrainingHooks": nearest,
-        "target": survival_score.get("targetContract"),
-        "latency": {
-            "legacyWholeHookAxisTest": model["latencyDecision"],
-            "forwardComponentMetric": (
-                forward_response.get("metric") if forward_response else None
+        "relationships": relationships,
+        "causalPrefixTrace": prefix_trace,
+        "outputs": {
+            "retainedAtAnalyzedEndPercent": endpoint,
+            "retainedAtAnalyzedEndP10": float(entry["predictionP10"][-1]),
+            "retainedAtAnalyzedEndP90": float(entry["predictionP90"][-1]),
+            "retainedAtOriginalHookEndPercent": endpoint,
+            "absoluteRetention5sPercent": retention5,
+            "normalizedRetention5sPercent": (
+                float(np.interp(5.0, entry["timesSeconds"], entry["predicted"]))
+                if analysis_end >= 5.0 else None
             ),
+            "normalizedDropByAnalyzedEndPoints": 100.0 - endpoint,
+            "viewsDiagnostic": views,
         },
-        "forwardResponse": forward_response,
-        "opening20sResponse": opening_20s_response,
-        "outcomes": outcomes,
-        "componentLattice": component_lattice,
+        "actual": None,
+        "curves": curves,
+        "contributions": contributions,
+        "partition": {key: value for key, value in partition.items() if key != "owners"},
+        "componentLattice": lattice,
+        "support": {
+            **prediction_support(
+                len(primitives["tokens"]), analysis_end, retention_model,
+            ),
+            "timingSource": scope["timingSource"],
+            "timingEstimated": scope["timingEstimated"],
+        },
+        "validation": {
+            family_name: {
+                "randomFold": family.get("randomFoldValidation"),
+                "chronological": family.get("chronologicalValidation"),
+            }
+            for family_name, family in (retention_model.get("families") or {}).items()
+        },
+        "evidence": retention_model.get("evidenceBoundary"),
         "provenance": {
-            "outcomeUsedForBoundaries": False,
-            "outcomeUsedForQualityAxis": True,
-            "marketRewardFitUsesOwnedOutcomes": False,
-            "marketRewardUsesVisualInput": False,
-            "marketRewardUsesTitleInput": False,
-            "marketRewardUsesRetentionAtInference": False,
-            "marketRewardModelVersion": market_model["methodVersion"],
-            "examplesUsedForTraining": False,
-            "componentAttribution": model["componentDefinition"],
-            "forwardResponseDiagnosticsComputed": bool(forward_response),
-            "opening20sResponseDiagnosticsComputed": bool(opening_20s_response),
-            "opening20sAbsoluteRetentionFabricated": False,
-            "forwardResponseLagAdoptedForWholeHook": bool(
-                outcome_model.get("responseLagSeconds")
-            ),
-            "forwardResponseBoundariesChanged": False,
-            "outcomeModelsUseFrozenBoundaries": True,
-            "componentLatticeSharedWithCorpus": True,
-            "componentLatticeCandidateSpaceUsedForPartition": True,
-            "componentLatticeCanonicalCoverUsedForHeadlineScore": True,
-            "componentLatticeOverlappingSpansDoubleCounted": False,
-            "attentionRelationalGraphUsedForHeadlineScore": False,
-            "componentLatticeStructuralEdgesUseOutcomes": False,
-            "outcomePredictionsHaveRandomFoldDiagnostics": True,
-            "outcomePredictionsPassPromotionGate": bool(
-                all(
-                    str((row.get("validation") or {}).get("status") or "").startswith(
-                        "validated"
-                    )
-                    for row in (outcome_model.get("hookModels") or {}).values()
+            "sameFeatureBuilderAsSavedLibrary": True,
+            "sameTemporalModelFamilyAsSavedLibrary": True,
+            "savedRowsUseOutOfFoldPredictions": True,
+            "typedRowsUseFrozenFullFitPredictions": True,
+            "outcomesUsedForBoundaries": False,
+            "componentLiteralEmbeddingsUsedForCandidate": True,
+            "componentDeletionInfluenceUsedForCandidate": True,
+            "canonicalSequenceRelationshipsUsedForHeadline": False,
+            "fullOverlappingLatticeUsedAsIndependentVotes": False,
+            "responseLagBlended": False,
+            "viewsPromotedAsCalibratedForecast": bool(
+                (retention_model.get("viewsContract") or {}).get(
+                    "individualizedForecastAvailable"
                 )
-                and str(survival_validation.get("status") or "").startswith("validated")
             ),
+            "futureWordsUsedForEarlierPredictions": False,
         },
     }
 
@@ -1489,28 +797,39 @@ def main() -> None:
     parser.add_argument("--stdin", action="store_true")
     parser.add_argument("--json-stdin", action="store_true")
     parser.add_argument("--idea", default="")
+    parser.add_argument("--duration-seconds", type=float, default=None)
     parser.add_argument("--pretty", action="store_true")
     parser.add_argument("--refresh-model", action="store_true")
     args = parser.parse_args()
     idea = args.idea
+    duration = args.duration_seconds
     if args.json_stdin:
         request = json.loads(sys.stdin.read() or "{}")
         text = str(request.get("text") or "")
         idea = str(request.get("idea") or "")
+        raw_duration = request.get("durationSeconds")
+        duration = float(raw_duration) if raw_duration not in (None, "") else None
     else:
         text = sys.stdin.read() if args.stdin else args.text
     if not normalize_source(text):
-        print(json.dumps({"error": "type a hook to score"}))
+        print(json.dumps({"error": "type an opening to score"}))
         raise SystemExit(2)
     try:
-        model = load_artifact(MODEL_FILE, args.refresh_model)
-        partition = load_artifact(PARTITION_FILE, args.refresh_model)
-        outcomes = load_artifact(OUTCOME_MODEL_FILE, args.refresh_model)
-        lattice = load_artifact(LATTICE_MODEL_FILE, args.refresh_model)
-        result = score_text(text, model, partition, outcome_model=outcomes,
-                            lattice_model=lattice, idea_text=idea)
-        print(json.dumps(json_ready(result), indent=2 if args.pretty else None,
-                         separators=None if args.pretty else (",", ":"), allow_nan=False))
+        result = score_text(
+            text,
+            partition_model=load_artifact(PARTITION_FILE, args.refresh_model),
+            lattice_model=load_artifact(LATTICE_MODEL_FILE, args.refresh_model),
+            opening_model=load_artifact(OPENING_MODEL_FILE, args.refresh_model),
+            opening_retention_model=load_artifact(
+                OPENING_RETENTION_MODEL_FILE, args.refresh_model,
+            ),
+            idea_text=idea,
+            planned_duration_seconds=duration,
+        )
+        print(json.dumps(
+            json_ready(result), indent=2 if args.pretty else None,
+            separators=None if args.pretty else (",", ":"), allow_nan=False,
+        ))
     except Exception as exc:
         print(json.dumps({"error": str(exc)}))
         raise SystemExit(1)

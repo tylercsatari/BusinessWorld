@@ -104,7 +104,7 @@ function routeBuilding(pathname) {
     // Library building (and the sponsors section, below) — anyone who can use Sponsors
     // can make & see invoices, instead of needing a separate building grant.
     if (/^\/api\/data\/invoices/.test(pathname) || /^\/api\/invoices\//.test(pathname)) return 'Library';
-    if (/^\/api\/(jarvis|tribe|longquant)\//.test(pathname)) return 'Jarvis';
+    if (/^\/api\/(jarvis|tribe|longquant|shortsquant)\//.test(pathname)) return 'Jarvis';
     if (/^\/api\/(gemini|videolab)\//.test(pathname)) return 'Video Lab';
     if (/^\/api\/(openai|kimi)\//.test(pathname)) return 'shared';      // AI used across buildings
     if (pathname === '/load-layout' || pathname === '/api/config' || pathname === '/config.js') return 'shared';

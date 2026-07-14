@@ -90,6 +90,96 @@ def atomic_gzip_json(path: Path, value) -> None:
     os.replace(temporary, path)
 
 
+def current_detail_contract(detail: dict) -> dict:
+    """Remove superseded title/outcome channels from the active Shorts artifact."""
+    detail["ideaAnchor"] = {
+        "text": None,
+        "present": False,
+        "role": "optional typed context only; absent from saved Shorts openings",
+    }
+    detail["anchorNodes"] = []
+    detail["outcomeNodes"] = []
+    detail["edges"] = [
+        row for row in detail.get("edges") or []
+        if row.get("type") not in {"title", "outcome"}
+    ]
+    edge_families = ("containment", "sequence", "semantic", "context")
+    detail["edgeCounts"] = {
+        name: sum(row.get("type") == name for row in detail["edges"])
+        for name in edge_families
+    }
+    detail["edgeCount"] = len(detail["edges"])
+    detail["mapDefinitions"] = {
+        key: value for key, value in (detail.get("mapDefinitions") or {}).items()
+        if key in {"raw", "context", "influence", "nonadditive"}
+    }
+    for node in detail.get("nodes") or []:
+        node["maps"] = {
+            key: value for key, value in (node.get("maps") or {}).items()
+            if key in {"raw", "context", "influence", "nonadditive"}
+        }
+        (node.get("coordinates") or {}).pop("globalTitleManifold", None)
+        for key in ("fullOrthogonalIdea", "marginalOrthogonalIdea"):
+            (node.get("representations") or {}).pop(key, None)
+        for key in ("componentIdeaCosine", "contextIdeaCosine"):
+            (node.get("relations") or {}).pop(key, None)
+    for component in detail.get("canonicalComponents") or []:
+        component.pop("opening20sResponse", None)
+        component["maps"] = {
+            key: value for key, value in (component.get("maps") or {}).items()
+            if key in {"raw", "context", "influence", "nonadditive"}
+        }
+    partition = detail.get("partitionContract") or {}
+    calibration = partition.get("horizonCalibration") or {}
+    calibration["activationTokenThreshold"] = -1
+    partition["horizonCalibration"] = calibration
+    detail["partitionContract"] = partition
+    detail["graphContract"] = {
+        "edgeFamilies": list(edge_families),
+        "structuralEdgesUseOutcomes": False,
+        "structuralEdgesUseLongFormReferences": False,
+        "descriptiveAttentionUsedForHeadline": False,
+        "componentAndRelationshipOutcomeCandidatesStoredHere": False,
+    }
+    detail["parityContract"] = {
+        "sharedBuilder": "component_lattice.build_component_lattice",
+        "corpusAndPredictorShareCode": True,
+        "allowedDifferences": [
+            "source-media timing versus typed planned/estimated timing",
+            "saved source-level OOF prediction versus typed frozen full fit",
+        ],
+    }
+    horizon = detail.get("horizonContract") or {}
+    horizon["headlinePredictor"] = "opening-retention-predictor-v2"
+    horizon["headlineUsesComponentResponseAxis"] = False
+    horizon["headlineUsesLongFormReference"] = False
+    horizon.pop("headlineHookScoreReused", None)
+    horizon.pop("headlineReason", None)
+    detail["horizonContract"] = horizon
+    detail["sourceIdentityHash"] = hashlib.sha256(
+        (METHOD_VERSION + "\0" + str(detail.get("text") or "")).encode("utf-8")
+    ).hexdigest()
+    return detail
+
+
+def current_opening_model(horizon_extension: dict, length_support: dict) -> dict:
+    return {
+        "version": 4,
+        "status": "complete",
+        "methodVersion": METHOD_VERSION,
+        "analysisHorizonSeconds": OPENING_HORIZON_SECONDS,
+        "embeddingModel": MODEL,
+        "embeddingDimensions": DIMENSIONS,
+        "partitionExtension": horizon_extension,
+        "lengthSupport": length_support,
+        "categoryCount": 4,
+        "longFormReferenceUsed": False,
+        "outcomesUsedForBoundaries": False,
+        "componentOutcomeAxisUsedByHeadline": False,
+        "role": "source-media alignment, exact-cover segmentation, and lattice support only",
+    }
+
+
 def read_gzip_json(path: Path) -> dict:
     with gzip.open(path, "rt", encoding="utf-8") as handle:
         return json.load(handle)
@@ -218,8 +308,6 @@ def build_one(source: dict, partition_model: dict, lattice_model: dict,
         partition = decode_partition(
             primitives, partition_model, horizon_extension=horizon_extension,
         )
-        title = str(source.get("title") or "").strip()
-        title_vector = store.embed_many([title]).get(title) if title else None
         lattice = build_component_lattice(
             text=partition["forecastSemanticInput"]["text"],
             tokens=primitives["tokens"],
@@ -240,8 +328,7 @@ def build_one(source: dict, partition_model: dict, lattice_model: dict,
             prefix_transition_null=np.asarray(
                 lattice_model.get("prefixTransitionNullSorted") or [], np.float32,
             ),
-            idea_text=title, idea_vector=title_vector,
-            title_manifold=lattice_model.get("titleManifold"),
+            idea_text=None, idea_vector=None, title_manifold=None,
             source_kind="stored-opening-20s", video_id=video_id,
         )
         raw_components, influence_components = selected_vector_rows(primitives, partition)
@@ -1406,7 +1493,7 @@ def summary_row(detail: dict) -> dict:
             bool((row.get("categoryLengthSupport") or {}).get("outsideMeasuredRange"))
             for row in detail.get("canonicalComponents") or []
         ),
-        "detail": f"/api/longquant/promise-lab/opening-20s/{detail['videoId']}",
+        "detail": f"/api/shortsquant/promise-lab/opening-20s/{detail['videoId']}",
         "contentHash": detail.get("contentHash"),
     }
 
@@ -1493,15 +1580,13 @@ def main() -> None:
     parser.add_argument("--embedding-workers", type=int, default=8)
     parser.add_argument("--upload-workers", type=int, default=8)
     parser.add_argument("--upload-only", action="store_true")
+    parser.add_argument("--migrate-current", action="store_true")
     args = parser.parse_args()
     started = time.time()
 
-    if args.response_only and (
-        args.skip_response or args.rebuild or args.video_id or args.limit
-    ):
+    if args.response_only:
         raise SystemExit(
-            "--response-only requires the complete cached corpus and cannot be combined "
-            "with --skip-response, --rebuild, --video-id, or --limit"
+            "the legacy component-response refit was removed; run run_opening_predictor.py"
         )
 
     if args.upload_only:
@@ -1537,15 +1622,41 @@ def main() -> None:
         corpus = corpus[:args.limit]
     partition_model = load("canonical-partition-model.json")
     canonical_partitions = load("canonical-partitions.json")
-    lattice_model = load("component-lattice-model.json")
+    lattice_model = load("opening-lattice-model.json")
     horizon_extension = fit_horizon_partition_extension(
         canonical_partitions, full_corpus,
     )
+    # Use the learned, outcome-blind boundary-count posterior for every opening.
+    # The former 57-token activation threshold made short typed openings and one
+    # short saved opening fall back to a different one-component decoder.
+    horizon_extension = dict(horizon_extension)
+    horizon_extension["activationTokenThreshold"] = -1
     length_support = measured_length_support(full_corpus, horizon_extension)
     DETAILS.mkdir(parents=True, exist_ok=True)
     VECTORS.mkdir(parents=True, exist_ok=True)
     EMBED_CACHE.mkdir(parents=True, exist_ok=True)
-    if args.response_only:
+    if args.migrate_current:
+        update_progress(
+            status="running", stage="removing superseded lattice channels",
+            sourcesComplete=0, sourcesTotal=len(corpus),
+            horizonSeconds=OPENING_HORIZON_SECONDS, error="",
+        )
+        details = load_cached_source_structures(corpus)
+        for position, source in enumerate(corpus, 1):
+            video_id = str(source["id"])
+            detail_path = DETAILS / f"{video_id}.json.gz"
+            detail = read_gzip_json(detail_path)
+            current_detail_contract(detail)
+            detail["buildContentKey"] = content_key(
+                source, load_local_opening(video_id, ROOT), partition_model,
+                lattice_model, horizon_extension,
+            )
+            atomic_gzip_json(detail_path, detail)
+            update_progress(
+                sourcesComplete=position,
+                stage=f"migrated {video_id} ({position}/{len(corpus)})",
+            )
+    elif args.response_only:
         update_progress(
             status="running", stage="validating cached 20-second source structures",
             sourcesComplete=0, sourcesTotal=len(corpus),
@@ -1638,33 +1749,17 @@ def main() -> None:
             if pool is not None:
                 pool.shutdown(wait=True)
 
-    response_summary = None
-    model_artifact = None
-    if not args.skip_response and len(corpus) >= 20:
-        update_progress(stage="fitting source-held-out 20-second component response")
-        response_summary, model_artifact = fit_responses(
-            corpus, details, horizon_extension,
-            inference_repeats=args.inference_repeats,
-        )
-        atomic_json(MODEL_PATH, model_artifact)
-        for source in corpus:
-            video_id = str(source["id"])
-            detail = read_gzip_json(DETAILS / f"{video_id}.json.gz")
-            detail["canonicalComponents"] = details[video_id]["canonicalComponents"]
-            attach_length_support(detail, length_support)
-            attach_timing_precision(detail)
-            attach_outcome_graph(detail)
-            atomic_gzip_json(DETAILS / f"{video_id}.json.gz", detail)
-            del detail
-
-    if not response_summary:
-        for source in corpus:
-            video_id = str(source["id"])
-            detail = read_gzip_json(DETAILS / f"{video_id}.json.gz")
-            attach_length_support(detail, length_support)
-            attach_timing_precision(detail)
-            atomic_gzip_json(DETAILS / f"{video_id}.json.gz", detail)
-            del detail
+    model_artifact = current_opening_model(horizon_extension, length_support)
+    atomic_json(MODEL_PATH, model_artifact)
+    for source in corpus:
+        video_id = str(source["id"])
+        detail = read_gzip_json(DETAILS / f"{video_id}.json.gz")
+        detail["canonicalComponents"] = details[video_id]["canonicalComponents"]
+        current_detail_contract(detail)
+        attach_length_support(detail, length_support)
+        attach_timing_precision(detail)
+        atomic_gzip_json(DETAILS / f"{video_id}.json.gz", detail)
+        del detail
 
     rows = []
     for source in corpus:
@@ -1832,7 +1927,8 @@ def main() -> None:
             "builder": "component_lattice.build_component_lattice",
             "everyContiguousSpanPresent": True,
             "sameRepresentationMapsAsHooks": True,
-            "sameStructuralEdgeFamiliesAsHooks": True,
+            "edgeFamilies": ["containment", "sequence", "semantic", "context"],
+            "longFormReferenceUsed": False,
             "outcomesUsedForStructuralEdges": False,
         },
         "retentionContract": {
@@ -1840,11 +1936,8 @@ def main() -> None:
             "forecastValues": 0,
             "primaryNormalization": "entry_indexed",
             "primaryFutureFree": True,
-            "terminalConditionedViews": "retrospective sensitivity only",
-            "forwardLagsSeconds": list(FORWARD_LAGS_SECONDS),
-            "reverseControlsSeconds": list(REVERSE_CONTROL_LAGS_SECONDS),
+            "predictionModel": "opening-retention-predictor-v2",
         },
-        "response": response_summary,
         "rows": rows,
         "elapsedSeconds": round(time.time() - started, 2),
     }

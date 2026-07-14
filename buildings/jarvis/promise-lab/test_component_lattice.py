@@ -141,7 +141,8 @@ class ComponentLatticeTest(unittest.TestCase):
             for edge in lattice["edges"]
             if edge["type"] == "outcome"
         ))
-        self.assertEqual(len(lattice["mapDefinitions"]), 12)
+        self.assertEqual(len(lattice["mapDefinitions"]), 4)
+        self.assertNotIn("globalTitleManifold", lattice["mapDefinitions"])
         self.assertTrue(all(
             set(node["maps"]) == set(lattice["mapDefinitions"])
             for node in lattice["nodes"]

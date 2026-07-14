@@ -23,7 +23,7 @@ import requests
 MODEL = "gemini-embedding-2"
 DIMENSIONS = 1536
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
-R2_PREFIX = "longform/promise-lab-v4"
+R2_PREFIX = "shorts/promise-lab-v1"
 
 _EMBED_RATE_LOCK = threading.Lock()
 _EMBED_NEXT_SLOT = 0.0

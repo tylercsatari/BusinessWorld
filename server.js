@@ -354,31 +354,36 @@ const runHeavyScore = fn => runLimited('heavy-score', HEAVY_SCORE_LIMIT, fn);
 const runHeavyScoreInteractive = fn => runLimited('heavy-score', HEAVY_SCORE_LIMIT, fn, true);
 // ── async scoring jobs: POST returns a job id instantly (no Render 100s proxy ceiling),
 //    the scorer runs in-process, results persist to R2 so a redeploy can't lose them silently ──
-const _lqJobs = new Map();
-function lqJobSubmit(kind, runner) {
+const _quantJobs = new Map();
+function quantJobNamespace(namespace) {
+    return namespace === 'shorts' ? 'shorts' : 'longform';
+}
+function quantJobSubmit(kind, runner, namespace = 'longform') {
+    namespace = quantJobNamespace(namespace);
     const jid = 'j' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-    const rec = { jid, kind, status: 'queued', ts: Date.now() };
-    _lqJobs.set(jid, rec);
+    const rec = { jid, kind, namespace, status: 'queued', ts: Date.now() };
+    _quantJobs.set(`${namespace}:${jid}`, rec);
     (async () => {
         rec.status = 'running'; rec.ts = Date.now();
         try { rec.result = await runner(rec); rec.status = 'done'; }
         catch (e) { rec.status = 'error'; rec.error = String((e && e.message) || e).slice(0, 300); }
         rec.ts = Date.now();
-        await cloud.uploadToR2(`longform/jobs/${jid}.json`, Buffer.from(JSON.stringify(rec)), 'application/json').catch(() => {});
-        setTimeout(() => _lqJobs.delete(jid), 20 * 60e3);
+        await cloud.uploadToR2(`${namespace}/jobs/${jid}.json`, Buffer.from(JSON.stringify(rec)), 'application/json').catch(() => {});
+        setTimeout(() => _quantJobs.delete(`${namespace}:${jid}`), 20 * 60e3);
     })();
     return jid;
 }
-async function lqJobGet(jid) {
-    const m = _lqJobs.get(jid);
+async function quantJobGet(jid, namespace = 'longform') {
+    namespace = quantJobNamespace(namespace);
+    const m = _quantJobs.get(`${namespace}:${jid}`);
     if (m) return m;
-    const b = await cloud.downloadFromR2(`longform/jobs/${jid}.json`).catch(() => null);
+    const b = await cloud.downloadFromR2(`${namespace}/jobs/${jid}.json`).catch(() => null);
     if (b) { try { return JSON.parse(b.toString('utf8')); } catch (e) {} }
     return null;   // lost (deploy killed it before any write) — client resubmits
 }
 
-async function sendLqJobStatus(res, jid) {
-    const rec = await lqJobGet(jid);
+async function sendQuantJobStatus(res, jid, namespace = 'longform') {
+    const rec = await quantJobGet(jid, namespace);
     res.writeHead(rec ? 200 : 404, {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-cache',
@@ -828,9 +833,12 @@ async function handlePromiseHookScore(req, res) {
         const body = await readBody(req);
         const text = String(body.text || '').replace(/\s+/g, ' ').trim();
         const idea = String(body.idea || '').replace(/\s+/g, ' ').trim();
+        const durationSeconds = body.durationSeconds == null || body.durationSeconds === ''
+            ? null : Number(body.durationSeconds);
         if (text.length < 8) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type a complete hook to score"}'); return; }
-        if (text.length > 1200) { res.writeHead(413, { 'Content-Type': 'application/json' }); res.end('{"error":"the exact scorer accepts up to 1,200 characters per analyzed opening; the input was not truncated"}'); return; }
+        if (text.length > 2400) { res.writeHead(413, { 'Content-Type': 'application/json' }); res.end('{"error":"the exact scorer accepts up to 2,400 characters per analyzed opening; the input was not truncated"}'); return; }
         if (idea.length > 1200) { res.writeHead(413, { 'Content-Type': 'application/json' }); res.end('{"error":"the candidate idea anchor accepts up to 1,200 characters; the input was not truncated"}'); return; }
+        if (durationSeconds != null && (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 600)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"spoken duration must be between 0 and 600 seconds"}'); return; }
         if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
         const scoreRunner = job => {
             if (job) { job.status = 'queued'; job.ts = Date.now(); }
@@ -842,7 +850,7 @@ async function handlePromiseHookScore(req, res) {
             let so = '', se = '';
             py.stdout.on('data', d => { so += d; if (so.length > 32e6) so = so.slice(-32e6); });
             py.stderr.on('data', d => { se += d; if (se.length > 20000) se = se.slice(-20000); });
-            py.stdin.end(JSON.stringify({ text, idea }));
+            py.stdin.end(JSON.stringify({ text, idea, durationSeconds }));
             const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (_) {} no(new Error('hook scorer timeout')); }, 300000);
             py.on('close', code => {
                 clearTimeout(timer);
@@ -856,7 +864,7 @@ async function handlePromiseHookScore(req, res) {
             });
         };
         if (body.async) {
-            const jobId = lqJobSubmit('promise-hook-score', scoreRunner);
+            const jobId = quantJobSubmit('promise-hook-score', scoreRunner, 'shorts');
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
             res.end(JSON.stringify({ ok: true, jobId }));
             return;
@@ -1711,7 +1719,7 @@ const server = http.createServer(async (req, res) => {
             gemini,
             hasR2: !!process.env.R2_ACCESS_KEY_ID,
             gitCommit: process.env.RENDER_GIT_COMMIT || null,
-            promiseScorerServingContract: 'sklearn-fit-only-v1',
+            promiseScorerServingContract: 'numpy-causal-temporal-v2',
         }));
         return;
     }
@@ -1720,13 +1728,14 @@ const server = http.createServer(async (req, res) => {
     // authenticated Render route below. Non-loopback and deployed requests
     // continue through the ordinary account gate.
     if (!IS_RENDER && requestIsLoopback(req)
-        && pathname === '/api/longquant/promise-lab/hook-score' && req.method === 'POST') {
+        && pathname === '/api/shortsquant/promise-lab/hook-score'
+        && req.method === 'POST') {
         await handlePromiseHookScore(req, res);
         return;
     }
-    const localLqJob = pathname.match(/^\/api\/longquant\/jobs\/(j[a-z0-9]+)$/);
-    if (!IS_RENDER && requestIsLoopback(req) && localLqJob && req.method === 'GET') {
-        await sendLqJobStatus(res, localLqJob[1]);
+    const localQuantJob = pathname.match(/^\/api\/(shortsquant|longquant)\/jobs\/(j[a-z0-9]+)$/);
+    if (!IS_RENDER && requestIsLoopback(req) && localQuantJob && req.method === 'GET') {
+        await sendQuantJobStatus(res, localQuantJob[2], localQuantJob[1] === 'shortsquant' ? 'shorts' : 'longform');
         return;
     }
 
@@ -1786,7 +1795,7 @@ const server = http.createServer(async (req, res) => {
                         py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
                     }));
                 if (String(req.headers['x-raw-async'] || '') === '1') {
-                    const jobId = lqJobSubmit('raw-embed-upload', async () => {
+                    const jobId = quantJobSubmit('raw-embed-upload', async () => {
                         try { return JSON.parse(await upRunner()); }
                         finally { try { fs.unlinkSync(tmp); } catch (_) {} }
                     });
@@ -1843,7 +1852,7 @@ const server = http.createServer(async (req, res) => {
                     py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
                 }));
             if (j.async) {
-                const jobId = lqJobSubmit('raw-embed-montage', async () => {
+                const jobId = quantJobSubmit('raw-embed-montage', async () => {
                     try { return JSON.parse(await monRunner()); }
                     finally { try { fs.unlinkSync(tmp); } catch (_) {} }
                 });
@@ -3792,43 +3801,42 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (!b64 || b64.length < 100) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no image"}'); return; }
             if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"Enter the video title or idea so visual and together embeddings can both be scored"}'); return; }
             if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
-            if (body.async) { const jobId = lqJobSubmit('score-upload', () => longQuantScoreThumbnail(Buffer.from(b64, 'base64'), title, idea, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) { const jobId = quantJobSubmit('score-upload', () => longQuantScoreThumbnail(Buffer.from(b64, 'base64'), title, idea, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
             const score = await longQuantScoreThumbnail(Buffer.from(b64, 'base64'), title, idea, true);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(score));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
-    if (pathname === '/api/longquant/promise-lab/manifest' && req.method === 'GET') {
-        await serveR2Gz(req, res, 'longform/promise-lab-v4/manifest.json', 30e3,
-            { version: 5, status: 'building', counts: {}, artifacts: {} });
+    // Promise Lab is a Shorts Quant product. There is one route namespace and
+    // one implementation for both the saved library and typed scorer.
+    const promisePathname = pathname;
+    if (promisePathname === '/api/shortsquant/promise-lab/manifest' && req.method === 'GET') {
+        await serveR2Gz(req, res, 'shorts/promise-lab-v1/manifest.json', 30e3,
+            { version: 7, productVersion: 'shorts-promise-lab-v3', status: 'building', counts: {}, artifacts: {} });
         return;
     }
-    if (pathname === '/api/longquant/promise-lab/progress' && req.method === 'GET') {
-        await serveR2Gz(req, res, 'longform/promise-lab-v4/progress.json', 5e3,
-            { version: 5, status: 'building', stage: 'waiting for first product artifact' });
+    if (promisePathname === '/api/shortsquant/promise-lab/progress' && req.method === 'GET') {
+        await serveR2Gz(req, res, 'shorts/promise-lab-v1/progress.json', 5e3,
+            { version: 7, productVersion: 'shorts-promise-lab-v3', status: 'building', stage: 'waiting for first product artifact' });
         return;
     }
     const promiseArtifacts = {
-        'component-lattice': 'component-lattice.json.gz',
         'opening-20s': 'opening-20s.json.gz',
-        'manual-probe': 'manual-probe.json.gz',
+        'opening-predictions': 'opening-predictions.json.gz',
         'manual-projection': 'manual-projection.json.gz',
-        'cluster-outcomes': 'cluster-outcomes.json.gz',
-        'latency-study': 'latency-study.json.gz',
         'canonical-partitions': 'canonical-partitions.json.gz',
-        'hook-quality': 'hook-quality.json.gz',
-        'hook-outcomes': 'hook-outcomes.json.gz',
-        'market-reward': 'market-reward.json.gz',
-        'hook-example-results': 'hook-example-results.json.gz',
     };
-    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(component-lattice|opening-20s|manual-probe|manual-projection|cluster-outcomes|latency-study|canonical-partitions|hook-quality|hook-outcomes|market-reward|hook-example-results)$/);
+    const promiseArtifact = promisePathname.match(/^\/api\/shortsquant\/promise-lab\/(opening-20s|opening-predictions|manual-projection|canonical-partitions)$/);
     if (promiseArtifact && req.method === 'GET') {
-        const cacheControl = ['component-lattice', 'opening-20s'].includes(promiseArtifact[1])
+        const cacheControl = ['opening-20s', 'opening-predictions'].includes(promiseArtifact[1])
             ? 'private, no-cache'
             : undefined;
-        if (promiseArtifact[1] === 'opening-20s') {
-            const local = path.join(DIR, 'buildings', 'jarvis', 'promise-lab', '.cache', 'opening-20s.json');
+        if (['opening-20s', 'opening-predictions'].includes(promiseArtifact[1])) {
+            const local = path.join(
+                DIR, 'buildings', 'jarvis', 'promise-lab', '.cache',
+                `${promiseArtifact[1]}.json`,
+            );
             if (fs.existsSync(local)) {
                 res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-cache' });
                 fs.createReadStream(local).pipe(res);
@@ -3836,53 +3844,18 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             }
         }
         const ok = await serveR2GzipJsonStream(res,
-            `longform/promise-lab-v4/${promiseArtifacts[promiseArtifact[1]]}`, cacheControl);
+            `shorts/promise-lab-v1/${promiseArtifacts[promiseArtifact[1]]}`, cacheControl);
         if (!ok) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end('{"error":"Promise Lab artifact is still building"}');
         }
         return;
     }
-    if (pathname === '/api/longquant/promise-lab/hook-score' && req.method === 'POST') {
+    if (promisePathname === '/api/shortsquant/promise-lab/hook-score' && req.method === 'POST') {
         await handlePromiseHookScore(req, res);
         return;
     }
-    const promiseClusterOutcome = pathname.match(
-        /^\/api\/longquant\/promise-lab\/cluster-outcome\/([0-3])\/([a-z0-9_-]+)$/
-    );
-    if (promiseClusterOutcome && req.method === 'GET') {
-        const ok = await serveR2GzipJsonStream(res,
-            `longform/promise-lab-v4/cluster-outcomes/${promiseClusterOutcome[1]}/${promiseClusterOutcome[2]}.json.gz`);
-        if (!ok) {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end('{"error":"cluster outcome map is not built"}');
-        }
-        return;
-    }
-    const promiseLatencyDetail = pathname.match(
-        /^\/api\/longquant\/promise-lab\/latency-study\/([0-3])$/
-    );
-    if (promiseLatencyDetail && req.method === 'GET') {
-        const ok = await serveR2GzipJsonStream(res,
-            `longform/promise-lab-v4/latency-study/${promiseLatencyDetail[1]}.json.gz`);
-        if (!ok) {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end('{"error":"latency detail is not built"}');
-        }
-        return;
-    }
-    const promiseLattice = pathname.match(/^\/api\/longquant\/promise-lab\/component-lattice\/([\w-]+)$/);
-    if (promiseLattice && req.method === 'GET') {
-        const ok = await serveR2GzipJsonStream(res,
-            `longform/promise-lab-v4/component-lattice/${promiseLattice[1]}.json.gz`,
-            'private, no-cache');
-        if (!ok) {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end('{"error":"component lattice artifact is not built"}');
-        }
-        return;
-    }
-    const promiseOpening20s = pathname.match(/^\/api\/longquant\/promise-lab\/opening-20s\/([\w-]+)$/);
+    const promiseOpening20s = promisePathname.match(/^\/api\/shortsquant\/promise-lab\/opening-20s\/([\w-]+)$/);
     if (promiseOpening20s && req.method === 'GET') {
         const local = path.join(DIR, 'buildings', 'jarvis', 'promise-lab', '.cache', 'opening-20s', `${promiseOpening20s[1]}.json.gz`);
         if (fs.existsSync(local)) {
@@ -3896,11 +3869,41 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             return;
         }
         const ok = await serveR2GzipJsonStream(res,
-            `longform/promise-lab-v4/opening-20s/${promiseOpening20s[1]}.json.gz`,
+            `shorts/promise-lab-v1/opening-20s/${promiseOpening20s[1]}.json.gz`,
             'private, max-age=300');
         if (!ok) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end('{"error":"20-second opening artifact is not built"}');
+        }
+        return;
+    }
+    const promiseOpeningPrediction = promisePathname.match(
+        /^\/api\/shortsquant\/promise-lab\/opening-prediction\/([\w-]+)$/
+    );
+    if (promiseOpeningPrediction && req.method === 'GET') {
+        const videoId = promiseOpeningPrediction[1];
+        const local = path.join(
+            DIR, 'buildings', 'jarvis', 'promise-lab', '.cache',
+            'opening-predictions', `${videoId}.json.gz`,
+        );
+        if (fs.existsSync(local)) {
+            res.writeHead(200, {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Content-Encoding': 'gzip',
+                'Cache-Control': 'private, max-age=300',
+                'Vary': 'Accept-Encoding',
+            });
+            fs.createReadStream(local).pipe(res);
+            return;
+        }
+        const ok = await serveR2GzipJsonStream(
+            res,
+            `shorts/promise-lab-v1/opening-predictions/${videoId}.json.gz`,
+            'private, max-age=300',
+        );
+        if (!ok) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end('{"error":"opening prediction artifact is not built"}');
         }
         return;
     }
@@ -3948,7 +3951,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             } catch (e) { console.warn('hook edit index patch:', e.message); }
             return { ok: true, rec };
             };
-            if (body.async) { const jobId = lqJobSubmit('hook-edit', editRunner); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) { const jobId = quantJobSubmit('hook-edit', editRunner); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(await editRunner()));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -3968,9 +3971,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         res.end(b ? b.toString('utf8') : '{"error":"not found"}');
         return;
     }
-    const lqJob = pathname.match(/^\/api\/longquant\/jobs\/(j[a-z0-9]+)$/);
-    if (lqJob && req.method === 'GET') {
-        await sendLqJobStatus(res, lqJob[1]);
+    const quantJob = pathname.match(/^\/api\/(shortsquant|longquant)\/jobs\/(j[a-z0-9]+)$/);
+    if (quantJob && req.method === 'GET') {
+        await sendQuantJobStatus(res, quantJob[2], quantJob[1] === 'shortsquant' ? 'shorts' : 'longform');
         return;
     }
     if (pathname === '/api/longquant/exp/score-title' && req.method === 'POST') {
@@ -3979,7 +3982,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const title = String(body.title || body.idea || '').slice(0, 500).trim();
             if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type a title to embed"}'); return; }
             if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
-            if (body.async) { const jobId = lqJobSubmit('score-title', () => longQuantScoreTitleText(title, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) { const jobId = quantJobSubmit('score-title', () => longQuantScoreTitleText(title, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
             const score = await longQuantScoreTitleText(title, true);
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify(score));
@@ -3996,7 +3999,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (!jpg) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"image not found"}'); return; }
             const title = String(body.title || '').slice(0, 500).trim();
             const idea = String(body.idea || title).slice(0, 500).trim();
-            if (body.async) { const jobId = lqJobSubmit('score-key', () => longQuantScoreThumbnail(jpg, title, idea, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) { const jobId = quantJobSubmit('score-key', () => longQuantScoreThumbnail(jpg, title, idea, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
             const score = await longQuantScoreThumbnail(jpg, title, idea, true);
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify(score));

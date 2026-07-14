@@ -679,6 +679,23 @@ def build_component_lattice(*, text: str, tokens: list, starts: np.ndarray, ends
             )
             resolutions = memberships[(start, end)]
             timing_interval = span_timing_interval(timing, start, end)
+            node_maps = {
+                "raw": raw_2d[index].astype(float).tolist(),
+                "context": context_2d[index].astype(float).tolist() if context_valid[index] else None,
+                "influence": influence_2d[index].astype(float).tolist(),
+                "nonadditive": nonadditive_2d[index].astype(float).tolist() if nonadditive_valid[index] else None,
+            }
+            if title_manifold:
+                node_maps.update({
+                    "globalTitleManifold": title_coordinates[:2] if title_coordinates else None,
+                    "componentOrthogonalContext": component_orthogonal_title[:2] if component_orthogonal_title else None,
+                    "fullOrthogonalIdea": full_orthogonal_title[:2] if full_orthogonal_title else None,
+                    "marginalOrthogonalIdea": marginal_orthogonal_title[:2] if marginal_orthogonal_title else None,
+                    "prefixBefore": before_title[:2].astype(float).tolist() if start > 0 and before_title is not None else None,
+                    "prefixAfter": after_title[:2].astype(float).tolist() if after_title is not None else None,
+                    "prefixTransition": prefix_transition_title[:2] if prefix_transition_title else None,
+                    "suffixAfter": suffix_title[:2].astype(float).tolist() if end < n and suffix_title is not None else None,
+                })
             node = {
                 "id": f"span:{start}:{end}", "type": "component", "index": index,
                 "globalSpanIndex": (global_span_offset + index) if global_span_offset is not None else None,
@@ -698,20 +715,7 @@ def build_component_lattice(*, text: str, tokens: list, starts: np.ndarray, ends
                 "rejectionReasons": rejection,
                 "category": category, "categoryProbability": float(probability[category]),
                 "categoryDistribution": probability.astype(float).tolist(),
-                "maps": {
-                    "raw": raw_2d[index].astype(float).tolist(),
-                    "context": context_2d[index].astype(float).tolist() if context_valid[index] else None,
-                    "influence": influence_2d[index].astype(float).tolist(),
-                    "nonadditive": nonadditive_2d[index].astype(float).tolist() if nonadditive_valid[index] else None,
-                    "globalTitleManifold": title_coordinates[:2] if title_coordinates else None,
-                    "componentOrthogonalContext": component_orthogonal_title[:2] if component_orthogonal_title else None,
-                    "fullOrthogonalIdea": full_orthogonal_title[:2] if full_orthogonal_title else None,
-                    "marginalOrthogonalIdea": marginal_orthogonal_title[:2] if marginal_orthogonal_title else None,
-                    "prefixBefore": before_title[:2].astype(float).tolist() if start > 0 and before_title is not None else None,
-                    "prefixAfter": after_title[:2].astype(float).tolist() if after_title is not None else None,
-                    "prefixTransition": prefix_transition_title[:2] if prefix_transition_title else None,
-                    "suffixAfter": suffix_title[:2].astype(float).tolist() if end < n and suffix_title is not None else None,
-                },
+                "maps": node_maps,
                 "coordinates": {
                     "rawCategory4D": raw_4d[index].astype(float).tolist(),
                     "contextCategory4D": context_4d[index].astype(float).tolist() if context_valid[index] else None,
@@ -850,6 +854,23 @@ def build_component_lattice(*, text: str, tokens: list, starts: np.ndarray, ends
         payload_digest.update(str(array.shape).encode("ascii"))
         payload_digest.update(array.tobytes())
     payload_hash = payload_digest.hexdigest()
+    map_definitions = {
+        "raw": {"formula": "E(S)", "basis": "frozen four-category browse plane"},
+        "context": {"formula": "E(K)", "basis": "frozen four-category browse plane"},
+        "influence": {"formula": "unit(E(H)-E(K))", "basis": "frozen four-category browse plane"},
+        "nonadditive": {"formula": "unit((E(H)-E(K))-sum token effects)", "basis": "frozen four-category browse plane"},
+    }
+    if title_manifold:
+        map_definitions.update({
+            "globalTitleManifold": {"formula": "E(S)", "basis": "first two coordinates of the supplied title manifold"},
+            "componentOrthogonalContext": {"formula": "unit(E(S)-proj_E(K)(E(S)))", "basis": "first two coordinates of the supplied title manifold"},
+            "fullOrthogonalIdea": {"formula": "unit(E(H)-proj_E(I)(E(H)))", "basis": "first two coordinates of the supplied title manifold"},
+            "marginalOrthogonalIdea": {"formula": "unit((E(H)-E(K))-proj_E(I)(E(H)-E(K)))", "basis": "first two coordinates of the supplied title manifold"},
+            "prefixBefore": {"formula": "E(H[0:a])", "basis": "first two coordinates of the supplied title manifold"},
+            "prefixAfter": {"formula": "E(H[0:b])", "basis": "first two coordinates of the supplied title manifold"},
+            "prefixTransition": {"formula": "unit(E(H[0:b])-E(H[0:a]))", "basis": "first two coordinates of the supplied title manifold"},
+            "suffixAfter": {"formula": "E(H[b:n])", "basis": "first two coordinates of the supplied title manifold"},
+        })
     return {
         "version": 1, "status": "complete", "methodVersion": LATTICE_VERSION,
         "id": payload_hash[:20], "contentHash": payload_hash,
@@ -862,20 +883,7 @@ def build_component_lattice(*, text: str, tokens: list, starts: np.ndarray, ends
         "tokenCount": n, "spanCount": len(nodes), "expectedContiguousSpanCount": expected,
         "tokens": timing, "timingContract": timing_contract,
         "resolutionDefinitions": RESOLUTION_DEFINITIONS,
-        "mapDefinitions": {
-            "raw": {"formula": "E(S)", "basis": "frozen four-category browse plane"},
-            "context": {"formula": "E(K)", "basis": "frozen four-category browse plane"},
-            "influence": {"formula": "unit(E(H)-E(K))", "basis": "frozen four-category browse plane"},
-            "nonadditive": {"formula": "unit((E(H)-E(K))-sum token effects)", "basis": "frozen four-category browse plane"},
-            "globalTitleManifold": {"formula": "E(S)", "basis": "first two coordinates of frozen eight-dimensional Long Quant title PCA"},
-            "componentOrthogonalContext": {"formula": "unit(E(S)-proj_E(K)(E(S)))", "basis": "first two coordinates of frozen eight-dimensional Long Quant title PCA"},
-            "fullOrthogonalIdea": {"formula": "unit(E(H)-proj_E(I)(E(H)))", "basis": "first two coordinates of frozen eight-dimensional Long Quant title PCA; one hook-level vector repeated by definition"},
-            "marginalOrthogonalIdea": {"formula": "unit((E(H)-E(K))-proj_E(I)(E(H)-E(K)))", "basis": "first two coordinates of frozen eight-dimensional Long Quant title PCA"},
-            "prefixBefore": {"formula": "E(H[0:a])", "basis": "first two coordinates of frozen eight-dimensional Long Quant title PCA"},
-            "prefixAfter": {"formula": "E(H[0:b])", "basis": "first two coordinates of frozen eight-dimensional Long Quant title PCA"},
-            "prefixTransition": {"formula": "unit(E(H[0:b])-E(H[0:a]))", "basis": "first two coordinates of frozen eight-dimensional Long Quant title PCA"},
-            "suffixAfter": {"formula": "E(H[b:n])", "basis": "first two coordinates of frozen eight-dimensional Long Quant title PCA"},
-        },
+        "mapDefinitions": map_definitions,
         "resolutionCounts": dict(sorted(resolution_counts.items())),
         "resolutionEvidence": resolution_evidence,
         "rejectedCandidates": {

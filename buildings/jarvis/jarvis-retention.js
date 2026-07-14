@@ -9,10 +9,11 @@ const JarvisRetention = (function () {
     'use strict';
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
-        orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
+        orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', amber: '#f59e0b', accent: '#38bdf8' };
     let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
+    let PROMISE_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
     const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec' };
@@ -3028,6 +3029,17 @@ const JarvisRetention = (function () {
         return h;
     }
 
+    function promiseUI() {
+        if (!PROMISE_UI && typeof window !== 'undefined' && window.createShortsPromiseLab) {
+            PROMISE_UI = window.createShortsPromiseLab({ colors: C, escape: esc });
+        }
+        return PROMISE_UI;
+    }
+    function renderPromiseLab() {
+        const ui = promiseUI();
+        return ui ? ui.render() : cardc(`<div style="padding:24px;color:${C.red}">Promise Lab UI module did not load.</div>`);
+    }
+
     // switch the active channel → reload its retention table into DATA (or merge all → pooled)
     async function loadChannel(id) {
         st.channel = id;
@@ -3057,7 +3069,7 @@ const JarvisRetention = (function () {
         //  • PER-CHANNEL  — analyses of the selected account's own videos (scoped by the channel bar)
         //  • CORPUS       — built on ALL videos (your 211 + the 11k library); account-independent
         const PERCHAN = [['data', '📋 Data'], ['q1', '① Views'], ['q2', '② Shape'], ['ind', '③ Drivers'], ['q4', '④ Duration'], ['predict', '⑤ Predict']];
-        const CORPUS = [['raw', '🔬 Raw'], ['tribe', '🧠 Tribe'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
+        const CORPUS = [['raw', '🔬 Raw'], ['tribe', '🧠 Tribe'], ['guesses', '🎰 Guesses'], ['experiment', '🧪 Experiment'], ['promise', 'Promise Lab'], ['confounds', '🧪 Confounds'], ['principles', '✦ Principles']];
         const SECLBL = Object.fromEntries([...PERCHAN, ...CORPUS]);
         const isPer = PERCHAN.some(([id]) => id === st.sec);
         const btn = ([id, l]) => `<button data-rs="${id}" style="background:${st.sec === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.sec === id ? C.accent : C.border};color:${st.sec === id ? C.accent : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`;
@@ -3093,7 +3105,7 @@ const JarvisRetention = (function () {
         if (isPer && st.sec !== 'data' && !S) {
             sec = cardc(`<div style="padding:26px;text-align:center"><div style="font-size:14px;font-weight:800;color:${C.text};margin-bottom:6px">${SECLBL[st.sec]} — not computed for ${chName} yet</div><div style="font-size:11px;color:${C.mute};line-height:1.7;max-width:580px;margin:0 auto">${active === 'all' ? 'Pooled analysis isn\'t built yet — switch to a single channel.' : `This per-channel analysis hasn't been run for <b>${chName}</b>. It has <b style="color:${C.green}">${nKeep}</b> videos with retention — open <b>📋 Data</b>, or run <code>build_study.py ${active}</code>.`}</div></div>`, 16);
         } else {
-            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
+            sec = st.sec === 'raw' ? `<div id="rtg-rawpanel">${renderRaw()}</div>` : st.sec === 'tribe' ? `<div id="rtg-tribepanel">${renderTribeInfluence()}</div>` : st.sec === 'guesses' ? `<div id="rtg-guesspanel">${renderGuesses()}</div>` : st.sec === 'experiment' ? `<div id="rtg-exppanel">${renderExperiment()}</div>` : st.sec === 'promise' ? `<div id="shorts-promise-panel">${renderPromiseLab()}</div>` : (S ? ({ data: renderData, q1: renderQ1, q2: renderQ2, ind: renderIndicators, q4: renderQ4, predict: renderPredict, confounds: renderNovConfounds, principles: renderPrinciples }[st.sec] || renderData)() : renderData());
         }
         const bgNote = BGPEND > 0 ? `<div style="font-size:10px;color:${C.cyan};margin:-4px 0 8px;font-weight:600">⏳ heavy corpus data still streaming in (${BGPEND} file${BGPEND > 1 ? 's' : ''} left) — sections light up as their data lands</div>` : '';
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
@@ -3102,6 +3114,7 @@ const JarvisRetention = (function () {
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><span style="font-size:9px;color:${C.green};text-transform:uppercase;font-weight:800;letter-spacing:.3px">📊 this channel</span>${PERCHAN.map(btn).join('')}${isPer ? badge : ''}</div>${pooledNote}
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px"><span style="font-size:9px;color:${C.purple};text-transform:uppercase;font-weight:800;letter-spacing:.3px">🌐 corpus · all videos</span>${CORPUS.map(btn).join('')}<span style="font-size:9px;color:${C.faint}">— not affected by the channel selector</span></div>${sec}</div>`;
         try { rtgAfterRender(); } catch (e) { }
+        try { if (st.sec === 'promise' && promiseUI()) promiseUI().afterRender(); } catch (e) { }
     }
 
     function refreshRawUploadPanel() {
@@ -3192,6 +3205,7 @@ const JarvisRetention = (function () {
         return `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="display:flex;justify-content:space-between;gap:6px;font-size:9px;font-weight:900;text-transform:uppercase"><span style="color:${C.mute}">all embedding outputs</span><span style="color:${found === possible ? C.green : C.amber}">${found}/${possible}${hasText ? '' : ' (visual-only — no transcript; fix it above to unlock text + together)'}</span></div>${rows}</div>`;
     }
     function onClick(e) {
+        if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleClick(e)) return;
         const rtt = e.target.closest('[data-rawtitleedit]'); if (rtt) {
             const idx = parseInt(rtt.getAttribute('data-rawtitleedit'), 10);
             st.rawTitleEdit = { idx, text: ((st.rawUploads || [])[idx] || {}).title || '' };
@@ -3332,6 +3346,7 @@ const JarvisRetention = (function () {
         if (tr) { const id = tr.getAttribute('data-row'); st.open = st.open === id ? null : id; render(); }
     }
     function onInput(e) {
+        if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleInput(e)) return;
         if (e.target.hasAttribute && e.target.hasAttribute('data-rawtranstext')) { if (st.rawTransEdit) st.rawTransEdit.text = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-rawtitletext')) { if (st.rawTitleEdit) st.rawTitleEdit.text = e.target.value; return; }
         if (e.target.id === 'rtg-minstr') { st.rtgMinStr = +e.target.value; rtgUpdateThresh(); return; }
@@ -3348,6 +3363,7 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-q]')) { st.q = e.target.value; render(); }
     }
     function onChange(e) {
+        if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleChange(e)) return;
         if (e.target.getAttribute && e.target.getAttribute('data-savedmove') != null) { moveHook(e.target.getAttribute('data-savedmove'), e.target.value); return; }
         if (e.target.closest('[data-tracked]')) { st.trackedOnly = e.target.checked; render(); }
     }
