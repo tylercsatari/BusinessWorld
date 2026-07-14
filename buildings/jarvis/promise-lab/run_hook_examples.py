@@ -97,14 +97,17 @@ def main() -> None:
     for left in range(len(EXAMPLES)):
         for right in range(left + 1, len(EXAMPLES)):
             delta = bootstrap_scores[:, left] - bootstrap_scores[:, right]
-            main_delta = first[left]["score"]["prediction"] - first[right]["score"]["prediction"]
+            main_delta = (
+                first[left]["hookHoldDiagnostic"]["prediction"]
+                - first[right]["hookHoldDiagnostic"]["prediction"]
+            )
             comparisons.append({
                 "left": EXAMPLES[left]["id"],
                 "right": EXAMPLES[right]["id"],
                 "survivalLiftDeltaLeftMinusRight": float(main_delta),
                 "marketHoldRankPointDeltaLeftMinusRight": float(
-                    first[left]["trainingReward"]["percentile"]
-                    - first[right]["trainingReward"]["percentile"]
+                    first[left]["primaryScore"]["percentile"]
+                    - first[right]["primaryScore"]["percentile"]
                 ),
                 "retainedInformationBootstrapLeftHigherFraction": float(np.mean(delta > 0)),
                 "retainedInformationBootstrapRightHigherFraction": float(np.mean(delta < 0)),
@@ -121,13 +124,13 @@ def main() -> None:
         np.argmax(machine_bootstrap, axis=1), minlength=len(machine_positions),
     )
     machine_hook_hold_rank = sorted(machine_positions, key=lambda index: (
-        -first[index]["score"]["percentile"], EXAMPLES[index]["id"],
+        -first[index]["hookHoldDiagnostic"]["percentile"], EXAMPLES[index]["id"],
     ))
     machine_rank = sorted(machine_positions, key=lambda index: (
-        -first[index]["trainingReward"]["percentile"], EXAMPLES[index]["id"],
+        -first[index]["primaryScore"]["percentile"], EXAMPLES[index]["id"],
     ))
     all_rank = sorted(range(len(EXAMPLES)), key=lambda index: (
-        -first[index]["trainingReward"]["percentile"], EXAMPLES[index]["id"],
+        -first[index]["primaryScore"]["percentile"], EXAMPLES[index]["id"],
     ))
     example_rows = []
     for spec, result in zip(EXAMPLES, first):
@@ -148,25 +151,25 @@ def main() -> None:
             **spec,
             "score": result,
             "summary": {
-                "marketHoldPercentile": result["trainingReward"]["percentile"],
-                "marketHoldZ": result["trainingReward"]["z"],
-                "marketHoldReward": result["trainingReward"]["reward"],
-                "marketHoldEligibleForTraining": result["trainingReward"][
+                "marketHoldPercentile": result["primaryScore"]["percentile"],
+                "marketHoldZ": result["primaryScore"]["z"],
+                "marketHoldReward": result["primaryScore"]["reward"],
+                "marketHoldEligibleForTraining": result["primaryScore"][
                     "eligibleForTraining"
                 ],
-                "marketHoldDomainNearestCosine": result["trainingReward"][
+                "marketHoldDomainNearestCosine": result["primaryScore"][
                     "domainNearestCosine"
                 ],
-                "holdZ": result["score"]["holdZ"],
-                "percentile": result["score"]["percentile"],
-                "axisCoordinate": result["score"]["prediction"],
-                "predictedHoldLiftPercentagePoints": result["score"][
+                "holdZ": result["hookHoldDiagnostic"]["holdZ"],
+                "percentile": result["hookHoldDiagnostic"]["percentile"],
+                "axisCoordinate": result["hookHoldDiagnostic"]["prediction"],
+                "predictedHoldLiftPercentagePoints": result["hookHoldDiagnostic"][
                     "predictedHoldLiftPercentagePoints"
                 ],
-                "predictedCarryPercentPerSecond": result["score"][
+                "predictedCarryPercentPerSecond": result["hookHoldDiagnostic"][
                     "predictedCarryPercentPerSecond"
                 ],
-                "responseEndSeconds": result["score"]["responseEndSeconds"],
+                "responseEndSeconds": result["hookHoldDiagnostic"]["responseEndSeconds"],
                 "retainedInformationPercentile": (
                     result["retainedInformation"]["score"]["percentile"]
                 ),

@@ -35,7 +35,7 @@ def main() -> None:
         assert abs(float(row["summary"]["holdZ"])) < 10
         assert "predictedHoldLiftPercentagePoints" in row["summary"]
         score = row["score"]
-        market = score["trainingReward"]
+        market = score["primaryScore"]
         assert score["primaryScore"] == market
         assert market["status"] == market_model["status"]
         assert 0 <= float(market["percentile"]) <= 100
@@ -58,9 +58,9 @@ def main() -> None:
         assert score["partition"]["coverage"] == 1
         assert score["partition"]["overlapCount"] == 0
         assert all(value["attributionDefinition"] for value in score["components"])
-        assert 0 <= float(score["score"]["percentile"]) <= 100
-        assert score["score"]["label"] == "Hook Hold z-score"
-        assert score["score"]["validation"]["status"] == expected_quality_status
+        assert 0 <= float(score["hookHoldDiagnostic"]["percentile"]) <= 100
+        assert score["hookHoldDiagnostic"]["label"] == "Hook Hold z-score"
+        assert score["hookHoldDiagnostic"]["validation"]["status"] == expected_quality_status
         forward = score["forwardResponse"]
         assert forward["validatedAtComponentLevel"] == forward_model["validated"]
         assert forward["validationStatus"] == forward_model["validationStatus"]

@@ -1326,7 +1326,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             "trainingVectorStorageDtype": primitives["trainingVectorStorageDtype"],
             "liveQuantizationMatchesTrainingStore": primitives["liveQuantizationMatchesTrainingStore"],
             "fullHookEmbeddingInput": primitives["text"],
-            "trainingRewardEmbeddingInput": primitives["text"],
+            "primaryScoreEmbeddingInput": primitives["text"],
             "spanEmbeddingInputs": primitives["embeddingInputs"],
             "localCounterfactualEmbeddingInputs": len(set(required)),
             "emergentComponentCount": component_count,
@@ -1351,8 +1351,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             "candidateIdeaAnchor": idea_text or None,
         },
         "primaryScore": market_score,
-        "trainingReward": market_score,
-        "score": survival_score,
+        "hookHoldDiagnostic": survival_score,
         "confidence": {
             "heldoutSpearman": survival_validation.get("heldoutSpearman"),
             "heldoutPearson": survival_validation.get("heldoutPearson"),

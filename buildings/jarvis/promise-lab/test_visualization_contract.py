@@ -1,6 +1,5 @@
-import json
 import gzip
-import hashlib
+import json
 import math
 import re
 import unittest
@@ -10,22 +9,85 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
 UI_SOURCE = HERE.parent / "promise-lab-ui.js"
+LONGQUANT_SOURCE = HERE.parent / "jarvis-longquant.js"
+SERVER_SOURCE = HERE.parents[2] / "server.js"
 
 
 def load_json(name):
     return json.loads((CACHE / name).read_text(encoding="utf-8"))
 
 
-class VisualizationContractTests(unittest.TestCase):
+class ProductVisualizationContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.partitions = load_json("canonical-partitions.json")
         cls.outcomes = load_json("hook-outcomes.json")
-        cls.axes = load_json("axes.json")
-        cls.findings = load_json("findings.json")
+        cls.market = load_json("market-reward.json")
         cls.lattice = load_json("component-lattice.json")
-        cls.research_contract = load_json("research-contract.json")
+        cls.opening = load_json("opening-20s.json")
+        cls.projection = load_json("manual-projection.json")
+        cls.manifest = load_json("manifest.json")
         cls.ui = UI_SOURCE.read_text(encoding="utf-8")
+        cls.longquant = LONGQUANT_SOURCE.read_text(encoding="utf-8")
+        cls.server = SERVER_SOURCE.read_text(encoding="utf-8")
+
+    def test_product_manifest_contains_only_current_surfaces(self):
+        self.assertEqual(self.manifest["status"], "complete")
+        self.assertEqual(self.manifest["errors"], [])
+        self.assertEqual(
+            [row["id"] for row in self.manifest["surfaces"]],
+            ["scorer", "library", "saved", "opening20s"],
+        )
+        self.assertEqual(
+            set(self.manifest["artifacts"]),
+            {
+                "componentLattice", "opening20s", "manualProbe",
+                "manualProjection", "clusterOutcomes", "latencyStudy",
+                "canonicalPartitions", "hookQuality", "hookOutcomes",
+                "marketReward", "hookExamples", "hookScore",
+            },
+        )
+        self.assertTrue(self.manifest["validation"]["allProductChecksPassed"])
+        self.assertEqual(
+            self.manifest["scoringContract"]["sharedBy"],
+            ["typed hook scorer", "stored hook library"],
+        )
+
+    def test_ui_has_four_views_and_no_legacy_navigation(self):
+        self.assertIn("['scorer', 'Hook scorer']", self.ui)
+        self.assertIn("['library', 'Hook library']", self.ui)
+        self.assertIn("['saved', 'Saved embedding']", self.ui)
+        self.assertIn("['opening20s', '20s analysis']", self.ui)
+        self.assertIn("scorer: renderHookScorer", self.ui)
+        self.assertIn("library: renderHookLibrary", self.ui)
+        self.assertIn("saved: renderSavedProjection", self.ui)
+        self.assertIn("opening20s: renderOpening20s", self.ui)
+        for legacy in (
+            "renderOverview", "renderHooks", "renderBoundaries",
+            "renderComponents", "renderClusters", "renderSwaps", "renderAxes",
+            "renderRegistry", "renderResearchContract", "function renderLattice(",
+            "Claude RTG", "claudertg",
+        ):
+            self.assertNotIn(legacy, self.ui + self.longquant)
+
+    def test_scorer_and_library_render_one_explicit_score_contract(self):
+        self.assertIn("function sharedScoringContractPanel(surface)", self.ui)
+        self.assertIn("sharedScoringContractPanel('scorer')", self.ui)
+        self.assertIn("sharedScoringContractPanel('library')", self.ui)
+        self.assertIn("data-pl-shared-score-contract", self.ui)
+        self.assertIn("score(full) − score(without component)", self.ui)
+        self.assertIn(
+            "score(full) − score(without A) − score(without B) + score(without A+B)",
+            self.ui,
+        )
+        self.assertNotIn("result.score ||", self.ui)
+        self.assertNotIn("result.trainingReward", self.ui)
+
+    def test_every_emitted_canvas_has_a_draw_handler(self):
+        emitted = set(re.findall(r'data-pl-canvas="([^"]+)"', self.ui))
+        handled = set(re.findall(r"kind === '([^']+)'", self.ui))
+        self.assertTrue(emitted)
+        self.assertEqual(emitted - handled, set())
 
     def test_every_candidate_gap_is_stored_and_visualizable(self):
         for row in self.partitions["rows"]:
@@ -41,162 +103,55 @@ class VisualizationContractTests(unittest.TestCase):
                                 for value in probabilities))
             self.assertTrue(all(math.isfinite(value) and 0 <= value <= 1
                                 for value in serving))
-            expected_cuts = sorted(int(chunk["end"])
-                                   for chunk in row["chunks"][:-1])
+            expected_cuts = sorted(int(chunk["end"]) for chunk in row["chunks"][:-1])
             self.assertEqual(trace.get("selectedCutTokenOffsets"), expected_cuts)
 
-    def test_hook_forecasts_end_at_exact_semantic_evidence(self):
+    def test_hook_forecasts_stop_at_their_measured_hook_endpoint(self):
         for row in self.outcomes["hooks"]:
             forecast = row["retentionForecast"]
             endpoint = float(forecast["responseEndSeconds"])
             self.assertEqual(len(forecast["timesSeconds"]), 41)
-            self.assertEqual(len(forecast["progressFractions"]), 41)
             self.assertAlmostEqual(float(forecast["timesSeconds"][-1]), endpoint, places=5)
-            self.assertAlmostEqual(float(forecast["progressFractions"][-1]), 1.0, places=8)
             self.assertTrue(all(float(word["responseSeconds"]) <= endpoint + 1e-6
                                 for word in forecast["words"]))
-            self.assertTrue(all(
-                float(window["responseWindowEndSeconds"]) <= endpoint + 1e-6
-                for window in forecast["componentWindows"]
-            ))
         self.assertEqual(self.outcomes["audit"]["postHookOutputPoints"], 0)
 
-    def test_every_axis_has_separate_input_and_target_horizon(self):
-        contract = self.findings["visualizationContract"]
-        lineage = contract["axisTargetLineage"]
-        targets = [row["experiment"]["target"] for row in self.axes["maps"]]
-        self.assertEqual(contract["status"], "complete")
-        self.assertEqual(contract["errors"], [])
-        self.assertEqual(set(lineage), set(targets))
-        for target in targets:
-            row = lineage[target]
-            self.assertEqual(row["semanticInputHorizon"],
-                             "the exact analyzed source hook only")
-            self.assertTrue((row.get("outcomeWindow") or {}).get("label"))
-        twenty = lineage["measured_retention_20s"]
-        self.assertEqual(twenty["outcomeWindow"]["kind"],
-                         "absolute-video-second-point")
-        self.assertEqual(twenty["outcomeWindow"]["endSeconds"], 20.0)
-        self.assertEqual(
-            twenty["sourceHooksWhoseSemanticInputEndsBeforeOutcomeWindow"],
-            twenty["sourceHooks"],
-        )
-        self.assertLess(
-            contract["semanticInputHorizon"]["maximumResponseEndSeconds"], 20.0
-        )
-
-    def test_every_declared_visual_channel_has_ui_and_draw_contract(self):
-        expected_channels = {
-            "partition-boundaries", "complete-hook-planes", "market-transfer",
-            "long-title-transfer", "retention-forecast", "word-semantics",
-            "component-planes", "relationship-matrices", "legacy-outcome-axes",
-            "multi-resolution-lattice", "attention-relational-graph",
-            "opening-20s", "research-contract",
-        }
-        channels = self.findings["visualizationContract"]["channels"]
-        self.assertEqual({row["id"] for row in channels}, expected_channels)
-        self.assertTrue(all(int(row["graphs"]) > 0 for row in channels))
-        required_ui_markers = (
-            'data-pl-visualization-contract',
-            'data-pl-horizon-lineage',
-            'data-pl-boundary-trace',
-            'data-pl-market-transfer',
-            'data-pl-long-title-transfer',
-            'kind === \'boundary-trace\'',
-            'kind === \'market-transfer\'',
-            'kind === \'long-title-transfer\'',
-            'kind === \'axis-horizon\'',
-            'kind === \'deconfounding-curves\'',
-            'kind === \'deconfounding-heatmap\'',
-            'kind === \'deconfounding-lag\'',
-            'kind === \'deconfounding-reverse\'',
-            'kind === \'deconfounding-baselines\'',
-            'data-pl-retention-mode="entry"',
-            'data-pl-retention-mode="absolute"',
-            'data-pl-retention-mode="terminal"',
-            'data-pl-canvas="lattice-embedding"',
-            'data-pl-canvas="lattice-spans"',
-            'data-pl-canvas="lattice-graph"',
-            'data-pl-canvas="opening20s-retention"',
-            'data-pl-canvas="opening20s-lag"',
-            'data-pl-opening20s-component-measurements',
-            'opening20sDetailCache',
-            'data-pl-auxiliary-node',
-            'data-pl-reveal-inspector',
-            'plInterpolationPoints',
-            'nativeObservedTimesSeconds || []).length',
-            'EXPLORATORY RESPONSE AXIS WITHHELD',
-            'class="pl-lattice-controls"',
-            'SCORED EXACT COVER',
-            'partition.canonicalComponentNodeIds',
-            "kind === 'lattice-embedding'",
-            "kind === 'lattice-spans'",
-            "kind === 'lattice-graph'",
-            "kind === 'opening20s-retention'",
-            "kind === 'opening20s-lag'",
-            'latticeEdgeMeasurement(edge)',
-            "renderStoredLattice(row)",
-            "function opening20sScorerLattice(result)",
-            "state.hookScoreOpeningLattice || result.componentLattice",
-            "typed 20-second response cover",
-            "observed start timestamps",
-            "timestampCollisionGroups",
-            "sourceStartTimestampSeconds",
-            "resolvedIntervalsNonoverlapping",
-            "canonicalComponentNodeIds: [...canonicalIds]",
-            "lattice: renderLattice",
-            "contract: renderResearchContract",
-            "opening20s: renderOpening20s",
-            "['multi-resolution-lattice', 'attention-relational-graph'].includes(row.id) ? 'lattice'",
-            "row.id === 'research-contract' ? 'contract'",
-            'data-pl-research-contract-table',
-            'analysis stops',
-            '% hook',
-        )
-        for marker in required_ui_markers:
-            self.assertIn(marker, self.ui)
-        self.assertNotIn("Retention-curve error by second", self.ui)
-        self.assertNotIn("response.selectedLagSeconds || 0", self.ui)
-        emitted = set(re.findall(r'data-pl-canvas="([^"]+)"', self.ui))
-        handled = set(re.findall(r"kind === '([^']+)'", self.ui))
-        self.assertEqual(emitted - handled, set(),
-                         "every emitted canvas kind needs a draw handler")
-        self.assertIn("SUPPORTED TRANSFER", self.ui)
-        self.assertNotIn("retained map 0042", self.ui)
-        self.assertIn("state.data.canonicalPartitions || {}).mapId", self.ui)
-
-    def test_lattice_and_research_contract_cover_the_real_corpus(self):
-        hooks = self.outcomes["hooks"]
+    def test_lattice_and_20_second_analysis_cover_the_library(self):
+        hooks = len(self.outcomes["hooks"])
         expected_spans = sum(
             int(row["tokenCount"]) * (int(row["tokenCount"]) + 1) // 2
             for row in self.lattice["rows"]
         )
-        self.assertEqual(self.lattice["hookCount"], len(hooks))
+        self.assertEqual(self.lattice["hookCount"], hooks)
         self.assertEqual(self.lattice["spanCount"], expected_spans)
-        self.assertEqual(len(self.lattice["rows"]), len(hooks))
-        self.assertTrue(all(
-            int(row["spanCount"])
-            == int(row["tokenCount"]) * (int(row["tokenCount"]) + 1) // 2
-            for row in self.lattice["rows"]
-        ))
-        self.assertEqual(len(self.lattice["mapDefinitions"]), 12)
         self.assertTrue(self.lattice["parityContract"]["shared"])
-        self.assertFalse(self.lattice["graphContract"]["structuralEdgeOutcomesUsed"])
+        self.assertEqual(self.opening["sourceVideos"], hooks)
+        self.assertEqual(
+            self.opening["sourceVideosWithNonoverlappingResolvedIntervals"], hooks,
+        )
         first = self.lattice["rows"][0]
         with gzip.open(CACHE / "component-lattice" / f"{first['videoId']}.json.gz", "rt") as handle:
             detail = json.load(handle)
         self.assertTrue(detail["partitionContract"]["exactNonoverlappingCover"])
         self.assertFalse(detail["partitionContract"]["selectionUsesOutcomes"])
-        self.assertEqual(
-            detail["partitionContract"]["tokenOwnership"],
-            [1] * detail["tokenCount"],
-        )
-        source = HERE / "REFERENCE_TO_GRATIFICATION_RESEARCH_PROGRAM.md"
-        contract = self.research_contract
-        self.assertEqual(len(contract["rows"]), 66)
-        self.assertEqual(contract["contract"]["sha256"], hashlib.sha256(source.read_bytes()).hexdigest())
-        self.assertFalse(contract["definitionOfDone"]["met"])
-        self.assertNotIn("contract-only", {row["status"] for row in contract["rows"]})
+        self.assertEqual(detail["partitionContract"]["tokenOwnership"],
+                         [1] * detail["tokenCount"])
+
+    def test_saved_embedding_is_the_canonical_category_map(self):
+        self.assertTrue(self.projection["saved"])
+        self.assertEqual(self.projection["mapId"], self.partitions["mapId"])
+        labels = self.projection["frozenPointIndex"]["labels"]
+        self.assertEqual(len(labels), self.lattice["spanCount"])
+        self.assertEqual(set(labels), {0, 1, 2, 3})
+
+    def test_server_exposes_no_deleted_promise_lab_routes(self):
+        for route in (
+            "findings", "corpus", "discovery", "atlas", "all-span-atlas",
+            "research-contract", "forward-response", "cross-scope", "swaps",
+            "axes", "registry", "swap-source",
+        ):
+            self.assertNotIn(f"promise-lab/{route}", self.server)
+        self.assertNotIn("claudertg", self.server.lower())
 
 
 if __name__ == "__main__":

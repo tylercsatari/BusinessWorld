@@ -82,12 +82,10 @@ reference distributions only turn them into inspectable percentiles.
 
 ## What this enables
 
-`score_market_hook.py` is the model-training endpoint. It requires one embedding
-for an unseeded candidate and returns the exact reward, domain status, calibrated
-owned-outcome estimates, and contract. `--diagnostics` adds validation provenance;
-the compact default avoids copying it into every training step. `score_hook.py` adds the
-full variable component partition and exact local effects without changing the
-primary score.
+`score_hook.py` is the one serving endpoint. It returns the exact Market Hold
+reward and domain status together with the full variable component partition and
+local effects. There is no second market-only implementation that can drift from
+the scorer/library contract.
 
 This reaches the same operational maturity as the thumbnail score: one
 deterministic reward can be replicated everywhere. It does not solve the harder

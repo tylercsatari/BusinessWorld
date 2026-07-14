@@ -9,11 +9,8 @@
         let savedProjectionMethod = 'maxmin';
         try { savedProjectionMethod = window.localStorage.getItem(projectionMethodKey) || 'maxmin'; } catch (_) { /* Storage is optional. */ }
         const state = {
-            view: 'overview', data: {}, loading: {}, errors: {},
-            hookId: null, hook: null, componentId: null, representation: 'influence',
-            mapIndex: 0, mapPage: 0, metric: 'ctrviews', sourceId: null, source: null,
-            axisIndex: 0, pendingAxisTarget: null, registryPage: 0, hookQuery: '', registryQuery: '', registryStage: 'all',
-            atlasScope: 'supported', focusedCluster: null, projectionMethod: savedProjectionMethod,
+            view: 'scorer', data: {}, loading: {}, errors: {},
+            projectionMethod: savedProjectionMethod,
             savedPointIndex: null,
             clusterOutcomeCluster: 2, clusterOutcomeFamily: 'performance',
             clusterOutcomeTarget: null, clusterOutcomeDetail: null,
@@ -27,22 +24,20 @@
             hookScoreOpeningLattice: null,
             hookScoreIdea: '',
             hookScoreError: null, hookScoreStatus: null, hookScoreJobId: null,
-            hookQualityPointIndex: null, forwardResponseComponentIndex: null,
+            forwardResponseComponentIndex: null,
             hookLibraryQuery: '', hookLibraryMetric: 'market', hookLibrarySelectedId: null,
             outcomePointVideoId: null, outcomeComponentPointKey: null,
             retentionCurveMode: 'entry',
             forecastWordIndex: 0,
             latticeVideoId: null, latticeDetail: null, latticeLoading: false,
             latticeError: null, latticeNodeId: null, latticeRepresentation: 'raw',
-            latticeResolution: 'all', latticeEdgeType: 'semantic', latticeQuery: '', latticeCorpusQuery: '',
+            latticeResolution: 'all', latticeEdgeType: 'semantic', latticeQuery: '',
             opening20sVideoId: null, opening20sDetail: null, opening20sLoading: false,
             opening20sError: null, opening20sQuery: '', opening20sCurve: 'entry_indexed',
         };
         let progressTimer = null;
         let resizeTimer = null;
         let resizeBound = false;
-        let hookRequest = 0;
-        let sourceRequest = 0;
         let clusterOutcomeRequest = 0;
         let latencyDetailRequest = 0;
         let hookScoreRequest = 0;
@@ -56,11 +51,6 @@
         const pct = value => value == null || !isFinite(value) ? '-' : `${Number(value).toFixed(1)}%`;
         const signed = (value, digits = 2) => value == null || !isFinite(value) ? '-' : `${value >= 0 ? '+' : ''}${Number(value).toFixed(digits)}`;
         const numeric = value => value == null || value === '' ? NaN : Number(value);
-        const metricLabel = name => ({
-            ctrviews: 'CTR + views', ctr: 'CTR', ret30: '30-second retention',
-            views: 'views', scaled_views: 'scaled views', realviews: 'realistic views',
-            gt10m: '10M-view class',
-        })[name] || name;
         const outcomePalette = {
             low: 'rgb(56,189,248)', middle: 'rgb(152,151,181)', high: 'rgb(248,113,113)',
         };
@@ -122,21 +112,6 @@
             return status.startsWith('validated')
                 || (status.includes('supported') && !status.includes('not-supported'));
         }
-        function legacyAxisClaim(experiment) {
-            if (!axisRandomFoldSupported(experiment)) return 'NOT SUPPORTED';
-            return experiment.targetChannel === 'observed YouTube outcome'
-                ? 'RANDOM-FOLD DIAGNOSTIC'
-                : 'SOURCE-GROUPED SUPPORTED';
-        }
-        function axisRandomFoldSupported(experiment) {
-            return [
-                'validated',
-                'multiplicity-controlled-random-fold-association',
-                'source-grouped-observed-diagnostic',
-                'source-grouped-model-transfer-supported',
-                'source-grouped-supported',
-            ].includes(String((experiment || {}).status || ''));
-        }
         function selectedLibraryHook() {
             const hooks = ((state.data.hookOutcomes || {}).hooks || []);
             return hooks.find(row => String(row.videoId) === String(state.hookLibrarySelectedId)) || null;
@@ -196,18 +171,11 @@
                 <div style="font-size:8px;color:${C.mute};margin-top:7px">Population shown: frozen cluster ${Number(detail.cluster)} only. Cluster identity is fixed before outcomes are joined; blue and red are values within that one cluster.</div>
             </div>`;
         }
-        const representationLabel = name => ({
-            raw: 'raw source span', influence: 'deletion influence',
-            nonadditive: 'non-additive source span', context: 'retained hook context',
-        })[name] || name;
         const clusterColor = label => `hsl(${(Number(label || 0) * 137.508) % 360} 72% 62%)`;
         const card = (body, extra = '') => `<section style="background:${C.card};border:1px solid ${C.border};border-radius:8px;padding:12px;${extra}">${body}</section>`;
         const stat = (label, value, color = C.text) => `<div style="min-width:112px;border-left:2px solid ${color};padding:3px 9px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase">${esc(label)}</div><div style="font-size:17px;font-weight:900;color:${color}">${esc(String(value))}</div></div>`;
         const button = (label, attr, active = false) => `<button ${attr} style="border:1px solid ${active ? C.cyan : C.border};background:${active ? C.cyan + '1c' : C.card2};color:${active ? C.cyan : C.dim};border-radius:6px;padding:5px 9px;font-size:10px;font-weight:800;cursor:pointer">${esc(label)}</button>`;
         const statusColor = status => status === 'complete' || String(status || '').startsWith('validated') || status === 'supported' ? C.green : status === 'error' ? C.red : C.amber;
-        const activeAtlas = () => state.atlasScope === 'all' ? state.data.allSpanAtlas : state.data.atlas;
-        const atlasRows = atlas => (atlas && (atlas.spans || atlas.candidates)) || [];
-        const atlasCount = atlas => Number((atlas && (atlas.spanInstances || atlas.candidateInstances)) || atlasRows(atlas).length || 0);
 
         async function load(name, url, force) {
             if (!force && (state.data[name] || state.loading[name])) return state.data[name];
@@ -446,36 +414,6 @@
             }
         }
 
-        async function loadHook(videoId) {
-            const request = ++hookRequest;
-            state.hookId = videoId;
-            state.hook = null;
-            paint();
-            try {
-                const response = await fetch(`${api('hook')}/${encodeURIComponent(videoId)}`, { cache: 'no-cache' });
-                const value = response.ok ? await response.json() : { error: `${response.status} ${response.statusText}` };
-                if (request === hookRequest) state.hook = value;
-            } catch (error) {
-                if (request === hookRequest) state.hook = { error: String(error && error.message || error) };
-            }
-            if (request === hookRequest) paint();
-        }
-
-        async function loadSource(sourceId) {
-            const request = ++sourceRequest;
-            state.sourceId = sourceId;
-            state.source = null;
-            paint();
-            try {
-                const response = await fetch(`${api('swap-source')}/${encodeURIComponent(sourceId)}`, { cache: 'no-cache' });
-                const value = response.ok ? await response.json() : { error: `${response.status} ${response.statusText}` };
-                if (request === sourceRequest) state.source = value;
-            } catch (error) {
-                if (request === sourceRequest) state.source = { error: String(error && error.message || error) };
-            }
-            if (request === sourceRequest) paint();
-        }
-
         async function loadClusterOutcomeDetail(cluster, target) {
             const request = ++clusterOutcomeRequest;
             const key = `${cluster}/${target}`;
@@ -585,7 +523,6 @@
                 load('marketReward', api('market-reward'));
                 load('canonicalPartitions', api('canonical-partitions'));
                 load('hookExamples', api('hook-example-results'));
-                load('componentLattice', api('component-lattice'));
                 resumePendingHookScore();
             }
             if (state.view === 'library') {
@@ -593,30 +530,14 @@
                 load('hookOutcomes', api('hook-outcomes'));
                 load('marketReward', api('market-reward'));
                 load('canonicalPartitions', api('canonical-partitions'));
-                load('componentLattice', api('component-lattice'));
             }
-            if (state.view === 'lattice') load('componentLattice', api('component-lattice'));
             if (state.view === 'opening20s') load('opening20s', api('opening-20s'));
-            if (state.view === 'contract') load('researchContract', api('research-contract'));
-            if (state.view === 'overview') { load('findings'); load('manualProbe', api('manual-probe')); }
             if (state.view === 'saved') {
                 load('manualProbe', api('manual-probe'));
                 load('manualProjection', api('manual-projection'));
                 load('clusterOutcomes', api('cluster-outcomes')).then(initializeClusterOutcome);
                 load('latencyStudy', api('latency-study'));
             }
-            if (state.view === 'hooks' || state.view === 'boundaries') load('discovery');
-            if (state.view === 'components' || state.view === 'clusters') {
-                if (state.atlasScope === 'all') load('allSpanAtlas', api('all-span-atlas'));
-                else load('atlas');
-                if (state.view === 'clusters') {
-                    load('manualProbe', api('manual-probe'));
-                    load('manualProjection', api('manual-projection'));
-                }
-            }
-            if (state.view === 'swaps') load('swaps');
-            if (state.view === 'axes') { load('axes'); load('findings'); }
-            if (state.view === 'registry') load('registry');
         }
 
         function loading(name) {
@@ -629,13 +550,12 @@
             const manifest = state.data.manifest || {};
             const progress = state.data.progress || {};
             const views = [
-                ['overview', 'Results'], ['scorer', 'Hook scorer'], ['library', 'Hook library'], ['opening20s', '20s openings'], ['lattice', 'Component lattice'], ['contract', 'Research contract'], ['hooks', 'Hooks'], ['boundaries', 'Boundaries'],
-                ['components', 'Embeddings'], ['clusters', 'Cluster atlas'], ['saved', 'Saved embedding'], ['swaps', 'Swaps'],
-                ['axes', 'Outcome axes'], ['registry', 'Registry'],
+                ['scorer', 'Hook scorer'], ['library', 'Hook library'],
+                ['saved', 'Saved embedding'], ['opening20s', '20s analysis'],
             ];
             return `<div style="display:flex;align-items:flex-start;gap:12px;justify-content:space-between;margin-bottom:11px;flex-wrap:wrap">
                 <div><div style="font-size:17px;font-weight:900;color:${C.text}">Promise Lab</div>
-                <div style="font-size:10px;color:${C.mute};line-height:1.5">First-principles semantic discovery in the exact Long Quant text space. Examples are never labels.</div></div>
+                <div style="font-size:10px;color:${C.mute};line-height:1.5">One hook scorer, one measured-hook library, one frozen validation embedding, and the same component system extended through 20 seconds.</div></div>
                 <div style="display:flex;gap:7px;align-items:center"><span data-pl-live-status style="font-size:10px;color:${statusColor(progress.status || manifest.status)};font-weight:800">${esc(progress.stage || manifest.status || 'loading')}</span>${button('Refresh', 'data-pl-refresh')}</div>
             </div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px">${views.map(([id, label]) => button(label, `data-pl-view="${id}"`, state.view === id)).join('')}</div>`;
         }
@@ -658,55 +578,6 @@
                 <div style="height:5px;background:${C.border};overflow:hidden"><div style="height:100%;width:${width}%;background:${C.cyan}"></div></div>
                 <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:5px;font-size:9px;color:${C.mute}"><span>${Number(progress.embeddingCacheVectors || 0).toLocaleString()} transient vectors</span><span>${Number(progress.spansMaterialized || progress.spanInstances || progress.candidateInstances || 0).toLocaleString()} spans/candidates</span><span>${Number(progress.tokenPairsMaterialized || 0).toLocaleString()} token pairs</span><span>${Number(progress.experimentsComplete || 0).toLocaleString()} experiments complete</span></div>
             </div>`;
-        }
-
-        async function openManualProbe() {
-            const probe = state.data.manualProbe || await load('manualProbe', api('manual-probe'));
-            if (!probe || !probe.winner) return;
-            const winner = probe.winner;
-            state.view = 'clusters';
-            state.atlasScope = winner.scope === 'all-contiguous-spans' ? 'all' : 'supported';
-            state.componentId = null;
-            const atlas = state.atlasScope === 'all'
-                ? (state.data.allSpanAtlas || await load('allSpanAtlas', api('all-span-atlas')))
-                : (state.data.atlas || await load('atlas'));
-            if (!atlas) return;
-            const found = (atlas.maps || []).findIndex(row => row.id === winner.mapId);
-            state.mapIndex = found >= 0 ? found : Number(winner.mapIndex || 0);
-            state.mapPage = Math.floor(state.mapIndex / 24);
-            state.focusedCluster = Number(winner.cluster);
-            state.representation = winner.representation || state.representation;
-            load('manualProjection', api('manual-projection'));
-            paint();
-        }
-
-        function manualProbeSummary() {
-            const probe = state.data.manualProbe;
-            if (!probe || !probe.winner) return '';
-            const winner = probe.winner, counts = probe.counts || {}, bootstrap = winner.bootstrap || {};
-            const active = state.view === 'clusters'
-                && ((state.atlasScope === 'all') === (winner.scope === 'all-contiguous-spans'))
-                && ((activeAtlas() || {}).maps || [])[state.mapIndex]?.id === winner.mapId
-                && state.focusedCluster === Number(winner.cluster);
-            return card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
-                <div style="min-width:250px;flex:1"><div style="font-size:9px;color:${C.amber};font-weight:900;text-transform:uppercase">Manual post-hoc overfit probe</div><div style="font-size:14px;color:${C.text};font-weight:900;margin-top:3px">Closest existing category: cluster ${winner.cluster}</div><div style="font-size:9px;color:${C.dim};margin-top:3px">${esc(winner.representation)} · ${esc(winner.geometry)} · ${winner.pcaDimensions}D · k=${winner.clusterCount} · map ${esc(String(winner.mapId || '').slice(0, 10))}</div><div style="font-size:9px;color:${C.mute};line-height:1.5;margin-top:6px">Yes: this is the strongest of ${Number(counts.frozenMapsCompared || 0).toLocaleString()} frozen map/cluster comparisons under the declared information-contribution measure. It is a descriptive overfit, not a discovered semantic name or scientific validation.</div></div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap">${stat('selected recall', pct(Number(winner.manualRecall || 0) * 100), C.green)}${stat('atlas base rate', pct(Number(winner.atlasBaseRate || 0) * 100), C.dim)}${stat('concentration', `${fmt(winner.enrichment, 2)}x`, C.cyan)}${stat('information', `${fmt(winner.globalInformationContributionBits, 3)} bits`, C.purple)}</div>
-                <div style="min-width:230px"><div style="font-size:9px;color:${C.text};line-height:1.5">${winner.manualPhrasesInCluster || 0}/${counts.manualPhrases || 0} selected phrases · ${winner.manualHooksInCluster || 0}/${counts.manualHooks || 0} source hooks<br>same cluster in ${pct(Number(bootstrap.sameClusterWithinWinningMapRate || 0) * 100)} of grouped bootstraps · exact map/cluster in ${pct(Number(bootstrap.exactMapAndClusterSelectionRate || 0) * 100)}<br>length NMI ${fmt(winner.lengthNMI, 3)} · position NMI ${fmt(winner.positionNMI, 3)}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:7px">${button(state.view === 'saved' ? 'Saved embedding open' : 'Open saved embedding', 'data-pl-view="saved"', state.view === 'saved')}${button(active ? 'Winning cluster isolated' : 'Isolate source cluster', 'data-pl-open-manual-probe', active)}</div></div>
-            </div>`, 'margin-bottom:10px;border-color:' + C.amber + '55');
-        }
-
-        function manualProbeDetail(selectedMap) {
-            const probe = state.data.manualProbe, detail = probe && probe.winnerDetail;
-            if (!probe || !detail || !selectedMap || selectedMap.id !== probe.winner.mapId
-                || state.focusedCluster !== Number(probe.winner.cluster)) return '';
-            const matches = detail.matches || [], misses = detail.misses || [], neighbors = detail.nearestMembers || [];
-            const rowButton = (row, label, suffix = '') => `<button data-pl-component="${esc(row.spanId || row.id || '')}" data-pl-open-components style="display:block;width:100%;text-align:left;border:0;border-bottom:1px solid ${C.border};background:transparent;color:${C.text};padding:5px 0;font-size:8.5px;cursor:pointer"><b>${esc(label)}</b>${suffix ? `<br><span style="color:${C.mute}">${esc(suffix)}</span>` : ''}</button>`;
-            return card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:8px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">Study the winning category</div><div style="font-size:8px;color:${C.mute}">Cyan points are your selected spans. Colored points are every member of cluster ${detail.cluster}; dim points are the other three categories. Click any row to inspect its exact embedding input.</div></div>${button('Show all clusters', 'data-pl-clear-cluster-focus')}</div>
-                <div class="pl-split" style="display:grid;grid-template-columns:minmax(250px,1fr) minmax(230px,.7fr) minmax(280px,1.1fr);gap:12px">
-                <div><div style="font-size:9px;font-weight:900;color:${C.green};margin-bottom:4px">Inside · ${matches.length} manual phrases</div><div style="max-height:390px;overflow:auto">${matches.map(row => rowButton(row, row.manualPhrase, row.observedSpanText === row.manualPhrase ? '' : `observed: ${row.observedSpanText}`)).join('')}</div></div>
-                <div><div style="font-size:9px;font-weight:900;color:${C.amber};margin-bottom:4px">Outside · ${misses.length} manual phrases</div><div style="max-height:390px;overflow:auto">${misses.map(row => rowButton(row, row.manualPhrase, `observed: ${row.observedSpanText} · landed in cluster ${row.winningMapCluster}`)).join('')}</div></div>
-                <div><div style="font-size:9px;font-weight:900;color:${C.cyan};margin-bottom:4px">Nearest unlabeled members · ${neighbors.length}</div><div style="font-size:8px;color:${C.mute};margin-bottom:4px">Nearest the displayed cluster median, one source hook each before repeats. Unlabeled means unreviewed, not negative.</div><div style="max-height:390px;overflow:auto">${neighbors.map(row => rowButton(row, row.text, `distance ${fmt(row.distanceToDisplayedCentroid, 4)}${(row.manualPhraseIndices || []).length ? ' · manually selected' : ''}`)).join('')}</div></div>
-                </div>`, 'margin-bottom:10px;border-color:' + clusterColor(detail.cluster) + '66');
         }
 
         function manualMetricGlossary() {
@@ -908,19 +779,6 @@
             ${latencyPointPanel(summary, cluster)}${latencyExtremes(cluster)}`;
         }
 
-        function hookQualityPointInspector(summary) {
-            const rows = ((summary || {}).axis || {}).points || [];
-            const index = Number(state.hookQualityPointIndex);
-            if (state.hookQualityPointIndex == null || !rows[index]) {
-                return `<div style="height:100%;min-height:190px;display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:9px;text-align:center;padding:20px">Click a training point to inspect its exact hook, held-out score, target residual, and every evidence-selected stored component.</div>`;
-            }
-            const row = rows[index];
-            const components = (summary.components || []).slice(
-                Number(row.componentOffset || 0), Number(row.componentOffset || 0) + Number(row.componentCount || 0),
-            );
-            return `<div style="padding:10px;min-height:190px"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">Held-out training hook ${index + 1}/${rows.length}</div><div style="font-size:12px;color:${C.text};font-weight:900;line-height:1.4;margin:4px 0">${esc(row.text || '')}</div><div style="font-size:8px;color:${C.mute}">${esc(row.title || row.videoId || '')}</div><div style="display:flex;gap:12px;flex-wrap:wrap;margin:8px 0;font-size:8.5px;color:${C.dim}"><span><b style="color:${C.text}">${fmt(row.oofAxisPercentile, 1)}th</b> held-out score</span><span><b style="color:${C.text}">${signed(row.oofTargetResidual, 3)}</b> observed residual</span><span>fold ${Number(row.fold) + 1}</span><span><b style="color:${C.text}">${components.length}</b> emergent components</span><span>partition gap ${fmt(row.partitionScoreGapPercentile, 1)}th</span></div><div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:4px">${components.map(component => `<span style="flex:0 0 auto;border-bottom:3px solid ${clusterColor(component.category)};background:${C.card};padding:4px 5px;font-size:8.5px;color:${C.text}" title="full-context deletion effect ${signed(component.deletionEffect, 4)}">${esc(component.text)}</span>`).join('')}</div></div>`;
-        }
-
         function forwardResponseInspector(summary) {
             const response = (summary || {}).forwardResponse || {};
             const rows = response.components || [];
@@ -1019,7 +877,7 @@
         function hookOutcomePayload(focus, target) {
             if (!focus) return null;
             if (target === 'market') {
-                if (focus.type === 'live') return (focus.result || {}).trainingReward || null;
+                if (focus.type === 'live') return (focus.result || {}).primaryScore || null;
                 return (marketRewardRow((focus.row || {}).videoId) || {}).score || null;
             }
             if (target === 'survival') {
@@ -1126,48 +984,6 @@
             ];
             if (!(outcomes.hooks || []).length) return '';
             return `<section data-pl-long-title-transfer style="background:${C.card};border:1px solid ${C.amber}55;padding:10px;margin-top:8px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:280px;flex:1"><div style="font-size:8px;color:${C.amber};font-weight:900;text-transform:uppercase">Long Quant title market prior · separate, never blended</div><div style="font-size:15px;color:${C.text};font-weight:900;margin-top:2px">${Number(corpus.embeddedTitleRecords || 0).toLocaleString()} embedded long-form titles → five visible Shorts transfer tests</div><div style="font-size:8px;color:${C.dim};line-height:1.55;margin-top:3px">X is predicted long-form log10 views from the unchanged Long Quant title direction applied to each complete Shorts hook. Y is the measured Shorts target. The direction predicts long-form titles (held-out rho ${fmt(validation.heldoutSpearman, 3)}) but does not transfer to Shorts hold, so it remains a contextual prior only.</div></div><span style="font-size:7.5px;color:${C.amber};font-weight:900;border:1px solid ${C.amber}66;padding:5px 7px">INDEPENDENT · NOT BLENDED</span></div><div class="pl-map-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:7px;margin-top:8px">${rows.map(([target, label]) => { const audit = audits[target] || {}; return `<div style="background:${C.card2};padding:7px"><div style="display:flex;justify-content:space-between;gap:6px"><b style="font-size:8px;color:${C.text}">${esc(label)}</b><span style="font-size:7px;color:${C.red}">rho ${fmt(audit.spearman, 3)}</span></div><canvas data-pl-canvas="long-title-transfer" data-pl-long-title-target="${target}" style="width:100%;height:175px;display:block;margin-top:3px"></canvas><div style="font-size:6.8px;color:${C.mute}">p ${fmt(audit.spearmanP, 4)} · n ${audit.rows || 0}</div></div>`; }).join('')}</div></section>`;
-        }
-
-        function legacyAxisValueFormatter(experiment) {
-            const target = String((experiment || {}).target || '');
-            return value => {
-                value = numeric(value);
-                if (!Number.isFinite(value)) return '-';
-                if (target.startsWith('transfer_')) return `${signed(value, 2)} percentile points`;
-                if (target === 'measured_log_views') return `${fmt(value, 2)} log10 (about ${formatCompactNumber(10 ** value)} views)`;
-                if (target === 'measured_keep_rate' || target === 'measured_avg_retention') return `${fmt(value, 1)}%`;
-                if (target.includes('_slope_')) return `${signed(value * 100, 2)} pp/s`;
-                if (target.startsWith('measured_hold_after_hook_')) return `${signed(value * 100, 2)} pp`;
-                if (target.startsWith('measured_')) return `${fmt(value * 100, 1)}%`;
-                return fmt(value, 3);
-            };
-        }
-
-        function axisLineageFor(map) {
-            const target = String(((map || {}).experiment || {}).target || '');
-            return (((state.data.findings || {}).axis || {}).targetLineage || {})[target]
-                || (((state.data.findings || {}).visualizationContract || {}).axisTargetLineage || {})[target]
-                || null;
-        }
-
-        function axisHorizonPanel(map) {
-            const lineage = axisLineageFor(map);
-            if (!lineage) return `<div data-pl-horizon-lineage style="border-left:3px solid ${C.amber};padding:8px;color:${C.amber};font-size:8.5px">Target lineage is missing from this artifact. This axis is not presented as fully traceable until the findings artifact is rebuilt.</div>`;
-            const horizon = (((state.data.findings || {}).visualizationContract || {}).semanticInputHorizon) || {};
-            const window = lineage.outcomeWindow || {};
-            const sourceHooks = Number(lineage.sourceHooks || horizon.sourceHooks || 0);
-            const before = lineage.sourceHooksWhoseSemanticInputEndsBeforeOutcomeWindow;
-            const afterCopy = before == null
-                ? 'This target has no single fixed viewer-time endpoint.'
-                : `${Number(before).toLocaleString()} of ${sourceHooks.toLocaleString()} source hooks stop before the target window ends.`;
-            return `<section data-pl-horizon-lineage style="background:${C.card2};border:1px solid ${C.border2};padding:10px;margin:9px 0"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:280px;flex:1"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">Input horizon versus outcome horizon</div><div style="font-size:14px;color:${C.text};font-weight:900;margin-top:2px">Hook-derived semantics stop at each exact hook endpoint</div><div style="font-size:8.5px;color:${C.dim};line-height:1.55;margin-top:3px">Semantic input: ${esc(lineage.semanticInput || '')}. Outcome label: ${esc(window.label || lineage.targetDefinition || '')}. ${esc(afterCopy)} A later target is only a measured label used to test association; it is never represented as unseen words or a post-hook semantic forecast.</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${stat('semantic hooks', sourceHooks, C.cyan)}${stat('hook endpoints', `${fmt(horizon.minimumResponseEndSeconds, 2)}–${fmt(horizon.maximumResponseEndSeconds, 2)}s`, C.green)}${stat('target kind', window.kind || 'declared', C.amber)}${stat('claim', lineage.status || 'diagnostic', axisRandomFoldSupported((map || {}).experiment || {}) ? C.green : C.red)}</div></div><canvas data-pl-canvas="axis-horizon" style="width:100%;height:230px;display:block;margin-top:8px"></canvas><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:5px;font-size:8px;line-height:1.5"><div style="border-left:3px solid ${C.cyan};padding-left:7px;color:${C.dim}"><b style="color:${C.text}">CYAN DISTRIBUTION</b><br>Exact response endpoint of every analyzed hook. Median ${fmt(horizon.medianResponseEndSeconds, 2)}s; maximum ${fmt(horizon.maximumResponseEndSeconds, 2)}s.</div><div style="border-left:3px solid ${C.red};padding-left:7px;color:${C.dim}"><b style="color:${C.text}">RED TARGET</b><br>${esc(window.label || 'No fixed viewer-time window')}. ${esc(afterCopy)}</div></div></section>`;
-        }
-
-        function visualizationContractPanel() {
-            const contract = (state.data.findings || {}).visualizationContract;
-            if (!contract) return '';
-            const horizon = contract.semanticInputHorizon || {}, assertions = contract.assertions || {};
-            return `<section data-pl-visualization-contract style="border:1px solid ${contract.status === 'complete' ? C.green : C.amber}66;background:${C.card};padding:11px;margin:0 0 10px"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:300px;flex:1"><div style="font-size:8px;color:${C.green};font-weight:900;text-transform:uppercase">Visualization completeness contract</div><div style="font-size:17px;color:${C.text};font-weight:900;margin-top:2px">Every emitted analytical channel has a named visible graph</div><div style="font-size:8.5px;color:${C.dim};line-height:1.55;margin-top:4px">The contract is generated from the artifacts, not a hand-maintained UI promise. Semantic curves contain ${esc((horizon.outputPositionsPerHook || []).join(', '))} positions per hook, stop at ${fmt(horizon.minimumResponseEndSeconds, 2)}–${fmt(horizon.maximumResponseEndSeconds, 2)}s, and contain ${Number(assertions.postHookSemanticOutputs || 0)} post-hook semantic outputs.</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${stat('channels', (contract.channels || []).length, C.cyan)}${stat('axis lineage', `${assertions.axisTargetsWithLineage || 0}/${assertions.axisTargetsWithMaps || 0}`, C.green)}${stat('boundary traces', `${assertions.boundaryHooksWithTraces || 0}/${assertions.boundaryHooks || 0}`, C.green)}${stat('post-hook outputs', assertions.postHookSemanticOutputs || 0, Number(assertions.postHookSemanticOutputs || 0) === 0 ? C.green : C.red)}</div></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:7px;margin-top:9px">${(contract.channels || []).map(row => { const destination = ['multi-resolution-lattice', 'attention-relational-graph'].includes(row.id) ? 'lattice' : row.id === 'research-contract' ? 'contract' : row.view && row.view.startsWith('Outcome') ? 'axes' : row.view && row.view.includes('library') ? 'library' : 'scorer'; return `<button data-pl-contract-view="${destination}" style="text-align:left;background:${C.card2};border:1px solid ${C.border};padding:8px;cursor:pointer"><div style="display:flex;justify-content:space-between;gap:6px"><b style="font-size:8.5px;color:${C.text}">${esc(row.label || row.id || '')}</b><b style="font-size:8px;color:${C.cyan}">${Number(row.graphs || 0).toLocaleString()} graph${Number(row.graphs || 0) === 1 ? '' : 's'}</b></div><div style="font-size:7.5px;color:${C.dim};line-height:1.45;margin-top:3px">${Number(row.outputs || 0).toLocaleString()} outputs · ${esc(row.visibleAs || '')}<br><span style="color:${C.mute}">${esc(row.view || '')}</span></div></button>`; }).join('')}</div></section>`;
         }
 
         function outcomePredictionStrip(focus) {
@@ -1352,6 +1168,15 @@
                 .sort((left, right) => left.count - right.count);
             const largest = Math.max(1, ...histogram.map(row => row.hooks));
             return card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:300px;flex:1"><div style="font-size:9px;color:${C.cyan};font-weight:900;text-transform:uppercase">Category-blind partition contract</div><div style="font-size:16px;color:${C.text};font-weight:900;margin-top:2px">Variable non-overlapping components, then a conditional four-label overlay</div><div style="font-size:9px;color:${C.dim};line-height:1.6;margin-top:4px">Every token gap receives a source-held-out semantic cut probability from eight category-blind contrast features. The decoder chooses the maximum-posterior contiguous exact cover. It has no required count, maximum count, duration rule, supplied phrase feature, outcome, or tuned split penalty. After boundaries are fixed, categories are assigned from retained map <b style="color:${C.text};font-family:monospace">${esc(categoryMapId)}</b>, read from the saved canonical-partition artifact and selected post hoc using the manual probe. Those four labels are useful conditional coordinates, not an independently discovered taxonomy.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('observed range', `${validation.minimumComponents || '-'}–${validation.maximumComponents || '-'}`, C.cyan)}${stat('median', fmt(validation.medianComponents, 1), C.green)}${stat('mean', fmt(validation.meanComponents, 2), C.text)}${stat('boundary AUC', fmt(boundary.heldoutAuc ?? validation.boundaryHeldoutAuc, 3), C.purple)}${stat('boundary AP', fmt(boundary.heldoutAveragePrecision ?? validation.boundaryHeldoutAveragePrecision, 3), C.amber)}</div></div><div style="margin-top:10px"><div style="font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:5px">Observed component counts across ${Number((summary.model || {}).trainingHooks || 0)} held-out hooks</div><div style="display:flex;align-items:flex-end;gap:4px;height:82px;overflow-x:auto;padding-bottom:3px">${histogram.map(row => `<div title="${row.hooks} hooks have ${row.count} components" style="flex:1 0 28px;min-width:28px;text-align:center"><div style="font-size:7px;color:${C.dim};margin-bottom:2px">${row.hooks}</div><div style="height:${Math.max(3, row.hooks / largest * 52)}px;background:${C.cyan};opacity:.78"></div><b style="font-size:8px;color:${C.text}">${row.count}</b></div>`).join('')}</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:5px">X = emergent components per hook; label above each bar = source hooks. ${validation.hooksUsingAllFourCategories || 0} hooks use all four labels; that is observed, not constrained. Serving averages fold-specific models whose regularization is selected inside training data; raw cut posteriors enter the decoder without thresholding or recentering.</div></div>`, 'margin-bottom:10px;border-color:' + C.cyan + '55');
+        }
+
+        function sharedScoringContractPanel(surface) {
+            const partitions = state.data.canonicalPartitions || {};
+            const market = state.data.marketReward || {};
+            const source = surface === 'library'
+                ? 'Stored rows use source-held-out cuts and predictions so they can be audited honestly. Typed text uses the frozen serving ensemble. Both paths use the same partition method, Market Hold coordinate, and deletion formulas; held-out and serving cuts are never falsely presented as identical.'
+                : 'Typed text uses the frozen serving ensemble. The library uses source-held-out cuts and predictions for audit, while preserving the same partition method, Market Hold coordinate, and deletion formulas.';
+            return `<section data-pl-shared-score-contract data-pl-score-surface="${esc(surface)}" style="background:${C.card};border:1px solid ${C.green}66;border-radius:8px;padding:12px;margin-bottom:10px"><div class="pl-score-contract-layout" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.48fr);gap:14px;align-items:start"><div><div style="font-size:9px;color:${C.green};font-weight:900;text-transform:uppercase">One scorer contract · live and library</div><div style="font-size:15px;color:${C.text};font-weight:900;margin-top:2px">Same partition contract, same Market Hold coordinate, same local counterfactual formulas</div><div style="font-size:9px;color:${C.dim};line-height:1.6;margin-top:4px">${esc(source)}</div></div><div style="font-size:8px;color:${C.mute};line-height:1.6;overflow-wrap:anywhere"><b style="color:${C.text}">Partition:</b> <span style="font-family:monospace">${esc(partitions.methodVersion || 'unavailable')}</span><br><b style="color:${C.text}">Headline reward:</b> <span style="font-family:monospace">${esc(market.methodVersion || 'unavailable')}</span><br><b style="color:${C.text}">Component:</b> score(full) − score(without component)<br><b style="color:${C.text}">Relationship:</b> score(full) − score(without A) − score(without B) + score(without A+B)</div></div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:7px">Hook Hold, direct outcome forecasts, retention curves, and 20-second response measurements are diagnostics. They remain visible for validation but never replace or blend into the headline Market Hold score.</div></section>`;
         }
 
         function componentMetricValue(component, axis, focusType) {
@@ -1583,13 +1408,13 @@
                 : numeric(((row.outcomes || {})[state.hookLibraryMetric] || {}).predictedOOF);
             rows = [...rows].sort((left, right) => metricValue(right) - metricValue(left) || String(left.videoId).localeCompare(String(right.videoId)));
             const targets = outcomes.targets || {};
-            return `${partitionMethodPanel(state.data.hookQuality)}${card(`<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"><label style="flex:1;min-width:260px"><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:4px">Search all ${Number((outcomes.hooks || []).length).toLocaleString()} measured hooks</span><input data-pl-query="library" value="${esc(state.hookLibraryQuery)}" placeholder="title, hook text, or video ID" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:7px 8px;border-radius:5px;font-size:10px"></label>${button('Apply', 'data-pl-library-apply')}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${[['market', 'Market Hold · primary'], ['overall', 'Hook Hold · diagnostic'], ...hookOutcomeOrder.map(id => [id, (targets[id] || {}).shortLabel || id])].map(([id, label]) => button(label, `data-pl-library-metric="${id}"`, state.hookLibraryMetric === id)).join('')}</div><div style="font-size:8px;color:${C.mute};margin-top:6px">${rows.length} hooks sorted by ${esc(state.hookLibraryMetric === 'market' ? 'frozen Market Hold percentile' : state.hookLibraryMetric === 'overall' ? 'unbounded diagnostic Hook Hold z-score' : `${(targets[state.hookLibraryMetric] || {}).shortLabel || state.hookLibraryMetric} held-out prediction`)}. Every row shows prediction, actual, error, all emergent components, and its full curve.</div>`, 'margin-bottom:9px')}
+            return `${partitionMethodPanel(state.data.hookQuality)}${sharedScoringContractPanel('library')}${card(`<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"><label style="flex:1;min-width:260px"><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:4px">Search all ${Number((outcomes.hooks || []).length).toLocaleString()} measured hooks</span><input data-pl-query="library" value="${esc(state.hookLibraryQuery)}" placeholder="title, hook text, or video ID" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:7px 8px;border-radius:5px;font-size:10px"></label>${button('Apply', 'data-pl-library-apply')}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${[['market', 'Market Hold · primary'], ['overall', 'Hook Hold · diagnostic'], ...hookOutcomeOrder.map(id => [id, (targets[id] || {}).shortLabel || id])].map(([id, label]) => button(label, `data-pl-library-metric="${id}"`, state.hookLibraryMetric === id)).join('')}</div><div style="font-size:8px;color:${C.mute};margin-top:6px">${rows.length} hooks sorted by ${esc(state.hookLibraryMetric === 'market' ? 'frozen Market Hold percentile' : state.hookLibraryMetric === 'overall' ? 'unbounded diagnostic Hook Hold z-score' : `${(targets[state.hookLibraryMetric] || {}).shortLabel || state.hookLibraryMetric} held-out prediction`)}. Every row shows prediction, actual, error, all emergent components, and its full curve.</div>`, 'margin-bottom:9px')}
             <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:6px">${rows.map((row, index) => { const selected = String(row.videoId) === String(state.hookLibrarySelectedId), market = (marketRewardRow(row.videoId) || {}).score || {}; return `<div><div class="pl-library-row" data-pl-library-hook="${esc(row.videoId)}" role="button" tabindex="0" style="display:grid;grid-template-columns:minmax(280px,1.5fr) repeat(4,minmax(100px,.55fr)) minmax(180px,.75fr);gap:7px;align-items:center;border:1px solid ${selected ? C.cyan : C.border};background:${selected ? C.cyan + '0d' : C.card};padding:8px;cursor:pointer"><div style="min-width:0"><div style="display:flex;justify-content:space-between;gap:6px"><span style="font-size:7.5px;color:${C.mute}">#${index + 1} · ${esc(row.videoId || '')}</span><b style="font-size:9px;color:${C.green}">Market ${fmt(market.percentile, 1)}th</b></div><div style="font-size:10px;color:${C.text};font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc(row.title || '')}</div><div style="font-size:8px;color:${C.dim};line-height:1.35;max-height:2.7em;overflow:hidden;margin-top:2px">${esc(row.text || '')}</div><div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">${(row.components || []).map((component, componentIndex) => { const effect = (((marketRewardRow(row.videoId) || {}).components || [])[componentIndex] || {}); return `<span style="border-bottom:2px solid ${clusterColor(component.category)};font-size:7px;color:${C.mute};padding:2px 3px" title="Market Hold exact deletion effect">C${component.category} ${signed(effect.effectZ, 1)}σ</span>`; }).join('')}</div></div>${hookOutcomeOrder.map(target => { const value = (row.outcomes || {})[target] || {}; return `<div style="border-left:2px solid ${numeric(value.actual) >= numeric(value.predictedOOF) ? C.green : C.red};padding-left:6px;min-width:0"><div style="font-size:7px;color:${C.mute};text-transform:uppercase">${esc((targets[target] || {}).shortLabel || target)}</div><b style="display:block;font-size:11px;color:${C.text};white-space:nowrap">${esc(formatHookOutcomeValue(value.predictedOOF, target, true))}</b><div style="font-size:7px;color:${C.dim};white-space:nowrap">actual ${esc(formatHookOutcomeValue(value.actual, target, true))}<br>error ${signed(numeric(value.actual) - numeric(value.predictedOOF), target === 'log_views' ? 2 : 1)}</div></div>`; }).join('')}<canvas data-pl-canvas="library-retention-mini" data-pl-video-id="${esc(row.videoId)}" style="width:100%;height:62px;display:block"></canvas></div>${selected ? hookLibraryDetail(row) : ''}</div>`; }).join('')}</div>`;
         }
 
         function hookScoreResultPanel(result) {
             if (!result) return '';
-            const score = result.score || {}, market = result.trainingReward || {}, confidence = result.confidence || {};
+            const score = result.hookHoldDiagnostic || {}, market = result.primaryScore || {}, confidence = result.confidence || {};
             const components = result.components || [], pairs = result.pairInteractions || [];
             const scorecard = result.scorecard || {}, trainingScorecard = result.trainingScorecard || {}, scoreCoverage = trainingScorecard.coverage || {};
             const forward = result.forwardResponse || {}, forwardMetric = forward.metric || {};
@@ -1614,10 +1439,9 @@
             if (!market) return loading('marketReward');
             if (!state.data.canonicalPartitions) return loading('canonicalPartitions');
             if (!examples) return loading('hookExamples');
-            const model = summary.model || {}, result = state.hookScoreResult;
-            const survival = (outcomes.survivalModel || {}).validation || {};
+            const result = state.hookScoreResult;
             const marketExternal = market.externalTraining || {}, marketTransfer = (market.transferValidation || {}).retention_5s || {};
-            return `${partitionMethodPanel(summary)}${card(`<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"><label style="flex:1;min-width:280px"><span style="display:flex;justify-content:space-between;gap:8px;font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:4px"><span>Complete hook or longer spoken opening</span><span data-pl-hook-score-count>${state.hookScoreText.length.toLocaleString()}/1,200 characters</span></span><textarea data-pl-hook-score-input maxlength="1200" rows="3" ${state.hookScoreLoading ? 'disabled' : ''} style="width:100%;box-sizing:border-box;resize:vertical;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:8px;font:10px/1.45 inherit;border-radius:6px;cursor:${state.hookScoreLoading ? 'wait' : 'text'}">${esc(state.hookScoreText)}</textarea><span style="display:block;font-size:7.5px;color:${C.mute};line-height:1.45;margin-top:3px">The exact scorer never truncates. Length support is reported against the measured 8–57-token training range; longer openings are computed but explicitly marked as extrapolations.</span></label><button data-pl-run-hook-score ${state.hookScoreLoading ? 'disabled' : ''} style="height:34px;border:1px solid ${C.cyan};background:${C.cyan}20;color:${C.cyan};padding:0 13px;border-radius:6px;font-size:10px;font-weight:900;cursor:${state.hookScoreLoading ? 'wait' : 'pointer'}">${state.hookScoreLoading ? 'Scoring…' : 'Score hook'}</button></div>${state.hookScoreError ? `<div data-pl-hook-score-error style="font-size:9px;color:${C.red};margin-top:7px">${esc(state.hookScoreError)}</div>` : ''}`, 'margin-bottom:10px')}
+            return `${partitionMethodPanel(summary)}${sharedScoringContractPanel('scorer')}${card(`<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"><label style="flex:1;min-width:280px"><span style="display:flex;justify-content:space-between;gap:8px;font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:4px"><span>Complete hook or longer spoken opening</span><span data-pl-hook-score-count>${state.hookScoreText.length.toLocaleString()}/1,200 characters</span></span><textarea data-pl-hook-score-input maxlength="1200" rows="3" ${state.hookScoreLoading ? 'disabled' : ''} style="width:100%;box-sizing:border-box;resize:vertical;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:8px;font:10px/1.45 inherit;border-radius:6px;cursor:${state.hookScoreLoading ? 'wait' : 'text'}">${esc(state.hookScoreText)}</textarea><span style="display:block;font-size:7.5px;color:${C.mute};line-height:1.45;margin-top:3px">The exact scorer never truncates. Length support is reported against the measured 8–57-token training range; longer openings are computed but explicitly marked as extrapolations.</span></label><button data-pl-run-hook-score ${state.hookScoreLoading ? 'disabled' : ''} style="height:34px;border:1px solid ${C.cyan};background:${C.cyan}20;color:${C.cyan};padding:0 13px;border-radius:6px;font-size:10px;font-weight:900;cursor:${state.hookScoreLoading ? 'wait' : 'pointer'}">${state.hookScoreLoading ? 'Scoring…' : 'Score hook'}</button></div>${state.hookScoreError ? `<div data-pl-hook-score-error style="font-size:9px;color:${C.red};margin-top:7px">${esc(state.hookScoreError)}</div>` : ''}`, 'margin-bottom:10px')}
                 ${card(`<label><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:4px">Optional underlying idea anchor</span><input data-pl-hook-score-idea maxlength="1200" value="${esc(state.hookScoreIdea)}" ${state.hookScoreLoading ? 'disabled' : ''} placeholder="Leave blank for an outcome-blind hook graph; add the idea to expose title/context relations" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:7px 8px;font:9px/1.4 inherit;border-radius:6px"><span style="display:block;font-size:7.5px;color:${C.mute};line-height:1.45;margin-top:3px">This anchor adds idea/title relation edges and orthogonal representations. It never changes the headline score or selects components.</span></label>`, 'margin-bottom:10px')}
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${stat('external training hooks', Number(marketExternal.nonOwnedTrainingRows || 0).toLocaleString(), C.cyan)}${stat('external nested OOF rho', fmt((marketExternal.selectedValidation || {}).heldoutSpearman, 3), C.text)}${stat('owned 5s transfer rho', fmt(marketTransfer.heldoutSpearman, 3), C.green)}${stat('recent-half 5s rho', fmt(marketTransfer.recentHalfSpearman, 3), C.green)}${stat('owned labels in reward fit', marketExternal.ownedOutcomeLabelsUsedToFitOrSelectAxis ? 'YES' : 'NO', marketExternal.ownedOutcomeLabelsUsedToFitOrSelectAxis ? C.red : C.green)}${stat('generative LLM', 'NO', C.green)}</div>${marketScoreCard(activeHookOutcomeFocus())}${marketTransferPanel(activeHookOutcomeFocus())}${survivalMethodPanel()}${predictionAccuracyPanel(activeHookOutcomeFocus())}
             ${card(`<div style="font-size:9px;color:${C.dim};line-height:1.55"><b style="color:${C.green}">Training contract:</b> Market Hold is the one frozen reward because it was selected outside your channel and transferred to untouched five-second retention. Hook Hold, direct viewed/retention/views forecasts, word forecasts, and category-response axes remain visible diagnostics. Market Hold still is not a causal promise truth: promotion beyond training proxy requires randomized same-topic variants.</div>`, 'margin-bottom:10px;border-color:' + C.green + '55')}
@@ -1681,246 +1505,6 @@
             return `${manualProjectionPanel()}${manualMetricGlossary()}${clusterOutcomePanel()}${latencyPanel()}`;
         }
 
-        function renderOverview() {
-            const manifest = state.data.manifest;
-            const findings = state.data.findings;
-            if (!manifest || !findings) return loading(!manifest ? 'manifest' : 'findings');
-            const counts = manifest.counts || {};
-            const boundary = findings.boundary || {}, cluster = findings.cluster || {}, swap = findings.swap || {}, axis = findings.axis || {};
-            const canonical = findings.canonicalPartition || {}, canonicalValidation = canonical.validation || {};
-            const outcomeAudit = findings.hookOutcomes || {}, survivalAudit = outcomeAudit.survivalValidation || {};
-            const marketAudit = findings.marketReward || {}, marketExternal = marketAudit.externalTraining || {}, marketTransfer = (marketAudit.transferValidation || {}).retention_5s || {};
-            const marketPromoted = marketAudit.status === 'validated-cross-source-local-retention-proxy';
-            const promotionColor = marketPromoted ? C.green : C.red;
-            const promotionHeadline = marketPromoted
-                ? 'MARKET HOLD PROMOTED AS A TRAINING PROXY'
-                : 'MARKET HOLD IS NOT READY FOR TRAINING';
-            const promotionCopy = marketPromoted
-                ? 'One direction selected on external hooks only transfers to untouched viewed percentage, five-second retention, and average retention. It is now the deterministic reward for model training. It does not predict owned raw views and does not establish a causal or universal promise-quality truth.'
-                : 'The frozen external direction remains inspectable, but the current build did not pass every declared external, transfer, recent-half, and domain gate. No training reward is emitted until it does.';
-            const temporalAudit = survivalAudit.chronologicalValidation || {};
-            const normalizationAudit = outcomeAudit.normalizationSensitivity || {}, entryAudit = normalizationAudit.entryNormalizedNoFutureAnchor || {};
-            const crossScope = cluster.crossScope || {}, consensusAgreement = crossScope.consensusAgreement || {};
-            const supportedHooks = boundary.supportedHooks || [];
-            const transferRows = ((swap.topTransferByMetric || {})[state.metric] || []).slice(0, 8);
-            const axisRows = axis.selectedByTarget || [];
-            const representationRows = cluster.allSpanRepresentationIndicators || [];
-            return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-                ${stat('complete hooks', counts.hooks || 0, C.cyan)}${stat('embedding texts', Number(counts.embeddingTexts || 0).toLocaleString(), C.purple)}
-                ${stat('boundary runs', Number(counts.boundaryExperiments || 0).toLocaleString(), C.amber)}${stat('cluster runs', Number(counts.clusterExperiments || 0).toLocaleString(), C.green)}
-                ${stat('cluster maps', Number(counts.clusterMaps || 0) + Number(counts.allSpanClusterMaps || 0), C.orange)}${stat('all spans', Number(counts.allContiguousSpans || 0).toLocaleString(), C.purple)}${stat('swap rows', Number(counts.swapRows || 0).toLocaleString(), C.cyan)}${stat('axis runs', Number(counts.axisExperiments || 0).toLocaleString(), C.purple)}
-            </div>${visualizationContractPanel()}${card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:300px;flex:1"><div style="font-size:9px;color:${promotionColor};font-weight:900;text-transform:uppercase">Current promotion decision</div><div style="font-size:18px;color:${C.text};font-weight:900;margin-top:2px">${promotionHeadline}</div><div style="font-size:9px;color:${C.dim};line-height:1.55;margin-top:4px">${promotionCopy}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('external nested OOF rho', fmt((marketExternal.selectedValidation || {}).heldoutSpearman, 3), C.text)}${stat('owned 5s rho', fmt(marketTransfer.heldoutSpearman, 3), marketPromoted ? C.green : C.red)}${stat('recent-half rho', fmt(marketTransfer.recentHalfSpearman, 3), marketPromoted ? C.green : C.red)}${stat('owned labels fit axis', marketExternal.ownedOutcomeLabelsUsedToFitOrSelectAxis ? 'yes' : 'no', marketExternal.ownedOutcomeLabelsUsedToFitOrSelectAxis ? C.red : C.green)}</div></div>`, 'margin-bottom:10px;border-color:' + promotionColor + '66')}${manualProbeSummary()}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:9px;margin-bottom:10px">
-                ${card(`<div style="font-size:11px;font-weight:900;color:${C.cyan};margin-bottom:5px">Canonical partition · current</div><div style="font-size:24px;font-weight:900;color:${C.text}">${canonical.components || 0}</div><div style="font-size:10px;color:${C.dim}">non-overlapping components across ${canonical.hooks || 0} hooks · observed range ${canonicalValidation.minimumComponents || '-'}–${canonicalValidation.maximumComponents || '-'}</div><div style="font-size:9px;color:${C.mute};margin-top:5px">${(canonicalValidation.componentCountHistogram || {})['1'] || 0} hooks stay whole · AUC ${fmt(canonicalValidation.boundaryHeldoutAuc, 3)} · AP ${fmt(canonicalValidation.boundaryHeldoutAveragePrecision, 3)} · category-blind boundaries.</div>`)}
-                ${card(`<div style="font-size:11px;font-weight:900;color:${C.amber};margin-bottom:5px">Legacy exhaustive boundary search · superseded</div><div style="font-size:24px;font-weight:900;color:${C.text}">${boundary.supportedMultiSegmentHooks || 0}</div><div style="font-size:10px;color:${C.dim}">search artifacts passed their original geometric null, but are not the current components</div><div style="font-size:9px;color:${C.mute};margin-top:5px">Some selected 31–37 near-token fragments, revealing a degenerate objective. They remain inspectable provenance only; scoring and libraries use the canonical exact cover above.</div>`)}
-                ${card(`<div style="font-size:11px;font-weight:900;color:${C.green};margin-bottom:5px">Two outcome-blind atlases</div><div style="font-size:24px;font-weight:900;color:${C.text}">${Number(cluster.experiments || 0).toLocaleString()} + ${Number(cluster.allContiguousExperiments || 0).toLocaleString()}</div><div style="font-size:10px;color:${C.dim}">evidence-supported candidates plus every contiguous span across 12 semantic and residual views</div><div style="font-size:9px;color:${C.mute};margin-top:5px">${Number(cluster.mapsVisible || 0) + Number(cluster.allContiguousMapsVisible || 0)} maps are inspectable · cross-scope consensus rho ${fmt(consensusAgreement.spearman, 3)}. Families remain unnamed.</div>`)}
-                ${card(`<div style="font-size:11px;font-weight:900;color:${C.cyan};margin-bottom:5px">Crossed transfer surface</div><div style="font-size:24px;font-weight:900;color:${C.text}">${Number(swap.rows || 0).toLocaleString()}</div><div style="font-size:10px;color:${C.dim}">source-component by target-hook recompositions</div><div style="font-size:9px;color:${C.mute};margin-top:5px">Model-predicted Long Quant evidence is kept separate from observed YouTube outcomes.</div>`)}
-                ${card(`<div style="font-size:11px;font-weight:900;color:${C.purple};margin-bottom:5px">Source-grouped semantic axes</div><div style="font-size:24px;font-weight:900;color:${C.text}">${axis.randomFoldSupported || 0}</div><div style="font-size:10px;color:${C.dim}">axes surviving grouped-source holdout and the searched null; this is not chronological validation</div><div style="font-size:9px;color:${C.mute};margin-top:5px">${axis.modelTransferValidated || 0}/${axis.modelTransferTargets || 0} model-transfer targets supported · ${axis.observedValidated || 0}/${axis.observedTargets || 0} observed targets remain random-fold diagnostics · ${axis.observedSourceSpanValidated || 0} observed source-span axes.</div>`)}
-            </div>${card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:7px">What entered the calculation</div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;font-size:10px;line-height:1.55">
-                <div><b style="color:${C.green}">Discovery input</b><br><span style="color:${C.dim}">${esc(manifest.separation.discoveryInputs)}</span></div>
-                <div><b style="color:${C.red}">Excluded from discovery</b><br><span style="color:${C.dim}">${esc(manifest.separation.discoveryExcludes)}</span></div>
-                <div><b style="color:${C.cyan}">Exact embedding</b><br><span style="color:${C.dim}">${esc(manifest.embeddingModel)} at ${manifest.embeddingDimensions} dimensions, text channel only</span></div>
-                <div><b style="color:${C.amber}">Outcome boundary</b><br><span style="color:${C.dim}">Outcomes join only after structures are frozen; observed and counterfactual evidence never share a label.</span></div>
-                <div><b style="color:${C.purple}">Atlas scopes</b><br><span style="color:${C.dim}">${esc(manifest.separation.atlasScopes || '')}</span></div>
-                <div><b style="color:${C.green}">All-span transforms</b><br><span style="color:${C.dim}">${esc(manifest.separation.allSpanTransforms || '')}</span></div></div>`)}
-                ${axis.experiments ? card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:7px">What emerged after correction</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:12px;font-size:9px;line-height:1.5"><div style="border-left:3px solid ${C.green};padding-left:8px"><b style="color:${C.green}">${axis.modelTransferValidated || 0}/${axis.modelTransferTargets || 0} model-transfer targets source-grouped supported</b><br><span style="color:${C.dim}">The trained Long Quant counterfactual surface is predictable from raw source-span semantics across held-out source videos.</span></div><div style="border-left:3px solid ${C.cyan};padding-left:8px"><b style="color:${C.cyan}">${axis.observedValidated || 0}/${axis.observedTargets || 0} observed targets random-fold supported</b><br><span style="color:${C.dim}">These signals concern early retention and retained hook context, but have no strict later-video replication and remain diagnostic.</span></div><div style="border-left:3px solid ${C.amber};padding-left:8px"><b style="color:${C.amber}">${axis.observedSourceSpanValidated || 0} observed source-span axes supported</b><br><span style="color:${C.dim}">No raw, influence, or non-additive span direction yet supports declaring a measured reference-to-gratification component. This is a negative result, not a missing label.</span></div></div>`, 'margin-top:10px') : ''}
-                ${representationRows.length ? card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:2px">All-span view indicators</div><div style="font-size:8px;color:${C.mute};margin-bottom:7px">Medians across the retained maps for each outcome-blind representation. Fit-excluded margin uses hooks omitted from K-means fitting, but the PCA basis saw the full corpus, so it is descriptive rather than independent validation. Lower length/position NMI means less nuisance leakage.</div><div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['representation', 'maps', 'null lift', 'fit-excluded margin', 'seed ARI', 'length NMI', 'position NMI', 'cross-hook', 'cross-scope ARI', 'boundary enrichment'].map(label => `<th style="text-align:left;color:${C.mute};padding:4px;border-bottom:1px solid ${C.border};white-space:nowrap">${label}</th>`).join('')}</tr></thead><tbody>${representationRows.map(row => `<tr><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.text};font-weight:800">${esc(row.representation)}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${row.maps || 0}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${fmt(row.medianMarginAboveNull, 3)}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${fmt(row.medianFitExcludedHookMargin, 3)}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${fmt(row.medianSeedStabilityARI, 3)}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${fmt(row.medianLengthNMI, 3)}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${fmt(row.medianPositionNMI, 3)}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${fmt(row.medianCrossHookGenerality, 3)}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${fmt(row.medianCrossScopeARI, 3)}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${fmt(row.medianBoundarySupportEnrichment, 3)}</td></tr>`).join('')}</tbody></table></div>`, 'margin-top:10px') : ''}
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:9px;margin-top:10px">
-                ${card(`<div style="font-size:11px;font-weight:900;color:${C.amber};margin-bottom:6px">Legacy exploratory partitions · provenance only</div><div style="font-size:8px;color:${C.mute};margin-bottom:6px">These rows beat the original searched geometric null, but token-level fragmentation exposed objective degeneracy. They do not feed the canonical partition, scorer, or component library.</div>${supportedHooks.length ? supportedHooks.map(row => { const seg = row.segmentation || {}; return `<button data-pl-hook="${esc(row.videoId)}" data-pl-open-hooks style="width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid ${C.border};padding:6px 0;cursor:pointer"><div style="font-size:9px;color:${C.text};font-weight:800;line-height:1.35">${esc(row.text)}</div><div style="font-size:8px;color:${C.mute}">${seg.segmentCount || '-'} legacy segments · searched p ${fmt(seg.searchWideP, 3)} · superseded</div></button>`; }).join('') : boundary.supportedMultiSegmentHooks ? `<div style="font-size:9px;color:${C.dim}">The legacy detail artifact is still building.</div>` : `<div style="font-size:9px;color:${C.dim}">No hook passed the searched null.</div>`}`)}
-                ${card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px"><div><div style="font-size:11px;font-weight:900;color:${C.cyan}">Cross-context transfer indicators</div><div style="font-size:8px;color:${C.mute}">Long Quant model-predicted counterfactuals, never observed viewer outcomes.</div></div></div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">${(swap.metricNames || []).map(name => button(metricLabel(name), `data-pl-metric="${name}"`, state.metric === name)).join('')}</div>${transferRows.map(row => `<button data-pl-source="${esc(row.sourceId)}" data-pl-open-swaps style="width:100%;display:flex;justify-content:space-between;gap:8px;border:0;border-bottom:1px solid ${C.border};background:transparent;padding:5px 0;cursor:pointer;text-align:left"><div style="font-size:9px;color:${C.text};font-weight:800">${esc(row.text)}</div><div style="text-align:right;white-space:nowrap"><b style="font-size:9px;color:${Number(row.meanDeltaAcrossContexts) >= 0 ? C.green : C.red}">${signed(row.meanDeltaAcrossContexts, 2)}</b><div style="font-size:7.5px;color:${C.mute}">${pct(Number(row.positiveContextRate || 0) * 100)} positive</div></div></button>`).join('') || `<div style="font-size:9px;color:${C.dim}">Transfer surface is still building.</div>`}`)}
-                </div>
-                ${card(`<div style="font-size:11px;font-weight:900;color:${C.purple};margin-bottom:3px">Selected required-confound outcome directions</div><div style="font-size:8px;color:${C.mute};margin-bottom:7px">One predeclared adjusted configuration per target. Every row opens the exact semantic plane, grouped-source check, color scale, and input-versus-outcome horizon. Highlighted rows survived the target-wide max-null and cross-target FDR in grouped random folds; none is called chronologically validated.</div><div style="overflow:auto;max-height:480px"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['evidence channel', 'target and outcome window', 'input / confounds', 'grouped-random result'].map(label => `<th style="text-align:left;color:${C.mute};padding:4px;border-bottom:1px solid ${C.border}">${label}</th>`).join('')}</tr></thead><tbody>${axisRows.map(row => { const lineage = (axis.targetLineage || {})[row.target] || {}, window = lineage.outcomeWindow || {}; return `<tr><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${esc(row.targetChannel || '')}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.text}"><button data-pl-open-axis-target="${esc(row.target || '')}" style="border:0;background:transparent;color:${C.cyan};font:inherit;font-weight:900;padding:0;cursor:pointer;text-align:left">${esc(row.target || '')} →</button><br><span style="color:${C.mute}">${esc(row.targetDefinition || '')}</span>${window.label ? `<br><span style="color:${C.amber}">target window: ${esc(window.label)}</span>` : ''}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${esc(row.representation || '')} · ${esc(row.confounds || '')}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${axisRandomFoldSupported(row) ? C.green : C.dim};white-space:nowrap">rho ${fmt(row.heldoutSpearman, 3)}<br>p ${fmt(row.searchWideP, 3)} · q ${fmt(row.searchWideQ, 3)}<br>${esc(row.status || '')}</td></tr>`; }).join('') || `<tr><td colspan="4" style="padding:8px;color:${C.dim}">Outcome-axis search is still building.</td></tr>`}</tbody></table></div>`, 'margin-top:10px')} `;
-        }
-
-        function hookRows() {
-            const discovery = state.data.discovery;
-            if (!discovery) return loading('discovery');
-            const query = state.hookQuery.toLowerCase();
-            const rows = (discovery.rows || []).filter(row => !query || String(row.text || '').toLowerCase().includes(query));
-            return `${card(`<div style="display:flex;gap:7px;align-items:center"><input data-pl-query="hook" value="${esc(state.hookQuery)}" placeholder="filter exact embedded hook text" style="flex:1;min-width:180px;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:6px 8px;border-radius:5px;font-size:10px"/>${button('Apply', 'data-pl-apply-query')}</div>`)}
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:7px">${rows.map(row => {
-                const selected = state.hookId === row.videoId, seg = row.selectedSegmentation || {};
-                return `<button data-pl-hook="${esc(row.videoId)}" style="text-align:left;background:${selected ? C.cyan + '12' : C.card};border:1px solid ${selected ? C.cyan : C.border};border-radius:7px;padding:8px;cursor:pointer"><div style="font-size:10px;line-height:1.4;color:${C.text};font-weight:700">${esc(row.text || '')}</div><div style="font-size:9px;color:${statusColor(seg.status)};margin-top:5px">${esc(seg.status || 'not built')} · ${seg.segmentCount || '-'} segment${seg.segmentCount === 1 ? '' : 's'} · search p ${fmt(seg.searchWideP, 3)}</div><div style="font-size:9px;color:${C.mute};margin-top:2px">${row.experimentCount || 0} registered partitions · ${(row.candidates || []).length} candidate spans</div></button>`;
-            }).join('')}</div>`;
-        }
-
-        function segmentationText(hook, key, color) {
-            const segmentation = hook[key] || {};
-            const tokens = hook.tokens || [];
-            const spans = segmentation.partition || [];
-            return `<div style="font-size:9px;color:${C.mute};margin-bottom:4px">${esc(segmentation.selectionRule || '')}</div><div style="display:flex;gap:3px;flex-wrap:wrap">${spans.map((span, index) => `<span style="border-bottom:3px solid ${clusterColor(index)};padding:3px 4px;font-size:10px;color:${C.text};background:${C.card2}">${esc(tokens.slice(span[0], span[1]).map(token => token.text).join(' '))}</span>`).join('')}</div><div style="font-size:9px;color:${color};margin-top:5px">${esc(segmentation.status || '')} · k ${segmentation.segmentCount || '-'} · score ${fmt(segmentation.selectionScore, 3)} · search p ${fmt(segmentation.searchWideP, 3)}</div>`;
-        }
-
-        function renderHookDetail() {
-            const hook = state.hook;
-            if (!state.hookId) return card(`<div style="font-size:10px;color:${C.dim}">Select a hook to inspect every input, interaction, boundary and candidate embedding.</div>`);
-            if (!hook) return loading('hook detail');
-            if (hook.error) return card(`<div style="color:${C.red}">${esc(hook.error)}</div>`);
-            const boundaries = (hook.boundaries || []).slice().sort((a, b) => b.calibratedZ - a.calibratedZ);
-            return `<div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:9px;margin-top:10px">
-                <div>${card(`<div style="font-size:12px;font-weight:900;color:${C.text};line-height:1.5">${esc(hook.text)}</div><div style="font-size:9px;color:${C.mute};margin-top:5px">This exact string is the embedding input. No title, visual, metric or example label enters discovery.</div>`)}
-                ${card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:7px">Null-calibrated selected partition</div>${segmentationText(hook, 'selectedSegmentation', statusColor((hook.selectedSegmentation || {}).status))}<div style="height:1px;background:${C.border};margin:10px 0"></div><div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:7px">Best nontrivial sensitivity partition</div>${segmentationText(hook, 'exploratoryNontrivialSegmentation', C.amber)}`)}
-                ${card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:7px">Token-to-token inclusion-exclusion matrix</div><canvas data-pl-canvas="interaction" style="width:100%;height:340px;display:block"></canvas><div style="font-size:9px;color:${C.mute};margin-top:5px">Each cell is ||E(H)-E(H-i)-E(H-j)+E(H-{i,j})|| normalized by both single-token effects. This is computed, not model-attention theater.</div>`)}</div>
-                <div>${card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:7px">Boundary evidence above its matched null</div><div style="max-height:340px;overflow:auto">${boundaries.map(row => `<div style="display:grid;grid-template-columns:28px 1fr 48px;gap:5px;align-items:center;margin-bottom:5px"><b style="font-size:9px;color:${C.text}">${row.index}</b><div style="height:6px;background:${C.border}"><div style="height:100%;width:${Math.max(0, Math.min(100, 50 + row.aboveNullFrequency * 250))}%;background:${row.calibratedZ > 0 ? C.green : C.red}"></div></div><span style="font-size:8px;color:${C.dim}">z ${fmt(row.calibratedZ, 2)}</span></div>`).join('')}</div>`)}
-                ${card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:7px">This hook inside component space</div><canvas data-pl-canvas="hook-map" style="width:100%;height:260px;display:block"></canvas><div style="font-size:9px;color:${C.mute};margin-top:4px">Bright points are this hook's candidate spans; dim points are the full corpus atlas.</div>`)}</div>
-            </div>`;
-        }
-
-        function renderHooks() {
-            return `${hookRows()}${renderHookDetail()}`;
-        }
-
-        function renderBoundaries() {
-            const discovery = state.data.discovery;
-            if (!discovery) return loading('discovery');
-            const rows = discovery.rows || [];
-            const supported = rows.filter(row => (row.selectedSegmentation || {}).status === 'supported');
-            const noEvidence = rows.filter(row => (row.selectedSegmentation || {}).status === 'no-separable-component-evidence');
-            const all = rows.flatMap(row => (row.boundaries || []).map(boundary => ({ ...boundary, videoId: row.videoId, text: row.text })));
-            all.sort((a, b) => b.calibratedZ - a.calibratedZ);
-            return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${stat('hooks', rows.length, C.cyan)}${stat('supported partitions', supported.length, C.green)}${stat('no component evidence', noEvidence.length, C.amber)}${stat('boundary positions tested', all.length.toLocaleString(), C.purple)}</div>
-            ${card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:8px">Strongest above-null boundaries across the corpus</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:6px">${all.slice(0, 120).map(row => `<button data-pl-hook="${esc(row.videoId)}" data-pl-open-hooks style="text-align:left;background:${C.card2};border:1px solid ${C.border};padding:7px;border-radius:6px;cursor:pointer"><div style="font-size:9px;color:${C.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.text)}</div><div style="font-size:8px;color:${C.dim};margin-top:3px">boundary ${row.index} · observed ${pct(row.frequency * 100)} · null ${pct(row.nullFrequency * 100)} · z ${fmt(row.calibratedZ, 2)} · q ${fmt(row.calibratedQ, 3)}</div></button>`).join('')}</div>`)} `;
-        }
-
-        function atlasScopeControls(atlas) {
-            const representations = (atlas && atlas.representations) || Object.keys((atlas && atlas.projections) || {});
-            if (representations.length && !representations.includes(state.representation)) state.representation = representations[0];
-            return `<div style="display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:8px"><div style="display:flex;gap:5px;flex-wrap:wrap">${button('Evidence-supported spans', 'data-pl-atlas-scope="supported"', state.atlasScope === 'supported')}${button('Every contiguous span', 'data-pl-atlas-scope="all"', state.atlasScope === 'all')}</div><div style="display:flex;gap:5px;flex-wrap:wrap">${representations.map(name => button(name, `data-pl-rep="${name}"`, state.representation === name)).join('')}</div></div>`;
-        }
-
-        function selectedComponent(atlas) {
-            return atlasRows(atlas).find(row => row.id === state.componentId) || null;
-        }
-
-        function supportValue(row, name) {
-            const evidence = row && (row.boundaryEvidence || row);
-            return evidence && evidence[name];
-        }
-
-        function selectedInputDetail(atlas, selected) {
-            if (!selected) return card(`<div style="font-size:10px;color:${C.dim}">No span selected.</div>`);
-            const hook = selected.hookText || (((atlas.hooks || [])[selected.hookIndex] || {}).text) || '';
-            const hasOffsets = Number.isFinite(selected.charStart) && Number.isFinite(selected.charEnd);
-            const source = hasOffsets
-                ? `${esc(hook.slice(0, selected.charStart))}<mark style="background:${C.cyan}2a;color:${C.text};padding:1px 2px">${esc(hook.slice(selected.charStart, selected.charEnd))}</mark>${esc(hook.slice(selected.charEnd))}`
-                : esc(hook);
-            const z = supportValue(selected, 'calibratedZ'), q = supportValue(selected, 'calibratedQ');
-            const formula = ((atlas.representationFormulae || {})[state.representation]) || state.representation;
-            return card(`<div style="font-size:12px;font-weight:900;color:${C.text};line-height:1.45">${esc(selected.text)}</div><div style="font-size:8px;color:${C.mute};margin:7px 0 2px">exact source hook and selected offsets</div><div style="font-size:10px;color:${C.dim};line-height:1.5">${source}</div><div style="font-size:8px;color:${C.faint};margin-top:6px">tokens ${selected.start}-${selected.end} · width ${selected.tokenCount} · position/length are browse-only</div><div style="height:1px;background:${C.border};margin:9px 0"></div><div style="font-size:8px;color:${C.mute};margin-bottom:2px">embedding view input</div><div style="font-size:9px;color:${C.text};line-height:1.45">${esc(formula)}</div><div style="height:1px;background:${C.border};margin:9px 0"></div><div style="font-size:9px;color:${C.dim}">${selected.contextText ? `retained context: ${esc(selected.contextText)}<br>` : ''}boundary-supported: ${selected.boundarySupported === false ? 'no' : z != null ? 'yes' : 'not recorded'}<br>calibrated z ${fmt(z, 3)} · q ${fmt(q, 3)}${selected.selectedPrimary != null ? `<br>selected evidence partition: ${selected.selectedPrimary ? 'yes' : 'no'}<br>selected sensitivity partition: ${selected.selectedExploratory ? 'yes' : 'no'}` : ''}</div>`);
-        }
-
-        function renderComponents() {
-            const atlas = activeAtlas();
-            if (!atlas) return loading(state.atlasScope === 'all' ? 'allSpanAtlas' : 'atlas');
-            const selected = selectedComponent(atlas);
-            const allRows = atlasRows(atlas);
-            const supportedRows = allRows.filter(row => row.boundarySupported !== false && supportValue(row, 'calibratedZ') != null)
-                .sort((a, b) => Number(supportValue(b, 'calibratedZ') || -Infinity) - Number(supportValue(a, 'calibratedZ') || -Infinity));
-            const browserRows = supportedRows.length ? supportedRows.slice(0, 200) : allRows.slice(0, 200);
-            return `${atlasScopeControls(atlas)}<div class="pl-split" style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,.5fr);gap:9px">
-                ${card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:7px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">${esc(state.representation)} embedding · ${state.atlasScope === 'all' ? 'every contiguous span' : 'evidence-supported candidates'}</div><div style="font-size:9px;color:${C.mute}">${atlasCount(atlas).toLocaleString()} exact spans. Click a point to see the literal substring, source hook, offsets, and vector formula.</div></div></div><canvas data-pl-canvas="components" style="width:100%;height:540px;display:block"></canvas>`)}
-                <div>${selectedInputDetail(atlas, selected)}
-                ${card(`<div style="font-size:10px;font-weight:900;color:${C.text};margin-bottom:6px">${supportedRows.length ? 'Strongest boundary-supported rows' : 'Enumerated rows'}</div><div style="max-height:390px;overflow:auto">${browserRows.map(row => `<button data-pl-component="${row.id}" style="width:100%;text-align:left;background:${state.componentId === row.id ? C.cyan + '12' : 'transparent'};border:0;border-bottom:1px solid ${C.border};padding:5px;color:${C.dim};font-size:9px;cursor:pointer"><b style="color:${C.text}">${esc(row.text)}</b><br>${supportValue(row, 'calibratedZ') != null ? `z ${fmt(supportValue(row, 'calibratedZ'), 2)} · q ${fmt(supportValue(row, 'calibratedQ'), 3)}` : `${row.tokenCount} tokens · exhaustive span`}</button>`).join('')}</div>`)}</div>
-            </div>`;
-        }
-
-        function renderClusters() {
-            const atlas = activeAtlas();
-            if (!atlas) return loading(state.atlasScope === 'all' ? 'allSpanAtlas' : 'atlas');
-            const maps = atlas.maps || [];
-            const selected = maps[Math.max(0, Math.min(state.mapIndex, maps.length - 1))] || {};
-            const pageSize = 24, start = state.mapPage * pageSize;
-            const clusterSummaries = (selected.clusterSummaries || []).filter(summary =>
-                state.focusedCluster == null || Number(summary.label) === Number(state.focusedCluster));
-            const rows = atlasRows(atlas);
-            const diagnostics = selected.lengthNMI == null ? '' : ` · length NMI ${fmt(selected.lengthNMI, 3)} · position NMI ${fmt(selected.positionNMI, 3)} · cross-hook generality ${fmt(selected.crossHookGenerality, 3)}`;
-            const persistence = selected.crossScopeBestARI == null ? '' : ` · best supported-atlas ARI ${fmt(selected.crossScopeBestARI, 3)} (${esc(selected.crossScopeBestRepresentation || '')}) · boundary enrichment ${fmt(selected.boundarySupportWeightedEnrichment, 3)}`;
-            return `${atlasScopeControls(atlas)}${manualProbeSummary()}${manualMetricGlossary()}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px">${stat('registered experiments', Number(atlas.experimentCount || 0).toLocaleString(), C.green)}${stat('maps retained', maps.length, C.cyan)}${stat(state.atlasScope === 'all' ? 'all spans' : 'candidates', atlasCount(atlas).toLocaleString(), C.purple)}${stat('outcomes used', '0', C.amber)}</div>
-            ${card(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">${esc(selected.representation || '')} · ${esc(selected.geometry || '')} · ${selected.pcaDimensions || '-'}D · k=${selected.clusterCount || '-'}${state.focusedCluster == null ? '' : ` · isolated cluster ${state.focusedCluster}`}</div><div style="font-size:9px;color:${C.mute}">margin above null ${fmt(selected.marginAboveNull, 3)} · fit-excluded margin ${fmt(selected.heldoutHookMargin, 3)} (full-corpus PCA; descriptive) · seed ARI ${fmt(selected.seedStabilityARI, 3)} · entropy ${fmt(selected.entropy, 3)}${diagnostics}${persistence} · ${selected.pareto ? 'Pareto front' : 'ranked sensitivity map'}</div></div>${state.focusedCluster == null ? '' : button('Show all clusters', 'data-pl-clear-cluster-focus')}</div><canvas data-pl-canvas="cluster" style="width:100%;height:520px;display:block"></canvas>`)}
-            ${manualProbeDetail(selected)}
-            ${clusterSummaries.length ? card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:2px">Cluster composition and representative observed spans</div><div style="font-size:8px;color:${C.mute};margin-bottom:7px">Representatives are nearest the cluster centroid in this displayed 2D projection, with distinct source hooks selected first; they never enter fitting.</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(245px,1fr));gap:7px;max-height:620px;overflow:auto">${clusterSummaries.map(summary => `<div style="border-left:3px solid ${clusterColor(summary.label)};background:${C.card2};padding:7px"><div style="display:flex;justify-content:space-between;gap:6px;font-size:8px;color:${C.mute};margin-bottom:5px"><b style="color:${clusterColor(summary.label)}">cluster ${summary.label}</b><span>${Number(summary.size || 0).toLocaleString()} spans · ${summary.hookCount || 0} hooks · median ${fmt(summary.medianTokenCount, 1)} tokens${summary.boundarySupportedFraction == null ? '' : ` · ${pct(summary.boundarySupportedFraction * 100)} boundary-supported`}</span></div>${(summary.representativeIndices || []).map(index => { const row = rows[index] || {}; return `<button data-pl-component="${esc(row.id || '')}" data-pl-open-components style="display:block;width:100%;text-align:left;border:0;border-top:1px solid ${C.border};background:transparent;color:${C.text};font-size:8.5px;padding:4px 0;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.text || '')}</button>`; }).join('')}</div>`).join('')}</div>`) : ''}
-            ${card(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><div><div style="font-size:11px;font-weight:900;color:${C.text}">All retained clustering maps</div><div style="font-size:8px;color:${C.mute}">${maps.length ? `${start + 1}-${Math.min(maps.length, start + pageSize)} of ${maps.length}` : '0 maps'}</div></div><div style="display:flex;gap:5px">${button('Previous', 'data-pl-map-page="-1"')}${button('Next', 'data-pl-map-page="1"')}</div></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:7px">${maps.slice(start, start + pageSize).map((row, offset) => { const index = start + offset; return `<button data-pl-map="${index}" style="text-align:left;background:${index === state.mapIndex ? C.cyan + '12' : C.card2};border:1px solid ${index === state.mapIndex ? C.cyan : C.border};border-radius:6px;padding:5px;cursor:pointer"><div style="font-size:8px;color:${C.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.representation)} · ${esc(row.geometry)} · ${row.pcaDimensions}D · k${row.clusterCount}</div><canvas data-pl-canvas="cluster-mini" data-pl-map-index="${index}" style="width:100%;height:88px;display:block"></canvas><div style="font-size:8px;color:${C.mute}">ARI ${fmt(row.seedStabilityARI, 2)} · null lift ${fmt(row.marginAboveNull, 2)}${row.lengthNMI == null ? '' : ` · length NMI ${fmt(row.lengthNMI, 2)}`}</div></button>`; }).join('')}</div>`)} `;
-        }
-
-        function renderSwaps() {
-            const swaps = state.data.swaps;
-            if (!swaps) return loading('swaps');
-            const metric = state.metric;
-            const sources = (swaps.sourceComponents || []).slice().sort((a, b) => ((b.metrics[metric] || {}).transferPercentile || 0) - ((a.metrics[metric] || {}).transferPercentile || 0));
-            const detail = state.source;
-            const projectionSource = detail && detail.targets && detail.targets[0]
-                ? ((detail.targets[0].scores[metric] || {}).source || '') : '';
-            return `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">${(swaps.metricNames || []).map(name => button(metricLabel(name), `data-pl-metric="${name}"`, metric === name)).join('')}</div>
-            <div class="pl-split" style="display:grid;grid-template-columns:minmax(290px,.65fr) minmax(0,1.35fr);gap:9px">
-                ${card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:6px">Source components ranked across every target context</div><div style="font-size:9px;color:${C.mute};margin-bottom:7px">${swaps.sourceComponentCount || 0} sources x ${swaps.targetHookCount || 0} hooks = ${Number(swaps.swapRows || 0).toLocaleString()} scored recompositions.</div><div style="max-height:650px;overflow:auto">${sources.map(row => { const score = row.metrics[metric] || {}; return `<button data-pl-source="${row.sourceId}" style="width:100%;text-align:left;background:${state.sourceId === row.sourceId ? C.cyan + '12' : 'transparent'};border:0;border-bottom:1px solid ${C.border};padding:7px;cursor:pointer"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:10px;color:${C.text}">${esc(row.text)}</b><b style="font-size:10px;color:${score.meanDeltaAcrossContexts >= 0 ? C.green : C.red}">${signed(score.meanDeltaAcrossContexts, 2)}</b></div><div style="font-size:8px;color:${C.mute}">${fmt(score.transferPercentile, 1)}th transfer · ${pct(score.positiveContextRate * 100)} positive · context SD ${fmt(score.contextSensitivity, 2)}</div></button>`; }).join('')}</div>`)}
-                <div>${!state.sourceId ? card(`<div style="font-size:10px;color:${C.dim}">Select a source component to inspect all target hooks, exact recomposed text and every Long Quant score.</div>`) : !detail ? loading('source swap surface') : detail.error ? card(`<div style="color:${C.red}">${esc(detail.error)}</div>`) : `${card(`<div style="font-size:12px;font-weight:900;color:${C.text}">${esc(detail.source.text)}</div><div style="font-size:9px;color:${C.mute};margin-top:4px">Source retained context: ${esc(detail.source.contextText)}</div><div style="font-size:8px;color:${C.faint};margin-top:5px">${esc(metricLabel(metric))} projection input: complete recomposed hook text · scorer: ${esc(projectionSource)}</div>`)}${card(`<canvas data-pl-canvas="swap-bars" style="width:100%;height:220px;display:block"></canvas><div style="font-size:9px;color:${C.mute};margin-top:4px">Each bar is the ${esc(metricLabel(metric))} percentile delta from that target hook's own baseline. This exposes context dependence instead of hiding it in an average.</div>`)}${(detail.targets || []).slice().sort((a, b) => ((b.scores[metric] || {}).deltaFromBaseline || 0) - ((a.scores[metric] || {}).deltaFromBaseline || 0)).map(row => { const score = row.scores[metric] || {}; return card(`<div style="display:flex;justify-content:space-between;gap:8px"><div style="min-width:0"><div style="font-size:8px;color:${C.mute};margin-bottom:2px">exact recomposed embedding input</div><div style="font-size:10px;color:${C.text};font-weight:800">${esc(row.recomposedText)}</div></div><div style="text-align:right;white-space:nowrap"><div style="font-size:11px;color:${score.deltaFromBaseline >= 0 ? C.green : C.red};font-weight:900">${signed(score.deltaFromBaseline, 1)}</div><div style="font-size:8px;color:${C.mute}">${fmt(score.percentile, 1)}th vs ${fmt(score.baselinePercentile, 1)}th</div></div></div><div style="font-size:8px;color:${C.faint};margin-top:5px;line-height:1.45"><b>baseline hook:</b> ${esc(row.targetHookText)}<br><b>replaced span:</b> ${esc(row.targetText)} · combined consensus ${fmt(row.atlasCoassociation, 3)} · all-span ${fmt(row.allSpanAtlasCoassociation, 3)}${row.candidateAtlasCoassociation == null ? '' : ` · supported ${fmt(row.candidateAtlasCoassociation, 3)}`} · influence cosine ${fmt(row.influenceCosine, 3)}${row.identityControl ? ' · exact identity control' : ''}</div>`, 'margin-bottom:6px'); }).join('')}`}</div>
-            </div>`;
-        }
-
-        function renderAxes() {
-            const axes = state.data.axes;
-            if (!axes) return loading('axes');
-            if (!state.data.findings) return loading('findings');
-            const maps = axes.maps || [];
-            if (state.pendingAxisTarget) {
-                const targetIndex = maps.findIndex(row => String((row.experiment || {}).target) === String(state.pendingAxisTarget));
-                if (targetIndex >= 0) state.axisIndex = targetIndex;
-                state.pendingAxisTarget = null;
-            }
-            const map = maps[Math.max(0, Math.min(state.axisIndex, maps.length - 1))] || {};
-            const selectedExperiments = maps.map(row => row.experiment || {});
-            const modelAxes = selectedExperiments.filter(row => row.targetChannel === 'Long Quant model-predicted counterfactual');
-            const observedAxes = selectedExperiments.filter(row => row.targetChannel === 'observed YouTube outcome');
-            const validatedModel = modelAxes.filter(axisRandomFoldSupported);
-            const validatedObserved = observedAxes.filter(axisRandomFoldSupported);
-            const validatedObservedSpan = validatedObserved.filter(row => ['raw', 'influence', 'nonadditive'].includes(row.representation));
-            const selectedExperiment = map.experiment || {};
-            const observedFormatter = legacyAxisValueFormatter(selectedExperiment);
-            return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px">${stat('axis experiments', Number(axes.experimentCount || 0).toLocaleString(), C.purple)}${stat('model source-grouped', `${validatedModel.length}/${modelAxes.length}`, C.green)}${stat('observed random-fold', `${validatedObserved.length}/${observedAxes.length}`, C.amber)}${stat('observed span support', validatedObservedSpan.length, C.amber)}${stat('source videos', axes.sourceVideos || 0, C.cyan)}${stat('confound sets', (axes.confoundSets || []).length, C.orange)}</div>
-                    ${card(`<div style="font-size:9px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">Current result:</b> model-predicted transfer is source-grouped supported on raw source-span semantics. Observed-retention axes are random-fold diagnostics on retained hook context with no chronological replication. No observed raw, influence, or non-additive source-span axis passed. Outcome metrics measure candidate directions; they are not themselves semantic component names.</div>`, 'margin-bottom:9px')}
-                    <div class="pl-split" style="display:grid;grid-template-columns:minmax(280px,.65fr) minmax(0,1.35fr);gap:9px">${card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:7px">Selected required-confound direction per target</div><div style="max-height:720px;overflow:auto">${maps.map((row, index) => { const exp = row.experiment || {}; const lineage = axisLineageFor(row) || {}, window = lineage.outcomeWindow || {}; const claimColor = axisRandomFoldSupported(exp) ? (exp.targetChannel === 'observed YouTube outcome' ? C.amber : C.green) : C.dim; return `<button data-pl-axis="${index}" style="width:100%;text-align:left;background:${index === state.axisIndex ? C.cyan + '12' : 'transparent'};border:0;border-bottom:1px solid ${C.border};padding:7px;cursor:pointer"><div style="display:flex;justify-content:space-between;gap:6px"><b style="font-size:9px;color:${C.text}">${esc(exp.target || '')}</b><b style="font-size:9px;color:${claimColor}">rho ${fmt(exp.heldoutSpearman, 3)}</b></div><div style="font-size:8px;color:${C.mute}">${esc(exp.representation || '')} · ${exp.pcaDimensions || '-'}D · ${esc(exp.confounds || '')} · search q ${fmt(exp.searchWideQ, 3)}</div><div style="font-size:7px;color:${C.amber};margin-top:2px">${esc(window.label || 'declared target without a fixed viewer-time window')}</div></button>`; }).join('')}</div>`)}
-                    ${card(`<div style="font-size:11px;font-weight:900;color:${C.text};margin-bottom:3px">${esc(selectedExperiment.target || 'No axis built')}</div><div style="font-size:9px;color:${C.mute};margin-bottom:4px">${esc(selectedExperiment.targetDefinition || '')}</div><div style="font-size:8px;color:${C.faint};margin-bottom:9px">channel: ${esc(selectedExperiment.targetChannel || '')} · semantic input: ${esc(representationLabel(selectedExperiment.representation || ''))} · target unit/source: ${esc(selectedExperiment.targetUnit || '')} · required confounds: ${esc(selectedExperiment.validationConfoundsRequired || 'none')} · claim: ${esc(legacyAxisClaim(selectedExperiment))}</div>${axisHorizonPanel(map)}<div style="font-size:9px;font-weight:900;color:${C.cyan};margin-bottom:3px">Semantic embedding plane</div><canvas data-pl-canvas="axis" style="width:100%;height:300px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin:4px 0">Horizontal position is the final fitted semantic direction; vertical position is an outcome-blind background component. Point color is the raw selected target below, before confound residualization.</div>${continuousMetricLegend(map.observed || [], observedFormatter, selectedExperiment.targetDefinition || selectedExperiment.target || 'target value')}<div style="font-size:9px;font-weight:900;color:${C.green};margin:11px 0 3px">Grouped-source prediction check</div><canvas data-pl-canvas="axis-oof" style="width:100%;height:300px;display:block"></canvas><div style="font-size:8px;color:${C.mute};margin-top:4px">Horizontal is grouped out-of-fold prediction; vertical is the residualized target. Every fold keeps one source video's components together and residualizes both features and targets against the selected confounds. This is not a later-video test and does not extend the semantic input beyond the exact source hook.</div>`)}</div>`;
-        }
-
-        function renderRegistry() {
-            const registry = state.data.registry;
-            if (!registry) return loading('registry');
-            const query = state.registryQuery.toLowerCase();
-            let rows = registry.rows || [];
-            if (state.registryStage !== 'all') rows = rows.filter(row => row.stage === state.registryStage);
-            if (query) rows = rows.filter(row => JSON.stringify(row).toLowerCase().includes(query));
-            const pageSize = 100, maxPage = Math.max(0, Math.ceil(rows.length / pageSize) - 1);
-            state.registryPage = Math.min(state.registryPage, maxPage);
-            const page = rows.slice(state.registryPage * pageSize, (state.registryPage + 1) * pageSize);
-            const stages = ['all', ...Object.keys(registry.stageCounts || {})];
-            return `${card(`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input data-pl-query="registry" value="${esc(state.registryQuery)}" placeholder="search method, target, representation, status" style="flex:1;min-width:220px;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:6px 8px;border-radius:5px;font-size:10px"/>${button('Apply', 'data-pl-apply-query')}${stages.map(stage => button(stage, `data-pl-registry-stage="${stage}"`, state.registryStage === stage)).join('')}</div>`)}
-            ${card(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><div style="font-size:10px;color:${C.dim}">${rows.length.toLocaleString()} matching registered experiments · page ${state.registryPage + 1} / ${maxPage + 1}</div><div style="display:flex;gap:5px">${button('Previous', 'data-pl-registry-page="-1"')}${button('Next', 'data-pl-registry-page="1"')}</div></div><div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:8.5px"><thead><tr>${['stage', 'method / representation', 'configuration', 'held-out / null', 'status', 'id'].map(label => `<th style="text-align:left;color:${C.mute};padding:5px;border-bottom:1px solid ${C.border}">${label}</th>`).join('')}</tr></thead><tbody>${page.map(row => `<tr><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.text}">${esc(row.stage || '')}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${esc(row.method || row.representation || '')}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${row.segmentCount != null ? `k=${row.segmentCount}` : row.clusterCount != null ? `${row.pcaDimensions}D k=${row.clusterCount} ${esc(row.geometry || '')}` : `${row.pcaDimensions || '-'}D alpha ${row.ridgeAlpha || '-'} · ${esc(row.confounds || '')}`}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.dim}">${row.heldoutSpearman != null ? `rho ${fmt(row.heldoutSpearman, 3)} · search p ${fmt(row.searchWideP, 3)}${row.searchWideQ != null ? ` · selected q ${fmt(row.searchWideQ, 3)}` : ''}` : row.crossScopeARI != null ? `cross-scope ARI ${fmt(row.crossScopeARI, 3)} · boundary enrichment ${fmt(row.boundarySupportWeightedEnrichment, 3)}` : row.marginAboveNull != null ? `margin ${fmt(row.marginAboveNull, 3)} · ARI ${fmt(row.seedStabilityARI, 3)}` : `z ${fmt(row.z, 3)} · q ${fmt(row.q, 3)}`}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${statusColor(row.status)}">${esc(row.status || (row.outcomesUsed === false ? 'outcome-blind' : ''))}</td><td style="padding:5px;border-bottom:1px solid ${C.border};color:${C.faint};font-family:monospace">${esc(row.id || '')}</td></tr>`).join('')}</tbody></table></div>`)} `;
-        }
-
-        function renderLattice() {
-            const summary = state.data.componentLattice;
-            if (!summary) return loading('componentLattice');
-            const query = state.latticeCorpusQuery.trim().toLowerCase();
-            const allRows = summary.rows || [];
-            const rows = allRows.filter(row => !query || `${row.title || ''} ${row.text || ''} ${row.videoId || ''}`.toLowerCase().includes(query));
-            const parity = summary.parityContract || {}, graph = summary.graphContract || {};
-            return `${card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:300px;flex:1"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">Section 5 executable evidence</div><div style="font-size:18px;color:${C.text};font-weight:900;margin-top:2px">Multi-resolution component lattice + relational graph</div><div style="font-size:9px;color:${C.dim};line-height:1.55;margin-top:4px">Every contiguous source span is represented once, then tagged with every deterministic resolution it belongs to. The frozen corpus and live predictor both call <b style="color:${C.text}">${esc(parity.builder || '')}</b>; the graph is not rebuilt by a second UI-only approximation.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('hooks built', `${Number(summary.hookCount || 0).toLocaleString()}/${allRows.length.toLocaleString()}`, Number(summary.hookCount || 0) === allRows.length ? C.green : C.amber)}${stat('span nodes', Number(summary.spanCount || 0).toLocaleString(), C.cyan)}${stat('graph edges', Number(summary.edgeCount || 0).toLocaleString(), C.purple)}${stat('Long Quant titles', Number((summary.titleManifold || {}).sourceRows || 0).toLocaleString(), C.green)}</div></div><div style="font-size:8px;color:${C.mute};line-height:1.55;margin-top:8px">Representation formula: <b style="color:${C.text}">${esc(summary.representationVersion || parity.representationVersion || '')}</b> · training storage: ${esc(parity.trainingVectorStorageDtype || '')} · predictor quantizes before derived views: <b style="color:${parity.predictorQuantizesBeforeDerivedRepresentations ? C.green : C.red}">${parity.predictorQuantizesBeforeDerivedRepresentations ? 'yes' : 'not verified'}</b><br>Structural edges use outcomes: <b style="color:${graph.structuralEdgeOutcomesUsed ? C.red : C.green}">${graph.structuralEdgeOutcomesUsed ? 'YES' : 'NO'}</b> · stored outcome edges: ${esc(graph.storedOutcomeEdges || '')} · live outcome edges: ${esc(graph.liveOutcomeEdges || '')}</div>`, 'margin-bottom:9px;border-color:' + C.cyan + '66')}
-            ${card(`<div style="display:flex;gap:6px;align-items:flex-end"><label style="flex:1"><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase;margin-bottom:4px">Search ${allRows.length.toLocaleString()} stored hook lattices</span><input data-pl-query="lattice-corpus" value="${esc(state.latticeCorpusQuery)}" placeholder="title, hook text, or video ID" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:7px 8px;font-size:9px"></label>${button('Apply', 'data-pl-lattice-apply')}</div><div style="max-height:310px;overflow:auto;margin-top:8px">${rows.map(row => `<button data-pl-lattice-video="${esc(row.videoId)}" style="width:100%;display:grid;grid-template-columns:minmax(250px,1fr) repeat(3,minmax(75px,.25fr));gap:7px;align-items:center;text-align:left;border:0;border-top:1px solid ${C.border};background:${String(row.videoId) === String(state.latticeVideoId) ? C.cyan + '12' : 'transparent'};padding:7px;cursor:pointer"><span style="min-width:0"><b style="display:block;color:${C.text};font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.title || row.videoId)}</b><span style="display:block;color:${C.mute};font-size:7.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.text || '')}</span></span><span style="color:${C.cyan};font-size:8px">${Number(row.spanCount || 0).toLocaleString()} spans</span><span style="color:${C.purple};font-size:8px">${Number(row.edgeCount || 0).toLocaleString()} edges</span><span style="color:${row.timingSource === 'exact-caption-alignment' ? C.green : C.amber};font-size:8px">${esc(row.timingSource || '')}</span></button>`).join('') || `<div style="font-size:9px;color:${C.mute}">No stored hooks match.</div>`}</div>`, 'margin-bottom:9px')}
-            ${renderLatticeSurface(state.latticeDetail, 'stored measured hook')}`;
-        }
-
-        function renderResearchContract() {
-            const audit = state.data.researchContract;
-            if (!audit) return loading('researchContract');
-            const counts = audit.implementationStatusCounts || {}, inventory = audit.currentInventory || {};
-            const done = audit.definitionOfDone || {}, source = audit.contract || {};
-            const section5 = audit.section5Audit || {};
-            const statusColors = { implemented: C.green, active: C.cyan, partial: C.amber, 'blocked-data': C.purple, 'not-met': C.red };
-            return `${card(`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:300px;flex:1"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">Frozen research contract audit</div><div style="font-size:18px;color:${C.text};font-weight:900;margin-top:2px">${Number((audit.rows || []).length).toLocaleString()} document sections checked against executable artifacts</div><div style="font-size:9px;color:${C.dim};line-height:1.55;margin-top:4px">Source hash <span style="font-family:monospace;color:${C.text}">${esc(source.sha256 || '')}</span> · ${Number(source.lines || 0).toLocaleString()} lines. “Implemented” means an inspectable artifact exists; it does not silently promote an observational relationship into causal reference-to-gratification truth.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${Object.entries(counts).map(([name, value]) => stat(name, value, statusColors[name] || C.text)).join('')}</div></div><div style="font-size:10px;color:${done.met ? C.green : C.red};font-weight:900;margin-top:8px">Definition of done: ${done.met ? 'MET' : 'NOT MET'}</div><div style="font-size:8.5px;color:${C.dim};line-height:1.55;margin-top:3px">${esc(done.reason || '')} ${esc(done.languageRule || '')}</div>`, 'margin-bottom:9px;border-color:' + (done.met ? C.green : C.red) + '66')}
-            ${card(`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px">${stat('measured hooks', inventory.measuredHooks || 0, C.cyan)}${stat('lattice hooks', inventory.componentLatticeHooks || 0, C.green)}${stat('lattice spans', Number(inventory.componentSpanNodes || 0).toLocaleString(), C.purple)}${stat('lattice edges', Number(inventory.componentGraphEdges || 0).toLocaleString(), C.purple)}${stat('current title vectors', Number(inventory.currentLongQuantTitleVectors || 0).toLocaleString(), C.green)}</div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:8px 0"><div style="border-left:3px solid ${section5.sharedCorpusAndPredictorBuilder ? C.green : C.red};padding-left:7px;font-size:8px;color:${C.dim}">corpus/predictor builder<br><b style="color:${C.text}">${section5.sharedCorpusAndPredictorBuilder ? 'shared' : 'not verified'}</b></div><div style="border-left:3px solid ${C.cyan};padding-left:7px;font-size:8px;color:${C.dim}">representation formula<br><b style="color:${C.text};overflow-wrap:anywhere">${esc(section5.representationVersion || '')}</b></div><div style="border-left:3px solid ${section5.structuralEdgesUseOutcomes === false ? C.green : C.red};padding-left:7px;font-size:8px;color:${C.dim}">structural outcome leakage<br><b style="color:${C.text}">${section5.structuralEdgesUseOutcomes === false ? 'none' : 'not verified'}</b></div></div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-bottom:9px">${esc(section5.claimBoundary || '')}</div><div style="font-size:9px;color:${C.text};font-weight:900;margin-bottom:5px">Blocked evidence required before causal promotion</div>${(audit.blockedDataRequirements || []).map(value => `<div style="font-size:8.5px;color:${C.dim};border-top:1px solid ${C.border};padding:5px 0">${esc(value)}</div>`).join('')}`, 'margin-bottom:9px')}
-            ${card(`<div style="overflow:auto;max-height:760px"><table data-pl-research-contract-table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['document section', 'status', 'executable interpretation', 'evidence', 'source lines'].map(value => `<th style="position:sticky;top:0;background:${C.card};text-align:left;padding:6px;color:${C.mute};border-bottom:1px solid ${C.border};z-index:1">${esc(value)}</th>`).join('')}</tr></thead><tbody>${(audit.rows || []).map(row => `<tr><td style="padding:6px;border-bottom:1px solid ${C.border};color:${C.text};font-weight:800">${esc(row.title || row.key || '')}</td><td style="padding:6px;border-bottom:1px solid ${C.border};color:${statusColors[row.status] || C.text};font-weight:900">${esc(row.status || '')}</td><td style="padding:6px;border-bottom:1px solid ${C.border};color:${C.dim};line-height:1.45">${esc(row.statement || '')}</td><td style="padding:6px;border-bottom:1px solid ${C.border};color:${C.cyan};font-family:monospace">${(row.evidenceArtifacts || []).map(esc).join(', ')}</td><td style="padding:6px;border-bottom:1px solid ${C.border};color:${C.mute};white-space:nowrap">${row.lineStart || '-'}–${row.lineEnd || '-'}</td></tr>`).join('')}</tbody></table></div>`)}`;
-        }
-
         function opening20sComponentStrip(detail) {
             const components = detail.canonicalComponents || [];
             if (!components.length) return '';
@@ -1968,9 +1552,10 @@
 
         function body() {
             return {
-                overview: renderOverview, scorer: renderHookScorer, library: renderHookLibrary, opening20s: renderOpening20s, lattice: renderLattice, contract: renderResearchContract, hooks: renderHooks, boundaries: renderBoundaries,
-                components: renderComponents, clusters: renderClusters, saved: renderSavedProjection, swaps: renderSwaps,
-                axes: renderAxes, registry: renderRegistry,
+                scorer: renderHookScorer,
+                library: renderHookLibrary,
+                saved: renderSavedProjection,
+                opening20s: renderOpening20s,
             }[state.view]();
         }
 
@@ -1979,7 +1564,7 @@
         }
 
         function responsiveStyles() {
-            return `<style>#pl-root,#pl-root *{box-sizing:border-box}#pl-root .pl-flex-copy{min-width:0!important}@media(max-width:1180px){#pl-root .pl-component-map-grid,#pl-root .pl-component-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}#pl-root .pl-library-row{grid-template-columns:minmax(250px,1.4fr) repeat(2,minmax(100px,.6fr))!important}#pl-root .pl-library-row>canvas{grid-column:1/-1}}@media(max-width:820px){#pl-root .pl-split,#pl-root .pl-metric-channels,#pl-root .pl-natural-stats,#pl-root .pl-outcome-strip,#pl-root .pl-component-map-grid,#pl-root .pl-component-summary-grid,#pl-root .pl-lattice-controls{grid-template-columns:minmax(0,1fr)!important}#pl-root .pl-library-row,#pl-root .pl-opening-row{grid-template-columns:repeat(2,minmax(0,1fr))!important;align-items:start!important}#pl-root .pl-library-row>div:first-child,#pl-root .pl-library-row>canvas,#pl-root .pl-opening-row>span:first-child{grid-column:1/-1}#pl-root canvas{max-width:100%}#pl-root [data-pl-outcome-inspector]{height:auto!important;min-height:280px}}@media(max-width:400px){#pl-root{max-width:100%;overflow-x:hidden}#pl-root [style*="min-width:300px"]{min-width:0!important}#pl-root .pl-opening-row{grid-template-columns:minmax(0,1fr)!important}#pl-root .pl-opening-row>span{grid-column:1!important}#pl-root [data-pl-lattice-surface] aside{min-width:0!important;height:auto!important;min-height:560px!important;max-height:720px!important}}</style>`;
+            return `<style>#pl-root,#pl-root *{box-sizing:border-box}#pl-root .pl-flex-copy{min-width:0!important}@media(max-width:1180px){#pl-root .pl-component-map-grid,#pl-root .pl-component-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}#pl-root .pl-library-row{grid-template-columns:minmax(250px,1.4fr) repeat(2,minmax(100px,.6fr))!important}#pl-root .pl-library-row>canvas{grid-column:1/-1}}@media(max-width:820px){#pl-root .pl-split,#pl-root .pl-metric-channels,#pl-root .pl-natural-stats,#pl-root .pl-outcome-strip,#pl-root .pl-component-map-grid,#pl-root .pl-component-summary-grid,#pl-root .pl-lattice-controls,#pl-root .pl-score-contract-layout{grid-template-columns:minmax(0,1fr)!important}#pl-root .pl-library-row,#pl-root .pl-opening-row{grid-template-columns:repeat(2,minmax(0,1fr))!important;align-items:start!important}#pl-root .pl-library-row>div:first-child,#pl-root .pl-library-row>canvas,#pl-root .pl-opening-row>span:first-child{grid-column:1/-1}#pl-root canvas{max-width:100%}#pl-root [data-pl-outcome-inspector]{height:auto!important;min-height:280px}}@media(max-width:400px){#pl-root{max-width:100%;overflow-x:hidden}#pl-root [style*="min-width:300px"]{min-width:0!important}#pl-root .pl-opening-row{grid-template-columns:minmax(0,1fr)!important}#pl-root .pl-opening-row>span{grid-column:1!important}#pl-root [data-pl-lattice-surface] aside{min-width:0!important;height:auto!important;min-height:560px!important;max-height:720px!important}}</style>`;
         }
 
         function paint() {
@@ -2056,11 +1641,9 @@
             });
             context.globalAlpha = 1;
             canvas.onclick = event => {
-                const interactiveKinds = new Set(['components', 'hook-map', 'cluster', 'manual-projection', 'cluster-outcome-axis', 'hook-quality-axis', 'forward-response-axis', 'hook-outcome-axis', 'component-score-axis', 'lattice-embedding']);
+                const interactiveKinds = new Set(['manual-projection', 'cluster-outcome-axis', 'forward-response-axis', 'hook-outcome-axis', 'component-score-axis', 'lattice-embedding']);
                 const kind = canvas.dataset.plCanvas;
-                const atlas = kind === 'hook-map' ? state.data.atlas : activeAtlas();
-                if (!interactiveKinds.has(kind)
-                    || (!['manual-projection', 'cluster-outcome-axis', 'hook-quality-axis', 'forward-response-axis', 'hook-outcome-axis', 'component-score-axis', 'lattice-embedding'].includes(kind) && !atlas)) return;
+                if (!interactiveKinds.has(kind)) return;
                 const rect = canvas.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top;
                 let best = -1, distance = Infinity;
                 projected.forEach((point, index) => { const d = (point[0] - x) ** 2 + (point[1] - y) ** 2; if (d < distance) { distance = d; best = index; } });
@@ -2083,15 +1666,6 @@
                     const scrollX = window.scrollX, scrollY = window.scrollY;
                     state.outcomeComponentPointKey = `${ref.videoId}:${ref.component}`;
                     paint(); window.scrollTo(scrollX, scrollY); return;
-                }
-                if (kind === 'hook-quality-axis') {
-                    const count = ((((state.data.hookQuality || {}).axis || {}).points || []).length);
-                    if (originalIndex >= count) return;
-                    const scrollX = window.scrollX, scrollY = window.scrollY;
-                    state.hookQualityPointIndex = originalIndex;
-                    paint();
-                    window.scrollTo(scrollX, scrollY);
-                    return;
                 }
                 if (kind === 'forward-response-axis') {
                     const indices = canvas._plGlobalIndices || [];
@@ -2126,26 +1700,7 @@
                     window.scrollTo(scrollX, scrollY);
                     return;
                 }
-                const row = atlasRows(atlas)[originalIndex];
-                if (!row) return;
-                state.componentId = row.id;
-                if (state.view !== 'components') state.view = 'components';
-                paint();
             };
-        }
-
-        function drawInteraction(canvas) {
-            const hook = state.hook, matrix = hook && hook.interactionMatrix;
-            if (!matrix || !matrix.length) return;
-            const { context, width, height } = canvasContext(canvas), n = matrix.length;
-            const size = Math.min(width - 70, height - 45), cell = size / n, max = Math.max(...matrix.flat(), .001);
-            matrix.forEach((row, y) => row.forEach((value, x) => {
-                const t = Math.max(0, Math.min(1, value / max));
-                context.fillStyle = `rgb(${Math.round(25 + 220 * t)},${Math.round(45 + 45 * (1 - t))},${Math.round(90 + 150 * (1 - t))})`;
-                context.fillRect(55 + x * cell, 8 + y * cell, Math.ceil(cell), Math.ceil(cell));
-            }));
-            context.fillStyle = C.dim; context.font = '8px sans-serif';
-            (hook.tokens || []).forEach((token, index) => { if (index % Math.max(1, Math.ceil(n / 12)) === 0) context.fillText(String(token.text).slice(0, 6), 2, 13 + index * cell); });
         }
 
         function drawClusterOutcomeOffsets(canvas) {
@@ -2990,7 +2545,7 @@
             const focus = activeHookOutcomeFocus();
             const selected = focus && focus.type === 'stored'
                 ? rows.findIndex(row => String(row.videoId) === String(focus.row.videoId)) : null;
-            const liveX = focus && focus.type === 'live' ? numeric((focus.result.trainingReward || {}).z) : NaN;
+            const liveX = focus && focus.type === 'live' ? numeric((focus.result.primaryScore || {}).z) : NaN;
             const label = (((state.data.hookOutcomes || {}).targets || {})[target] || {}).shortLabel || target;
             const yLabel = target === 'log_views' ? 'measured log10 Shorts views' : `measured ${label} (%)`;
             drawTransferScatter(canvas, points, selected >= 0 ? selected : null, liveX, 'Market Hold z', yLabel);
@@ -3012,56 +2567,6 @@
                     ? 'measured log10 Shorts views'
                     : `measured ${((((state.data.hookOutcomes || {}).targets || {})[target] || {}).shortLabel || target)} (%)`;
             drawTransferScatter(canvas, points, selected >= 0 ? selected : null, NaN, 'predicted long-form log10 views', label);
-        }
-
-        function drawAxisHorizon(canvas) {
-            const axes = state.data.axes || {}, map = (axes.maps || [])[state.axisIndex] || {};
-            const lineage = axisLineageFor(map);
-            const horizon = (((state.data.findings || {}).visualizationContract || {}).semanticInputHorizon) || {};
-            const endpoints = (horizon.responseEndSecondsSorted || []).map(numeric).filter(Number.isFinite);
-            if (!lineage || !endpoints.length) return;
-            const window = lineage.outcomeWindow || {};
-            const median = numeric(horizon.medianResponseEndSeconds);
-            let targetStart = numeric(window.startSeconds), targetEnd = numeric(window.endSeconds);
-            if (window.relativeToHookEnd) { targetStart = median; targetEnd = median + Math.max(0, targetEnd); }
-            if (window.kind === 'hook-end-point') { targetStart = median; targetEnd = median; }
-            if (window.kind === 'within-hook-window' && !Number.isFinite(targetEnd)) { targetStart = 0; targetEnd = median; }
-            const fixedTarget = Number.isFinite(targetStart) || Number.isFinite(targetEnd);
-            const maxX = Math.max(...endpoints, fixedTarget ? Math.max(targetStart || 0, targetEnd || 0) : 0) * 1.08 || 1;
-            const { context, width, height } = canvasContext(canvas);
-            const pad = { left: 34, right: 12, top: 28, bottom: 30 }, bins = 16;
-            const counts = Array(bins).fill(0);
-            endpoints.forEach(value => { counts[Math.min(bins - 1, Math.max(0, Math.floor(value / maxX * bins)))] += 1; });
-            const peak = Math.max(1, ...counts), x = value => pad.left + value / maxX * (width - pad.left - pad.right);
-            const y = value => height - pad.bottom - value / peak * (height - pad.top - pad.bottom);
-            context.fillStyle = C.cyan; context.globalAlpha = .62;
-            counts.forEach((count, index) => {
-                const x0 = pad.left + index / bins * (width - pad.left - pad.right), x1 = pad.left + (index + 1) / bins * (width - pad.left - pad.right);
-                context.fillRect(x0 + 1, y(count), Math.max(1, x1 - x0 - 2), height - pad.bottom - y(count));
-            });
-            context.globalAlpha = 1;
-            if (fixedTarget) {
-                const start = Number.isFinite(targetStart) ? targetStart : targetEnd;
-                const end = Number.isFinite(targetEnd) ? targetEnd : targetStart;
-                context.fillStyle = C.red; context.globalAlpha = start === end ? .95 : .2;
-                if (start === end) context.fillRect(x(end) - 1.5, pad.top, 3, height - pad.top - pad.bottom);
-                else context.fillRect(x(Math.min(start, end)), pad.top, Math.max(3, x(Math.max(start, end)) - x(Math.min(start, end))), height - pad.top - pad.bottom);
-                context.globalAlpha = 1; context.fillStyle = C.red; context.font = '8px sans-serif'; context.textAlign = end > maxX * .8 ? 'right' : 'left';
-                context.fillText(window.relativeToHookEnd ? `median hook end + ${fmt(numeric(window.endSeconds), 1)}s` : (start === end ? `target ${fmt(end, 1)}s` : `target ${fmt(start, 1)}–${fmt(end, 1)}s`), x(end) + (end > maxX * .8 ? -4 : 4), 12);
-            } else {
-                context.fillStyle = C.amber; context.font = '8px sans-serif'; context.textAlign = 'right'; context.fillText('target has no single fixed viewer-time coordinate', width - pad.right, 12);
-            }
-            context.strokeStyle = C.green; context.lineWidth = 1.5; context.setLineDash([4, 3]);
-            context.beginPath(); context.moveTo(x(median), pad.top); context.lineTo(x(median), height - pad.bottom); context.stroke(); context.setLineDash([]);
-            [0, .25, .5, .75, 1].forEach(fraction => {
-                const value = fraction * maxX; context.fillStyle = C.mute; context.font = '7px sans-serif'; context.textAlign = 'center';
-                context.fillText(`${fmt(value, 1)}s`, x(value), height - 9);
-            });
-            context.textAlign = 'left'; context.fillStyle = C.cyan; context.fillText('hook semantic endpoints', pad.left, 12);
-            context.fillStyle = C.green; context.fillText(`median ${fmt(median, 2)}s`, Math.min(width - 65, x(median) + 4), pad.top + 9);
-            canvas.dataset.plSemanticEndpoints = String(endpoints.length);
-            canvas.dataset.plOutcomeKind = String(window.kind || '');
-            canvas.dataset.plHooksBeforeOutcome = lineage.sourceHooksWhoseSemanticInputEndsBeforeOutcomeWindow == null ? '' : String(lineage.sourceHooksWhoseSemanticInputEndsBeforeOutcomeWindow);
         }
 
         function selectLatticeNode(nodeId, revealInspector = false) {
@@ -3300,30 +2805,11 @@
                 if (kind === 'boundary-trace') return drawBoundaryTrace(canvas);
                 if (kind === 'market-transfer') return drawMarketTransfer(canvas);
                 if (kind === 'long-title-transfer') return drawLongTitleTransfer(canvas);
-                if (kind === 'axis-horizon') return drawAxisHorizon(canvas);
                 if (kind === 'retention-forecast') return drawRetentionForecast(canvas, false);
                 if (kind === 'library-retention-mini') return drawRetentionForecast(canvas, true);
                 if (kind === 'word-embedding-map') return drawWordEmbeddingMap(canvas);
                 if (kind === 'forecast-input-map') return drawForecastInputMap(canvas);
                 if (kind === 'word-forecast-contribution') return drawWordForecastContribution(canvas);
-                if (kind === 'hook-quality-axis') {
-                    const summary = state.data.hookQuality || {};
-                    const rows = ((summary.axis || {}).points || []);
-                    const points = rows.map(row => [numeric(row.axisCoordinate), numeric(row.mapY)]);
-                    const targets = rows.map(row => numeric(row.oofTargetResidual));
-                    const range = bounds(targets);
-                    const colors = targets.map(value => {
-                        const t = Math.max(0, Math.min(1, (value - range[0]) / ((range[1] - range[0]) || 1)));
-                        return `rgb(${Math.round(56 + 192 * t)},${Math.round(189 - 76 * t)},${Math.round(248 - 135 * t)})`;
-                    });
-                    const selected = new Set();
-                    if (state.hookScoreResult && (state.hookScoreResult.map || {}).x != null) {
-                        selected.add(points.length);
-                        points.push([numeric(state.hookScoreResult.map.x), numeric(state.hookScoreResult.map.y)]);
-                        colors.push(C.cyan);
-                    }
-                    return scatter(canvas, points, colors, selected, null, false, state.hookQualityPointIndex);
-                }
                 if (kind === 'forward-response-lag') {
                     const response = ((state.data.hookQuality || {}).forwardResponse || {});
                     const rows = [...(response.reverseTimeControls || []), ...(response.forwardCandidates || [])]
@@ -3375,7 +2861,6 @@
                     const focused = state.forwardResponseComponentIndex == null ? null : globalIndices.indexOf(focusedGlobal);
                     return scatter(canvas, points, colors, selected, null, false, focused >= 0 ? focused : null);
                 }
-                if (kind === 'interaction') return drawInteraction(canvas);
                 if (kind === 'cluster-outcome-axis') {
                     const detail = state.clusterOutcomeDetail, points = detail && detail.points;
                     if (!points) return;
@@ -3404,46 +2889,13 @@
                 if (kind === 'latency-transfer') return drawLatencyTransfer(canvas);
                 if (kind === 'latency-natural') return drawLatencyNatural(canvas);
                 if (kind === 'latency-point') return drawLatencyPoint(canvas);
-                if (kind === 'components' || kind === 'hook-map') {
-                    const atlas = kind === 'hook-map' ? state.data.atlas : activeAtlas(); if (!atlas) return;
-                    const projections = atlas.projections || {};
-                    const points = projections[state.representation] || projections.influence || Object.values(projections)[0] || [];
-                    const selected = new Set();
-                    atlasRows(atlas).forEach((row, index) => {
-                        if (row.id === state.componentId || (kind === 'hook-map' && row.videoId === state.hookId)) selected.add(index);
-                    });
-                    return scatter(canvas, points, null, selected);
-                }
-                if (kind === 'cluster' || kind === 'cluster-mini') {
-                    const atlas = activeAtlas(); if (!atlas) return;
-                    const index = kind === 'cluster' ? state.mapIndex : Number(canvas.dataset.plMapIndex || 0);
-                    const map = (atlas.maps || [])[index]; if (!map) return;
-                    const points = (atlas.projections || {})[map.representation] || [];
-                    const labels = map.labels || [];
-                    let colors = labels.map(clusterColor), selectedIds = null, alphas = null;
-                    if (kind === 'cluster' && state.focusedCluster != null) {
-                        colors = labels.map(label => Number(label) === Number(state.focusedCluster) ? clusterColor(label) : C.faint);
-                        alphas = labels.map(label => Number(label) === Number(state.focusedCluster) ? .72 : .07);
-                        const probe = state.data.manualProbe, winner = probe && probe.winner;
-                        if (winner && winner.mapId === map.id) {
-                            const field = winner.scope === 'all-contiguous-spans' ? 'allSpanIndex' : 'candidateIndex';
-                            selectedIds = new Set(((probe.winnerDetail || {}).matches || []).map(row => Number(row[field])));
-                        }
-                    }
-                    return scatter(canvas, points, colors, selectedIds, alphas);
-                }
                 if (kind === 'manual-projection') {
                     const experiment = state.data.manualProjection;
                     if (!experiment) return;
                     const method = (experiment.methods || []).find(row => row.id === state.projectionMethod)
                         || (experiment.methods || []).find(row => row.id === experiment.selectedMethod);
                     const pointIndex = experiment.frozenPointIndex || {};
-                    let labels = pointIndex.labels || [];
-                    if (!labels.length) {
-                        const atlas = state.data.allSpanAtlas || activeAtlas();
-                        const map = atlas && (atlas.maps || []).find(row => row.id === experiment.mapId);
-                        labels = (map && map.labels) || [];
-                    }
+                    const labels = pointIndex.labels || [];
                     if (!method || !labels.length) return;
                     const colors = labels.map(clusterColor);
                     const alphas = labels.map(() => .58);
@@ -3451,43 +2903,31 @@
                         .map(row => Number(row.allSpanIndex)));
                     return scatter(canvas, method.points || [], colors, selectedIds, alphas, true, state.savedPointIndex);
                 }
-                if (kind === 'axis' || kind === 'axis-oof') {
-                    const axes = state.data.axes, map = axes && (axes.maps || [])[state.axisIndex]; if (!map) return;
-                    const observed = map.observed || [], ob = bounds(observed), colors = observed.map(value => {
-                        if (!Number.isFinite(value)) return C.faint;
-                        const t = Math.max(0, Math.min(1, (value - ob[0]) / ((ob[1] - ob[0]) || 1)));
-                        return `rgb(${Math.round(248 * t + 56 * (1 - t))},${Math.round(113 * (1 - t) + 211 * t)},${Math.round(113 + 100 * (1 - t))})`;
-                    });
-                    const points = kind === 'axis'
-                        ? (map.x || []).map((x, index) => [x, (map.y || [])[index]])
-                        : (map.predictedOOF || []).map((prediction, index) => [prediction, (map.observedResidualOOF || [])[index]]);
-                    return scatter(canvas, points, colors, null);
-                }
-                if (kind === 'swap-bars') {
-                    const detail = state.source; if (!detail) return;
-                    const { context, width, height } = canvasContext(canvas);
-                    const rows = detail.targets || [], metric = state.metric;
-                    const values = rows.map(row => Number((row.scores[metric] || {}).deltaFromBaseline));
-                    const min = Math.min(0, ...values), max = Math.max(0, ...values), range = (max - min) || 1;
-                    const zeroY = height - 9 - (0 - min) / range * (height - 18), bar = width / Math.max(1, values.length);
-                    context.strokeStyle = C.dim; context.globalAlpha = .55; context.beginPath(); context.moveTo(0, zeroY); context.lineTo(width, zeroY); context.stroke();
-                    values.forEach((value, index) => { const y = height - 9 - (value - min) / range * (height - 18); context.fillStyle = value >= 0 ? C.green : C.red; context.globalAlpha = .72; context.fillRect(index * bar, Math.min(y, zeroY), Math.max(1, bar - .5), Math.max(1, Math.abs(zeroY - y))); });
-                    context.globalAlpha = 1;
-                }
             });
         }
 
         function handleClick(event) {
             const target = event.target;
             const view = target.closest('[data-pl-view]'); if (view) { state.view = view.dataset.plView; ensureView(); paint(); return true; }
-            const contractView = target.closest('[data-pl-contract-view]');
-            if (contractView) { state.view = contractView.dataset.plContractView; ensureView(); paint(); return true; }
-            const openAxisTarget = target.closest('[data-pl-open-axis-target]');
-            if (openAxisTarget) {
-                state.pendingAxisTarget = openAxisTarget.dataset.plOpenAxisTarget;
-                state.view = 'axes'; ensureView(); paint(); return true;
+            if (target.closest('[data-pl-refresh]')) {
+                Object.keys(state.data).forEach(key => delete state.data[key]);
+                state.clusterOutcomeTarget = null;
+                state.clusterOutcomeDetail = null;
+                state.clusterOutcomePointIndex = null;
+                state.latencyDetail = null;
+                state.latencyPointGlobalIndex = null;
+                state.forwardResponseComponentIndex = null;
+                state.hookScoreOpeningLattice = null;
+                state.latticeDetail = null;
+                state.latticeVideoId = null;
+                state.latticeNodeId = null;
+                state.latticeError = null;
+                state.opening20sDetail = null;
+                state.opening20sVideoId = null;
+                state.opening20sError = null;
+                ensureView();
+                return true;
             }
-            if (target.closest('[data-pl-refresh]')) { Object.keys(state.data).forEach(key => delete state.data[key]); state.hook = null; state.source = null; state.focusedCluster = null; state.clusterOutcomeTarget = null; state.clusterOutcomeDetail = null; state.clusterOutcomePointIndex = null; state.latencyDetail = null; state.latencyPointGlobalIndex = null; state.hookQualityPointIndex = null; state.forwardResponseComponentIndex = null; state.hookScoreOpeningLattice = null; state.latticeDetail = null; state.latticeVideoId = null; state.latticeNodeId = null; state.latticeError = null; state.opening20sDetail = null; state.opening20sVideoId = null; state.opening20sError = null; ensureView(); return true; }
             if (target.closest('[data-pl-run-hook-score]')) { scoreHookText(); return true; }
             const latticeVideo = target.closest('[data-pl-lattice-video]');
             if (latticeVideo) {
@@ -3553,21 +2993,11 @@
                     state.hookScoreText = row.text;
                     state.hookScoreResult = row.score;
                     state.hookScoreError = null;
-                    state.hookQualityPointIndex = null;
                     state.forecastWordIndex = 0;
                     paint();
                 }
                 return true;
             }
-            if (target.closest('[data-pl-open-manual-probe]')) { openManualProbe(); return true; }
-            if (target.closest('[data-pl-clear-cluster-focus]')) { state.focusedCluster = null; paint(); return true; }
-            if (target.closest('[data-pl-apply-query]')) { state.registryPage = 0; paint(); return true; }
-            const hook = target.closest('[data-pl-hook]'); if (hook) { if (hook.hasAttribute('data-pl-open-hooks')) state.view = 'hooks'; load('atlas'); loadHook(hook.dataset.plHook); return true; }
-            const atlasScope = target.closest('[data-pl-atlas-scope]'); if (atlasScope) { state.atlasScope = atlasScope.dataset.plAtlasScope; state.componentId = null; state.mapIndex = 0; state.mapPage = 0; state.focusedCluster = null; state.representation = 'influence'; if (state.atlasScope === 'all') load('allSpanAtlas', api('all-span-atlas')); else load('atlas'); paint(); return true; }
-            const rep = target.closest('[data-pl-rep]'); if (rep) { state.representation = rep.dataset.plRep; paint(); return true; }
-            const component = target.closest('[data-pl-component]'); if (component) { state.componentId = component.dataset.plComponent; if (component.hasAttribute('data-pl-open-components')) state.view = 'components'; paint(); return true; }
-            const map = target.closest('[data-pl-map]'); if (map) { state.mapIndex = Number(map.dataset.plMap); state.focusedCluster = null; paint(); return true; }
-            const mapPage = target.closest('[data-pl-map-page]'); if (mapPage) { const maps = ((activeAtlas() || {}).maps || []); const max = Math.max(0, Math.ceil(maps.length / 24) - 1); state.mapPage = Math.max(0, Math.min(max, state.mapPage + Number(mapPage.dataset.plMapPage))); state.mapIndex = Math.min(Math.max(0, maps.length - 1), state.mapPage * 24); state.focusedCluster = null; paint(); return true; }
             const projectionMethod = target.closest('[data-pl-projection-method]'); if (projectionMethod) { state.projectionMethod = projectionMethod.dataset.plProjectionMethod; try { window.localStorage.setItem(projectionMethodKey, state.projectionMethod); } catch (_) { /* Storage is optional. */ } paint(); return true; }
             const outcomeTarget = target.closest('[data-pl-outcome-target]'); if (outcomeTarget) { const summary = state.data.clusterOutcomes || {}, cluster = Number(outcomeTarget.dataset.plOutcomeCluster ?? state.clusterOutcomeCluster), name = outcomeTarget.dataset.plOutcomeTarget; state.clusterOutcomeFamily = ((summary.targetDefinitions || {})[name] || {}).family || state.clusterOutcomeFamily; loadClusterOutcomeDetail(cluster, name); return true; }
             const outcomeCluster = target.closest('[data-pl-outcome-cluster]'); if (outcomeCluster) { const summary = state.data.clusterOutcomes || {}, cluster = Number(outcomeCluster.dataset.plOutcomeCluster), clusterRow = (summary.clusters || []).find(row => Number(row.label) === cluster), available = new Set((clusterRow && clusterRow.targets || []).map(row => row.target)); const name = available.has(state.clusterOutcomeTarget) ? state.clusterOutcomeTarget : ((clusterRow && clusterRow.targets || [])[0] || {}).target; if (name) loadClusterOutcomeDetail(cluster, name); return true; }
@@ -3576,11 +3006,6 @@
             const latencyCluster = target.closest('[data-pl-latency-cluster]'); if (latencyCluster) { state.latencyCluster = Number(latencyCluster.dataset.plLatencyCluster); state.latencySelectedLagIndex = null; state.latencyDetail = null; if (state.latencyPointGlobalIndex != null) loadLatencyDetail(state.latencyCluster); else paint(); return true; }
             const latencyWindow = target.closest('[data-pl-latency-window]'); if (latencyWindow) { state.latencyWindow = latencyWindow.dataset.plLatencyWindow; state.latencySelectedLagIndex = null; paint(); return true; }
             const latencyPoint = target.closest('[data-pl-latency-point-global]'); if (latencyPoint) { state.latencyPointGlobalIndex = Number(latencyPoint.dataset.plLatencyPointGlobal); loadLatencyDetail(state.latencyCluster); return true; }
-            const metric = target.closest('[data-pl-metric]'); if (metric) { state.metric = metric.dataset.plMetric; paint(); return true; }
-            const source = target.closest('[data-pl-source]'); if (source) { if (source.hasAttribute('data-pl-open-swaps')) { state.view = 'swaps'; load('swaps'); } loadSource(source.dataset.plSource); return true; }
-            const axis = target.closest('[data-pl-axis]'); if (axis) { state.axisIndex = Number(axis.dataset.plAxis); paint(); return true; }
-            const stage = target.closest('[data-pl-registry-stage]'); if (stage) { state.registryStage = stage.dataset.plRegistryStage; state.registryPage = 0; paint(); return true; }
-            const registryPage = target.closest('[data-pl-registry-page]'); if (registryPage) { state.registryPage = Math.max(0, state.registryPage + Number(registryPage.dataset.plRegistryPage)); paint(); return true; }
             return false;
         }
 
@@ -3593,11 +3018,8 @@
             }
             if (event.target.matches('[data-pl-hook-score-idea]')) { state.hookScoreIdea = event.target.value; return true; }
             if (event.target.matches('[data-pl-query="lattice"]')) { state.latticeQuery = event.target.value; return true; }
-            if (event.target.matches('[data-pl-query="lattice-corpus"]')) { state.latticeCorpusQuery = event.target.value; return true; }
             if (event.target.matches('[data-pl-query="opening20s"]')) { state.opening20sQuery = event.target.value; return true; }
             if (event.target.matches('[data-pl-query="library"]')) { state.hookLibraryQuery = event.target.value; return true; }
-            if (event.target.matches('[data-pl-query="hook"]')) { state.hookQuery = event.target.value; return true; }
-            if (event.target.matches('[data-pl-query="registry"]')) { state.registryQuery = event.target.value; return true; }
             return false;
         }
 

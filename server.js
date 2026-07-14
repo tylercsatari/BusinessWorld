@@ -3801,41 +3801,30 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     if (pathname === '/api/longquant/promise-lab/manifest' && req.method === 'GET') {
         await serveR2Gz(req, res, 'longform/promise-lab-v4/manifest.json', 30e3,
-            { version: 4, status: 'building', counts: {}, artifacts: {} });
+            { version: 5, status: 'building', counts: {}, artifacts: {} });
         return;
     }
     if (pathname === '/api/longquant/promise-lab/progress' && req.method === 'GET') {
         await serveR2Gz(req, res, 'longform/promise-lab-v4/progress.json', 5e3,
-            { version: 4, status: 'building', stage: 'waiting for first artifact' });
+            { version: 5, status: 'building', stage: 'waiting for first product artifact' });
         return;
     }
     const promiseArtifacts = {
-        findings: 'findings.json.gz',
-        corpus: 'corpus.json.gz',
-        discovery: 'discovery-summary.json.gz',
-        atlas: 'atlas.json.gz',
-        'all-span-atlas': 'all-span-atlas.json.gz',
         'component-lattice': 'component-lattice.json.gz',
         'opening-20s': 'opening-20s.json.gz',
-        'research-contract': 'research-contract.json.gz',
         'manual-probe': 'manual-probe.json.gz',
         'manual-projection': 'manual-projection.json.gz',
         'cluster-outcomes': 'cluster-outcomes.json.gz',
         'latency-study': 'latency-study.json.gz',
         'canonical-partitions': 'canonical-partitions.json.gz',
         'hook-quality': 'hook-quality.json.gz',
-        'forward-response': 'forward-response.json.gz',
         'hook-outcomes': 'hook-outcomes.json.gz',
         'market-reward': 'market-reward.json.gz',
         'hook-example-results': 'hook-example-results.json.gz',
-        'cross-scope': 'cross-scope.json.gz',
-        swaps: 'swaps/summary.json.gz',
-        axes: 'axes.json.gz',
-        registry: 'registry.json.gz',
     };
-    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|component-lattice|opening-20s|research-contract|manual-probe|manual-projection|cluster-outcomes|latency-study|canonical-partitions|hook-quality|forward-response|hook-outcomes|market-reward|hook-example-results|cross-scope|swaps|axes|registry)$/);
+    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(component-lattice|opening-20s|manual-probe|manual-projection|cluster-outcomes|latency-study|canonical-partitions|hook-quality|hook-outcomes|market-reward|hook-example-results)$/);
     if (promiseArtifact && req.method === 'GET') {
-        const cacheControl = ['component-lattice', 'opening-20s', 'research-contract'].includes(promiseArtifact[1])
+        const cacheControl = ['component-lattice', 'opening-20s'].includes(promiseArtifact[1])
             ? 'private, no-cache'
             : undefined;
         if (promiseArtifact[1] === 'opening-20s') {
@@ -3882,16 +3871,6 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         }
         return;
     }
-    const promiseHook = pathname.match(/^\/api\/longquant\/promise-lab\/hook\/([\w-]+)$/);
-    if (promiseHook && req.method === 'GET') {
-        const ok = await serveR2GzipJsonStream(res,
-            `longform/promise-lab-v4/discovery/${promiseHook[1]}.json.gz`);
-        if (!ok) {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end('{"error":"hook discovery artifact is not built"}');
-        }
-        return;
-    }
     const promiseLattice = pathname.match(/^\/api\/longquant\/promise-lab\/component-lattice\/([\w-]+)$/);
     if (promiseLattice && req.method === 'GET') {
         const ok = await serveR2GzipJsonStream(res,
@@ -3923,51 +3902,6 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end('{"error":"20-second opening artifact is not built"}');
         }
-        return;
-    }
-    const promiseSource = pathname.match(/^\/api\/longquant\/promise-lab\/swap-source\/([a-f0-9]{20})$/);
-    if (promiseSource && req.method === 'GET') {
-        const ok = await serveR2GzipJsonStream(res,
-            `longform/promise-lab-v4/swaps/by-source/${promiseSource[1]}.json.gz`);
-        if (!ok) {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end('{"error":"source swap surface is not built"}');
-        }
-        return;
-    }
-    if (pathname === '/api/longquant/claudertg/score-promise' && req.method === 'POST') {
-        try {
-            const body = await readBody(req);
-            const text = String(body.text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
-            if (text.length < 4) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type a promise line to score"}'); return; }
-            if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
-            const promiseRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
-                const py = spawn(RAW_PYTHON, [path.join(__dirname, 'claude_rtg_score.py'), '--text', text], { env: RAW_PY_ENV });
-                let so = '', se = '';
-                py.stdout.on('data', d => so += d);
-                py.stderr.on('data', d => se += d);
-                const t = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('promise scorer timeout')); }, 300000);
-                py.on('close', () => {
-                    clearTimeout(t);
-                    const line = so.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
-                    if (!line) return no(new Error('promise scorer: ' + (se.trim().split('\n').pop() || 'no output').slice(-160)));
-                    try { const j = JSON.parse(line); return j.error ? no(new Error(j.error)) : ok(j); } catch (e) { no(e); }
-                });
-                py.on('error', e => { clearTimeout(t); no(e); });
-            }));
-            if (body.async) { const jobId = lqJobSubmit('score-promise', promiseRunner); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
-            const out = await promiseRunner();
-            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify(out));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
-        return;
-    }
-    const lqCrtg = pathname.match(/^\/api\/longquant\/claudertg\/(meta|chunks|clusterings|axes|swaps|promise_axes)$/);
-    if (lqCrtg && req.method === 'GET') {
-        await serveGzCached(req, res, 'lq:crtg-' + lqCrtg[1], 60e3, async () => {
-            const b = await cloud.downloadFromR2(`longform/claude-rtg/${lqCrtg[1]}.json`).catch(() => null);
-            return b ? b.toString('utf8') : '{}';
-        }, {});
         return;
     }
     if (pathname === '/api/longquant/hooks/edit' && req.method === 'POST') {

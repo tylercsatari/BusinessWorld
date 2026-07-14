@@ -253,7 +253,7 @@ def main() -> None:
     complete = {
         "version": 4,
         "status": "running",
-        "stage": "all-span atlas complete; cross-scope validation next",
+        "stage": "all-span atlas complete; saved-map validation next",
         "scope": "all-contiguous-spans",
         "spanInstances": row_count,
         "boundarySupportedInstances": manifest["boundarySupportedInstances"],

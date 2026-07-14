@@ -9,7 +9,6 @@ from market_reward import (
     local_market_effects,
     score_market_vector,
 )
-from score_market_hook import score_hook as score_market_hook
 
 
 def tiny_model():
@@ -96,25 +95,6 @@ class MarketRewardTests(unittest.TestCase):
             - relation["withoutRightCoordinate"]
             + relation["withoutBothCoordinate"],
         )
-
-    def test_fast_training_scorer_keeps_relevance_separate(self):
-        class Store:
-            def embed_many(self, texts):
-                vectors = {
-                    "candidate": np.asarray([1.0, 0.0]),
-                    "different seed": np.asarray([0.0, 1.0]),
-                }
-                return {text: vectors[text] for text in texts}
-
-        result = score_market_hook(
-            "candidate", "different seed", minimum_relevance=0.5,
-            model=tiny_model(), store=Store(),
-        )
-        self.assertEqual(result["trainingReward"]["percentile"], 100.0)
-        self.assertIsNone(result["trainingReward"]["reward"])
-        self.assertFalse(result["topicalRelevance"]["passes"])
-        self.assertFalse(result["input"]["visualInputUsed"])
-
 
 if __name__ == "__main__":
     unittest.main()
