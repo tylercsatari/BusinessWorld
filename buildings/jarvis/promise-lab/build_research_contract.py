@@ -44,17 +44,17 @@ STATUS = {
     "6.2": ("partial", "Seed stability, nuisance concentration, cross-hook generality, and bootstrap diagnostics exist; complete split-half and cross-resolution lineage do not."),
     "6.3": ("implemented", "Numeric IDs, maps, members, medoids/exemplars, outcome colors, and confound explanations are inspectable without semantic ground-truth names."),
     "7": ("partial", "Published-title, full-hook, hook-relative, orthogonal-title, and no-anchor views exist; the exhaustive anchor-by-removal matrix is not complete."),
-    "8": ("partial", "A broad retention/deconfounding atlas exists, but not every dense parameter cell specified in Sections 8.1 through 8.7 has been materialized."),
-    "8.1": ("partial", "Absolute, duration-relative, hook-relative, component-relative, entry-indexed, terminal-conditioned, replay-corrected, and rank views exist; coverage is not yet exhaustive."),
+    "8": ("partial", "A broad retention/deconfounding atlas and measured 20-second component extension exist, but not every dense parameter cell specified in Sections 8.1 through 8.7 has been materialized."),
+    "8.1": ("partial", "Absolute, duration-relative, hook-relative, component-relative, entry-indexed, terminal-conditioned, replay-corrected, and rank views exist, including measured curves through 20 seconds; coverage is not yet exhaustive."),
     "8.2": ("partial", "Fixed-time, hook-end, response-end, carry, and component-boundary holds exist; every crossing threshold and dense ratio grid does not."),
     "8.3": ("implemented", "Raw, entry-indexed, replay sensitivity, endpoint sensitivity, expected, residual, robust, and lagged slopes are registered and visualized."),
     "8.4": ("partial", "Derivative, flattening, and change-point diagnostics exist, but the full smoothing-bandwidth grid is not complete."),
     "8.5": ("implemented", "Start excess, terminal relation, replay correction, entry indexing, sensitivity curves, and leakage audits are published."),
-    "8.6": ("partial", "Hook Hold, carry, AUC, and short-horizon persistence exist; the complete start/end payoff-horizon grid is pending."),
+    "8.6": ("partial", "Hook Hold, carry, AUC, and source-aligned component response through 20 seconds exist with 0-to-5-second forward lags and reverse controls; the complete start/end payoff-horizon grid is pending."),
     "8.7": ("partial", "PCA/curve and derivative representations exist; full DCT, wavelet, and joint multi-channel families remain."),
     "9": ("implemented", "Keep rate, retention, views, log views, and Long Quant diagnostics remain visible and are not called RTG truth."),
     "10": ("partial", "The deconfounding audit covers timing, entry, replay, terminal retention, duration, source, and quality channels; some semantic/exposure variables are unavailable."),
-    "10.1": ("implemented", "Hook duration, actual token count, speech rate, source, component timing/position, and video duration are available."),
+    "10.1": ("implemented", "Hook duration, actual token count, speech rate, source, component timing/position, and video duration are available; 20-second openings distinguish observed quantized starts, resolved collisions, and inferred ends."),
     "10.2": ("implemented", "Start level, early drop, replay area, keep/swipe rate, terminal retention, and correction sensitivity are available."),
     "10.3": ("partial", "Title/hook embeddings and cluster/topic diagnostics exist; visual-opening and broad channel-history controls are incomplete."),
     "10.4": ("partial", "Published date, views, age/outlier proxies, and creator identity exist; recommendation-distribution history is unavailable."),
@@ -119,7 +119,11 @@ def evidence_for(key: str) -> list[str]:
     if key.startswith("5") or key == "phase-2":
         return ["component-lattice.json", "component-lattice/<videoId>.json.gz", "component-lattice-model.json"]
     if key.startswith("8") or key.startswith("10") or key in {"11", "phase-1"}:
-        return ["hook-outcomes.json", "hook-outcome-model.json", "latency-study.json", "cluster-outcomes.json"]
+        return [
+            "hook-outcomes.json", "hook-outcome-model.json", "latency-study.json",
+            "cluster-outcomes.json", "opening-20s.json",
+            "opening-20s/<videoId>.json.gz", "opening-20s-model.json",
+        ]
     if key.startswith("6") or key == "phase-3":
         return ["all-span-atlas.json", "atlas.json", "manual-projection.json", "cross-scope.json"]
     if key.startswith("15") or key.startswith("16"):
@@ -149,6 +153,9 @@ def main() -> None:
     lattice_model = json.loads(
         (CACHE / "component-lattice-model.json").read_text(encoding="utf-8")
     )
+    opening_20s = json.loads(
+        (CACHE / "opening-20s.json").read_text(encoding="utf-8")
+    ) if (CACHE / "opening-20s.json").exists() else {}
     title_map = json.loads((CACHE / "raw-long-text" / "map.json").read_text(encoding="utf-8"))
     if (int(lattice.get("hookCount") or 0) != len(corpus.get("rows") or [])
             or not (lattice.get("parityContract") or {}).get("shared")
@@ -169,6 +176,9 @@ def main() -> None:
             "componentLatticeHooks": lattice.get("hookCount"),
             "componentSpanNodes": lattice.get("spanCount"),
             "componentGraphEdges": lattice.get("edgeCount"),
+            "opening20sVideos": opening_20s.get("sourceVideos", 0),
+            "opening20sComponents": opening_20s.get("componentCount", 0),
+            "opening20sSpans": opening_20s.get("spanCount", 0),
             "currentLongQuantTitleVectors": len(title_map.get("title") or []),
             "contractInitialLongQuantTitleVectors": 42599,
             "titleCorpusDriftVisible": len(title_map.get("title") or []) != 42599,

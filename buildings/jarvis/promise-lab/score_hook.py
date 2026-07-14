@@ -28,6 +28,7 @@ from hook_score_core import (
     category_log_probabilities,
     combined_component_features,
     component_response_windows,
+    decode_support_calibrated_chunks,
     decode_variable_chunks,
     enrich_word_semantics,
     estimated_token_timeline,
@@ -36,6 +37,7 @@ from hook_score_core import (
     local_counterfactual_texts,
     percentile,
     row_unit,
+    weighted_percentile,
 )
 from market_reward import local_market_effects, score_market_vector
 from sequence import all_spans, normalize_source, surface, tokenize, without_span
@@ -49,7 +51,8 @@ PARTITION_FILE = "canonical-partition-model.json"
 OUTCOME_MODEL_FILE = "hook-outcome-model.json"
 MARKET_MODEL_FILE = "market-reward-model.json"
 LATTICE_MODEL_FILE = "component-lattice-model.json"
-SCORER_VERSION = "deterministic-variable-hook-scorer-v13"
+OPENING_MODEL_FILE = "opening-20s-model.json"
+SCORER_VERSION = "deterministic-variable-hook-scorer-v14"
 
 
 def _decode_json(payload: bytes) -> dict:
@@ -153,7 +156,8 @@ def build_span_primitives(text: str, store: EmbeddingStore) -> dict:
     }
 
 
-def decode_partition(primitives: dict, partition_model: dict) -> dict:
+def decode_partition(primitives: dict, partition_model: dict,
+                     horizon_extension: dict | None = None) -> dict:
     category_values = apply_category_transform(
         primitives["raw"], partition_model["categoryTransform"],
     )
@@ -176,6 +180,15 @@ def decode_partition(primitives: dict, partition_model: dict) -> dict:
         logp, primitives["lexical"],
     )
     tokens = primitives["tokens"]
+    support_threshold = int(
+        (horizon_extension or {}).get("activationTokenThreshold") or 0
+    )
+    uncalibrated = decoded
+    if horizon_extension and len(tokens) > support_threshold:
+        decoded = decode_support_calibrated_chunks(
+            primitives["starts"], primitives["ends"], boundary_probability,
+            logp, primitives["lexical"], horizon_extension,
+        )
     owners = np.full(len(tokens), -1, int)
     chunks = []
     for index, chunk in enumerate(decoded["chunks"]):
@@ -249,7 +262,30 @@ def decode_partition(primitives: dict, partition_model: dict) -> dict:
             "score", "runnerUpScore", "scoreGap", "topTwoPosteriorProxy",
             "partitionsCompared", "objective", "complexityControl",
         )},
-        "scoreGapPercentile": percentile(gap_calibration, float(decoded["scoreGap"] or 0)),
+        "scoreGapPercentile": (
+            None if decoded.get("horizonCalibration") else
+            percentile(gap_calibration, float(decoded["scoreGap"] or 0))
+        ),
+        "scoreGapCalibrationEligible": not bool(decoded.get("horizonCalibration")),
+        "boundaryEvidenceMode": (
+            "support-calibrated long-horizon exact cover"
+            if decoded.get("horizonCalibration") else
+            "frozen serving ensemble over outcome-blind boundary evidence"
+        ),
+        "horizonCalibration": decoded.get("horizonCalibration"),
+        "countPrior": decoded.get("countPrior"),
+        "selectedCountBoundaryPosteriorProbability": decoded.get(
+            "selectedCountBoundaryPosteriorProbability"
+        ),
+        "selectedCountRenewalSensitivityProbability": decoded.get(
+            "selectedCountRenewalSensitivityProbability"
+        ),
+        "countSelectionPolicy": decoded.get("countSelectionPolicy"),
+        "maximumComponentTokens": decoded.get("maximumComponentTokens"),
+        "uncalibratedBoundaryOnlyComponentCount": (
+            int(uncalibrated["componentCount"])
+            if decoded.get("horizonCalibration") else None
+        ),
         "chunks": chunks,
         "componentCount": component_count,
         "boundaryProbabilities": boundary_probability.astype(float).tolist(),
@@ -428,6 +464,98 @@ def _score_forward_response(primitives: dict, partition: dict,
             "targetDefinition": standalone.get("targetDefinition"),
             "validation": standalone.get("validation"),
         },
+    }
+
+
+def _score_opening_20s_response(primitives: dict, partition_model: dict,
+                                model: dict | None) -> dict | None:
+    """Apply the longer-horizon component axes without fabricating a retention curve."""
+    if not model or model.get("status") not in {
+        "promoted", "exploratory-not-promoted", "complete",
+    }:
+        return None
+    promotion = model.get("promotion") or {}
+    promoted = bool(promotion.get("promoted"))
+    partition = decode_partition(
+        primitives, partition_model,
+        horizon_extension=model.get("partitionExtension"),
+    )
+    models = model.get("modelsByCategory") or {}
+    starts = np.asarray(primitives["starts"], int)
+    ends = np.asarray(primitives["ends"], int)
+    rows = []
+    for index, chunk in enumerate(partition["chunks"]):
+        matches = np.flatnonzero(
+            (starts == int(chunk["start"])) & (ends == int(chunk["end"]))
+        )
+        if len(matches) != 1:
+            raise RuntimeError("20-second response component is absent from the span tensor")
+        category = str(int(chunk["category"]))
+        category_model = models.get(category)
+        if not category_model:
+            raise RuntimeError(f"20-second response category model is missing: {category}")
+        span_index = int(matches[0])
+        feature = combined_component_features(
+            primitives["raw"][span_index:span_index + 1],
+            primitives["influence"][span_index:span_index + 1],
+        )[0]
+        coordinate = float(feature @ np.asarray(category_model["direction"], np.float32))
+        map_y = float(feature @ np.asarray(category_model["mapDirection"], np.float32))
+        exploratory_percentile = weighted_percentile(
+            np.asarray(category_model["trainingProjectionSorted"], float),
+            np.asarray(category_model.get("trainingProjectionWeights") or np.ones(
+                len(category_model["trainingProjectionSorted"])
+            ), float),
+            coordinate,
+        )
+        response = {
+            "index": index,
+            "nodeId": f"span:{int(chunk['start'])}:{int(chunk['end'])}",
+            "startToken": int(chunk["start"]),
+            "endToken": int(chunk["end"]),
+            "tokenCount": int(chunk["end"]) - int(chunk["start"]),
+            "text": chunk["text"],
+            "label": "20-second opening component response",
+            "category": int(category),
+            "axisCoordinate": coordinate,
+            "axisPercentile": exploratory_percentile if promoted else None,
+            "mapY": map_y,
+            "servingAxisCoordinateFullFit": coordinate,
+            "servingAxisPercentileFullFit": exploratory_percentile,
+            "exploratoryFullFitPercentile": exploratory_percentile,
+            "servingMapYFullFit": map_y,
+            "servingAxisEvaluationEligible": False,
+            "selectedLagSeconds": model.get("selectedLagSeconds"),
+            "metricId": model.get("selectedCandidate"),
+            "observedRetentionAvailable": False,
+            "absoluteRetentionForecastAvailable": False,
+            "claim": (
+                "exploratory frozen semantic coordinate only; held-out promotion gates did "
+                "not pass, and a typed opening has no measured retention curve"
+                if not promoted else
+                "promoted frozen semantic response coordinate; a typed opening has no "
+                "measured retention curve, so the scorer does not invent one"
+            ),
+            "validation": category_model.get("validation"),
+        }
+        rows.append(response)
+    return {
+        "status": "promoted" if promoted else "exploratory-not-promoted",
+        "promotion": promotion,
+        "analysisHorizonSeconds": model.get("analysisHorizonSeconds"),
+        "selectedLagSeconds": model.get("selectedLagSeconds"),
+        "selectedCandidate": model.get("selectedCandidate"),
+        "components": rows,
+        "partition": {
+            key: value for key, value in partition.items() if key != "owners"
+        },
+        "componentCount": len(rows),
+        "exactNonoverlappingCover": bool(
+            partition.get("coverage") == 1 and partition.get("overlapCount") == 0
+        ),
+        "absoluteRetentionForecastAvailable": False,
+        "servingContract": model.get("servingContract"),
+        "validation": model.get("validation"),
     }
 
 
@@ -981,12 +1109,18 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
                store: EmbeddingStore | None = None,
                outcome_model: dict | None = None,
                market_model: dict | None = None, lattice_model: dict | None = None,
+               opening_model: dict | None = None,
                idea_text: str = "") -> dict:
     model = model or load_artifact(MODEL_FILE)
     partition_model = partition_model or load_artifact(PARTITION_FILE)
     outcome_model = outcome_model or load_artifact(OUTCOME_MODEL_FILE)
     market_model = market_model or load_artifact(MARKET_MODEL_FILE)
     lattice_model = lattice_model or load_artifact(LATTICE_MODEL_FILE)
+    if opening_model is None:
+        try:
+            opening_model = load_artifact(OPENING_MODEL_FILE)
+        except Exception:
+            opening_model = None
     idea_text = normalize_source(idea_text)
     owned_store = store is None
     store = store or EmbeddingStore(_embedding_cache_path())
@@ -1125,6 +1259,9 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
 
     forward_response = _score_forward_response(
         primitives, partition, counter_vectors, components, interactions, model,
+    )
+    opening_20s_response = _score_opening_20s_response(
+        primitives, partition_model, opening_model,
     )
     outcomes = _score_outcomes(
         primitives, partition, components, outcome_model,
@@ -1306,6 +1443,7 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             ),
         },
         "forwardResponse": forward_response,
+        "opening20sResponse": opening_20s_response,
         "outcomes": outcomes,
         "componentLattice": component_lattice,
         "provenance": {
@@ -1319,6 +1457,8 @@ def score_text(text: str, model: dict | None = None, partition_model: dict | Non
             "examplesUsedForTraining": False,
             "componentAttribution": model["componentDefinition"],
             "forwardResponseDiagnosticsComputed": bool(forward_response),
+            "opening20sResponseDiagnosticsComputed": bool(opening_20s_response),
+            "opening20sAbsoluteRetentionFabricated": False,
             "forwardResponseLagAdoptedForWholeHook": bool(
                 outcome_model.get("responseLagSeconds")
             ),

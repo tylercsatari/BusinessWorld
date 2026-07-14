@@ -55,7 +55,20 @@ Stages:
    component and pair counterfactuals.
 16. `run_hook_examples.py`: deterministic evaluation of the supplied example
    problem, kept entirely out of training and model selection.
-17. `build_ui.py`: browser artifacts, cluster representatives, findings, the
+17. `run_opening_horizon.py`: the same exhaustive span lattice, frozen
+   four-category vocabulary, and variable-count exact-cover decoder applied to
+   every observed transcript word before 20.0 seconds. It stores the measured
+   0.0-20.0-second retention curve, resolves quantized equal word timestamps
+   into deterministic non-overlapping intervals, and fits component response
+   directions with source-held-out lag selection. Reverse-time controls reuse
+   the unchanged forward prediction on the same rows instead of fitting a new
+   reverse axis. The current response direction fails its promotion gate and is
+   published only as explicitly labeled exploratory geometry. It
+   does not forecast missing words or retention and does not redefine the
+   endpoint-calibrated Hook Hold score as a 20-second score. Source and R2
+   work use bounded queues; `--upload-only` republishes verified cached
+   details, summary, and model without rebuilding embeddings or refitting.
+18. `build_ui.py`: browser artifacts, cluster representatives, findings, the
    complete experiment registry, and the interactive Hook scorer.
 
 The deterministic diagnostic architecture is documented in
@@ -81,6 +94,11 @@ gates check exact character slices, complete variable-cover and local-deletion i
 normalization, crossed-design completeness, per-source artifacts, zero-error
 self-span controls, one predeclared-confound selection per target, and exact
 agreement among the axis registry, maps, out-of-fold rows, and direction tensors.
+`verify_opening_horizon.py` separately replays every 20-second detail and vector
+artifact, checks the 201-point measured horizon with zero forecast values,
+non-overlapping source-aligned timing, exact token ownership, all four frozen
+categories, six graph edge families, fold-safe response candidates, and aggregate
+agreement with the corpus summary.
 
 Every expensive stage is resumable. The exhaustive span store preallocates
 float16 primitive matrices and processes one hook at a time, so API volume does

@@ -9,7 +9,11 @@ from canonical_partition import (
     fit_category_model,
     structural_features,
 )
-from hook_score_core import decode_variable_chunks
+from hook_score_core import (
+    decode_support_calibrated_chunks,
+    decode_variable_chunks,
+    support_calibrated_count_prior,
+)
 
 
 def span_rows(token_count):
@@ -58,6 +62,35 @@ class CanonicalPartitionTests(unittest.TestCase):
         result = decode_variable_chunks(starts, ends, boundary, logp, lexical)
         for row in result["chunks"]:
             self.assertTrue(lexical[row["start"]:row["end"]].any())
+
+    def test_long_horizon_count_uses_marginal_boundary_posterior_with_support(self):
+        starts, ends = span_rows(12)
+        logp = np.log(np.full((len(starts), 4), .25, np.float32))
+        extension = {
+            "maximumObservedComponentTokens": 3,
+            "componentLengthDistribution": [
+                {"tokens": 3, "probability": 1.0},
+            ],
+            "method": "test renewal",
+            "activationTokenThreshold": 6,
+            "trainingSources": 20,
+            "trainingComponents": 40,
+            "sourceEqualLengthWeights": True,
+        }
+        prior = support_calibrated_count_prior(12, extension)
+        self.assertAlmostEqual(float(prior[4]), 1.0)
+        boundary = np.full(11, .01)
+        boundary[[2, 5, 8]] = .99
+        result = decode_support_calibrated_chunks(
+            starts, ends, boundary, logp, np.ones(12, bool), extension,
+        )
+        self.assertEqual(result["componentCount"], 4)
+        self.assertEqual(
+            [(row["start"], row["end"]) for row in result["chunks"]],
+            [(0, 3), (3, 6), (6, 9), (9, 12)],
+        )
+        self.assertFalse(result["boundarySelectionUsesCategories"])
+        self.assertFalse(result["boundarySelectionUsesOutcomes"])
 
     def test_category_probabilities_are_normalized(self):
         rng = np.random.default_rng(4)

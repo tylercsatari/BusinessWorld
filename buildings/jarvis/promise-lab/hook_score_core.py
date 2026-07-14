@@ -169,6 +169,20 @@ def percentile(sorted_values: np.ndarray, value: float) -> float:
     return float(100 * np.searchsorted(sorted_values, value, side="right") / max(1, len(sorted_values)))
 
 
+def weighted_percentile(sorted_values: np.ndarray, sorted_weights: np.ndarray,
+                        value: float) -> float:
+    """Weighted empirical CDF for source-equal calibration coordinates."""
+    values = np.asarray(sorted_values, float)
+    weights = np.asarray(sorted_weights, float)
+    if len(values) != len(weights) or not len(values) or weights.sum() <= 0:
+        raise ValueError("percentile values and weights must have equal nonzero support")
+    order = np.argsort(values, kind="mergesort")
+    values = values[order]
+    weights = weights[order]
+    finish = int(np.searchsorted(values, float(value), side="right"))
+    return float(100.0 * weights[:finish].sum() / weights.sum())
+
+
 def category_log_probabilities(values: np.ndarray, model: dict) -> np.ndarray:
     values = np.asarray(values, np.float64)
     columns = []
@@ -297,6 +311,235 @@ def decode_variable_chunks(starts: np.ndarray, ends: np.ndarray,
             "or tuned split penalty"
         ),
         "categoryAssignment": "maximum frozen-category posterior after boundaries are fixed",
+    }
+
+
+def support_calibrated_count_prior(token_count: int, extension: dict) -> np.ndarray:
+    """Condition the empirical component-length renewal process on exact coverage."""
+    n = int(token_count)
+    probabilities = np.zeros(n + 1, np.float64)
+    for row in extension.get("componentLengthDistribution") or []:
+        length = int(row["tokens"])
+        if 1 <= length <= n:
+            probabilities[length] = float(row["probability"])
+    total = float(probabilities.sum())
+    if total <= EPS:
+        raise ValueError("the horizon extension has no supported component lengths")
+    probabilities /= total
+    renewal = np.zeros((n + 1, n + 1), np.float64)
+    renewal[0, 0] = 1.0
+    supported_lengths = np.flatnonzero(probabilities > 0)
+    for count in range(1, n + 1):
+        for length in supported_lengths:
+            if length > n:
+                continue
+            renewal[count, length:] += (
+                renewal[count - 1, :n + 1 - length] * probabilities[length]
+            )
+    mass = renewal[:, n]
+    mass_sum = float(mass.sum())
+    if mass_sum <= EPS:
+        raise ValueError(f"the learned component-length process cannot cover {n} tokens")
+    return (mass / mass_sum).astype(np.float64)
+
+
+def decode_support_calibrated_chunks(starts: np.ndarray, ends: np.ndarray,
+                                     boundary_probability: np.ndarray,
+                                     category_logp: np.ndarray,
+                                     lexical_tokens: np.ndarray,
+                                     extension: dict) -> dict:
+    """Extend the exact-cover decoder beyond training length without a chosen k.
+
+    The learned cut/non-cut likelihood is marginalized across every valid cover
+    to select a component count. Within that count, the original boundary
+    likelihood ranks covers unchanged. The empirical component-length renewal
+    distribution is reported only as a sensitivity comparison.
+    """
+    starts = np.asarray(starts, int)
+    ends = np.asarray(ends, int)
+    boundary_probability = np.asarray(boundary_probability, float)
+    category_logp = np.asarray(category_logp, float)
+    lexical_tokens = np.asarray(lexical_tokens, bool)
+    if not (len(starts) == len(ends) == len(category_logp)):
+        raise ValueError("support-calibrated exact-cover inputs do not have matching rows")
+    token_count = int(ends.max())
+    if len(lexical_tokens) != token_count:
+        raise ValueError("lexical token mask does not match the opening")
+    if len(boundary_probability) != max(0, token_count - 1):
+        raise ValueError("boundary probabilities must contain one row per token gap")
+    maximum_span = int(extension.get("maximumObservedComponentTokens") or 0)
+    if maximum_span < 1:
+        raise ValueError("the horizon extension has no measured component-length support")
+
+    try:
+        renewal_sensitivity = support_calibrated_count_prior(token_count, extension)
+    except ValueError:
+        renewal_sensitivity = np.zeros(token_count + 1, np.float64)
+    lexical_prefix = np.concatenate([[0], np.cumsum(lexical_tokens.astype(int))])
+    lookup = {
+        (int(start), int(end)): index
+        for index, (start, end) in enumerate(zip(starts, ends))
+    }
+    clipped = np.clip(boundary_probability, EPS, 1 - EPS)
+    selected_log = np.log(clipped)
+    rejected_log = np.log1p(-clipped)
+    rejected_prefix = np.concatenate([[0.0], np.cumsum(rejected_log)])
+
+    best: dict[tuple[int, int], list[tuple[float, tuple[int, ...]]]] = {
+        (0, 0): [(0.0, ())],
+    }
+    boundary_log_mass: dict[tuple[int, int], float] = {(0, 0): 0.0}
+    partition_counts: dict[tuple[int, int], int] = {(0, 0): 1}
+    for position in range(token_count):
+        for count in range(position + 1):
+            state = (position, count)
+            current = best.get(state)
+            if not current:
+                continue
+            for finish in range(
+                position + 1, min(token_count, position + maximum_span) + 1,
+            ):
+                if lexical_prefix[finish] - lexical_prefix[position] <= 0:
+                    continue
+                span_index = lookup[(position, finish)]
+                increment = float(
+                    rejected_prefix[finish - 1] - rejected_prefix[position]
+                )
+                if finish < token_count:
+                    increment += float(selected_log[finish - 1])
+                target = (finish, count + 1)
+                candidates = best.setdefault(target, [])
+                candidates.extend(
+                    (score + increment, selected + (span_index,))
+                    for score, selected in current
+                )
+                unique = {}
+                for score, selected in candidates:
+                    if selected not in unique or score > unique[selected]:
+                        unique[selected] = score
+                best[target] = sorted(
+                    ((score, selected) for selected, score in unique.items()),
+                    key=lambda row: (-row[0], row[1]),
+                )[:2]
+                source_boundary_mass = boundary_log_mass[state] + increment
+                boundary_log_mass[target] = float(np.logaddexp(
+                    boundary_log_mass.get(target, -np.inf), source_boundary_mass,
+                ))
+                partition_counts[target] = (
+                    partition_counts.get(target, 0) + partition_counts[state]
+                )
+
+    supported_counts = []
+    for count in range(1, token_count + 1):
+        state = (token_count, count)
+        paths = best.get(state) or []
+        if not paths or not np.isfinite(boundary_log_mass.get(state, np.nan)):
+            continue
+        supported_counts.append(count)
+    if not supported_counts:
+        raise ValueError("no support-calibrated lexical exact cover exists")
+    count_log_normalizer = float(np.logaddexp.reduce([
+        boundary_log_mass[(token_count, count)] for count in supported_counts
+    ]))
+    boundary_count_posterior = {
+        count: float(math.exp(
+            boundary_log_mass[(token_count, count)] - count_log_normalizer
+        ))
+        for count in supported_counts
+    }
+    count_rows = [{
+        "componentCount": count,
+        "boundaryCountPosteriorProbability": boundary_count_posterior[count],
+        "renewalSensitivityProbability": float(renewal_sensitivity[count]),
+        "validBoundaryLogMass": float(boundary_log_mass[(token_count, count)]),
+        "validPartitions": int(partition_counts[(token_count, count)]),
+    } for count in supported_counts]
+    selected_count = max(
+        supported_counts, key=lambda count: (boundary_count_posterior[count], -count),
+    )
+    selected_state = (token_count, selected_count)
+    conditional_normalizer = float(boundary_log_mass[selected_state])
+    finalists = [
+        (
+            float(
+                boundary_score - conditional_normalizer
+                + math.log(boundary_count_posterior[selected_count])
+            ),
+            boundary_score, selected, selected_count,
+        )
+        for boundary_score, selected in (best[selected_state] or [])
+    ]
+    finalists.sort(key=lambda row: (-row[0], row[2]))
+    best_score, best_boundary_score, best_indices, _ = finalists[0]
+    second = finalists[1] if len(finalists) > 1 else None
+    chunks = []
+    for span_index in best_indices:
+        chunks.append({
+            "spanIndex": int(span_index),
+            "start": int(starts[span_index]),
+            "end": int(ends[span_index]),
+            "category": int(np.argmax(category_logp[span_index])),
+            "leftBoundaryProbability": (
+                float(boundary_probability[int(starts[span_index]) - 1])
+                if int(starts[span_index]) > 0 else None
+            ),
+            "rightBoundaryProbability": (
+                float(boundary_probability[int(ends[span_index]) - 1])
+                if int(ends[span_index]) < token_count else None
+            ),
+        })
+    return {
+        "score": float(best_score),
+        "boundaryLogLikelihood": float(best_boundary_score),
+        "runnerUpScore": float(second[0]) if second else None,
+        "scoreGap": float(best_score - second[0]) if second else None,
+        "topTwoPosteriorProxy": (
+            float(1 / (1 + math.exp(-min(50, best_score - second[0]))))
+            if second else 1.0
+        ),
+        "chunks": chunks,
+        "componentCount": len(chunks),
+        "partitionsCompared": int(sum(
+            partition_counts.get((token_count, count), 0)
+            for count in range(1, token_count + 1)
+        )),
+        "boundarySelectionUsesCategories": False,
+        "boundarySelectionUsesOutcomes": False,
+        "componentCountConstraint": None,
+        "maximumComponentTokens": maximum_span,
+        "maximumComponentTokensSource": "largest measured canonical training component",
+        "selectedCountBoundaryPosteriorProbability": float(
+            boundary_count_posterior[selected_count]
+        ),
+        "selectedCountRenewalSensitivityProbability": float(
+            renewal_sensitivity[selected_count]
+        ),
+        "countSelectionPolicy": (
+            "posterior mode of the marginalized learned cut/non-cut likelihood first; "
+            "maximum original boundary likelihood conditional on that count second"
+        ),
+        "countPrior": count_rows,
+        "objective": (
+            "marginalize learned cut/non-cut likelihood over every valid cover to select "
+            "component count, then select the maximum-likelihood cover within that count"
+        ),
+        "complexityControl": (
+            "no chosen component count, duration window, or split penalty; count comes from "
+            "the learned boundary posterior and maximum span support comes from measured "
+            "canonical components"
+        ),
+        "categoryAssignment": "maximum frozen-category posterior after boundaries are fixed",
+        "horizonCalibration": {
+            "status": "training-support-calibrated",
+            "method": extension.get("method"),
+            "activationTokenThreshold": extension.get("activationTokenThreshold"),
+            "trainingSources": extension.get("trainingSources"),
+            "trainingComponents": extension.get("trainingComponents"),
+            "sourceEqualLengthWeights": extension.get("sourceEqualLengthWeights"),
+            "boundaryCountValidation": extension.get("boundaryCountValidation"),
+            "outcomesUsed": False,
+            "categoriesUsedToChooseBoundaries": False,
+        },
     }
 
 

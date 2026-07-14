@@ -368,10 +368,22 @@ validated causal effects.
 - The manual probe conditions downstream category interpretation.
 - Gemini embedding geometry may encode topic, wording, and production era together.
 - Component response is weak and unstable after conservative partitioning.
-- The available exact timing records end with the extracted hooks; none reaches
-  22 seconds. The current model therefore emits nothing after each analyzed hook
-  endpoint. Extending the same algorithm requires transcript and timing data for
-  the additional words first.
+- The opening extension now uses every transcript word whose observed, quantized
+  source start is before 20.0 seconds. Equal-start collisions are resolved
+  deterministically inside the next distinct timestamp interval and word ends
+  are inferred, so this is source-aligned timing rather than exact word-boundary
+  timing. Retention through 20 seconds is interpolated from each measured source
+  curve; no value beyond 20 seconds is emitted. The original endpoint-calibrated
+  Hook Hold score is not relabeled as a 20-second score: the extension reports a
+  separate source-grouped component-response diagnostic and marks semantic
+  lengths outside the measured hook range as extrapolations. Reverse controls
+  hold the nested forward semantic prediction fixed, use the same component
+  support, and place every trajectory feature before the earlier reverse
+  response window. The response axis remains withheld: its selection-adjusted
+  interval crosses zero, category directions are not uniformly positive, and
+  the complete outcome-blind representation has not been refit inside outer
+  folds or replicated on later videos. Full-fit percentiles are therefore shown
+  only as exploratory geometry, never as validated scores.
 - Percentiles are ranks against this 208-hook corpus, not calibrated probabilities.
 - Market Hold percentiles are ranks against 5,353 external transcript scores, not
   probabilities. The direction can still encode topic, channel style, language,

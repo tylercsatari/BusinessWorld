@@ -10,8 +10,10 @@ from forward_response import (
     combined_component_features,
     crossfit_category_axis,
     interaction_features,
+    nested_select_candidate,
     response_candidates,
     source_equal_weights,
+    weighted_spearman,
 )
 
 
@@ -130,6 +132,42 @@ class ForwardResponseTests(unittest.TestCase):
         ))
         weights = source_equal_weights(np.asarray(["a", "b", "b", "b"]))
         self.assertAlmostEqual(float(weights[:1].sum()), float(weights[1:].sum()))
+
+    def test_source_duplication_does_not_move_weighted_rank_correlation(self):
+        base = weighted_spearman(
+            np.asarray([0.0, 1.0, 2.0]), np.asarray([0.0, 1.0, 2.0]),
+            np.asarray(["a", "b", "c"]),
+        )
+        duplicated = weighted_spearman(
+            np.asarray([0.0, 1.0, 1.0, 1.0, 2.0]),
+            np.asarray([0.0, 1.0, 1.0, 1.0, 2.0]),
+            np.asarray(["a", "b", "b", "b", "c"]),
+        )
+        self.assertAlmostEqual(base, duplicated, places=7)
+
+    def test_nested_selection_returns_row_level_heldout_provenance(self):
+        rng = np.random.default_rng(31)
+        groups = np.repeat(np.arange(80).astype(str), 4)
+        categories = np.tile(np.arange(4), 80)
+        features = rng.normal(size=(len(groups), 24)).astype(np.float32)
+        signal = features[:, 0] + rng.normal(scale=.1, size=len(groups))
+        targets = {
+            "lag_0": signal,
+            "lag_1": rng.normal(size=len(groups)),
+        }
+        naturals = {
+            key: rng.normal(size=(len(groups), 4)).astype(np.float32)
+            for key in targets
+        }
+        result = nested_select_candidate(
+            features, targets, naturals, groups, categories,
+            folds=4, inner_folds=3, shared_natural_baseline=True,
+        )
+        evaluated = np.isfinite(result["prediction"] + result["targetResidual"])
+        self.assertTrue(evaluated.any())
+        self.assertTrue(np.all(result["foldIndex"][evaluated] >= 0))
+        self.assertTrue(np.all(result["selectedCandidateByRow"][evaluated] != ""))
+        self.assertTrue(np.isfinite(result["naturalBaselinePrediction"][evaluated]).all())
 
 
 if __name__ == "__main__":

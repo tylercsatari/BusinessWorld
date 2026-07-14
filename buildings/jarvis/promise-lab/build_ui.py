@@ -296,6 +296,7 @@ def main() -> None:
     atlas = load_json("atlas.json", {})
     all_span_atlas = load_json("all-span-atlas.json", {})
     component_lattice = load_json("component-lattice.json", {})
+    opening_20s = load_json("opening-20s.json", {})
     research_contract = load_json("research-contract.json", {})
     cross_scope = load_json("cross-scope.json", {})
     for name, value in (("atlas.json", atlas), ("all-span-atlas.json", all_span_atlas)):
@@ -530,6 +531,20 @@ def main() -> None:
         visualization_errors.append("component lattice does not cover every measured hook")
     if not (component_lattice.get("parityContract") or {}).get("shared"):
         visualization_errors.append("corpus and predictor do not share one component-lattice builder")
+    if opening_20s and int(opening_20s.get("sourceVideos") or 0) != len(hook_rows):
+        visualization_errors.append("20-second opening analysis does not cover every measured video")
+    if opening_20s and int(
+        opening_20s.get("sourceVideosWithObservedWordStartTimestamps") or 0
+    ) != len(hook_rows):
+        visualization_errors.append(
+            "one or more 20-second openings lack observed transcript word-start timestamps"
+        )
+    if opening_20s and int(
+        opening_20s.get("sourceVideosWithNonoverlappingResolvedIntervals") or 0
+    ) != len(hook_rows):
+        visualization_errors.append(
+            "one or more 20-second openings have overlapping resolved transcript intervals"
+        )
     if len(research_contract.get("rows") or []) != 66:
         visualization_errors.append("frozen research contract does not expose all 66 sections")
     visualization_contract = {
@@ -609,6 +624,21 @@ def main() -> None:
                 "view": "Component lattice / Hook scorer / Hook library",
             },
             {
+                "id": "opening-20s", "label": "Measured 20-second opening analysis",
+                "outputs": int(opening_20s.get("componentCount") or 0),
+                "graphs": (
+                    int(opening_20s.get("sourceVideos") or 0)
+                    * (len(component_lattice.get("mapDefinitions") or {}) + 3)
+                    + int(bool((opening_20s.get("response") or {}).get("forwardCandidates")))
+                ),
+                "visibleAs": (
+                    "source transcript with observed quantized start timestamps, visible collision "
+                    "resolution, inferred ends, full multi-resolution lattice, four-category exact "
+                    "cover, measured retention, normalization families, and forward-lag response"
+                ),
+                "view": "20s openings",
+            },
+            {
                 "id": "research-contract", "label": "Frozen research-program implementation ledger",
                 "outputs": len(research_contract.get("rows") or []),
                 "graphs": 1,
@@ -632,6 +662,9 @@ def main() -> None:
             "componentLatticeHooks": int(component_lattice.get("hookCount") or 0),
             "componentLatticeSpans": int(component_lattice.get("spanCount") or 0),
             "componentGraphEdges": int(component_lattice.get("edgeCount") or 0),
+            "opening20sVideos": int(opening_20s.get("sourceVideos") or 0),
+            "opening20sComponents": int(opening_20s.get("componentCount") or 0),
+            "opening20sSpans": int(opening_20s.get("spanCount") or 0),
             "researchContractSections": len(research_contract.get("rows") or []),
         },
     }
@@ -962,6 +995,9 @@ def main() -> None:
             "componentLatticeHooks": component_lattice.get("hookCount", 0),
             "componentLatticeSpans": component_lattice.get("spanCount", 0),
             "componentGraphEdges": component_lattice.get("edgeCount", 0),
+            "opening20sVideos": opening_20s.get("sourceVideos", 0),
+            "opening20sComponents": opening_20s.get("componentCount", 0),
+            "opening20sSpans": opening_20s.get("spanCount", 0),
             "researchContractHeadings": len(research_contract.get("rows") or []),
             "crossScopeExperiments": len(cross_scope_registry),
             "swapRows": swaps.get("swapRows", 0),
@@ -1041,6 +1077,14 @@ def main() -> None:
                 "reverse-time windows are controls, exact-cover boundaries stay frozen, and "
                 "expanding-window validation reruns lag selection using past videos only"
             ),
+            "opening20sSeparated": (
+                "the same outcome-blind variable exact cover, frozen four-category vocabulary, "
+                "multi-resolution lattice, and structural graph are applied to source transcript "
+                "words through 20 seconds; source timestamps are observed but quantized, equal-start "
+                "collisions are resolved within the next distinct interval, and absent ends are "
+                "inferred; entry-indexed retention is primary, terminal-conditioned "
+                "normalizations are retrospective, and lag selection is nested by source video"
+            ),
             "hookOutcomesSeparated": (
                 "whole-hook and category-specific component outcome axes use frozen boundaries, "
                 "source-grouped out-of-fold validation, explicit uncertainty, and separate statuses"
@@ -1057,6 +1101,7 @@ def main() -> None:
             "atlas": "/api/longquant/promise-lab/atlas",
             "allSpanAtlas": "/api/longquant/promise-lab/all-span-atlas",
             "componentLattice": "/api/longquant/promise-lab/component-lattice",
+            "opening20s": "/api/longquant/promise-lab/opening-20s",
             "researchContract": "/api/longquant/promise-lab/research-contract",
             "manualProbe": "/api/longquant/promise-lab/manual-probe",
             "manualProjection": "/api/longquant/promise-lab/manual-projection",
@@ -1115,6 +1160,7 @@ def main() -> None:
         ("atlas.json", "atlas.json.gz"),
         ("all-span-atlas.json", "all-span-atlas.json.gz"),
         ("component-lattice.json", "component-lattice.json.gz"),
+        ("opening-20s.json", "opening-20s.json.gz"),
         ("research-contract.json", "research-contract.json.gz"),
         ("manual-probe.json", "manual-probe.json.gz"),
         ("manual-projection.json", "manual-projection.json.gz"),
@@ -1137,6 +1183,7 @@ def main() -> None:
         "canonical-partition-model.json", "hook-quality-model.json",
         "forward-response-model.json", "hook-outcome-model.json",
         "market-reward-model.json", "component-lattice-model.json",
+        "opening-20s-model.json",
     ):
         value = load_json(local_name)
         if value is not None:

@@ -3816,6 +3816,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         atlas: 'atlas.json.gz',
         'all-span-atlas': 'all-span-atlas.json.gz',
         'component-lattice': 'component-lattice.json.gz',
+        'opening-20s': 'opening-20s.json.gz',
         'research-contract': 'research-contract.json.gz',
         'manual-probe': 'manual-probe.json.gz',
         'manual-projection': 'manual-projection.json.gz',
@@ -3832,11 +3833,19 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         axes: 'axes.json.gz',
         registry: 'registry.json.gz',
     };
-    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|component-lattice|research-contract|manual-probe|manual-projection|cluster-outcomes|latency-study|canonical-partitions|hook-quality|forward-response|hook-outcomes|market-reward|hook-example-results|cross-scope|swaps|axes|registry)$/);
+    const promiseArtifact = pathname.match(/^\/api\/longquant\/promise-lab\/(findings|corpus|discovery|atlas|all-span-atlas|component-lattice|opening-20s|research-contract|manual-probe|manual-projection|cluster-outcomes|latency-study|canonical-partitions|hook-quality|forward-response|hook-outcomes|market-reward|hook-example-results|cross-scope|swaps|axes|registry)$/);
     if (promiseArtifact && req.method === 'GET') {
-        const cacheControl = ['component-lattice', 'research-contract'].includes(promiseArtifact[1])
+        const cacheControl = ['component-lattice', 'opening-20s', 'research-contract'].includes(promiseArtifact[1])
             ? 'private, no-cache'
             : undefined;
+        if (promiseArtifact[1] === 'opening-20s') {
+            const local = path.join(DIR, 'buildings', 'jarvis', 'promise-lab', '.cache', 'opening-20s.json');
+            if (fs.existsSync(local)) {
+                res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-cache' });
+                fs.createReadStream(local).pipe(res);
+                return;
+            }
+        }
         const ok = await serveR2GzipJsonStream(res,
             `longform/promise-lab-v4/${promiseArtifacts[promiseArtifact[1]]}`, cacheControl);
         if (!ok) {
@@ -3891,6 +3900,28 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         if (!ok) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end('{"error":"component lattice artifact is not built"}');
+        }
+        return;
+    }
+    const promiseOpening20s = pathname.match(/^\/api\/longquant\/promise-lab\/opening-20s\/([\w-]+)$/);
+    if (promiseOpening20s && req.method === 'GET') {
+        const local = path.join(DIR, 'buildings', 'jarvis', 'promise-lab', '.cache', 'opening-20s', `${promiseOpening20s[1]}.json.gz`);
+        if (fs.existsSync(local)) {
+            res.writeHead(200, {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Content-Encoding': 'gzip',
+                'Cache-Control': 'private, max-age=300',
+                'Vary': 'Accept-Encoding',
+            });
+            fs.createReadStream(local).pipe(res);
+            return;
+        }
+        const ok = await serveR2GzipJsonStream(res,
+            `longform/promise-lab-v4/opening-20s/${promiseOpening20s[1]}.json.gz`,
+            'private, max-age=300');
+        if (!ok) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end('{"error":"20-second opening artifact is not built"}');
         }
         return;
     }

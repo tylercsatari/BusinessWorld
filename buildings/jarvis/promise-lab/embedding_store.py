@@ -8,6 +8,7 @@ import io
 import json
 import math
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -23,6 +24,64 @@ MODEL = "gemini-embedding-2"
 DIMENSIONS = 1536
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
 R2_PREFIX = "longform/promise-lab-v4"
+
+_EMBED_RATE_LOCK = threading.Lock()
+_EMBED_NEXT_SLOT = 0.0
+_EMBED_BLOCKED_UNTIL = 0.0
+
+
+def _duration_seconds(value) -> float | None:
+    match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*([sm]?)", str(value or ""), re.I)
+    if not match:
+        return None
+    amount = float(match.group(1))
+    return amount * (60.0 if match.group(2).lower() == "m" else 1.0)
+
+
+def _retry_delay_seconds(response, attempt: int) -> float:
+    header = _duration_seconds((getattr(response, "headers", {}) or {}).get("retry-after"))
+    if header is not None:
+        return max(0.25, header)
+    try:
+        payload = response.json()
+    except Exception:
+        payload = {}
+    details = ((payload.get("error") or {}).get("details") or []) if isinstance(payload, dict) else []
+    for detail in details:
+        if isinstance(detail, dict) and detail.get("retryDelay") is not None:
+            parsed = _duration_seconds(detail.get("retryDelay"))
+            if parsed is not None:
+                return max(0.25, parsed)
+    message = str(((payload.get("error") or {}).get("message") or "") if isinstance(payload, dict) else "")
+    match = re.search(r"retry\s+in\s+([0-9]+(?:\.[0-9]+)?)\s*s", message, re.I)
+    if match:
+        return max(0.25, float(match.group(1)))
+    return min(60.0, 1.5 * (2 ** max(0, int(attempt))))
+
+
+def _wait_for_embedding_quota(request_count: int) -> None:
+    """Serialize content requests below the project RPM instead of bursting into 429s."""
+    global _EMBED_NEXT_SLOT
+    rpm = max(1.0, float(os.environ.get("PROMISE_LAB_EMBED_RPM", "4500")))
+    spacing = 60.0 * max(1, int(request_count)) / rpm
+    while True:
+        with _EMBED_RATE_LOCK:
+            now = time.monotonic()
+            ready = max(_EMBED_NEXT_SLOT, _EMBED_BLOCKED_UNTIL)
+            if now >= ready:
+                _EMBED_NEXT_SLOT = now + spacing
+                return
+            wait = ready - now
+        time.sleep(wait)
+
+
+def _defer_embedding_quota(seconds: float) -> None:
+    global _EMBED_BLOCKED_UNTIL
+    with _EMBED_RATE_LOCK:
+        _EMBED_BLOCKED_UNTIL = max(
+            _EMBED_BLOCKED_UNTIL,
+            time.monotonic() + max(0.25, float(seconds)),
+        )
 
 
 def json_ready(value):
@@ -140,7 +199,9 @@ class EmbeddingStore:
             ]
         }
         last_error = ""
-        for attempt in range(8):
+        attempts = max(8, int(os.environ.get("PROMISE_LAB_EMBED_RETRIES", "48")))
+        for attempt in range(attempts):
+            _wait_for_embedding_quota(len(texts))
             try:
                 response = requests.post(
                     url,
@@ -157,9 +218,14 @@ class EmbeddingStore:
                 last_error = f"HTTP {response.status_code}: {response.text[:300]}"
                 if response.status_code not in (408, 429, 500, 502, 503, 504):
                     break
+                delay = _retry_delay_seconds(response, attempt)
+                if response.status_code == 429:
+                    _defer_embedding_quota(delay + 1.0)
+                    continue
             except Exception as exc:
                 last_error = str(exc)
-            time.sleep(min(30.0, 1.5 * (2 ** attempt)))
+                delay = min(60.0, 1.5 * (2 ** attempt))
+            time.sleep(delay)
         raise RuntimeError(f"Gemini batch embedding failed: {last_error}")
 
     def _save(self, texts: list[str], vectors: list[np.ndarray]) -> None:

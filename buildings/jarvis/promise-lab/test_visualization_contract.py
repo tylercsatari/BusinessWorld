@@ -91,7 +91,7 @@ class VisualizationContractTests(unittest.TestCase):
             "long-title-transfer", "retention-forecast", "word-semantics",
             "component-planes", "relationship-matrices", "legacy-outcome-axes",
             "multi-resolution-lattice", "attention-relational-graph",
-            "research-contract",
+            "opening-20s", "research-contract",
         }
         channels = self.findings["visualizationContract"]["channels"]
         self.assertEqual({row["id"] for row in channels}, expected_channels)
@@ -117,17 +117,36 @@ class VisualizationContractTests(unittest.TestCase):
             'data-pl-canvas="lattice-embedding"',
             'data-pl-canvas="lattice-spans"',
             'data-pl-canvas="lattice-graph"',
+            'data-pl-canvas="opening20s-retention"',
+            'data-pl-canvas="opening20s-lag"',
+            'data-pl-opening20s-component-measurements',
+            'opening20sDetailCache',
+            'data-pl-auxiliary-node',
+            'data-pl-reveal-inspector',
+            'plInterpolationPoints',
+            'nativeObservedTimesSeconds || []).length',
+            'EXPLORATORY RESPONSE AXIS WITHHELD',
             'class="pl-lattice-controls"',
             'SCORED EXACT COVER',
             'partition.canonicalComponentNodeIds',
             "kind === 'lattice-embedding'",
             "kind === 'lattice-spans'",
             "kind === 'lattice-graph'",
+            "kind === 'opening20s-retention'",
+            "kind === 'opening20s-lag'",
             'latticeEdgeMeasurement(edge)',
             "renderStoredLattice(row)",
-            "renderLatticeSurface(result.componentLattice, 'typed live predictor')",
+            "function opening20sScorerLattice(result)",
+            "state.hookScoreOpeningLattice || result.componentLattice",
+            "typed 20-second response cover",
+            "observed start timestamps",
+            "timestampCollisionGroups",
+            "sourceStartTimestampSeconds",
+            "resolvedIntervalsNonoverlapping",
+            "canonicalComponentNodeIds: [...canonicalIds]",
             "lattice: renderLattice",
             "contract: renderResearchContract",
+            "opening20s: renderOpening20s",
             "['multi-resolution-lattice', 'attention-relational-graph'].includes(row.id) ? 'lattice'",
             "row.id === 'research-contract' ? 'contract'",
             'data-pl-research-contract-table',
@@ -137,6 +156,7 @@ class VisualizationContractTests(unittest.TestCase):
         for marker in required_ui_markers:
             self.assertIn(marker, self.ui)
         self.assertNotIn("Retention-curve error by second", self.ui)
+        self.assertNotIn("response.selectedLagSeconds || 0", self.ui)
         emitted = set(re.findall(r'data-pl-canvas="([^"]+)"', self.ui))
         handled = set(re.findall(r"kind === '([^']+)'", self.ui))
         self.assertEqual(emitted - handled, set(),

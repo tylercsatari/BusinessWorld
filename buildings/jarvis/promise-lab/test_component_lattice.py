@@ -219,6 +219,24 @@ class ComponentLatticeTest(unittest.TestCase):
         self.assertEqual(timing[3]["spokenStartSeconds"], 0.9)
         self.assertEqual(timing[3]["spokenEndSeconds"], 0.9)
 
+    def test_source_aligned_inferred_intervals_are_not_called_exact(self):
+        tokens = tokenize("alpha beta")
+        words = [
+            {"tokenIndex": 0, "text": "alpha", "spokenStartSeconds": 0.1,
+             "spokenEndSeconds": 0.4, "sourceStartTimestampSeconds": 0.1},
+            {"tokenIndex": 1, "text": "beta", "spokenStartSeconds": 0.4,
+             "spokenEndSeconds": 0.8, "sourceStartTimestampSeconds": 0.4},
+        ]
+        timing, contract = exact_or_estimated_timing(
+            tokens, words,
+            timing_policy="observed quantized starts with inferred word ends",
+        )
+        self.assertFalse(contract["exact"])
+        self.assertTrue(contract["sourceAlignmentExact"])
+        self.assertTrue(contract["wordIntervalsInferred"])
+        self.assertEqual(contract["source"], "source-aligned-inferred-intervals")
+        self.assertEqual(timing[0]["sourceStartTimestampSeconds"], 0.1)
+
     def test_missing_spoken_token_forces_estimated_timing(self):
         tokens = tokenize("alpha beta")
         timing, contract = exact_or_estimated_timing(

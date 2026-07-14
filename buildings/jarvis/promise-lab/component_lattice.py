@@ -138,25 +138,47 @@ def exact_or_estimated_timing(tokens: list, words: list[dict] | None = None,
         token["index"] for token in token_rows
         if any(character.isalnum() or character == "_" for character in token["text"])
     ]
-    policy_is_exact = str(timing_policy or "").lower() not in {
+    policy_text = str(timing_policy or "").lower()
+    policy_uses_source_timing = policy_text not in {
         "library-average speaking rate", "estimated", "corpus-mean-speaking-rate",
     }
-    exact = policy_is_exact and all(index in supplied for index in lexical_indices)
-    if exact:
-        exact = all(
+    source_aligned = policy_uses_source_timing and all(
+        index in supplied for index in lexical_indices
+    )
+    if source_aligned:
+        source_aligned = all(
             str(supplied[index].get("text") or "").casefold()
             == str(token_rows[index]["text"]).casefold()
             for index in lexical_indices
         )
+    inferred_intervals = source_aligned and any(
+        marker in policy_text for marker in ("quantized", "inferred", "resolved")
+    )
+    timing_exact = source_aligned and not inferred_intervals
+    timing_source = (
+        "source-aligned-inferred-intervals"
+        if source_aligned and inferred_intervals else
+        "exact-caption-alignment"
+        if source_aligned else
+        "corpus-mean-speaking-rate"
+    )
     output = []
     lexical_seen = 0
     for token in token_rows:
         index = token["index"]
-        if exact and index in supplied:
+        provenance = {}
+        if source_aligned and index in supplied:
             source = supplied[index]
             start = float(source.get("spokenStartSeconds") or 0)
             end = float(source.get("spokenEndSeconds") or start)
-        elif exact:
+            provenance = {
+                key: source[key] for key in (
+                    "sourceWordIndex", "sourceWord", "sourceStartTimestampSeconds",
+                    "resolvedSourceWordStartSeconds", "resolvedSourceWordEndSeconds",
+                    "startResolution", "timestampCollisionGroupSize",
+                ) if key in source
+            }
+        elif source_aligned:
             previous = next((
                 supplied[candidate] for candidate in range(index - 1, -1, -1)
                 if candidate in supplied
@@ -178,16 +200,19 @@ def exact_or_estimated_timing(tokens: list, words: list[dict] | None = None,
             end = lexical_seen / max(words_per_second, EPS)
         output.append({
             **token, "spokenStartSeconds": start, "spokenEndSeconds": end,
-            "timingSource": "exact-caption-alignment" if exact else "corpus-mean-speaking-rate",
+            "timingSource": timing_source, **provenance,
         })
     return output, {
-        "source": "exact-caption-alignment" if exact else "corpus-mean-speaking-rate",
-        "exact": exact,
-        "wordsPerSecond": None if exact else float(words_per_second),
+        "source": timing_source,
+        "exact": timing_exact,
+        "sourceAlignmentExact": source_aligned,
+        "wordIntervalsInferred": inferred_intervals,
+        "wordsPerSecond": None if source_aligned else float(words_per_second),
         "claimBoundary": (
-            "Exact stored word timings are used when every lexical atom aligns; unspoken punctuation "
-            "gets a zero-duration adjacent boundary. Live or incomplete text uses the frozen corpus "
-            "mean speaking rate and is explicitly an estimate."
+            "Stored source intervals are used when every lexical atom aligns; a supplied policy "
+            "declares whether those intervals are observed or inferred. Unspoken punctuation gets "
+            "a zero-duration adjacent boundary. Live or incomplete text uses the frozen corpus mean "
+            "speaking rate and is explicitly an estimate."
         ),
     }
 

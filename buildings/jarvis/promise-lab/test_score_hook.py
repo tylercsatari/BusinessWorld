@@ -2,10 +2,11 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
-from score_hook import _score_local_attributions
+from score_hook import _score_local_attributions, _score_opening_20s_response
 
 
 def scalar_model(coefficient):
@@ -120,6 +121,56 @@ print(score_hook.SCORER_VERSION)
         self.assertIn(
             "viewed_percent", components[0]["wholeHookOutcomeContributions"],
         )
+
+    def test_opening_response_returns_the_exact_extended_partition(self):
+        primitives = {
+            "starts": np.asarray([0, 0, 1], int),
+            "ends": np.asarray([1, 2, 2], int),
+            "raw": np.asarray([[1.0, 0.0], [1.0, 1.0], [0.0, 1.0]], np.float32),
+            "influence": np.asarray([[0.0, 1.0], [1.0, 0.0], [1.0, 1.0]], np.float32),
+        }
+        partition = {
+            "chunks": [
+                {"start": 0, "end": 1, "text": "alpha", "category": 0},
+                {"start": 1, "end": 2, "text": "beta", "category": 1},
+            ],
+            "componentCount": 2,
+            "coverage": 1,
+            "overlapCount": 0,
+            "boundaryEvidenceMode": "support-calibrated long-horizon exact cover",
+            "horizonCalibration": {"status": "training-support-calibrated"},
+        }
+        category_model = {
+            "direction": [1.0, 0.0, 0.0, 0.0],
+            "mapDirection": [0.0, 1.0, 0.0, 0.0],
+            "trainingProjectionSorted": [-1.0, 0.0, 1.0],
+            "validation": {"evaluationEligible": False},
+        }
+        model = {
+            "status": "exploratory-not-promoted",
+            "promotion": {"promoted": False, "decision": "withheld"},
+            "analysisHorizonSeconds": 20.0,
+            "selectedLagSeconds": 1.0,
+            "selectedCandidate": "phrase_lag_1p0",
+            "partitionExtension": {"activationTokenThreshold": 1},
+            "modelsByCategory": {"0": category_model, "1": category_model},
+            "validation": {"status": "source-grouped-diagnostic"},
+            "servingContract": "semantic coordinates only",
+        }
+        with patch("score_hook.decode_partition", return_value=partition):
+            result = _score_opening_20s_response(primitives, {}, model)
+        self.assertEqual(result["componentCount"], 2)
+        self.assertTrue(result["exactNonoverlappingCover"])
+        self.assertFalse(result["absoluteRetentionForecastAvailable"])
+        self.assertEqual(result["status"], "exploratory-not-promoted")
+        self.assertTrue(all(
+            row["axisPercentile"] is None for row in result["components"]
+        ))
+        self.assertEqual(
+            [row["nodeId"] for row in result["components"]],
+            ["span:0:1", "span:1:2"],
+        )
+        self.assertEqual(result["partition"]["chunks"], partition["chunks"])
 
 
 if __name__ == "__main__":
