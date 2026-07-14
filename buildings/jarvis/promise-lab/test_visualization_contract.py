@@ -57,6 +57,14 @@ class ProductVisualizationContractTests(unittest.TestCase):
         self.assertIn("['library', 'Opening library']", self.ui)
         self.assertIn("['saved', 'Saved embedding']", self.ui)
 
+    def test_interactive_scorer_has_automatic_timing_and_no_duration_contract(self):
+        self.assertNotIn("data-pl-score-duration", self.ui)
+        self.assertNotIn("durationSeconds: duration", self.ui)
+        self.assertIn("mean speaking rate measured across your source videos", self.ui)
+        self.assertIn("const durationSeconds = null", self.server)
+        self.assertNotIn("spoken duration must be between 0 and 600 seconds", self.server)
+        self.assertIn("type at least one word to score", self.server)
+
     def test_complete_evidence_surfaces_are_inside_shared_renderer(self):
         for function in (
             "temporalAttributionPanel", "componentEmbeddingPanel",

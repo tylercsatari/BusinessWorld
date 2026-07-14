@@ -42,6 +42,7 @@ def main() -> None:
         CACHE / "opening-predictions" / f"{source['videoId']}.json.gz"
     )
     typed = score_text(saved["text"], planned_duration_seconds=20.0)
+    automatic = score_text(saved["text"])
 
     assert typed["predictorVersion"] == saved["predictorVersion"]
     assert typed["featureVersion"] == saved["featureVersion"]
@@ -90,6 +91,14 @@ def main() -> None:
     for row in typed["causalPrefixTrace"]:
         assert int(row["tokenCount"]) <= int(typed["tokenCount"])
 
+    mean_rate = float(automatic["input"]["wordsPerSecond"])
+    assert automatic["input"]["plannedSpokenSeconds"] is None
+    assert automatic["input"]["timingEstimated"] is True
+    assert mean_rate == float(automatic["input"]["modelTimingSupport"]["meanWordsPerSecond"])
+    assert automatic["input"]["modelTimingSupport"]["sourceVideos"] == 208
+    assert "mean source-level speaking rate" in automatic["input"]["timingSource"]
+    assert exact_cover(automatic)
+
     code = """
 import builtins
 real_import = builtins.__import__
@@ -117,6 +126,8 @@ print(score_hook.PREDICTOR_VERSION)
         "sharedTemporalAttribution": True,
         "typedComponentsLinkedToLattice": True,
         "futureWordsUsedForEarlierPredictions": False,
+        "automaticTimingWordsPerSecond": mean_rate,
+        "automaticTimingSourceVideos": 208,
         "views": "withheld",
         "servingImportsSklearn": False,
     }, indent=2))

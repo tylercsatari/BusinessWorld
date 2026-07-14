@@ -58,6 +58,9 @@ def main() -> None:
     assert set(model["families"]) == {"entryIndexed", "observedAbsolute"}
     assert set(model["endpointCandidates"]) == {"entryIndexed", "observedAbsolute"}
     assert model["viewsContract"]["promotionStatus"] in {"available", "withheld"}
+    assert float(model["support"]["meanWordsPerSecond"]) > 0
+    assert model["support"]["speakingRateSourceCount"] == 208
+    assert model["support"]["defaultSpeakingRateEstimator"] == "source-level arithmetic mean"
 
     for family in model["families"].values():
         assert family["selectedStage"] == "semanticPrefix"

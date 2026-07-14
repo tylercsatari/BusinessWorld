@@ -15,7 +15,7 @@ from embedding_store import DIMENSIONS, MODEL, R2_PREFIX, R2Store, json_ready
 
 HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
-PRODUCT_VERSION = "shorts-promise-lab-v4"
+PRODUCT_VERSION = "shorts-promise-lab-v5"
 
 BROWSER_ARTIFACTS = {
     "openingPredictions": ("opening-predictions.json", "opening-predictions.json.gz"),
@@ -88,6 +88,11 @@ def validate(artifacts: dict[str, dict], models: dict[str, dict]) -> list[str]:
           "browser predictions and serving model have different training sources")
     check(predictions.get("predictorVersion") == retention_model.get("predictorVersion"),
           "browser and serving predictor versions differ")
+    support = retention_model.get("support") or {}
+    check(float(support.get("meanWordsPerSecond") or 0) > 0,
+          "serving model has no source-level mean speaking rate")
+    check(int(support.get("speakingRateSourceCount") or 0) == sources,
+          "mean speaking rate does not cover every source video")
     check(predictions.get("featureVersion") == retention_model.get("featureVersion"),
           "browser and serving feature versions differ")
     check(all(int(row.get("componentCount") or 0) > 0 for row in rows),
@@ -127,6 +132,10 @@ def validate(artifacts: dict[str, dict], models: dict[str, dict]) -> list[str]:
         "Analysis data ledger",
     ):
         check(marker in ui_source, f"shared analysis renderer is missing: {marker}")
+    check("mean speaking rate measured across your source videos" in ui_source,
+          "scorer does not explain its automatic timing contract")
+    check("data-pl-score-duration" not in ui_source,
+          "legacy spoken-duration control is still present")
     for row in rows:
         video_id = str(row.get("videoId") or "")
         detail_path = CACHE / "opening-predictions" / f"{video_id}.json.gz"
@@ -164,7 +173,7 @@ def main() -> None:
     model = models.get("opening-retention-model.json") or {}
     status = "complete" if not errors else "error"
     manifest = {
-        "version": 8,
+        "version": 9,
         "productVersion": PRODUCT_VERSION,
         "status": status,
         "errors": errors,
@@ -242,7 +251,7 @@ def main() -> None:
         },
     }
     progress = {
-        "version": 8,
+        "version": 9,
         "productVersion": PRODUCT_VERSION,
         "status": status,
         "stage": "current Shorts Promise Lab published" if not errors else "product validation failed",

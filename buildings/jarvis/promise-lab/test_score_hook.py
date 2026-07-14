@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from score_hook import (
+    decode_partition,
     _prediction_text_scope,
     _typed_curve_payload,
     _typed_prefix_features,
@@ -107,6 +108,71 @@ print(score_hook.PREDICTOR_VERSION)
         self.assertTrue(scope["inputWasLongerThan20Seconds"])
         self.assertIsNotNone(scope["excludedAfter20Seconds"])
         self.assertLess(scope["analyzedLexicalTokens"], scope["inputLexicalTokens"])
+
+    def test_default_timing_uses_the_source_level_mean_and_accepts_one_word(self):
+        model = {
+            "analysisHorizonSeconds": 20.0,
+            "support": {
+                "meanWordsPerSecond": 5.0,
+                "medianWordsPerSecond": 4.0,
+                "measuredWordsPerSecondP10": 3.0,
+                "measuredWordsPerSecondP90": 6.0,
+                "speakingRateSourceCount": 208,
+            },
+        }
+        scope = _prediction_text_scope(
+            "one two three four five six seven eight nine ten", model,
+        )
+        self.assertEqual(scope["wordsPerSecond"], 5.0)
+        self.assertEqual(scope["estimatedSpokenSeconds"], 2.0)
+        self.assertEqual(scope["modelTimingSupport"]["sourceVideos"], 208)
+        self.assertIn("mean source-level speaking rate", scope["timingSource"])
+        single = _prediction_text_scope("word", model)
+        self.assertAlmostEqual(single["estimatedSpokenSeconds"], 0.2)
+        self.assertEqual(single["analyzedLexicalTokens"], 1)
+
+    def test_single_token_has_one_exact_cover_component_without_a_boundary(self):
+        tokens = tokenize("word")
+        primitives = {
+            "text": "word",
+            "tokens": tokens,
+            "starts": np.asarray([0], int),
+            "ends": np.asarray([1], int),
+            "raw": np.asarray([[1.0, 0.0]], np.float32),
+            "lexical": np.asarray([True]),
+        }
+        cluster = {
+            "mean": [0.0] * 4,
+            "inverseCovariance": np.eye(4).tolist(),
+            "logDeterminant": 0.0,
+            "prior": 0.25,
+        }
+        model = {
+            "categoryTransform": {
+                "pcaMean": [0.0, 0.0],
+                "pcaComponents": [
+                    [1.0, 0.0], [0.0, 1.0],
+                    [0.0, 0.0], [0.0, 0.0],
+                ],
+                "whiteningScale": [1.0] * 4,
+            },
+            "categoryModel": {"clusters": [dict(cluster) for _ in range(4)]},
+            "browseProjection": {
+                "basis4x2": [
+                    [1.0, 0.0], [0.0, 1.0],
+                    [0.0, 0.0], [0.0, 0.0],
+                ],
+            },
+            "boundaryModel": {},
+            "partitionCalibration": {"scoreGapsSorted": [0.0]},
+        }
+        result = decode_partition(primitives, model)
+        self.assertEqual(result["componentCount"], 1)
+        self.assertEqual(result["owners"].tolist(), [0])
+        self.assertEqual(result["chunks"][0]["text"], "word")
+        self.assertEqual(result["boundaryProbabilities"], [])
+        self.assertTrue(result["degenerateSingleTokenCover"])
+        self.assertFalse(result["scoreGapCalibrationEligible"])
 
     def test_fractional_endpoint_uses_its_own_completed_prefix(self):
         text = "one two three four five six seven eight"

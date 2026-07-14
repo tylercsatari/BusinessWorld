@@ -654,8 +654,11 @@ def main() -> None:
             "tokenCountMedian": float(np.median(token_counts)),
             "tokenCountMaximum": int(token_counts.max()),
             "measuredWordsPerSecondP10": float(np.quantile(speaking_rates_array, .1)),
+            "meanWordsPerSecond": float(np.mean(speaking_rates_array)),
             "medianWordsPerSecond": float(np.median(speaking_rates_array)),
             "measuredWordsPerSecondP90": float(np.quantile(speaking_rates_array, .9)),
+            "speakingRateSourceCount": int(len(speaking_rates_array)),
+            "defaultSpeakingRateEstimator": "source-level arithmetic mean",
             "speakingRateDefinition": (
                 "lexical atoms divided by the acoustic interval from the first word start "
                 "through the final word end"

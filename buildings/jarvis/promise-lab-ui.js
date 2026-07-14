@@ -15,7 +15,7 @@
         const clusterColors = ['#38bdf8', '#f59e0b', '#a78bfa', '#34d399'];
         const state = {
             view: 'scorer', data: {}, loading: {}, errors: {},
-            scoreText: '', scoreIdea: '', scoreDuration: '', scoreResult: null, scoreLoading: false,
+            scoreText: '', scoreIdea: '', scoreResult: null, scoreLoading: false,
             scoreStatus: '', scoreError: '', scoreJobId: null,
             query: '', sort: 'predicted', selectedVideo: null,
             selectedPrediction: null, selectedLattice: null, detailLoading: false,
@@ -110,9 +110,7 @@
         async function scoreOpening() {
             const text = String(state.scoreText || '').replace(/\s+/g, ' ').trim();
             const idea = String(state.scoreIdea || '').replace(/\s+/g, ' ').trim();
-            const duration = numeric(state.scoreDuration);
-            if (text.length < 8) { state.scoreError = 'Type a complete opening to score.'; paint(); return; }
-            if (state.scoreDuration !== '' && (duration == null || duration <= 0)) { state.scoreError = 'Spoken duration must be a positive number of seconds.'; paint(); return; }
+            if (!/[\p{L}\p{N}_]/u.test(text)) { state.scoreError = 'Type at least one word to score.'; paint(); return; }
             if (state.scoreLoading) return;
             const request = ++scoreRequest;
             state.scoreLoading = true; state.scoreError = ''; state.scoreResult = null;
@@ -120,7 +118,7 @@
             try {
                 const submitted = await jsonResponse(await fetch(api('hook-score'), {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text, idea, durationSeconds: duration, async: true }), cache: 'no-store',
+                    body: JSON.stringify({ text, idea, async: true }), cache: 'no-store',
                 }));
                 state.scoreJobId = submitted.jobId || null;
                 const result = submitted.jobId ? await pollScoreJob(submitted.jobId, request) : submitted;
@@ -364,6 +362,7 @@
         function dataCoveragePanel(analysis, lattice) {
             const provenance = analysis.provenance || {};
             const support = analysis.support || {};
+            const input = analysis.input || {};
             const edgeCounts = (lattice || {}).edgeCounts || {};
             const rows = [
                 ['curve points', (((analysis.curves || {}).entryIndexed || {}).timesSeconds || []).length],
@@ -374,7 +373,7 @@
                 ['lattice nodes', ((lattice || {}).nodes || []).length],
                 ['lattice edges', ((lattice || {}).edges || []).length],
             ];
-            return panel(`<div style="font-size:11px;color:${C.text};font-weight:900">Analysis data ledger</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">This inventory makes omissions visible. Counts come from the same analysis object rendered above, not a parallel summary.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:6px;margin-top:7px">${rows.map(row => `<div style="background:${C.card2};padding:7px"><div style="font-size:7px;color:${C.mute};text-transform:uppercase;font-weight:900">${esc(row[0])}</div><div style="font-size:17px;color:${C.text};font-weight:900">${Number(row[1] || 0).toLocaleString()}</div></div>`).join('')}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:7px;margin-top:8px"><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Lattice edge families</b><br>${Object.entries(edgeCounts).map(([key, value]) => `${esc(key)} ${Number(value).toLocaleString()}`).join(' · ') || 'typed lattice not loaded'}</div><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Support</b><br>${support.trainingTokenCountMinimum || '—'}–${support.trainingTokenCountMaximum || '—'} training tokens · ${fmt(support.estimatedSpokenSeconds, 2)}s analyzed · ${support.isExtrapolation ? 'outside measured length support' : 'inside measured length support'}</div><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Serving provenance</b><br>${Object.entries(provenance).filter(([, value]) => typeof value === 'boolean').map(([key, value]) => `${esc(key)}: <b style="color:${value ? C.green : C.amber}">${value ? 'yes' : 'no'}</b>`).join(' · ') || 'saved row: source-level out-of-fold prediction'}</div></div>`, 'margin-top:10px');
+            return panel(`<div style="font-size:11px;color:${C.text};font-weight:900">Analysis data ledger</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">This inventory makes omissions visible. Counts come from the same analysis object rendered above, not a parallel summary.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:6px;margin-top:7px">${rows.map(row => `<div style="background:${C.card2};padding:7px"><div style="font-size:7px;color:${C.mute};text-transform:uppercase;font-weight:900">${esc(row[0])}</div><div style="font-size:17px;color:${C.text};font-weight:900">${Number(row[1] || 0).toLocaleString()}</div></div>`).join('')}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:7px;margin-top:8px"><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Lattice edge families</b><br>${Object.entries(edgeCounts).map(([key, value]) => `${esc(key)} ${Number(value).toLocaleString()}`).join(' · ') || 'typed lattice not loaded'}</div><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Support</b><br>${support.trainingTokenCountMinimum || '—'}–${support.trainingTokenCountMaximum || '—'} training tokens · ${fmt(support.estimatedSpokenSeconds, 2)}s analyzed · ${support.isExtrapolation ? 'outside measured length support' : 'inside measured length support'}</div><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Automatic timing</b><br>${numeric(input.wordsPerSecond) == null ? 'saved source-media timestamps' : `${fmt(input.wordsPerSecond, 3)} words/second · ${fmt(input.estimatedSpokenSeconds, 3)}s estimated`}<br>${esc(input.timingSource || 'measured source-media word intervals')}</div><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Serving provenance</b><br>${Object.entries(provenance).filter(([, value]) => typeof value === 'boolean').map(([key, value]) => `${esc(key)}: <b style="color:${value ? C.green : C.amber}">${value ? 'yes' : 'no'}</b>`).join(' · ') || 'saved row: source-level out-of-fold prediction'}</div></div>`, 'margin-top:10px');
         }
 
         function renderAnalysis(analysis, lattice) {
@@ -397,8 +396,8 @@
 
         function renderScorer() {
             const result = state.scoreResult;
-            return `<div><div style="font-size:15px;color:${C.text};font-weight:900">Score an opening</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">The same frozen feature builder and renderer used for every measured library opening. Text is never forecast beyond the supplied words; inputs longer than the measured horizon are visibly scoped to 20 seconds.</div>
-            ${panel(`<label style="display:block"><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;margin-bottom:4px">OPENING TEXT</span><textarea data-pl-score-text maxlength="2400" rows="6" placeholder="Paste the spoken opening through the point you want analyzed…" style="width:100%;box-sizing:border-box;resize:vertical;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:9px;font:10px/1.5 inherit">${esc(state.scoreText)}</textarea></label><div data-pl-score-controls style="display:grid;grid-template-columns:minmax(220px,1fr) minmax(160px,.3fr) auto;gap:7px;align-items:end;margin-top:7px"><label><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;margin-bottom:4px">OPTIONAL IDEA CONTEXT · GRAPH ONLY</span><input data-pl-score-idea value="${esc(state.scoreIdea)}" maxlength="1200" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:8px;font-size:9px"></label><label><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;margin-bottom:4px">SPOKEN DURATION · SECONDS</span><input data-pl-score-duration value="${esc(state.scoreDuration)}" inputmode="decimal" placeholder="measured-rate estimate" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:8px;font-size:9px"></label>${button(state.scoreLoading ? 'Scoring…' : 'Score opening', 'data-pl-score', true)}</div>`, 'margin-top:8px')}
+            return `<div><div style="font-size:15px;color:${C.text};font-weight:900">Score an opening</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">The same frozen feature builder and renderer used for every measured library opening. Timing is derived automatically from lexical word count and the mean speaking rate measured across your source videos. Text beyond the estimated 20-second boundary is visibly scoped rather than silently forecast.</div>
+            ${panel(`<label style="display:block"><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;margin-bottom:4px">OPENING TEXT</span><textarea data-pl-score-text maxlength="2400" rows="6" placeholder="Type any opening text…" style="width:100%;box-sizing:border-box;resize:vertical;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:9px;font:10px/1.5 inherit">${esc(state.scoreText)}</textarea></label><div data-pl-score-controls style="display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:7px;align-items:end;margin-top:7px"><label><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;margin-bottom:4px">OPTIONAL IDEA CONTEXT · GRAPH ONLY</span><input data-pl-score-idea value="${esc(state.scoreIdea)}" maxlength="1200" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:8px;font-size:9px"></label>${button(state.scoreLoading ? 'Scoring…' : 'Score opening', 'data-pl-score', true)}</div>`, 'margin-top:8px')}
             ${state.scoreError ? `<div style="margin-top:8px">${errorPanel(state.scoreError)}</div>` : ''}
             ${state.scoreLoading ? `<div style="margin-top:8px">${loadingPanel(state.scoreStatus || 'Scoring opening')}</div>` : ''}
             ${result ? `<div style="margin-top:10px">${renderAnalysis(result, result.componentLattice)}</div>` : ''}</div>`;
@@ -807,7 +806,6 @@
         function handleInput(event) {
             if (event.target.matches('[data-pl-score-text]')) { state.scoreText = event.target.value; return true; }
             if (event.target.matches('[data-pl-score-idea]')) { state.scoreIdea = event.target.value; return true; }
-            if (event.target.matches('[data-pl-score-duration]')) { state.scoreDuration = event.target.value; return true; }
             if (event.target.matches('[data-pl-query]')) { state.query = event.target.value; return true; }
             return false;
         }

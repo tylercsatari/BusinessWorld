@@ -833,12 +833,13 @@ async function handlePromiseHookScore(req, res) {
         const body = await readBody(req);
         const text = String(body.text || '').replace(/\s+/g, ' ').trim();
         const idea = String(body.idea || '').replace(/\s+/g, ' ').trim();
-        const durationSeconds = body.durationSeconds == null || body.durationSeconds === ''
-            ? null : Number(body.durationSeconds);
-        if (text.length < 8) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type a complete hook to score"}'); return; }
+        // The interactive scorer always derives time from word count and the
+        // corpus-wide speaking rate. Ignore legacy duration fields so an old
+        // client cannot turn a blank control into a rejected numeric zero.
+        const durationSeconds = null;
+        if (!/[\p{L}\p{N}_]/u.test(text)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type at least one word to score"}'); return; }
         if (text.length > 2400) { res.writeHead(413, { 'Content-Type': 'application/json' }); res.end('{"error":"the exact scorer accepts up to 2,400 characters per analyzed opening; the input was not truncated"}'); return; }
         if (idea.length > 1200) { res.writeHead(413, { 'Content-Type': 'application/json' }); res.end('{"error":"the candidate idea anchor accepts up to 1,200 characters; the input was not truncated"}'); return; }
-        if (durationSeconds != null && (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 600)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"spoken duration must be between 0 and 600 seconds"}'); return; }
         if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
         const scoreRunner = job => {
             if (job) { job.status = 'queued'; job.ts = Date.now(); }
@@ -3813,12 +3814,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const promisePathname = pathname;
     if (promisePathname === '/api/shortsquant/promise-lab/manifest' && req.method === 'GET') {
         await serveR2Gz(req, res, 'shorts/promise-lab-v1/manifest.json', 30e3,
-            { version: 8, productVersion: 'shorts-promise-lab-v4', status: 'building', counts: {}, artifacts: {} });
+            { version: 9, productVersion: 'shorts-promise-lab-v5', status: 'building', counts: {}, artifacts: {} });
         return;
     }
     if (promisePathname === '/api/shortsquant/promise-lab/progress' && req.method === 'GET') {
         await serveR2Gz(req, res, 'shorts/promise-lab-v1/progress.json', 5e3,
-            { version: 8, productVersion: 'shorts-promise-lab-v4', status: 'building', stage: 'waiting for first product artifact' });
+            { version: 9, productVersion: 'shorts-promise-lab-v5', status: 'building', stage: 'waiting for first product artifact' });
         return;
     }
     const promiseArtifacts = {

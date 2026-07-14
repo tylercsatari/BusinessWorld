@@ -159,25 +159,51 @@ def decode_partition(primitives: dict, partition_model: dict,
         raise RuntimeError("canonical semantic browse projection is unavailable")
     semantic_points = category_values @ basis
     semantic_categories = np.argmax(logp, axis=1)
-    features = boundary_features(
-        primitives["full"], primitives["raw"], primitives["context"],
-        primitives["influence"], primitives["nonadditive"],
-        primitives["starts"], primitives["ends"], logp,
-    )
     boundary_model = partition_model["boundaryModel"]
-    boundary_probability = boundary_probabilities(features, boundary_model)
-    uncalibrated = decode_variable_chunks(
-        primitives["starts"], primitives["ends"], boundary_probability,
-        logp, primitives["lexical"],
-    )
-    extension = dict(horizon_extension or {})
-    threshold = int(extension.get("activationTokenThreshold", 0))
-    decoded = uncalibrated
-    if extension and len(primitives["tokens"]) > threshold:
-        decoded = decode_support_calibrated_chunks(
-            primitives["starts"], primitives["ends"], boundary_probability,
-            logp, primitives["lexical"], extension,
+    token_total = len(primitives["tokens"])
+    if token_total == 1:
+        category = int(semantic_categories[0])
+        score = float(logp[0, category])
+        decoded = {
+            "score": score,
+            "runnerUpScore": None,
+            "scoreGap": None,
+            "topTwoPosteriorProxy": 1.0,
+            "partitionsCompared": 1,
+            "objective": "the only possible contiguous exact cover",
+            "complexityControl": "no boundary exists for a one-token opening",
+            "chunks": [{
+                "spanIndex": 0,
+                "start": 0,
+                "end": 1,
+                "category": category,
+                "leftBoundaryProbability": None,
+                "rightBoundaryProbability": None,
+            }],
+            "componentCount": 1,
+            "degenerateSingleTokenCover": True,
+        }
+        uncalibrated = decoded
+        boundary_probability = np.empty(0, np.float32)
+    else:
+        features = boundary_features(
+            primitives["full"], primitives["raw"], primitives["context"],
+            primitives["influence"], primitives["nonadditive"],
+            primitives["starts"], primitives["ends"], logp,
         )
+        boundary_probability = boundary_probabilities(features, boundary_model)
+        uncalibrated = decode_variable_chunks(
+            primitives["starts"], primitives["ends"], boundary_probability,
+            logp, primitives["lexical"],
+        )
+        extension = dict(horizon_extension or {})
+        threshold = int(extension.get("activationTokenThreshold", 0))
+        decoded = uncalibrated
+        if extension and token_total > threshold:
+            decoded = decode_support_calibrated_chunks(
+                primitives["starts"], primitives["ends"], boundary_probability,
+                logp, primitives["lexical"], extension,
+            )
 
     tokens = primitives["tokens"]
     owners = np.full(len(tokens), -1, int)
@@ -248,21 +274,28 @@ def decode_partition(primitives: dict, partition_model: dict,
     gap_calibration = np.asarray(
         partition_model["partitionCalibration"]["scoreGapsSorted"], float,
     )
+    score_gap_eligible = bool(
+        not decoded.get("horizonCalibration")
+        and not decoded.get("degenerateSingleTokenCover")
+    )
     return {
         **{key: decoded.get(key) for key in (
             "score", "runnerUpScore", "scoreGap", "topTwoPosteriorProxy",
             "partitionsCompared", "objective", "complexityControl",
         )},
         "scoreGapPercentile": (
-            None if decoded.get("horizonCalibration") else
+            None if not score_gap_eligible else
             percentile(gap_calibration, float(decoded.get("scoreGap") or 0))
         ),
-        "scoreGapCalibrationEligible": not bool(decoded.get("horizonCalibration")),
+        "scoreGapCalibrationEligible": score_gap_eligible,
         "boundaryEvidenceMode": (
+            "single-token exact cover; no boundary exists"
+            if decoded.get("degenerateSingleTokenCover") else
             "support-calibrated opening exact cover"
             if decoded.get("horizonCalibration") else
             "frozen outcome-blind boundary evidence"
         ),
+        "degenerateSingleTokenCover": bool(decoded.get("degenerateSingleTokenCover")),
         "horizonCalibration": decoded.get("horizonCalibration"),
         "countPrior": decoded.get("countPrior"),
         "selectedCountBoundaryPosteriorProbability": decoded.get(
@@ -312,9 +345,13 @@ def _prediction_text_scope(text: str, model: dict,
     normalized = normalize_source(text)
     tokens = tokenize(normalized)
     support = model.get("support") or {}
-    rate = float(support.get("medianWordsPerSecond") or 0.0)
+    rate = float(
+        support.get("meanWordsPerSecond")
+        or support.get("medianWordsPerSecond")
+        or 0.0
+    )
     if rate <= 0:
-        raise RuntimeError("the opening model has no measured speaking-rate support")
+        raise RuntimeError("the opening model has no measured source-video speaking-rate support")
     horizon = float(model.get("analysisHorizonSeconds") or 20.0)
     lexical_indices = [
         index for index, token in enumerate(tokens)
@@ -350,7 +387,12 @@ def _prediction_text_scope(text: str, model: dict,
         timing_estimated = False
     else:
         analyzed_seconds = min(horizon, analyzed_lexical / rate)
-        timing_source = "measured corpus median speaking rate"
+        source_count = int(support.get("speakingRateSourceCount") or 0)
+        timing_source = (
+            f"mean source-level speaking rate across {source_count} measured videos"
+            if source_count else
+            "mean source-level speaking rate across the measured video corpus"
+        )
         timing_estimated = True
     slow_rate = float(support.get("measuredWordsPerSecondP10") or rate)
     fast_rate = float(support.get("measuredWordsPerSecondP90") or rate)
@@ -374,8 +416,13 @@ def _prediction_text_scope(text: str, model: dict,
         "analyzedLexicalTokens": analyzed_lexical,
         "modelTimingSupport": {
             "p10WordsPerSecond": slow_rate,
-            "medianWordsPerSecond": rate,
+            "meanWordsPerSecond": rate,
+            "medianWordsPerSecond": float(
+                support.get("medianWordsPerSecond") or rate
+            ),
             "p90WordsPerSecond": fast_rate,
+            "sourceVideos": int(support.get("speakingRateSourceCount") or 0),
+            "defaultEstimator": "source-level arithmetic mean",
         },
     }
 
