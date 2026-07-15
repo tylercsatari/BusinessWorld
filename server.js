@@ -363,8 +363,11 @@ function quantJobSubmit(kind, runner, namespace = 'longform') {
     const jid = 'j' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
     const rec = { jid, kind, namespace, status: 'queued', ts: Date.now() };
     _quantJobs.set(`${namespace}:${jid}`, rec);
+    const persist = () => cloud.uploadToR2(`${namespace}/jobs/${jid}.json`, Buffer.from(JSON.stringify(rec)), 'application/json').catch(() => {});
+    persist();   // visible from R2 from the FIRST moment — hung or deploy-killed jobs are never invisible
     (async () => {
         rec.status = 'running'; rec.ts = Date.now();
+        persist();
         try { rec.result = await runner(rec); rec.status = 'done'; }
         catch (e) { rec.status = 'error'; rec.error = String((e && e.message) || e).slice(0, 300); }
         rec.ts = Date.now();
@@ -1732,7 +1735,18 @@ const server = http.createServer(async (req, res) => {
         } catch (e) { deps = 'FAIL'; detail = String((e.stderr && e.stderr.toString()) || e.message || e).slice(-300); }
         let ffmpeg = '', ytdlp = '';
         try { ffmpeg = execSync('command -v ffmpeg', { env: RAW_PY_ENV }).toString().trim(); } catch (e) { ffmpeg = '(missing)'; }
-        try { ytdlp = execSync('command -v yt-dlp', { env: RAW_PY_ENV }).toString().trim(); } catch (e) { ytdlp = '(missing)'; }
+        try { ytdlp = execSync('command -v yt-dlp', { env: RAW_PY_ENV }).toString().trim(); } catch (e) { ytdlp = '(missing binary — module may still import)'; }
+        // LIVE YouTube reachability: import yt_dlp and fetch metadata for a known public video —
+        // reveals datacenter-IP bot-blocking directly on this box.
+        let youtube = '';
+        try {
+            youtube = execSync(`"${RAW_PYTHON}" -c "
+import yt_dlp
+opts = {'quiet': True, 'no_warnings': True, 'skip_download': True, 'socket_timeout': 15}
+with yt_dlp.YoutubeDL(opts) as y:
+    i = y.extract_info('https://www.youtube.com/watch?v=aE9jKLck_cI', download=False)
+print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 }).toString().trim().split('\n').pop();
+        } catch (e) { youtube = 'FAIL: ' + String((e.stderr && e.stderr.toString()) || e.message || e).slice(-260); }
         // LIVE Gemini check — a key can be present but dead (e.g. billing suspended on the Google
         // project → 403 on every embed, which silently breaks ALL hook scoring). Test it for real.
         let gemini = 'no key';
@@ -1752,6 +1766,7 @@ const server = http.createServer(async (req, res) => {
             detail,
             ffmpeg,
             ytdlp,
+            youtube,
             hasGeminiKey: !!process.env.GEMINI_API_KEY,
             gemini,
             hasR2: !!process.env.R2_ACCESS_KEY_ID,
@@ -1816,7 +1831,7 @@ const server = http.createServer(async (req, res) => {
                 });
                 py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
             }));
-            if (body.async) { const jobId = lqJobSubmit('raw-embed-youtube', ytRunner); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) { const jobId = quantJobSubmit('raw-embed-youtube', ytRunner); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
             const out = await ytRunner();
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(out));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
