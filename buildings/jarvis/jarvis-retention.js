@@ -3031,7 +3031,11 @@ const JarvisRetention = (function () {
 
     function promiseUI() {
         if (!PROMISE_UI && typeof window !== 'undefined' && window.createShortsPromiseLab) {
-            PROMISE_UI = window.createShortsPromiseLab({ colors: C, escape: esc });
+            PROMISE_UI = window.createShortsPromiseLab({
+                colors: C,
+                escape: esc,
+                getScope: () => st.channel || (CHANS && CHANS.active) || 'tyler',
+            });
         }
         return PROMISE_UI;
     }
@@ -3086,7 +3090,7 @@ const JarvisRetention = (function () {
             const pooled = CHANS.channels.length > 1 ? tab('all', 'All pooled', total) : '';
             const add = `<button data-chanadd="1" style="background:transparent;border:1px dashed ${C.border};color:${C.mute};border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer">＋ add</button>`;
             const help = st.channelHelp ? `<div style="font-size:10px;color:${C.mute};margin-top:6px;line-height:1.6;background:${C.card2};border-radius:8px;padding:9px 12px;max-width:760px"><b style="color:${C.text}">Add another channel (you must have Studio Viewer access):</b> run <code style="color:${C.cyan}">node scrape-channels.js</code>, switch to the channel when it pauses, and it scrapes the full retention curve + swipe + views and uploads to R2 — the tab appears here. <b>All pooled</b> merges every channel for a bigger dataset.</div>` : '';
-            return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:7px;flex-wrap:wrap"><span style="font-size:10px;color:${C.green};text-transform:uppercase;letter-spacing:.3px;font-weight:800">channel</span>${tabs}${pooled}${add}<span style="font-size:9px;color:${C.faint};margin-left:2px">— scopes the “this channel” sections below</span></div>${help}`;
+            return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:7px;flex-wrap:wrap"><span style="font-size:10px;color:${C.green};text-transform:uppercase;letter-spacing:.3px;font-weight:800">channel</span>${tabs}${pooled}${add}<span style="font-size:9px;color:${C.faint};margin-left:2px">— scopes “this channel” plus the Promise Lab opening library</span></div>${help}`;
         })();
         // analyzed badge: how much of this channel actually has data
         const nKeep = (DATA && DATA.videos) ? DATA.videos.filter(v => v.keep_rate != null).length : 0;
@@ -3112,7 +3116,7 @@ const JarvisRetention = (function () {
             <div style="font-size:21px;font-weight:900;color:${C.accent};margin-bottom:8px">Retention → Views</div>${bgNote}
             ${chBar}
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><span style="font-size:9px;color:${C.green};text-transform:uppercase;font-weight:800;letter-spacing:.3px">📊 this channel</span>${PERCHAN.map(btn).join('')}${isPer ? badge : ''}</div>${pooledNote}
-            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px"><span style="font-size:9px;color:${C.purple};text-transform:uppercase;font-weight:800;letter-spacing:.3px">🌐 corpus · all videos</span>${CORPUS.map(btn).join('')}<span style="font-size:9px;color:${C.faint}">— not affected by the channel selector</span></div>${sec}</div>`;
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px"><span style="font-size:9px;color:${C.purple};text-transform:uppercase;font-weight:800;letter-spacing:.3px">🌐 corpus · all videos</span>${CORPUS.map(btn).join('')}<span style="font-size:9px;color:${C.faint}">— corpus maps are global; Promise Lab follows the selected account</span></div>${sec}</div>`;
         try { rtgAfterRender(); } catch (e) { }
         try { if (st.sec === 'promise' && promiseUI()) promiseUI().afterRender(); } catch (e) { }
     }

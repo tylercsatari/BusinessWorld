@@ -102,10 +102,29 @@ class ProductVisualizationContractTests(unittest.TestCase):
         self.assertTrue(emitted)
         self.assertEqual(emitted - handled, set())
         self.assertTrue({
-            "retention", "attribution", "component-map", "component-response",
+            "retention-predicted", "retention-actual", "retention-overlay",
+            "attribution", "component-map", "component-response",
             "contributions", "relationships", "validation", "saved-map",
-            "risk-set", "outcome-plane",
+            "risk-set", "outcome-plane", "pooled-mean", "pooled-accuracy",
+            "pooled-scatter",
         }.issubset(emitted))
+
+    def test_pooled_scope_uses_same_renderer_and_shows_prediction_accuracy(self):
+        self.assertIn("getScope", self.ui)
+        self.assertIn("openingPredictions:${scope || state.scope}", self.ui)
+        self.assertIn("?scope=${encodeURIComponent(state.scope)}", self.ui)
+        self.assertIn("Frozen prediction beside measured retention", self.ui)
+        self.assertIn("Frozen prediction accuracy against actual retention", self.ui)
+        self.assertIn("account-external holdout rows", self.ui)
+        self.assertIn("opening-context-study", self.ui)
+        self.assertIn("state.data.openingContextStudy", self.ui)
+        self.assertIn("Duration-conditioned baseline only", self.ui)
+        self.assertIn("startsWith('cross-account-')", self.ui)
+        self.assertIn("actual 20-second retention %", self.ui)
+        self.assertGreaterEqual(
+            self.ui.count("load('manualProjection', api('manual-projection'))"), 3,
+        )
+        self.assertEqual(self.ui.count("function renderAnalysis("), 1)
 
     def test_variable_horizon_summary_and_context_are_visible(self):
         self.assertEqual(self.predictions["version"], 3)

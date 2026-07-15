@@ -1,0 +1,601 @@
+#!/usr/bin/env python3
+"""Apply the frozen Promise Lab scorer to every pooled Shorts account.
+
+The 208 model-cohort rows keep their saved source-level OOF predictions. Every
+other row is inferred before its measured retention curve is joined. This file
+never trains, refits, recalibrates, or promotes a model stage.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import gzip
+import hashlib
+import json
+import os
+import threading
+import time
+from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+
+from embedding_store import EmbeddingStore, R2_PREFIX, R2Store, json_ready
+from pooled_opening_evaluation import (
+    CAPTION_TIMING_SOURCE,
+    EVALUATION_VERSION,
+    analysis_transcript_to_timed_words,
+    attach_observed_retention,
+    baseline_only_analysis,
+    caption_json3_to_timed_words,
+    compact_summary,
+    evaluation_by_account,
+    evaluation_metrics,
+    model_fingerprint,
+    token_clock_from_timed_words,
+)
+from score_hook import load_artifact, score_timed_text
+
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[2]
+CACHE = HERE / ".cache"
+DETAIL_DIR = CACHE / "pooled-opening-predictions"
+CAPTION_DIR = CACHE / "pooled-captions"
+SUMMARY_PATH = CACHE / "pooled-opening-predictions.json"
+PROGRESS_PATH = CACHE / "pooled-opening-progress.json"
+LOCK_PATH = CACHE / "pooled-opening-build.lock"
+CHANNELS_PATH = ROOT / "buildings/jarvis/retention-study/channels.json"
+SAVED_SUMMARY_PATH = CACHE / "opening-predictions.json"
+SAVED_DETAIL_DIR = CACHE / "opening-predictions"
+MODEL_FILES = (
+    "canonical-partition-model.json",
+    "opening-20s-model.json",
+    "opening-retention-model.json",
+)
+
+
+def read_json(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def read_gzip_json(path: Path) -> dict:
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def write_json(path: Path, value: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(
+        json.dumps(
+            json_ready(value), separators=(",", ":"), ensure_ascii=False,
+            allow_nan=False,
+        ),
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
+def write_gzip_json(path: Path, value: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    payload = json.dumps(
+        json_ready(value), separators=(",", ":"), ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    temporary.write_bytes(gzip.compress(payload, compresslevel=6))
+    temporary.replace(path)
+
+
+def sha256_bytes(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def prediction_input_fingerprint(video: dict, transcript: dict | None) -> str:
+    payload = {
+        "evaluationVersion": EVALUATION_VERSION,
+        "videoId": str(video["id"]),
+        "mediaDurationSeconds": video.get("duration_s"),
+        "transcript": None if transcript is None else {
+            "text": transcript.get("text"),
+            "words": [{
+                "word": row.get("word"),
+                "timestamp": row.get("timestamp"),
+                "duration": row.get("duration"),
+            } for row in transcript.get("words") or []],
+        },
+    }
+    return sha256_bytes(json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ).encode("utf-8"))
+
+
+def load_pooled_rows() -> tuple[list[dict], list[dict]]:
+    registry = read_json(CHANNELS_PATH)
+    rows = []
+    accounts = []
+    seen = set()
+    for account in registry.get("channels") or []:
+        account_id = str(account["id"])
+        path = ROOT / "buildings/jarvis/retention-study" / str(account["table"])
+        table = read_json(path)
+        account_rows = table.get("videos") or []
+        accounts.append({
+            "id": account_id,
+            "name": account.get("name") or account_id,
+            "videos": len(account_rows),
+            "owner": bool(account.get("owner")),
+        })
+        for row in account_rows:
+            video_id = str(row.get("id") or "")
+            if not video_id:
+                continue
+            if video_id in seen:
+                raise RuntimeError(f"duplicate pooled video id: {video_id}")
+            seen.add(video_id)
+            rows.append({
+                **row,
+                "accountId": account_id,
+                "accountName": account.get("name") or account_id,
+            })
+    return rows, accounts
+
+
+def caption_path(video_id: str) -> Path | None:
+    candidates = sorted(
+        CAPTION_DIR.glob(f"{video_id}.*.json3"),
+        key=lambda path: ("en-orig" not in path.name, path.name),
+    )
+    return candidates[0] if candidates else None
+
+
+def timed_transcript(video: dict) -> tuple[dict | None, str, str | None]:
+    video_id = str(video["id"])
+    local = ROOT / "video_data" / video_id / "analysis.json"
+    if local.exists():
+        analysis = read_json(local)
+        result = analysis_transcript_to_timed_words(
+            analysis.get("transcript") or {}, video.get("duration_s"),
+        )
+        if result.get("words"):
+            return result, "local analysis.transcript.words", None
+    caption = caption_path(video_id)
+    if caption:
+        result = caption_json3_to_timed_words(
+            read_json(caption), video.get("duration_s"),
+        )
+        if result.get("words"):
+            return result, f"YouTube automatic captions · {caption.name}", None
+        return None, "caption unavailable", str(result.get("status") or "no caption words")
+    return None, "caption unavailable", "no public timestamped transcript was recovered"
+
+
+def metric_record(detail: dict) -> dict:
+    return {
+        "accountId": detail.get("accountId"),
+        "evaluationKind": detail.get("evaluationKind"),
+        "curves": {
+            family: {
+                key: (detail.get("curves") or {}).get(family, {}).get(key)
+                for key in (
+                    "timesSeconds", "predicted", "predictionP10",
+                    "predictionP90", "actual",
+                )
+            }
+            for family in ("entryIndexed", "observedAbsolute")
+        },
+    }
+
+
+def annotate(detail: dict, video: dict, evaluation_kind: str,
+             transcript_source: str, fingerprint: str, fit_kind: str,
+             input_fingerprint: str | None = None,
+             oof_artifact_fingerprint: str | None = None) -> dict:
+    detail.update({
+        "videoId": str(video["id"]),
+        "title": video.get("title") or str(video["id"]),
+        "url": video.get("url") or f"https://www.youtube.com/shorts/{video['id']}",
+        "accountId": video.get("accountId"),
+        "accountName": video.get("accountName"),
+        "evaluationKind": evaluation_kind,
+        "transcriptSource": transcript_source,
+        "pooledEvaluationVersion": EVALUATION_VERSION,
+        "pooledModelFingerprint": fingerprint if fit_kind != "source-level-oof" else None,
+        "referenceFullFitModelFingerprint": fingerprint,
+        "predictionFitKind": fit_kind,
+        "pooledInputFingerprint": input_fingerprint,
+        "savedOofArtifactFingerprint": oof_artifact_fingerprint,
+    })
+    detail.setdefault("provenance", {}).update({
+        "pooledEvaluationVersion": EVALUATION_VERSION,
+        "pooledModelFingerprint": fingerprint if fit_kind != "source-level-oof" else None,
+        "referenceFullFitModelFingerprint": fingerprint,
+        "predictionFitKind": fit_kind,
+        "pooledInputFingerprint": input_fingerprint,
+        "savedOofArtifactFingerprint": oof_artifact_fingerprint,
+        "pooledEvaluationKind": evaluation_kind,
+        "observedCurveUsedForPrediction": False,
+        "pooledEvaluationRefit": False,
+        "pooledEvaluationRecalibration": False,
+    })
+    return attach_observed_retention(detail, video)
+
+
+def saved_detail(video: dict, fingerprint: str, oof_artifact_fingerprint: str,
+                 detail_dir: Path) -> dict:
+    path = SAVED_DETAIL_DIR / f"{video['id']}.json.gz"
+    detail = read_gzip_json(path)
+    detail = annotate(
+        detail, video, "saved-source-level-oof",
+        "canonical source-media transcript and timing", fingerprint,
+        "source-level-oof", oof_artifact_fingerprint=oof_artifact_fingerprint,
+    )
+    write_gzip_json(detail_dir / f"{video['id']}.json.gz", detail)
+    return detail
+
+
+def score_external(video: dict, models: dict, store: EmbeddingStore,
+                   fingerprint: str, refresh: bool,
+                   detail_dir: Path) -> tuple[dict, bool]:
+    path = detail_dir / f"{video['id']}.json.gz"
+    transcript, transcript_source, unavailable_reason = timed_transcript(video)
+    input_fingerprint = prediction_input_fingerprint(video, transcript)
+    if path.exists() and not refresh:
+        existing = read_gzip_json(path)
+        same_model = existing.get("pooledModelFingerprint") == fingerprint
+        same_evaluation = existing.get("pooledEvaluationVersion") == EVALUATION_VERSION
+        same_input = existing.get("pooledInputFingerprint") == input_fingerprint
+        needs_transcript_upgrade = (
+            transcript is not None
+            and existing.get("sourceKind") == "pooled-duration-only-selected-baseline"
+        )
+        if same_model and same_evaluation and same_input and not needs_transcript_upgrade:
+            existing = attach_observed_retention(existing, video)
+            write_gzip_json(path, existing)
+            return existing, True
+    if transcript is None:
+        detail = baseline_only_analysis(
+            video, models["retention"], unavailable_reason or "transcript unavailable",
+        )
+        evaluation_kind = (
+            "main-withheld-duration-only-full-fit"
+            if video.get("accountId") == "tyler" else
+            "cross-account-duration-only-frozen-baseline"
+        )
+    else:
+        try:
+            clock = token_clock_from_timed_words(transcript["text"], transcript["words"])
+            detail = score_timed_text(
+                transcript["text"], clock, timing_source=CAPTION_TIMING_SOURCE,
+                media_duration_seconds=float(video["duration_s"]),
+                partition_model=models["partition"], opening_model=models["opening"],
+                opening_retention_model=models["retention"], store=store,
+            )
+            detail["scorerSourceKind"] = detail.get("sourceKind")
+            detail["sourceKind"] = (
+                "pooled-main-withheld-frozen-full-fit"
+                if video.get("accountId") == "tyler" else
+                "pooled-cross-account-frozen-full-fit"
+            )
+            evaluation_kind = (
+                "main-withheld-frozen-full-fit"
+                if video.get("accountId") == "tyler" else
+                "cross-account-frozen-full-fit"
+            )
+            detail["captionTiming"] = {
+                key: transcript.get(key) for key in (
+                    "status", "captionSegments", "wordCount", "spokenEndSeconds",
+                )
+            }
+        except Exception as error:
+            detail = baseline_only_analysis(
+                video, models["retention"],
+                f"timestamped transcript diagnostics failed: {error}",
+            )
+            detail["diagnosticError"] = str(error)
+            transcript_source = f"{transcript_source} · diagnostics failed"
+            evaluation_kind = (
+                "main-withheld-duration-only-diagnostic-error"
+                if video.get("accountId") == "tyler" else
+                "cross-account-duration-only-diagnostic-error"
+            )
+    detail = annotate(
+        detail, video, evaluation_kind, transcript_source, fingerprint,
+        (
+            "frozen-selected-baseline-no-transcript"
+            if transcript is None or detail.get("sourceKind") == "pooled-duration-only-selected-baseline"
+            else "frozen-full-fit"
+        ),
+        input_fingerprint=input_fingerprint,
+    )
+    write_gzip_json(path, detail)
+    return detail, False
+
+
+def evaluation_bundle(records: list[dict]) -> dict:
+    by_kind = defaultdict(list)
+    for record in records:
+        by_kind[str(record.get("evaluationKind") or "unknown")].append(record)
+    external = [
+        record for record in records
+        if str(record.get("evaluationKind") or "").startswith("cross-account-")
+    ]
+    new_predictions = [
+        record for record in records
+        if record.get("evaluationKind") != "saved-source-level-oof"
+    ]
+    return {
+        "allPooled": evaluation_metrics(records),
+        "newFrozenPredictions": evaluation_metrics(new_predictions),
+        "externalAccounts": evaluation_metrics(external),
+        "byAccount": evaluation_by_account(records),
+        "byEvaluationKind": {
+            kind: evaluation_metrics(group) for kind, group in sorted(by_kind.items())
+        },
+        "claimBoundary": (
+            "The 208 saved cohort rows are source-level out of fold. Other Main rows "
+            "use the unchanged full fit. Other accounts are account-external frozen-model "
+            "evaluations. Outcomes are joined only after inference; no pooled outcome "
+            "refits, recalibrates, or promotes the scorer."
+        ),
+    }
+
+
+def upload(summary: dict, detail_dir: Path) -> None:
+    expected_paths = []
+    fingerprint = summary["modelFingerprint"]
+    for row in summary.get("rows") or []:
+        path = detail_dir / f"{row['videoId']}.json.gz"
+        if not path.exists():
+            raise RuntimeError(f"cannot publish without detail artifact: {row['videoId']}")
+        detail = read_gzip_json(path)
+        if str(detail.get("videoId")) != str(row["videoId"]):
+            raise RuntimeError(f"detail ID mismatch: {row['videoId']}")
+        if detail.get("pooledEvaluationVersion") != EVALUATION_VERSION:
+            raise RuntimeError(f"stale evaluation detail: {row['videoId']}")
+        if detail.get("referenceFullFitModelFingerprint") != fingerprint:
+            raise RuntimeError(f"detail model reference mismatch: {row['videoId']}")
+        expected_paths.append(path)
+
+    remote = R2Store()
+
+    def put(path: Path) -> str:
+        remote.put_bytes(
+            f"{R2_PREFIX}/pooled-opening-generations/"
+            f"{summary['generationId']}/{path.name}",
+            path.read_bytes(), "application/json", "gzip",
+        )
+        return path.stem.split(".")[0]
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        jobs = [pool.submit(put, path) for path in expected_paths]
+        for index, job in enumerate(as_completed(jobs), 1):
+            job.result()
+            if index % 25 == 0 or index == len(jobs):
+                print(f"uploaded details {index}/{len(jobs)}", flush=True)
+    remote.put_json(
+        f"{R2_PREFIX}/pooled-opening-predictions.json.gz", summary,
+        gzip_payload=True,
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--workers", type=int, default=3)
+    parser.add_argument("--refresh", action="store_true")
+    parser.add_argument("--upload", action="store_true")
+    parser.add_argument("--video-id", action="append", default=[])
+    parser.add_argument("--limit", type=int, default=0)
+    args = parser.parse_args()
+
+    pooled_rows, accounts = load_pooled_rows()
+    canonical_source_count = len(pooled_rows)
+    selected_ids = set(args.video_id)
+    filtered_run = bool(selected_ids or args.limit > 0)
+    if args.upload and filtered_run:
+        raise RuntimeError("filtered preview runs cannot publish the canonical pooled artifact")
+    if selected_ids:
+        pooled_rows = [row for row in pooled_rows if str(row["id"]) in selected_ids]
+    if args.limit > 0:
+        pooled_rows = pooled_rows[:args.limit]
+    if not pooled_rows:
+        raise RuntimeError("the selected pooled run has no videos")
+
+    if filtered_run:
+        preview_key = sha256_bytes(json.dumps({
+            "videoIds": [str(row["id"]) for row in pooled_rows],
+            "evaluationVersion": EVALUATION_VERSION,
+        }, sort_keys=True).encode("utf-8"))[:12]
+        run_dir = CACHE / "pooled-opening-previews" / preview_key
+        detail_dir = run_dir / "details"
+        summary_path = run_dir / "summary.json"
+        progress_path = run_dir / "progress.json"
+    else:
+        LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+        build_lock = LOCK_PATH.open("a+")
+        try:
+            fcntl.flock(build_lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise RuntimeError("another canonical pooled build is already running") from error
+        detail_dir = DETAIL_DIR
+        summary_path = SUMMARY_PATH
+        progress_path = PROGRESS_PATH
+    saved_summary = read_json(SAVED_SUMMARY_PATH)
+    saved_ids = {str(row["videoId"]) for row in saved_summary.get("rows") or []}
+    models = {
+        "partition": load_artifact(MODEL_FILES[0]),
+        "opening": load_artifact(MODEL_FILES[1]),
+        "retention": load_artifact(MODEL_FILES[2]),
+    }
+    fingerprint = model_fingerprint(
+        models["partition"], models["opening"], models["retention"],
+    )
+    oof_artifact_fingerprint = sha256_file(SAVED_SUMMARY_PATH)
+    detail_dir.mkdir(parents=True, exist_ok=True)
+    store = EmbeddingStore(CACHE / "pooled-hook-embeddings.sqlite3")
+    summaries = []
+    metric_records = []
+    failures = []
+    resumed = 0
+    lock = threading.Lock()
+    started = time.time()
+    completed = 0
+
+    def record(detail: dict, was_resumed: bool = False) -> None:
+        nonlocal completed, resumed
+        summary = compact_summary(detail)
+        metrics = metric_record(detail)
+        with lock:
+            summaries.append(summary)
+            metric_records.append(metrics)
+            completed += 1
+            resumed += int(was_resumed)
+            if completed % 5 == 0 or completed == len(pooled_rows):
+                write_json(progress_path, {
+                    "version": 1,
+                    "status": "building" if completed < len(pooled_rows) else "complete",
+                    "completed": completed,
+                    "total": len(pooled_rows),
+                    "resumed": resumed,
+                    "failed": len(failures),
+                    "elapsedSeconds": time.time() - started,
+                    "modelFingerprint": fingerprint,
+                })
+                print(
+                    f"pooled {completed}/{len(pooled_rows)} · resumed {resumed} · "
+                    f"errors {len(failures)}", flush=True,
+                )
+
+    for video in pooled_rows:
+        if str(video["id"]) not in saved_ids:
+            continue
+        record(saved_detail(
+            video, fingerprint, oof_artifact_fingerprint, detail_dir,
+        ))
+
+    external_rows = [row for row in pooled_rows if str(row["id"]) not in saved_ids]
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
+            jobs = {
+                pool.submit(
+                    score_external, video, models, store, fingerprint, args.refresh,
+                    detail_dir,
+                ): video
+                for video in external_rows
+            }
+            for job in as_completed(jobs):
+                video = jobs[job]
+                try:
+                    detail, was_resumed = job.result()
+                    record(detail, was_resumed)
+                except Exception as error:
+                    failures.append({
+                        "videoId": video.get("id"),
+                        "accountId": video.get("accountId"),
+                        "error": str(error),
+                    })
+                    print(f"ERROR {video.get('id')}: {error}", flush=True)
+    finally:
+        store.close()
+
+    order = {str(row["id"]): index for index, row in enumerate(pooled_rows)}
+    summaries.sort(key=lambda row: order.get(str(row.get("videoId")), 10**9))
+    if not filtered_run and len(summaries) != canonical_source_count:
+        raise RuntimeError(
+            f"refusing canonical promotion: built {len(summaries)} of "
+            f"{canonical_source_count} registered videos"
+        )
+    kind_counts = Counter(str(row.get("evaluationKind") or "unknown") for row in summaries)
+    outcome_fingerprint = sha256_bytes(json.dumps([{
+        "videoId": str(row["id"]),
+        "accountId": row.get("accountId"),
+        "durationSeconds": row.get("duration_s"),
+        "views": row.get("views"),
+        "curve": row.get("curve"),
+    } for row in pooled_rows], sort_keys=True, separators=(",", ":")).encode("utf-8"))
+    generation_id = sha256_bytes(json.dumps({
+        "evaluationVersion": EVALUATION_VERSION,
+        "modelFingerprint": fingerprint,
+        "savedOofArtifactFingerprint": oof_artifact_fingerprint,
+        "outcomeFingerprint": outcome_fingerprint,
+        "predictionInputs": [{
+            "videoId": row.get("videoId"),
+            "fitKind": row.get("predictionFitKind"),
+            "inputFingerprint": row.get("pooledInputFingerprint"),
+        } for row in summaries],
+    }, sort_keys=True, separators=(",", ":")).encode("utf-8"))[:20]
+    for row in summaries:
+        row["detail"] = (
+            f"/api/shortsquant/promise-lab/opening-prediction/{row['videoId']}"
+            f"?scope=all&generation={generation_id}"
+        )
+    summary = {
+        "version": 1,
+        "status": "complete" if not failures else "complete-with-errors",
+        "scope": "preview" if filtered_run else "all",
+        "evaluationVersion": EVALUATION_VERSION,
+        "predictorVersion": models["retention"].get("predictorVersion"),
+        "featureVersion": models["retention"].get("featureVersion"),
+        "modelFingerprint": fingerprint,
+        "savedOofArtifactFingerprint": oof_artifact_fingerprint,
+        "outcomeFingerprint": outcome_fingerprint,
+        "generationId": generation_id,
+        "selectedStage": {
+            family: (model.get("headlineStage") or model.get("selectedStage"))
+            for family, model in (models["retention"].get("families") or {}).items()
+        },
+        "sources": len(summaries),
+        "expectedSources": len(pooled_rows),
+        "accounts": accounts,
+        "evaluationKindCounts": dict(sorted(kind_counts.items())),
+        "rows": summaries,
+        "evaluation": evaluation_bundle(metric_records),
+        "failures": failures,
+        "validation": saved_summary.get("validation"),
+        "riskSetBySecond": saved_summary.get("riskSetBySecond"),
+        "support": models["retention"].get("support"),
+        "evidenceBoundary": models["retention"].get("evidenceBoundary"),
+        "provenance": {
+            "modelRefit": False,
+            "modelRecalibrated": False,
+            "modelStageChanged": False,
+            "outcomesJoinedAfterInference": True,
+            "savedCohortPredictionsRemainSourceLevelOOF": True,
+            "externalRowsUseFrozenFullFit": True,
+        },
+        "builtAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    write_json(summary_path, summary)
+    write_json(progress_path, {
+        "version": 1,
+        "status": summary["status"],
+        "completed": len(summaries),
+        "total": len(pooled_rows),
+        "resumed": resumed,
+        "failed": len(failures),
+        "elapsedSeconds": time.time() - started,
+        "modelFingerprint": fingerprint,
+    })
+    if args.upload:
+        upload(summary, detail_dir)
+    print(json.dumps({
+        "status": summary["status"],
+        "sources": summary["sources"],
+        "expected": summary["expectedSources"],
+        "details": len(list(detail_dir.glob("*.json.gz"))),
+        "evaluationVideos": summary["evaluation"]["allPooled"]["videos"],
+        "summary": str(summary_path),
+    }, indent=2), flush=True)
+
+
+if __name__ == "__main__":
+    main()

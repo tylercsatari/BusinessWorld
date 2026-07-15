@@ -3889,18 +3889,23 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const promiseArtifacts = {
         'opening-predictions': 'opening-predictions.json.gz',
+        'opening-context-study': 'opening-context-study.json.gz',
         'manual-projection': 'manual-projection.json.gz',
         'canonical-partitions': 'canonical-partitions.json.gz',
     };
-    const promiseArtifact = promisePathname.match(/^\/api\/shortsquant\/promise-lab\/(opening-predictions|manual-projection|canonical-partitions)$/);
+    const promiseArtifact = promisePathname.match(/^\/api\/shortsquant\/promise-lab\/(opening-predictions|opening-context-study|manual-projection|canonical-partitions)$/);
     if (promiseArtifact && req.method === 'GET') {
+        const promiseScope = (url.searchParams.get('scope') || 'tyler').replace(/[^a-z0-9_-]/gi, '');
+        const pooledPrediction = promiseArtifact[1] === 'opening-predictions' && promiseScope !== 'tyler';
         const cacheControl = promiseArtifact[1] === 'opening-predictions'
             ? 'private, no-cache'
             : undefined;
         if (promiseArtifact[1] === 'opening-predictions') {
             const local = path.join(
                 DIR, 'buildings', 'jarvis', 'promise-lab', '.cache',
-                `${promiseArtifact[1]}.json`,
+                pooledPrediction
+                    ? 'pooled-opening-predictions.json'
+                    : `${promiseArtifact[1]}.json`,
             );
             if (fs.existsSync(local)) {
                 res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-cache' });
@@ -3909,7 +3914,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             }
         }
         const ok = await serveR2GzipJsonStream(res,
-            `shorts/promise-lab-v1/${promiseArtifacts[promiseArtifact[1]]}`, cacheControl);
+            pooledPrediction
+                ? 'shorts/promise-lab-v1/pooled-opening-predictions.json.gz'
+                : `shorts/promise-lab-v1/${promiseArtifacts[promiseArtifact[1]]}`,
+            cacheControl);
         if (!ok) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end('{"error":"Promise Lab artifact is still building"}');
@@ -3925,25 +3933,42 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     );
     if (promiseOpeningPrediction && req.method === 'GET') {
         const videoId = promiseOpeningPrediction[1];
-        const local = path.join(
-            DIR, 'buildings', 'jarvis', 'promise-lab', '.cache',
-            'opening-predictions', `${videoId}.json.gz`,
-        );
-        if (fs.existsSync(local)) {
-            res.writeHead(200, {
-                'Content-Type': 'application/json; charset=utf-8',
-                'Content-Encoding': 'gzip',
-                'Cache-Control': 'private, max-age=300',
-                'Vary': 'Accept-Encoding',
-            });
-            fs.createReadStream(local).pipe(res);
-            return;
+        const promiseScope = (url.searchParams.get('scope') || 'tyler').replace(/[^a-z0-9_-]/gi, '');
+        const pooledPrediction = promiseScope !== 'tyler';
+        const pooledGeneration = (url.searchParams.get('generation') || '').replace(/[^a-f0-9]/gi, '');
+        const localDirectories = pooledPrediction
+            ? ['pooled-opening-predictions', 'opening-predictions']
+            : ['opening-predictions'];
+        for (const directory of localDirectories) {
+            const local = path.join(
+                DIR, 'buildings', 'jarvis', 'promise-lab', '.cache',
+                directory, `${videoId}.json.gz`,
+            );
+            if (fs.existsSync(local)) {
+                res.writeHead(200, {
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Content-Encoding': 'gzip',
+                    'Cache-Control': 'private, max-age=300',
+                    'Vary': 'Accept-Encoding',
+                });
+                fs.createReadStream(local).pipe(res);
+                return;
+            }
         }
-        const ok = await serveR2GzipJsonStream(
-            res,
-            `shorts/promise-lab-v1/opening-predictions/${videoId}.json.gz`,
-            'private, max-age=300',
-        );
+        const remoteKeys = pooledPrediction
+            ? [
+                ...(pooledGeneration ? [
+                    `shorts/promise-lab-v1/pooled-opening-generations/${pooledGeneration}/${videoId}.json.gz`,
+                ] : []),
+                `shorts/promise-lab-v1/pooled-opening-predictions/${videoId}.json.gz`,
+                `shorts/promise-lab-v1/opening-predictions/${videoId}.json.gz`,
+            ]
+            : [`shorts/promise-lab-v1/opening-predictions/${videoId}.json.gz`];
+        let ok = false;
+        for (const key of remoteKeys) {
+            ok = await serveR2GzipJsonStream(res, key, 'private, max-age=300');
+            if (ok) break;
+        }
         if (!ok) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end('{"error":"opening prediction artifact is not built"}');

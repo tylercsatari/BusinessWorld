@@ -12,12 +12,16 @@
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;'));
         const api = name => `/api/shortsquant/promise-lab/${name}`;
+        const getScope = typeof (options || {}).getScope === 'function'
+            ? (options || {}).getScope : (() => 'tyler');
+        const currentScope = () => String(getScope() || 'tyler').replace(/[^a-z0-9_-]/gi, '') || 'tyler';
         const clusterColors = ['#38bdf8', '#f59e0b', '#a78bfa', '#34d399'];
         const state = {
             view: 'scorer', data: {}, loading: {}, errors: {},
+            scope: currentScope(),
             scoreText: '', scoreDuration: '', scoreResult: null, scoreLoading: false,
             scoreStatus: '', scoreError: '', scoreJobId: null,
-            query: '', sort: 'predicted', selectedVideo: null,
+            query: '', sort: 'predicted', libraryLimit: 60, selectedVideo: null,
             selectedPrediction: null, selectedLattice: null, detailLoading: false,
             detailError: '', selectedComponent: 0, selectedLatticeNode: null,
             curveMode: 'entryIndexed', showStages: true,
@@ -31,7 +35,11 @@
         let detailRequest = 0;
         let savedMapGeometry = null;
 
-        const numeric = value => Number.isFinite(Number(value)) ? Number(value) : null;
+        const numeric = value => (
+            value === null || value === undefined || value === ''
+                ? null
+                : (Number.isFinite(Number(value)) ? Number(value) : null)
+        );
         const fmt = (value, digits = 1) => numeric(value) == null ? '—' : Number(value).toFixed(digits);
         const signed = (value, digits = 1) => numeric(value) == null ? '—' : `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(digits)}`;
         const pct = value => numeric(value) == null ? '—' : `${fmt(value, 1)}%`;
@@ -49,6 +57,26 @@
         const stat = (label, value, color, sub) => `<div style="min-width:112px;border-left:3px solid ${color || C.cyan};padding:3px 7px"><div style="font-size:7px;color:${C.mute};font-weight:900;text-transform:uppercase">${esc(label)}</div><div style="font-size:18px;color:${color || C.text};font-weight:900;line-height:1.15">${esc(value)}</div>${sub ? `<div style="font-size:7px;color:${C.mute};line-height:1.35;margin-top:2px">${esc(sub)}</div>` : ''}</div>`;
         const errorPanel = message => panel(`<div style="font-size:9px;color:${C.red}">${esc(message)}</div>`);
         const loadingPanel = message => panel(`<div style="font-size:9px;color:${C.cyan}">${esc(message)}</div>`);
+
+        const openingDataKey = scope => `openingPredictions:${scope || state.scope}`;
+        const openingSummary = () => state.data[openingDataKey()];
+        const openingSummaryError = () => state.errors[openingDataKey()];
+        const openingSummaryPath = () => `${api('opening-predictions')}?scope=${encodeURIComponent(state.scope)}`;
+        const contextStudy = () => ((openingSummary() || {}).contextStudy)
+            || state.data.openingContextStudy || {};
+
+        function syncScope() {
+            const scope = currentScope();
+            if (scope === state.scope) return false;
+            state.scope = scope;
+            state.query = ''; state.libraryLimit = 60; state.selectedVideo = null;
+            state.selectedPrediction = null; state.selectedLattice = null;
+            state.detailLoading = false; state.detailError = '';
+            state.selectedComponent = 0; state.selectedLatticeNode = null;
+            state.selectedAttributionStep = 0; state.outcomePoint = null;
+            detailRequest += 1;
+            return true;
+        }
 
         function paint() {
             if (!host) return;
@@ -75,9 +103,12 @@
         }
 
         function ensureViewData() {
-            load('manualProjection', api('manual-projection'));
-            load('openingPredictions', api('opening-predictions'));
+            syncScope();
+            if (state.view === 'library' || (state.view === 'scorer' && state.scoreResult)) {
+                load(openingDataKey(), openingSummaryPath());
+            }
             if (state.view === 'saved') {
+                load('manualProjection', api('manual-projection'));
                 load('canonicalPartitions', api('canonical-partitions'));
             }
         }
@@ -129,6 +160,8 @@
                     state.scoreResult = result; state.selectedComponent = 0;
                     state.selectedLatticeNode = null; state.selectedAttributionStep = 0;
                     state.savedPoint = null; state.outcomePoint = null;
+                    load(openingDataKey(), openingSummaryPath());
+                    load('manualProjection', api('manual-projection'));
                 }
             } catch (error) {
                 if (request === scoreRequest) state.scoreError = String(error && error.message || error);
@@ -141,22 +174,31 @@
 
         async function loadVideo(videoId) {
             const request = ++detailRequest;
+            const scope = state.scope;
             state.selectedVideo = String(videoId); state.detailError = '';
             state.selectedComponent = 0; state.selectedLatticeNode = null;
             state.selectedAttributionStep = 0; state.savedPoint = null;
             state.outcomePoint = null;
-            const cached = detailCache.get(String(videoId));
+            const cacheKey = `${scope}:${videoId}`;
+            const cached = detailCache.get(cacheKey);
             if (cached) {
                 state.selectedPrediction = cached.prediction; state.selectedLattice = cached.lattice; paint(); return;
             }
             state.selectedPrediction = null; state.selectedLattice = null; state.detailLoading = true; paint();
+            load('manualProjection', api('manual-projection'));
+            if (!(openingSummary() || {}).contextStudy) {
+                load('openingContextStudy', api('opening-context-study'));
+            }
             try {
+                const generation = (openingSummary() || {}).generationId;
+                const generationQuery = generation
+                    ? `&generation=${encodeURIComponent(generation)}` : '';
                 const prediction = await jsonResponse(await fetch(
-                    `${api('opening-prediction')}/${encodeURIComponent(videoId)}`,
+                    `${api('opening-prediction')}/${encodeURIComponent(videoId)}?scope=${encodeURIComponent(scope)}${generationQuery}`,
                 ));
                 const lattice = prediction.componentGraph || prediction.componentLattice || null;
-                if (request !== detailRequest) return;
-                detailCache.set(String(videoId), { prediction, lattice });
+                if (request !== detailRequest || scope !== state.scope) return;
+                detailCache.set(cacheKey, { prediction, lattice });
                 while (detailCache.size > 3) detailCache.delete(detailCache.keys().next().value);
                 state.selectedPrediction = prediction; state.selectedLattice = lattice;
             } catch (error) {
@@ -181,7 +223,7 @@
             const selected = (((analysis.contributions || {}).at20Seconds || (analysis.contributions || {}).atAnalyzedEnd || {}).selectedStage)
                 || (((analysis.curves || {}).entryIndexed || {}).selectedStage) || 'semanticPrefix';
             const random = family.randomFold || {};
-            const summary = state.data.openingPredictions || {};
+            const summary = openingSummary() || {};
             const corpusFamily = ((summary.validation || {}).entryIndexed || {});
             const chronological = family.chronological || corpusFamily.chronological || {};
             return {
@@ -230,6 +272,7 @@
         function headline(analysis) {
             const output = analysis.outputs || {};
             const actual = analysis.actual || null;
+            const predictionError = analysis.predictionError || null;
             const views = output.viewsDiagnostic || null;
             const forecastEnd = numeric(output.forecastEndSeconds) == null
                 ? numeric(analysis.forecastHorizonSeconds)
@@ -248,6 +291,7 @@
                 ${stat('normalized drop', pct(output.normalizedDropByAnalyzedEndPoints), C.amber, 'entry indexed: starts at 100%')}
                 ${stat('views diagnostic', viewsAvailable ? compact(views.estimate) : 'withheld', viewsAvailable ? C.purple : C.amber, views ? `R5 scenario ${compact(views.lower80)}–${compact(views.upper80)} · ${views.status || 'withheld'}` : 'needs at least five seconds of supplied text')}
                 ${actual ? stat('actual retained', pct(numeric(actual.retainedAtForecastEndPercent) == null ? actual.retainedAt20sPercent : actual.retainedAtForecastEndPercent), C.text, `actual R5 ${pct(actual.absoluteRetention5sPercent)} · ${compact(actual.views)} views`) : ''}
+                ${predictionError ? stat('prediction error', `${signed(predictionError.retainedAtForecastEndPoints, 2)} pp`, Math.abs(Number(predictionError.retainedAtForecastEndPoints || 0)) > 7 ? C.red : C.dim, `whole-curve MAE ${fmt(predictionError.curveMAEPercentagePoints, 2)} pp`) : ''}
             </div>`;
         }
 
@@ -398,13 +442,16 @@
 
         function componentPanel(analysis, lattice) {
             const components = analysis.components || [];
+            if (!components.length && ((analysis.support || {}).diagnosticComponentsAvailable === false)) {
+                return panel(`<div style="font-size:11px;color:${C.amber};font-weight:900">Semantic component diagnostics unavailable</div><div style="font-size:8px;color:${C.mute};line-height:1.55;margin-top:3px">No public timestamped transcript was recoverable for this video. The graph above is still the exact frozen selected baseline, which is the production stage, but no words or four-cluster components are invented.</div>`, 'margin-top:10px');
+            }
             const selected = activeComponent(analysis);
             return `${panel(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><div style="font-size:11px;color:${C.text};font-weight:900">${components.length} non-overlapping components · every phrase and value exposed</div><div style="font-size:8px;color:${C.mute};margin:2px 0 7px">Four is the category vocabulary, not the component count. Every analyzed token belongs to exactly one selected component; overlapping lattice spans below are candidates only.</div></div><div style="font-size:8px;color:${C.cyan};font-weight:900">SELECT A COMPONENT</div></div>${tokenStrip(analysis)}${componentLedgerTable(analysis)}`, 'margin-top:10px')}
             ${selected.text ? componentEmbeddingPanel(analysis) : ''}${selected.text ? componentMeasurementPanel(analysis) : ''}${selected.text ? componentRawEvidencePanel(analysis, lattice) : ''}`;
         }
 
         function outcomePlanesPanel(analysis) {
-            const study = ((state.data.openingPredictions || {}).contextStudy || {});
+            const study = contextStudy();
             const categories = study.categories || [];
             if (!categories.length) return loadingPanel('Loading the four frozen category outcome planes…');
             const selected = activeComponent(analysis);
@@ -422,7 +469,7 @@
 
         function availableRiskRows(analysis) {
             const local = analysis.supportBySecond || ((analysis.support || {}).riskSetBySecond) || [];
-            const global = (state.data.openingPredictions || {}).riskSetBySecond || [];
+            const global = (openingSummary() || {}).riskSetBySecond || [];
             return local.length ? local : global;
         }
 
@@ -431,7 +478,7 @@
             if (!rows.length) return '';
             const support = analysis.support || {};
             const input = analysis.input || {};
-            const summarySupport = (state.data.openingPredictions || {}).support || {};
+            const summarySupport = (openingSummary() || {}).support || {};
             const semanticMinimum = Number(summarySupport.minimumModelSources || 10);
             const chronologicalMinimum = Number(summarySupport.minimumChronologicalSources || 40);
             const forecastEnd = numeric(analysis.forecastHorizonSeconds) == null
@@ -443,7 +490,7 @@
         }
 
         function sequenceContextPanel(analysis) {
-            const study = (state.data.openingPredictions || {}).contextStudy || {};
+            const study = contextStudy();
             const categories = study.categories || [];
             const swaps = ((analysis.orderSensitivity || {}).swaps || []);
             if (!categories.length && !swaps.length) return '';
@@ -492,6 +539,9 @@
         function temporalAttributionPanel(analysis) {
             const attribution = analysis.temporalAttribution || {};
             const steps = attribution.steps || [];
+            if (!steps.length && ((analysis.support || {}).diagnosticComponentsAvailable === false)) {
+                return panel(`<div style="font-size:11px;color:${C.text};font-weight:900">Selected-stage movement ledger</div><div style="font-size:8px;color:${C.mute};line-height:1.55;margin-top:3px">The served curve is the duration-conditioned baseline at every point. Transcript-dependent timing, semantics, components, and relationships remain unavailable rather than being imputed.</div>`, 'margin-top:10px');
+            }
             if (!steps.length) return errorPanel('This analysis artifact predates the shared temporal attribution ledger. Rebuild it before treating the curve as explainable.');
             const summary = attribution.summary || {};
             const selectedIndex = Math.min(Math.max(0, state.selectedAttributionStep), steps.length - 1);
@@ -562,10 +612,21 @@
             const structural = Number(analysis.analysisHorizonSeconds || input.structuralDurationSeconds || 0);
             const forecast = Number(analysis.forecastHorizonSeconds || (analysis.outputs || {}).forecastEndSeconds || 0);
             const unsupportedSuffix = structural > forecast + 1e-6;
-            return `<div data-pl-analysis>${panel(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:260px;flex:1"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">${esc(source)}</div><div style="font-size:16px;color:${C.text};font-weight:900;line-height:1.35;margin-top:3px">${esc(analysis.title || input.analyzedText || analysis.text || 'Opening analysis')}</div>${analysis.title ? `<div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px">${esc(analysis.text || '')}</div>` : ''}</div><div style="font-size:8px;color:${C.mute};text-align:right">${analysis.tokenCount || 0} tokens · ${analysis.componentCount || (analysis.components || []).length} components<br>${fmt(structural, 2)}s structurally analyzed · ${fmt(forecast, 2)}s retention forecast</div></div>${unsupportedSuffix ? `<div style="margin-top:7px;font-size:8px;color:${C.amber}">The entire ${fmt(structural, 2)}s input is componentized. Retention stops at ${fmt(forecast, 2)}s because ${esc(((analysis.support || {}).forecastStopReason) || 'the next duration-conditioned model point is unsupported')}; no suffix value is fabricated.</div>` : ''}${headline(analysis)}`)}
+            const diagnosticComponentsAvailable = ((analysis.support || {}).diagnosticComponentsAvailable !== false);
+            const activeFamily = ((analysis.curves || {})[state.curveMode]) || {};
+            const hasActualCurve = (activeFamily.actual || []).some(value => numeric(value) != null);
+            const countCopy = diagnosticComponentsAvailable
+                ? `${analysis.tokenCount || 0} tokens · ${analysis.componentCount || (analysis.components || []).length} components<br>${fmt(structural, 2)}s structurally analyzed · ${fmt(forecast, 2)}s retention forecast`
+                : `transcript unavailable · semantic diagnostics withheld<br>${fmt(structural, 2)}s media duration · ${fmt(forecast, 2)}s baseline forecast`;
+            const header = panel(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:260px;flex:1"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">${esc(source)}</div><div style="font-size:16px;color:${C.text};font-weight:900;line-height:1.35;margin-top:3px">${esc(analysis.title || input.analyzedText || analysis.text || 'Opening analysis')}</div>${analysis.title && analysis.text ? `<div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px">${esc(analysis.text)}</div>` : ''}</div><div style="font-size:8px;color:${C.mute};text-align:right">${countCopy}</div></div>${unsupportedSuffix ? `<div style="margin-top:7px;font-size:8px;color:${C.amber}">${diagnosticComponentsAvailable ? `The entire ${fmt(structural, 2)}s input is componentized. Retention stops at ${fmt(forecast, 2)}s because ${esc(((analysis.support || {}).forecastStopReason) || 'the next duration-conditioned model point is unsupported')}; no suffix value is fabricated.` : `The selected baseline is served through ${fmt(forecast, 2)}s. The remaining media duration is outside frozen support, and transcript-dependent diagnostics are unavailable; neither is fabricated.`}</div>` : ''}${headline(analysis)}`);
+            const comparison = panel(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:900">Frozen prediction beside measured retention</div><div style="font-size:8px;color:${C.mute};margin-top:2px">Both panes use the same seconds and percentage scale. Entry-indexed starts each video at 100%; raw retention preserves looping and rewatch elevation. The full-resolution measured curve is joined only after inference.</div></div><div style="display:flex;gap:4px">${button('Normalized survival', 'data-pl-curve="entryIndexed"', state.curveMode === 'entryIndexed')}${button('Raw retention', 'data-pl-curve="observedAbsolute"', state.curveMode === 'observedAbsolute')}${button(state.showStages ? 'Hide stage ladder' : 'Show stage ladder', 'data-pl-toggle-stages', state.showStages)}</div></div><div style="display:grid;grid-template-columns:repeat(2,minmax(300px,1fr));gap:8px;margin-top:7px"><div style="background:${C.card2};padding:7px"><div style="font-size:8px;color:${C.cyan};font-weight:900">PREDICTED · FROZEN MODEL</div><canvas data-pl-canvas="retention-predicted" style="display:block;width:100%;height:300px;margin-top:3px"></canvas></div><div style="background:${C.card2};padding:7px"><div style="font-size:8px;color:${hasActualCurve ? C.green : C.amber};font-weight:900">${hasActualCurve ? 'ACTUAL · YOUTUBE RETENTION' : 'ACTUAL · UNOBSERVED FOR TYPED TEXT'}</div>${hasActualCurve ? `<canvas data-pl-canvas="retention-actual" style="display:block;width:100%;height:300px;margin-top:3px"></canvas>` : `<div style="height:300px;display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:8px;text-align:center">No outcome is attached to typed text.</div>`}</div></div>${hasActualCurve ? `<div style="font-size:8px;color:${C.text};font-weight:900;margin-top:9px">SAME-AXIS OVERLAY · ERROR IS THE VERTICAL GAP</div><canvas data-pl-canvas="retention-overlay" style="display:block;width:100%;height:340px;margin-top:3px"></canvas>` : ''}`, 'margin-top:10px');
+            if (!diagnosticComponentsAvailable) {
+                return `<div data-pl-analysis>${header}${panel(`<div style="font-size:11px;color:${C.amber};font-weight:900">Duration-conditioned baseline only</div><div style="font-size:8px;color:${C.mute};line-height:1.6;margin-top:3px">No public timestamped spoken transcript was recovered. This video therefore receives only the frozen selected baseline through its supported media duration. No words, embeddings, four-cluster components, semantic effects, or sequence relationships are inferred. The actual retention curve remains outcome-only comparison data.</div>`, 'margin-top:10px')}${riskSetPanel(analysis)}${comparison}</div>`;
+            }
+            return `<div data-pl-analysis>${header}
             ${evidencePanel(analysis)}
             ${riskSetPanel(analysis)}
-            ${panel(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:900">Retention prediction and measured comparison</div><div style="font-size:8px;color:${C.mute};margin-top:2px">Entry-indexed starts every opening at 100%. The band is the cross-fitted 10th–90th residual interval. Saved rows add the measured curve; typed rows stop at their supported endpoint.</div></div><div style="display:flex;gap:4px">${button('Normalized survival', 'data-pl-curve="entryIndexed"', state.curveMode === 'entryIndexed')}${button('Raw retention', 'data-pl-curve="observedAbsolute"', state.curveMode === 'observedAbsolute')}${button(state.showStages ? 'Hide stage ladder' : 'Show stage ladder', 'data-pl-toggle-stages', state.showStages)}</div></div><canvas data-pl-canvas="retention" style="display:block;width:100%;height:370px;margin-top:5px"></canvas>`, 'margin-top:10px')}
+            ${comparison}
             ${temporalAttributionPanel(analysis)}
             ${prefixTracePanel(analysis)}
             ${panel(`<div style="font-size:11px;color:${C.text};font-weight:900">Applied and candidate endpoint channels</div><div style="font-size:8px;color:${C.mute};margin-top:2px">The waterfall shows all predeclared nested candidate movements. The served-stage label marks where the cyan headline stops; later bars are diagnostics until the global promotion gate passes.</div><canvas data-pl-canvas="contributions" style="display:block;width:100%;height:275px;margin-top:5px"></canvas>`, 'margin-top:10px')}
@@ -589,11 +650,35 @@
             ${result ? `<div style="margin-top:10px">${renderAnalysis(result, result.componentLattice)}</div>` : ''}</div>`;
         }
 
+        function scopedLibraryRows(summary) {
+            const rows = summary.rows || [];
+            if (state.scope === 'all' || state.scope === 'tyler') return rows;
+            return rows.filter(row => String(row.accountId || '') === state.scope);
+        }
+
+        function scopeEvaluation(summary) {
+            const evaluation = summary.evaluation || {};
+            const group = state.scope === 'all'
+                ? (evaluation.externalAccounts || evaluation.allPooled || null)
+                : (((evaluation.byAccount || {})[state.scope]) || null);
+            return group && (group.families || {})[state.curveMode] || group;
+        }
+
+        function evaluationPanel(summary, rows) {
+            const metrics = scopeEvaluation(summary);
+            if (!metrics || !metrics.videos) return '';
+            const pooled = (summary.evaluation || {}).allPooled || {};
+            const fixed20 = metrics.fixed20Second || {};
+            const primaryLabel = state.scope === 'all'
+                ? 'account-external holdout rows' : `${state.scope} frozen predictions`;
+            return panel(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:12px;color:${C.text};font-weight:900">Frozen prediction accuracy against actual retention</div><div style="font-size:8px;color:${C.mute};line-height:1.55;margin-top:2px">Primary metrics use ${esc(primaryLabel)}. Time zero is excluded. Each source contributes equally to curve MAE, regardless of duration. The fixed 20-second readout compares like with like; cross-horizon endpoint correlation is withheld.</div><div style="display:flex;gap:4px;margin-top:6px">${button('Normalized survival', 'data-pl-curve="entryIndexed"', state.curveMode === 'entryIndexed')}${button('Raw retention', 'data-pl-curve="observedAbsolute"', state.curveMode === 'observedAbsolute')}</div></div><div style="font-size:7.5px;color:${C.amber};max-width:510px;text-align:right;line-height:1.5">${esc((summary.evaluation || {}).claimBoundary || '')}</div></div><div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:8px">${stat('evaluated videos', Number(metrics.videos || 0).toLocaleString(), C.text, state.scope === 'all' ? `${Number(pooled.videos || 0).toLocaleString()} visible pooled rows include OOF + frozen evaluations` : `${rows.length.toLocaleString()} visible rows`)}${stat('whole-curve MAE', `${fmt(metrics.sourceEqualCurveMAEPercentagePoints, 2)} pp`, C.cyan, `one equal vote per video · ${metrics.metricFamily === 'observedAbsolute' ? 'raw retention' : 'entry indexed'}`)}${stat('20s MAE', `${fmt(fixed20.maePercentagePoints, 2)} pp`, C.amber, `${Number(fixed20.videos || 0).toLocaleString()} videos · bias ${signed(fixed20.biasPercentagePoints, 2)} pp`)}${stat('20s correlation', fmt(fixed20.pearson, 3), C.purple, `Spearman ${fmt(fixed20.spearman, 3)} · fixed horizon only`)}${stat('10–90 band coverage', pct(Number(metrics.residualBandCoverageFraction || 0) * 100), C.green, 'measured nonzero-time cells inside frozen residual band')}</div><div style="display:grid;grid-template-columns:repeat(2,minmax(300px,1fr));gap:8px;margin-top:9px"><div style="background:${C.card2};padding:7px"><div style="font-size:8px;color:${C.text};font-weight:900">MEAN PREDICTED VS ACTUAL CURVE</div><canvas data-pl-canvas="pooled-mean" style="display:block;width:100%;height:300px;margin-top:3px"></canvas></div><div style="background:${C.card2};padding:7px"><div style="font-size:8px;color:${C.text};font-weight:900">ERROR BY SECOND</div><canvas data-pl-canvas="pooled-accuracy" style="display:block;width:100%;height:300px;margin-top:3px"></canvas></div></div><div style="background:${C.card2};padding:7px;margin-top:8px"><div style="font-size:8px;color:${C.text};font-weight:900">FIXED 20-SECOND RETENTION · PREDICTED VS ACTUAL</div><canvas data-pl-canvas="pooled-scatter" style="display:block;width:100%;height:360px;margin-top:3px"></canvas></div>`, 'margin-top:9px');
+        }
+
         function renderLibrary() {
-            const summary = state.data.openingPredictions;
-            if (!summary) return state.errors.openingPredictions ? errorPanel(state.errors.openingPredictions) : loadingPanel('Loading 208 measured openings and out-of-fold predictions…');
+            const summary = openingSummary();
+            if (!summary) return openingSummaryError() ? errorPanel(openingSummaryError()) : loadingPanel(state.scope === 'tyler' ? 'Loading 208 measured openings and out-of-fold predictions…' : 'Loading pooled frozen predictions and measured retention…');
             const query = state.query.trim().toLowerCase();
-            let rows = (summary.rows || []).filter(row => !query || `${row.title || ''} ${row.text || ''} ${row.videoId}`.toLowerCase().includes(query));
+            let rows = scopedLibraryRows(summary).filter(row => !query || `${row.title || ''} ${row.text || ''} ${row.videoId} ${row.accountName || ''}`.toLowerCase().includes(query));
             const predictedEndpoint = row => numeric((row.outputs || {}).retainedAtForecastEndPercent) == null
                 ? Number((row.outputs || {}).retainedAtAnalyzedEndPercent || 0)
                 : Number((row.outputs || {}).retainedAtForecastEndPercent);
@@ -608,8 +693,12 @@
                 if (state.sort === 'actual') return actualEndpoint(b) - actualEndpoint(a);
                 return predictedEndpoint(b) - predictedEndpoint(a);
             });
-            return `<div><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;flex-wrap:wrap"><div><div style="font-size:15px;color:${C.text};font-weight:900">Opening library</div><div style="font-size:8px;color:${C.mute};margin-top:2px">${summary.sources || rows.length} source-aligned Shorts sequences · source-level out-of-fold predictions · each row ends at its own supported risk-set endpoint</div></div><div style="display:flex;gap:5px">${button('Predicted', 'data-pl-sort="predicted"', state.sort === 'predicted')}${button('Actual', 'data-pl-sort="actual"', state.sort === 'actual')}${button('Largest error', 'data-pl-sort="error"', state.sort === 'error')}</div></div>
-            ${panel(`<input data-pl-query value="${esc(state.query)}" placeholder="Search title, opening, or video ID" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:8px;font-size:9px"><div style="max-height:520px;overflow:auto;margin-top:7px"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['opening', 'exact components and clusters', 'forecast endpoint', 'predicted retained', 'actual retained', 'error', 'actual views'].map(value => `<th style="position:sticky;top:0;background:${C.card};padding:5px;text-align:right;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${rows.map(row => { const error = endpointError(row); return `<tr data-pl-video="${esc(row.videoId)}" style="cursor:pointer;background:${String(row.videoId) === String(state.selectedVideo) ? C.cyan + '12' : 'transparent'}"><td style="padding:6px;text-align:left;border-bottom:1px solid ${C.border};max-width:420px"><b style="display:block;color:${C.text};font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.title || row.videoId)}</b><span style="display:block;color:${C.mute};line-height:1.4;max-height:34px;overflow:hidden">${esc(row.text || '')}</span></td><td style="padding:6px;text-align:left;border-bottom:1px solid ${C.border};min-width:320px;max-width:620px"><div style="font-size:7px;color:${C.mute};margin-bottom:3px">${row.componentCount} components across ${fmt(row.analysisHorizonSeconds, 1)}s</div><div style="display:flex;flex-wrap:wrap;gap:2px">${(row.components || []).map(component => `<span title="tokens ${component.startToken}–${component.endToken} · ${fmt(component.spokenStartSeconds, 2)}–${fmt(component.spokenEndSeconds, 2)}s" style="border-left:3px solid ${colorForCluster(component.category)};background:${colorForCluster(component.category)}12;color:${C.text};padding:2px 4px;font-size:7px;line-height:1.3"><b style="color:${colorForCluster(component.category)}">C${component.category}</b> ${esc(component.text)}</span>`).join('') || (row.categorySequence || []).map((category, index) => `<span style="color:${colorForCluster(category)}">C${category}.${index + 1}</span>`).join(' · ')}</div></td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border};color:${C.cyan}">${fmt(row.forecastHorizonSeconds || (row.outputs || {}).forecastEndSeconds, 0)}s<br><span style="font-size:7px;color:${C.mute}">${(row.support || {}).riskSetSourcesAtForecastEnd || '—'} at risk</span></td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border};color:${C.green};font-weight:900">${pct(predictedEndpoint(row))}</td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border}">${pct(actualEndpoint(row))}</td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border};color:${Math.abs(error) > 7 ? C.red : C.dim}">${signed(error, 1)} pp</td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border}">${compact((row.actual || {}).views)}</td></tr>`; }).join('')}</tbody></table></div>`, 'margin-top:8px')}
+            const visibleRows = state.scope === 'tyler'
+                ? rows
+                : rows.slice(0, Math.max(60, Number(state.libraryLimit || 60)));
+            return `<div><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;flex-wrap:wrap"><div><div style="font-size:15px;color:${C.text};font-weight:900">${state.scope === 'all' ? 'Pooled opening library' : 'Opening library'}</div><div style="font-size:8px;color:${C.mute};margin-top:2px">${rows.length} visible source-aligned Shorts sequences · ${state.scope === 'tyler' ? 'source-level out-of-fold predictions' : 'unchanged frozen model, outcomes joined afterward'} · each row ends at its own supported endpoint</div></div><div style="display:flex;gap:5px">${button('Predicted', 'data-pl-sort="predicted"', state.sort === 'predicted')}${button('Actual', 'data-pl-sort="actual"', state.sort === 'actual')}${button('Largest error', 'data-pl-sort="error"', state.sort === 'error')}</div></div>
+            ${evaluationPanel(summary, rows)}
+            ${panel(`<input data-pl-query value="${esc(state.query)}" placeholder="Search title, opening, account, or video ID" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:8px;font-size:9px"><div style="max-height:520px;overflow:auto;margin-top:7px"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['opening', 'exact components and clusters', 'forecast endpoint', 'predicted retained', 'actual retained', 'error', 'actual views'].map(value => `<th style="position:sticky;top:0;background:${C.card};padding:5px;text-align:right;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${visibleRows.map(row => { const error = endpointError(row); return `<tr data-pl-video="${esc(row.videoId)}" style="cursor:pointer;background:${String(row.videoId) === String(state.selectedVideo) ? C.cyan + '12' : 'transparent'}"><td style="padding:6px;text-align:left;border-bottom:1px solid ${C.border};max-width:420px"><b style="display:block;color:${C.text};font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.title || row.videoId)}</b><span style="display:block;color:${C.mute};line-height:1.4;max-height:34px;overflow:hidden">${esc(row.text || '')}</span><span style="display:block;color:${C.cyan};font-size:7px;margin-top:2px">${esc(row.accountName || '')}${row.evaluationKind ? ` · ${esc(row.evaluationKind)}` : ''}</span></td><td style="padding:6px;text-align:left;border-bottom:1px solid ${C.border};min-width:320px;max-width:620px"><div style="font-size:7px;color:${C.mute};margin-bottom:3px">${row.componentCount || 0} components across ${fmt(row.analysisHorizonSeconds, 1)}s</div><div style="display:flex;flex-wrap:wrap;gap:2px">${(row.components || []).map(component => `<span title="tokens ${component.startToken}–${component.endToken} · ${fmt(component.spokenStartSeconds, 2)}–${fmt(component.spokenEndSeconds, 2)}s" style="border-left:3px solid ${colorForCluster(component.category)};background:${colorForCluster(component.category)}12;color:${C.text};padding:2px 4px;font-size:7px;line-height:1.3"><b style="color:${colorForCluster(component.category)}">C${component.category}</b> ${esc(component.text)}</span>`).join('') || ((row.support || {}).timingEstimated ? `<span style="color:${C.amber}">duration-only selected baseline · transcript unavailable</span>` : (row.categorySequence || []).map((category, index) => `<span style="color:${colorForCluster(category)}">C${category}.${index + 1}</span>`).join(' · '))}</div></td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border};color:${C.cyan}">${fmt(row.forecastHorizonSeconds || (row.outputs || {}).forecastEndSeconds, 0)}s<br><span style="font-size:7px;color:${C.mute}">${(row.support || {}).riskSetSourcesAtForecastEnd || '—'} at risk</span></td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border};color:${C.green};font-weight:900">${pct(predictedEndpoint(row))}</td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border}">${pct(actualEndpoint(row))}</td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border};color:${Math.abs(error) > 7 ? C.red : C.dim}">${signed(error, 1)} pp</td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border}">${compact((row.actual || {}).views)}</td></tr>`; }).join('')}</tbody></table></div><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:7px;font-size:8px;color:${C.mute}"><span>showing ${visibleRows.length.toLocaleString()} of ${rows.length.toLocaleString()} matching videos</span>${visibleRows.length < rows.length ? button(`Load next ${Math.min(60, rows.length - visibleRows.length)}`, 'data-pl-more', false) : ''}</div>`, 'margin-top:8px')}
             ${state.detailError ? `<div style="margin-top:8px">${errorPanel(state.detailError)}</div>` : ''}
             ${state.detailLoading ? `<div style="margin-top:8px">${loadingPanel('Loading the saved prediction, measured curve, components, and full lattice…')}</div>` : ''}
             ${state.selectedPrediction ? `<div style="margin-top:10px">${renderAnalysis(state.selectedPrediction, state.selectedLattice)}</div>` : ''}</div>`;
@@ -702,21 +791,27 @@
             ctx.stroke(); ctx.setLineDash([]);
         }
 
-        function drawRetention(canvas) {
+        function drawRetention(canvas, displayMode) {
             const analysis = activeAnalysis().prediction; if (!analysis) return;
+            const mode = displayMode || 'overlay';
             const family = ((analysis.curves || {})[state.curveMode]) || {};
             const times = family.timesSeconds || analysis.predictionTimesSeconds || [];
             const predicted = family.predicted || [];
             const lower = family.predictionP10 || [];
             const upper = family.predictionP90 || [];
-            const actual = family.actual || [];
+            const observed = ((analysis.observedCurves || {})[state.curveMode]) || {};
+            const actualTimes = observed.timesSeconds || times;
+            const actual = observed.actual || family.actual || [];
             if (!times.length || !predicted.length) return;
+            const xMax = Math.max(...times);
+            const actualSeries = actualTimes.map((time, index) => [Number(time), numeric(actual[index])])
+                .filter(point => Number.isFinite(point[0]) && point[0] <= xMax + 1e-6 && point[1] != null);
             const sized = clearCanvas(canvas); const ctx = sized.context;
-            const values = [...predicted, ...lower, ...upper, ...actual].filter(value => numeric(value) != null);
+            const values = [...predicted, ...lower, ...upper, ...actualSeries.map(point => point[1])].filter(value => numeric(value) != null);
             const yMin = Math.floor((Math.min(...values, 40) - 4) / 5) * 5;
             const yMax = Math.ceil((Math.max(...values, 100) + 4) / 5) * 5;
-            const axes = drawAxes(ctx, sized.width, sized.height, 'seconds', '% retained', 0, Math.max(...times), yMin, yMax);
-            (analysis.components || []).forEach((component, index) => {
+            const axes = drawAxes(ctx, sized.width, sized.height, 'seconds', '% retained', 0, xMax, yMin, yMax);
+            if (mode !== 'actual') (analysis.components || []).forEach((component, index) => {
                 const start = numeric(component.spokenStartSeconds);
                 const end = numeric(component.spokenEndSeconds);
                 if (start == null || end == null) return;
@@ -734,13 +829,13 @@
             });
             const band = times.map((time, index) => ({ time, low: numeric(lower[index]), high: numeric(upper[index]) }))
                 .filter(row => row.low != null && row.high != null);
-            if (band.length > 1) {
+            if (mode !== 'actual' && band.length > 1) {
                 ctx.fillStyle = C.cyan + '20'; ctx.beginPath();
                 band.forEach((row, index) => index ? ctx.lineTo(axes.X(row.time), axes.Y(row.high)) : ctx.moveTo(axes.X(row.time), axes.Y(row.high)));
                 [...band].reverse().forEach(row => ctx.lineTo(axes.X(row.time), axes.Y(row.low)));
                 ctx.closePath(); ctx.fill();
             }
-            if (state.showStages && family.stages) {
+            if (mode !== 'actual' && state.showStages && family.stages) {
                 const stageColors = {
                     baseline: C.faint, timing: C.amber, semantic: C.purple,
                     semanticPrefix: C.purple, components: C.accent, relationships: C.green,
@@ -751,10 +846,11 @@
                     stageColors[name], name === family.selectedStage ? 1.8 : 1, [4, 4],
                 ));
             }
-            line(ctx, times.map((time, index) => [axes.X(time), numeric(predicted[index]) == null ? NaN : axes.Y(predicted[index])]), C.cyan, 3);
-            if (actual && actual.length === times.length) line(ctx, times.map((time, index) => [axes.X(time), numeric(actual[index]) == null ? NaN : axes.Y(actual[index])]), C.green, 2.5);
-            ctx.font = '8px sans-serif'; ctx.fillStyle = C.cyan; ctx.fillText('predicted', sized.width - 140, 14);
-            if (actual && actual.length) { ctx.fillStyle = C.green; ctx.fillText('actual', sized.width - 78, 14); }
+            if (mode !== 'actual') line(ctx, times.map((time, index) => [axes.X(time), numeric(predicted[index]) == null ? NaN : axes.Y(predicted[index])]), C.cyan, 3);
+            if (mode !== 'predicted' && actualSeries.length) line(ctx, actualSeries.map(point => [axes.X(point[0]), axes.Y(point[1])]), C.green, 2.5);
+            ctx.font = '8px sans-serif';
+            if (mode !== 'actual') { ctx.fillStyle = C.cyan; ctx.fillText('predicted', sized.width - (mode === 'overlay' ? 140 : 78), 14); }
+            if (mode !== 'predicted' && actual && actual.length) { ctx.fillStyle = C.green; ctx.fillText('actual', sized.width - 78, 14); }
         }
 
         function drawContributions(canvas) {
@@ -925,7 +1021,7 @@
             const analysis = activeAnalysis().prediction; if (!analysis) return;
             const category = Number(canvas.dataset.plCategory);
             const lag = Number(canvas.dataset.plLag == null ? state.outcomeLag : canvas.dataset.plLag);
-            const study = (state.data.openingPredictions || {}).contextStudy || {};
+            const study = contextStudy();
             const categoryStudy = (study.categories || []).find(row => Number(row.category) === category) || {};
             const experiment = (categoryStudy.lagExperiments || []).find(row => Number(row.lagSeconds) === lag && row.status === 'complete') || {};
             const plane = experiment.outcomePlane || ((categoryStudy.outcomePlanesByLag || {})[String(lag)]) || {};
@@ -967,7 +1063,7 @@
             const analysis = activeAnalysis().prediction; if (!analysis) return;
             const rows = availableRiskRows(analysis).filter(row => numeric(row.second) != null && numeric(row.riskSetSources) != null);
             if (!rows.length) return;
-            const summarySupport = (state.data.openingPredictions || {}).support || {};
+            const summarySupport = (openingSummary() || {}).support || {};
             const semanticMinimum = Number(summarySupport.minimumModelSources || 10);
             const chronologicalMinimum = Number(summarySupport.minimumChronologicalSources || 40);
             const forecast = Number(analysis.forecastHorizonSeconds || (analysis.outputs || {}).forecastEndSeconds || 0);
@@ -1036,11 +1132,82 @@
             savedMapGeometry = geometry;
         }
 
+        function drawPooledMean(canvas) {
+            const metrics = scopeEvaluation(openingSummary() || {}) || {};
+            const rows = metrics.accuracyBySecond || [];
+            if (!rows.length) return;
+            const sized = clearCanvas(canvas); const ctx = sized.context;
+            const values = rows.flatMap(row => [row.predictedMeanPercent, row.actualMeanPercent]).filter(value => numeric(value) != null);
+            const xMax = Math.max(...rows.map(row => Number(row.second || 0)), 1);
+            const yMin = Math.floor((Math.min(...values, 40) - 3) / 5) * 5;
+            const yMax = Math.ceil((Math.max(...values, 100) + 3) / 5) * 5;
+            const axes = drawAxes(ctx, sized.width, sized.height, 'seconds', '% retained', 0, xMax, yMin, yMax);
+            line(ctx, rows.map(row => [axes.X(row.second), axes.Y(row.predictedMeanPercent)]), C.cyan, 3);
+            line(ctx, rows.map(row => [axes.X(row.second), axes.Y(row.actualMeanPercent)]), C.green, 3);
+            ctx.font = '8px sans-serif'; ctx.fillStyle = C.cyan; ctx.fillText('predicted mean', sized.width - 170, 14);
+            ctx.fillStyle = C.green; ctx.fillText('actual mean', sized.width - 88, 14);
+        }
+
+        function drawPooledAccuracy(canvas) {
+            const metrics = scopeEvaluation(openingSummary() || {}) || {};
+            const rows = metrics.accuracyBySecond || [];
+            if (!rows.length) return;
+            const sized = clearCanvas(canvas); const ctx = sized.context;
+            const xMax = Math.max(...rows.map(row => Number(row.second || 0)), 1);
+            const lower = Math.min(0, ...rows.map(row => Number(row.biasPercentagePoints || 0)));
+            const upper = Math.max(1, ...rows.map(row => Number(row.rmsePercentagePoints || 0)), ...rows.map(row => Number(row.maePercentagePoints || 0)));
+            const yMin = Math.floor((lower - 1) / 2) * 2;
+            const yMax = Math.ceil((upper + 1) / 2) * 2;
+            const axes = drawAxes(ctx, sized.width, sized.height, 'seconds', 'error · percentage points', 0, xMax, yMin, yMax);
+            if (yMin <= 0 && yMax >= 0) line(ctx, [[axes.X(0), axes.Y(0)], [axes.X(xMax), axes.Y(0)]], C.faint, 1, [3, 3]);
+            line(ctx, rows.map(row => [axes.X(row.second), axes.Y(row.maePercentagePoints)]), C.cyan, 3);
+            line(ctx, rows.map(row => [axes.X(row.second), axes.Y(row.rmsePercentagePoints)]), C.amber, 2);
+            line(ctx, rows.map(row => [axes.X(row.second), axes.Y(row.biasPercentagePoints)]), C.purple, 2);
+            ctx.font = '8px sans-serif'; ctx.fillStyle = C.cyan; ctx.fillText('MAE', sized.width - 145, 14);
+            ctx.fillStyle = C.amber; ctx.fillText('RMSE', sized.width - 108, 14);
+            ctx.fillStyle = C.purple; ctx.fillText('bias', sized.width - 64, 14);
+        }
+
+        function drawPooledScatter(canvas) {
+            const summary = openingSummary() || {};
+            const rows = scopedLibraryRows(summary)
+                .filter(row => state.scope !== 'all' || String(row.evaluationKind || '').startsWith('cross-account-'))
+                .map(row => {
+                const familyComparisons = (row.comparisonsByFamily || {})[state.curveMode]
+                    || row.comparisons || {};
+                const comparison = familyComparisons['20'] || {};
+                const predicted = numeric(comparison.predictedPercent);
+                const actual = numeric(comparison.actualPercent);
+                return { predicted, actual, accountId: row.accountId || 'tyler' };
+            }).filter(row => row.predicted != null && row.actual != null);
+            if (!rows.length) return;
+            const sized = clearCanvas(canvas); const ctx = sized.context;
+            const values = rows.flatMap(row => [row.predicted, row.actual]);
+            const minimum = Math.floor((Math.min(...values) - 3) / 5) * 5;
+            const maximum = Math.ceil((Math.max(...values) + 3) / 5) * 5;
+            const axes = drawAxes(ctx, sized.width, sized.height, 'actual 20-second retention %', 'predicted 20-second retention %', minimum, maximum, minimum, maximum);
+            line(ctx, [[axes.X(minimum), axes.Y(minimum)], [axes.X(maximum), axes.Y(maximum)]], C.green, 1.5, [5, 4]);
+            const accounts = [...new Set(rows.map(row => row.accountId))];
+            rows.forEach(row => {
+                const color = clusterColors[Math.max(0, accounts.indexOf(row.accountId)) % clusterColors.length];
+                ctx.fillStyle = color; ctx.globalAlpha = .48;
+                ctx.beginPath(); ctx.arc(axes.X(row.actual), axes.Y(row.predicted), 3, 0, Math.PI * 2); ctx.fill();
+            });
+            canvas._plPooledPointCount = rows.length;
+            ctx.globalAlpha = 1; ctx.font = '8px sans-serif';
+            ctx.fillStyle = C.green; ctx.fillText('perfect prediction', sized.width - 110, 14);
+        }
+
         function drawAll() {
             if (!host) return;
             host.querySelectorAll('canvas[data-pl-canvas]').forEach(canvas => {
                 const kind = canvas.dataset.plCanvas;
-                if (kind === 'retention') drawRetention(canvas);
+                if (kind === 'retention' || kind === 'retention-overlay') drawRetention(canvas, 'overlay');
+                else if (kind === 'retention-predicted') drawRetention(canvas, 'predicted');
+                else if (kind === 'retention-actual') drawRetention(canvas, 'actual');
+                else if (kind === 'pooled-mean') drawPooledMean(canvas);
+                else if (kind === 'pooled-accuracy') drawPooledAccuracy(canvas);
+                else if (kind === 'pooled-scatter') drawPooledScatter(canvas);
                 else if (kind === 'contributions') drawContributions(canvas);
                 else if (kind === 'attribution') drawAttribution(canvas);
                 else if (kind === 'component-response') drawComponentResponse(canvas);
@@ -1074,7 +1241,8 @@
             if (view) { state.view = view.dataset.plView; ensureViewData(); paint(); return true; }
             if (target.closest('[data-pl-score]')) { scoreOpening(); return true; }
             const sort = target.closest('[data-pl-sort]');
-            if (sort) { state.sort = sort.dataset.plSort; paint(); return true; }
+            if (sort) { state.sort = sort.dataset.plSort; state.libraryLimit = 60; paint(); return true; }
+            if (target.closest('[data-pl-more]')) { state.libraryLimit = Number(state.libraryLimit || 60) + 60; paint(); return true; }
             const video = target.closest('[data-pl-video]');
             if (video) { loadVideo(video.dataset.plVideo); return true; }
             const component = target.closest('[data-pl-component]');
@@ -1127,12 +1295,12 @@
         }
 
         function handleChange(event) {
-            if (event.target.matches('[data-pl-query]')) { state.query = event.target.value; paint(); return true; }
+            if (event.target.matches('[data-pl-query]')) { state.query = event.target.value; state.libraryLimit = 60; paint(); return true; }
             return false;
         }
 
-        function render() { window.requestAnimationFrame(() => { host = document.querySelector('#pl-root'); drawAll(); }); return renderBody(); }
-        function afterRender() { host = document.querySelector('#pl-root'); ensureViewData(); drawAll(); }
+        function render() { syncScope(); window.requestAnimationFrame(() => { host = document.querySelector('#pl-root'); drawAll(); }); return renderBody(); }
+        function afterRender() { host = document.querySelector('#pl-root'); syncScope(); ensureViewData(); drawAll(); }
         return { render, afterRender, handleClick, handleInput, handleChange, _state: state };
     };
 }());

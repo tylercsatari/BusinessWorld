@@ -515,13 +515,75 @@ def sequence_order_sensitivity(components: list[dict], context_study: dict) -> d
     }
 
 
+def _validated_token_clock(tokens: list, token_clock: list[dict]) -> list[dict]:
+    if len(token_clock) != len(tokens):
+        raise ValueError("observed token clock does not cover every token")
+    output = []
+    previous_end = 0.0
+    for index, (token, row) in enumerate(zip(tokens, token_clock)):
+        start = float(row.get("startSeconds"))
+        end = float(row.get("endSeconds"))
+        lexical = bool(row.get("lexical", any(
+            character.isalnum() or character == "_" for character in token.text
+        )))
+        if not math.isfinite(start + end) or start < 0 or end < start:
+            raise ValueError(f"observed token clock has invalid timing at token {index}")
+        if start + 1e-6 < previous_end:
+            raise ValueError(f"observed token clock moves backward at token {index}")
+        output.append({
+            "index": int(token.index),
+            "startSeconds": float(start),
+            "endSeconds": float(end),
+            "lexical": lexical,
+        })
+        previous_end = max(previous_end, end)
+    if not any(row["lexical"] for row in output):
+        raise ValueError("an opening needs at least one lexical atom")
+    return output
+
+
 def _score_variable_text(text: str, partition_model: dict, opening_model: dict,
                          retention_model: dict, store: EmbeddingStore,
-                         planned_duration_seconds: float | None) -> dict:
+                         planned_duration_seconds: float | None,
+                         token_clock_override: list[dict] | None = None,
+                         timing_source: str | None = None,
+                         forecast_duration_override: float | None = None) -> dict:
     scope = _variable_prediction_scope(text, retention_model, planned_duration_seconds)
     source_text = scope["analyzedText"]
     tokens = tokenize(source_text)
-    token_clock = _typed_token_clock(tokens, scope["structuralDurationSeconds"])
+    token_clock = (
+        _validated_token_clock(tokens, token_clock_override)
+        if token_clock_override is not None else
+        _typed_token_clock(tokens, scope["structuralDurationSeconds"])
+    )
+    if token_clock_override is not None:
+        observed_duration = max(float(row["endSeconds"]) for row in token_clock)
+        if observed_duration <= 0:
+            raise ValueError("observed token clock has no positive duration")
+        sequence_duration = (
+            float(forecast_duration_override)
+            if forecast_duration_override is not None else observed_duration
+        )
+        if not math.isfinite(sequence_duration) or sequence_duration <= 0:
+            raise ValueError("observed media duration must be a positive number")
+        if sequence_duration + 1e-6 < observed_duration:
+            raise ValueError("observed token timing extends past the media duration")
+        supported = float(scope["retentionUnsupportedAfterSeconds"])
+        scope.update({
+            "plannedSpokenSeconds": observed_duration,
+            "estimatedSpokenSeconds": observed_duration,
+            "observedSpokenEndSeconds": observed_duration,
+            "structuralDurationSeconds": sequence_duration,
+            "forecastDurationSeconds": min(sequence_duration, supported),
+            "forecastStopReason": (
+                "source-media endpoint"
+                if sequence_duration <= supported + 1e-9 else
+                "duration-conditioned cohort risk set falls below the declared model minimum"
+            ),
+            "forecastBeyondSuppliedText": sequence_duration > observed_duration + 1e-6,
+            "timingEstimated": False,
+            "timingSource": timing_source or "observed source-media caption timestamps",
+        })
     support = _typed_causal_support(opening_model, retention_model)
     decomposition = build_streaming_components(
         source_text, store, partition_model, opening_model,
@@ -604,7 +666,7 @@ def _score_variable_text(text: str, partition_model: dict, opening_model: dict,
             **scope,
             "candidateIdeaAnchor": None,
             "externalIdeaContextUsed": False,
-            "forecastBeyondSuppliedText": False,
+            "forecastBeyondSuppliedText": bool(scope.get("forecastBeyondSuppliedText")),
         },
         "analysisHorizonSeconds": float(scope["structuralDurationSeconds"]),
         "modelHorizonSeconds": float(
@@ -613,7 +675,9 @@ def _score_variable_text(text: str, partition_model: dict, opening_model: dict,
         ),
         "forecastHorizonSeconds": forecast_end,
         "predictionTimesSeconds": entry["timesSeconds"],
-        "originalHookEndSeconds": float(scope["structuralDurationSeconds"]),
+        "originalHookEndSeconds": float(
+            scope.get("observedSpokenEndSeconds") or scope["structuralDurationSeconds"]
+        ),
         "tokenCount": len(tokens),
         "componentCount": len(public_components),
         "components": public_components,
@@ -716,6 +780,36 @@ def score_text(text: str, partition_model: dict | None = None,
         return _score_variable_text(
             text, partition_model, opening_model, retention_model, store,
             planned_duration_seconds,
+        )
+    finally:
+        if owned_store:
+            store.close()
+
+
+def score_timed_text(text: str, token_clock: list[dict],
+                     timing_source: str = "observed source-media caption timestamps",
+                     media_duration_seconds: float | None = None,
+                     partition_model: dict | None = None,
+                     store: EmbeddingStore | None = None,
+                     opening_model: dict | None = None,
+                     opening_retention_model: dict | None = None) -> dict:
+    """Score observed spoken timing with the unchanged frozen model."""
+    partition_model = partition_model or load_artifact(PARTITION_FILE)
+    opening_model = opening_model or load_artifact(OPENING_MODEL_FILE)
+    retention_model = (
+        opening_retention_model or load_artifact(OPENING_RETENTION_MODEL_FILE)
+    )
+    if int(retention_model.get("version") or 0) < 3:
+        raise RuntimeError(
+            "legacy opening-retention artifacts are unsupported; rebuild the v3 variable-horizon model"
+        )
+    owned_store = store is None
+    store = store or EmbeddingStore(_embedding_cache_path())
+    try:
+        return _score_variable_text(
+            text, partition_model, opening_model, retention_model, store,
+            None, token_clock_override=token_clock, timing_source=timing_source,
+            forecast_duration_override=media_duration_seconds,
         )
     finally:
         if owned_store:

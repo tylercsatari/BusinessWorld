@@ -8,6 +8,7 @@ import numpy as np
 from opening_predictor import temporal_attribution
 from score_hook import (
     _typed_token_clock,
+    _validated_token_clock,
     _variable_curve_payload,
     _variable_prediction_scope,
 )
@@ -96,6 +97,21 @@ print(score_hook.PREDICTOR_VERSION)
         self.assertEqual([row["endSeconds"] for row in lexical], [1.0, 2.0, 3.0])
         self.assertTrue(all(left["endSeconds"] <= right["startSeconds"]
                             for left, right in zip(lexical, lexical[1:])))
+
+    def test_observed_token_clock_must_cover_every_token_without_reversing(self):
+        tokens = tokenize("one two")
+        clock = _validated_token_clock(tokens, [
+            {"startSeconds": 0.1, "endSeconds": 0.4, "lexical": True},
+            {"startSeconds": 0.4, "endSeconds": 0.8, "lexical": True},
+        ])
+        self.assertEqual([row["index"] for row in clock], [0, 1])
+        with self.assertRaisesRegex(ValueError, "cover every token"):
+            _validated_token_clock(tokens, clock[:1])
+        with self.assertRaisesRegex(ValueError, "moves backward"):
+            _validated_token_clock(tokens, [
+                {"startSeconds": 0.1, "endSeconds": 0.5, "lexical": True},
+                {"startSeconds": 0.4, "endSeconds": 0.8, "lexical": True},
+            ])
 
     def test_failed_promotion_serves_baseline_and_keeps_candidate_visible(self):
         family = {
