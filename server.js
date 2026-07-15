@@ -1831,8 +1831,31 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
                 });
                 py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
             }));
-            if (body.async) { const jobId = quantJobSubmit('raw-embed-youtube', ytRunner); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
-            const out = await ytRunner();
+            const relayRunner = async () => {
+                try { return await ytRunner(); }
+                catch (e) {
+                    const msg = String((e && e.message) || e);
+                    if (!/cookie|bot|confirm|sign in|authenticat|403/i.test(msg)) throw e;
+                    // YouTube bot-blocks this datacenter IP — relay the job through the Mac watcher,
+                    // which downloads on a residential IP and runs the identical scoring pipeline.
+                    const rid = 'y' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+                    await cloud.uploadToR2(`shorts/yt-relay/requests/${rid}.json`, Buffer.from(JSON.stringify({ url: yurl, title: yTitle, ts: Date.now() })), 'application/json');
+                    for (let i = 0; i < 100; i++) {
+                        await new Promise(r => setTimeout(r, 5000));
+                        const b = await cloud.downloadFromR2(`shorts/yt-relay/results/${rid}.json`).catch(() => null);
+                        if (b) {
+                            await cloud.deleteFromR2(`shorts/yt-relay/results/${rid}.json`).catch(() => {});
+                            const j = JSON.parse(b.toString('utf8'));
+                            if (j.error) throw new Error(j.error);
+                            return j;
+                        }
+                    }
+                    await cloud.deleteFromR2(`shorts/yt-relay/requests/${rid}.json`).catch(() => {});
+                    throw new Error('YouTube blocks this server and the Mac relay did not answer in 8 min — is the relay watcher running? (launchctl list | grep ytrelay)');
+                }
+            };
+            if (body.async) { const jobId = quantJobSubmit('raw-embed-youtube', relayRunner); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            const out = await relayRunner();
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(out));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
