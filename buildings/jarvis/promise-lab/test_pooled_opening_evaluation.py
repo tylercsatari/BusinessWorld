@@ -5,8 +5,13 @@ import numpy as np
 from pooled_opening_evaluation import (
     attach_observed_retention,
     baseline_only_analysis,
+    candidate_vs_baseline,
     caption_json3_to_timed_words,
+    content_fingerprint,
     evaluation_metrics,
+    outcome_blind_prediction,
+    prediction_fingerprint,
+    strict_blind_external_selection,
     token_clock_from_timed_words,
 )
 from score_hook import _variable_curve_payload
@@ -41,6 +46,34 @@ def family(selected="baseline"):
 
 
 class PooledOpeningEvaluationTest(unittest.TestCase):
+    @staticmethod
+    def synthetic_detail(video_id, account_id, evaluation_kind, text,
+                         actual_end=48.0, baseline_end=50.0,
+                         candidate_end=55.0):
+        curves = {}
+        for family_name in ("entryIndexed", "observedAbsolute"):
+            curves[family_name] = {
+                "timesSeconds": [0.0, 20.0],
+                "predicted": [100.0, baseline_end],
+                "predictionP10": [100.0, baseline_end - 8.0],
+                "predictionP90": [100.0, baseline_end + 8.0],
+                "actual": [100.0, actual_end],
+                "stages": {
+                    "baseline": [100.0, baseline_end],
+                    "relationships": [100.0, candidate_end],
+                },
+                "selectedStage": "baseline",
+                "candidateStage": "relationships",
+            }
+        return {
+            "videoId": video_id,
+            "accountId": account_id,
+            "evaluationKind": evaluation_kind,
+            "predictionFitKind": "frozen-full-fit",
+            "contentFingerprint": content_fingerprint(text),
+            "curves": curves,
+        }
+
     def test_json3_caption_offsets_become_monotonic_exact_token_clock(self):
         payload = {"events": [
             {"tStartMs": 500, "segs": [
@@ -181,6 +214,112 @@ class PooledOpeningEvaluationTest(unittest.TestCase):
         self.assertEqual(metrics["families"]["observedAbsolute"]["metricFamily"],
                          "observedAbsolute")
         self.assertIsNone(metrics["endpointPearson"])
+
+    def test_prediction_seal_is_invariant_to_every_target_outcome_field(self):
+        prediction = self.synthetic_detail(
+            "external", "account", "cross-account-frozen-full-fit",
+            "this is a sealed spoken opening",
+        )
+        prediction.update({
+            "actual": {"views": 10},
+            "predictionError": {"retainedAt20sPoints": 2.0},
+            "observedCurves": {"entryIndexed": {"actual": [100.0, 48.0]}},
+            "components": [{
+                "text": "sealed spoken opening",
+                "measurements": {"0": {"deltaPercentagePoints": -9.0}},
+                "outcomePlane": {
+                    "predictedRetentionSlopePercentagePointsPerSecond": -2.0,
+                    "observedSlopePercentagePointsPerSecond": -99.0,
+                },
+                "timelineAttribution": {
+                    "predictedDeltaPoints": -2.0,
+                    "observedDeltaPoints": -99.0,
+                },
+            }],
+            "support": {"fullObservedDurationSeconds": 99.0},
+            "temporalAttribution": {
+                "summary": {"totalObservedDeltaPoints": -99.0},
+            },
+        })
+        poisoned = dict(prediction)
+        poisoned["actual"] = {"views": 999999999}
+        poisoned["predictionError"] = {"retainedAt20sPoints": -999.0}
+        poisoned["curves"] = {
+            name: {**curve, "actual": [100.0, 1.0]}
+            for name, curve in prediction["curves"].items()
+        }
+        self.assertEqual(
+            prediction_fingerprint(prediction), prediction_fingerprint(poisoned),
+        )
+        blind = outcome_blind_prediction(prediction)
+        serialized = str(blind)
+        for forbidden in (
+            "observedSlopePercentagePointsPerSecond", "observedDeltaPoints",
+            "totalObservedDeltaPoints", "fullObservedDurationSeconds",
+            "measurements", "predictionError", "observedCurves",
+        ):
+            self.assertNotIn(forbidden, serialized)
+        self.assertNotIn("actual", blind)
+        self.assertNotIn("actual", blind["curves"]["entryIndexed"])
+
+    def test_strict_blind_selection_excludes_training_overlap_and_reposts(self):
+        rows = [
+            self.synthetic_detail(
+                "train", "main", "saved-source-level-oof", "same exact spoken text",
+            ),
+            self.synthetic_detail(
+                "overlap", "a", "cross-account-frozen-full-fit",
+                "same exact spoken text",
+            ),
+            self.synthetic_detail(
+                "duplicate-b", "b", "cross-account-frozen-full-fit",
+                "external repost text here",
+            ),
+            self.synthetic_detail(
+                "duplicate-a", "a", "cross-account-frozen-full-fit",
+                "external repost text here",
+            ),
+            self.synthetic_detail(
+                "unique", "a", "cross-account-frozen-full-fit",
+                "a wholly unique opening",
+            ),
+        ]
+        selected, audit = strict_blind_external_selection(rows)
+        self.assertEqual([row["videoId"] for row in selected], ["duplicate-a", "unique"])
+        self.assertEqual(audit["trainingContentOverlapExcluded"], 1)
+        self.assertEqual(audit["externalDuplicateGroupsCollapsed"], 1)
+        self.assertEqual(audit["externalDuplicateVideosCollapsed"], 1)
+
+    def test_fixed_horizon_reports_uncertainty_and_no_constant_ranking(self):
+        rows = [
+            self.synthetic_detail(
+                f"v{index}", "a", "cross-account-frozen-full-fit",
+                f"unique opening number {index}", actual_end=actual,
+            )
+            for index, actual in enumerate((42.0, 48.0, 54.0, 60.0))
+        ]
+        metrics = evaluation_metrics(rows)
+        fixed = metrics["fixed20Second"]
+        self.assertEqual(fixed["discriminationStatus"],
+                         "unavailable-constant-prediction")
+        self.assertEqual(fixed["predictedStandardDeviationPercent"], 0.0)
+        self.assertIsNotNone(fixed["maeConfidence95"])
+        self.assertIsNotNone(fixed["predictionBandCoverageWilson95"])
+        self.assertIsNotNone(metrics["sourceEqualCurveMAEConfidence95"])
+
+    def test_candidate_diagnostic_never_promotes_the_candidate(self):
+        rows = [
+            self.synthetic_detail(
+                f"v{index}", "a", "cross-account-frozen-full-fit",
+                f"candidate diagnostic text {index}", actual_end=48.0,
+                baseline_end=50.0, candidate_end=70.0,
+            )
+            for index in range(4)
+        ]
+        result = candidate_vs_baseline(rows)["families"]["entryIndexed"]
+        self.assertLess(result["pairedImprovementPercentagePoints"], 0.0)
+        self.assertFalse(result["modelStageChanged"])
+        self.assertEqual(result["candidateWinFraction"], 0.0)
 
 
 if __name__ == "__main__":

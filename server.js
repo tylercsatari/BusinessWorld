@@ -3935,11 +3935,19 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         const videoId = promiseOpeningPrediction[1];
         const promiseScope = (url.searchParams.get('scope') || 'tyler').replace(/[^a-z0-9_-]/gi, '');
         const pooledPrediction = promiseScope !== 'tyler';
-        const pooledGeneration = (url.searchParams.get('generation') || '').replace(/[^a-f0-9]/gi, '');
+        const requestedGeneration = url.searchParams.get('generation') || '';
+        if (requestedGeneration && !/^[a-f0-9]{20}$/i.test(requestedGeneration)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end('{"error":"invalid pooled evaluation generation"}');
+            return;
+        }
+        const pooledGeneration = requestedGeneration.toLowerCase();
         const localDirectories = pooledPrediction
             ? ['pooled-opening-predictions', 'opening-predictions']
             : ['opening-predictions'];
-        for (const directory of localDirectories) {
+        // A generation-pinned pooled request must fail closed. Stable local and
+        // legacy keys are only fallbacks for unpinned/Main requests.
+        for (const directory of (pooledGeneration ? [] : localDirectories)) {
             const local = path.join(
                 DIR, 'buildings', 'jarvis', 'promise-lab', '.cache',
                 directory, `${videoId}.json.gz`,
@@ -3956,13 +3964,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             }
         }
         const remoteKeys = pooledPrediction
-            ? [
-                ...(pooledGeneration ? [
-                    `shorts/promise-lab-v1/pooled-opening-generations/${pooledGeneration}/${videoId}.json.gz`,
-                ] : []),
+            ? (pooledGeneration ? [
+                `shorts/promise-lab-v1/pooled-opening-generations/${pooledGeneration}/${videoId}.json.gz`,
+            ] : [
                 `shorts/promise-lab-v1/pooled-opening-predictions/${videoId}.json.gz`,
                 `shorts/promise-lab-v1/opening-predictions/${videoId}.json.gz`,
-            ]
+            ])
             : [`shorts/promise-lab-v1/opening-predictions/${videoId}.json.gz`];
         let ok = false;
         for (const key of remoteKeys) {

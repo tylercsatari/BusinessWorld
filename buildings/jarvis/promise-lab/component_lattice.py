@@ -11,11 +11,11 @@ from itertools import combinations
 
 import numpy as np
 
-from atlas import REPRESENTATION_VERSION
+from atlas import REPRESENTATION_VERSION, span_additive_effects
 from scipy.spatial import cKDTree
 
-from hook_score_core import apply_category_transform, category_log_probabilities
-from sequence import surface
+from hook_score_core import apply_category_transform, category_log_probabilities, row_unit
+from sequence import all_spans, normalize_source, surface, tokenize, without_span
 
 
 EPS = 1e-9
@@ -60,6 +60,80 @@ RESOLUTION_DEFINITIONS = {
     "deletion": "every leave-one-contiguous-span-out counterfactual",
     "canonical": "the frozen source-held-out variable exact cover used by the hook scorer",
 }
+
+
+def build_all_span_primitives(text: str, store) -> dict:
+    """Materialize the exhaustive lattice for offline research artifacts only.
+
+    Live scoring uses the bounded streaming graph. This helper exists so the
+    retained multi-resolution source lattice can still be rebuilt and audited.
+    """
+    text = normalize_source(text)
+    tokens = tokenize(text)
+    lexical = np.asarray([
+        any(character.isalnum() or character == "_" for character in token.text)
+        for token in tokens
+    ], bool)
+    if int(lexical.sum()) < 1:
+        raise ValueError("an opening needs at least one lexical atom")
+    spans = all_spans(len(tokens))
+    span_texts = [
+        surface(tokens, span.start, span.end, source_text=text) for span in spans
+    ]
+    context_texts = [
+        without_span(tokens, span.start, span.end, source_text=text) for span in spans
+    ]
+    required = [text, *span_texts, *[value for value in context_texts if value]]
+    vectors = store.embed_many(required)
+    full_source = row_unit(vectors[text])
+    raw_source = np.asarray([
+        row_unit(vectors[value]) for value in span_texts
+    ], np.float32)
+    context_source = np.asarray([
+        row_unit(vectors[value]) if value else np.zeros_like(full_source)
+        for value in context_texts
+    ], np.float32)
+    starts = np.asarray([span.start for span in spans], int)
+    ends = np.asarray([span.end for span in spans], int)
+    lookup = {
+        (int(start), int(end)): index
+        for index, (start, end) in enumerate(zip(starts, ends))
+    }
+
+    stored_full = np.asarray(full_source, np.float16).astype(np.float32)
+    stored_raw = np.asarray(raw_source, np.float16).astype(np.float32)
+    stored_context = np.asarray(context_source, np.float16).astype(np.float32)
+    influence_source = row_unit(stored_full[None, :] - stored_context)
+    token_effects = np.asarray([
+        stored_full - stored_context[lookup[(index, index + 1)]]
+        for index in range(len(tokens))
+    ], np.float32)
+    additive = span_additive_effects(token_effects, starts, ends)
+    nonadditive_source = row_unit(
+        (stored_full[None, :] - stored_context) - additive,
+    )
+
+    def training_precision(values: np.ndarray) -> np.ndarray:
+        return row_unit(np.asarray(values, np.float16).astype(np.float32))
+
+    return {
+        "text": text,
+        "tokens": tokens,
+        "starts": starts,
+        "ends": ends,
+        "spanTexts": span_texts,
+        "raw": row_unit(stored_raw),
+        "context": row_unit(stored_context),
+        "influence": training_precision(influence_source),
+        "nonadditive": training_precision(nonadditive_source),
+        "full": row_unit(stored_full),
+        "lexical": lexical,
+        "embeddingInputs": len(set(required)),
+        "trainingVectorStorageDtype": "float16",
+        "representationVersion": REPRESENTATION_VERSION,
+        "liveQuantizationMatchesTrainingStore": True,
+        "servingRole": "none; offline multi-resolution research lattice only",
+    }
 
 
 def _unit(values: np.ndarray) -> np.ndarray:

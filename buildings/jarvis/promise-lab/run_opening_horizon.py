@@ -19,7 +19,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 
 from cluster_outcomes import retention_at, retention_window_slope
-from component_lattice import build_component_lattice
+from component_lattice import build_all_span_primitives, build_component_lattice
 from deconfounding import natural_baseline_features, retention_curve_families
 from embedding_store import DIMENSIONS, MODEL, R2_PREFIX, EmbeddingStore, R2Store, json_ready
 from forward_response import (
@@ -48,8 +48,8 @@ from opening_horizon import (
     curve_payload,
     load_local_opening,
 )
-from score_hook import build_span_primitives, decode_partition
 from sequence import tokenize
+from streaming_components import build_streaming_components
 
 
 HERE = Path(__file__).resolve().parent
@@ -241,7 +241,8 @@ def remove_sqlite(path: Path) -> None:
 
 
 def content_key(source: dict, opening: dict, partition_model: dict,
-                lattice_model: dict, horizon_extension: dict) -> str:
+                lattice_model: dict, horizon_extension: dict,
+                length_support: dict | None = None) -> str:
     payload = {
         "methodVersion": METHOD_VERSION,
         "horizonSeconds": OPENING_HORIZON_SECONDS,
@@ -261,6 +262,7 @@ def content_key(source: dict, opening: dict, partition_model: dict,
         "partitionModel": model_hash(partition_model),
         "latticeModel": model_hash(lattice_model),
         "horizonPartitionExtension": model_hash(horizon_extension),
+        "measuredLengthSupport": model_hash(length_support or {}),
     }
     return hashlib.sha256(json.dumps(
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
@@ -284,14 +286,52 @@ def selected_vector_rows(primitives: dict, partition: dict) -> tuple[np.ndarray,
     )
 
 
+def streaming_partition_payload(decomposition: dict) -> dict:
+    """Adapt the live bounded partition to the retained offline lattice schema."""
+    chunks = [
+        {key: value for key, value in row.items() if not key.startswith("_")}
+        for row in decomposition.get("chunks") or []
+    ]
+    posteriors = [
+        value
+        for block in decomposition.get("blocks") or []
+        for value in block.get("boundaryPosteriors") or []
+    ]
+    return {
+        "chunks": chunks,
+        "componentCount": len(chunks),
+        "owners": decomposition.get("owners") or [],
+        "coverage": decomposition.get("coverage"),
+        "overlapCount": decomposition.get("overlapCount"),
+        "boundaryProbabilities": posteriors,
+        "boundaryPosteriors": posteriors,
+        "boundaryEvidenceMode": "support-bounded streaming exact cover",
+        "horizonCalibration": {
+            "method": decomposition.get("version"),
+            "blockCount": len(decomposition.get("blocks") or []),
+            "globalAllSpanRowsMaterializedForBoundarySelection": False,
+        },
+        "countSelectionPolicy": (
+            "the same frozen support-bounded streaming partition used by the live scorer"
+        ),
+        "maximumComponentTokens": (
+            (decomposition.get("work") or {}).get("maximumComponentTokens")
+        ),
+        "forecastSemanticInput": {"text": decomposition.get("text")},
+        "streamingWork": decomposition.get("work") or {},
+        "streamingBlocks": decomposition.get("blocks") or [],
+    }
+
+
 def build_one(source: dict, partition_model: dict, lattice_model: dict,
-              horizon_extension: dict,
+              horizon_extension: dict, length_support: dict,
               rebuild: bool = False, keep_embedding_cache: bool = False,
               embedding_workers: int = 8) -> dict:
     video_id = str(source["id"])
     opening = load_local_opening(video_id, ROOT)
     key = content_key(
         source, opening, partition_model, lattice_model, horizon_extension,
+        length_support,
     )
     detail_path = DETAILS / f"{video_id}.json.gz"
     vector_path = VECTORS / f"{video_id}.npz"
@@ -304,10 +344,11 @@ def build_one(source: dict, partition_model: dict, lattice_model: dict,
     store = EmbeddingStore(embedding_path, workers=max(1, int(embedding_workers)))
     persisted = False
     try:
-        primitives = build_span_primitives(opening["text"], store)
-        partition = decode_partition(
-            primitives, partition_model, horizon_extension=horizon_extension,
-        )
+        primitives = build_all_span_primitives(opening["text"], store)
+        partition = streaming_partition_payload(build_streaming_components(
+            opening["text"], store, partition_model, horizon_extension,
+            measured_token_support=length_support,
+        ))
         lattice = build_component_lattice(
             text=partition["forecastSemanticInput"]["text"],
             tokens=primitives["tokens"],
@@ -441,7 +482,7 @@ def build_one(source: dict, partition_model: dict, lattice_model: dict,
                 "forecastBeyond20Seconds": False,
                 "fourCategoryModelReused": True,
                 "categoryCount": 4,
-                "partitionBuilder": "score_hook.decode_partition",
+                "partitionBuilder": "streaming_components.build_streaming_components",
                 "partitionExtension": horizon_extension.get("method"),
                 "partitionExtensionActivated": bool(partition.get("horizonCalibration")),
                 "latticeBuilder": "component_lattice.build_component_lattice",
@@ -1649,7 +1690,7 @@ def main() -> None:
             current_detail_contract(detail)
             detail["buildContentKey"] = content_key(
                 source, load_local_opening(video_id, ROOT), partition_model,
-                lattice_model, horizon_extension,
+                lattice_model, horizon_extension, length_support,
             )
             atomic_gzip_json(detail_path, detail)
             update_progress(
@@ -1685,6 +1726,7 @@ def main() -> None:
         def build_source(source: dict) -> tuple[dict, dict]:
             return source, build_one(
                 source, partition_model, lattice_model, horizon_extension,
+                length_support,
                 rebuild=args.rebuild, keep_embedding_cache=args.keep_embedding_cache,
                 embedding_workers=args.embedding_workers,
             )

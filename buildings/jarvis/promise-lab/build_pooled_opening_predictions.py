@@ -24,14 +24,21 @@ from embedding_store import EmbeddingStore, R2_PREFIX, R2Store, json_ready
 from pooled_opening_evaluation import (
     CAPTION_TIMING_SOURCE,
     EVALUATION_VERSION,
+    account_balanced_metrics,
     analysis_transcript_to_timed_words,
     attach_observed_retention,
     baseline_only_analysis,
+    blind_manifest_entry,
+    candidate_vs_baseline,
     caption_json3_to_timed_words,
     compact_summary,
+    content_fingerprint,
     evaluation_by_account,
     evaluation_metrics,
     model_fingerprint,
+    outcome_blind_prediction,
+    prediction_fingerprint,
+    strict_blind_external_selection,
     token_clock_from_timed_words,
 )
 from score_hook import load_artifact, score_timed_text
@@ -41,8 +48,10 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 CACHE = HERE / ".cache"
 DETAIL_DIR = CACHE / "pooled-opening-predictions"
+BLIND_DETAIL_DIR = CACHE / "pooled-opening-blind-predictions"
 CAPTION_DIR = CACHE / "pooled-captions"
 SUMMARY_PATH = CACHE / "pooled-opening-predictions.json"
+BLIND_MANIFEST_PATH = CACHE / "pooled-opening-blind-manifest.json"
 PROGRESS_PATH = CACHE / "pooled-opening-progress.json"
 LOCK_PATH = CACHE / "pooled-opening-build.lock"
 CHANNELS_PATH = ROOT / "buildings/jarvis/retention-study/channels.json"
@@ -119,6 +128,16 @@ def prediction_input_fingerprint(video: dict, transcript: dict | None) -> str:
     ).encode("utf-8"))
 
 
+def prediction_input_row(video: dict) -> dict:
+    """Allowlist inference inputs so outcomes are inaccessible by construction."""
+    return {
+        key: video.get(key) for key in (
+            "id", "title", "url", "duration_s", "published",
+            "accountId", "accountName",
+        )
+    }
+
+
 def load_pooled_rows() -> tuple[list[dict], list[dict]]:
     registry = read_json(CHANNELS_PATH)
     rows = []
@@ -181,14 +200,22 @@ def timed_transcript(video: dict) -> tuple[dict | None, str, str | None]:
 
 def metric_record(detail: dict) -> dict:
     return {
+        "videoId": detail.get("videoId"),
         "accountId": detail.get("accountId"),
+        "published": detail.get("published"),
         "evaluationKind": detail.get("evaluationKind"),
+        "predictionFitKind": detail.get("predictionFitKind"),
+        "contentFingerprint": detail.get("contentFingerprint"),
+        "blindPredictionFingerprint": detail.get("blindPredictionFingerprint"),
+        "blindEvaluationRole": detail.get("blindEvaluationRole"),
+        "strictBlindEligible": bool(detail.get("strictBlindEligible")),
         "curves": {
             family: {
                 key: (detail.get("curves") or {}).get(family, {}).get(key)
                 for key in (
                     "timesSeconds", "predicted", "predictionP10",
-                    "predictionP90", "actual",
+                    "predictionP90", "actual", "stages", "selectedStage",
+                    "candidateStage",
                 )
             }
             for family in ("entryIndexed", "observedAbsolute")
@@ -196,16 +223,19 @@ def metric_record(detail: dict) -> dict:
     }
 
 
-def annotate(detail: dict, video: dict, evaluation_kind: str,
-             transcript_source: str, fingerprint: str, fit_kind: str,
-             input_fingerprint: str | None = None,
-             oof_artifact_fingerprint: str | None = None) -> dict:
+def annotate_prediction(detail: dict, video: dict, evaluation_kind: str,
+                        transcript_source: str, fingerprint: str, fit_kind: str,
+                        input_fingerprint: str | None = None,
+                        oof_artifact_fingerprint: str | None = None) -> dict:
+    detail = outcome_blind_prediction(detail)
+    spoken_text = detail.get("text") or ((detail.get("input") or {}).get("analyzedText"))
     detail.update({
         "videoId": str(video["id"]),
         "title": video.get("title") or str(video["id"]),
         "url": video.get("url") or f"https://www.youtube.com/shorts/{video['id']}",
         "accountId": video.get("accountId"),
         "accountName": video.get("accountName"),
+        "published": video.get("published"),
         "evaluationKind": evaluation_kind,
         "transcriptSource": transcript_source,
         "pooledEvaluationVersion": EVALUATION_VERSION,
@@ -214,6 +244,7 @@ def annotate(detail: dict, video: dict, evaluation_kind: str,
         "predictionFitKind": fit_kind,
         "pooledInputFingerprint": input_fingerprint,
         "savedOofArtifactFingerprint": oof_artifact_fingerprint,
+        "contentFingerprint": content_fingerprint(spoken_text),
     })
     detail.setdefault("provenance", {}).update({
         "pooledEvaluationVersion": EVALUATION_VERSION,
@@ -227,26 +258,27 @@ def annotate(detail: dict, video: dict, evaluation_kind: str,
         "pooledEvaluationRefit": False,
         "pooledEvaluationRecalibration": False,
     })
-    return attach_observed_retention(detail, video)
+    detail["blindPredictionFingerprint"] = prediction_fingerprint(detail)
+    return detail
 
 
-def saved_detail(video: dict, fingerprint: str, oof_artifact_fingerprint: str,
-                 detail_dir: Path) -> dict:
+def saved_prediction(video: dict, fingerprint: str,
+                     oof_artifact_fingerprint: str, blind_detail_dir: Path) -> dict:
     path = SAVED_DETAIL_DIR / f"{video['id']}.json.gz"
     detail = read_gzip_json(path)
-    detail = annotate(
+    detail = annotate_prediction(
         detail, video, "saved-source-level-oof",
         "canonical source-media transcript and timing", fingerprint,
         "source-level-oof", oof_artifact_fingerprint=oof_artifact_fingerprint,
     )
-    write_gzip_json(detail_dir / f"{video['id']}.json.gz", detail)
+    write_gzip_json(blind_detail_dir / f"{video['id']}.json.gz", detail)
     return detail
 
 
-def score_external(video: dict, models: dict, store: EmbeddingStore,
-                   fingerprint: str, refresh: bool,
-                   detail_dir: Path) -> tuple[dict, bool]:
-    path = detail_dir / f"{video['id']}.json.gz"
+def score_external_prediction(video: dict, models: dict, store: EmbeddingStore,
+                              fingerprint: str, refresh: bool,
+                              blind_detail_dir: Path) -> tuple[dict, bool]:
+    path = blind_detail_dir / f"{video['id']}.json.gz"
     transcript, transcript_source, unavailable_reason = timed_transcript(video)
     input_fingerprint = prediction_input_fingerprint(video, transcript)
     if path.exists() and not refresh:
@@ -259,8 +291,12 @@ def score_external(video: dict, models: dict, store: EmbeddingStore,
             and existing.get("sourceKind") == "pooled-duration-only-selected-baseline"
         )
         if same_model and same_evaluation and same_input and not needs_transcript_upgrade:
-            existing = attach_observed_retention(existing, video)
-            write_gzip_json(path, existing)
+            expected = existing.get("blindPredictionFingerprint")
+            existing = outcome_blind_prediction(existing)
+            actual = prediction_fingerprint(existing)
+            if expected and expected != actual:
+                raise RuntimeError(f"sealed prediction cache hash mismatch: {video['id']}")
+            existing["blindPredictionFingerprint"] = actual
             return existing, True
     if transcript is None:
         detail = baseline_only_analysis(
@@ -272,43 +308,30 @@ def score_external(video: dict, models: dict, store: EmbeddingStore,
             "cross-account-duration-only-frozen-baseline"
         )
     else:
-        try:
-            clock = token_clock_from_timed_words(transcript["text"], transcript["words"])
-            detail = score_timed_text(
-                transcript["text"], clock, timing_source=CAPTION_TIMING_SOURCE,
-                media_duration_seconds=float(video["duration_s"]),
-                partition_model=models["partition"], opening_model=models["opening"],
-                opening_retention_model=models["retention"], store=store,
+        clock = token_clock_from_timed_words(transcript["text"], transcript["words"])
+        detail = score_timed_text(
+            transcript["text"], clock, timing_source=CAPTION_TIMING_SOURCE,
+            media_duration_seconds=float(video["duration_s"]),
+            partition_model=models["partition"], opening_model=models["opening"],
+            opening_retention_model=models["retention"], store=store,
+        )
+        detail["scorerSourceKind"] = detail.get("sourceKind")
+        detail["sourceKind"] = (
+            "pooled-main-withheld-frozen-full-fit"
+            if video.get("accountId") == "tyler" else
+            "pooled-cross-account-frozen-full-fit"
+        )
+        evaluation_kind = (
+            "main-withheld-frozen-full-fit"
+            if video.get("accountId") == "tyler" else
+            "cross-account-frozen-full-fit"
+        )
+        detail["captionTiming"] = {
+            key: transcript.get(key) for key in (
+                "status", "captionSegments", "wordCount", "spokenEndSeconds",
             )
-            detail["scorerSourceKind"] = detail.get("sourceKind")
-            detail["sourceKind"] = (
-                "pooled-main-withheld-frozen-full-fit"
-                if video.get("accountId") == "tyler" else
-                "pooled-cross-account-frozen-full-fit"
-            )
-            evaluation_kind = (
-                "main-withheld-frozen-full-fit"
-                if video.get("accountId") == "tyler" else
-                "cross-account-frozen-full-fit"
-            )
-            detail["captionTiming"] = {
-                key: transcript.get(key) for key in (
-                    "status", "captionSegments", "wordCount", "spokenEndSeconds",
-                )
-            }
-        except Exception as error:
-            detail = baseline_only_analysis(
-                video, models["retention"],
-                f"timestamped transcript diagnostics failed: {error}",
-            )
-            detail["diagnosticError"] = str(error)
-            transcript_source = f"{transcript_source} · diagnostics failed"
-            evaluation_kind = (
-                "main-withheld-duration-only-diagnostic-error"
-                if video.get("accountId") == "tyler" else
-                "cross-account-duration-only-diagnostic-error"
-            )
-    detail = annotate(
+        }
+    detail = annotate_prediction(
         detail, video, evaluation_kind, transcript_source, fingerprint,
         (
             "frozen-selected-baseline-no-transcript"
@@ -333,10 +356,29 @@ def evaluation_bundle(records: list[dict]) -> dict:
         record for record in records
         if record.get("evaluationKind") != "saved-source-level-oof"
     ]
+    strict_external, isolation = strict_blind_external_selection(records)
+    strict_by_account = evaluation_by_account(strict_external)
+    strict_transcript = [
+        row for row in strict_external
+        if row.get("predictionFitKind") == "frozen-full-fit"
+    ]
+    strict_missing_transcript = [
+        row for row in strict_external
+        if row.get("predictionFitKind") == "frozen-selected-baseline-no-transcript"
+    ]
     return {
         "allPooled": evaluation_metrics(records),
         "newFrozenPredictions": evaluation_metrics(new_predictions),
         "externalAccounts": evaluation_metrics(external),
+        "strictBlindExternal": evaluation_metrics(strict_external),
+        "strictBlindByAccount": strict_by_account,
+        "strictBlindAccountBalanced": account_balanced_metrics(strict_external),
+        "strictBlindCandidateVsBaseline": candidate_vs_baseline(strict_external),
+        "strictBlindByTranscriptStatus": {
+            "timestampedTranscript": evaluation_metrics(strict_transcript),
+            "missingTranscript": evaluation_metrics(strict_missing_transcript),
+        },
+        "blindIsolationAudit": isolation,
         "byAccount": evaluation_by_account(records),
         "byEvaluationKind": {
             kind: evaluation_metrics(group) for kind, group in sorted(by_kind.items())
@@ -344,13 +386,15 @@ def evaluation_bundle(records: list[dict]) -> dict:
         "claimBoundary": (
             "The 208 saved cohort rows are source-level out of fold. Other Main rows "
             "use the unchanged full fit. Other accounts are account-external frozen-model "
-            "evaluations. Outcomes are joined only after inference; no pooled outcome "
-            "refits, recalibrates, or promotes the scorer."
+            "evaluations. Primary blind metrics exclude exact training-content overlap "
+            "and collapse exact external reposts. Outcomes are opened only after the "
+            "prediction manifest is sealed; no pooled outcome refits, recalibrates, or "
+            "promotes the scorer."
         ),
     }
 
 
-def upload(summary: dict, detail_dir: Path) -> None:
+def upload(summary: dict, detail_dir: Path, blind_manifest: dict) -> None:
     expected_paths = []
     fingerprint = summary["modelFingerprint"]
     for row in summary.get("rows") or []:
@@ -364,9 +408,16 @@ def upload(summary: dict, detail_dir: Path) -> None:
             raise RuntimeError(f"stale evaluation detail: {row['videoId']}")
         if detail.get("referenceFullFitModelFingerprint") != fingerprint:
             raise RuntimeError(f"detail model reference mismatch: {row['videoId']}")
+        if detail.get("evaluationGenerationId") != summary.get("generationId"):
+            raise RuntimeError(f"detail generation mismatch: {row['videoId']}")
         expected_paths.append(path)
 
     remote = R2Store()
+    remote.put_json(
+        f"{R2_PREFIX}/pooled-opening-blind-generations/"
+        f"{blind_manifest['blindGenerationId']}.json.gz",
+        blind_manifest, gzip_payload=True,
+    )
 
     def put(path: Path) -> str:
         remote.put_bytes(
@@ -417,7 +468,9 @@ def main() -> None:
         }, sort_keys=True).encode("utf-8"))[:12]
         run_dir = CACHE / "pooled-opening-previews" / preview_key
         detail_dir = run_dir / "details"
+        blind_detail_dir = run_dir / "blind-details"
         summary_path = run_dir / "summary.json"
+        blind_manifest_path = run_dir / "blind-manifest.json"
         progress_path = run_dir / "progress.json"
     else:
         LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -427,7 +480,9 @@ def main() -> None:
         except BlockingIOError as error:
             raise RuntimeError("another canonical pooled build is already running") from error
         detail_dir = DETAIL_DIR
+        blind_detail_dir = BLIND_DETAIL_DIR
         summary_path = SUMMARY_PATH
+        blind_manifest_path = BLIND_MANIFEST_PATH
         progress_path = PROGRESS_PATH
     saved_summary = read_json(SAVED_SUMMARY_PATH)
     saved_ids = {str(row["videoId"]) for row in saved_summary.get("rows") or []}
@@ -441,22 +496,19 @@ def main() -> None:
     )
     oof_artifact_fingerprint = sha256_file(SAVED_SUMMARY_PATH)
     detail_dir.mkdir(parents=True, exist_ok=True)
+    blind_detail_dir.mkdir(parents=True, exist_ok=True)
     store = EmbeddingStore(CACHE / "pooled-hook-embeddings.sqlite3")
-    summaries = []
-    metric_records = []
+    predictions = []
     failures = []
     resumed = 0
     lock = threading.Lock()
     started = time.time()
     completed = 0
 
-    def record(detail: dict, was_resumed: bool = False) -> None:
+    def record_prediction(prediction: dict, was_resumed: bool = False) -> None:
         nonlocal completed, resumed
-        summary = compact_summary(detail)
-        metrics = metric_record(detail)
         with lock:
-            summaries.append(summary)
-            metric_records.append(metrics)
+            predictions.append(prediction)
             completed += 1
             resumed += int(was_resumed)
             if completed % 5 == 0 or completed == len(pooled_rows):
@@ -475,28 +527,31 @@ def main() -> None:
                     f"errors {len(failures)}", flush=True,
                 )
 
-    for video in pooled_rows:
+    prediction_rows = [prediction_input_row(row) for row in pooled_rows]
+    for video in prediction_rows:
         if str(video["id"]) not in saved_ids:
             continue
-        record(saved_detail(
-            video, fingerprint, oof_artifact_fingerprint, detail_dir,
+        record_prediction(saved_prediction(
+            video, fingerprint, oof_artifact_fingerprint, blind_detail_dir,
         ))
 
-    external_rows = [row for row in pooled_rows if str(row["id"]) not in saved_ids]
+    external_rows = [
+        row for row in prediction_rows if str(row["id"]) not in saved_ids
+    ]
     try:
         with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
             jobs = {
                 pool.submit(
-                    score_external, video, models, store, fingerprint, args.refresh,
-                    detail_dir,
+                    score_external_prediction, video, models, store, fingerprint,
+                    args.refresh, blind_detail_dir,
                 ): video
                 for video in external_rows
             }
             for job in as_completed(jobs):
                 video = jobs[job]
                 try:
-                    detail, was_resumed = job.result()
-                    record(detail, was_resumed)
+                    prediction, was_resumed = job.result()
+                    record_prediction(prediction, was_resumed)
                 except Exception as error:
                     failures.append({
                         "videoId": video.get("id"),
@@ -508,12 +563,110 @@ def main() -> None:
         store.close()
 
     order = {str(row["id"]): index for index, row in enumerate(pooled_rows)}
-    summaries.sort(key=lambda row: order.get(str(row.get("videoId")), 10**9))
-    if not filtered_run and len(summaries) != canonical_source_count:
+    predictions.sort(key=lambda row: order.get(str(row.get("videoId")), 10**9))
+    if not filtered_run and len(predictions) != canonical_source_count:
         raise RuntimeError(
-            f"refusing canonical promotion: built {len(summaries)} of "
+            f"refusing canonical promotion: built {len(predictions)} of "
             f"{canonical_source_count} registered videos"
         )
+
+    # Seal every outcome-blind serving prediction before opening any measured curve.
+    blind_entries = [blind_manifest_entry(row) for row in predictions]
+    for prediction, entry in zip(predictions, blind_entries):
+        if prediction.get("blindPredictionFingerprint") != entry["predictionFingerprint"]:
+            raise RuntimeError(
+                f"prediction seal mismatch before outcome join: {prediction.get('videoId')}"
+            )
+    input_manifest_fingerprint = sha256_bytes(json.dumps([{
+        key: row.get(key) for key in (
+            "videoId", "accountId", "predictionFitKind", "inputFingerprint",
+            "contentFingerprint",
+        )
+    } for row in blind_entries], sort_keys=True, separators=(",", ":")).encode("utf-8"))
+    prediction_manifest_fingerprint = sha256_bytes(json.dumps([{
+        "videoId": row.get("videoId"),
+        "predictionFingerprint": row.get("predictionFingerprint"),
+    } for row in blind_entries], sort_keys=True, separators=(",", ":")).encode("utf-8"))
+    blind_generation_id = sha256_bytes(json.dumps({
+        "evaluationVersion": EVALUATION_VERSION,
+        "modelFingerprint": fingerprint,
+        "savedOofArtifactFingerprint": oof_artifact_fingerprint,
+        "inputManifestFingerprint": input_manifest_fingerprint,
+        "predictionManifestFingerprint": prediction_manifest_fingerprint,
+    }, sort_keys=True, separators=(",", ":")).encode("utf-8"))[:20]
+    development_ids = sorted(saved_ids)
+    non_development_ids = sorted(
+        str(row["id"]) for row in prediction_rows if str(row["id"]) not in saved_ids
+    )
+    account_external_ids = sorted(
+        str(row["id"]) for row in prediction_rows if row.get("accountId") != "tyler"
+    )
+    development_ids_fingerprint = sha256_bytes(json.dumps(
+        development_ids, separators=(",", ":"),
+    ).encode("utf-8"))
+    blind_manifest = {
+        "version": 1,
+        "status": "sealed-before-outcome-join",
+        "evaluationVersion": EVALUATION_VERSION,
+        "blindGenerationId": blind_generation_id,
+        "modelFingerprint": fingerprint,
+        "savedOofArtifactFingerprint": oof_artifact_fingerprint,
+        "inputManifestFingerprint": input_manifest_fingerprint,
+        "predictionManifestFingerprint": prediction_manifest_fingerprint,
+        "sources": len(blind_entries),
+        "outcomeFieldsPresent": False,
+        "predictionInputsExcludeOutcomeFields": True,
+        "developmentCohortIdsFingerprint": development_ids_fingerprint,
+        "developmentCohortVideos": len(development_ids),
+        "nonDevelopmentVideos": len(non_development_ids),
+        "nonDevelopmentIdsDisjoint": not bool(
+            set(development_ids) & set(non_development_ids)
+        ),
+        "accountExternalVideos": len(account_external_ids),
+        "externalHoldoutVideos": len(account_external_ids),
+        "externalHoldoutIdsDisjoint": not bool(
+            set(development_ids) & set(account_external_ids)
+        ),
+        "trainingMembershipBoundary": (
+            "The 208 source-level OOF artifact IDs define the development cohort. "
+            "The frozen model files do not contain an independent training-ID ledger."
+        ),
+        "entries": blind_entries,
+        "sealedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    write_json(blind_manifest_path, blind_manifest)
+
+    # Only this phase receives the audience-retention outcomes.
+    outcomes_by_id = {str(row["id"]): row for row in pooled_rows}
+    joined_details = [
+        attach_observed_retention(prediction, outcomes_by_id[str(prediction["videoId"])])
+        for prediction in predictions
+    ]
+    strict_details, isolation_audit = strict_blind_external_selection(joined_details)
+    strict_ids = {str(row.get("videoId")) for row in strict_details}
+    overlap_ids = set(isolation_audit["trainingContentOverlapVideoIds"])
+    for detail in joined_details:
+        video_id = str(detail.get("videoId"))
+        kind = str(detail.get("evaluationKind") or "")
+        if kind == "saved-source-level-oof":
+            role = "development-source-level-oof"
+        elif kind.startswith("cross-account-") and video_id in overlap_ids:
+            role = "excluded-exact-training-content-overlap"
+        elif kind.startswith("cross-account-") and video_id in strict_ids:
+            role = "strict-blind-primary"
+        elif kind.startswith("cross-account-"):
+            role = "collapsed-exact-external-repost"
+        else:
+            role = "main-withheld-frozen-evaluation"
+        detail["blindEvaluationRole"] = role
+        detail["strictBlindEligible"] = role == "strict-blind-primary"
+
+    summaries = []
+    metric_records = []
+    for detail in joined_details:
+        summaries.append(compact_summary(detail))
+        metric_records.append(metric_record(detail))
+
     kind_counts = Counter(str(row.get("evaluationKind") or "unknown") for row in summaries)
     outcome_fingerprint = sha256_bytes(json.dumps([{
         "videoId": str(row["id"]),
@@ -526,18 +679,20 @@ def main() -> None:
         "evaluationVersion": EVALUATION_VERSION,
         "modelFingerprint": fingerprint,
         "savedOofArtifactFingerprint": oof_artifact_fingerprint,
+        "blindGenerationId": blind_generation_id,
+        "predictionManifestFingerprint": prediction_manifest_fingerprint,
         "outcomeFingerprint": outcome_fingerprint,
-        "predictionInputs": [{
-            "videoId": row.get("videoId"),
-            "fitKind": row.get("predictionFitKind"),
-            "inputFingerprint": row.get("pooledInputFingerprint"),
-        } for row in summaries],
     }, sort_keys=True, separators=(",", ":")).encode("utf-8"))[:20]
+    for detail in joined_details:
+        detail["evaluationGenerationId"] = generation_id
+        write_gzip_json(detail_dir / f"{detail['videoId']}.json.gz", detail)
     for row in summaries:
+        row["evaluationGenerationId"] = generation_id
         row["detail"] = (
             f"/api/shortsquant/promise-lab/opening-prediction/{row['videoId']}"
             f"?scope=all&generation={generation_id}"
         )
+    evaluation = evaluation_bundle(metric_records)
     summary = {
         "version": 1,
         "status": "complete" if not failures else "complete-with-errors",
@@ -549,6 +704,35 @@ def main() -> None:
         "savedOofArtifactFingerprint": oof_artifact_fingerprint,
         "outcomeFingerprint": outcome_fingerprint,
         "generationId": generation_id,
+        "blindValidation": {
+            "status": "sealed-before-outcome-join",
+            "blindGenerationId": blind_generation_id,
+            "sealedPredictionCount": len(blind_entries),
+            "inputManifestFingerprint": input_manifest_fingerprint,
+            "predictionManifestFingerprint": prediction_manifest_fingerprint,
+            "outcomeManifestFingerprint": outcome_fingerprint,
+            "outcomeFieldsPresentInBlindManifest": False,
+            "predictionInputsExcludeOutcomeFields": True,
+            "developmentCohortIdsFingerprint": development_ids_fingerprint,
+            "developmentCohortVideos": len(development_ids),
+            "nonDevelopmentVideos": len(non_development_ids),
+            "nonDevelopmentIdsDisjoint": not bool(
+                set(development_ids) & set(non_development_ids)
+            ),
+            "accountExternalVideos": len(account_external_ids),
+            "externalHoldoutVideos": len(account_external_ids),
+            "externalHoldoutIdsDisjoint": not bool(
+                set(development_ids) & set(account_external_ids)
+            ),
+            "joinOrder": [
+                "strip outcome fields from inference inputs",
+                "run or load frozen predictions",
+                "write and fingerprint prediction-only manifest",
+                "open measured retention curves",
+                "join by video ID and evaluate",
+            ],
+            **isolation_audit,
+        },
         "selectedStage": {
             family: (model.get("headlineStage") or model.get("selectedStage"))
             for family, model in (models["retention"].get("families") or {}).items()
@@ -558,7 +742,7 @@ def main() -> None:
         "accounts": accounts,
         "evaluationKindCounts": dict(sorted(kind_counts.items())),
         "rows": summaries,
-        "evaluation": evaluation_bundle(metric_records),
+        "evaluation": evaluation,
         "failures": failures,
         "validation": saved_summary.get("validation"),
         "riskSetBySecond": saved_summary.get("riskSetBySecond"),
@@ -571,6 +755,9 @@ def main() -> None:
             "outcomesJoinedAfterInference": True,
             "savedCohortPredictionsRemainSourceLevelOOF": True,
             "externalRowsUseFrozenFullFit": True,
+            "blindPredictionManifestSealedBeforeOutcomeJoin": True,
+            "strictBlindMetricsExcludeExactTrainingContentOverlap": True,
+            "strictBlindMetricsCollapseExactExternalReposts": True,
         },
         "builtAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
@@ -586,7 +773,7 @@ def main() -> None:
         "modelFingerprint": fingerprint,
     })
     if args.upload:
-        upload(summary, detail_dir)
+        upload(summary, detail_dir, blind_manifest)
     print(json.dumps({
         "status": summary["status"],
         "sources": summary["sources"],

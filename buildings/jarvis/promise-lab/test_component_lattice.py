@@ -5,10 +5,13 @@ import copy
 import numpy as np
 
 from atlas import representation_matrix
-from component_lattice import build_component_lattice, exact_or_estimated_timing
+from component_lattice import (
+    build_all_span_primitives,
+    build_component_lattice,
+    exact_or_estimated_timing,
+)
 from hook_score_core import row_unit
 from interventions import build_tensor, make_plan
-from score_hook import build_span_primitives
 from sequence import all_spans, tokenize
 
 
@@ -47,7 +50,7 @@ def fixture():
 
 
 class ComponentLatticeTest(unittest.TestCase):
-    def test_predictor_primitives_match_persisted_training_formula(self):
+    def test_offline_lattice_primitives_match_persisted_training_formula(self):
         class FakeStore:
             @staticmethod
             def embed_many(texts):
@@ -61,7 +64,7 @@ class ComponentLatticeTest(unittest.TestCase):
 
         text = "alpha beta, gamma works"
         store = FakeStore()
-        live = build_span_primitives(text, store)
+        live = build_all_span_primitives(text, store)
         plan = make_plan(text)
         tensor, _ = build_tensor(plan, store.embed_many(plan.required_texts))
         stored_full = np.asarray(tensor["full"], np.float16).astype(np.float32)

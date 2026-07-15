@@ -115,16 +115,31 @@ class ProductVisualizationContractTests(unittest.TestCase):
         self.assertIn("?scope=${encodeURIComponent(state.scope)}", self.ui)
         self.assertIn("Frozen prediction beside measured retention", self.ui)
         self.assertIn("Frozen prediction accuracy against actual retention", self.ui)
-        self.assertIn("account-external holdout rows", self.ui)
+        self.assertIn("strict unique external videos", self.ui)
+        self.assertIn("SEALED BLIND VALIDATION", self.ui)
+        self.assertIn("ACCOUNT-BY-ACCOUNT BLIND TRANSPORT", self.ui)
+        self.assertIn("strictBlindAccountBalanced", self.ui)
+        self.assertIn("candidate did not beat the selected baseline", self.ui)
+        self.assertIn("noDiscrimination", self.ui)
+        self.assertIn("row.strictBlindEligible === true", self.ui)
+        self.assertIn("blindEvaluationRole", self.ui)
         self.assertIn("opening-context-study", self.ui)
         self.assertIn("state.data.openingContextStudy", self.ui)
         self.assertIn("Duration-conditioned baseline only", self.ui)
-        self.assertIn("startsWith('cross-account-')", self.ui)
         self.assertIn("actual 20-second retention %", self.ui)
         self.assertGreaterEqual(
             self.ui.count("load('manualProjection', api('manual-projection'))"), 3,
         )
         self.assertEqual(self.ui.count("function renderAnalysis("), 1)
+
+    def test_generation_pinned_detail_requests_fail_closed(self):
+        self.assertIn("invalid pooled evaluation generation", self.server)
+        self.assertIn("for (const directory of (pooledGeneration ? []", self.server)
+        self.assertIn("pooled-opening-generations/${pooledGeneration}", self.server)
+        self.assertNotIn(
+            "...(pooledGeneration ? [", self.server,
+            "generation-pinned requests must not append mutable fallback keys",
+        )
 
     def test_variable_horizon_summary_and_context_are_visible(self):
         self.assertEqual(self.predictions["version"], 3)

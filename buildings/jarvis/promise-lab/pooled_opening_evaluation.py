@@ -24,7 +24,7 @@ CAPTION_TIMING_SOURCE = (
     "YouTube source-media automatic caption word offsets; observed outcome "
     "curves are joined only after frozen inference"
 )
-EVALUATION_VERSION = "promise-pooled-external-evaluation-v2"
+EVALUATION_VERSION = "promise-pooled-external-evaluation-v3-sealed-blind"
 
 
 def _finite(value) -> float | None:
@@ -36,9 +36,11 @@ def _finite(value) -> float | None:
 
 
 def _float_array(values) -> np.ndarray:
+    if values is None:
+        values = []
     return np.asarray([
         float(value) if _finite(value) is not None else np.nan
-        for value in values or []
+        for value in values
     ], float)
 
 
@@ -209,6 +211,86 @@ def model_fingerprint(*artifacts: dict) -> str:
         artifacts, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
     ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+
+def content_fingerprint(text: str) -> str | None:
+    """Hash exact normalized spoken content without video/account identity."""
+    normalized = " ".join(re.findall(
+        r"[\w']+", normalize_source(text or "").casefold(), flags=re.UNICODE,
+    ))
+    if len(normalized.split()) < 3:
+        return None
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def outcome_blind_prediction(analysis: dict) -> dict:
+    """Return the serving prediction with every joined outcome removed."""
+    target_outcome_keys = {
+        "actual", "predictionError", "observedCurves", "comparisons",
+        "comparisonsByFamily", "blindPredictionFingerprint",
+        "blindEvaluationRole", "strictBlindEligible", "evaluationGenerationId",
+        "measurements", "observedSlopePercentagePointsPerSecond",
+        "observedDeltaPoints", "totalObservedDeltaPoints",
+        "fullObservedDurationSeconds", "pointPredictionStatus",
+    }
+
+    def scrub(value):
+        if isinstance(value, dict):
+            return {
+                key: scrub(child) for key, child in value.items()
+                if key not in target_outcome_keys
+            }
+        if isinstance(value, list):
+            return [scrub(child) for child in value]
+        return copy.deepcopy(value)
+
+    output = scrub(analysis)
+    for curve in (output.get("curves") or {}).values():
+        curve.pop("actual", None)
+    provenance = output.setdefault("provenance", {})
+    provenance.pop("blindPredictionFingerprint", None)
+    provenance.pop("evaluationGenerationId", None)
+    provenance["observedCurveJoinedAfterInference"] = False
+    provenance["observedCurveUsedForPrediction"] = False
+    provenance["outcomesUsedForPrediction"] = False
+    return output
+
+
+def prediction_fingerprint(analysis: dict) -> str:
+    payload = json.dumps(
+        outcome_blind_prediction(analysis), sort_keys=True,
+        separators=(",", ":"), ensure_ascii=False, allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def blind_manifest_entry(analysis: dict) -> dict:
+    """Compact prediction-only record persisted before outcomes are opened."""
+    blind = outcome_blind_prediction(analysis)
+    return {
+        "videoId": blind.get("videoId"),
+        "accountId": blind.get("accountId"),
+        "evaluationKind": blind.get("evaluationKind"),
+        "predictionFitKind": blind.get("predictionFitKind"),
+        "modelFingerprint": blind.get("pooledModelFingerprint"),
+        "referenceFullFitModelFingerprint": blind.get(
+            "referenceFullFitModelFingerprint"
+        ),
+        "inputFingerprint": blind.get("pooledInputFingerprint"),
+        "contentFingerprint": blind.get("contentFingerprint"),
+        "predictionFingerprint": prediction_fingerprint(blind),
+        "forecastHorizonSeconds": blind.get("forecastHorizonSeconds"),
+        "curves": {
+            family_name: {
+                key: family.get(key) for key in (
+                    "timesSeconds", "predicted", "predictionP10",
+                    "predictionP90", "selectedStage",
+                )
+            }
+            for family_name, family in (blind.get("curves") or {}).items()
+        },
+        "outputs": blind.get("outputs"),
+    }
 
 
 def _baseline_family(family: dict, forecast_end: float) -> dict:
@@ -500,6 +582,10 @@ def compact_summary(detail: dict) -> dict:
         "evaluationKind": detail.get("evaluationKind"),
         "predictionFitKind": detail.get("predictionFitKind"),
         "pooledInputFingerprint": detail.get("pooledInputFingerprint"),
+        "contentFingerprint": detail.get("contentFingerprint"),
+        "blindPredictionFingerprint": detail.get("blindPredictionFingerprint"),
+        "blindEvaluationRole": detail.get("blindEvaluationRole"),
+        "strictBlindEligible": bool(detail.get("strictBlindEligible")),
         "transcriptSource": detail.get("transcriptSource"),
         "tokenCount": detail.get("tokenCount"),
         "componentCount": detail.get("componentCount"),
@@ -558,6 +644,64 @@ def _correlation(left: np.ndarray, right: np.ndarray, ranked: bool = False) -> f
     return float(np.corrcoef(x, y)[0, 1])
 
 
+def _bootstrap_mean_interval(values, seed_material: str,
+                             repetitions: int = 2000) -> dict | None:
+    values = _float_array(values)
+    values = values[np.isfinite(values)]
+    if not len(values):
+        return None
+    if len(values) == 1:
+        value = float(values[0])
+        return {"lower": value, "upper": value, "repetitions": 0}
+    seed = int(hashlib.sha256(seed_material.encode("utf-8")).hexdigest()[:16], 16)
+    rng = np.random.default_rng(seed)
+    means = np.empty(repetitions, float)
+    for start in range(0, repetitions, 200):
+        stop = min(repetitions, start + 200)
+        sample = rng.integers(0, len(values), size=(stop - start, len(values)))
+        means[start:stop] = values[sample].mean(axis=1)
+    lower, upper = np.quantile(means, [0.025, 0.975])
+    return {
+        "lower": float(lower), "upper": float(upper),
+        "repetitions": repetitions,
+    }
+
+
+def _bootstrap_rmse_interval(errors, seed_material: str,
+                             repetitions: int = 2000) -> dict | None:
+    errors = _float_array(errors)
+    errors = errors[np.isfinite(errors)]
+    if not len(errors):
+        return None
+    if len(errors) == 1:
+        value = float(abs(errors[0]))
+        return {"lower": value, "upper": value, "repetitions": 0}
+    seed = int(hashlib.sha256(seed_material.encode("utf-8")).hexdigest()[:16], 16)
+    rng = np.random.default_rng(seed)
+    values = np.empty(repetitions, float)
+    for start in range(0, repetitions, 200):
+        stop = min(repetitions, start + 200)
+        sample = rng.integers(0, len(errors), size=(stop - start, len(errors)))
+        values[start:stop] = np.sqrt(np.mean(errors[sample] ** 2, axis=1))
+    lower, upper = np.quantile(values, [0.025, 0.975])
+    return {
+        "lower": float(lower), "upper": float(upper),
+        "repetitions": repetitions,
+    }
+
+
+def _wilson_interval(successes: int, total: int, z: float = 1.959963984540054) -> dict | None:
+    if total <= 0:
+        return None
+    proportion = successes / total
+    denominator = 1.0 + z * z / total
+    center = (proportion + z * z / (2.0 * total)) / denominator
+    radius = z * math.sqrt(
+        proportion * (1.0 - proportion) / total + z * z / (4.0 * total * total)
+    ) / denominator
+    return {"lower": center - radius, "upper": center + radius, "total": total}
+
+
 def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
     eligible = [row for row in details if ((row.get("curves") or {}).get(
         family_name) or {}).get("actual")]
@@ -571,7 +715,9 @@ def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
     per_source_mae = []
     all_errors = []
     band_hits = []
-    by_second = defaultdict(lambda: {"predicted": [], "actual": []})
+    by_second = defaultdict(lambda: {
+        "predicted": [], "actual": [], "lower": [], "upper": [], "videoIds": [],
+    })
     for row in eligible:
         family = row["curves"][family_name]
         predicted = _float_array(family["predicted"])
@@ -597,12 +743,19 @@ def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
                 ((actual[band_valid] >= lower[band_valid])
                  & (actual[band_valid] <= upper[band_valid])).tolist()
             )
-        for second, predicted_value, actual_value in zip(
-            times[valid], predicted[valid], actual[valid],
-        ):
-            bucket = by_second[float(second)]
-            bucket["predicted"].append(float(predicted_value))
-            bucket["actual"].append(float(actual_value))
+        for position in np.flatnonzero(valid):
+            bucket = by_second[float(times[position])]
+            bucket["predicted"].append(float(predicted[position]))
+            bucket["actual"].append(float(actual[position]))
+            bucket["videoIds"].append(str(row.get("videoId") or "unknown"))
+            bucket["lower"].append(
+                float(lower[position]) if len(lower) == len(actual)
+                and np.isfinite(lower[position]) else None
+            )
+            bucket["upper"].append(
+                float(upper[position]) if len(upper) == len(actual)
+                and np.isfinite(upper[position]) else None
+            )
     if not endpoint_predicted_values:
         return {
             "videos": 0, "status": "no-jointly-supported-videos",
@@ -618,6 +771,22 @@ def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
         actual = np.asarray(by_second[second]["actual"], float)
         errors = predicted - actual
         baseline_ss = float(np.sum((actual - actual.mean()) ** 2))
+        seed_base = (
+            f"{EVALUATION_VERSION}:{family_name}:{second}:"
+            + ",".join(by_second[second]["videoIds"])
+        )
+        predicted_std = float(np.std(predicted, ddof=1)) if len(predicted) > 1 else 0.0
+        actual_std = float(np.std(actual, ddof=1)) if len(actual) > 1 else 0.0
+        band_rows = [
+            (actual_value, lower, upper)
+            for actual_value, lower, upper in zip(
+                actual, by_second[second]["lower"], by_second[second]["upper"],
+            )
+            if lower is not None and upper is not None
+        ]
+        band_successes = sum(
+            lower <= actual_value <= upper for actual_value, lower, upper in band_rows
+        )
         accuracy_by_second.append({
             "second": second,
             "videos": len(predicted),
@@ -626,6 +795,31 @@ def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
             "maePercentagePoints": float(np.mean(np.abs(errors))),
             "rmsePercentagePoints": float(np.sqrt(np.mean(errors ** 2))),
             "biasPercentagePoints": float(errors.mean()),
+            "maeConfidence95": _bootstrap_mean_interval(
+                np.abs(errors), seed_base + ":mae",
+            ),
+            "rmseConfidence95": _bootstrap_rmse_interval(
+                errors, seed_base + ":rmse",
+            ),
+            "biasConfidence95": _bootstrap_mean_interval(
+                errors, seed_base + ":bias",
+            ),
+            "predictedStandardDeviationPercent": predicted_std,
+            "actualStandardDeviationPercent": actual_std,
+            "discriminationStatus": (
+                "unavailable-constant-prediction"
+                if predicted_std < 1e-8 else "estimable"
+            ),
+            "predictionBandCoverageFraction": (
+                band_successes / len(band_rows) if band_rows else None
+            ),
+            "predictionBandCoverageWilson95": _wilson_interval(
+                band_successes, len(band_rows),
+            ),
+            "predictionBandMeanWidthPoints": (
+                float(np.mean([upper - lower for _, lower, upper in band_rows]))
+                if band_rows else None
+            ),
             "pearson": _correlation(predicted, actual),
             "spearman": _correlation(predicted, actual, ranked=True),
             "r2AgainstSecondMean": (
@@ -633,10 +827,15 @@ def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
                 if baseline_ss > 1e-9 else None
             ),
         })
-    fixed_20 = next(
-        (row for row in accuracy_by_second if abs(float(row["second"]) - 20.0) <= 1e-6),
-        None,
-    )
+    fixed_horizons = {
+        str(second): next(
+            (row for row in accuracy_by_second
+             if abs(float(row["second"]) - float(second)) <= 1e-6),
+            None,
+        )
+        for second in (5, 10, 20, 30)
+    }
+    fixed_20 = fixed_horizons["20"]
     contains_oof = any(
         row.get("evaluationKind") == "saved-source-level-oof" for row in eligible
     )
@@ -648,6 +847,11 @@ def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
         "metricFamily": family_name,
         "videos": len(endpoint_predicted),
         "sourceEqualCurveMAEPercentagePoints": float(np.mean(per_source_mae)),
+        "sourceEqualCurveMAEConfidence95": _bootstrap_mean_interval(
+            per_source_mae,
+            f"{EVALUATION_VERSION}:{family_name}:curve-mae:"
+            + ",".join(str(row.get("videoId") or "unknown") for row in eligible),
+        ),
         "cellWeightedCurveMAEPercentagePoints": float(np.mean(np.abs(all_errors))),
         "cellWeightedCurveRMSEPercentagePoints": float(np.sqrt(np.mean(all_errors ** 2))),
         "cellWeightedCurveBiasPercentagePoints": float(np.mean(all_errors)),
@@ -663,6 +867,7 @@ def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
         ),
         "endpointHorizonPolicy": "last jointly supported second per video; horizons vary",
         "fixed20Second": fixed_20,
+        "fixedHorizons": fixed_horizons,
         "residualBandCoverageFraction": (
             float(np.mean(band_hits)) if band_hits else None
         ),
@@ -680,6 +885,10 @@ def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
                 "nested inside each saved prediction fold"
                 if contains_oof else
                 "external evaluation of intervals calibrated on the Main training cohort"
+            ),
+            "uncertaintyMethod": (
+                "deterministic 2,000-resample source bootstrap; videos are the "
+                "resampling unit"
             ),
         },
     }
@@ -702,3 +911,163 @@ def evaluation_by_account(details: list[dict]) -> dict:
     for row in details:
         grouped[str(row.get("accountId") or "unknown")].append(row)
     return {account: evaluation_metrics(rows) for account, rows in sorted(grouped.items())}
+
+
+def strict_blind_external_selection(details: list[dict]) -> tuple[list[dict], dict]:
+    """Remove training-content overlap and collapse exact external reposts."""
+    training_fingerprints = {
+        row.get("contentFingerprint") for row in details
+        if row.get("evaluationKind") == "saved-source-level-oof"
+        and row.get("contentFingerprint")
+    }
+    external = [
+        row for row in details
+        if str(row.get("evaluationKind") or "").startswith("cross-account-")
+    ]
+    overlap = [
+        row for row in external
+        if row.get("contentFingerprint") in training_fingerprints
+    ]
+    overlap_ids = {str(row.get("videoId")) for row in overlap}
+    groups = defaultdict(list)
+    for row in external:
+        if str(row.get("videoId")) in overlap_ids:
+            continue
+        key = row.get("contentFingerprint") or f"video:{row.get('videoId')}"
+        groups[str(key)].append(row)
+    selected = []
+    duplicate_groups = []
+    duplicate_ids = set()
+    for key, rows in sorted(groups.items()):
+        rows = sorted(rows, key=lambda row: str(row.get("videoId") or ""))
+        selected.append(rows[0])
+        if len(rows) > 1:
+            duplicate_ids.update(str(row.get("videoId")) for row in rows[1:])
+            duplicate_groups.append({
+                "contentFingerprint": key,
+                "videoIds": [str(row.get("videoId")) for row in rows],
+                "accountIds": sorted({str(row.get("accountId")) for row in rows}),
+                "count": len(rows),
+            })
+    selected_ids = [str(row.get("videoId")) for row in selected]
+    return selected, {
+        "externalVideosBeforeIsolation": len(external),
+        "strictBlindUniqueVideos": len(selected),
+        "trainingContentOverlapExcluded": len(overlap),
+        "trainingContentOverlapVideoIds": sorted(overlap_ids),
+        "externalDuplicateGroupsCollapsed": len(duplicate_groups),
+        "externalDuplicateVideosCollapsed": len(duplicate_ids),
+        "duplicateGroups": duplicate_groups,
+        "primaryVideoIds": selected_ids,
+        "primaryVideoIdsFingerprint": hashlib.sha256(
+            json.dumps(selected_ids, separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
+    }
+
+
+def account_balanced_metrics(details: list[dict]) -> dict:
+    by_account = evaluation_by_account(details)
+    output = {"accountCount": len(by_account), "byAccount": by_account, "families": {}}
+    for family_name in ("entryIndexed", "observedAbsolute"):
+        account_rows = []
+        for account_id, metrics in by_account.items():
+            family = (metrics.get("families") or {}).get(family_name) or metrics
+            account_rows.append({
+                "accountId": account_id,
+                "videos": family.get("videos"),
+                "sourceEqualCurveMAEPercentagePoints": family.get(
+                    "sourceEqualCurveMAEPercentagePoints"
+                ),
+                "sourceEqualCurveMAEConfidence95": family.get(
+                    "sourceEqualCurveMAEConfidence95"
+                ),
+                "fixed20Second": family.get("fixed20Second") or {},
+            })
+        curve_values = [
+            row["sourceEqualCurveMAEPercentagePoints"] for row in account_rows
+            if _finite(row["sourceEqualCurveMAEPercentagePoints"]) is not None
+        ]
+        fixed_mae = [
+            row["fixed20Second"].get("maePercentagePoints") for row in account_rows
+            if _finite(row["fixed20Second"].get("maePercentagePoints")) is not None
+        ]
+        fixed_bias = [
+            row["fixed20Second"].get("biasPercentagePoints") for row in account_rows
+            if _finite(row["fixed20Second"].get("biasPercentagePoints")) is not None
+        ]
+        output["families"][family_name] = {
+            "accounts": account_rows,
+            "macroSourceEqualCurveMAEPercentagePoints": (
+                float(np.mean(curve_values)) if curve_values else None
+            ),
+            "bestAccountCurveMAEPercentagePoints": (
+                float(np.min(curve_values)) if curve_values else None
+            ),
+            "worstAccountCurveMAEPercentagePoints": (
+                float(np.max(curve_values)) if curve_values else None
+            ),
+            "macroFixed20MAEPercentagePoints": (
+                float(np.mean(fixed_mae)) if fixed_mae else None
+            ),
+            "macroFixed20BiasPercentagePoints": (
+                float(np.mean(fixed_bias)) if fixed_bias else None
+            ),
+        }
+    return output
+
+
+def candidate_vs_baseline(details: list[dict]) -> dict:
+    """Evaluate the frozen diagnostic candidate without promoting or refitting it."""
+    result = {"status": "diagnostic-only-no-promotion", "families": {}}
+    for family_name in ("entryIndexed", "observedAbsolute"):
+        rows = []
+        for detail in details:
+            family = (detail.get("curves") or {}).get(family_name) or {}
+            stages = family.get("stages") or {}
+            candidate_name = str(family.get("candidateStage") or "relationships")
+            baseline = _float_array(stages.get("baseline") or [])
+            candidate = _float_array(stages.get(candidate_name) or [])
+            actual = _float_array(family.get("actual") or [])
+            times = _float_array(family.get("timesSeconds") or [])
+            if not (len(baseline) == len(candidate) == len(actual) == len(times)):
+                continue
+            valid = (
+                np.isfinite(baseline) & np.isfinite(candidate)
+                & np.isfinite(actual) & np.isfinite(times) & (times > 1e-9)
+            )
+            if not valid.any():
+                continue
+            baseline_mae = float(np.mean(np.abs(baseline[valid] - actual[valid])))
+            candidate_mae = float(np.mean(np.abs(candidate[valid] - actual[valid])))
+            rows.append({
+                "videoId": str(detail.get("videoId")),
+                "accountId": str(detail.get("accountId")),
+                "candidateStage": candidate_name,
+                "baselineMAE": baseline_mae,
+                "candidateMAE": candidate_mae,
+                "improvement": baseline_mae - candidate_mae,
+            })
+        improvements = [row["improvement"] for row in rows]
+        result["families"][family_name] = {
+            "videos": len(rows),
+            "candidateStage": rows[0]["candidateStage"] if rows else None,
+            "baselineCurveMAEPercentagePoints": (
+                float(np.mean([row["baselineMAE"] for row in rows])) if rows else None
+            ),
+            "candidateCurveMAEPercentagePoints": (
+                float(np.mean([row["candidateMAE"] for row in rows])) if rows else None
+            ),
+            "pairedImprovementPercentagePoints": (
+                float(np.mean(improvements)) if improvements else None
+            ),
+            "pairedImprovementConfidence95": _bootstrap_mean_interval(
+                improvements,
+                f"{EVALUATION_VERSION}:{family_name}:candidate-v-baseline:"
+                + ",".join(row["videoId"] for row in rows),
+            ),
+            "candidateWinFraction": (
+                float(np.mean(np.asarray(improvements) > 0)) if improvements else None
+            ),
+            "modelStageChanged": False,
+        }
+    return result
