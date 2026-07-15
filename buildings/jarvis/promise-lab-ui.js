@@ -15,14 +15,15 @@
         const clusterColors = ['#38bdf8', '#f59e0b', '#a78bfa', '#34d399'];
         const state = {
             view: 'scorer', data: {}, loading: {}, errors: {},
-            scoreText: '', scoreIdea: '', scoreResult: null, scoreLoading: false,
+            scoreText: '', scoreDuration: '', scoreResult: null, scoreLoading: false,
             scoreStatus: '', scoreError: '', scoreJobId: null,
             query: '', sort: 'predicted', selectedVideo: null,
             selectedPrediction: null, selectedLattice: null, detailLoading: false,
             detailError: '', selectedComponent: 0, selectedLatticeNode: null,
             curveMode: 'entryIndexed', showStages: true,
             savedMethod: 'maxmin', savedPoint: null, selectedAttributionStep: 0,
-            latticeEdgeType: 'sequence', measurementMode: 'forward',
+            latticeEdgeType: 'sequence', measurementMode: 'forward', outcomePoint: null,
+            outcomeLag: 0,
         };
         const detailCache = new Map();
         let host = null;
@@ -75,7 +76,7 @@
 
         function ensureViewData() {
             load('manualProjection', api('manual-projection'));
-            if (state.view === 'library') load('openingPredictions', api('opening-predictions'));
+            load('openingPredictions', api('opening-predictions'));
             if (state.view === 'saved') {
                 load('canonicalPartitions', api('canonical-partitions'));
             }
@@ -101,7 +102,7 @@
                 if (job.status === 'error') throw new Error(job.error || 'opening score failed');
                 state.scoreStatus = job.status === 'queued'
                     ? 'Queued in the interactive lane'
-                    : 'Embedding the opening and applying the frozen 20-second model';
+                    : 'Embedding the delivered sequence and applying the frozen risk-set models';
                 paint();
             }
             throw new Error('The scorer is still running after 15 minutes.');
@@ -109,7 +110,9 @@
 
         async function scoreOpening() {
             const text = String(state.scoreText || '').replace(/\s+/g, ' ').trim();
-            const idea = String(state.scoreIdea || '').replace(/\s+/g, ' ').trim();
+            const suppliedDuration = Number(state.scoreDuration);
+            const durationSeconds = Number.isFinite(suppliedDuration) && suppliedDuration > 0
+                ? suppliedDuration : null;
             if (!/[\p{L}\p{N}_]/u.test(text)) { state.scoreError = 'Type at least one word to score.'; paint(); return; }
             if (state.scoreLoading) return;
             const request = ++scoreRequest;
@@ -118,14 +121,14 @@
             try {
                 const submitted = await jsonResponse(await fetch(api('hook-score'), {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text, idea, async: true }), cache: 'no-store',
+                    body: JSON.stringify({ text, durationSeconds, async: true }), cache: 'no-store',
                 }));
                 state.scoreJobId = submitted.jobId || null;
                 const result = submitted.jobId ? await pollScoreJob(submitted.jobId, request) : submitted;
                 if (request === scoreRequest) {
                     state.scoreResult = result; state.selectedComponent = 0;
                     state.selectedLatticeNode = null; state.selectedAttributionStep = 0;
-                    state.savedPoint = null;
+                    state.savedPoint = null; state.outcomePoint = null;
                 }
             } catch (error) {
                 if (request === scoreRequest) state.scoreError = String(error && error.message || error);
@@ -141,16 +144,17 @@
             state.selectedVideo = String(videoId); state.detailError = '';
             state.selectedComponent = 0; state.selectedLatticeNode = null;
             state.selectedAttributionStep = 0; state.savedPoint = null;
+            state.outcomePoint = null;
             const cached = detailCache.get(String(videoId));
             if (cached) {
                 state.selectedPrediction = cached.prediction; state.selectedLattice = cached.lattice; paint(); return;
             }
             state.selectedPrediction = null; state.selectedLattice = null; state.detailLoading = true; paint();
             try {
-                const [prediction, lattice] = await Promise.all([
-                    jsonResponse(await fetch(`${api('opening-prediction')}/${encodeURIComponent(videoId)}`)),
-                    jsonResponse(await fetch(`${api('opening-20s')}/${encodeURIComponent(videoId)}`)),
-                ]);
+                const prediction = await jsonResponse(await fetch(
+                    `${api('opening-prediction')}/${encodeURIComponent(videoId)}`,
+                ));
+                const lattice = prediction.componentGraph || prediction.componentLattice || null;
                 if (request !== detailRequest) return;
                 detailCache.set(String(videoId), { prediction, lattice });
                 while (detailCache.size > 3) detailCache.delete(detailCache.keys().next().value);
@@ -165,7 +169,9 @@
         function activeAnalysis() {
             if (state.view === 'scorer') return {
                 prediction: state.scoreResult,
-                lattice: state.scoreResult && state.scoreResult.componentLattice,
+                lattice: state.scoreResult && (
+                    state.scoreResult.componentGraph || state.scoreResult.componentLattice
+                ),
             };
             return { prediction: state.selectedPrediction, lattice: state.selectedLattice };
         }
@@ -178,39 +184,107 @@
             const summary = state.data.openingPredictions || {};
             const corpusFamily = ((summary.validation || {}).entryIndexed || {});
             const chronological = family.chronological || corpusFamily.chronological || {};
-            return { selected, random, chronological };
+            return {
+                selected, random, chronological,
+                candidateRandom: family.candidateRandomFold || {},
+                candidateChronological: family.candidateChronological || {},
+                promotion: family.promotion || {},
+            };
+        }
+
+        function lastFinite(values) {
+            for (let index = (values || []).length - 1; index >= 0; index--) {
+                if (numeric(values[index]) != null) return Number(values[index]);
+            }
+            return null;
+        }
+
+        function endpointChannels(analysis) {
+            const family = ((analysis.curves || {}).entryIndexed || {});
+            const stages = family.stages || {};
+            const names = ['baseline', 'timing', 'semantic', 'components', 'relationships'];
+            const values = Object.fromEntries(names.map(name => [name, lastFinite(stages[name] || [])]));
+            const finalValue = lastFinite(family.predicted || []);
+            const selectedStage = family.selectedStage || 'baseline';
+            const stageOrder = ['baseline', 'timing', 'semantic', 'components', 'relationships'];
+            const selectedIndex = Math.max(0, stageOrder.indexOf(selectedStage));
+            const rawDeltas = {
+                timing: values.timing == null || values.baseline == null ? null : values.timing - values.baseline,
+                semantic: values.semantic == null || values.timing == null ? null : values.semantic - values.timing,
+                components: values.components == null || values.semantic == null ? null : values.components - values.semantic,
+                relationships: values.relationships == null || values.components == null ? null : values.relationships - values.components,
+            };
+            return {
+                values,
+                deltas: rawDeltas,
+                appliedDeltas: Object.fromEntries(['timing', 'semantic', 'components', 'relationships'].map((name, index) => [
+                    name, index + 1 <= selectedIndex ? rawDeltas[name] : 0,
+                ])),
+                finalValue,
+                selectedStage,
+                candidateStage: family.candidateStage || 'relationships',
+                promotion: family.promotion || {},
+            };
         }
 
         function headline(analysis) {
             const output = analysis.outputs || {};
             const actual = analysis.actual || null;
             const views = output.viewsDiagnostic || null;
-            const is20 = Number(analysis.analysisHorizonSeconds || 0) >= 19.99;
-            const hookEnd = numeric(analysis.originalHookEndSeconds);
-            const hookPrediction = numeric(output.retainedAtOriginalHookEndPercent);
+            const forecastEnd = numeric(output.forecastEndSeconds) == null
+                ? numeric(analysis.forecastHorizonSeconds)
+                : numeric(output.forecastEndSeconds);
+            const prediction = numeric(output.retainedAtForecastEndPercent) == null
+                ? output.retainedAtAnalyzedEndPercent
+                : output.retainedAtForecastEndPercent;
+            const lower = numeric(output.retainedAtForecastEndP10) == null
+                ? output.retainedAtAnalyzedEndP10 : output.retainedAtForecastEndP10;
+            const upper = numeric(output.retainedAtForecastEndP90) == null
+                ? output.retainedAtAnalyzedEndP90 : output.retainedAtForecastEndP90;
             const viewsAvailable = !!(views && views.promoted);
             return `<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;padding:10px 0;border-bottom:1px solid ${C.border}">
-                ${stat(is20 ? 'predicted retained at 20s' : 'predicted retained at text end', pct(output.retainedAtAnalyzedEndPercent), C.green, `OOF residual band ${pct(output.retainedAtAnalyzedEndP10)}–${pct(output.retainedAtAnalyzedEndP90)}`)}
-                ${hookPrediction == null ? '' : stat(`predicted at hook end${hookEnd == null ? '' : ` · ${fmt(hookEnd, 1)}s`}`, pct(hookPrediction), C.accent, 'same causal prefix curve at the measured hook boundary')}
+                ${stat(`predicted retained${forecastEnd == null ? '' : ` · ${fmt(forecastEnd, 1)}s`}`, pct(prediction), C.green, `OOF residual band ${pct(lower)}–${pct(upper)}`)}
                 ${stat('predicted absolute R5', output.absoluteRetention5sPercent == null ? 'withheld' : pct(output.absoluteRetention5sPercent), C.cyan, output.absoluteRetention5sPercent == null ? 'supplied text ends before 5s' : 'same raw R5 definition used by Shorts Quant')}
-                ${stat('normalized drop', pct(output.normalizedDropBy20sPoints == null ? output.normalizedDropByAnalyzedEndPoints : output.normalizedDropBy20sPoints), C.amber, 'entry indexed: starts at 100%')}
-                ${stat('individualized views', viewsAvailable ? compact(views.estimate) : 'withheld', viewsAvailable ? C.purple : C.amber, views ? `R5 scenario ${compact(views.lower80)}–${compact(views.upper80)} · ${views.status || 'withheld'}` : 'needs at least five seconds of supplied text')}
-                ${actual ? stat('actual retained', pct(actual.retainedAt20sPercent), C.text, `actual R5 ${pct(actual.absoluteRetention5sPercent)} · ${compact(actual.views)} views`) : ''}
+                ${stat('normalized drop', pct(output.normalizedDropByAnalyzedEndPoints), C.amber, 'entry indexed: starts at 100%')}
+                ${stat('views diagnostic', viewsAvailable ? compact(views.estimate) : 'withheld', viewsAvailable ? C.purple : C.amber, views ? `R5 scenario ${compact(views.lower80)}–${compact(views.upper80)} · ${views.status || 'withheld'}` : 'needs at least five seconds of supplied text')}
+                ${actual ? stat('actual retained', pct(numeric(actual.retainedAtForecastEndPercent) == null ? actual.retainedAt20sPercent : actual.retainedAtForecastEndPercent), C.text, `actual R5 ${pct(actual.absoluteRetention5sPercent)} · ${compact(actual.views)} views`) : ''}
             </div>`;
         }
 
         function evidencePanel(analysis) {
             const validation = validationSummary(analysis);
-            const contribution = (analysis.contributions || {}).at20Seconds
-                || (analysis.contributions || {}).atAnalyzedEnd || {};
             const support = analysis.support || {};
-            const selectedLabel = validation.selected === 'semanticPrefix' ? 'causal prefix semantics' : validation.selected;
-            const selectedColor = C.green;
-            const randomGain = numeric(validation.random.maeImprovementFraction);
-            const forwardGain = numeric(validation.chronological.maeImprovementFraction);
+            const channels = endpointChannels(analysis);
+            const selectedLabel = channels.selectedStage || validation.selected;
+            const promotion = validation.promotion || channels.promotion || {};
+            const randomGain = numeric(validation.random.sourceEqualMAEImprovementFraction) == null
+                ? numeric(validation.random.maeImprovementFraction)
+                : numeric(validation.random.sourceEqualMAEImprovementFraction);
+            const forwardGain = numeric(validation.chronological.sourceEqualMAEImprovementFraction) == null
+                ? numeric(validation.chronological.maeImprovementFraction)
+                : numeric(validation.chronological.sourceEqualMAEImprovementFraction);
             const forwardPassed = forwardGain != null && forwardGain > 0;
-            const equation = `${fmt(contribution.baselinePercent, 2)}% ${Number(contribution.semanticDeltaPoints || 0) >= 0 ? '+' : '−'} ${fmt(Math.abs(Number(contribution.semanticDeltaPoints || 0)), 2)} pp + 0.00 pp + 0.00 pp = ${fmt(contribution.finalPercent, 2)}%`;
-            return panel(`<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div style="max-width:760px"><div style="font-size:11px;color:${C.text};font-weight:900">Prediction evidence</div><div style="font-size:8px;color:${C.dim};line-height:1.55;margin-top:3px">At every plotted second, the headline embeds only words completed by that second. Component and relationship endpoint candidates remain visible below, but add <b>zero</b> to the headline. Random-fold validation measures same-era association; the chronological result is the past-to-future deployment stress test.</div><div style="font-size:8px;color:${C.text};margin-top:6px"><b>Endpoint equation:</b> mean curve + prefix semantics + component channel + relationship channel<br><span style="color:${C.cyan}">${equation}</span></div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('model status', forwardPassed ? 'forward gate passed' : 'exploratory', forwardPassed ? C.green : C.amber, forwardPassed ? 'beats the past-to-future mean baseline' : `forward MAE change ${forwardGain == null ? '—' : signed(forwardGain * 100, 1) + '%'}`)}${stat('applied signal', selectedLabel, selectedColor)}${stat('random OOF curve MAE', `${fmt(validation.random.heldoutMAEPercentagePoints, 2)} pp`, C.cyan, `baseline ${fmt(validation.random.baselineMAEPercentagePoints, 2)} pp · ${randomGain == null ? '—' : signed(randomGain * 100, 1) + '%'}`)}${stat('past-to-future MAE', `${fmt(validation.chronological.heldoutMAEPercentagePoints, 2)} pp`, C.amber, `baseline ${fmt(validation.chronological.baselineMAEPercentagePoints, 2)} pp`)}${stat('length support', support.isExtrapolation ? 'extrapolation' : 'inside range', support.isExtrapolation ? C.red : C.green, `${support.trainingTokenCountMinimum || 20}–${support.trainingTokenCountMaximum || 115} training tokens`)}</div></div>`, 'margin-top:10px');
+            const equation = [
+                `${fmt(channels.values.baseline, 2)}% baseline`,
+                `${signed(channels.appliedDeltas.timing, 2)} pp timing`,
+                `${signed(channels.appliedDeltas.semantic, 2)} pp prefix semantics`,
+                `${signed(channels.appliedDeltas.components, 2)} pp components`,
+                `${signed(channels.appliedDeltas.relationships, 2)} pp sequence context`,
+                `= ${fmt(channels.finalValue, 2)}%`,
+            ].join(' · ');
+            const randomMae = numeric(validation.random.sourceEqualMAEPercentagePoints) == null
+                ? validation.random.heldoutMAEPercentagePoints
+                : validation.random.sourceEqualMAEPercentagePoints;
+            const randomBaseline = numeric(validation.random.sourceEqualBaselineMAEPercentagePoints) == null
+                ? validation.random.baselineMAEPercentagePoints
+                : validation.random.sourceEqualBaselineMAEPercentagePoints;
+            const chronologicalMae = numeric(validation.chronological.sourceEqualMAEPercentagePoints) == null
+                ? validation.chronological.heldoutMAEPercentagePoints
+                : validation.chronological.sourceEqualMAEPercentagePoints;
+            const chronologicalBaseline = numeric(validation.chronological.sourceEqualBaselineMAEPercentagePoints) == null
+                ? validation.chronological.baselineMAEPercentagePoints
+                : validation.chronological.sourceEqualBaselineMAEPercentagePoints;
+            return panel(`<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div style="max-width:800px"><div style="font-size:11px;color:${C.text};font-weight:900">Prediction evidence</div><div style="font-size:8px;color:${C.dim};line-height:1.55;margin-top:3px">Every point uses only words and completed boundary-evidence windows available by that second. The full timing → semantic → four-cluster → prior-sequence ladder remains visible as a candidate; only stages that pass the declared global gate enter the cyan headline.</div><div style="font-size:8px;color:${C.text};margin-top:6px"><b>Applied endpoint equation:</b><br><span style="color:${C.cyan}">${equation}</span></div><div style="font-size:7.5px;color:${C.amber};margin-top:5px">Candidate ${esc(channels.candidateStage)} · random gate ${promotion.randomGatePassed ? 'passed' : 'failed'} · chronological gate ${promotion.chronologicalGatePassed ? 'passed' : 'failed'} · stage shopping disabled</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('promotion status', promotion.promoted ? 'candidate promoted' : 'baseline retained', promotion.promoted ? C.green : C.amber, promotion.promoted ? 'both source-level gates passed' : 'full sequence candidate did not clear both gates')}${stat('applied stage', selectedLabel, promotion.promoted ? C.green : C.amber)}${stat('selected random MAE', `${fmt(randomMae, 2)} pp`, C.cyan, `baseline ${fmt(randomBaseline, 2)} pp · ${randomGain == null ? '—' : signed(randomGain * 100, 1) + '%'}`)}${stat('selected forward MAE', `${fmt(chronologicalMae, 2)} pp`, C.amber, `baseline ${fmt(chronologicalBaseline, 2)} pp`)}${stat('forecast support', `${fmt(support.servedForecastThroughSeconds || analysis.forecastHorizonSeconds, 0)}s`, C.purple, `${support.riskSetSourcesAtForecastEnd || 'typed'} at-risk sources at endpoint`)}</div></div>`, 'margin-top:10px');
         }
 
         function tokenStrip(analysis) {
@@ -240,13 +314,17 @@
             if (!components.length) return '';
             return `<div style="overflow:auto;max-height:430px;margin-top:7px"><table style="width:100%;min-width:1180px;border-collapse:collapse;font-size:7.5px"><thead><tr>${[
                 'component and exact text', 'tokens / spoken time', 'cluster', 'all cluster probabilities',
-                'saved map x / y', 'model movement', 'semantic movement', 'observed movement', 'candidate R20 deletion',
+                'saved map x / y', 'model movement', 'stage-channel movement', 'observed movement', 'viewer context / outcome plane',
             ].map(value => `<th style="position:sticky;top:0;background:${C.card};text-align:right;padding:5px;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${components.map((component, index) => {
                 const timeline = component.timelineAttribution || {};
-                const impactRoot = component.predictionImpact || {};
-                const impact = impactRoot.entryIndexed || {};
                 const probabilities = component.categoryDistribution || [];
-                return `<tr data-pl-component="${index}" style="cursor:pointer;background:${state.selectedComponent === index ? C.cyan + '12' : 'transparent'}"><td style="text-align:left;padding:5px;border-bottom:1px solid ${C.border};max-width:360px"><b style="color:${colorForCluster(component.category)}">${index + 1} · C${component.category}</b><br><span style="color:${C.text};line-height:1.4">${esc(component.text)}</span></td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};white-space:nowrap">${component.startToken == null ? component.start : component.startToken}–${component.endToken == null ? component.end : component.endToken}<br>${fmt(component.spokenStartSeconds, 3)}–${fmt(component.spokenEndSeconds, 3)}s</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};color:${colorForCluster(component.category)};font-weight:900">C${component.category}<br>${pct(Number(component.categoryProbability || probabilities[component.category] || 0) * 100)}</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};white-space:nowrap">${[0, 1, 2, 3].map(category => `<span style="color:${colorForCluster(category)}">C${category} ${pct(Number(probabilities[category] || 0) * 100)}</span>`).join('<br>')}</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};white-space:nowrap">${fmt(component.mapX, 5)}<br>${fmt(component.mapY, 5)}</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};font-weight:900">${signed(timeline.predictedDeltaPoints, 2)} pp</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};color:${C.purple}">${signed(timeline.semanticShapeDeltaPoints, 2)} pp</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};color:${C.green}">${timeline.observedDeltaPoints == null ? '—' : signed(timeline.observedDeltaPoints, 2) + ' pp'}</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};color:${C.amber}">${impactRoot.available === false || impact.retention20sPoints == null ? 'unavailable' : signed(impact.retention20sPoints, 2) + ' pp'}<br><span style="color:${C.mute}">headline 0.00 pp</span></td></tr>`;
+                const context = component.viewerContext || {};
+                const plane = component.outcomePlane || {};
+                const channel = timeline.channelDeltaPoints || {};
+                const slope = numeric(plane.predictedRetentionSlopePercentagePointsPerSecond) == null
+                    ? plane.oofPredictedSlopePercentagePointsPerSecond
+                    : plane.predictedRetentionSlopePercentagePointsPerSecond;
+                return `<tr data-pl-component="${index}" style="cursor:pointer;background:${state.selectedComponent === index ? C.cyan + '12' : 'transparent'}"><td style="text-align:left;padding:5px;border-bottom:1px solid ${C.border};max-width:360px"><b style="color:${colorForCluster(component.category)}">${index + 1} · C${component.category}</b><br><span style="color:${C.text};line-height:1.4">${esc(component.text)}</span></td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};white-space:nowrap">${component.startToken == null ? component.start : component.startToken}–${component.endToken == null ? component.end : component.endToken}<br>${fmt(component.spokenStartSeconds, 3)}–${fmt(component.spokenEndSeconds, 3)}s<br><span style="color:${C.mute}">evidence ${fmt(component.boundaryEvidenceAvailableSeconds, 3)}s</span></td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};color:${colorForCluster(component.category)};font-weight:900">C${component.category}<br>${pct(Number(component.categoryProbability || probabilities[component.category] || 0) * 100)}</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};white-space:nowrap">${[0, 1, 2, 3].map(category => `<span style="color:${colorForCluster(category)}">C${category} ${pct(Number(probabilities[category] || 0) * 100)}</span>`).join('<br>')}</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};white-space:nowrap">${fmt(component.mapX, 5)}<br>${fmt(component.mapY, 5)}</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};font-weight:900">${signed(timeline.predictedDeltaPoints, 2)} pp</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};white-space:nowrap"><span style="color:${C.amber}">time ${signed(channel.timing, 2)}</span><br><span style="color:${C.purple}">semantic ${signed(channel.semantic, 2)}</span><br><span style="color:${C.accent}">components ${signed(channel.components, 2)}</span><br><span style="color:${C.green}">relations ${signed(channel.relationships, 2)}</span></td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};color:${C.green}">${timeline.observedDeltaPoints == null ? '—' : signed(timeline.observedDeltaPoints, 2) + ' pp'}</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};color:${C.amber}">${esc(context.transition || 'START')}<br>${slope == null ? 'plane unavailable' : `${signed(slope, 3)} pp/s`}<br><span style="color:${C.mute}">x ${fmt(plane.x, 3)} · ${fmt(plane.xPercentile, 1)}th</span></td></tr>`;
             }).join('')}</tbody></table></div>`;
         }
 
@@ -262,20 +340,35 @@
             return `${panel(`<div style="display:flex;justify-content:space-between;gap:9px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:900">Selected component inside the saved four-cluster embedding</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">All background points are the frozen outcome-blind span atlas. The large outlined point is this exact component, projected from its stored whitened 4D coordinates with the same saved plane.</div></div><div style="display:flex;gap:4px;flex-wrap:wrap">${(projection.methods || []).map(row => button(row.label || row.id, `data-pl-method="${esc(row.id)}"`, row.id === (method || {}).id)).join('')}</div></div><div style="display:grid;grid-template-columns:minmax(0,1.45fr) minmax(260px,.55fr);gap:10px;margin-top:7px"><div><canvas data-pl-canvas="component-map" style="display:block;width:100%;height:390px"></canvas><div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;font-size:8px;margin-top:4px">${[0, 1, 2, 3].map(category => `<span style="color:${colorForCluster(category)}">● cluster ${category}</span>`).join('')}<span style="color:${C.text}">◎ selected component</span></div></div><div style="border-left:1px solid ${C.border};padding-left:9px"><div style="font-size:8px;color:${colorForCluster(component.category)};font-weight:900">COMPONENT ${Number(component.index || 0) + 1} · ASSIGNED C${component.category}</div><div style="font-size:13px;color:${C.text};font-weight:900;line-height:1.4;margin:3px 0 7px">${esc(component.text)}</div>${categoryProbabilityBars(component)}<div style="font-size:8px;color:${C.dim};line-height:1.6;margin-top:8px"><b style="color:${C.text}">Saved plane:</b> ${esc((method || {}).label || (method || {}).id || '')}<br><b style="color:${C.text}">Point:</b> x ${fmt(point[0], 5)} · y ${fmt(point[1], 5)}<br><b style="color:${C.text}">Whitened 4D:</b> [${coordinates.map(value => fmt(value, 4)).join(', ')}]<br><b style="color:${C.text}">Worst-pair separation:</b> ${fmt(metrics.worstPairSeparation, 3)}<br><b style="color:${C.text}">Balanced centroid agreement:</b> ${pct(Number(metrics.balancedNearestCentroidAgreement || 0) * 100)}<br><b style="color:${C.text}">Silhouette:</b> ${fmt(metrics.silhouetteSampled, 3)}</div><div style="font-size:7px;color:${C.mute};line-height:1.5;margin-top:7px">Click any atlas point to compare its exact stored phrase without leaving this analysis.</div></div></div>`, 'margin-top:8px')}${state.savedPoint == null ? '' : savedPointDetail()}`;
         }
 
+        function componentResponseRows(component) {
+            const measurements = component.measurements || {};
+            if (Array.isArray(measurements.forward)) return measurements.forward;
+            return Object.entries(measurements).map(([lag, value]) => ({
+                lagSeconds: Number(lag),
+                windowStartSeconds: (value || {}).windowStartSeconds,
+                windowEndSeconds: (value || {}).windowEndSeconds,
+                measuredWithinRiskSet: !!value,
+                entry_indexed: value ? {
+                    slopePercentPerSecond: value.slopePercentagePointsPerSecond,
+                    dropPercentagePoints: value.deltaPercentagePoints,
+                } : {},
+            })).sort((left, right) => left.lagSeconds - right.lagSeconds);
+        }
+
         function componentMeasurementPanel(analysis) {
             const component = activeComponent(analysis);
             if (!component.text) return '';
             const timeline = component.timelineAttribution || {};
-            const measurements = component.measurements || {};
-            const rows = state.measurementMode === 'reverse' ? (measurements.reverseControls || []) : (measurements.forward || []);
-            const impact = component.predictionImpact || {};
-            const entryImpact = impact.entryIndexed || {};
-            const attention = component.descriptiveAttention || {};
-            const rawMap = ((component.maps || {}).raw || []);
-            const contextMap = ((component.maps || {}).context || []);
-            const influenceMap = ((component.maps || {}).influence || []);
-            const controls = `<div style="display:flex;gap:4px">${button('Forward lags', 'data-pl-measurement-mode="forward"', state.measurementMode === 'forward')}${button('Reverse controls', 'data-pl-measurement-mode="reverse"', state.measurementMode === 'reverse')}</div>`;
-            return panel(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:900">Component evidence and response timing</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">Timeline accounting explains which model transition consumed these tokens. Saved rows additionally expose every measured forward lag and reverse-time falsification control.</div></div>${controls}</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${stat('timeline drop assigned', timeline.predictedDropPoints == null ? '—' : `${signed(timeline.predictedDropPoints, 2)} pp`, C.cyan, 'exact token-overlap accounting')}${stat('semantic shape share', timeline.semanticShapeDeltaPoints == null ? '—' : `${signed(timeline.semanticShapeDeltaPoints, 2)} pp`, C.purple, 'relative to the time baseline')}${stat('candidate R20 deletion', impact.available ? `${signed(entryImpact.retention20sPoints, 2)} pp` : 'unavailable', C.amber, impact.available ? 'withheld intervention candidate' : (impact.reason || component.measurementStatus || 'not estimated'))}${stat('headline contribution', '0.00 pp', C.green, 'component stage was not promoted')}</div><div style="display:grid;grid-template-columns:minmax(230px,.8fr) minmax(0,1.2fr);gap:9px;margin-top:8px"><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.6"><b style="color:${C.text}">Exact phrase:</b> ${esc(component.text)}<br><b style="color:${C.text}">Tokens:</b> ${component.startToken == null ? component.start : component.startToken}–${component.endToken == null ? component.end : component.endToken}<br><b style="color:${C.text}">Spoken interval:</b> ${fmt(component.spokenStartSeconds, 3)}–${fmt(component.spokenEndSeconds, 3)}s<br><b style="color:${C.text}">Context change:</b> ${fmt(attention.contextChangePercentileWithinHook, 1)}th percentile<br><b style="color:${C.text}">Semantic centrality:</b> ${fmt(attention.semanticCentralityPercentileWithinHook, 1)}th percentile<br><b style="color:${C.text}">Raw map:</b> [${rawMap.map(value => fmt(value, 4)).join(', ')}]<br><b style="color:${C.text}">Context map:</b> [${contextMap.map(value => fmt(value, 4)).join(', ')}]<br><b style="color:${C.text}">Influence map:</b> [${influenceMap.map(value => fmt(value, 4)).join(', ')}]</div><div>${rows.length ? `<canvas data-pl-canvas="component-response" style="display:block;width:100%;height:230px"></canvas>` : `<div style="min-height:180px;border:1px dashed ${C.border};display:flex;align-items:center;justify-content:center;padding:20px;color:${C.mute};font-size:8px;text-align:center">${esc(component.measurementStatus || 'No observed audience-retention curve is attached to this typed opening. The same panel remains present so saved and typed analyses do not diverge.')}</div>`}</div></div>${rows.length ? `<div style="overflow:auto;max-height:250px;margin-top:7px"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['lag', 'response window', 'eligible', 'entry slope /s', 'entry Δ', 'raw slope /s', 'raw Δ'].map(value => `<th style="text-align:right;padding:4px;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${rows.map(row => { const entry = row.entry_indexed || {}; const raw = row.observed_absolute || {}; return `<tr><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${row.lagSeconds < 0 ? C.amber : C.cyan}">${signed(row.lagSeconds, 1)}s</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${fmt(row.windowStartSeconds, 2)}–${fmt(row.windowEndSeconds, 2)}s</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${row.measuredWithin20s ? C.green : C.red}">${row.measuredWithin20s ? 'yes' : 'no'}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${signed(entry.slopePercentPerSecond, 2)}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${signed(entry.dropPercentagePoints, 2)} pp</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${signed(raw.slopePercentPerSecond, 2)}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${signed(raw.dropPercentagePoints, 2)} pp</td></tr>`; }).join('')}</tbody></table></div>` : ''}`, 'margin-top:8px');
+            const rows = componentResponseRows(component);
+            const context = component.viewerContext || {};
+            const plane = component.outcomePlane || {};
+            const slope = numeric(plane.predictedRetentionSlopePercentagePointsPerSecond) == null
+                ? plane.oofPredictedSlopePercentagePointsPerSecond
+                : plane.predictedRetentionSlopePercentagePointsPerSecond;
+            const observed = numeric(plane.observedSlopePercentagePointsPerSecond) == null
+                ? (((rows.find(row => Number(row.lagSeconds) === 0) || {}).entry_indexed || {}).slopePercentPerSecond)
+                : plane.observedSlopePercentagePointsPerSecond;
+            return panel(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:900">Component evidence, viewer context, and response timing</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">The context state contains only components delivered earlier. Saved rows expose measured forward offsets; typed rows apply the frozen category-specific context model.</div></div><div style="font-size:8px;color:${C.amber};max-width:430px;text-align:right">${esc(plane.claimBoundary || 'observational response association; not a randomized rewrite effect')}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${stat('timeline movement', timeline.predictedDeltaPoints == null ? '—' : `${signed(timeline.predictedDeltaPoints, 2)} pp`, C.cyan, 'promoted full-stage curve')}${stat('context-model slope', slope == null ? '—' : `${signed(slope, 3)} pp/s`, C.purple, 'source-grouped category plane')}${stat('observed slope', observed == null ? 'unobserved' : `${signed(observed, 3)} pp/s`, C.green, 'saved source only')}${stat('cluster-plane x', plane.xPercentile == null ? fmt(plane.x, 3) : `${fmt(plane.xPercentile, 1)}th`, colorForCluster(component.category), 'higher predicts less drop')}</div><div style="display:grid;grid-template-columns:minmax(260px,.85fr) minmax(0,1.15fr);gap:9px;margin-top:8px"><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.65"><b style="color:${C.text}">Exact phrase:</b> ${esc(component.text)}<br><b style="color:${C.text}">Tokens:</b> ${component.startToken == null ? component.start : component.startToken}–${component.endToken == null ? component.end : component.endToken}<br><b style="color:${C.text}">Spoken interval:</b> ${fmt(component.spokenStartSeconds, 3)}–${fmt(component.spokenEndSeconds, 3)}s<br><b style="color:${C.text}">Boundary evidence complete:</b> ${fmt(component.boundaryEvidenceAvailableSeconds, 3)}s<br><b style="color:${C.text}">Prior transition:</b> ${esc(context.transition || `START→C${component.category}`)}<br><b style="color:${C.text}">Earlier components:</b> ${Number(context.componentsPreviouslyDelivered || 0)}<br><b style="color:${C.text}">Prior category mix:</b> ${(context.categoryDistributionBefore || [0, 0, 0, 0]).map((value, category) => `C${category} ${pct(Number(value) * 100)}`).join(' · ')}<br><b style="color:${C.text}">Predecessor similarity:</b> ${fmt(context.predecessorSemanticSimilarity, 4)}<br><b style="color:${C.text}">History similarity / change:</b> ${fmt(context.historySemanticSimilarity, 4)} / ${fmt(context.historySemanticChange, 4)}<br><b style="color:${C.text}">Outcome plane:</b> x ${fmt(plane.x, 4)} · y ${fmt(plane.y, 4)}</div><div>${rows.length ? `<canvas data-pl-canvas="component-response" style="display:block;width:100%;height:230px"></canvas>` : `<div style="min-height:180px;border:1px dashed ${C.border};display:flex;align-items:center;justify-content:center;padding:20px;color:${C.mute};font-size:8px;text-align:center">${esc(component.measurementStatus || 'Typed text has no observed audience-retention response; the frozen prediction remains shown above.')}</div>`}</div></div>${rows.length ? `<div style="overflow:auto;max-height:250px;margin-top:7px"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['forward offset', 'response window', 'risk-set eligible', 'entry-indexed slope', 'entry-indexed delta'].map(value => `<th style="text-align:right;padding:4px;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${rows.map(row => { const entry = row.entry_indexed || {}; const eligible = row.measuredWithinRiskSet !== false && numeric(entry.slopePercentPerSecond) != null; return `<tr><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${C.cyan}">+${fmt(row.lagSeconds, 0)}s</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${fmt(row.windowStartSeconds, 2)}–${fmt(row.windowEndSeconds, 2)}s</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${eligible ? C.green : C.red}">${eligible ? 'yes' : 'no'}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${signed(entry.slopePercentPerSecond, 3)} pp/s</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${signed(entry.dropPercentagePoints, 3)} pp</td></tr>`; }).join('')}</tbody></table></div>` : ''}`, 'margin-top:8px');
         }
 
         function activeComponentNode(analysis, lattice) {
@@ -310,10 +403,64 @@
             ${selected.text ? componentEmbeddingPanel(analysis) : ''}${selected.text ? componentMeasurementPanel(analysis) : ''}${selected.text ? componentRawEvidencePanel(analysis, lattice) : ''}`;
         }
 
+        function outcomePlanesPanel(analysis) {
+            const study = ((state.data.openingPredictions || {}).contextStudy || {});
+            const categories = study.categories || [];
+            if (!categories.length) return loadingPanel('Loading the four frozen category outcome planes…');
+            const selected = activeComponent(analysis);
+            const chosen = state.outcomePoint;
+            const lags = study.testedForwardLagsSeconds || [0];
+            return panel(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:900">Four category-specific retention-response planes at every tested processing lag</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">Choose +0 through +5 seconds. Each view refits the category-conditional response direction to retention measured after that forward delay. X and Y are descriptive full-cohort coordinates, not OOF validation coordinates; point predictions are OOF and color is observed slope.</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${lags.map(lag => button(`+${lag}s`, `data-pl-outcome-lag="${lag}"`, Number(state.outcomeLag) === Number(lag))).join('')}</div></div><div style="max-width:440px;text-align:right;font-size:7.5px;color:${C.amber};line-height:1.5">${esc(study.claimBoundary || '')}</div></div><div style="display:grid;grid-template-columns:repeat(2,minmax(300px,1fr));gap:8px;margin-top:8px">${categories.map(category => {
+                const experiment = (category.lagExperiments || []).find(row => Number(row.lagSeconds) === Number(state.outcomeLag) && row.status === 'complete') || {};
+                const plane = experiment.outcomePlane || ((category.outcomePlanesByLag || {})[String(state.outcomeLag)]) || {};
+                const gain = ((experiment.nestedRandomFoldMAEGain || {}).semanticToViewerContext);
+                const selectedHere = Number(selected.category) === Number(category.category);
+                const selectedPlane = ((selected.outcomePlanesByLag || {})[String(state.outcomeLag)]) || (Number(state.outcomeLag) === Number(study.primaryLagSeconds || 0) ? selected.outcomePlane : {}) || {};
+                return `<div style="background:${C.card2};border-top:3px solid ${colorForCluster(category.category)};padding:8px;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px"><b style="font-size:9px;color:${colorForCluster(category.category)}">CLUSTER ${category.category} · RESPONSE +${state.outcomeLag}s</b><span style="font-size:7px;color:${C.mute}">${Number(experiment.rows || 0).toLocaleString()} windows / ${experiment.sourceVideos || '—'} sources · context MAE gain ${gain == null ? '—' : signed(gain, 3) + ' pp'}</span></div><canvas data-pl-canvas="outcome-plane" data-pl-category="${category.category}" data-pl-lag="${state.outcomeLag}" style="display:block;width:100%;height:270px;margin-top:4px"></canvas><div style="font-size:7px;color:${C.dim};line-height:1.45;margin-top:4px">x: ${esc(plane.xAxis || '')}<br>y: ${esc(plane.yAxis || '')}${selectedHere ? `<br><b style="color:${C.text}">selected component:</b> x ${fmt(selectedPlane.x, 4)} · y ${fmt(selectedPlane.y, 4)} · predicted ${signed(selectedPlane.predictedRetentionSlopePercentagePointsPerSecond, 3)} pp/s` : ''}</div></div>`;
+            }).join('')}</div>${chosen ? `<div style="margin-top:8px;background:${C.card2};border-left:3px solid ${colorForCluster(chosen.category)};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${colorForCluster(chosen.category)}">CLUSTER ${chosen.category} · RESPONSE +${state.outcomeLag}s · ${esc(chosen.videoId || '')} · COMPONENT ${Number(chosen.componentIndex || 0) + 1}</b><br><span style="color:${C.text};font-size:10px;font-weight:900">${esc(chosen.text || '')}</span><br>x ${fmt(chosen.x, 4)} · y ${fmt(chosen.y, 4)} · observed ${signed(chosen.observedSlopePercentagePointsPerSecond, 3)} pp/s · OOF predicted ${signed(chosen.oofPredictedSlopePercentagePointsPerSecond, 3)} pp/s</div>` : ''}`, 'margin-top:10px');
+        }
+
+        function availableRiskRows(analysis) {
+            const local = analysis.supportBySecond || ((analysis.support || {}).riskSetBySecond) || [];
+            const global = (state.data.openingPredictions || {}).riskSetBySecond || [];
+            return local.length ? local : global;
+        }
+
+        function riskSetPanel(analysis) {
+            const rows = availableRiskRows(analysis).filter(row => numeric(row.second) != null);
+            if (!rows.length) return '';
+            const support = analysis.support || {};
+            const input = analysis.input || {};
+            const summarySupport = (state.data.openingPredictions || {}).support || {};
+            const semanticMinimum = Number(summarySupport.minimumModelSources || 10);
+            const chronologicalMinimum = Number(summarySupport.minimumChronologicalSources || 40);
+            const forecastEnd = numeric(analysis.forecastHorizonSeconds) == null
+                ? numeric((analysis.outputs || {}).forecastEndSeconds) : numeric(analysis.forecastHorizonSeconds);
+            const endpoint = [...rows].reverse().find(row => forecastEnd == null || Number(row.second) <= forecastEnd + 1e-6) || {};
+            const timingLabel = input.timingSource || ((support.timingContract || {}).contract) || 'source-media word intervals';
+            const supportTier = support.supportTierAtForecastEnd || endpoint.supportTier || '—';
+            return panel(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:900">Duration-conditioned risk set and timing support</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">A source contributes at second t only while its measured video, transcript timing, and retention curve cover t. Missing future retention is never padded or imputed.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('forecast endpoint', `${fmt(forecastEnd, 1)}s`, C.cyan, `${endpoint.riskSetSources || support.riskSetSourcesAtForecastEnd || '—'} sources at risk`)}${stat('support tier', supportTier, C.purple, support.forecastStopReason || 'duration-conditioned model support')}${stat('individualized minimum', semanticMinimum, C.purple, 'below this: no text-specific candidate')}${stat('chronological minimum', chronologicalMinimum, C.amber, 'below this: no past-to-future claim')}${stat('timing source', input.timingEstimated ? 'estimated' : 'measured', input.timingEstimated ? C.amber : C.green, timingLabel)}</div></div><canvas data-pl-canvas="risk-set" style="display:block;width:100%;height:260px;margin-top:7px"></canvas><div style="font-size:7.5px;color:${C.dim};line-height:1.5;margin-top:5px">Purple line: individualized-model minimum (${semanticMinimum}). Amber line: chronological-validation minimum (${chronologicalMinimum}). The vertical marker is this opening's final supported forecast point; the structural component cover can continue beyond it.</div>`, 'margin-top:10px');
+        }
+
+        function sequenceContextPanel(analysis) {
+            const study = (state.data.openingPredictions || {}).contextStudy || {};
+            const categories = study.categories || [];
+            const swaps = ((analysis.orderSensitivity || {}).swaps || []);
+            if (!categories.length && !swaps.length) return '';
+            const rows = categories.flatMap(category => (category.lagExperiments || []).map(experiment => ({
+                category: category.category,
+                experiment,
+            })));
+            const order = analysis.orderSensitivity || {};
+            return panel(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:900">Viewer-held context, order, and processing-lag experiments</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">Context is the information already delivered inside this opening: predecessor, category history, semantic similarity, and semantic change. No external idea prompt is used.</div></div><div style="max-width:470px;text-align:right;font-size:7.5px;color:${C.amber};line-height:1.5">${esc(study.claimBoundary || order.claimBoundary || 'Observed ordering associations and synthetic model sensitivities are not randomized causal effects.')}</div></div>${rows.length ? `<div style="overflow:auto;max-height:330px;margin-top:8px"><table style="width:100%;min-width:1120px;border-collapse:collapse;font-size:8px"><thead><tr>${['cluster', 'forward lag', 'rows / sources', 'timing → semantic random gain', 'context random gain', 'context forward gain', 'within-source context shuffle', 'replication'].map(value => `<th style="position:sticky;top:0;background:${C.card};text-align:right;padding:4px;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${rows.map(({ category, experiment }) => { const gain = experiment.nestedRandomFoldMAEGain || {}; const forwardGain = experiment.nestedChronologicalMAEGain || {}; const permutation = experiment.historyPermutationNull || {}; const replicated = Boolean(experiment.incrementalViewerContextReplicated); return `<tr><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${colorForCluster(category)};font-weight:900">C${category}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">+${fmt(experiment.lagSeconds, 0)}s</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${experiment.rows || 0} / ${experiment.sourceVideos || '—'}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${signed(gain.timingToSemantic, 3)} pp/s</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${numeric(gain.semanticToViewerContext) > 0 ? C.green : C.red}">${signed(gain.semanticToViewerContext, 3)} pp/s</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${numeric(forwardGain.semanticToViewerContext) > 0 ? C.green : C.red}">${signed(forwardGain.semanticToViewerContext, 3)} pp/s</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${permutation.repeats ? `observed ${signed(permutation.observedMAEGainPercentagePointsPerSecond, 3)} · null p95 ${signed(permutation.nullP95MAEGainPercentagePointsPerSecond, 3)} · raw p ${fmt(permutation.oneSidedP, 3)}` : 'unavailable'}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${replicated ? C.green : C.amber};font-weight:900">${replicated ? 'random + forward positive' : 'not replicated'}</td></tr>`; }).join('')}</tbody></table></div>` : ''}${swaps.length ? `<div style="margin-top:9px"><div style="font-size:9px;color:${C.text};font-weight:900">Adjacent-order model sensitivity for this opening</div><div style="font-size:7.5px;color:${C.mute};margin-top:2px">Each row swaps two adjacent components, recomputes all prior-history features, and reports model movement. It does not claim the edited video would causally produce that movement.</div><div style="overflow:auto;max-height:250px;margin-top:5px"><table style="width:100%;min-width:760px;border-collapse:collapse;font-size:8px"><thead><tr>${['components', 'original order', 'swapped order', 'predicted retained change'].map(value => `<th style="text-align:right;padding:4px;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${swaps.map(row => `<tr><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${row.leftComponentIndex + 1} ↔ ${row.rightComponentIndex + 1}</td><td style="text-align:left;padding:4px;border-bottom:1px solid ${C.border};max-width:360px">${esc((row.originalOrder || []).join(' → '))}</td><td style="text-align:left;padding:4px;border-bottom:1px solid ${C.border};max-width:360px">${esc((row.swappedOrder || []).join(' → '))}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${numeric(row.predictedRetentionDeltaChangePoints) >= 0 ? C.green : C.red};font-weight:900">${signed(row.predictedRetentionDeltaChangePoints, 3)} pp</td></tr>`).join('')}</tbody></table></div></div>` : `<div style="font-size:8px;color:${C.mute};margin-top:8px">No adjacent swap is available for this sequence.</div>`}`, 'margin-top:10px');
+        }
+
         function relationshipPanel(analysis) {
             const rows = analysis.relationships || [];
             if (!rows.length) return '';
-            return panel(`<div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:5px">Canonical sequence relationships</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-bottom:6px">Each row disables one adjacent relationship channel while preserving both component semantics. Only complete 20-second openings have a candidate endpoint delta; every row contributes zero to the headline.</div><div style="overflow:auto;max-height:280px"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['edge', 'clusters', 'candidate R20 Δ', 'headline Δ', 'status'].map(value => `<th style="text-align:right;padding:4px;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${rows.map(row => { const root = row.predictionImpact || {}; const impact = root.entryIndexed || {}; return `<tr><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${row.left + 1}→${row.right + 1}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${colorForCluster(row.rightCategory)}">${row.leftCategory}→${row.rightCategory}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${root.available === false ? 'unavailable' : signed(impact.retention20sPoints, 2) + ' pp'}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${C.green}">0.00 pp</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${C.amber}">withheld</td></tr>`; }).join('')}</tbody></table></div>`, 'margin-top:10px');
+            const modern = rows.some(row => row.type === 'next' || row.source != null);
+            if (modern) return panel(`<div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:5px">Sequence relationships supplied to the predeclared candidate</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-bottom:6px">These directed adjacent edges feed the relationship candidate. The candidate uses the transition matrix and accumulated prior context jointly; the global promotion gate decides whether it may affect the served curve, and no per-edge causal effect is invented.</div><div style="overflow:auto;max-height:280px"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['edge', 'transition', 'predecessor semantic similarity', 'future used', 'model role'].map(value => `<th style="text-align:right;padding:4px;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${esc(row.source || '')} → ${esc(row.target || '')}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${colorForCluster(Number(String(row.transition || '').split('->').pop()))}">${esc(row.transition || '')}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${fmt(row.semanticSimilarity, 4)}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${C.green}">no</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${C.amber}">candidate jointly</td></tr>`).join('')}</tbody></table></div>`, 'margin-top:10px');
+            return panel(`<div style="font-size:11px;color:${C.text};font-weight:900;margin-bottom:5px">Legacy relationship diagnostics</div><div style="overflow:auto;max-height:280px"><table style="width:100%;border-collapse:collapse;font-size:8px"><tbody>${rows.map(row => `<tr><td style="padding:4px;border-bottom:1px solid ${C.border}">${row.left + 1} → ${row.right + 1}</td><td style="padding:4px;border-bottom:1px solid ${C.border}">${row.leftCategory} → ${row.rightCategory}</td></tr>`).join('')}</tbody></table></div>`, 'margin-top:10px');
         }
 
         function latticeInspector(lattice) {
@@ -333,7 +480,9 @@
         }
 
         function prefixTracePanel(analysis) {
-            const rows = (analysis.causalPrefixTrace || []).filter(row => Number(row.second) <= Number(analysis.analysisHorizonSeconds || 20) + 1e-6);
+            const endpoint = numeric(analysis.forecastHorizonSeconds) == null
+                ? Number(analysis.analysisHorizonSeconds || Infinity) : Number(analysis.forecastHorizonSeconds);
+            const rows = (analysis.causalPrefixTrace || []).filter(row => Number(row.second) <= endpoint + 1e-6);
             if (!rows.length) return '';
             const input = analysis.input || {};
             const timing = input.timingSource || ((rows[0] || {}).timingSource) || 'source-media acoustic word ends';
@@ -348,22 +497,49 @@
             const selectedIndex = Math.min(Math.max(0, state.selectedAttributionStep), steps.length - 1);
             const selected = steps[selectedIndex] || {};
             const allocations = selected.enteredComponents || [];
-            return panel(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:900">Where every predicted drop comes from</div><div style="font-size:8px;color:${C.mute};line-height:1.55;margin-top:2px">Each bar is one exact transition in the headline curve. Gray is the population time-baseline movement; purple is the semantic-prefix movement relative to that baseline. Component colors identify which exact-cover phrases supplied newly entered tokens.</div></div><div style="font-size:7px;color:${C.amber};max-width:470px;text-align:right;line-height:1.5">${esc(attribution.claimBoundary || '')}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${stat('total predicted drop', `${signed(summary.totalPredictedDropPoints, 2)} pp`, C.cyan)}${stat('baseline movement', `${signed(summary.totalBaselineDeltaPoints, 2)} pp`, C.faint)}${stat('semantic shape movement', `${signed(summary.totalSemanticShapeDeltaPoints, 2)} pp`, C.purple)}${stat('unchanged-prefix movement', `${signed(summary.unassignedTimeModelDeltaPoints, 2)} pp`, C.amber, 'separate time model; no new component entered')}</div><canvas data-pl-canvas="attribution" style="display:block;width:100%;height:300px;margin-top:7px"></canvas><div style="display:grid;grid-template-columns:minmax(220px,.55fr) minmax(0,1.45fr);gap:9px;margin-top:8px"><div style="background:${C.card2};padding:8px"><div style="font-size:8px;color:${C.cyan};font-weight:900">SELECTED ${fmt(selected.startSeconds, 1)}–${fmt(selected.endSeconds, 1)}s</div><div style="font-size:13px;color:${C.text};font-weight:900;line-height:1.4;margin:3px 0">${esc(selected.enteredText || 'No newly completed words')}</div><div style="font-size:8px;color:${C.dim};line-height:1.6">start ${pct(selected.startRetentionPercent)}<br>baseline movement ${signed(selected.baselineDeltaPoints, 2)} pp<br>semantic-prefix movement ${signed(selected.semanticShapeDeltaPoints, 2)} pp<br><b style="color:${C.text}">predicted movement ${signed(selected.predictedDeltaPoints, 2)} pp</b><br>end ${pct(selected.endRetentionPercent)}${selected.observedDeltaPoints == null ? '' : `<br>observed movement ${signed(selected.observedDeltaPoints, 2)} pp`}<br>driver: ${esc(selected.driver || '')}</div></div><div style="background:${C.card2};padding:8px"><div style="font-size:8px;color:${C.text};font-weight:900;margin-bottom:5px">Entered component allocation</div>${allocations.length ? allocations.map(row => `<button data-pl-component="${row.componentIndex}" style="display:grid;grid-template-columns:minmax(160px,1fr) repeat(3,minmax(72px,.3fr));gap:5px;width:100%;border:1px solid ${C.border};border-left:4px solid ${colorForCluster(row.category)};background:${C.card};color:${C.text};padding:6px;text-align:left;cursor:pointer;margin-bottom:4px;font-size:8px"><span><b style="color:${colorForCluster(row.category)}">C${row.category} · component ${row.componentIndex + 1}</b><br>${esc(row.text)}</span><span>${row.overlapTokens} tokens<br>${pct(Number(row.weight || 0) * 100)} weight</span><span>model ${signed(row.predictedDeltaPoints, 2)} pp</span><span>semantic ${signed(row.semanticShapeDeltaPoints, 2)} pp</span></button>`).join('') : `<div style="font-size:8px;color:${C.mute}">No component entered during this transition. The movement comes from the independently fitted time baseline and the same unchanged semantic prefix under the next time model.</div>`}</div></div><div style="overflow:auto;max-height:360px;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['interval', 'exact entered words', 'components', 'predicted Δ', 'baseline Δ', 'semantic Δ', 'observed Δ'].map(value => `<th style="position:sticky;top:0;background:${C.card};text-align:right;padding:4px;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${steps.map((row, index) => `<tr data-pl-attribution-step="${index}" style="cursor:pointer;background:${index === selectedIndex ? C.cyan + '12' : 'transparent'}"><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${C.cyan}">${fmt(row.startSeconds, 1)}–${fmt(row.endSeconds, 1)}s</td><td style="text-align:left;padding:4px;border-bottom:1px solid ${C.border};max-width:440px;color:${C.text}">${esc(row.enteredText || '— unchanged prefix —')}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${(row.enteredComponents || []).map(item => `<span style="color:${colorForCluster(item.category)}">C${item.category}.${item.componentIndex + 1}</span>`).join(' + ') || 'time only'}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};font-weight:900">${signed(row.predictedDeltaPoints, 2)}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${signed(row.baselineDeltaPoints, 2)}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${C.purple}">${signed(row.semanticShapeDeltaPoints, 2)}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${C.green}">${row.observedDeltaPoints == null ? '—' : signed(row.observedDeltaPoints, 2)}</td></tr>`).join('')}</tbody></table></div>`, 'margin-top:10px');
+            const totals = summary.totalChannelDeltaPoints || {};
+            const selectedChannels = selected.channelDeltaPoints || {};
+            const channelText = channels => `time ${signed(channels.timing, 2)} · semantic ${signed(channels.semantic, 2)} · components ${signed(channels.components, 2)} · relationships ${signed(channels.relationships, 2)}`;
+            return panel(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:900">Where every served prediction movement comes from</div><div style="font-size:8px;color:${C.mute};line-height:1.55;margin-top:2px">The ledger reconstructs the cyan headline exactly through the selected ${esc(attribution.selectedStage || 'baseline')} stage. Later candidate channels remain visible in the stage graph and validation table, but contribute zero to the served curve until promoted.</div></div><div style="font-size:7px;color:${C.amber};max-width:470px;text-align:right;line-height:1.5">${esc(attribution.claimBoundary || '')}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${stat('served stage', attribution.selectedStage || 'baseline', C.cyan)}${stat('total predicted drop', `${signed(summary.totalPredictedDropPoints, 2)} pp`, C.cyan)}${stat('baseline movement', `${signed(totals.baseline == null ? summary.totalBaselineDeltaPoints : totals.baseline, 2)} pp`, C.faint)}${stat('timing movement', `${signed(totals.timing, 2)} pp`, C.amber)}${stat('semantic movement', `${signed(totals.semantic == null ? summary.totalSemanticShapeDeltaPoints : totals.semantic, 2)} pp`, C.purple)}${stat('component movement', `${signed(totals.components, 2)} pp`, C.accent)}${stat('relationship movement', `${signed(totals.relationships, 2)} pp`, C.green)}</div><canvas data-pl-canvas="attribution" style="display:block;width:100%;height:300px;margin-top:7px"></canvas><div style="display:grid;grid-template-columns:minmax(220px,.55fr) minmax(0,1.45fr);gap:9px;margin-top:8px"><div style="background:${C.card2};padding:8px"><div style="font-size:8px;color:${C.cyan};font-weight:900">SELECTED ${fmt(selected.startSeconds, 1)}–${fmt(selected.endSeconds, 1)}s</div><div style="font-size:13px;color:${C.text};font-weight:900;line-height:1.4;margin:3px 0">${esc(selected.enteredText || 'No newly completed words')}</div><div style="font-size:8px;color:${C.dim};line-height:1.6">start ${pct(selected.startRetentionPercent)}<br>baseline ${signed(selectedChannels.baseline == null ? selected.baselineDeltaPoints : selectedChannels.baseline, 2)} pp<br><span style="color:${C.amber}">timing ${signed(selectedChannels.timing, 2)} pp</span><br><span style="color:${C.purple}">semantics ${signed(selectedChannels.semantic, 2)} pp</span><br><span style="color:${C.accent}">components ${signed(selectedChannels.components, 2)} pp</span><br><span style="color:${C.green}">relationships ${signed(selectedChannels.relationships, 2)} pp</span><br><b style="color:${C.text}">predicted movement ${signed(selected.predictedDeltaPoints, 2)} pp</b><br>end ${pct(selected.endRetentionPercent)}${selected.observedDeltaPoints == null ? '' : `<br>observed movement ${signed(selected.observedDeltaPoints, 2)} pp`}<br>driver: ${esc(selected.driver || '')}</div></div><div style="background:${C.card2};padding:8px"><div style="font-size:8px;color:${C.text};font-weight:900;margin-bottom:5px">Entered component allocation</div>${allocations.length ? allocations.map(row => `<button data-pl-component="${row.componentIndex}" style="display:grid;grid-template-columns:minmax(160px,1fr) minmax(80px,.35fr) minmax(180px,.65fr);gap:5px;width:100%;border:1px solid ${C.border};border-left:4px solid ${colorForCluster(row.category)};background:${C.card};color:${C.text};padding:6px;text-align:left;cursor:pointer;margin-bottom:4px;font-size:8px"><span><b style="color:${colorForCluster(row.category)}">C${row.category} · component ${row.componentIndex + 1}</b><br>${esc(row.text)}</span><span>${row.overlapTokens} tokens<br>${pct(Number(row.weight || 0) * 100)} weight<br>model ${signed(row.predictedDeltaPoints, 2)} pp</span><span style="color:${C.dim}">${esc(channelText(row.channelDeltaPoints || {}))}</span></button>`).join('') : `<div style="font-size:8px;color:${C.mute}">No component entered during this transition. The same prefix is evaluated under the next independently fitted time model.</div>`}</div></div><div style="overflow:auto;max-height:360px;margin-top:8px"><table style="width:100%;min-width:1050px;border-collapse:collapse;font-size:8px"><thead><tr>${['interval', 'exact entered words', 'components', 'predicted Δ', 'baseline Δ', 'timing Δ', 'semantic Δ', 'component Δ', 'relationship Δ', 'observed Δ'].map(value => `<th style="position:sticky;top:0;background:${C.card};text-align:right;padding:4px;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${steps.map((row, index) => { const channel = row.channelDeltaPoints || {}; return `<tr data-pl-attribution-step="${index}" style="cursor:pointer;background:${index === selectedIndex ? C.cyan + '12' : 'transparent'}"><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${C.cyan}">${fmt(row.startSeconds, 1)}–${fmt(row.endSeconds, 1)}s</td><td style="text-align:left;padding:4px;border-bottom:1px solid ${C.border};max-width:440px;color:${C.text}">${esc(row.enteredText || '— unchanged prefix —')}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${(row.enteredComponents || []).map(item => `<span style="color:${colorForCluster(item.category)}">C${item.category}.${item.componentIndex + 1}</span>`).join(' + ') || 'time only'}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};font-weight:900">${signed(row.predictedDeltaPoints, 2)}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${signed(channel.baseline == null ? row.baselineDeltaPoints : channel.baseline, 2)}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${C.amber}">${signed(channel.timing, 2)}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${C.purple}">${signed(channel.semantic == null ? row.semanticShapeDeltaPoints : channel.semantic, 2)}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${C.accent}">${signed(channel.components, 2)}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${C.green}">${signed(channel.relationships, 2)}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${C.green}">${row.observedDeltaPoints == null ? '—' : signed(row.observedDeltaPoints, 2)}</td></tr>`; }).join('')}</tbody></table></div>`, 'margin-top:10px');
         }
 
         function validationPanel(analysis) {
             const validation = ((analysis.validation || {}).entryIndexed || {});
             const random = validation.randomFold || {};
             const chronological = validation.chronological || {};
-            const inference = random.pairedImprovementInference || {};
-            return panel(`<div style="display:flex;justify-content:space-between;gap:9px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:900">Validation by second</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">Every stored timewise RMSE value is plotted. Random folds measure same-era association; chronological folds test past-to-future transfer.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('random MAE', `${fmt(random.heldoutMAEPercentagePoints, 2)} pp`, C.cyan)}${stat('chronological MAE', `${fmt(chronological.heldoutMAEPercentagePoints, 2)} pp`, C.amber)}${stat('paired p', fmt(inference.p, 4), C.purple)}${stat('80% band coverage', pct(Number(random.empiricalBandCoverage || 0) * 100), C.green)}</div></div><canvas data-pl-canvas="validation" style="display:block;width:100%;height:270px;margin-top:7px"></canvas><div style="font-size:8px;color:${C.dim};line-height:1.55;margin-top:5px">Random source MAE p50 ${fmt(random.sourceMAEP50PercentagePoints, 2)} pp · p80 ${fmt(random.sourceMAEP80PercentagePoints, 2)} pp · p90 ${fmt(random.sourceMAEP90PercentagePoints, 2)} pp · mean timewise Spearman ${fmt(random.meanTimewiseSpearman, 3)}. Chronological source MAE p50 ${fmt(chronological.sourceMAEP50PercentagePoints, 2)} pp · p80 ${fmt(chronological.sourceMAEP80PercentagePoints, 2)} pp · p90 ${fmt(chronological.sourceMAEP90PercentagePoints, 2)} pp · mean timewise Spearman ${fmt(chronological.meanTimewiseSpearman, 3)}.</div>`, 'margin-top:10px');
+            const inference = random.pairedSourceImprovementInference || random.pairedImprovementInference || {};
+            const stageOrder = ['timing', 'semantic', 'components', 'relationships'];
+            const stages = validation.stages || {};
+            const promotion = validation.promotion || {};
+            const candidateRandom = validation.candidateRandomFold || {};
+            const candidateChronological = validation.candidateChronological || {};
+            const randomMae = numeric(random.sourceEqualMAEPercentagePoints) == null ? random.heldoutMAEPercentagePoints : random.sourceEqualMAEPercentagePoints;
+            const randomBaseline = numeric(random.sourceEqualBaselineMAEPercentagePoints) == null ? random.baselineMAEPercentagePoints : random.sourceEqualBaselineMAEPercentagePoints;
+            const chronologicalMae = numeric(chronological.sourceEqualMAEPercentagePoints) == null ? chronological.heldoutMAEPercentagePoints : chronological.sourceEqualMAEPercentagePoints;
+            const chronologicalBaseline = numeric(chronological.sourceEqualBaselineMAEPercentagePoints) == null ? chronological.baselineMAEPercentagePoints : chronological.sourceEqualBaselineMAEPercentagePoints;
+            const candidateRandomGain = numeric(candidateRandom.sourceEqualMAEImprovementFraction);
+            const candidateChronologicalGain = numeric(candidateChronological.sourceEqualMAEImprovementFraction);
+            return panel(`<div style="display:flex;justify-content:space-between;gap:9px;align-items:flex-start;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:900">Duration-conditioned out-of-fold validation and promotion decision</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">Each point is evaluated only while that video remains observable. The relationship model was declared before fitting. It becomes the headline only if both random source folds and past-to-future folds beat the at-risk mean with positive source-bootstrap lower bounds.</div><div style="font-size:7.5px;color:${C.amber};margin-top:5px">${esc(promotion.policy || '')}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${stat('served stage', promotion.selectedStage || 'baseline', promotion.promoted ? C.green : C.amber, promotion.promoted ? 'full candidate passed' : 'candidate withheld')}${stat('candidate random gain', candidateRandomGain == null ? '—' : signed(candidateRandomGain * 100, 2) + '%', promotion.randomGatePassed ? C.green : C.red, `MAE ${fmt(candidateRandom.sourceEqualMAEPercentagePoints, 3)} pp`)}${stat('candidate forward gain', candidateChronologicalGain == null ? '—' : signed(candidateChronologicalGain * 100, 2) + '%', promotion.chronologicalGatePassed ? C.green : C.red, `MAE ${fmt(candidateChronological.sourceEqualMAEPercentagePoints, 3)} pp`)}${stat('last evaluated second', `${fmt(candidateRandom.lastEvaluatedSecond || random.lastEvaluatedSecond, 0)}s`, C.cyan, `${Number(candidateRandom.evaluatedObservationCells || random.evaluatedObservationCells || 0).toLocaleString()} held-out source-second cells`)}</div></div><canvas data-pl-canvas="validation" style="display:block;width:100%;height:270px;margin-top:7px"></canvas>${Object.keys(stages).length ? `<div style="overflow:auto;margin-top:7px"><table style="width:100%;min-width:760px;border-collapse:collapse;font-size:8px"><thead><tr>${['fixed candidate stage', 'source-equal OOF MAE', 'mean baseline MAE', 'OOF improvement', 'evaluated seconds', 'role'].map(value => `<th style="text-align:right;padding:4px;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${stageOrder.filter(name => stages[name]).map(name => { const row = stages[name] || {}; const candidate = name === (promotion.candidateStage || 'relationships'); return `<tr><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${candidate ? C.green : C.dim};font-weight:900">${esc(name)}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${fmt(row.sourceEqualMAEPercentagePoints, 3)} pp</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${fmt(row.sourceEqualBaselineMAEPercentagePoints, 3)} pp</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${signed(Number(row.sourceEqualMAEImprovementFraction || 0) * 100, 2)}%</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border}">${row.evaluatedSeconds || 0}</td><td style="text-align:right;padding:4px;border-bottom:1px solid ${C.border};color:${candidate ? C.green : C.mute}">${candidate ? (promotion.promoted ? 'predeclared candidate · promoted' : 'predeclared candidate · failed gate') : 'ablation only'}</td></tr>`; }).join('')}</tbody></table></div>` : ''}`, 'margin-top:10px');
+        }
+
+        function chronologicalStagePanel(analysis) {
+            const validation = ((analysis.validation || {}).entryIndexed || {});
+            const random = validation.stages || {};
+            const chronological = validation.chronologicalStages || {};
+            const promotion = validation.promotion || {};
+            const order = ['timing', 'semantic', 'components', 'relationships'];
+            if (!order.some(name => random[name] || chronological[name])) return '';
+            return panel(`<div style="font-size:11px;color:${C.text};font-weight:900">Every fixed stage in random and chronological validation</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">The same four predeclared feature sets are shown side by side. These are source-equal duration-conditioned curve errors, not endpoint-only scores.</div><div style="overflow:auto;margin-top:7px"><table style="width:100%;min-width:940px;border-collapse:collapse;font-size:8px"><thead><tr>${['stage', 'random MAE', 'random baseline', 'random gain', 'forward MAE', 'forward baseline', 'forward gain', 'promotion role'].map(value => `<th style="text-align:right;padding:5px;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${order.map(name => { const left = random[name] || {}; const right = chronological[name] || {}; const candidate = name === (promotion.candidateStage || 'relationships'); return `<tr><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};color:${candidate ? C.green : C.dim};font-weight:900">${name}</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border}">${fmt(left.sourceEqualMAEPercentagePoints, 3)} pp</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border}">${fmt(left.sourceEqualBaselineMAEPercentagePoints, 3)} pp</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border}">${signed(Number(left.sourceEqualMAEImprovementFraction || 0) * 100, 2)}%</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border}">${fmt(right.sourceEqualMAEPercentagePoints, 3)} pp</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border}">${fmt(right.sourceEqualBaselineMAEPercentagePoints, 3)} pp</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border}">${signed(Number(right.sourceEqualMAEImprovementFraction || 0) * 100, 2)}%</td><td style="text-align:right;padding:5px;border-bottom:1px solid ${C.border};color:${candidate ? C.amber : C.mute}">${candidate ? (promotion.promoted ? 'candidate promoted' : 'candidate failed') : 'ablation'}</td></tr>`; }).join('')}</tbody></table></div>`, 'margin-top:10px');
         }
 
         function dataCoveragePanel(analysis, lattice) {
             const provenance = analysis.provenance || {};
             const support = analysis.support || {};
             const input = analysis.input || {};
-            const edgeCounts = (lattice || {}).edgeCounts || {};
+            const edgeCounts = (lattice || {}).edgeCounts || ((lattice || {}).edges || []).reduce((counts, edge) => {
+                counts[edge.type || 'unknown'] = (counts[edge.type || 'unknown'] || 0) + 1;
+                return counts;
+            }, {});
             const rows = [
                 ['curve points', (((analysis.curves || {}).entryIndexed || {}).timesSeconds || []).length],
                 ['causal prefixes', (analysis.causalPrefixTrace || []).length],
@@ -373,31 +549,41 @@
                 ['lattice nodes', ((lattice || {}).nodes || []).length],
                 ['lattice edges', ((lattice || {}).edges || []).length],
             ];
-            return panel(`<div style="font-size:11px;color:${C.text};font-weight:900">Analysis data ledger</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">This inventory makes omissions visible. Counts come from the same analysis object rendered above, not a parallel summary.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:6px;margin-top:7px">${rows.map(row => `<div style="background:${C.card2};padding:7px"><div style="font-size:7px;color:${C.mute};text-transform:uppercase;font-weight:900">${esc(row[0])}</div><div style="font-size:17px;color:${C.text};font-weight:900">${Number(row[1] || 0).toLocaleString()}</div></div>`).join('')}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:7px;margin-top:8px"><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Lattice edge families</b><br>${Object.entries(edgeCounts).map(([key, value]) => `${esc(key)} ${Number(value).toLocaleString()}`).join(' · ') || 'typed lattice not loaded'}</div><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Support</b><br>${support.trainingTokenCountMinimum || '—'}–${support.trainingTokenCountMaximum || '—'} training tokens · ${fmt(support.estimatedSpokenSeconds, 2)}s analyzed · ${support.isExtrapolation ? 'outside measured length support' : 'inside measured length support'}</div><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Automatic timing</b><br>${numeric(input.wordsPerSecond) == null ? 'saved source-media timestamps' : `${fmt(input.wordsPerSecond, 3)} words/second · ${fmt(input.estimatedSpokenSeconds, 3)}s estimated`}<br>${esc(input.timingSource || 'measured source-media word intervals')}</div><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Serving provenance</b><br>${Object.entries(provenance).filter(([, value]) => typeof value === 'boolean').map(([key, value]) => `${esc(key)}: <b style="color:${value ? C.green : C.amber}">${value ? 'yes' : 'no'}</b>`).join(' · ') || 'saved row: source-level out-of-fold prediction'}</div></div>`, 'margin-top:10px');
+            const structural = numeric(support.structuralDurationSeconds) == null ? (support.fullObservedDurationSeconds || analysis.analysisHorizonSeconds) : support.structuralDurationSeconds;
+            const forecast = support.servedForecastThroughSeconds || analysis.forecastHorizonSeconds;
+            const work = support.streamingWork || analysis.streamingWork || ((analysis.partition || {}).work) || {};
+            return panel(`<div style="font-size:11px;color:${C.text};font-weight:900">Analysis data ledger</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">This inventory makes omissions visible. Counts come from the same analysis object rendered above, not a parallel summary.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:6px;margin-top:7px">${rows.map(row => `<div style="background:${C.card2};padding:7px"><div style="font-size:7px;color:${C.mute};text-transform:uppercase;font-weight:900">${esc(row[0])}</div><div style="font-size:17px;color:${C.text};font-weight:900">${Number(row[1] || 0).toLocaleString()}</div></div>`).join('')}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:7px;margin-top:8px"><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Graph edge families</b><br>${Object.entries(edgeCounts).map(([key, value]) => `${esc(key)} ${Number(value).toLocaleString()}`).join(' · ') || 'graph not loaded'}</div><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Structural versus predictive support</b><br>${fmt(structural, 2)}s and ${analysis.tokenCount || 0} tokens fully componentized<br>served retention emitted through ${fmt(forecast, 2)}s only; sequence-specific channels enter only after promotion</div><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Timing</b><br>${numeric(input.wordsPerSecond) == null ? 'saved source-media timestamps' : `${fmt(input.wordsPerSecond, 3)} words/second · ${fmt(input.estimatedSpokenSeconds, 3)}s estimated`}<br>${esc(input.timingSource || ((support.timingContract || {}).contract || 'measured source-media word intervals'))}</div><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Bounded streaming work</b><br>${Number(work.embeddingInputRequests || 0).toLocaleString()} embedding inputs · peak batch ${Number(work.peakEmbeddingBatchInputs || 0).toLocaleString()}<br>${Number(work.totalCandidateSpanRows || 0).toLocaleString()} candidate rows · no global all-span materialization</div><div style="background:${C.card2};padding:8px;font-size:8px;color:${C.dim};line-height:1.55"><b style="color:${C.text}">Serving provenance</b><br>${Object.entries(provenance).filter(([, value]) => typeof value === 'boolean').map(([key, value]) => `${esc(key)}: <b style="color:${value ? C.green : C.amber}">${value ? 'yes' : 'no'}</b>`).join(' · ') || 'saved row: source-level out-of-fold prediction'}</div></div>`, 'margin-top:10px');
         }
 
         function renderAnalysis(analysis, lattice) {
             if (!analysis) return '';
             const source = analysis.sourceKind || '';
             const input = analysis.input || {};
-            return `<div data-pl-analysis>${panel(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:260px;flex:1"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">${esc(source)}</div><div style="font-size:16px;color:${C.text};font-weight:900;line-height:1.35;margin-top:3px">${esc(analysis.title || input.analyzedText || analysis.text || 'Opening analysis')}</div>${analysis.title ? `<div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px">${esc(analysis.text || '')}</div>` : ''}</div><div style="font-size:8px;color:${C.mute};text-align:right">${analysis.tokenCount || 0} tokens · ${analysis.componentCount || (analysis.components || []).length} components<br>${fmt(analysis.analysisHorizonSeconds, 2)}s supplied/analyzed · model horizon ${fmt(analysis.modelHorizonSeconds || 20, 0)}s</div></div>${input.inputWasLongerThan20Seconds ? `<div style="margin-top:7px;font-size:8px;color:${C.amber}">Text after the estimated 20-second boundary was excluded from the predictor and is explicitly preserved in the input audit.</div>` : ''}${headline(analysis)}`)}
+            const structural = Number(analysis.analysisHorizonSeconds || input.structuralDurationSeconds || 0);
+            const forecast = Number(analysis.forecastHorizonSeconds || (analysis.outputs || {}).forecastEndSeconds || 0);
+            const unsupportedSuffix = structural > forecast + 1e-6;
+            return `<div data-pl-analysis>${panel(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap"><div style="min-width:260px;flex:1"><div style="font-size:8px;color:${C.cyan};font-weight:900;text-transform:uppercase">${esc(source)}</div><div style="font-size:16px;color:${C.text};font-weight:900;line-height:1.35;margin-top:3px">${esc(analysis.title || input.analyzedText || analysis.text || 'Opening analysis')}</div>${analysis.title ? `<div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px">${esc(analysis.text || '')}</div>` : ''}</div><div style="font-size:8px;color:${C.mute};text-align:right">${analysis.tokenCount || 0} tokens · ${analysis.componentCount || (analysis.components || []).length} components<br>${fmt(structural, 2)}s structurally analyzed · ${fmt(forecast, 2)}s retention forecast</div></div>${unsupportedSuffix ? `<div style="margin-top:7px;font-size:8px;color:${C.amber}">The entire ${fmt(structural, 2)}s input is componentized. Retention stops at ${fmt(forecast, 2)}s because ${esc(((analysis.support || {}).forecastStopReason) || 'the next duration-conditioned model point is unsupported')}; no suffix value is fabricated.</div>` : ''}${headline(analysis)}`)}
             ${evidencePanel(analysis)}
-            ${panel(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:900">Retention prediction and measured comparison</div><div style="font-size:8px;color:${C.mute};margin-top:2px">Entry-indexed starts every opening at 100%. The shaded band is the cross-fitted 10th–90th residual interval. Saved rows add the observed curve.</div></div><div style="display:flex;gap:4px">${button('Normalized survival', 'data-pl-curve="entryIndexed"', state.curveMode === 'entryIndexed')}${button('Raw retention', 'data-pl-curve="observedAbsolute"', state.curveMode === 'observedAbsolute')}${button(state.showStages ? 'Hide mean baseline' : 'Show mean baseline', 'data-pl-toggle-stages', state.showStages)}</div></div><canvas data-pl-canvas="retention" style="display:block;width:100%;height:370px;margin-top:5px"></canvas>`, 'margin-top:10px')}
+            ${riskSetPanel(analysis)}
+            ${panel(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;flex-wrap:wrap"><div><div style="font-size:11px;color:${C.text};font-weight:900">Retention prediction and measured comparison</div><div style="font-size:8px;color:${C.mute};margin-top:2px">Entry-indexed starts every opening at 100%. The band is the cross-fitted 10th–90th residual interval. Saved rows add the measured curve; typed rows stop at their supported endpoint.</div></div><div style="display:flex;gap:4px">${button('Normalized survival', 'data-pl-curve="entryIndexed"', state.curveMode === 'entryIndexed')}${button('Raw retention', 'data-pl-curve="observedAbsolute"', state.curveMode === 'observedAbsolute')}${button(state.showStages ? 'Hide stage ladder' : 'Show stage ladder', 'data-pl-toggle-stages', state.showStages)}</div></div><canvas data-pl-canvas="retention" style="display:block;width:100%;height:370px;margin-top:5px"></canvas>`, 'margin-top:10px')}
             ${temporalAttributionPanel(analysis)}
             ${prefixTracePanel(analysis)}
-            ${panel(`<div style="font-size:11px;color:${C.text};font-weight:900">What changed the endpoint prediction</div><div style="font-size:8px;color:${C.mute};margin-top:2px">The purple semantic-prefix delta is applied. Amber and red 20-second endpoint counterfactuals remain visible but contribute zero.</div><canvas data-pl-canvas="contributions" style="display:block;width:100%;height:230px;margin-top:5px"></canvas>`, 'margin-top:10px')}
+            ${panel(`<div style="font-size:11px;color:${C.text};font-weight:900">Applied and candidate endpoint channels</div><div style="font-size:8px;color:${C.mute};margin-top:2px">The waterfall shows all predeclared nested candidate movements. The served-stage label marks where the cyan headline stops; later bars are diagnostics until the global promotion gate passes.</div><canvas data-pl-canvas="contributions" style="display:block;width:100%;height:275px;margin-top:5px"></canvas>`, 'margin-top:10px')}
             ${componentPanel(analysis, lattice)}
-            ${panel(`<div style="font-size:11px;color:${C.text};font-weight:900">Attention-like relational and drop graph</div><div style="font-size:8px;color:${C.mute};margin-top:2px">Canonical components are nodes; node size tracks the magnitude of timeline-accounted retention movement when that component's tokens enter. Sequence edges show the withheld adjacent-relation counterfactual. Click a node to open all of its evidence.</div><canvas data-pl-canvas="relationships" style="display:block;width:100%;height:290px;margin-top:5px"></canvas>`, 'margin-top:10px')}
+            ${outcomePlanesPanel(analysis)}
+            ${sequenceContextPanel(analysis)}
+            ${panel(`<div style="font-size:11px;color:${C.text};font-weight:900">Attention-like relational and drop graph</div><div style="font-size:8px;color:${C.mute};margin-top:2px">Canonical components are nodes and directed edges are the actual predecessor transitions supplied to the relationship candidate. Node size follows served-curve accounting. If the candidate is withheld, these edges remain visible evidence without silently changing the headline.</div><canvas data-pl-canvas="relationships" style="display:block;width:100%;height:290px;margin-top:5px"></canvas>`, 'margin-top:10px')}
             ${relationshipPanel(analysis)}
-            ${latticeInspector(lattice)}
+            ${Number(analysis.version || 0) < 3 ? latticeInspector(lattice) : ''}
             ${validationPanel(analysis)}
+            ${chronologicalStagePanel(analysis)}
             ${dataCoveragePanel(analysis, lattice)}</div>`;
         }
 
         function renderScorer() {
             const result = state.scoreResult;
-            return `<div><div style="font-size:15px;color:${C.text};font-weight:900">Score an opening</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">The same frozen feature builder and renderer used for every measured library opening. Timing is derived automatically from lexical word count and the mean speaking rate measured across your source videos. Text beyond the estimated 20-second boundary is visibly scoped rather than silently forecast.</div>
-            ${panel(`<label style="display:block"><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;margin-bottom:4px">OPENING TEXT</span><textarea data-pl-score-text maxlength="2400" rows="6" placeholder="Type any opening text…" style="width:100%;box-sizing:border-box;resize:vertical;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:9px;font:10px/1.5 inherit">${esc(state.scoreText)}</textarea></label><div data-pl-score-controls style="display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:7px;align-items:end;margin-top:7px"><label><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;margin-bottom:4px">OPTIONAL IDEA CONTEXT · GRAPH ONLY</span><input data-pl-score-idea value="${esc(state.scoreIdea)}" maxlength="1200" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:8px;font-size:9px"></label>${button(state.scoreLoading ? 'Scoring…' : 'Score opening', 'data-pl-score', true)}</div>`, 'margin-top:8px')}
+            return `<div><div style="font-size:15px;color:${C.text};font-weight:900">Score an opening</div><div style="font-size:8px;color:${C.mute};line-height:1.5;margin-top:2px">The exact same frozen component, context, and retention feature builder used by every saved opening. Any text length is fully componentized; retention is emitted only through the duration-conditioned risk set supported by the 208-video cohort.</div>
+            ${panel(`<label style="display:block"><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;margin-bottom:4px">OPENING OR LONGER SPOKEN SEQUENCE</span><textarea data-pl-score-text rows="7" placeholder="Type any spoken opening…" style="width:100%;box-sizing:border-box;resize:vertical;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:9px;font:10px/1.5 inherit">${esc(state.scoreText)}</textarea></label><div data-pl-score-controls style="display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:7px;align-items:end;margin-top:7px"><label><span style="display:block;font-size:8px;color:${C.mute};font-weight:900;margin-bottom:4px">PLANNED SPOKEN DURATION · OPTIONAL SECONDS</span><input data-pl-score-duration type="number" min="0.01" step="0.01" value="${esc(state.scoreDuration)}" placeholder="blank = measured mean speaking rate" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:8px;font-size:9px"></label>${button(state.scoreLoading ? 'Scoring…' : 'Score opening', 'data-pl-score', true)}</div>`, 'margin-top:8px')}
             ${state.scoreError ? `<div style="margin-top:8px">${errorPanel(state.scoreError)}</div>` : ''}
             ${state.scoreLoading ? `<div style="margin-top:8px">${loadingPanel(state.scoreStatus || 'Scoring opening')}</div>` : ''}
             ${result ? `<div style="margin-top:10px">${renderAnalysis(result, result.componentLattice)}</div>` : ''}</div>`;
@@ -408,13 +594,22 @@
             if (!summary) return state.errors.openingPredictions ? errorPanel(state.errors.openingPredictions) : loadingPanel('Loading 208 measured openings and out-of-fold predictions…');
             const query = state.query.trim().toLowerCase();
             let rows = (summary.rows || []).filter(row => !query || `${row.title || ''} ${row.text || ''} ${row.videoId}`.toLowerCase().includes(query));
+            const predictedEndpoint = row => numeric((row.outputs || {}).retainedAtForecastEndPercent) == null
+                ? Number((row.outputs || {}).retainedAtAnalyzedEndPercent || 0)
+                : Number((row.outputs || {}).retainedAtForecastEndPercent);
+            const actualEndpoint = row => numeric((row.actual || {}).retainedAtForecastEndPercent) == null
+                ? Number((row.actual || {}).retainedAt20sPercent || 0)
+                : Number((row.actual || {}).retainedAtForecastEndPercent);
+            const endpointError = row => numeric((row.predictionError || {}).retainedAtForecastEndPoints) == null
+                ? Number((row.predictionError || {}).retainedAt20sPoints || 0)
+                : Number((row.predictionError || {}).retainedAtForecastEndPoints);
             rows = rows.slice().sort((a, b) => {
-                if (state.sort === 'error') return Math.abs((b.predictionError || {}).retainedAt20sPoints || 0) - Math.abs((a.predictionError || {}).retainedAt20sPoints || 0);
-                if (state.sort === 'actual') return ((b.actual || {}).retainedAt20sPercent || 0) - ((a.actual || {}).retainedAt20sPercent || 0);
-                return ((b.outputs || {}).retainedAtAnalyzedEndPercent || 0) - ((a.outputs || {}).retainedAtAnalyzedEndPercent || 0);
+                if (state.sort === 'error') return Math.abs(endpointError(b)) - Math.abs(endpointError(a));
+                if (state.sort === 'actual') return actualEndpoint(b) - actualEndpoint(a);
+                return predictedEndpoint(b) - predictedEndpoint(a);
             });
-            return `<div><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;flex-wrap:wrap"><div><div style="font-size:15px;color:${C.text};font-weight:900">Opening library</div><div style="font-size:8px;color:${C.mute};margin-top:2px">${summary.sources || rows.length} source-aligned Shorts openings · saved values are out of fold · each row is measured through 20 seconds</div></div><div style="display:flex;gap:5px">${button('Predicted', 'data-pl-sort="predicted"', state.sort === 'predicted')}${button('Actual', 'data-pl-sort="actual"', state.sort === 'actual')}${button('Largest error', 'data-pl-sort="error"', state.sort === 'error')}</div></div>
-            ${panel(`<input data-pl-query value="${esc(state.query)}" placeholder="Search title, opening, or video ID" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:8px;font-size:9px"><div style="max-height:520px;overflow:auto;margin-top:7px"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['opening', 'exact components and clusters', 'predicted R20', 'actual R20', 'error', 'actual views'].map(value => `<th style="position:sticky;top:0;background:${C.card};padding:5px;text-align:right;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr data-pl-video="${esc(row.videoId)}" style="cursor:pointer;background:${String(row.videoId) === String(state.selectedVideo) ? C.cyan + '12' : 'transparent'}"><td style="padding:6px;text-align:left;border-bottom:1px solid ${C.border};max-width:420px"><b style="display:block;color:${C.text};font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.title || row.videoId)}</b><span style="display:block;color:${C.mute};line-height:1.4;max-height:34px;overflow:hidden">${esc(row.text || '')}</span></td><td style="padding:6px;text-align:left;border-bottom:1px solid ${C.border};min-width:320px;max-width:620px"><div style="font-size:7px;color:${C.mute};margin-bottom:3px">${row.componentCount} components</div><div style="display:flex;flex-wrap:wrap;gap:2px">${(row.components || []).map(component => `<span title="tokens ${component.startToken}–${component.endToken}" style="border-left:3px solid ${colorForCluster(component.category)};background:${colorForCluster(component.category)}12;color:${C.text};padding:2px 4px;font-size:7px;line-height:1.3"><b style="color:${colorForCluster(component.category)}">C${component.category}</b> ${esc(component.text)}</span>`).join('') || (row.categorySequence || []).map((category, index) => `<span style="color:${colorForCluster(category)}">C${category}.${index + 1}</span>`).join(' · ')}</div></td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border};color:${C.green};font-weight:900">${pct((row.outputs || {}).retainedAtAnalyzedEndPercent)}</td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border}">${pct((row.actual || {}).retainedAt20sPercent)}</td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border};color:${Math.abs((row.predictionError || {}).retainedAt20sPoints || 0) > 7 ? C.red : C.dim}">${signed((row.predictionError || {}).retainedAt20sPoints, 1)} pp</td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border}">${compact((row.actual || {}).views)}</td></tr>`).join('')}</tbody></table></div>`, 'margin-top:8px')}
+            return `<div><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;flex-wrap:wrap"><div><div style="font-size:15px;color:${C.text};font-weight:900">Opening library</div><div style="font-size:8px;color:${C.mute};margin-top:2px">${summary.sources || rows.length} source-aligned Shorts sequences · source-level out-of-fold predictions · each row ends at its own supported risk-set endpoint</div></div><div style="display:flex;gap:5px">${button('Predicted', 'data-pl-sort="predicted"', state.sort === 'predicted')}${button('Actual', 'data-pl-sort="actual"', state.sort === 'actual')}${button('Largest error', 'data-pl-sort="error"', state.sort === 'error')}</div></div>
+            ${panel(`<input data-pl-query value="${esc(state.query)}" placeholder="Search title, opening, or video ID" style="width:100%;box-sizing:border-box;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:8px;font-size:9px"><div style="max-height:520px;overflow:auto;margin-top:7px"><table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr>${['opening', 'exact components and clusters', 'forecast endpoint', 'predicted retained', 'actual retained', 'error', 'actual views'].map(value => `<th style="position:sticky;top:0;background:${C.card};padding:5px;text-align:right;color:${C.mute};border-bottom:1px solid ${C.border}">${value}</th>`).join('')}</tr></thead><tbody>${rows.map(row => { const error = endpointError(row); return `<tr data-pl-video="${esc(row.videoId)}" style="cursor:pointer;background:${String(row.videoId) === String(state.selectedVideo) ? C.cyan + '12' : 'transparent'}"><td style="padding:6px;text-align:left;border-bottom:1px solid ${C.border};max-width:420px"><b style="display:block;color:${C.text};font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.title || row.videoId)}</b><span style="display:block;color:${C.mute};line-height:1.4;max-height:34px;overflow:hidden">${esc(row.text || '')}</span></td><td style="padding:6px;text-align:left;border-bottom:1px solid ${C.border};min-width:320px;max-width:620px"><div style="font-size:7px;color:${C.mute};margin-bottom:3px">${row.componentCount} components across ${fmt(row.analysisHorizonSeconds, 1)}s</div><div style="display:flex;flex-wrap:wrap;gap:2px">${(row.components || []).map(component => `<span title="tokens ${component.startToken}–${component.endToken} · ${fmt(component.spokenStartSeconds, 2)}–${fmt(component.spokenEndSeconds, 2)}s" style="border-left:3px solid ${colorForCluster(component.category)};background:${colorForCluster(component.category)}12;color:${C.text};padding:2px 4px;font-size:7px;line-height:1.3"><b style="color:${colorForCluster(component.category)}">C${component.category}</b> ${esc(component.text)}</span>`).join('') || (row.categorySequence || []).map((category, index) => `<span style="color:${colorForCluster(category)}">C${category}.${index + 1}</span>`).join(' · ')}</div></td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border};color:${C.cyan}">${fmt(row.forecastHorizonSeconds || (row.outputs || {}).forecastEndSeconds, 0)}s<br><span style="font-size:7px;color:${C.mute}">${(row.support || {}).riskSetSourcesAtForecastEnd || '—'} at risk</span></td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border};color:${C.green};font-weight:900">${pct(predictedEndpoint(row))}</td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border}">${pct(actualEndpoint(row))}</td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border};color:${Math.abs(error) > 7 ? C.red : C.dim}">${signed(error, 1)} pp</td><td style="padding:6px;text-align:right;border-bottom:1px solid ${C.border}">${compact((row.actual || {}).views)}</td></tr>`; }).join('')}</tbody></table></div>`, 'margin-top:8px')}
             ${state.detailError ? `<div style="margin-top:8px">${errorPanel(state.detailError)}</div>` : ''}
             ${state.detailLoading ? `<div style="margin-top:8px">${loadingPanel('Loading the saved prediction, measured curve, components, and full lattice…')}</div>` : ''}
             ${state.selectedPrediction ? `<div style="margin-top:10px">${renderAnalysis(state.selectedPrediction, state.selectedLattice)}</div>` : ''}</div>`;
@@ -451,7 +646,7 @@
         function renderBody() {
             const tabs = [['scorer', 'Score opening'], ['library', 'Opening library'], ['saved', 'Saved embedding']];
             const body = ({ scorer: renderScorer, library: renderLibrary, saved: renderSaved }[state.view] || renderScorer)();
-            return `<div id="pl-root" style="color:${C.text};font-family:Nunito,sans-serif;max-width:100%;overflow-x:hidden"><style>#pl-root button:focus-visible,#pl-root input:focus-visible,#pl-root textarea:focus-visible{outline:2px solid ${C.cyan};outline-offset:1px}@media(max-width:760px){#pl-root [data-pl-analysis] section>div[style*='grid-template-columns'],#pl-root [data-pl-score-controls]{grid-template-columns:1fr!important}#pl-root canvas{max-height:330px}#pl-root table{min-width:620px}}</style><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:9px"><div><div style="font-size:19px;color:${C.cyan};font-weight:900">Promise Lab</div><div style="font-size:8px;color:${C.mute};margin-top:2px">Shorts opening semantics → measured retention through 20 seconds</div></div><div style="display:flex;gap:5px;flex-wrap:wrap">${tabs.map(([id, label]) => button(label, `data-pl-view="${id}"`, state.view === id)).join('')}</div></div>${body}</div>`;
+            return `<div id="pl-root" style="color:${C.text};font-family:Nunito,sans-serif;max-width:100%;overflow-x:hidden"><style>#pl-root button:focus-visible,#pl-root input:focus-visible,#pl-root textarea:focus-visible{outline:2px solid ${C.cyan};outline-offset:1px}@media(max-width:760px){#pl-root [data-pl-analysis] section>div[style*='grid-template-columns'],#pl-root [data-pl-score-controls]{grid-template-columns:1fr!important}#pl-root canvas{max-height:330px}#pl-root table{min-width:620px}}</style><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:9px"><div><div style="font-size:19px;color:${C.cyan};font-weight:900">Promise Lab</div><div style="font-size:8px;color:${C.mute};margin-top:2px">Shorts sequence semantics → duration-conditioned measured retention</div></div><div style="display:flex;gap:5px;flex-wrap:wrap">${tabs.map(([id, label]) => button(label, `data-pl-view="${id}"`, state.view === id)).join('')}</div></div>${body}</div>`;
         }
 
         function sizeCanvas(canvas) {
@@ -492,9 +687,19 @@
         }
 
         function line(ctx, points, color, width, dash) {
-            if (!points.length) return;
+            if (!points.length || !color) return;
             ctx.strokeStyle = color; ctx.lineWidth = width || 2; ctx.setLineDash(dash || []);
-            ctx.beginPath(); points.forEach((point, index) => index ? ctx.lineTo(point[0], point[1]) : ctx.moveTo(point[0], point[1])); ctx.stroke(); ctx.setLineDash([]);
+            let open = false;
+            ctx.beginPath();
+            points.forEach(point => {
+                if (!Number.isFinite(Number(point[0])) || !Number.isFinite(Number(point[1]))) {
+                    open = false;
+                    return;
+                }
+                if (open) ctx.lineTo(point[0], point[1]);
+                else { ctx.moveTo(point[0], point[1]); open = true; }
+            });
+            ctx.stroke(); ctx.setLineDash([]);
         }
 
         function drawRetention(canvas) {
@@ -527,38 +732,52 @@
                     ctx.fillText(`component ${index + 1} · C${component.category}`, left + 3, axes.pad.t + 15);
                 }
             });
-            if (lower.length === times.length && upper.length === times.length) {
+            const band = times.map((time, index) => ({ time, low: numeric(lower[index]), high: numeric(upper[index]) }))
+                .filter(row => row.low != null && row.high != null);
+            if (band.length > 1) {
                 ctx.fillStyle = C.cyan + '20'; ctx.beginPath();
-                times.forEach((time, index) => index ? ctx.lineTo(axes.X(time), axes.Y(upper[index])) : ctx.moveTo(axes.X(time), axes.Y(upper[index])));
-                [...times].reverse().forEach((time, reversed) => { const index = times.length - 1 - reversed; ctx.lineTo(axes.X(time), axes.Y(lower[index])); });
+                band.forEach((row, index) => index ? ctx.lineTo(axes.X(row.time), axes.Y(row.high)) : ctx.moveTo(axes.X(row.time), axes.Y(row.high)));
+                [...band].reverse().forEach(row => ctx.lineTo(axes.X(row.time), axes.Y(row.low)));
                 ctx.closePath(); ctx.fill();
             }
             if (state.showStages && family.stages) {
-                const stageColors = { baseline: C.faint, semanticPrefix: C.purple };
-                Object.entries(family.stages).forEach(([name, valuesRow]) => line(ctx, times.map((time, index) => [axes.X(time), axes.Y(valuesRow[index])]), stageColors[name], 1, [4, 4]));
+                const stageColors = {
+                    baseline: C.faint, timing: C.amber, semantic: C.purple,
+                    semanticPrefix: C.purple, components: C.accent, relationships: C.green,
+                };
+                Object.entries(family.stages).forEach(([name, valuesRow]) => line(
+                    ctx,
+                    times.map((time, index) => [axes.X(time), numeric(valuesRow[index]) == null ? NaN : axes.Y(valuesRow[index])]),
+                    stageColors[name], name === family.selectedStage ? 1.8 : 1, [4, 4],
+                ));
             }
-            line(ctx, times.map((time, index) => [axes.X(time), axes.Y(predicted[index])]), C.cyan, 3);
-            if (actual.length === times.length) line(ctx, times.map((time, index) => [axes.X(time), axes.Y(actual[index])]), C.green, 2.5);
+            line(ctx, times.map((time, index) => [axes.X(time), numeric(predicted[index]) == null ? NaN : axes.Y(predicted[index])]), C.cyan, 3);
+            if (actual && actual.length === times.length) line(ctx, times.map((time, index) => [axes.X(time), numeric(actual[index]) == null ? NaN : axes.Y(actual[index])]), C.green, 2.5);
             ctx.font = '8px sans-serif'; ctx.fillStyle = C.cyan; ctx.fillText('predicted', sized.width - 140, 14);
-            if (actual.length) { ctx.fillStyle = C.green; ctx.fillText('actual', sized.width - 78, 14); }
+            if (actual && actual.length) { ctx.fillStyle = C.green; ctx.fillText('actual', sized.width - 78, 14); }
         }
 
         function drawContributions(canvas) {
             const analysis = activeAnalysis().prediction; if (!analysis) return;
-            const row = (analysis.contributions || {}).at20Seconds || (analysis.contributions || {}).atAnalyzedEnd || {};
+            const channels = endpointChannels(analysis);
+            const order = ['baseline', 'timing', 'semantic', 'components', 'relationships'];
+            const selectedIndex = Math.max(0, order.indexOf(channels.selectedStage));
             const bars = [
-                { label: 'mean curve', value: numeric(row.baselinePercent) || 0, absolute: true, color: C.faint, applied: true },
-                { label: 'causal prefix semantics', value: numeric(row.semanticDeltaPoints) || 0, color: C.purple, applied: true },
-                { label: 'component candidate', value: numeric(row.componentStructureDeltaPoints), color: C.amber, applied: false },
-                { label: 'relationship candidate', value: numeric(row.relationshipDeltaPoints), color: C.red, applied: false },
+                { stage: 'baseline', label: 'at-risk mean baseline', value: channels.values.baseline, absolute: true, color: C.faint },
+                { stage: 'timing', label: 'timing and cadence', value: channels.deltas.timing, color: C.amber },
+                { stage: 'semantic', label: 'causal prefix semantics', value: channels.deltas.semantic, color: C.purple },
+                { stage: 'components', label: 'four-cluster components', value: channels.deltas.components, color: C.accent },
+                { stage: 'relationships', label: 'prior-sequence relationships', value: channels.deltas.relationships, color: C.green },
             ];
             const sized = clearCanvas(canvas); const ctx = sized.context;
-            const zero = 58; const plot = sized.width - 80;
-            const maxDelta = Math.max(1, ...bars.slice(1).map(bar => Math.abs(bar.value)));
+            const zero = Math.min(190, Math.max(145, sized.width * .28));
+            const plot = Math.max(120, sized.width - zero - 24);
+            const maxDelta = Math.max(1, ...bars.slice(1).map(bar => Math.abs(Number(bar.value || 0))));
             bars.forEach((bar, index) => {
-                const y = 24 + index * 47; ctx.fillStyle = C.text; ctx.font = '9px sans-serif'; ctx.fillText(bar.label, 8, y + 12);
+                const applied = order.indexOf(bar.stage) <= selectedIndex;
+                const y = 20 + index * 48; ctx.fillStyle = applied ? C.text : C.mute; ctx.font = '9px sans-serif'; ctx.fillText(`${bar.label} · ${applied ? 'applied' : 'candidate only'}`, 8, y + 12);
                 if (bar.absolute) {
-                    const width = Math.max(1, plot * Math.max(0, Math.min(100, bar.value)) / 100);
+                    const width = Math.max(1, plot * Math.max(0, Math.min(100, Number(bar.value || 0))) / 100);
                     ctx.fillStyle = bar.color; ctx.globalAlpha = .7; ctx.fillRect(zero, y, width, 18); ctx.globalAlpha = 1;
                     ctx.fillText(`${fmt(bar.value, 1)}%`, zero + width + 5, y + 12);
                 } else {
@@ -568,10 +787,10 @@
                     }
                     const center = zero + plot / 2; const width = Math.abs(bar.value) / maxDelta * (plot / 2 - 20);
                     ctx.strokeStyle = C.border2; ctx.beginPath(); ctx.moveTo(center, y - 3); ctx.lineTo(center, y + 23); ctx.stroke();
-                    ctx.fillStyle = bar.color; ctx.globalAlpha = bar.applied ? .85 : .28;
+                    ctx.fillStyle = bar.color; ctx.globalAlpha = applied ? .85 : .25;
                     ctx.fillRect(bar.value >= 0 ? center : center - width, y, width, 18); ctx.globalAlpha = 1;
-                    ctx.fillStyle = bar.applied ? C.text : C.amber;
-                    ctx.fillText(`${signed(bar.value, 2)} pp · ${bar.applied ? 'applied' : 'withheld'}`, bar.value >= 0 ? center + width + 5 : Math.max(4, center - width - 92), y + 12);
+                    ctx.fillStyle = C.text;
+                    ctx.fillText(`${signed(bar.value, 2)} pp · ${applied ? 'applied' : 'withheld'}`, bar.value >= 0 ? center + width + 5 : Math.max(4, center - width - 92), y + 12);
                 }
             });
         }
@@ -581,60 +800,77 @@
             const steps = ((analysis.temporalAttribution || {}).steps || []); if (!steps.length) return;
             const sized = clearCanvas(canvas); const ctx = sized.context;
             const pad = { l: 46, r: 14, t: 18, b: 36 };
-            const values = steps.flatMap(row => [Number(row.baselineDeltaPoints || 0), Number(row.semanticShapeDeltaPoints || 0), Number(row.predictedDeltaPoints || 0)]);
+            const channelNames = ['baseline', 'timing', 'semantic', 'components', 'relationships'];
+            const colors = { baseline: C.faint, timing: C.amber, semantic: C.purple, components: C.accent, relationships: C.green };
+            const channelsFor = row => ({
+                baseline: numeric((row.channelDeltaPoints || {}).baseline) == null ? Number(row.baselineDeltaPoints || 0) : Number(row.channelDeltaPoints.baseline),
+                timing: Number((row.channelDeltaPoints || {}).timing || 0),
+                semantic: numeric((row.channelDeltaPoints || {}).semantic) == null ? Number(row.semanticShapeDeltaPoints || 0) : Number(row.channelDeltaPoints.semantic),
+                components: Number((row.channelDeltaPoints || {}).components || 0),
+                relationships: Number((row.channelDeltaPoints || {}).relationships || 0),
+            });
+            const values = steps.flatMap(row => [...Object.values(channelsFor(row)), Number(row.predictedDeltaPoints || 0)]);
             const limit = Math.max(1, ...values.map(value => Math.abs(value))) * 1.15;
             const X = index => pad.l + (index + .5) / steps.length * (sized.width - pad.l - pad.r);
             const Y = value => pad.t + (limit - value) / (2 * limit) * (sized.height - pad.t - pad.b);
             const zero = Y(0);
             ctx.strokeStyle = C.border2; ctx.beginPath(); ctx.moveTo(pad.l, zero); ctx.lineTo(sized.width - pad.r, zero); ctx.stroke();
             ctx.fillStyle = C.mute; ctx.font = '8px sans-serif'; ctx.fillText('+ retention', 3, pad.t + 5); ctx.fillText('− retention', 3, sized.height - pad.b); ctx.fillText('seconds', sized.width / 2 - 15, sized.height - 8);
-            const barWidth = Math.max(2, Math.min(12, (sized.width - pad.l - pad.r) / steps.length * .28));
+            const barWidth = Math.max(1, Math.min(7, (sized.width - pad.l - pad.r) / steps.length / 6));
             const geometry = [];
             steps.forEach((row, index) => {
-                const center = X(index); const baseline = Number(row.baselineDeltaPoints || 0); const semantic = Number(row.semanticShapeDeltaPoints || 0);
+                const center = X(index); const channels = channelsFor(row);
                 const drawBar = (value, x, color) => { ctx.fillStyle = color; ctx.globalAlpha = .82; const top = Math.min(zero, Y(value)); ctx.fillRect(x, top, barWidth, Math.max(1, Math.abs(Y(value) - zero))); ctx.globalAlpha = 1; };
-                drawBar(baseline, center - barWidth - 1, C.faint); drawBar(semantic, center + 1, C.purple);
+                channelNames.forEach((name, offset) => drawBar(
+                    channels[name], center + (offset - 2.5) * barWidth, colors[name],
+                ));
                 const allocations = row.enteredComponents || [];
-                if (allocations.length) { ctx.fillStyle = colorForCluster(allocations[0].category); ctx.fillRect(center - barWidth, pad.t - 5, barWidth * 2, 4); }
-                if (index === Math.min(state.selectedAttributionStep, steps.length - 1)) { ctx.strokeStyle = C.cyan; ctx.lineWidth = 1.5; ctx.strokeRect(center - barWidth - 4, pad.t - 8, barWidth * 2 + 8, sized.height - pad.t - pad.b + 12); }
+                if (allocations.length) { ctx.fillStyle = colorForCluster(allocations[0].category); ctx.fillRect(center - barWidth * 2.5, pad.t - 5, barWidth * 5, 4); }
+                if (index === Math.min(state.selectedAttributionStep, steps.length - 1)) { ctx.strokeStyle = C.cyan; ctx.lineWidth = 1.5; ctx.strokeRect(center - barWidth * 3 - 3, pad.t - 8, barWidth * 6 + 6, sized.height - pad.t - pad.b + 12); }
                 if (index % Math.max(1, Math.ceil(steps.length / 10)) === 0) { ctx.fillStyle = C.mute; ctx.font = '7px sans-serif'; ctx.fillText(fmt(row.endSeconds, 0), center - 4, sized.height - 22); }
                 geometry.push({ x: center, y: zero, index });
             });
+            channelNames.forEach((name, index) => { ctx.fillStyle = colors[name]; ctx.font = '7px sans-serif'; ctx.fillText(name, 50 + index * 70, 11); });
             canvas._plAttributionBars = geometry;
         }
 
         function drawComponentResponse(canvas) {
             const analysis = activeAnalysis().prediction; if (!analysis) return;
-            const component = activeComponent(analysis); const measurements = component.measurements || {};
-            const rows = state.measurementMode === 'reverse' ? (measurements.reverseControls || []) : (measurements.forward || []);
-            const valid = rows.filter(row => row.measuredWithin20s && numeric((row.entry_indexed || {}).slopePercentPerSecond) != null);
+            const component = activeComponent(analysis);
+            const rows = componentResponseRows(component);
+            const valid = rows.filter(row => row.measuredWithinRiskSet !== false && numeric((row.entry_indexed || {}).slopePercentPerSecond) != null);
             if (!valid.length) return;
             const sized = clearCanvas(canvas); const ctx = sized.context;
             const xs = valid.map(row => Number(row.lagSeconds));
             const entry = valid.map(row => Number(row.entry_indexed.slopePercentPerSecond));
-            const raw = valid.map(row => Number((row.observed_absolute || {}).slopePercentPerSecond));
-            const values = [...entry, ...raw].filter(value => Number.isFinite(value));
+            const values = [...entry].filter(value => Number.isFinite(value));
             const min = Math.min(...values, -1); const max = Math.max(...values, 1);
             const axes = drawAxes(ctx, sized.width, sized.height, 'response lag (seconds)', 'retention slope pp/s', Math.min(...xs), Math.max(...xs), min, max);
             line(ctx, valid.map((row, index) => [axes.X(row.lagSeconds), axes.Y(entry[index])]), C.cyan, 2.5);
-            line(ctx, valid.map((row, index) => [axes.X(row.lagSeconds), axes.Y(raw[index])]), C.green, 2);
-            valid.forEach((row, index) => { [[entry[index], C.cyan], [raw[index], C.green]].forEach(([value, color]) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(axes.X(row.lagSeconds), axes.Y(value), 3, 0, Math.PI * 2); ctx.fill(); }); });
-            ctx.fillStyle = C.cyan; ctx.font = '8px sans-serif'; ctx.fillText('entry-indexed', sized.width - 150, 13); ctx.fillStyle = C.green; ctx.fillText('raw observed', sized.width - 78, 13);
+            valid.forEach((row, index) => { ctx.fillStyle = C.cyan; ctx.beginPath(); ctx.arc(axes.X(row.lagSeconds), axes.Y(entry[index]), 3, 0, Math.PI * 2); ctx.fill(); });
+            ctx.fillStyle = C.cyan; ctx.font = '8px sans-serif'; ctx.fillText('entry-indexed observed response', sized.width - 176, 13);
         }
 
         function drawValidation(canvas) {
             const analysis = activeAnalysis().prediction; if (!analysis) return;
             const validation = ((analysis.validation || {}).entryIndexed || {});
-            const random = (validation.randomFold || {}).modelRMSEByTimePercentagePoints || [];
-            const chronological = (validation.chronological || {}).modelRMSEByTimePercentagePoints || [];
+            const randomRows = (validation.candidateRandomFold || validation.randomFold || {}).perSecond || [];
+            const chronologicalRows = (validation.candidateChronological || validation.chronological || {}).perSecond || [];
+            const legacyRandom = (validation.randomFold || {}).modelRMSEByTimePercentagePoints || [];
+            const legacyChronological = (validation.chronological || {}).modelRMSEByTimePercentagePoints || [];
+            const random = randomRows.length ? randomRows.map(row => [row.second, row.heldoutMAEPercentagePoints]) : legacyRandom.map((value, second) => [second, value]);
+            const chronological = chronologicalRows.length ? chronologicalRows.map(row => [row.second, row.heldoutMAEPercentagePoints]) : legacyChronological.map((value, second) => [second, value]);
+            const baseline = randomRows.map(row => [row.second, row.baselineMAEPercentagePoints]);
             if (!random.length && !chronological.length) return;
             const sized = clearCanvas(canvas); const ctx = sized.context;
-            const values = [...random, ...chronological].filter(value => numeric(value) != null);
-            const max = Math.max(1, ...values) * 1.1; const length = Math.max(random.length, chronological.length);
-            const axes = drawAxes(ctx, sized.width, sized.height, 'seconds', 'RMSE percentage points', 0, Math.max(1, length - 1), 0, max);
-            if (random.length) line(ctx, random.map((value, index) => [axes.X(index), axes.Y(value)]), C.cyan, 2.5);
-            if (chronological.length) line(ctx, chronological.map((value, index) => [axes.X(index), axes.Y(value)]), C.amber, 2.5);
-            ctx.fillStyle = C.cyan; ctx.font = '8px sans-serif'; ctx.fillText('random folds', sized.width - 150, 13); ctx.fillStyle = C.amber; ctx.fillText('chronological', sized.width - 76, 13);
+            const values = [...random, ...chronological, ...baseline].map(row => numeric(row[1])).filter(value => value != null);
+            const seconds = [...random, ...chronological].map(row => numeric(row[0])).filter(value => value != null);
+            const max = Math.max(1, ...values) * 1.1; const last = Math.max(1, ...seconds);
+            const axes = drawAxes(ctx, sized.width, sized.height, 'seconds', 'held-out MAE percentage points', 0, last, 0, max);
+            if (random.length) line(ctx, random.map(row => [axes.X(row[0]), numeric(row[1]) == null ? NaN : axes.Y(row[1])]), C.cyan, 2.5);
+            if (chronological.length) line(ctx, chronological.map(row => [axes.X(row[0]), numeric(row[1]) == null ? NaN : axes.Y(row[1])]), C.amber, 2.5);
+            if (baseline.length) line(ctx, baseline.map(row => [axes.X(row[0]), numeric(row[1]) == null ? NaN : axes.Y(row[1])]), C.faint, 1.5, [4, 4]);
+            ctx.fillStyle = C.faint; ctx.font = '7px sans-serif'; ctx.fillText('mean baseline', sized.width - 275, 13); ctx.fillStyle = C.cyan; ctx.fillText('candidate random', sized.width - 185, 13); ctx.fillStyle = C.amber; ctx.fillText('candidate forward', sized.width - 88, 13);
         }
 
         function drawComponentMap(canvas) {
@@ -662,12 +898,17 @@
             const x = index => components.length === 1 ? sized.width / 2 : margin + index / (components.length - 1) * (sized.width - 2 * margin);
             const maximumDrop = Math.max(1, ...components.map(component => Math.abs(Number((component.timelineAttribution || {}).predictedDropPoints || 0))));
             relationships.forEach(row => {
-                const impact = ((row.predictionImpact || {}).entryIndexed || {}).retention20sPoints;
-                const applied = false;
-                const x1 = x(row.left), x2 = x(row.right); const lift = 45 + Math.min(70, Math.abs(Number(impact || 0)) * 9);
-                ctx.strokeStyle = applied ? C.green : C.amber; ctx.globalAlpha = applied ? .8 : .32; ctx.lineWidth = 1.5;
+                const modern = row.source != null || row.type === 'next';
+                const leftIndex = modern ? Number(String(row.source || '').split(':').pop()) : Number(row.left);
+                const rightIndex = modern ? Number(String(row.target || '').split(':').pop()) : Number(row.right);
+                if (!Number.isFinite(leftIndex) || !Number.isFinite(rightIndex)) return;
+                const similarity = numeric(row.semanticSimilarity);
+                const x1 = x(leftIndex), x2 = x(rightIndex);
+                const lift = 42 + Math.min(70, Math.abs(Number(similarity || 0)) * 42);
+                ctx.strokeStyle = modern ? C.green : C.amber; ctx.globalAlpha = modern ? .72 : .3; ctx.lineWidth = modern ? 2 : 1.5;
                 ctx.beginPath(); ctx.moveTo(x1, y); ctx.quadraticCurveTo((x1 + x2) / 2, y - lift, x2, y); ctx.stroke(); ctx.globalAlpha = 1;
-                ctx.fillStyle = applied ? C.green : C.amber; ctx.font = '7px sans-serif'; ctx.fillText(impact == null ? 'withheld' : `${signed(impact, 2)}pp`, (x1 + x2) / 2 - 16, y - lift + 9);
+                ctx.fillStyle = modern ? C.green : C.amber; ctx.font = '7px sans-serif';
+                ctx.fillText(modern ? `${String(row.transition || '')} · sim ${fmt(similarity, 2)}` : 'legacy diagnostic', (x1 + x2) / 2 - 25, y - lift + 9);
             });
             components.forEach((component, index) => {
                 const drop = Number((component.timelineAttribution || {}).predictedDropPoints || 0);
@@ -678,6 +919,74 @@
                 ctx.fillStyle = C.text; ctx.font = '7px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(`${signed(drop, 1)}pp`, x(index), y - radius - 5); ctx.textAlign = 'left';
             });
             canvas._plComponentX = components.map((_, index) => x(index)); canvas._plComponentY = y;
+        }
+
+        function drawOutcomePlane(canvas) {
+            const analysis = activeAnalysis().prediction; if (!analysis) return;
+            const category = Number(canvas.dataset.plCategory);
+            const lag = Number(canvas.dataset.plLag == null ? state.outcomeLag : canvas.dataset.plLag);
+            const study = (state.data.openingPredictions || {}).contextStudy || {};
+            const categoryStudy = (study.categories || []).find(row => Number(row.category) === category) || {};
+            const experiment = (categoryStudy.lagExperiments || []).find(row => Number(row.lagSeconds) === lag && row.status === 'complete') || {};
+            const plane = experiment.outcomePlane || ((categoryStudy.outcomePlanesByLag || {})[String(lag)]) || {};
+            const points = (plane.points || []).filter(row => numeric(row.x) != null && numeric(row.y) != null);
+            const selected = activeComponent(analysis);
+            const selectedByLag = (selected.outcomePlanesByLag || {})[String(lag)] || (lag === Number(study.primaryLagSeconds || 0) ? selected.outcomePlane : null);
+            const selectedPlane = Number(selected.category) === category ? (selectedByLag || {}) : null;
+            if (!points.length && (!selectedPlane || numeric(selectedPlane.x) == null)) return;
+            const allX = points.map(row => Number(row.x)); const allY = points.map(row => Number(row.y));
+            if (selectedPlane && numeric(selectedPlane.x) != null) { allX.push(Number(selectedPlane.x)); allY.push(Number(selectedPlane.y)); }
+            const slopes = points.map(row => numeric(row.observedSlopePercentagePointsPerSecond)).filter(value => value != null);
+            const low = slopes.length ? Math.min(...slopes) : -1; const high = slopes.length ? Math.max(...slopes) : 1;
+            const sized = clearCanvas(canvas); const ctx = sized.context;
+            const axes = drawAxes(ctx, sized.width, sized.height, 'conditional semantic response X', 'orthogonal residual semantic Y', Math.min(...allX), Math.max(...allX), Math.min(...allY), Math.max(...allY));
+            const geometry = [];
+            points.forEach(row => {
+                const x = axes.X(row.x), y = axes.Y(row.y);
+                const value = numeric(row.observedSlopePercentagePointsPerSecond);
+                const ratio = value == null ? .5 : Math.max(0, Math.min(1, (value - low) / Math.max(1e-9, high - low)));
+                const red = Math.round(248 * (1 - ratio) + 52 * ratio);
+                const green = Math.round(113 * (1 - ratio) + 211 * ratio);
+                const blue = Math.round(113 * (1 - ratio) + 153 * ratio);
+                ctx.fillStyle = `rgb(${red},${green},${blue})`; ctx.globalAlpha = .38;
+                ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+                geometry.push({ x, y, ...row, category, lagSeconds: lag });
+            });
+            if (selectedPlane && numeric(selectedPlane.x) != null) {
+                const x = axes.X(selectedPlane.x), y = axes.Y(selectedPlane.y);
+                ctx.fillStyle = colorForCluster(category); ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = C.text; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.stroke();
+                ctx.fillStyle = C.text; ctx.font = '7px sans-serif'; ctx.fillText('selected component', x + 11, y - 7);
+            }
+            ctx.fillStyle = C.red; ctx.font = '7px sans-serif'; ctx.fillText(`faster loss ${signed(low, 2)} pp/s`, 52, 11);
+            ctx.fillStyle = C.green; ctx.fillText(`better hold ${signed(high, 2)} pp/s`, Math.max(160, sized.width - 145), 11);
+            canvas._plOutcomePoints = geometry;
+        }
+
+        function drawRiskSet(canvas) {
+            const analysis = activeAnalysis().prediction; if (!analysis) return;
+            const rows = availableRiskRows(analysis).filter(row => numeric(row.second) != null && numeric(row.riskSetSources) != null);
+            if (!rows.length) return;
+            const summarySupport = (state.data.openingPredictions || {}).support || {};
+            const semanticMinimum = Number(summarySupport.minimumModelSources || 10);
+            const chronologicalMinimum = Number(summarySupport.minimumChronologicalSources || 40);
+            const forecast = Number(analysis.forecastHorizonSeconds || (analysis.outputs || {}).forecastEndSeconds || 0);
+            const sized = clearCanvas(canvas); const ctx = sized.context;
+            const maximumSecond = Math.max(...rows.map(row => Number(row.second)));
+            const maximumSources = Math.max(...rows.map(row => Number(row.riskSetSources)), chronologicalMinimum, semanticMinimum);
+            const axes = drawAxes(ctx, sized.width, sized.height, 'seconds', 'source videos still at risk', 0, maximumSecond, 0, maximumSources);
+            line(ctx, rows.map(row => [axes.X(row.second), axes.Y(row.riskSetSources)]), C.cyan, 2.8);
+            [[semanticMinimum, C.purple], [chronologicalMinimum, C.amber]].forEach(([value, color]) => {
+                ctx.strokeStyle = color; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(axes.pad.l, axes.Y(value)); ctx.lineTo(sized.width - axes.pad.r, axes.Y(value)); ctx.stroke(); ctx.setLineDash([]);
+            });
+            if (forecast > 0) {
+                ctx.strokeStyle = C.green; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(axes.X(forecast), axes.pad.t); ctx.lineTo(axes.X(forecast), sized.height - axes.pad.b); ctx.stroke();
+                ctx.fillStyle = C.green; ctx.font = '7px sans-serif'; ctx.fillText(`forecast ${fmt(forecast, 0)}s`, Math.min(sized.width - 78, axes.X(forecast) + 4), axes.pad.t + 10);
+            }
+            if (maximumSecond > 20) {
+                ctx.strokeStyle = C.faint; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.moveTo(axes.X(20), axes.pad.t); ctx.lineTo(axes.X(20), sized.height - axes.pad.b); ctx.stroke(); ctx.setLineDash([]);
+                ctx.fillStyle = C.mute; ctx.font = '7px sans-serif'; ctx.fillText('acoustic → timestamp timing', Math.min(sized.width - 135, axes.X(20) + 4), sized.height - axes.pad.b - 5);
+            }
         }
 
         function drawLattice(canvas) {
@@ -738,6 +1047,8 @@
                 else if (kind === 'component-map') drawComponentMap(canvas);
                 else if (kind === 'validation') drawValidation(canvas);
                 else if (kind === 'relationships') drawRelationships(canvas);
+                else if (kind === 'outcome-plane') drawOutcomePlane(canvas);
+                else if (kind === 'risk-set') drawRiskSet(canvas);
                 else if (kind === 'lattice') drawLattice(canvas);
                 else if (kind === 'saved-map') drawSavedMap(canvas);
             });
@@ -767,11 +1078,13 @@
             const video = target.closest('[data-pl-video]');
             if (video) { loadVideo(video.dataset.plVideo); return true; }
             const component = target.closest('[data-pl-component]');
-            if (component) { state.selectedComponent = Number(component.dataset.plComponent); state.selectedLatticeNode = null; state.savedPoint = null; paint(); return true; }
+            if (component) { state.selectedComponent = Number(component.dataset.plComponent); state.selectedLatticeNode = null; state.savedPoint = null; state.outcomePoint = null; paint(); return true; }
             const attributionStep = target.closest('[data-pl-attribution-step]');
             if (attributionStep) { state.selectedAttributionStep = Number(attributionStep.dataset.plAttributionStep); paint(); return true; }
             const measurementMode = target.closest('[data-pl-measurement-mode]');
             if (measurementMode) { state.measurementMode = measurementMode.dataset.plMeasurementMode; paint(); return true; }
+            const outcomeLag = target.closest('[data-pl-outcome-lag]');
+            if (outcomeLag) { state.outcomeLag = Number(outcomeLag.dataset.plOutcomeLag); state.outcomePoint = null; paint(); return true; }
             const latticeEdge = target.closest('[data-pl-lattice-edge]');
             if (latticeEdge) { state.latticeEdgeType = latticeEdge.dataset.plLatticeEdge; paint(); return true; }
             const curve = target.closest('[data-pl-curve]');
@@ -797,6 +1110,9 @@
                     const xs = canvas._plComponentX || []; let best = -1; let distance = 18;
                     xs.forEach((value, index) => { const next = Math.abs(value - point.x); if (next < distance) { distance = next; best = index; } });
                     if (best >= 0) { state.selectedComponent = best; state.selectedLatticeNode = null; paint(); }
+                } else if (canvas.dataset.plCanvas === 'outcome-plane') {
+                    const selected = nearestPoint(canvas._plOutcomePoints, point.x, point.y, 12);
+                    if (selected) { state.outcomePoint = selected; paint(); }
                 }
                 return true;
             }
@@ -805,7 +1121,7 @@
 
         function handleInput(event) {
             if (event.target.matches('[data-pl-score-text]')) { state.scoreText = event.target.value; return true; }
-            if (event.target.matches('[data-pl-score-idea]')) { state.scoreIdea = event.target.value; return true; }
+            if (event.target.matches('[data-pl-score-duration]')) { state.scoreDuration = event.target.value; return true; }
             if (event.target.matches('[data-pl-query]')) { state.query = event.target.value; return true; }
             return false;
         }

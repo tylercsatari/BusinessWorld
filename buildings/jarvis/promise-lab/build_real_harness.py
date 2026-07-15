@@ -25,7 +25,6 @@ def main() -> None:
         "manifest": read("manifest.json", {"version": 5, "status": "building", "counts": {}}),
         "progress": read("progress.json", {"version": 5, "status": "building", "stage": "real product build"}),
         "opening-predictions": read("opening-predictions.json", {"rows": []}),
-        "opening-20s": read("opening-20s.json", {"rows": []}),
         "manual-projection": read("manual-projection.json", None),
         "canonical-partitions": read("canonical-partitions.json", None),
     }
@@ -39,7 +38,6 @@ window.fetch=async function(url,opts){{
   const base='/api/shortsquant/promise-lab/';
   if(path===base+'hook-score'){{return nativeFetch(url,opts);}}
   if(path.startsWith(base+'opening-prediction/')){{const id=decodeURIComponent(path.slice((base+'opening-prediction/').length));const packed=await nativeFetch(`/buildings/jarvis/promise-lab/.cache/opening-predictions/${{encodeURIComponent(id)}}.json.gz`,opts);if(!packed.ok)return packed;const stream=packed.body.pipeThrough(new DecompressionStream('gzip'));return new Response(stream,{{status:200,headers:{{'Content-Type':'application/json'}}}});}}
-  if(path.startsWith(base+'opening-20s/')){{const id=decodeURIComponent(path.slice((base+'opening-20s/').length));const packed=await nativeFetch(`/buildings/jarvis/promise-lab/.cache/opening-20s/${{encodeURIComponent(id)}}.json.gz`,opts);if(!packed.ok)return packed;const stream=packed.body.pipeThrough(new DecompressionStream('gzip'));return new Response(stream,{{status:200,headers:{{'Content-Type':'application/json'}}}});}}
   if(path.startsWith(base)){{const key=path.slice(base.length);const v=window.__PL_REAL[key];return new Response(JSON.stringify(v||{{error:'real artifact not built yet'}}),{{status:v?200:404,headers:{{'Content-Type':'application/json'}}}});}}
   return nativeFetch(url,opts);
 }};</script>

@@ -50,7 +50,7 @@ def main() -> None:
         ("opening-lattice", "build_opening_lattice_model.py"),
         ("opening-20s", "run_opening_horizon.py"),
         ("verify-opening-20s", "verify_opening_horizon.py"),
-        ("opening-predictor", "run_opening_predictor.py"),
+        ("opening-predictor", "run_variable_opening_predictor.py"),
         ("verify-opening-predictor", "verify_opening_predictor.py"),
         ("verify-product-scorer", "verify_product_scorer.py"),
         ("ui", "build_ui.py"),

@@ -4,8 +4,8 @@
 const assert = require('assert');
 const { routeBuilding, permsAllow } = require('../auth');
 
-const summary = '/api/longquant/promise-lab/opening-20s';
-const detail = '/api/longquant/promise-lab/opening-20s/example-video';
+const summary = '/api/shortsquant/promise-lab/opening-predictions';
+const detail = '/api/shortsquant/promise-lab/opening-prediction/example-video';
 const jarvisProfile = { buildings: ['Jarvis'], features: {} };
 const workshopOnly = { buildings: ['Workshop'], features: {} };
 

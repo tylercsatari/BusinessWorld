@@ -5,26 +5,33 @@ from pathlib import Path
 
 import numpy as np
 
-from score_hook import (
-    decode_partition,
-    _prediction_text_scope,
-    _typed_curve_payload,
-    _typed_prefix_features,
-)
 from opening_predictor import temporal_attribution
-from sequence import all_spans, tokenize
+from score_hook import (
+    _typed_token_clock,
+    _variable_curve_payload,
+    _variable_prediction_scope,
+)
+from sequence import tokenize
 
 
 HERE = Path(__file__).resolve().parent
+STAGES = ("timing", "semantic", "components", "relationships")
 
 
-def scalar_row(second: int) -> dict:
+def compact_model(intercept: float) -> dict:
+    return {"coefficient": [0.0, 0.0], "intercept": [intercept]}
+
+
+def temporal_row(second: int) -> dict:
     return {
         "second": float(second),
         "baselineMean": 100.0 - second,
-        "model": {
-            "coefficient": [1.0, 0.0],
-            "intercept": [80.0 - second],
+        "headlineModelAvailable": True,
+        "residualP10": -2.0,
+        "residualP90": 2.0,
+        "stages": {
+            stage: {"model": compact_model(80.0 - second - index)}
+            for index, stage in enumerate(STAGES)
         },
     }
 
@@ -47,162 +54,84 @@ print(score_hook.PREDICTOR_VERSION)
             text=True, timeout=30,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("opening-retention-predictor-v2", result.stdout)
+        self.assertIn("opening-retention-predictor-v3-variable-context", result.stdout)
 
-    def test_each_second_uses_only_its_completed_prefix(self):
-        text = "one two three four five six seven eight"
-        tokens = tokenize(text)
-        spans = all_spans(len(tokens))
-        starts = np.asarray([span.start for span in spans], int)
-        ends = np.asarray([span.end for span in spans], int)
-        raw = np.asarray([
-            [float(span.end), float(span.end - span.start)] for span in spans
-        ], np.float32)
-        scope = {
-            "plannedSpokenSeconds": 8.0,
-            "wordsPerSecond": 1.0,
-            "timingSource": "test clock",
-        }
-        features, trace = _typed_prefix_features({
-            "tokens": tokens, "starts": starts, "ends": ends,
-            "raw": raw, "text": text,
-        }, scope, 8.0)
-        self.assertEqual([row["tokenCount"] for row in trace[:8]], list(range(1, 9)))
-        self.assertEqual(trace[0]["prefixText"], "one")
-        self.assertEqual(trace[7]["prefixText"], text)
-        self.assertTrue(all(row["usesWordsAfterThisSecond"] is False for row in trace))
-        self.assertEqual(features[1][0], 1.0)
-        self.assertEqual(features[8][0], 8.0)
-
-    def test_curve_stops_at_supplied_text_and_has_full_20_second_support(self):
+    def test_scope_never_truncates_and_labels_empirical_forecast_limit(self):
         model = {
-            "predictionTimesSeconds": list(range(21)),
-            "families": {
-                "entryIndexed": {
-                    "timeZeroMean": 100.0,
-                    "temporalModels": [scalar_row(second) for second in range(1, 21)],
-                    "residualP10": [0.0] * 21,
-                    "residualP90": [0.0] * 21,
-                }
-            },
-        }
-        features = {second: np.asarray([second, 1.0], np.float32) for second in range(1, 21)}
-        short = _typed_curve_payload(features, model, 7.5)["entryIndexed"]
-        full = _typed_curve_payload(features, model, 20.0)["entryIndexed"]
-        self.assertEqual(short["timesSeconds"][-1], 7.5)
-        self.assertEqual(len(full["timesSeconds"]), 21)
-        self.assertEqual(full["timesSeconds"][-1], 20.0)
-        self.assertTrue(full["causalPrefixOnly"])
-
-    def test_duration_scope_is_explicit_and_never_forecasts_missing_words(self):
-        model = {
-            "analysisHorizonSeconds": 20.0,
+            "analysisHorizonSeconds": 94.0,
             "support": {
-                "medianWordsPerSecond": 4.0,
-                "measuredWordsPerSecondP10": 3.0,
-                "measuredWordsPerSecondP90": 5.0,
+                "meanWordsPerSecond": 4.0,
+                "speakingRateSourceCount": 208,
+                "semanticModelHorizonSeconds": 94.0,
             },
         }
-        scope = _prediction_text_scope(" ".join(f"w{i}" for i in range(100)), model, 25.0)
-        self.assertEqual(scope["estimatedSpokenSeconds"], 20.0)
-        self.assertTrue(scope["inputWasLongerThan20Seconds"])
-        self.assertIsNotNone(scope["excludedAfter20Seconds"])
-        self.assertLess(scope["analyzedLexicalTokens"], scope["inputLexicalTokens"])
+        text = " ".join(f"word{index}" for index in range(500))
+        scope = _variable_prediction_scope(text, model, None)
+        self.assertEqual(scope["analyzedText"], text)
+        self.assertFalse(scope["inputWasTruncated"])
+        self.assertEqual(scope["analyzedLexicalTokens"], 500)
+        self.assertEqual(scope["structuralDurationSeconds"], 125.0)
+        self.assertEqual(scope["forecastDurationSeconds"], 94.0)
+        self.assertTrue(scope["structurallyUncapped"])
+        self.assertIn("risk set", scope["forecastStopReason"])
 
-    def test_default_timing_uses_the_source_level_mean_and_accepts_one_word(self):
+    def test_one_word_uses_measured_mean_rate_without_duration_input(self):
         model = {
-            "analysisHorizonSeconds": 20.0,
             "support": {
                 "meanWordsPerSecond": 5.0,
-                "medianWordsPerSecond": 4.0,
-                "measuredWordsPerSecondP10": 3.0,
-                "measuredWordsPerSecondP90": 6.0,
                 "speakingRateSourceCount": 208,
+                "semanticModelHorizonSeconds": 94.0,
             },
         }
-        scope = _prediction_text_scope(
-            "one two three four five six seven eight nine ten", model,
-        )
-        self.assertEqual(scope["wordsPerSecond"], 5.0)
-        self.assertEqual(scope["estimatedSpokenSeconds"], 2.0)
-        self.assertEqual(scope["modelTimingSupport"]["sourceVideos"], 208)
-        self.assertIn("mean source-level speaking rate", scope["timingSource"])
-        single = _prediction_text_scope("word", model)
-        self.assertAlmostEqual(single["estimatedSpokenSeconds"], 0.2)
-        self.assertEqual(single["analyzedLexicalTokens"], 1)
+        scope = _variable_prediction_scope("word", model, None)
+        self.assertAlmostEqual(scope["estimatedSpokenSeconds"], 0.2)
+        self.assertIn("208 source videos", scope["timingSource"])
 
-    def test_single_token_has_one_exact_cover_component_without_a_boundary(self):
-        tokens = tokenize("word")
-        primitives = {
-            "text": "word",
-            "tokens": tokens,
-            "starts": np.asarray([0], int),
-            "ends": np.asarray([1], int),
-            "raw": np.asarray([[1.0, 0.0]], np.float32),
-            "lexical": np.asarray([True]),
-        }
-        cluster = {
-            "mean": [0.0] * 4,
-            "inverseCovariance": np.eye(4).tolist(),
-            "logDeterminant": 0.0,
-            "prior": 0.25,
-        }
-        model = {
-            "categoryTransform": {
-                "pcaMean": [0.0, 0.0],
-                "pcaComponents": [
-                    [1.0, 0.0], [0.0, 1.0],
-                    [0.0, 0.0], [0.0, 0.0],
-                ],
-                "whiteningScale": [1.0] * 4,
-            },
-            "categoryModel": {"clusters": [dict(cluster) for _ in range(4)]},
-            "browseProjection": {
-                "basis4x2": [
-                    [1.0, 0.0], [0.0, 1.0],
-                    [0.0, 0.0], [0.0, 0.0],
-                ],
-            },
-            "boundaryModel": {},
-            "partitionCalibration": {"scoreGapsSorted": [0.0]},
-        }
-        result = decode_partition(primitives, model)
-        self.assertEqual(result["componentCount"], 1)
-        self.assertEqual(result["owners"].tolist(), [0])
-        self.assertEqual(result["chunks"][0]["text"], "word")
-        self.assertEqual(result["boundaryProbabilities"], [])
-        self.assertTrue(result["degenerateSingleTokenCover"])
-        self.assertFalse(result["scoreGapCalibrationEligible"])
+    def test_token_clock_assigns_every_lexical_token_once_in_order(self):
+        tokens = tokenize("one, two three")
+        clock = _typed_token_clock(tokens, 3.0)
+        lexical = [row for row in clock if row["lexical"]]
+        self.assertEqual(len(lexical), 3)
+        self.assertEqual([row["startSeconds"] for row in lexical], [0.0, 1.0, 2.0])
+        self.assertEqual([row["endSeconds"] for row in lexical], [1.0, 2.0, 3.0])
+        self.assertTrue(all(left["endSeconds"] <= right["startSeconds"]
+                            for left, right in zip(lexical, lexical[1:])))
 
-    def test_fractional_endpoint_uses_its_own_completed_prefix(self):
-        text = "one two three four five six seven eight"
-        tokens = tokenize(text)
-        spans = all_spans(len(tokens))
-        starts = np.asarray([span.start for span in spans], int)
-        ends = np.asarray([span.end for span in spans], int)
-        raw = np.asarray([
-            [float(span.end), float(span.end - span.start)] for span in spans
-        ], np.float32)
-        features, trace = _typed_prefix_features({
-            "tokens": tokens, "starts": starts, "ends": ends,
-            "raw": raw, "text": text,
-        }, {
-            "plannedSpokenSeconds": 8.0, "wordsPerSecond": 1.0,
-            "timingSource": "test clock",
-        }, 7.5)
-        endpoint = next(row for row in trace if row["second"] == 7.5)
-        self.assertEqual(endpoint["tokenCount"], 8)
-        self.assertEqual(endpoint["prefixText"], text)
-        self.assertIn(7.5, features)
+    def test_failed_promotion_serves_baseline_and_keeps_candidate_visible(self):
+        family = {
+            "timeZeroMean": 100.0,
+            "temporalModels": [temporal_row(second) for second in range(1, 4)],
+            "stageOrder": list(STAGES),
+            "selectedStage": "baseline",
+            "candidateStage": "relationships",
+            "promotion": {"promoted": False},
+        }
+        features = {
+            float(second): {stage: np.asarray([1.0, 0.0], np.float32)
+                            for stage in STAGES}
+            for second in range(1, 4)
+        }
+        curve = _variable_curve_payload(
+            features, {"analysisHorizonSeconds": 3.0,
+                       "families": {"entryIndexed": family}}, 3.0,
+        )["entryIndexed"]
+        self.assertEqual(curve["selectedStage"], "baseline")
+        self.assertEqual(curve["predicted"], [100.0, 99.0, 98.0, 97.0])
+        self.assertNotEqual(curve["stages"]["relationships"], curve["predicted"])
 
-    def test_temporal_attribution_accounts_for_every_transition(self):
+    def test_temporal_attribution_applies_only_selected_stage(self):
         curve = {
             "timesSeconds": [0.0, 1.0, 2.0],
-            "predicted": [100.0, 90.0, 85.0],
+            "predicted": [100.0, 92.0, 87.0],
             "actual": [100.0, 88.0, 83.0],
+            "selectedStage": "baseline",
+            "candidateStage": "relationships",
             "stages": {
                 "baseline": [100.0, 92.0, 87.0],
-                "semanticPrefix": [100.0, 90.0, 85.0],
+                "timing": [100.0, 91.0, 86.0],
+                "semantic": [100.0, 90.0, 85.0],
+                "components": [100.0, 89.0, 84.0],
+                "relationships": [100.0, 88.0, 83.0],
             },
         }
         trace = [
@@ -218,13 +147,13 @@ print(score_hook.PREDICTOR_VERSION)
              "text": "three four", "category": 1},
         ]
         result = temporal_attribution(curve, trace, components)
-        self.assertEqual(len(result["steps"]), 2)
-        self.assertEqual(result["steps"][1]["enteredText"], "three four")
-        self.assertAlmostEqual(
-            sum(row["predictedDeltaPoints"] for row in result["componentLedger"]),
-            result["summary"]["totalPredictedDeltaPoints"],
+        self.assertEqual(result["selectedStage"], "baseline")
+        self.assertTrue(all(step["channelDeltaPoints"]["relationships"] == 0.0
+                            for step in result["steps"]))
+        self.assertNotEqual(
+            result["summary"]["candidateTotalChannelDeltaPoints"]["relationships"],
+            0.0,
         )
-        self.assertFalse(result["steps"][0]["allocationIsCounterfactual"])
 
 
 if __name__ == "__main__":

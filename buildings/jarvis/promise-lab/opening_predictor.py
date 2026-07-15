@@ -14,8 +14,8 @@ import numpy as np
 from hook_score_core import apply_linear_model, row_unit
 
 
-FEATURE_VERSION = "opening-retention-features-v2"
-PREDICTOR_VERSION = "opening-retention-predictor-v2"
+FEATURE_VERSION = "opening-retention-features-v3-variable-context"
+PREDICTOR_VERSION = "opening-retention-predictor-v3-variable-context"
 CATEGORY_COUNT = 4
 EPS = 1e-9
 
@@ -180,6 +180,157 @@ def build_feature_stages(full: np.ndarray, raw: np.ndarray, influence: np.ndarra
     }
 
 
+def build_causal_sequence_feature_stages(
+        prefix_vector: np.ndarray, components: list[dict], second: float,
+        completed_token_count: int, words_per_second: float) -> dict[str, np.ndarray]:
+    """Build the shared variable-horizon feature ladder from prior viewer context.
+
+    ``components`` must contain only components whose boundary evidence was
+    available by ``second``.  The function never consumes a future component,
+    an external idea prompt, or an outcome.  Category geometry stays in the
+    frozen four-dimensional space, which keeps variable-horizon training compact.
+    """
+    second = max(0.0, float(second))
+    completed_token_count = max(0, int(completed_token_count))
+    words_per_second = max(EPS, float(words_per_second))
+    ordered = sorted(
+        components,
+        key=lambda row: (
+            int(row.get("startToken", row.get("start", 0))),
+            int(row.get("endToken", row.get("end", 0))),
+            int(row.get("index", 0)),
+        ),
+    )
+    timing = np.asarray([
+        second,
+        math.sqrt(second),
+        math.log1p(second),
+        float(completed_token_count),
+        math.sqrt(float(completed_token_count)),
+        math.log1p(float(completed_token_count)),
+        float(completed_token_count) / max(second, 1.0),
+        words_per_second,
+    ], np.float32)
+    semantic = row_unit(np.asarray(prefix_vector, np.float32))
+
+    counts = np.zeros(CATEGORY_COUNT, np.float32)
+    token_mass = np.zeros(CATEGORY_COUNT, np.float32)
+    confidence_sum = np.zeros(CATEGORY_COUNT, np.float32)
+    coordinate_sum = np.zeros((CATEGORY_COUNT, CATEGORY_COUNT), np.float32)
+    coordinate_count = np.zeros(CATEGORY_COUNT, np.float32)
+    history_similarity_sum = np.zeros(CATEGORY_COUNT, np.float32)
+    history_similarity_count = np.zeros(CATEGORY_COUNT, np.float32)
+    predecessor_similarity_sum = np.zeros(CATEGORY_COUNT, np.float32)
+    predecessor_similarity_count = np.zeros(CATEGORY_COUNT, np.float32)
+    transitions = np.zeros((CATEGORY_COUNT, CATEGORY_COUNT), np.float32)
+    transition_similarity = np.zeros_like(transitions)
+    transition_count = np.zeros_like(transitions)
+    categories = []
+    for position, component in enumerate(ordered):
+        category = int(component.get("category", -1))
+        if category < 0 or category >= CATEGORY_COUNT:
+            raise ValueError(f"component category is outside 0..3: {category}")
+        start = int(component.get("startToken", component.get("start", 0)))
+        end = int(component.get("endToken", component.get("end", start + 1)))
+        length = max(1, end - start)
+        counts[category] += 1.0
+        token_mass[category] += float(length)
+        confidence_sum[category] += float(component.get("categoryProbability") or 0.0)
+        coordinates = np.asarray(
+            component.get("categoryCoordinates4D") or np.zeros(CATEGORY_COUNT),
+            np.float32,
+        ).reshape(-1)
+        if len(coordinates) != CATEGORY_COUNT:
+            raise ValueError("component category coordinates are not four-dimensional")
+        coordinate_sum[category] += coordinates
+        coordinate_count[category] += 1.0
+        context = component.get("viewerContext") or {}
+        history_similarity = context.get("historySemanticSimilarity")
+        if history_similarity is not None and math.isfinite(float(history_similarity)):
+            history_similarity_sum[category] += float(history_similarity)
+            history_similarity_count[category] += 1.0
+        predecessor_similarity = context.get("predecessorSemanticSimilarity")
+        if predecessor_similarity is not None and math.isfinite(float(predecessor_similarity)):
+            predecessor_similarity_sum[category] += float(predecessor_similarity)
+            predecessor_similarity_count[category] += 1.0
+        if position:
+            previous = categories[-1]
+            transitions[previous, category] += 1.0
+            transition_count[previous, category] += 1.0
+            if predecessor_similarity is not None:
+                transition_similarity[previous, category] += float(predecessor_similarity)
+        categories.append(category)
+
+    nonzero = coordinate_count > 0
+    coordinate_mean = np.zeros_like(coordinate_sum)
+    coordinate_mean[nonzero] = (
+        coordinate_sum[nonzero] / coordinate_count[nonzero, None]
+    )
+    confidence_mean = np.divide(
+        confidence_sum, counts, out=np.zeros_like(confidence_sum), where=counts > 0,
+    )
+    history_similarity_mean = np.divide(
+        history_similarity_sum, history_similarity_count,
+        out=np.zeros_like(history_similarity_sum), where=history_similarity_count > 0,
+    )
+    predecessor_similarity_mean = np.divide(
+        predecessor_similarity_sum, predecessor_similarity_count,
+        out=np.zeros_like(predecessor_similarity_sum),
+        where=predecessor_similarity_count > 0,
+    )
+    transition_similarity = np.divide(
+        transition_similarity, transition_count,
+        out=np.zeros_like(transition_similarity), where=transition_count > 0,
+    )
+    first = np.zeros(CATEGORY_COUNT, np.float32)
+    last = np.zeros(CATEGORY_COUNT, np.float32)
+    if categories:
+        first[categories[0]] = 1.0
+        last[categories[-1]] = 1.0
+    probabilities = counts / max(1.0, float(counts.sum()))
+    valid_probabilities = probabilities[probabilities > 0]
+    entropy = (
+        -float(np.sum(valid_probabilities * np.log(valid_probabilities)))
+        / math.log(CATEGORY_COUNT)
+        if len(valid_probabilities) else 0.0
+    )
+    run_count = (
+        1 + int(np.sum(np.asarray(categories[1:]) != np.asarray(categories[:-1])))
+        if categories else 0
+    )
+    component_structure = np.concatenate([
+        counts / max(1.0, float(counts.sum())),
+        token_mass / max(1.0, float(completed_token_count)),
+        confidence_mean,
+        coordinate_mean.reshape(-1),
+        history_similarity_mean,
+        predecessor_similarity_mean,
+        first,
+        last,
+        np.asarray([
+            len(ordered) / max(1.0, float(completed_token_count)),
+            float(token_mass.sum()) / max(1.0, float(completed_token_count)),
+        ], np.float32),
+    ])
+    sequence = np.concatenate([
+        transitions.reshape(-1),
+        transition_similarity.reshape(-1),
+        np.asarray([
+            run_count / max(1, len(categories)),
+            entropy,
+            float(len(categories) > 0),
+        ], np.float32),
+    ])
+    return {
+        "timing": _join_blocks([timing]),
+        "semantic": _join_blocks([timing, semantic]),
+        "components": _join_blocks([timing, semantic, component_structure]),
+        "relationships": _join_blocks([
+            timing, semantic, component_structure, sequence,
+        ]),
+    }
+
+
 def apply_curve_stage(feature: np.ndarray, model: dict) -> np.ndarray:
     return np.asarray(apply_linear_model(np.asarray(feature, np.float32), model)[0], np.float32)
 
@@ -264,6 +415,21 @@ def temporal_attribution(curve: dict, prefix_trace: list[dict],
     stages = curve.get("stages") or {}
     baseline_value = stages.get("baseline")
     baseline = np.asarray([] if baseline_value is None else baseline_value, float)
+    stage_order = ["baseline", "timing", "semantic", "components", "relationships"]
+    stage_arrays = {"baseline": baseline}
+    for name in stage_order[1:]:
+        value = stages.get(name)
+        if value is not None and len(value) == len(times):
+            stage_arrays[name] = np.asarray(value, float)
+    if "semantic" not in stage_arrays and stages.get("semanticPrefix") is not None:
+        value = np.asarray(stages["semanticPrefix"], float)
+        if len(value) == len(times):
+            stage_arrays["semantic"] = value
+    modern_stage_ladder = all(name in stage_arrays for name in stage_order)
+    selected_stage = str(curve.get("selectedStage") or "relationships")
+    candidate_stage = str(curve.get("candidateStage") or "relationships")
+    if selected_stage not in stage_order:
+        raise ValueError(f"unknown selected temporal stage: {selected_stage}")
     actual_values = curve.get("actual")
     actual = (
         np.asarray(actual_values, float)
@@ -299,6 +465,9 @@ def temporal_attribution(curve: dict, prefix_trace: list[dict],
             "predictedDropPoints": 0.0,
             "baselineDeltaPoints": 0.0,
             "semanticShapeDeltaPoints": 0.0,
+            "channelDeltaPoints": {
+                name: 0.0 for name in stage_order
+            },
             "observedDeltaPoints": 0.0 if actual is not None else None,
             "allocationRole": "token-overlap accounting; not a deletion counterfactual",
         }
@@ -327,6 +496,35 @@ def temporal_attribution(curve: dict, prefix_trace: list[dict],
         predicted_delta = float(predicted[step_index] - predicted[step_index - 1])
         baseline_delta = float(baseline[step_index] - baseline[step_index - 1])
         semantic_delta = float(predicted_delta - baseline_delta)
+        if modern_stage_ladder:
+            candidate_channel_delta = {"baseline": baseline_delta}
+            for previous_name, name in zip(stage_order, stage_order[1:]):
+                previous = stage_arrays[previous_name]
+                current = stage_arrays[name]
+                candidate_channel_delta[name] = float(
+                    (current[step_index] - previous[step_index])
+                    - (current[step_index - 1] - previous[step_index - 1])
+                )
+            selected_index = stage_order.index(selected_stage)
+            channel_delta = {
+                name: (
+                    candidate_channel_delta[name]
+                    if index <= selected_index else 0.0
+                )
+                for index, name in enumerate(stage_order)
+            }
+            channel_total = float(sum(channel_delta.values()))
+            if not np.isclose(channel_total, predicted_delta, atol=1e-4):
+                raise ValueError("temporal stage-channel movements do not reconstruct prediction")
+        else:
+            candidate_channel_delta = None
+            channel_delta = {
+                "baseline": baseline_delta,
+                "timing": 0.0,
+                "semantic": semantic_delta,
+                "components": 0.0,
+                "relationships": 0.0,
+            }
         observed_delta = (
             float(actual[step_index] - actual[step_index - 1])
             if actual is not None else None
@@ -351,6 +549,10 @@ def temporal_attribution(curve: dict, prefix_trace: list[dict],
                 "predictedDropPoints": float(-predicted_delta * weight),
                 "baselineDeltaPoints": float(baseline_delta * weight),
                 "semanticShapeDeltaPoints": float(semantic_delta * weight),
+                "channelDeltaPoints": {
+                    name: float(value * weight)
+                    for name, value in channel_delta.items()
+                },
                 "observedDeltaPoints": (
                     float(observed_delta * weight) if observed_delta is not None else None
                 ),
@@ -363,6 +565,10 @@ def temporal_attribution(curve: dict, prefix_trace: list[dict],
                 "baselineDeltaPoints", "semanticShapeDeltaPoints",
             ):
                 ledger[key] = float(ledger[key] + allocation[key])
+            for name, value in allocation["channelDeltaPoints"].items():
+                ledger["channelDeltaPoints"][name] = float(
+                    ledger["channelDeltaPoints"][name] + value
+                )
             if observed_delta is not None:
                 ledger["observedDeltaPoints"] = float(
                     ledger["observedDeltaPoints"] + allocation["observedDeltaPoints"]
@@ -392,6 +598,8 @@ def temporal_attribution(curve: dict, prefix_trace: list[dict],
             "predictedDropPoints": -predicted_delta,
             "baselineDeltaPoints": baseline_delta,
             "semanticShapeDeltaPoints": semantic_delta,
+            "channelDeltaPoints": channel_delta,
+            "candidateChannelDeltaPoints": candidate_channel_delta,
             "observedDeltaPoints": observed_delta,
             "startToken": start_token,
             "endToken": end_token,
@@ -411,9 +619,17 @@ def temporal_attribution(curve: dict, prefix_trace: list[dict],
     total_baseline_delta = float(baseline[-1] - baseline[0])
     total_observed_delta = float(actual[-1] - actual[0]) if actual is not None else None
     return {
-        "version": 1,
+        "version": 2,
         "method": "per-second causal-prefix transition ledger",
-        "headlineModel": "baseline(t) + semantic-prefix adjustment(t)",
+        "headlineModel": (
+            " + ".join(stage_order[:stage_order.index(selected_stage) + 1])
+            if modern_stage_ladder else
+            "baseline(t) + individualized-prefix adjustment(t)"
+        ),
+        "selectedStage": selected_stage,
+        "candidateStage": candidate_stage,
+        "channelOrder": stage_order,
+        "fullStageLadderAvailable": modern_stage_ladder,
         "claimBoundary": (
             "Every predicted transition is exact. Component allocation is exhaustive token-overlap "
             "accounting, not a causal deletion score. Candidate deletion effects are reported separately."
@@ -428,6 +644,19 @@ def temporal_attribution(curve: dict, prefix_trace: list[dict],
             "totalPredictedDropPoints": -total_predicted_delta,
             "totalBaselineDeltaPoints": total_baseline_delta,
             "totalSemanticShapeDeltaPoints": float(total_predicted_delta - total_baseline_delta),
+            "totalChannelDeltaPoints": {
+                name: float(sum(
+                    row["channelDeltaPoints"][name] for row in steps
+                ))
+                for name in stage_order
+            },
+            "candidateTotalChannelDeltaPoints": {
+                name: float(sum(
+                    (row.get("candidateChannelDeltaPoints") or row["channelDeltaPoints"])[name]
+                    for row in steps
+                ))
+                for name in stage_order
+            },
             "totalObservedDeltaPoints": total_observed_delta,
             "allocatedPrefixTransitionDeltaPoints": float(allocated_delta),
             "unassignedTimeModelDeltaPoints": float(time_only_delta),

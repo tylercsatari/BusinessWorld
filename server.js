@@ -1756,7 +1756,7 @@ const server = http.createServer(async (req, res) => {
             gemini,
             hasR2: !!process.env.R2_ACCESS_KEY_ID,
             gitCommit: process.env.RENDER_GIT_COMMIT || null,
-            promiseScorerServingContract: 'numpy-causal-temporal-v2',
+            promiseScorerServingContract: 'numpy-variable-horizon-four-cluster-v3',
         }));
         return;
     }
@@ -3879,26 +3879,25 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const promisePathname = pathname;
     if (promisePathname === '/api/shortsquant/promise-lab/manifest' && req.method === 'GET') {
         await serveR2Gz(req, res, 'shorts/promise-lab-v1/manifest.json', 30e3,
-            { version: 9, productVersion: 'shorts-promise-lab-v5', status: 'building', counts: {}, artifacts: {} });
+            { version: 10, productVersion: 'shorts-promise-lab-v6-variable-horizon', status: 'building', counts: {}, artifacts: {} });
         return;
     }
     if (promisePathname === '/api/shortsquant/promise-lab/progress' && req.method === 'GET') {
         await serveR2Gz(req, res, 'shorts/promise-lab-v1/progress.json', 5e3,
-            { version: 9, productVersion: 'shorts-promise-lab-v5', status: 'building', stage: 'waiting for first product artifact' });
+            { version: 10, productVersion: 'shorts-promise-lab-v6-variable-horizon', status: 'building', stage: 'waiting for first product artifact' });
         return;
     }
     const promiseArtifacts = {
-        'opening-20s': 'opening-20s.json.gz',
         'opening-predictions': 'opening-predictions.json.gz',
         'manual-projection': 'manual-projection.json.gz',
         'canonical-partitions': 'canonical-partitions.json.gz',
     };
-    const promiseArtifact = promisePathname.match(/^\/api\/shortsquant\/promise-lab\/(opening-20s|opening-predictions|manual-projection|canonical-partitions)$/);
+    const promiseArtifact = promisePathname.match(/^\/api\/shortsquant\/promise-lab\/(opening-predictions|manual-projection|canonical-partitions)$/);
     if (promiseArtifact && req.method === 'GET') {
-        const cacheControl = ['opening-20s', 'opening-predictions'].includes(promiseArtifact[1])
+        const cacheControl = promiseArtifact[1] === 'opening-predictions'
             ? 'private, no-cache'
             : undefined;
-        if (['opening-20s', 'opening-predictions'].includes(promiseArtifact[1])) {
+        if (promiseArtifact[1] === 'opening-predictions') {
             const local = path.join(
                 DIR, 'buildings', 'jarvis', 'promise-lab', '.cache',
                 `${promiseArtifact[1]}.json`,
@@ -3919,28 +3918,6 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     if (promisePathname === '/api/shortsquant/promise-lab/hook-score' && req.method === 'POST') {
         await handlePromiseHookScore(req, res);
-        return;
-    }
-    const promiseOpening20s = promisePathname.match(/^\/api\/shortsquant\/promise-lab\/opening-20s\/([\w-]+)$/);
-    if (promiseOpening20s && req.method === 'GET') {
-        const local = path.join(DIR, 'buildings', 'jarvis', 'promise-lab', '.cache', 'opening-20s', `${promiseOpening20s[1]}.json.gz`);
-        if (fs.existsSync(local)) {
-            res.writeHead(200, {
-                'Content-Type': 'application/json; charset=utf-8',
-                'Content-Encoding': 'gzip',
-                'Cache-Control': 'private, max-age=300',
-                'Vary': 'Accept-Encoding',
-            });
-            fs.createReadStream(local).pipe(res);
-            return;
-        }
-        const ok = await serveR2GzipJsonStream(res,
-            `shorts/promise-lab-v1/opening-20s/${promiseOpening20s[1]}.json.gz`,
-            'private, max-age=300');
-        if (!ok) {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end('{"error":"20-second opening artifact is not built"}');
-        }
         return;
     }
     const promiseOpeningPrediction = promisePathname.match(

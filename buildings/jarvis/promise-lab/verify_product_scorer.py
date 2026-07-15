@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Canary that typed and saved openings share the current causal contract."""
+"""Canary that typed and saved sequences share the variable-horizon contract."""
 
 from __future__ import annotations
 
+import builtins
 import gzip
 import json
 import subprocess
@@ -14,6 +15,7 @@ from score_hook import score_text
 
 HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
+CHANNELS = {"baseline", "timing", "semantic", "components", "relationships"}
 
 
 def read(name: str) -> dict:
@@ -35,68 +37,97 @@ def exact_cover(payload: dict) -> bool:
     return owners == [1] * len(owners)
 
 
+def verify_attribution(payload: dict) -> None:
+    attribution = payload["temporalAttribution"]
+    assert attribution["fullStageLadderAvailable"] is True
+    assert set(attribution["channelOrder"]) == CHANNELS
+    assert len(attribution["steps"]) == len(attribution["timesSeconds"]) - 1
+    assert len(attribution["componentLedger"]) == payload["componentCount"]
+    for step in attribution["steps"]:
+        assert set(step["channelDeltaPoints"]) == CHANNELS
+        assert abs(
+            sum(step["channelDeltaPoints"].values())
+            - step["predictedDeltaPoints"]
+        ) < 1e-4
+    assert abs(
+        sum(row["predictedDeltaPoints"]
+            for row in attribution["componentLedger"])
+        + attribution["summary"]["unassignedTimeModelDeltaPoints"]
+        - attribution["summary"]["totalPredictedDeltaPoints"]
+    ) < 1e-4
+
+
 def main() -> None:
     summary = read("opening-predictions.json")
     source = min(summary["rows"], key=lambda row: (int(row["tokenCount"]), row["videoId"]))
     saved = read_gzip(
         CACHE / "opening-predictions" / f"{source['videoId']}.json.gz"
     )
-    typed = score_text(saved["text"], planned_duration_seconds=20.0)
+    typed = score_text(
+        saved["text"], planned_duration_seconds=saved["analysisHorizonSeconds"],
+    )
     automatic = score_text(saved["text"])
 
     assert typed["predictorVersion"] == saved["predictorVersion"]
     assert typed["featureVersion"] == saved["featureVersion"]
-    assert typed["sourceKind"] == "typed-opening-causal-full-fit"
-    assert saved["sourceKind"] == "saved-opening-20s-causal-oof"
-    assert typed["analysisHorizonSeconds"] == saved["analysisHorizonSeconds"] == 20.0
-    assert typed["predictionTimesSeconds"] == saved["predictionTimesSeconds"] == list(range(21))
+    assert typed["sourceKind"] == "typed-variable-horizon-four-cluster-full-fit"
+    assert saved["sourceKind"] == "saved-full-sequence-variable-horizon-oof"
+    assert typed["analysisHorizonSeconds"] == saved["analysisHorizonSeconds"]
+    assert typed["forecastHorizonSeconds"] <= typed["analysisHorizonSeconds"]
+    assert saved["forecastHorizonSeconds"] <= saved["analysisHorizonSeconds"]
     assert exact_cover(typed) and exact_cover(saved)
     assert typed["componentCount"] == saved["componentCount"]
     assert [row["text"] for row in typed["components"]] == [
         row["text"] for row in saved["components"]
     ]
-    assert typed["provenance"]["futureWordsUsedForEarlierPredictions"] is False
-    assert typed["provenance"]["sameTemporalModelFamilyAsSavedLibrary"] is True
-    assert typed["outputs"]["viewsDiagnostic"]["status"] == "withheld"
-    assert saved["outputs"]["viewsDiagnostic"]["status"] == "withheld"
+    assert [row["category"] for row in typed["components"]] == [
+        row["category"] for row in saved["components"]
+    ]
     for payload in (typed, saved):
-        attribution = payload["temporalAttribution"]
-        assert len(attribution["steps"]) == len(
-            payload["curves"]["entryIndexed"]["timesSeconds"]
-        ) - 1
-        assert len(attribution["componentLedger"]) == payload["componentCount"]
-        assert abs(
-            sum(row["predictedDeltaPoints"]
-                for row in attribution["componentLedger"])
-            + attribution["summary"]["unassignedTimeModelDeltaPoints"]
-            - attribution["summary"]["totalPredictedDeltaPoints"]
-        ) < 1e-4
-        nodes = {
-            row["id"]: row
-            for row in (payload.get("componentLattice") or {}).get("nodes", [])
-        }
-        if payload is saved:
-            nodes = {}
-        for component in payload["components"]:
+        assert payload["provenance"]["futureWordsUsedForEarlierPredictions"] is False
+        assert payload["provenance"]["sameTemporalModelFamilyAsSavedLibrary"] is True
+        assert payload["provenance"]["externalIdeaContextUsed"] is False
+        assert payload["support"]["structurallyUncapped"] is True
+        assert payload["support"]["servedForecastThroughSeconds"] == payload[
+            "forecastHorizonSeconds"
+        ]
+        assert len(payload["relationships"]) == max(0, payload["componentCount"] - 1)
+        assert payload["orderSensitivity"]["status"] == "complete"
+        assert "model sensitivity" in payload["orderSensitivity"]["claimBoundary"]
+        verify_attribution(payload)
+        for index, component in enumerate(payload["components"]):
+            assert component["index"] == index
             assert len(component["categoryDistribution"]) == 4
             assert len(component["categoryCoordinates4D"]) == 4
-            assert component["mapX"] is not None and component["mapY"] is not None
-            assert component["timelineAttribution"] == attribution["componentLedger"][
-                component["index"]
-            ]
-            if nodes:
-                node = nodes[component["nodeId"]]
-                assert node["text"] == component["text"]
-                assert node["representations"] and node["relations"]
+            assert component["timelineAttribution"] == payload[
+                "temporalAttribution"
+            ]["componentLedger"][index]
+            assert component["outcomePlane"] is not None
+            assert set(component["outcomePlanesByLag"]) == {
+                str(value) for value in range(6)
+            }
+            assert component["viewerContext"]["componentsPreviouslyDelivered"] == index
+            assert component["viewerContext"]["usesFutureComponents"] is False
+
+    assert typed["componentLattice"]["globalAllSpanRowsMaterialized"] is False
+    assert typed["provenance"]["syntheticOrderChangesAreCausalClaims"] is False
+    assert typed["temporalAttribution"]["selectedStage"] in {"baseline", "relationships"}
+    assert saved["temporalAttribution"]["selectedStage"] in {"baseline", "relationships"}
+    diagnostic = typed["outputs"].get("viewsDiagnostic")
+    if diagnostic:
+        assert diagnostic["status"] == "diagnostic only"
+        assert diagnostic["promoted"] is False
     for row in typed["causalPrefixTrace"]:
         assert int(row["tokenCount"]) <= int(typed["tokenCount"])
 
     mean_rate = float(automatic["input"]["wordsPerSecond"])
     assert automatic["input"]["plannedSpokenSeconds"] is None
     assert automatic["input"]["timingEstimated"] is True
-    assert mean_rate == float(automatic["input"]["modelTimingSupport"]["meanWordsPerSecond"])
-    assert automatic["input"]["modelTimingSupport"]["sourceVideos"] == 208
-    assert "mean source-level speaking rate" in automatic["input"]["timingSource"]
+    assert automatic["input"]["inputWasTruncated"] is False
+    assert automatic["input"]["structurallyUncapped"] is True
+    assert "mean speaking rate across 208 source videos" in automatic["input"][
+        "timingSource"
+    ]
     assert exact_cover(automatic)
 
     code = """
@@ -120,15 +151,14 @@ print(score_hook.PREDICTOR_VERSION)
         "status": "verified",
         "videoId": source["videoId"],
         "predictorVersion": typed["predictorVersion"],
-        "points": len(typed["predictionTimesSeconds"]),
+        "typedForecastPoints": len(typed["predictionTimesSeconds"]),
         "components": typed["componentCount"],
-        "samePartition": True,
+        "sameExactCoverAndCategories": True,
         "sharedTemporalAttribution": True,
-        "typedComponentsLinkedToLattice": True,
         "futureWordsUsedForEarlierPredictions": False,
         "automaticTimingWordsPerSecond": mean_rate,
         "automaticTimingSourceVideos": 208,
-        "views": "withheld",
+        "views": "diagnostic only",
         "servingImportsSklearn": False,
     }, indent=2))
 
