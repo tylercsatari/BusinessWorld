@@ -106,7 +106,8 @@ class ProductVisualizationContractTests(unittest.TestCase):
             "attribution", "component-map", "component-response",
             "contributions", "relationships", "validation", "saved-map",
             "risk-set", "outcome-plane", "pooled-mean", "pooled-accuracy",
-            "pooled-scatter",
+            "pooled-scatter", "pooled-candidate-horizon",
+            "pooled-candidate-leakage",
         }.issubset(emitted))
 
     def test_pooled_scope_uses_same_renderer_and_shows_prediction_accuracy(self):
@@ -115,11 +116,16 @@ class ProductVisualizationContractTests(unittest.TestCase):
         self.assertIn("?scope=${encodeURIComponent(state.scope)}", self.ui)
         self.assertIn("Frozen prediction beside measured retention", self.ui)
         self.assertIn("Frozen prediction accuracy against actual retention", self.ui)
-        self.assertIn("strict unique external videos", self.ui)
+        self.assertIn("strict external content components", self.ui)
         self.assertIn("SEALED BLIND VALIDATION", self.ui)
+        self.assertIn("content-component vote", self.ui)
         self.assertIn("ACCOUNT-BY-ACCOUNT BLIND TRANSPORT", self.ui)
         self.assertIn("strictBlindAccountBalanced", self.ui)
-        self.assertIn("candidate did not beat the selected baseline", self.ui)
+        self.assertIn("BLIND CANDIDATE SKILL · DIAGNOSTIC ONLY", self.ui)
+        self.assertIn("EQUAL-ACCOUNT CANDIDATE IMPROVEMENT BY HORIZON", self.ui)
+        self.assertIn("NEAR-DUPLICATE POLICY SENSITIVITY", self.ui)
+        self.assertIn("pairedImprovementSignFlipHolmAdjustedP", self.ui)
+        self.assertIn("candidate has no confirmed positive blind skill", self.ui)
         self.assertIn("noDiscrimination", self.ui)
         self.assertIn("row.strictBlindEligible === true", self.ui)
         self.assertIn("blindEvaluationRole", self.ui)

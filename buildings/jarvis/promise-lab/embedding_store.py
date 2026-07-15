@@ -150,7 +150,8 @@ class EmbeddingStore:
         self.db.close()
 
     def count(self) -> int:
-        return int(self.db.execute("SELECT COUNT(*) FROM vectors").fetchone()[0])
+        with self._lock:
+            return int(self.db.execute("SELECT COUNT(*) FROM vectors").fetchone()[0])
 
     def delete_texts(self, texts: list[str]) -> None:
         keys = [vector_key(str(text), self.model, self.dimensions) for text in set(texts)]
@@ -172,16 +173,20 @@ class EmbeddingStore:
     def _cached(self, texts: list[str]) -> dict[str, np.ndarray]:
         keys = [vector_key(text, self.model, self.dimensions) for text in texts]
         found: dict[str, np.ndarray] = {}
-        for offset in range(0, len(keys), 400):
-            chunk = keys[offset:offset + 400]
-            if not chunk:
-                continue
-            q = ",".join("?" for _ in chunk)
-            rows = self.db.execute(f"SELECT key, text, vector FROM vectors WHERE key IN ({q})", chunk).fetchall()
-            for _, text, blob in rows:
-                vec = np.frombuffer(blob, dtype=np.float32).copy()
-                if vec.size == self.dimensions:
-                    found[text] = vec
+        with self._lock:
+            for offset in range(0, len(keys), 400):
+                chunk = keys[offset:offset + 400]
+                if not chunk:
+                    continue
+                q = ",".join("?" for _ in chunk)
+                rows = self.db.execute(
+                    f"SELECT key, text, vector FROM vectors WHERE key IN ({q})",
+                    chunk,
+                ).fetchall()
+                for _, text, blob in rows:
+                    vec = np.frombuffer(blob, dtype=np.float32).copy()
+                    if vec.size == self.dimensions:
+                        found[text] = vec
         return found
 
     def _post_batch(self, texts: list[str]) -> list[np.ndarray]:

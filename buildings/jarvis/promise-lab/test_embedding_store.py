@@ -1,6 +1,11 @@
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from embedding_store import _retry_delay_seconds
+import numpy as np
+
+from embedding_store import EmbeddingStore, _retry_delay_seconds
 
 
 class FakeResponse:
@@ -32,6 +37,27 @@ class EmbeddingStoreRetryTest(unittest.TestCase):
     def test_fallback_is_bounded(self):
         response = FakeResponse()
         self.assertEqual(_retry_delay_seconds(response, 20), 60.0)
+
+    def test_parallel_cached_reads_share_the_connection_safely(self):
+        with TemporaryDirectory() as directory:
+            store = EmbeddingStore(
+                Path(directory) / "vectors.sqlite3", dimensions=4,
+            )
+            texts = [f"cached text {index}" for index in range(12)]
+            vectors = [np.full(4, index, np.float32) for index in range(12)]
+            store._save(texts, vectors)
+            try:
+                with ThreadPoolExecutor(max_workers=8) as pool:
+                    results = list(pool.map(
+                        lambda _: store.embed_many(texts), range(80),
+                    ))
+                self.assertTrue(all(len(result) == len(texts) for result in results))
+                self.assertTrue(all(
+                    np.array_equal(result[texts[7]], vectors[7])
+                    for result in results
+                ))
+            finally:
+                store.close()
 
 
 if __name__ == "__main__":

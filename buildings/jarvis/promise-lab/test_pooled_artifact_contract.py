@@ -76,8 +76,11 @@ class PooledArtifactContractTest(unittest.TestCase):
             "savedCohortPredictionsRemainSourceLevelOOF": True,
             "externalRowsUseFrozenFullFit": True,
             "blindPredictionManifestSealedBeforeOutcomeJoin": True,
+            "blindIsolationComputedAndSealedBeforeOutcomeJoin": True,
             "strictBlindMetricsExcludeExactTrainingContentOverlap": True,
-            "strictBlindMetricsCollapseExactExternalReposts": True,
+            "strictBlindMetricsExcludeNearTrainingContentOverlap": True,
+            "strictBlindMetricsWeightExactExternalRepostsAsOneComponent": True,
+            "strictBlindMetricsWeightNearExternalRepostsAsOneComponent": True,
         }
         for key, value in expected_provenance.items():
             self.assertEqual(self.summary["provenance"].get(key), value)
@@ -94,10 +97,13 @@ class PooledArtifactContractTest(unittest.TestCase):
         blind = self.blind
         summary_blind = self.summary["blindValidation"]
         self.assertEqual(blind["status"], "sealed-before-outcome-join")
+        self.assertEqual(blind["version"], 2)
+        self.assertTrue(blind["blindIsolationComputedBeforeOutcomeJoin"])
         self.assertEqual(blind["sources"], len(self.summary["rows"]))
         self.assertEqual(len(blind["entries"]), blind["sources"])
         self.assertFalse(blind["outcomeFieldsPresent"])
         self.assertTrue(blind["predictionInputsExcludeOutcomeFields"])
+        self.assertTrue(summary_blind["blindIsolationComputedBeforeOutcomeJoin"])
         self.assertTrue(blind["externalHoldoutIdsDisjoint"])
         self.assertEqual(
             blind["predictionManifestFingerprint"],
@@ -116,6 +122,8 @@ class PooledArtifactContractTest(unittest.TestCase):
             "comparisonsByFamily", "measurements",
             "observedSlopePercentagePointsPerSecond", "observedDeltaPoints",
             "totalObservedDeltaPoints", "fullObservedDurationSeconds",
+            "candidateComparisons", "candidateComparisonsByFamily",
+            "candidateAudit",
         }
 
         def assert_outcome_free(value, path="root"):
@@ -130,6 +138,8 @@ class PooledArtifactContractTest(unittest.TestCase):
         entries = {str(entry["videoId"]): entry for entry in blind["entries"]}
         for entry in entries.values():
             assert_outcome_free(entry)
+            self.assertIn("blindIsolationPrimary", entry)
+            self.assertIn("blindIsolationPolicies", entry)
         for video_id, entry in entries.items():
             detail = read_gzip_json(
                 CACHE / "pooled-opening-blind-predictions" / f"{video_id}.json.gz"
@@ -139,28 +149,76 @@ class PooledArtifactContractTest(unittest.TestCase):
                 prediction_fingerprint(detail), entry["predictionFingerprint"],
             )
 
-    def test_primary_blind_cohort_is_unique_and_training_overlap_free(self):
+    def test_primary_blind_cohort_is_component_weighted_and_training_overlap_free(self):
         validation = self.summary["blindValidation"]
         self.assertEqual(validation["nonDevelopmentVideos"], 428)
         self.assertEqual(validation["accountExternalVideos"], 425)
         self.assertEqual(validation["externalHoldoutVideos"], 425)
-        self.assertEqual(validation["strictBlindUniqueVideos"], 420)
-        self.assertEqual(validation["trainingContentOverlapExcluded"], 1)
-        self.assertEqual(validation["externalDuplicateGroupsCollapsed"], 4)
-        self.assertEqual(validation["externalDuplicateVideosCollapsed"], 4)
+        self.assertEqual(
+            validation["strictBlindEligibleVideos"]
+            + validation["trainingContentOverlapExcluded"]
+            + validation["identityUnverifiableVideos"],
+            validation["externalHoldoutVideos"],
+        )
+        self.assertEqual(
+            validation["strictBlindEligibleVideos"]
+            - validation["externalDuplicateVideosCollapsed"],
+            validation["strictBlindContentComponents"],
+        )
+        self.assertIn("Wdvnci3Ucpg", validation["exactTrainingContentOverlapVideoIds"])
+        self.assertTrue({"7fspdjqNvxQ", "UbuibdBqUVQ"} <= set(
+            validation["nearTrainingContentOverlapVideoIds"]
+        ))
+        self.assertGreater(validation["identityUnverifiableVideos"], 0)
+        self.assertGreater(validation["externalDuplicateGroupsCollapsed"], 0)
         roles = Counter(row["blindEvaluationRole"] for row in self.summary["rows"])
-        self.assertEqual(roles["strict-blind-primary"], 420)
-        self.assertEqual(roles["excluded-exact-training-content-overlap"], 1)
-        self.assertEqual(roles["collapsed-exact-external-repost"], 4)
+        self.assertEqual(
+            roles["strict-blind-primary"], validation["strictBlindEligibleVideos"],
+        )
+        self.assertEqual(
+            roles["excluded-exact-training-content-overlap"],
+            validation["exactTrainingContentOverlapExcluded"],
+        )
+        self.assertEqual(
+            roles["excluded-near-training-content-overlap"],
+            validation["nearTrainingContentOverlapExcluded"],
+        )
+        self.assertEqual(
+            roles["excluded-identity-unverifiable"],
+            validation["identityUnverifiableVideos"],
+        )
         self.assertEqual(roles["main-withheld-frozen-evaluation"], 3)
+
+        component_weights = {}
+        for row in self.summary["rows"]:
+            if not row.get("strictBlindEligible"):
+                continue
+            component_id = row.get("blindContentComponentId")
+            self.assertIsNotNone(component_id)
+            component_weights.setdefault(component_id, 0.0)
+            component_weights[component_id] += float(
+                row.get("blindContentComponentWeight") or 0.0
+            )
+        self.assertEqual(len(component_weights), validation["strictBlindContentComponents"])
+        for component_id, weight in component_weights.items():
+            self.assertAlmostEqual(weight, 1.0, msg=component_id)
 
     def test_strict_blind_metrics_report_uncertainty_and_account_transport(self):
         evaluation = self.summary["evaluation"]
         strict = evaluation["strictBlindExternal"]
-        self.assertEqual(strict["videos"], 420)
+        validation = self.summary["blindValidation"]
+        self.assertEqual(strict["videos"], validation["strictBlindEligibleVideos"])
+        self.assertEqual(
+            strict["contentComponents"], validation["strictBlindContentComponents"],
+        )
         for family_name, metrics in strict["families"].items():
             with self.subTest(family=family_name):
                 self.assertIsNotNone(metrics["sourceEqualCurveMAEConfidence95"])
+                self.assertEqual(
+                    metrics["contract"]["uncertaintyMethod"],
+                    "deterministic 2,000-resample bootstrap; sealed outcome-free "
+                    "content components are the resampling unit",
+                )
                 for horizon in ("5", "10", "20", "30"):
                     fixed = metrics["fixedHorizons"][horizon]
                     self.assertIsNotNone(fixed)
@@ -182,9 +240,19 @@ class PooledArtifactContractTest(unittest.TestCase):
                 family["macroSourceEqualCurveMAEPercentagePoints"],
             )
         diagnostic = evaluation["strictBlindCandidateVsBaseline"]
-        self.assertFalse(
-            diagnostic["families"]["entryIndexed"]["modelStageChanged"]
+        candidate = diagnostic["families"]["entryIndexed"]
+        self.assertFalse(candidate["modelStageChanged"])
+        self.assertEqual(
+            candidate["contentComponents"], validation["strictBlindContentComponents"],
         )
+        self.assertIn("equalAccountMacro", candidate)
+        for horizon in ("5", "10", "20", "30"):
+            fixed = candidate["fixedHorizons"][horizon]
+            self.assertIn("pairedImprovementSignFlipP", fixed)
+            self.assertIn("pairedImprovementSignFlipHolmAdjustedP", fixed)
+            self.assertIn(
+                "accountStratifiedPositivePearsonPermutationHolmAdjustedP", fixed,
+            )
 
     def test_every_row_has_comparable_prediction_and_actual(self):
         for row in self.summary["rows"]:

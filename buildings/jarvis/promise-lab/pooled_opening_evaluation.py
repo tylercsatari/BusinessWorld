@@ -13,6 +13,7 @@ import json
 import math
 import re
 from collections import defaultdict
+from functools import lru_cache
 
 import numpy as np
 
@@ -24,7 +25,9 @@ CAPTION_TIMING_SOURCE = (
     "YouTube source-media automatic caption word offsets; observed outcome "
     "curves are joined only after frozen inference"
 )
-EVALUATION_VERSION = "promise-pooled-external-evaluation-v3-sealed-blind"
+EVALUATION_VERSION = "promise-pooled-external-evaluation-v4-near-duplicate-audit"
+NEAR_DUPLICATE_TRIGRAM_JACCARD = 0.80
+NEAR_DUPLICATE_SENSITIVITY_THRESHOLDS = (0.70, 0.80, 0.90)
 
 
 def _finite(value) -> float | None:
@@ -223,11 +226,39 @@ def content_fingerprint(text: str) -> str | None:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
+def prediction_text(analysis: dict) -> str:
+    """Return the exact spoken text supplied to the frozen scorer."""
+    return normalize_source(
+        analysis.get("text")
+        or (analysis.get("input") or {}).get("analyzedText")
+        or (analysis.get("input") or {}).get("inputText")
+        or ""
+    )
+
+
+@lru_cache(maxsize=4096)
+def token_trigrams(text: str) -> frozenset[tuple[str, str, str]]:
+    tokens = re.findall(
+        r"[\w']+", normalize_source(text or "").casefold(), flags=re.UNICODE,
+    )
+    return frozenset(zip(tokens, tokens[1:], tokens[2:]))
+
+
+@lru_cache(maxsize=500000)
+def trigram_jaccard(left: frozenset, right: frozenset) -> tuple[float, int]:
+    if not left or not right:
+        return 0.0, 0
+    shared = len(left & right)
+    return shared / len(left | right), shared
+
+
 def outcome_blind_prediction(analysis: dict) -> dict:
     """Return the serving prediction with every joined outcome removed."""
     target_outcome_keys = {
         "actual", "predictionError", "observedCurves", "comparisons",
-        "comparisonsByFamily", "blindPredictionFingerprint",
+        "comparisonsByFamily", "candidateComparisons",
+        "candidateComparisonsByFamily", "candidateAudit",
+        "blindPredictionFingerprint",
         "blindEvaluationRole", "strictBlindEligible", "evaluationGenerationId",
         "measurements", "observedSlopePercentagePointsPerSecond",
         "observedDeltaPoints", "totalObservedDeltaPoints",
@@ -278,6 +309,17 @@ def blind_manifest_entry(analysis: dict) -> dict:
         ),
         "inputFingerprint": blind.get("pooledInputFingerprint"),
         "contentFingerprint": blind.get("contentFingerprint"),
+        "blindIsolationPrimary": blind.get("blindIsolationPrimary"),
+        "blindIsolationPolicies": blind.get("blindIsolationPolicies"),
+        "blindContentComponentId": blind.get("blindContentComponentId"),
+        "blindContentComponentSize": blind.get("blindContentComponentSize"),
+        "blindContentComponentWeight": blind.get("blindContentComponentWeight"),
+        "blindContentComponentMemberIndex": blind.get(
+            "blindContentComponentMemberIndex"
+        ),
+        "blindContentComponentMatchKind": blind.get(
+            "blindContentComponentMatchKind"
+        ),
         "predictionFingerprint": prediction_fingerprint(blind),
         "forecastHorizonSeconds": blind.get("forecastHorizonSeconds"),
         "curves": {
@@ -572,6 +614,46 @@ def compact_summary(detail: dict) -> dict:
         family_name: comparisons_for(family_name)
         for family_name in ("entryIndexed", "observedAbsolute")
     }
+
+    def candidate_comparisons_for(family_name: str) -> dict:
+        family = (detail.get("curves") or {}).get(family_name) or {}
+        times = family.get("timesSeconds") or []
+        actual = family.get("actual") or []
+        stages = family.get("stages") or {}
+        candidate_name = str(family.get("candidateStage") or "relationships")
+        candidate = stages.get(candidate_name) or []
+        baseline = stages.get("baseline") or []
+        comparisons = {}
+        for target in (5.0, 10.0, 20.0, 30.0):
+            index = next(
+                (position for position, second in enumerate(times)
+                 if abs(float(second) - target) <= 1e-6),
+                None,
+            )
+            if index is None or any(
+                index >= len(values) for values in (actual, candidate, baseline)
+            ):
+                continue
+            actual_value = _finite(actual[index])
+            candidate_value = _finite(candidate[index])
+            baseline_value = _finite(baseline[index])
+            if None in (actual_value, candidate_value, baseline_value):
+                continue
+            comparisons[str(int(target))] = {
+                "second": target,
+                "candidateStage": candidate_name,
+                "candidatePredictedPercent": candidate_value,
+                "baselinePredictedPercent": baseline_value,
+                "actualPercent": actual_value,
+                "candidateErrorPoints": candidate_value - actual_value,
+                "baselineErrorPoints": baseline_value - actual_value,
+            }
+        return comparisons
+
+    candidate_comparisons_by_family = {
+        family_name: candidate_comparisons_for(family_name)
+        for family_name in ("entryIndexed", "observedAbsolute")
+    }
     return {
         "videoId": detail.get("videoId"),
         "accountId": detail.get("accountId"),
@@ -586,6 +668,10 @@ def compact_summary(detail: dict) -> dict:
         "blindPredictionFingerprint": detail.get("blindPredictionFingerprint"),
         "blindEvaluationRole": detail.get("blindEvaluationRole"),
         "strictBlindEligible": bool(detail.get("strictBlindEligible")),
+        "blindIsolationPrimary": detail.get("blindIsolationPrimary"),
+        "blindContentComponentId": detail.get("blindContentComponentId"),
+        "blindContentComponentSize": detail.get("blindContentComponentSize"),
+        "blindContentComponentWeight": detail.get("blindContentComponentWeight"),
         "transcriptSource": detail.get("transcriptSource"),
         "tokenCount": detail.get("tokenCount"),
         "componentCount": detail.get("componentCount"),
@@ -605,6 +691,8 @@ def compact_summary(detail: dict) -> dict:
         "predictionError": detail.get("predictionError"),
         "comparisons": comparisons_by_family["entryIndexed"],
         "comparisonsByFamily": comparisons_by_family,
+        "candidateComparisons": candidate_comparisons_by_family["entryIndexed"],
+        "candidateComparisonsByFamily": candidate_comparisons_by_family,
         "support": {
             key: (detail.get("support") or {}).get(key) for key in (
                 "riskSetSourcesAtForecastEnd", "servedForecastThroughSeconds",
@@ -690,6 +778,31 @@ def _bootstrap_rmse_interval(errors, seed_material: str,
     }
 
 
+def _bootstrap_sqrt_mean_interval(squared_errors, seed_material: str,
+                                  repetitions: int = 2000) -> dict | None:
+    squared_errors = _float_array(squared_errors)
+    squared_errors = squared_errors[np.isfinite(squared_errors)]
+    if not len(squared_errors):
+        return None
+    if len(squared_errors) == 1:
+        value = float(math.sqrt(max(0.0, squared_errors[0])))
+        return {"lower": value, "upper": value, "repetitions": 0}
+    seed = int(hashlib.sha256(seed_material.encode("utf-8")).hexdigest()[:16], 16)
+    rng = np.random.default_rng(seed)
+    values = np.empty(repetitions, float)
+    for start in range(0, repetitions, 200):
+        stop = min(repetitions, start + 200)
+        sample = rng.integers(
+            0, len(squared_errors), size=(stop - start, len(squared_errors)),
+        )
+        values[start:stop] = np.sqrt(np.mean(squared_errors[sample], axis=1))
+    lower, upper = np.quantile(values, [0.025, 0.975])
+    return {
+        "lower": float(lower), "upper": float(upper),
+        "repetitions": repetitions,
+    }
+
+
 def _wilson_interval(successes: int, total: int, z: float = 1.959963984540054) -> dict | None:
     if total <= 0:
         return None
@@ -702,6 +815,100 @@ def _wilson_interval(successes: int, total: int, z: float = 1.959963984540054) -
     return {"lower": center - radius, "upper": center + radius, "total": total}
 
 
+def _content_component_id(row: dict) -> str:
+    """Return the sealed outcome-free content unit used for inference."""
+    return str(
+        row.get("blindContentComponentId")
+        or f"video:{row.get('videoId') or 'unknown'}"
+    )
+
+
+def _mean_finite(values) -> float | None:
+    array = _float_array(values)
+    array = array[np.isfinite(array)]
+    return float(array.mean()) if len(array) else None
+
+
+def _hierarchical_account_bootstrap_interval(
+    values_by_account: dict[str, list[float]],
+    seed_material: str,
+    repetitions: int = 2000,
+) -> dict | None:
+    """Bootstrap content components inside accounts, then weight accounts equally."""
+    groups = {
+        str(account): _float_array(values)[np.isfinite(_float_array(values))]
+        for account, values in values_by_account.items()
+    }
+    groups = {account: values for account, values in groups.items() if len(values)}
+    if not groups:
+        return None
+    observed = float(np.mean([values.mean() for values in groups.values()]))
+    if all(len(values) == 1 for values in groups.values()):
+        return {"lower": observed, "upper": observed, "repetitions": 0}
+    seed = int(hashlib.sha256(seed_material.encode("utf-8")).hexdigest()[:16], 16)
+    rng = np.random.default_rng(seed)
+    estimates = np.empty(repetitions, float)
+    ordered = [groups[account] for account in sorted(groups)]
+    for repetition in range(repetitions):
+        account_means = []
+        for values in ordered:
+            sample = rng.integers(0, len(values), size=len(values))
+            account_means.append(float(values[sample].mean()))
+        estimates[repetition] = float(np.mean(account_means))
+    lower, upper = np.quantile(estimates, [0.025, 0.975])
+    return {
+        "lower": float(lower), "upper": float(upper),
+        "repetitions": repetitions,
+    }
+
+
+def _equal_account_sign_flip_pvalue(
+    values_by_account: dict[str, list[float]],
+    seed_material: str,
+    repetitions: int = 2000,
+) -> float | None:
+    """One-sided paired test on account-equal component improvements."""
+    groups = {
+        str(account): _float_array(values)[np.isfinite(_float_array(values))]
+        for account, values in values_by_account.items()
+    }
+    groups = {account: values for account, values in groups.items() if len(values)}
+    if not groups:
+        return None
+    ordered = [groups[account] for account in sorted(groups)]
+    observed = float(np.mean([values.mean() for values in ordered]))
+    seed = int(hashlib.sha256(seed_material.encode("utf-8")).hexdigest()[:16], 16)
+    rng = np.random.default_rng(seed)
+    at_least_observed = 0
+    for _ in range(repetitions):
+        permuted_account_means = []
+        for values in ordered:
+            signs = rng.choice(np.asarray([-1.0, 1.0]), size=len(values))
+            permuted_account_means.append(float(np.mean(values * signs)))
+        permuted = float(np.mean(permuted_account_means))
+        if permuted >= observed - 1e-12:
+            at_least_observed += 1
+    return (at_least_observed + 1.0) / (repetitions + 1.0)
+
+
+def _holm_adjust(rows: list[dict], source_key: str, output_key: str) -> None:
+    """Attach Holm-adjusted p-values for the predeclared fixed horizons."""
+    indexed = [
+        (index, _finite(row.get(source_key)))
+        for index, row in enumerate(rows)
+        if _finite(row.get(source_key)) is not None
+    ]
+    ordered = sorted(indexed, key=lambda pair: pair[1])
+    running = 0.0
+    total = len(ordered)
+    adjusted = {}
+    for rank, (index, value) in enumerate(ordered):
+        running = max(running, min(1.0, (total - rank) * value))
+        adjusted[index] = running
+    for index, row in enumerate(rows):
+        row[output_key] = adjusted.get(index)
+
+
 def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
     eligible = [row for row in details if ((row.get("curves") or {}).get(
         family_name) or {}).get("actual")]
@@ -710,14 +917,14 @@ def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
             "videos": 0, "status": "no-comparable-videos",
             "metricFamily": family_name,
         }
-    endpoint_predicted_values = []
-    endpoint_actual_values = []
-    per_source_mae = []
-    all_errors = []
-    band_hits = []
-    by_second = defaultdict(lambda: {
-        "predicted": [], "actual": [], "lower": [], "upper": [], "videoIds": [],
-    })
+    source_count = 0
+    per_component_curve_mae = defaultdict(list)
+    endpoint_by_component = defaultdict(lambda: {"predicted": [], "actual": []})
+    error_by_component_second = defaultdict(list)
+    by_second_source_count = defaultdict(int)
+    by_second_component = defaultdict(lambda: defaultdict(lambda: {
+        "predicted": [], "actual": [], "lower": [], "upper": [],
+    }))
     for row in eligible:
         family = row["curves"][family_name]
         predicted = _float_array(family["predicted"])
@@ -729,25 +936,25 @@ def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
         )
         if not valid.any():
             continue
+        source_count += 1
+        component_id = _content_component_id(row)
         errors = predicted[valid] - actual[valid]
         endpoint_index = int(np.flatnonzero(valid)[-1])
-        endpoint_predicted_values.append(float(predicted[endpoint_index]))
-        endpoint_actual_values.append(float(actual[endpoint_index]))
-        per_source_mae.append(float(np.mean(np.abs(errors))))
-        all_errors.extend(errors.tolist())
+        endpoint_by_component[component_id]["predicted"].append(
+            float(predicted[endpoint_index])
+        )
+        endpoint_by_component[component_id]["actual"].append(
+            float(actual[endpoint_index])
+        )
+        per_component_curve_mae[component_id].append(float(np.mean(np.abs(errors))))
         lower = _float_array(family.get("predictionP10") or [])
         upper = _float_array(family.get("predictionP90") or [])
-        if len(lower) == len(actual) == len(upper):
-            band_valid = valid & np.isfinite(lower) & np.isfinite(upper)
-            band_hits.extend(
-                ((actual[band_valid] >= lower[band_valid])
-                 & (actual[band_valid] <= upper[band_valid])).tolist()
-            )
         for position in np.flatnonzero(valid):
-            bucket = by_second[float(times[position])]
+            second = float(times[position])
+            by_second_source_count[second] += 1
+            bucket = by_second_component[second][component_id]
             bucket["predicted"].append(float(predicted[position]))
             bucket["actual"].append(float(actual[position]))
-            bucket["videoIds"].append(str(row.get("videoId") or "unknown"))
             bucket["lower"].append(
                 float(lower[position]) if len(lower) == len(actual)
                 and np.isfinite(lower[position]) else None
@@ -756,53 +963,124 @@ def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
                 float(upper[position]) if len(upper) == len(actual)
                 and np.isfinite(upper[position]) else None
             )
-    if not endpoint_predicted_values:
+            error_by_component_second[(component_id, second)].append(
+                float(predicted[position] - actual[position])
+            )
+    if not endpoint_by_component:
         return {
             "videos": 0, "status": "no-jointly-supported-videos",
             "metricFamily": family_name,
         }
-    endpoint_predicted = np.asarray(endpoint_predicted_values, float)
-    endpoint_actual = np.asarray(endpoint_actual_values, float)
-    endpoint_errors = endpoint_predicted - endpoint_actual
-    all_errors = np.asarray(all_errors, float)
+    endpoint_predicted = np.asarray([
+        np.mean(endpoint_by_component[key]["predicted"])
+        for key in sorted(endpoint_by_component)
+    ], float)
+    endpoint_actual = np.asarray([
+        np.mean(endpoint_by_component[key]["actual"])
+        for key in sorted(endpoint_by_component)
+    ], float)
+    endpoint_component_errors = [
+        np.asarray(endpoint_by_component[key]["predicted"], float)
+        - np.asarray(endpoint_by_component[key]["actual"], float)
+        for key in sorted(endpoint_by_component)
+    ]
+    endpoint_mae = np.asarray([
+        np.mean(np.abs(values)) for values in endpoint_component_errors
+    ], float)
+    endpoint_mse = np.asarray([
+        np.mean(values ** 2) for values in endpoint_component_errors
+    ], float)
+    endpoint_bias = np.asarray([
+        np.mean(values) for values in endpoint_component_errors
+    ], float)
+    component_curve_mae = np.asarray([
+        np.mean(per_component_curve_mae[key])
+        for key in sorted(per_component_curve_mae)
+    ], float)
+    cell_absolute_errors = np.asarray([
+        np.mean(np.abs(values))
+        for _, values in sorted(error_by_component_second.items())
+    ], float)
+    cell_squared_errors = np.asarray([
+        np.mean(np.asarray(values, float) ** 2)
+        for _, values in sorted(error_by_component_second.items())
+    ], float)
+    cell_biases = np.asarray([
+        np.mean(values) for _, values in sorted(error_by_component_second.items())
+    ], float)
+    band_hits = []
     accuracy_by_second = []
-    for second in sorted(by_second):
-        predicted = np.asarray(by_second[second]["predicted"], float)
-        actual = np.asarray(by_second[second]["actual"], float)
+    for second in sorted(by_second_component):
+        component_rows = by_second_component[second]
+        component_ids = sorted(component_rows)
+        predicted = np.asarray([
+            np.mean(component_rows[key]["predicted"]) for key in component_ids
+        ], float)
+        actual = np.asarray([
+            np.mean(component_rows[key]["actual"]) for key in component_ids
+        ], float)
         errors = predicted - actual
+        component_source_errors = [
+            np.asarray(component_rows[key]["predicted"], float)
+            - np.asarray(component_rows[key]["actual"], float)
+            for key in component_ids
+        ]
+        component_mae = np.asarray([
+            np.mean(np.abs(values)) for values in component_source_errors
+        ], float)
+        component_mse = np.asarray([
+            np.mean(values ** 2) for values in component_source_errors
+        ], float)
+        component_bias = np.asarray([
+            np.mean(values) for values in component_source_errors
+        ], float)
         baseline_ss = float(np.sum((actual - actual.mean()) ** 2))
         seed_base = (
             f"{EVALUATION_VERSION}:{family_name}:{second}:"
-            + ",".join(by_second[second]["videoIds"])
+            + ",".join(component_ids)
         )
         predicted_std = float(np.std(predicted, ddof=1)) if len(predicted) > 1 else 0.0
         actual_std = float(np.std(actual, ddof=1)) if len(actual) > 1 else 0.0
-        band_rows = [
-            (actual_value, lower, upper)
-            for actual_value, lower, upper in zip(
-                actual, by_second[second]["lower"], by_second[second]["upper"],
-            )
-            if lower is not None and upper is not None
-        ]
-        band_successes = sum(
-            lower <= actual_value <= upper for actual_value, lower, upper in band_rows
-        )
+        component_coverages = []
+        component_band_widths = []
+        for component_id in component_ids:
+            band_rows = [
+                (actual_value, lower, upper)
+                for actual_value, lower, upper in zip(
+                    component_rows[component_id]["actual"],
+                    component_rows[component_id]["lower"],
+                    component_rows[component_id]["upper"],
+                )
+                if lower is not None and upper is not None
+            ]
+            if band_rows:
+                component_coverages.append(float(np.mean([
+                    lower <= actual_value <= upper
+                    for actual_value, lower, upper in band_rows
+                ])))
+                component_band_widths.append(float(np.mean([
+                    upper - lower for _, lower, upper in band_rows
+                ])))
+        band_successes = float(np.sum(component_coverages))
+        band_hits.extend(component_coverages)
         accuracy_by_second.append({
             "second": second,
-            "videos": len(predicted),
+            "videos": by_second_source_count[second],
+            "sourceVideos": by_second_source_count[second],
+            "contentComponents": len(predicted),
             "predictedMeanPercent": float(predicted.mean()),
             "actualMeanPercent": float(actual.mean()),
-            "maePercentagePoints": float(np.mean(np.abs(errors))),
-            "rmsePercentagePoints": float(np.sqrt(np.mean(errors ** 2))),
-            "biasPercentagePoints": float(errors.mean()),
+            "maePercentagePoints": float(np.mean(component_mae)),
+            "rmsePercentagePoints": float(np.sqrt(np.mean(component_mse))),
+            "biasPercentagePoints": float(np.mean(component_bias)),
             "maeConfidence95": _bootstrap_mean_interval(
-                np.abs(errors), seed_base + ":mae",
+                component_mae, seed_base + ":mae",
             ),
-            "rmseConfidence95": _bootstrap_rmse_interval(
-                errors, seed_base + ":rmse",
+            "rmseConfidence95": _bootstrap_sqrt_mean_interval(
+                component_mse, seed_base + ":rmse",
             ),
             "biasConfidence95": _bootstrap_mean_interval(
-                errors, seed_base + ":bias",
+                component_bias, seed_base + ":bias",
             ),
             "predictedStandardDeviationPercent": predicted_std,
             "actualStandardDeviationPercent": actual_std,
@@ -811,14 +1089,14 @@ def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
                 if predicted_std < 1e-8 else "estimable"
             ),
             "predictionBandCoverageFraction": (
-                band_successes / len(band_rows) if band_rows else None
+                float(np.mean(component_coverages)) if component_coverages else None
             ),
             "predictionBandCoverageWilson95": _wilson_interval(
-                band_successes, len(band_rows),
+                band_successes, len(component_coverages),
             ),
             "predictionBandMeanWidthPoints": (
-                float(np.mean([upper - lower for _, lower, upper in band_rows]))
-                if band_rows else None
+                float(np.mean(component_band_widths))
+                if component_band_widths else None
             ),
             "pearson": _correlation(predicted, actual),
             "spearman": _correlation(predicted, actual, ranked=True),
@@ -845,19 +1123,32 @@ def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
     return {
         "status": "complete",
         "metricFamily": family_name,
-        "videos": len(endpoint_predicted),
-        "sourceEqualCurveMAEPercentagePoints": float(np.mean(per_source_mae)),
-        "sourceEqualCurveMAEConfidence95": _bootstrap_mean_interval(
-            per_source_mae,
-            f"{EVALUATION_VERSION}:{family_name}:curve-mae:"
-            + ",".join(str(row.get("videoId") or "unknown") for row in eligible),
+        "videos": source_count,
+        "sourceVideos": source_count,
+        "contentComponents": len(component_curve_mae),
+        "statisticalUnit": "outcome-free content component",
+        "sourceEqualCurveMAEPercentagePoints": float(np.mean(component_curve_mae)),
+        "contentComponentEqualCurveMAEPercentagePoints": float(
+            np.mean(component_curve_mae)
         ),
-        "cellWeightedCurveMAEPercentagePoints": float(np.mean(np.abs(all_errors))),
-        "cellWeightedCurveRMSEPercentagePoints": float(np.sqrt(np.mean(all_errors ** 2))),
-        "cellWeightedCurveBiasPercentagePoints": float(np.mean(all_errors)),
-        "endpointMAEPercentagePoints": float(np.mean(np.abs(endpoint_errors))),
-        "endpointRMSEPercentagePoints": float(np.sqrt(np.mean(endpoint_errors ** 2))),
-        "endpointBiasPercentagePoints": float(np.mean(endpoint_errors)),
+        "sourceEqualCurveMAEConfidence95": _bootstrap_mean_interval(
+            component_curve_mae,
+            f"{EVALUATION_VERSION}:{family_name}:curve-mae:"
+            + ",".join(sorted(per_component_curve_mae)),
+        ),
+        "contentComponentEqualCurveMAEConfidence95": _bootstrap_mean_interval(
+            component_curve_mae,
+            f"{EVALUATION_VERSION}:{family_name}:curve-mae:"
+            + ",".join(sorted(per_component_curve_mae)),
+        ),
+        "cellWeightedCurveMAEPercentagePoints": float(np.mean(cell_absolute_errors)),
+        "cellWeightedCurveRMSEPercentagePoints": float(
+            np.sqrt(np.mean(cell_squared_errors))
+        ),
+        "cellWeightedCurveBiasPercentagePoints": float(np.mean(cell_biases)),
+        "endpointMAEPercentagePoints": float(np.mean(endpoint_mae)),
+        "endpointRMSEPercentagePoints": float(np.sqrt(np.mean(endpoint_mse))),
+        "endpointBiasPercentagePoints": float(np.mean(endpoint_bias)),
         "endpointPearson": None,
         "endpointSpearman": None,
         "endpointR2AgainstPooledMean": None,
@@ -887,8 +1178,12 @@ def _evaluation_metrics(details: list[dict], family_name: str) -> dict:
                 "external evaluation of intervals calibrated on the Main training cohort"
             ),
             "uncertaintyMethod": (
-                "deterministic 2,000-resample source bootstrap; videos are the "
-                "resampling unit"
+                "deterministic 2,000-resample bootstrap; sealed outcome-free "
+                "content components are the resampling unit"
+            ),
+            "duplicateWeighting": (
+                "all source rows remain inspectable; exact and near repost members "
+                "are averaged inside one outcome-free content-component vote"
             ),
         },
     }
@@ -913,54 +1208,306 @@ def evaluation_by_account(details: list[dict]) -> dict:
     return {account: evaluation_metrics(rows) for account, rows in sorted(grouped.items())}
 
 
-def strict_blind_external_selection(details: list[dict]) -> tuple[list[dict], dict]:
-    """Remove training-content overlap and collapse exact external reposts."""
-    training_fingerprints = {
-        row.get("contentFingerprint") for row in details
+def strict_blind_external_selection(
+    details: list[dict],
+    near_duplicate_threshold: float | None = NEAR_DUPLICATE_TRIGRAM_JACCARD,
+    include_sensitivity: bool = True,
+) -> tuple[list[dict], dict]:
+    """Build one outcome-free content graph and return its external components.
+
+    Development and external rows share the same graph, so a repost chain cannot
+    route around the training boundary. Rows with fewer than one token trigram
+    remain visible but are explicitly identity-unverifiable. Repost rows are all
+    retained and receive fractional component weights; no opaque representative
+    outcome is selected for inference.
+    """
+    development = [
+        row for row in details
         if row.get("evaluationKind") == "saved-source-level-oof"
-        and row.get("contentFingerprint")
-    }
+    ]
     external = [
         row for row in details
         if str(row.get("evaluationKind") or "").startswith("cross-account-")
     ]
-    overlap = [
-        row for row in external
-        if row.get("contentFingerprint") in training_fingerprints
-    ]
-    overlap_ids = {str(row.get("videoId")) for row in overlap}
-    groups = defaultdict(list)
-    for row in external:
-        if str(row.get("videoId")) in overlap_ids:
-            continue
-        key = row.get("contentFingerprint") or f"video:{row.get('videoId')}"
-        groups[str(key)].append(row)
+    development_ids = {str(row.get("videoId")) for row in development}
+    external_ids = {str(row.get("videoId")) for row in external}
+    all_rows = {
+        str(row.get("videoId")): row for row in development + external
+    }
+    shingles = {
+        video_id: token_trigrams(prediction_text(row))
+        for video_id, row in all_rows.items()
+    }
+    unverifiable_ids = {
+        str(row.get("videoId")) for row in external
+        if not shingles.get(str(row.get("videoId")))
+    }
+    graph_ids = sorted(
+        development_ids | (external_ids - unverifiable_ids)
+    )
+    parent = {video_id: video_id for video_id in graph_ids}
+
+    def find(video_id: str, parents=parent) -> str:
+        while parents[video_id] != video_id:
+            parents[video_id] = parents[parents[video_id]]
+            video_id = parents[video_id]
+        return video_id
+
+    def union(left: str, right: str, parents=parent) -> None:
+        left_root, right_root = find(left, parents), find(right, parents)
+        if left_root == right_root:
+            return
+        smaller, larger = sorted((left_root, right_root))
+        parents[larger] = smaller
+
+    exact_groups = defaultdict(list)
+    for video_id in graph_ids:
+        fingerprint = all_rows[video_id].get("contentFingerprint")
+        if fingerprint:
+            exact_groups[str(fingerprint)].append(video_id)
+    exact_edges = []
+    for video_ids in exact_groups.values():
+        for video_id in video_ids[1:]:
+            union(video_ids[0], video_id)
+            exact_edges.append((video_ids[0], video_id))
+
+    minimum_near_score = (
+        min(NEAR_DUPLICATE_SENSITIVITY_THRESHOLDS)
+        if include_sensitivity else
+        near_duplicate_threshold
+    )
+    near_edges = []
+    if minimum_near_score is not None:
+        for index, left_id in enumerate(graph_ids):
+            left = shingles.get(left_id) or frozenset()
+            if not left:
+                continue
+            for right_id in graph_ids[index + 1:]:
+                right = shingles.get(right_id) or frozenset()
+                score, shared = trigram_jaccard(left, right)
+                if score < minimum_near_score:
+                    continue
+                exact_match = bool(
+                    all_rows[left_id].get("contentFingerprint")
+                    and all_rows[left_id].get("contentFingerprint")
+                    == all_rows[right_id].get("contentFingerprint")
+                )
+                near_edges.append({
+                    "leftVideoId": left_id,
+                    "rightVideoId": right_id,
+                    "trigramJaccard": score,
+                    "sharedTrigrams": shared,
+                    "exactContentFingerprint": exact_match,
+                })
+                if (
+                    near_duplicate_threshold is not None
+                    and score >= near_duplicate_threshold
+                ):
+                    union(left_id, right_id)
+
+    def component_rows(parents: dict) -> dict[str, list[str]]:
+        components = defaultdict(list)
+        for video_id in graph_ids:
+            components[find(video_id, parents)].append(video_id)
+        return components
+
+    components = component_rows(parent)
+    development_roots = {
+        find(video_id) for video_id in development_ids if video_id in parent
+    }
+    exact_training_fingerprints = {
+        row.get("contentFingerprint") for row in development
+        if row.get("contentFingerprint")
+    }
+    exact_overlap_ids = {
+        video_id for video_id in external_ids - unverifiable_ids
+        if all_rows[video_id].get("contentFingerprint")
+        in exact_training_fingerprints
+    }
+    overlap_ids = {
+        video_id for video_id in external_ids - unverifiable_ids
+        if find(video_id) in development_roots
+    }
+    near_overlap_ids = overlap_ids - exact_overlap_ids
+
+    strict_components = []
     selected = []
     duplicate_groups = []
-    duplicate_ids = set()
-    for key, rows in sorted(groups.items()):
-        rows = sorted(rows, key=lambda row: str(row.get("videoId") or ""))
-        selected.append(rows[0])
-        if len(rows) > 1:
-            duplicate_ids.update(str(row.get("videoId")) for row in rows[1:])
+    exact_duplicate_ids = set()
+    near_duplicate_ids = set()
+    for root, component_ids in sorted(components.items()):
+        external_component_ids = sorted(
+            set(component_ids) & external_ids
+        )
+        if not external_component_ids or root in development_roots:
+            continue
+        component_id = hashlib.sha256(
+            json.dumps(external_component_ids, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()[:20]
+        component_rows_value = [all_rows[video_id] for video_id in external_component_ids]
+        component_size = len(component_rows_value)
+        fingerprints = {
+            str(row.get("contentFingerprint")) for row in component_rows_value
+            if row.get("contentFingerprint")
+        }
+        match_kind = (
+            "unique" if component_size == 1
+            else "exact" if len(fingerprints) == 1
+            else "near" if len(fingerprints) == component_size
+            else "mixed"
+        )
+        for member_index, row in enumerate(component_rows_value):
+            annotated = copy.deepcopy(row)
+            annotated["blindContentComponentId"] = component_id
+            annotated["blindContentComponentSize"] = component_size
+            annotated["blindContentComponentWeight"] = 1.0 / component_size
+            annotated["blindContentComponentMemberIndex"] = member_index
+            annotated["blindContentComponentMatchKind"] = match_kind
+            selected.append(annotated)
+            if member_index > 0:
+                if match_kind == "exact":
+                    exact_duplicate_ids.add(str(row.get("videoId")))
+                else:
+                    near_duplicate_ids.add(str(row.get("videoId")))
+        strict_components.append(component_id)
+        if component_size > 1:
             duplicate_groups.append({
-                "contentFingerprint": key,
-                "videoIds": [str(row.get("videoId")) for row in rows],
-                "accountIds": sorted({str(row.get("accountId")) for row in rows}),
-                "count": len(rows),
+                "contentComponentId": component_id,
+                "matchKind": match_kind,
+                "videoIds": external_component_ids,
+                "accountIds": sorted({
+                    str(row.get("accountId")) for row in component_rows_value
+                }),
+                "count": component_size,
+                "statisticalVotes": 1,
             })
-    selected_ids = [str(row.get("videoId")) for row in selected]
+
+    nearest_training = []
+    for video_id in sorted(near_overlap_ids):
+        candidates = []
+        for training_id in sorted(development_ids):
+            score, shared = trigram_jaccard(
+                shingles.get(video_id) or frozenset(),
+                shingles.get(training_id) or frozenset(),
+            )
+            candidates.append((score, shared, training_id))
+        best_score, best_shared, best_training_id = max(
+            candidates, default=(0.0, 0, None)
+        )
+        nearest_training.append({
+            "videoId": video_id,
+            "trainingVideoId": best_training_id,
+            "trigramJaccard": best_score,
+            "sharedTrigrams": best_shared,
+            "connection": (
+                "direct" if (
+                    near_duplicate_threshold is not None
+                    and best_score >= near_duplicate_threshold
+                ) else "component-chain"
+            ),
+        })
+
+    def policy_counts(threshold: float) -> dict:
+        policy_parent = {video_id: video_id for video_id in graph_ids}
+
+        def policy_find(video_id: str) -> str:
+            while policy_parent[video_id] != video_id:
+                policy_parent[video_id] = policy_parent[policy_parent[video_id]]
+                video_id = policy_parent[video_id]
+            return video_id
+
+        def policy_union(left: str, right: str) -> None:
+            left_root, right_root = policy_find(left), policy_find(right)
+            if left_root == right_root:
+                return
+            smaller, larger = sorted((left_root, right_root))
+            policy_parent[larger] = smaller
+
+        for left, right in exact_edges:
+            policy_union(left, right)
+        for edge in near_edges:
+            if edge["trigramJaccard"] >= threshold:
+                policy_union(edge["leftVideoId"], edge["rightVideoId"])
+        policy_development_roots = {
+            policy_find(video_id) for video_id in development_ids
+            if video_id in policy_parent
+        }
+        policy_overlap = {
+            video_id for video_id in external_ids - unverifiable_ids
+            if policy_find(video_id) in policy_development_roots
+        }
+        policy_component_roots = {
+            policy_find(video_id) for video_id in external_ids - unverifiable_ids
+            if video_id not in policy_overlap
+        }
+        near_external_pairs = [
+            edge for edge in near_edges
+            if not edge["exactContentFingerprint"]
+            and edge["leftVideoId"] in external_ids
+            and edge["rightVideoId"] in external_ids
+            and edge["trigramJaccard"] >= threshold
+        ]
+        eligible_videos = len(external_ids - unverifiable_ids - policy_overlap)
+        return {
+            "threshold": threshold,
+            "exactTrainingOverlapVideos": len(exact_overlap_ids),
+            "nearTrainingOverlapVideos": len(policy_overlap - exact_overlap_ids),
+            "combinedTrainingOverlapVideos": len(policy_overlap),
+            "identityUnverifiableVideos": len(unverifiable_ids),
+            "strictBlindEligibleVideos": eligible_videos,
+            "strictBlindComponents": len(policy_component_roots),
+            "externalDuplicateVideosConsolidated": (
+                eligible_videos - len(policy_component_roots)
+            ),
+            "nearExternalDuplicatePairs": len(near_external_pairs),
+        }
+
+    sensitivity = [
+        policy_counts(threshold)
+        for threshold in (
+            NEAR_DUPLICATE_SENSITIVITY_THRESHOLDS if include_sensitivity else ()
+        )
+    ]
+    selected_ids = sorted(str(row.get("videoId")) for row in selected)
+    component_ids = sorted(set(strict_components))
+    duplicate_ids = exact_duplicate_ids | near_duplicate_ids
     return selected, {
         "externalVideosBeforeIsolation": len(external),
+        "strictBlindEligibleVideos": len(selected),
+        "strictBlindContentComponents": len(component_ids),
+        "strictBlindUniqueComponents": len(component_ids),
         "strictBlindUniqueVideos": len(selected),
-        "trainingContentOverlapExcluded": len(overlap),
+        "identityUnverifiableVideos": len(unverifiable_ids),
+        "identityUnverifiableVideoIds": sorted(unverifiable_ids),
+        "nearDuplicateDefinition": (
+            "Connected components over exact content hashes and Jaccard similarity "
+            "of distinct normalized token trigrams; the primary identity threshold "
+            + (f"is {near_duplicate_threshold:.2f}" if near_duplicate_threshold is not None
+               else "uses exact hashes only")
+        ),
+        "nearDuplicateThreshold": near_duplicate_threshold,
+        "nearDuplicateThresholdSensitivity": sensitivity,
+        "trainingContentOverlapExcluded": len(overlap_ids),
         "trainingContentOverlapVideoIds": sorted(overlap_ids),
+        "exactTrainingContentOverlapExcluded": len(exact_overlap_ids),
+        "exactTrainingContentOverlapVideoIds": sorted(exact_overlap_ids),
+        "nearTrainingContentOverlapExcluded": len(near_overlap_ids),
+        "nearTrainingContentOverlapVideoIds": sorted(near_overlap_ids),
+        "nearTrainingMatches": nearest_training,
         "externalDuplicateGroupsCollapsed": len(duplicate_groups),
         "externalDuplicateVideosCollapsed": len(duplicate_ids),
+        "exactExternalDuplicateVideosCollapsed": len(exact_duplicate_ids),
+        "exactExternalDuplicateVideoIds": sorted(exact_duplicate_ids),
+        "nearExternalDuplicateVideosCollapsed": len(near_duplicate_ids),
+        "nearExternalDuplicateVideoIds": sorted(near_duplicate_ids),
         "duplicateGroups": duplicate_groups,
         "primaryVideoIds": selected_ids,
+        "primaryComponentIds": component_ids,
         "primaryVideoIdsFingerprint": hashlib.sha256(
             json.dumps(selected_ids, separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
+        "primaryComponentIdsFingerprint": hashlib.sha256(
+            json.dumps(component_ids, separators=(",", ":")).encode("utf-8")
         ).hexdigest(),
     }
 
@@ -975,6 +1522,7 @@ def account_balanced_metrics(details: list[dict]) -> dict:
             account_rows.append({
                 "accountId": account_id,
                 "videos": family.get("videos"),
+                "contentComponents": family.get("contentComponents"),
                 "sourceEqualCurveMAEPercentagePoints": family.get(
                     "sourceEqualCurveMAEPercentagePoints"
                 ),
@@ -1016,11 +1564,225 @@ def account_balanced_metrics(details: list[dict]) -> dict:
     return output
 
 
+def _account_stratified_permutation_pvalue(predicted, actual, accounts,
+                                           seed_material: str,
+                                           repetitions: int = 2000) -> float | None:
+    predicted = _float_array(predicted)
+    actual = _float_array(actual)
+    accounts = np.asarray([str(value) for value in accounts], object)
+    observed = _correlation(predicted, actual)
+    if observed is None:
+        return None
+    seed = int(hashlib.sha256(seed_material.encode("utf-8")).hexdigest()[:16], 16)
+    rng = np.random.default_rng(seed)
+    groups = [np.flatnonzero(accounts == account) for account in sorted(set(accounts))]
+    at_least_observed = 0
+    for _ in range(repetitions):
+        permuted = actual.copy()
+        for indexes in groups:
+            if len(indexes) > 1:
+                permuted[indexes] = actual[rng.permutation(indexes)]
+        value = _correlation(predicted, permuted)
+        if value is not None and value >= observed - 1e-12:
+            at_least_observed += 1
+    return (at_least_observed + 1.0) / (repetitions + 1.0)
+
+
+def _aggregate_candidate_rows(rows: list[dict], by_account: bool = False) -> list[dict]:
+    grouped = defaultdict(list)
+    for row in rows:
+        component_id = str(
+            row.get("componentId") or row.get("blindContentComponentId")
+            or f"video:{row.get('videoId')}"
+        )
+        key = (str(row.get("accountId") or "unknown"), component_id) if by_account else component_id
+        grouped[key].append(row)
+    output = []
+    for key, members in sorted(grouped.items(), key=lambda pair: str(pair[0])):
+        if by_account:
+            account_id, component_id = key
+        else:
+            account_id, component_id = None, key
+        record = {
+            "componentId": component_id,
+            "sourceVideos": len(members),
+            "candidateStage": members[0].get("candidateStage"),
+            "accountIds": sorted({str(row.get("accountId") or "unknown") for row in members}),
+        }
+        if account_id is not None:
+            record["accountId"] = account_id
+        for field in (
+            "baseline", "candidate", "actual", "baselineMAE",
+            "candidateMAE", "baselineError", "candidateError", "improvement",
+        ):
+            values = [row.get(field) for row in members]
+            mean = _mean_finite(values)
+            if mean is not None:
+                record[field] = mean
+        output.append(record)
+    return output
+
+
+def _candidate_fixed_metrics(rows: list[dict], family_name: str,
+                             second: float, inferential: bool = True) -> dict | None:
+    if not rows:
+        return None
+    loss_rows = []
+    for row in rows:
+        baseline_error = abs(float(row["baseline"]) - float(row["actual"]))
+        candidate_error = abs(float(row["candidate"]) - float(row["actual"]))
+        loss_rows.append({
+            **row,
+            "baselineError": baseline_error,
+            "candidateError": candidate_error,
+            "improvement": baseline_error - candidate_error,
+        })
+    component_cells = _aggregate_candidate_rows(loss_rows)
+    account_cells = _aggregate_candidate_rows(loss_rows, by_account=True)
+    baseline = np.asarray([row["baseline"] for row in component_cells], float)
+    candidate = np.asarray([row["candidate"] for row in component_cells], float)
+    actual = np.asarray([row["actual"] for row in component_cells], float)
+    baseline_errors = np.asarray([
+        row["baselineError"] for row in component_cells
+    ], float)
+    candidate_errors = np.asarray([
+        row["candidateError"] for row in component_cells
+    ], float)
+    improvements = np.asarray([
+        row["improvement"] for row in component_cells
+    ], float)
+    source_wins_by_component = defaultdict(list)
+    for row in loss_rows:
+        source_improvement = float(row["improvement"])
+        component_id = str(
+            row.get("componentId") or row.get("blindContentComponentId")
+            or f"video:{row.get('videoId')}"
+        )
+        source_wins_by_component[component_id].append(source_improvement > 0.0)
+    component_win_fractions = [
+        float(np.mean(values)) for _, values in sorted(source_wins_by_component.items())
+    ]
+    actual_ss = float(np.sum((actual - actual.mean()) ** 2))
+    candidate_std = float(np.std(candidate, ddof=1)) if len(candidate) > 1 else 0.0
+    pearson = _correlation(candidate, actual)
+    spearman = _correlation(candidate, actual, ranked=True)
+    seed_base = (
+        f"{EVALUATION_VERSION}:{family_name}:candidate-fixed:{second}:"
+        + ",".join(row["componentId"] for row in component_cells)
+    )
+    improvement_interval = (
+        _bootstrap_mean_interval(improvements, seed_base + ":improvement")
+        if inferential else None
+    )
+    account_improvements = defaultdict(list)
+    account_baseline_mae = defaultdict(list)
+    account_candidate_mae = defaultdict(list)
+    for cell in account_cells:
+        baseline_error = cell["baselineError"]
+        candidate_error = cell["candidateError"]
+        account = cell["accountId"]
+        account_baseline_mae[account].append(baseline_error)
+        account_candidate_mae[account].append(candidate_error)
+        account_improvements[account].append(baseline_error - candidate_error)
+    macro_baseline = _mean_finite([
+        np.mean(values) for values in account_baseline_mae.values()
+    ])
+    macro_candidate = _mean_finite([
+        np.mean(values) for values in account_candidate_mae.values()
+    ])
+    macro_improvement = _mean_finite([
+        np.mean(values) for values in account_improvements.values()
+    ])
+    macro_interval = (
+        _hierarchical_account_bootstrap_interval(
+            account_improvements, seed_base + ":hierarchical-account-improvement",
+        ) if inferential else None
+    )
+    paired_sign_flip_p = (
+        _equal_account_sign_flip_pvalue(
+            account_improvements, seed_base + ":paired-sign-flip",
+        ) if inferential else None
+    )
+    permutation_p = (
+        _account_stratified_permutation_pvalue(
+            [row["candidate"] for row in account_cells],
+            [row["actual"] for row in account_cells],
+            [row["accountId"] for row in account_cells],
+            seed_base + ":account-stratified-permutation",
+        ) if inferential else None
+    )
+    by_account = []
+    for account_id in sorted(account_improvements) if inferential else []:
+        cells = [row for row in account_cells if row["accountId"] == account_id]
+        account_candidate = np.asarray([row["candidate"] for row in cells], float)
+        account_actual = np.asarray([row["actual"] for row in cells], float)
+        improvement_values = np.asarray(account_improvements[account_id], float)
+        by_account.append({
+            "accountId": account_id,
+            "videos": sum(row["sourceVideos"] for row in cells),
+            "contentComponents": len(cells),
+            "candidatePearson": _correlation(account_candidate, account_actual),
+            "candidateSpearman": _correlation(
+                account_candidate, account_actual, ranked=True,
+            ),
+            "baselineMAEPercentagePoints": float(np.mean(account_baseline_mae[account_id])),
+            "candidateMAEPercentagePoints": float(np.mean(account_candidate_mae[account_id])),
+            "pairedImprovementPercentagePoints": float(np.mean(improvement_values)),
+        })
+    return {
+        "second": float(second),
+        "videos": len(rows),
+        "sourceVideos": len(rows),
+        "contentComponents": len(component_cells),
+        "accountComponentCells": len(account_cells),
+        "statisticalUnit": "outcome-free content component",
+        "candidateStage": rows[0]["candidateStage"],
+        "baselineMAEPercentagePoints": float(np.mean(baseline_errors)),
+        "candidateMAEPercentagePoints": float(np.mean(candidate_errors)),
+        "pairedImprovementPercentagePoints": float(np.mean(improvements)),
+        "pairedImprovementConfidence95": improvement_interval,
+        "candidateWinFraction": float(np.mean(component_win_fractions)),
+        "candidatePredictedMeanPercent": float(candidate.mean()),
+        "candidatePredictedStandardDeviationPercent": candidate_std,
+        "actualMeanPercent": float(actual.mean()),
+        "actualStandardDeviationPercent": (
+            float(np.std(actual, ddof=1)) if len(actual) > 1 else 0.0
+        ),
+        "candidatePearson": pearson,
+        "candidateSpearman": spearman,
+        "candidateR2AgainstSecondMean": (
+            1.0 - float(np.sum((candidate - actual) ** 2)) / actual_ss
+            if actual_ss > 1e-9 else None
+        ),
+        "accountStratifiedPositivePearsonPermutationP": permutation_p,
+        "pairedPositiveSignFlipP": paired_sign_flip_p,
+        "pairedImprovementSignFlipP": paired_sign_flip_p,
+        "equalAccountMacro": {
+            "accounts": len(account_improvements),
+            "baselineMAEPercentagePoints": macro_baseline,
+            "candidateMAEPercentagePoints": macro_candidate,
+            "pairedImprovementPercentagePoints": macro_improvement,
+            "pairedImprovementConfidence95": macro_interval,
+            "pairedPositiveSignFlipP": paired_sign_flip_p,
+        },
+        "passesErrorGate": False,
+        "passesRankingGate": False,
+        "blindSkillStatus": (
+            "descriptive-only" if not inferential
+            else "pending-multiplicity-adjustment"
+            if candidate_std >= 1e-8 else "unavailable-constant-candidate"
+        ),
+        "byAccount": by_account,
+        "modelStageChanged": False,
+    }
+
+
 def candidate_vs_baseline(details: list[dict]) -> dict:
     """Evaluate the frozen diagnostic candidate without promoting or refitting it."""
     result = {"status": "diagnostic-only-no-promotion", "families": {}}
     for family_name in ("entryIndexed", "observedAbsolute"):
         rows = []
+        by_second = defaultdict(list)
         for detail in details:
             family = (detail.get("curves") or {}).get(family_name) or {}
             stages = family.get("stages") or {}
@@ -1039,23 +1801,121 @@ def candidate_vs_baseline(details: list[dict]) -> dict:
                 continue
             baseline_mae = float(np.mean(np.abs(baseline[valid] - actual[valid])))
             candidate_mae = float(np.mean(np.abs(candidate[valid] - actual[valid])))
-            rows.append({
+            row = {
                 "videoId": str(detail.get("videoId")),
                 "accountId": str(detail.get("accountId")),
+                "componentId": _content_component_id(detail),
                 "candidateStage": candidate_name,
                 "baselineMAE": baseline_mae,
                 "candidateMAE": candidate_mae,
                 "improvement": baseline_mae - candidate_mae,
+            }
+            rows.append(row)
+            for position in np.flatnonzero(valid):
+                by_second[float(times[position])].append({
+                    "videoId": row["videoId"],
+                    "accountId": row["accountId"],
+                    "componentId": row["componentId"],
+                    "candidateStage": candidate_name,
+                    "baseline": float(baseline[position]),
+                    "candidate": float(candidate[position]),
+                    "actual": float(actual[position]),
+                })
+        component_rows = _aggregate_candidate_rows(rows)
+        account_cells = _aggregate_candidate_rows(rows, by_account=True)
+        improvements = [row["improvement"] for row in component_rows]
+        account_improvements = defaultdict(list)
+        account_baselines = defaultdict(list)
+        account_candidates = defaultdict(list)
+        for cell in account_cells:
+            account = cell["accountId"]
+            account_improvements[account].append(cell["improvement"])
+            account_baselines[account].append(cell["baselineMAE"])
+            account_candidates[account].append(cell["candidateMAE"])
+        accuracy_by_second = [
+            _candidate_fixed_metrics(
+                by_second[second], family_name, second,
+                inferential=second in (5.0, 10.0, 20.0, 30.0),
+            )
+            for second in sorted(by_second)
+        ]
+        accuracy_by_second = [row for row in accuracy_by_second if row is not None]
+        inferential_rows = [
+            row for row in accuracy_by_second
+            if float(row.get("second") or -1) in (5.0, 10.0, 20.0, 30.0)
+        ]
+        _holm_adjust(
+            inferential_rows, "pairedImprovementSignFlipP",
+            "pairedImprovementSignFlipHolmAdjustedP",
+        )
+        _holm_adjust(
+            inferential_rows, "accountStratifiedPositivePearsonPermutationP",
+            "accountStratifiedPositivePearsonPermutationHolmAdjustedP",
+        )
+        for row in inferential_rows:
+            row["holmAdjustedPairedPositiveSignFlipP"] = row.get(
+                "pairedImprovementSignFlipHolmAdjustedP"
+            )
+            row["holmAdjustedPositivePearsonPermutationP"] = row.get(
+                "accountStratifiedPositivePearsonPermutationHolmAdjustedP"
+            )
+            macro = row.get("equalAccountMacro") or {}
+            lower = _finite((macro.get("pairedImprovementConfidence95") or {}).get("lower"))
+            sign_flip_p = _finite(row.get("holmAdjustedPairedPositiveSignFlipP"))
+            rank_p = _finite(row.get("holmAdjustedPositivePearsonPermutationP"))
+            pearson = _finite(row.get("candidatePearson"))
+            row["passesErrorGate"] = bool(
+                lower is not None and lower > 0.0
+                and sign_flip_p is not None and sign_flip_p < 0.05
+            )
+            row["passesRankingGate"] = bool(
+                pearson is not None and pearson > 0.0
+                and rank_p is not None and rank_p < 0.05
+            )
+            row["blindSkillStatus"] = (
+                "passes-error-and-ranking-gates"
+                if row["passesErrorGate"] and row["passesRankingGate"]
+                else "no-confirmed-positive-skill"
+            )
+        fixed_horizons = {
+            str(second): next(
+                (row for row in accuracy_by_second
+                 if abs(float(row["second"]) - float(second)) <= 1e-6),
+                None,
+            )
+            for second in (5, 10, 20, 30)
+        }
+        account_rows = []
+        for account_id in sorted(account_improvements):
+            group = [row for row in account_cells if row["accountId"] == account_id]
+            account_rows.append({
+                "accountId": account_id,
+                "videos": sum(row["sourceVideos"] for row in group),
+                "contentComponents": len(group),
+                "baselineCurveMAEPercentagePoints": float(np.mean([
+                    row["baselineMAE"] for row in group
+                ])),
+                "candidateCurveMAEPercentagePoints": float(np.mean([
+                    row["candidateMAE"] for row in group
+                ])),
+                "pairedImprovementPercentagePoints": float(np.mean([
+                    row["improvement"] for row in group
+                ])),
             })
-        improvements = [row["improvement"] for row in rows]
         result["families"][family_name] = {
             "videos": len(rows),
+            "sourceVideos": len(rows),
+            "contentComponents": len(component_rows),
+            "accountComponentCells": len(account_cells),
+            "statisticalUnit": "outcome-free content component",
             "candidateStage": rows[0]["candidateStage"] if rows else None,
             "baselineCurveMAEPercentagePoints": (
-                float(np.mean([row["baselineMAE"] for row in rows])) if rows else None
+                float(np.mean([row["baselineMAE"] for row in component_rows]))
+                if component_rows else None
             ),
             "candidateCurveMAEPercentagePoints": (
-                float(np.mean([row["candidateMAE"] for row in rows])) if rows else None
+                float(np.mean([row["candidateMAE"] for row in component_rows]))
+                if component_rows else None
             ),
             "pairedImprovementPercentagePoints": (
                 float(np.mean(improvements)) if improvements else None
@@ -1063,11 +1923,111 @@ def candidate_vs_baseline(details: list[dict]) -> dict:
             "pairedImprovementConfidence95": _bootstrap_mean_interval(
                 improvements,
                 f"{EVALUATION_VERSION}:{family_name}:candidate-v-baseline:"
-                + ",".join(row["videoId"] for row in rows),
+                + ",".join(row["componentId"] for row in component_rows),
             ),
             "candidateWinFraction": (
-                float(np.mean(np.asarray(improvements) > 0)) if improvements else None
+                float(np.mean([
+                    np.mean([
+                        source["improvement"] > 0.0 for source in rows
+                        if source["componentId"] == component["componentId"]
+                    ])
+                    for component in component_rows
+                ])) if component_rows else None
+            ),
+            "accuracyBySecond": accuracy_by_second,
+            "fixedHorizons": fixed_horizons,
+            "fixed20Second": fixed_horizons["20"],
+            "byAccount": account_rows,
+            "equalAccountMacro": {
+                "accounts": len(account_improvements),
+                "baselineCurveMAEPercentagePoints": _mean_finite([
+                    np.mean(values) for values in account_baselines.values()
+                ]),
+                "candidateCurveMAEPercentagePoints": _mean_finite([
+                    np.mean(values) for values in account_candidates.values()
+                ]),
+                "pairedImprovementPercentagePoints": _mean_finite([
+                    np.mean(values) for values in account_improvements.values()
+                ]),
+                "pairedImprovementConfidence95": _hierarchical_account_bootstrap_interval(
+                    account_improvements,
+                    f"{EVALUATION_VERSION}:{family_name}:candidate-v-baseline:macro",
+                ),
+                "pairedPositiveSignFlipP": _equal_account_sign_flip_pvalue(
+                    account_improvements,
+                    f"{EVALUATION_VERSION}:{family_name}:candidate-v-baseline:sign-flip",
+                ),
+            },
+            "promotionGate": (
+                "A diagnostic candidate must lower equal-account error with a positive "
+                "hierarchical-bootstrap lower bound and Holm-adjusted paired sign-flip "
+                "test, then show positive Holm-adjusted account-stratified fixed-horizon "
+                "ranking. This audit cannot promote it."
             ),
             "modelStageChanged": False,
         }
     return result
+
+
+def candidate_leakage_sensitivity(details: list[dict]) -> dict:
+    """Re-report frozen candidate skill under every declared isolation policy.
+
+    Policies are evaluated in full and shown together. Outcomes never select a
+    similarity cutoff, and this diagnostic cannot change the deployed stage.
+    """
+    policies = [
+        ("exact-only", "exact only", None),
+        ("near-0.90", "near 0.90", 0.90),
+        ("near-0.80", "near 0.80 · primary", 0.80),
+        ("near-0.70", "near 0.70", 0.70),
+    ]
+    output = {
+        "status": "diagnostic-only-all-predeclared-policies",
+        "similarity": "Jaccard similarity of distinct normalized token trigrams",
+        "families": {
+            "entryIndexed": {"policies": []},
+            "observedAbsolute": {"policies": []},
+        },
+        "modelStageChanged": False,
+    }
+    for policy_key, label, threshold in policies:
+        selected = []
+        for detail in details:
+            policy = (detail.get("blindIsolationPolicies") or {}).get(policy_key) or {}
+            if not policy.get("eligible"):
+                continue
+            annotated = copy.deepcopy(detail)
+            annotated["blindContentComponentId"] = policy.get("contentComponentId")
+            annotated["blindContentComponentSize"] = policy.get("contentComponentSize")
+            annotated["blindContentComponentWeight"] = policy.get("contentComponentWeight")
+            selected.append(annotated)
+        diagnostic = candidate_vs_baseline(selected)
+        for family_name in ("entryIndexed", "observedAbsolute"):
+            family = (diagnostic.get("families") or {}).get(family_name) or {}
+            output["families"][family_name]["policies"].append({
+                "policyKey": policy_key,
+                "label": label,
+                "maximumNearDuplicateSimilarity": threshold,
+                "strictBlindVideos": family.get("sourceVideos"),
+                "strictBlindContentComponents": family.get("contentComponents"),
+                "candidateVideos": family.get("videos"),
+                "candidateContentComponents": family.get("contentComponents"),
+                "candidateStage": family.get("candidateStage"),
+                "baselineCurveMAEPercentagePoints": family.get(
+                    "baselineCurveMAEPercentagePoints"
+                ),
+                "candidateCurveMAEPercentagePoints": family.get(
+                    "candidateCurveMAEPercentagePoints"
+                ),
+                "pairedImprovementPercentagePoints": family.get(
+                    "pairedImprovementPercentagePoints"
+                ),
+                "pairedImprovementConfidence95": family.get(
+                    "pairedImprovementConfidence95"
+                ),
+                "candidateWinFraction": family.get("candidateWinFraction"),
+                "fixed20Second": family.get("fixed20Second"),
+                "equalAccountMacro": family.get("equalAccountMacro"),
+                "modelStageChanged": False,
+            })
+    return output

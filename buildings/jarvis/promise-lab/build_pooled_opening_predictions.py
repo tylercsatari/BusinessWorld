@@ -29,6 +29,7 @@ from pooled_opening_evaluation import (
     attach_observed_retention,
     baseline_only_analysis,
     blind_manifest_entry,
+    candidate_leakage_sensitivity,
     candidate_vs_baseline,
     caption_json3_to_timed_words,
     compact_summary,
@@ -37,6 +38,7 @@ from pooled_opening_evaluation import (
     evaluation_metrics,
     model_fingerprint,
     outcome_blind_prediction,
+    prediction_text,
     prediction_fingerprint,
     strict_blind_external_selection,
     token_clock_from_timed_words,
@@ -62,6 +64,13 @@ MODEL_FILES = (
     "opening-20s-model.json",
     "opening-retention-model.json",
 )
+ISOLATION_POLICIES = (
+    ("exact-only", "exact content only", None),
+    ("near-0.90", "token-trigram Jaccard at least 0.90", 0.90),
+    ("near-0.80", "token-trigram Jaccard at least 0.80 · primary", 0.80),
+    ("near-0.70", "token-trigram Jaccard at least 0.70", 0.70),
+)
+PRIMARY_ISOLATION_POLICY = "near-0.80"
 
 
 def read_json(path: Path) -> dict:
@@ -205,10 +214,16 @@ def metric_record(detail: dict) -> dict:
         "published": detail.get("published"),
         "evaluationKind": detail.get("evaluationKind"),
         "predictionFitKind": detail.get("predictionFitKind"),
+        "text": prediction_text(detail),
         "contentFingerprint": detail.get("contentFingerprint"),
         "blindPredictionFingerprint": detail.get("blindPredictionFingerprint"),
         "blindEvaluationRole": detail.get("blindEvaluationRole"),
         "strictBlindEligible": bool(detail.get("strictBlindEligible")),
+        "blindIsolationPrimary": detail.get("blindIsolationPrimary"),
+        "blindIsolationPolicies": detail.get("blindIsolationPolicies"),
+        "blindContentComponentId": detail.get("blindContentComponentId"),
+        "blindContentComponentSize": detail.get("blindContentComponentSize"),
+        "blindContentComponentWeight": detail.get("blindContentComponentWeight"),
         "curves": {
             family: {
                 key: (detail.get("curves") or {}).get(family, {}).get(key)
@@ -221,6 +236,138 @@ def metric_record(detail: dict) -> dict:
             for family in ("entryIndexed", "observedAbsolute")
         },
     }
+
+
+def seal_blind_isolation(predictions: list[dict], blind_detail_dir: Path) -> tuple[dict, dict]:
+    """Seal every content-isolation policy before any outcome is available."""
+    policy_results = {}
+    for policy_key, label, threshold in ISOLATION_POLICIES:
+        selected, audit = strict_blind_external_selection(
+            predictions,
+            near_duplicate_threshold=threshold,
+            include_sensitivity=policy_key == PRIMARY_ISOLATION_POLICY,
+        )
+        selected_by_id = {
+            str(row.get("videoId")): row for row in selected
+        }
+        exact_overlap = set(audit.get("exactTrainingContentOverlapVideoIds") or [])
+        near_overlap = set(audit.get("nearTrainingContentOverlapVideoIds") or [])
+        unverifiable = set(audit.get("identityUnverifiableVideoIds") or [])
+        per_video = {}
+        for prediction in predictions:
+            video_id = str(prediction.get("videoId"))
+            kind = str(prediction.get("evaluationKind") or "")
+            if not kind.startswith("cross-account-"):
+                continue
+            selected_row = selected_by_id.get(video_id)
+            if selected_row is not None:
+                per_video[video_id] = {
+                    "policyKey": policy_key,
+                    "label": label,
+                    "nearDuplicateThreshold": threshold,
+                    "eligible": True,
+                    "status": "strict-blind-content-component",
+                    "contentComponentId": selected_row.get("blindContentComponentId"),
+                    "contentComponentSize": selected_row.get("blindContentComponentSize"),
+                    "contentComponentWeight": selected_row.get("blindContentComponentWeight"),
+                    "contentComponentMemberIndex": selected_row.get(
+                        "blindContentComponentMemberIndex"
+                    ),
+                    "contentComponentMatchKind": selected_row.get(
+                        "blindContentComponentMatchKind"
+                    ),
+                }
+            elif video_id in exact_overlap:
+                per_video[video_id] = {
+                    "policyKey": policy_key, "label": label,
+                    "nearDuplicateThreshold": threshold, "eligible": False,
+                    "status": "excluded-exact-training-content-overlap",
+                }
+            elif video_id in near_overlap:
+                per_video[video_id] = {
+                    "policyKey": policy_key, "label": label,
+                    "nearDuplicateThreshold": threshold, "eligible": False,
+                    "status": "excluded-near-training-content-overlap",
+                }
+            elif video_id in unverifiable:
+                per_video[video_id] = {
+                    "policyKey": policy_key, "label": label,
+                    "nearDuplicateThreshold": threshold, "eligible": False,
+                    "status": "excluded-identity-unverifiable",
+                }
+            else:
+                raise RuntimeError(
+                    f"outcome-free isolation left external row unclassified: {video_id}"
+                )
+        policy_results[policy_key] = {
+            "label": label,
+            "threshold": threshold,
+            "audit": audit,
+            "perVideo": per_video,
+        }
+
+    for prediction in predictions:
+        video_id = str(prediction.get("videoId"))
+        kind = str(prediction.get("evaluationKind") or "")
+        prediction.pop("blindContentComponentId", None)
+        prediction.pop("blindContentComponentSize", None)
+        prediction.pop("blindContentComponentWeight", None)
+        prediction.pop("blindContentComponentMemberIndex", None)
+        prediction.pop("blindContentComponentMatchKind", None)
+        if kind.startswith("cross-account-"):
+            policies = {
+                policy_key: policy_results[policy_key]["perVideo"][video_id]
+                for policy_key, _, _ in ISOLATION_POLICIES
+            }
+            primary = policies[PRIMARY_ISOLATION_POLICY]
+            prediction["blindIsolationPolicies"] = policies
+            prediction["blindIsolationPrimary"] = primary
+            if primary.get("eligible"):
+                prediction["blindContentComponentId"] = primary.get(
+                    "contentComponentId"
+                )
+                prediction["blindContentComponentSize"] = primary.get(
+                    "contentComponentSize"
+                )
+                prediction["blindContentComponentWeight"] = primary.get(
+                    "contentComponentWeight"
+                )
+                prediction["blindContentComponentMemberIndex"] = primary.get(
+                    "contentComponentMemberIndex"
+                )
+                prediction["blindContentComponentMatchKind"] = primary.get(
+                    "contentComponentMatchKind"
+                )
+        else:
+            prediction["blindIsolationPolicies"] = {}
+            prediction["blindIsolationPrimary"] = {
+                "policyKey": PRIMARY_ISOLATION_POLICY,
+                "eligible": False,
+                "status": (
+                    "development-source-level-oof"
+                    if kind == "saved-source-level-oof"
+                    else "not-account-external"
+                ),
+            }
+        prediction.setdefault("provenance", {}).update({
+            "blindIsolationSealedBeforeOutcomeJoin": True,
+            "blindIsolationPrimaryPolicy": PRIMARY_ISOLATION_POLICY,
+            "blindIsolationUsesOutcomeFields": False,
+        })
+        prediction["blindPredictionFingerprint"] = prediction_fingerprint(prediction)
+        write_gzip_json(
+            blind_detail_dir / f"{prediction['videoId']}.json.gz", prediction,
+        )
+
+    public_audits = {
+        policy_key: {
+            "policyKey": policy_key,
+            "label": result["label"],
+            **result["audit"],
+        }
+        for policy_key, result in policy_results.items()
+    }
+    return public_audits[PRIMARY_ISOLATION_POLICY], public_audits
 
 
 def annotate_prediction(detail: dict, video: dict, evaluation_kind: str,
@@ -344,7 +491,7 @@ def score_external_prediction(video: dict, models: dict, store: EmbeddingStore,
     return detail, False
 
 
-def evaluation_bundle(records: list[dict]) -> dict:
+def evaluation_bundle(records: list[dict], isolation_audit: dict) -> dict:
     by_kind = defaultdict(list)
     for record in records:
         by_kind[str(record.get("evaluationKind") or "unknown")].append(record)
@@ -356,7 +503,14 @@ def evaluation_bundle(records: list[dict]) -> dict:
         record for record in records
         if record.get("evaluationKind") != "saved-source-level-oof"
     ]
-    strict_external, isolation = strict_blind_external_selection(records)
+    strict_external = [
+        record for record in records if record.get("strictBlindEligible") is True
+    ]
+    identity_unverifiable = [
+        record for record in records
+        if ((record.get("blindIsolationPrimary") or {}).get("status")
+            == "excluded-identity-unverifiable")
+    ]
     strict_by_account = evaluation_by_account(strict_external)
     strict_transcript = [
         row for row in strict_external
@@ -374,11 +528,15 @@ def evaluation_bundle(records: list[dict]) -> dict:
         "strictBlindByAccount": strict_by_account,
         "strictBlindAccountBalanced": account_balanced_metrics(strict_external),
         "strictBlindCandidateVsBaseline": candidate_vs_baseline(strict_external),
+        "strictBlindCandidateLeakageSensitivity": candidate_leakage_sensitivity(
+            records
+        ),
         "strictBlindByTranscriptStatus": {
             "timestampedTranscript": evaluation_metrics(strict_transcript),
             "missingTranscript": evaluation_metrics(strict_missing_transcript),
         },
-        "blindIsolationAudit": isolation,
+        "identityUnverifiableExternal": evaluation_metrics(identity_unverifiable),
+        "blindIsolationAudit": isolation_audit,
         "byAccount": evaluation_by_account(records),
         "byEvaluationKind": {
             kind: evaluation_metrics(group) for kind, group in sorted(by_kind.items())
@@ -386,8 +544,11 @@ def evaluation_bundle(records: list[dict]) -> dict:
         "claimBoundary": (
             "The 208 saved cohort rows are source-level out of fold. Other Main rows "
             "use the unchanged full fit. Other accounts are account-external frozen-model "
-            "evaluations. Primary blind metrics exclude exact training-content overlap "
-            "and collapse exact external reposts. Outcomes are opened only after the "
+            "evaluations. Primary blind metrics exclude exact and conservative near "
+            "training-content overlap. Exact or near external repost members remain "
+            "inspectable but share one sealed content-component statistical vote. "
+            "Near-duplicate sensitivity is outcome-free and reported at multiple "
+            "thresholds. Outcomes are opened only after the "
             "prediction manifest is sealed; no pooled outcome refits, recalibrates, or "
             "promotes the scorer."
         ),
@@ -570,6 +731,10 @@ def main() -> None:
             f"{canonical_source_count} registered videos"
         )
 
+    isolation_audit, isolation_policy_audits = seal_blind_isolation(
+        predictions, blind_detail_dir,
+    )
+
     # Seal every outcome-blind serving prediction before opening any measured curve.
     blind_entries = [blind_manifest_entry(row) for row in predictions]
     for prediction, entry in zip(predictions, blind_entries):
@@ -580,7 +745,7 @@ def main() -> None:
     input_manifest_fingerprint = sha256_bytes(json.dumps([{
         key: row.get(key) for key in (
             "videoId", "accountId", "predictionFitKind", "inputFingerprint",
-            "contentFingerprint",
+            "contentFingerprint", "blindIsolationPrimary",
         )
     } for row in blind_entries], sort_keys=True, separators=(",", ":")).encode("utf-8"))
     prediction_manifest_fingerprint = sha256_bytes(json.dumps([{
@@ -605,7 +770,7 @@ def main() -> None:
         development_ids, separators=(",", ":"),
     ).encode("utf-8"))
     blind_manifest = {
-        "version": 1,
+        "version": 2,
         "status": "sealed-before-outcome-join",
         "evaluationVersion": EVALUATION_VERSION,
         "blindGenerationId": blind_generation_id,
@@ -631,6 +796,10 @@ def main() -> None:
             "The 208 source-level OOF artifact IDs define the development cohort. "
             "The frozen model files do not contain an independent training-ID ledger."
         ),
+        "blindIsolationPrimaryPolicy": PRIMARY_ISOLATION_POLICY,
+        "blindIsolationComputedBeforeOutcomeJoin": True,
+        "blindIsolationAudit": isolation_audit,
+        "blindIsolationPolicyAudits": isolation_policy_audits,
         "entries": blind_entries,
         "sealedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
@@ -642,20 +811,20 @@ def main() -> None:
         attach_observed_retention(prediction, outcomes_by_id[str(prediction["videoId"])])
         for prediction in predictions
     ]
-    strict_details, isolation_audit = strict_blind_external_selection(joined_details)
-    strict_ids = {str(row.get("videoId")) for row in strict_details}
-    overlap_ids = set(isolation_audit["trainingContentOverlapVideoIds"])
     for detail in joined_details:
-        video_id = str(detail.get("videoId"))
         kind = str(detail.get("evaluationKind") or "")
         if kind == "saved-source-level-oof":
             role = "development-source-level-oof"
-        elif kind.startswith("cross-account-") and video_id in overlap_ids:
-            role = "excluded-exact-training-content-overlap"
-        elif kind.startswith("cross-account-") and video_id in strict_ids:
-            role = "strict-blind-primary"
         elif kind.startswith("cross-account-"):
-            role = "collapsed-exact-external-repost"
+            primary = detail.get("blindIsolationPrimary") or {}
+            if primary.get("eligible"):
+                role = "strict-blind-primary"
+            else:
+                role = str(primary.get("status") or "excluded-unclassified")
+            if role == "excluded-unclassified":
+                raise RuntimeError(
+                    f"sealed external blind role is unclassified: {detail.get('videoId')}"
+                )
         else:
             role = "main-withheld-frozen-evaluation"
         detail["blindEvaluationRole"] = role
@@ -692,7 +861,7 @@ def main() -> None:
             f"/api/shortsquant/promise-lab/opening-prediction/{row['videoId']}"
             f"?scope=all&generation={generation_id}"
         )
-    evaluation = evaluation_bundle(metric_records)
+    evaluation = evaluation_bundle(metric_records, isolation_audit)
     summary = {
         "version": 1,
         "status": "complete" if not failures else "complete-with-errors",
@@ -713,6 +882,8 @@ def main() -> None:
             "outcomeManifestFingerprint": outcome_fingerprint,
             "outcomeFieldsPresentInBlindManifest": False,
             "predictionInputsExcludeOutcomeFields": True,
+            "blindIsolationComputedBeforeOutcomeJoin": True,
+            "blindIsolationPrimaryPolicy": PRIMARY_ISOLATION_POLICY,
             "developmentCohortIdsFingerprint": development_ids_fingerprint,
             "developmentCohortVideos": len(development_ids),
             "nonDevelopmentVideos": len(non_development_ids),
@@ -727,6 +898,7 @@ def main() -> None:
             "joinOrder": [
                 "strip outcome fields from inference inputs",
                 "run or load frozen predictions",
+                "compute and seal all predeclared content-isolation policies",
                 "write and fingerprint prediction-only manifest",
                 "open measured retention curves",
                 "join by video ID and evaluate",
@@ -756,8 +928,11 @@ def main() -> None:
             "savedCohortPredictionsRemainSourceLevelOOF": True,
             "externalRowsUseFrozenFullFit": True,
             "blindPredictionManifestSealedBeforeOutcomeJoin": True,
+            "blindIsolationComputedAndSealedBeforeOutcomeJoin": True,
             "strictBlindMetricsExcludeExactTrainingContentOverlap": True,
-            "strictBlindMetricsCollapseExactExternalReposts": True,
+            "strictBlindMetricsExcludeNearTrainingContentOverlap": True,
+            "strictBlindMetricsWeightExactExternalRepostsAsOneComponent": True,
+            "strictBlindMetricsWeightNearExternalRepostsAsOneComponent": True,
         },
         "builtAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }

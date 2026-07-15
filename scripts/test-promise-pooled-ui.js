@@ -12,8 +12,14 @@ const artifact = JSON.parse(fs.readFileSync(path.join(
     __dirname, '..', 'buildings', 'jarvis', 'promise-lab', '.cache',
     'pooled-opening-predictions.json',
 ), 'utf8'));
-const strictFixed20Videos = artifact.evaluation.strictBlindExternal
-    .families.entryIndexed.fixed20Second.videos;
+const strictFixed20Components = artifact.evaluation.strictBlindExternal
+    .families.entryIndexed.fixed20Second.contentComponents;
+const candidateHorizonRows = Object.values(
+    artifact.evaluation.strictBlindCandidateVsBaseline
+        .families.entryIndexed.fixedHorizons,
+).filter(Boolean).length;
+const candidateLeakageRows = artifact.evaluation.strictBlindCandidateLeakageSensitivity
+    .families.entryIndexed.policies.length;
 
 async function chooseLibrary(page) {
     await page.getByRole('button', { name: 'Opening library', exact: true }).click();
@@ -38,6 +44,7 @@ async function search(page, value) {
         await pooled.getByText(/636 visible source-aligned Shorts sequences/).waitFor();
         await pooled.getByText('SEALED BLIND VALIDATION', { exact: true }).waitFor();
         await pooled.getByText('ACCOUNT-BY-ACCOUNT BLIND TRANSPORT', { exact: true }).waitFor();
+        await pooled.getByText('BLIND CANDIDATE SKILL · DIAGNOSTIC ONLY', { exact: true }).waitFor();
         await pooled.getByText('20s discrimination', { exact: true }).first().waitFor();
         await pooled.getByText('none', { exact: true }).first().waitFor();
         await pooled.getByText(/constant forecast.*predicted SD/i).waitFor();
@@ -52,7 +59,32 @@ async function search(page, value) {
             return canvas && Number.isFinite(canvas._plPooledPointCount);
         });
         assert.strictEqual(
-            await scatter.evaluate(node => node._plPooledPointCount), strictFixed20Videos,
+            await scatter.evaluate(node => node._plPooledPointCount), strictFixed20Components,
+        );
+        const candidateHorizon = pooled.locator(
+            'canvas[data-pl-canvas="pooled-candidate-horizon"]',
+        );
+        const candidateLeakage = pooled.locator(
+            'canvas[data-pl-canvas="pooled-candidate-leakage"]',
+        );
+        await pooled.waitForFunction(() => {
+            const horizon = document.querySelector(
+                'canvas[data-pl-canvas="pooled-candidate-horizon"]',
+            );
+            const leakage = document.querySelector(
+                'canvas[data-pl-canvas="pooled-candidate-leakage"]',
+            );
+            return horizon && leakage
+                && Number.isFinite(horizon._plCandidateHorizonRows)
+                && Number.isFinite(leakage._plCandidateLeakageRows);
+        });
+        assert.strictEqual(
+            await candidateHorizon.evaluate(node => node._plCandidateHorizonRows),
+            candidateHorizonRows,
+        );
+        assert.strictEqual(
+            await candidateLeakage.evaluate(node => node._plCandidateLeakageRows),
+            candidateLeakageRows,
         );
 
         await search(pooled, 'DgFX1kJcWtw');
@@ -92,14 +124,25 @@ async function search(page, value) {
         await mobile.goto(`${base}?scope=all`, { waitUntil: 'domcontentloaded' });
         await chooseLibrary(mobile);
         await mobile.getByText('SEALED BLIND VALIDATION', { exact: true }).waitFor();
+        await mobile.getByText('BLIND CANDIDATE SKILL · DIAGNOSTIC ONLY', { exact: true }).waitFor();
         assert.strictEqual(await mobile.evaluate(
             () => document.documentElement.scrollWidth <= window.innerWidth + 1,
         ), true, 'pooled blind report must not overflow the mobile viewport');
+        assert.strictEqual(await mobile.evaluate(() => [
+            'pooled-candidate-horizon', 'pooled-candidate-leakage',
+        ].every(kind => {
+            const canvas = document.querySelector(`canvas[data-pl-canvas="${kind}"]`);
+            if (!canvas || !canvas.parentElement) return false;
+            return canvas.getBoundingClientRect().width
+                <= canvas.parentElement.getBoundingClientRect().width + 1;
+        })), true, 'candidate evidence canvases must remain inside their mobile parents');
+        await mobile.evaluate(() => window.scrollTo(0, 0));
+        await mobile.waitForTimeout(250);
         await mobile.screenshot({
             path: 'buildings/jarvis/promise-lab/.cache/pooled-ui-mobile-verified.png',
             fullPage: false,
         });
-        console.log(`Promise pooled UI: pass (636 visible, ${strictFixed20Videos} strict blind fixed-20 points, 208 Main rows)`);
+        console.log(`Promise pooled UI: pass (636 visible, ${strictFixed20Components} strict blind fixed-20 components, 208 Main rows)`);
     } finally {
         await browser.close();
     }
