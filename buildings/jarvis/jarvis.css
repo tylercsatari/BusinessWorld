@@ -1219,6 +1219,33 @@
     .jarvis-bucket-row { gap: 6px; }
     .jarvis-bucket-label { font-size: 10px; min-width: 50px; }
     .jarvis-proximity-checks { columns: 2; gap: 6px; }
+
+    /* ── Shorts Quant + Long Quant modules (inline-styled) — fluid single-column on phones ──
+       !important is required: these panels style everything inline. */
+    #retention-root, #longquant-root { max-width: 100%; overflow-x: hidden; }
+    /* fixed-basis side panels (run lists, detail panes) stack full-width */
+    #retention-root div[style*="flex:0 0"], #longquant-root div[style*="flex:0 0"] { flex: 1 1 100% !important; max-width: 100% !important; }
+    /* inline min-width traps stop forcing horizontal overflow */
+    #retention-root [style*="min-width:2"], #longquant-root [style*="min-width:2"],
+    #retention-root [style*="min-width:3"], #longquant-root [style*="min-width:3"] { min-width: 0 !important; }
+    /* media + graphs never exceed the screen */
+    #retention-root img, #longquant-root img, #retention-root svg, #longquant-root svg,
+    #retention-root video, #longquant-root video, #retention-root canvas, #longquant-root canvas { max-width: 100% !important; height: auto; }
+    #retention-root img[style*="width:260px"], #longquant-root img[style*="width:260px"] { width: 100% !important; }
+    /* wide tables scroll inside themselves instead of stretching the page */
+    #retention-root table, #longquant-root table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+    /* inputs: full width + 16px font so iOS doesn't zoom-jump on focus */
+    #retention-root input[type="text"], #retention-root input:not([type]), #retention-root textarea,
+    #longquant-root input[type="text"], #longquant-root input:not([type]), #longquant-root textarea { font-size: 16px !important; flex: 1 1 100% !important; width: 100% !important; box-sizing: border-box; }
+    /* pills/buttons: comfortable tap targets */
+    #retention-root span[data-rs], #longquant-root span[data-rs],
+    #retention-root button, #longquant-root button { padding-top: 8px !important; padding-bottom: 8px !important; }
+    /* scrolling run lists get a sane phone height */
+    #longquant-root [data-lqxscrollkey] { max-height: 320px !important; }
+    /* long-quant modal fills the phone screen */
+    #longquant-root div[style*="position:fixed"] > div { width: 98vw !important; max-height: 94vh !important; padding: 8px !important; }
+    /* section nav rows scroll horizontally instead of towering */
+    #retention-root > div > div:first-child, #longquant-root > div > div:first-child { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
 
 /* ── Pipeline Architecture Flow ── */
