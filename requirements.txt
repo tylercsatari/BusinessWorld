@@ -3,3 +3,4 @@ scipy
 scikit-learn
 requests
 boto3
+yt-dlp>=2024.4

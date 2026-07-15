@@ -1226,7 +1226,7 @@ const JarvisRetention = (function () {
             : `<div data-rawframe="${i}" style="width:42px;height:75px;border:1px dashed ${C.border};border-radius:5px;display:flex;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋${i + 1}</div>`).join('')}
             <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="hook text…" style="flex:1;min-width:160px;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:12px"/>
             <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CY : C.border};background:${nFrames ? CY + '22' : 'transparent'};color:${nFrames ? CY : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Score this hook</span></div>${genFramesPanel()}` : '';
-        const controls = cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, '🖼 5 frames + text')}${!st.rawBuildMode ? `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ Upload video</span>` : ''}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red}">${esc(String(st.rawUpErr).slice(0, 70))}</span>` : ''}</div>${builder}`, 12);
+        const controls = cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, '🖼 5 frames + text')}${!st.rawBuildMode ? `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ Upload video</span><span style="display:inline-flex;gap:5px;align-items:center"><input data-rawyturl value="${esc(st.rawYtUrl || '')}" placeholder="or paste a YouTube link…" style="width:220px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 9px;font-size:11px"/><span data-rawytgo style="cursor:pointer;border:1px solid ${st.rawYtBusy ? C.amber : CY};background:${st.rawYtBusy ? C.amber + '18' : CY + '18'};color:${st.rawYtBusy ? C.amber : CY};border-radius:6px;padding:4px 11px;font-size:11px;font-weight:800;white-space:nowrap">${st.rawYtBusy ? '⏳ downloading + embedding…' : '⬇ score from link'}</span></span>` : ''}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red}">${esc(String(st.rawUpErr).slice(0, 70))}</span>` : ''}</div>${builder}`, 12);
         if (!EXPREG || EXPREG.loading) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">Loading the indicator registry…</div>`);
         if (EXPREG.error || !EXPREG.indicators) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">No indicator registry yet — run <code>indicators.py</code>.</div>`);
         // scorable = the indicators a NEW hook can actually be scored on (content probes + global novelty)
@@ -3204,8 +3204,22 @@ const JarvisRetention = (function () {
         }).join('');
         return `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="display:flex;justify-content:space-between;gap:6px;font-size:9px;font-weight:900;text-transform:uppercase"><span style="color:${C.mute}">all embedding outputs</span><span style="color:${found === possible ? C.green : C.amber}">${found}/${possible}${hasText ? '' : ' (visual-only — no transcript; fix it above to unlock text + together)'}</span></div>${rows}</div>`;
     }
+    async function rtgScoreYoutube() {
+        const inp = window.document.querySelector('[data-rawyturl]'); if (inp) st.rawYtUrl = inp.value;
+        const url = String(st.rawYtUrl || '').trim();
+        if (!url || st.rawYtBusy) return;
+        st.rawYtBusy = true; st.rawUpErr = null; render();
+        try {
+            const j = await rtJob('/api/raw/embed-youtube', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, async: true }) });
+            if (!j || j.error) st.rawUpErr = (j && j.error) || 'YouTube score failed';
+            else { st.rawUploads = st.rawUploads || []; st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; st.rawYtUrl = ''; }
+        } catch (e) { st.rawUpErr = 'YouTube: ' + (e.message || e); }
+        st.rawYtBusy = false;
+        render();
+    }
     function onClick(e) {
         if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleClick(e)) return;
+        if (e.target.closest('[data-rawytgo]')) { rtgScoreYoutube(); return; }
         const rtt = e.target.closest('[data-rawtitleedit]'); if (rtt) {
             const idx = parseInt(rtt.getAttribute('data-rawtitleedit'), 10);
             st.rawTitleEdit = { idx, text: ((st.rawUploads || [])[idx] || {}).title || '' };
@@ -3349,6 +3363,7 @@ const JarvisRetention = (function () {
         if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleInput(e)) return;
         if (e.target.hasAttribute && e.target.hasAttribute('data-rawtranstext')) { if (st.rawTransEdit) st.rawTransEdit.text = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-rawtitletext')) { if (st.rawTitleEdit) st.rawTitleEdit.text = e.target.value; return; }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-rawyturl')) { st.rawYtUrl = e.target.value; return; }
         if (e.target.id === 'rtg-minstr') { st.rtgMinStr = +e.target.value; rtgUpdateThresh(); return; }
         if (e.target.id === 'rtg-hazA') { st.hazA = +e.target.value; rtgUpdateHazCompare(); return; }
         if (e.target.id === 'rtg-hazB') { st.hazB = +e.target.value; rtgUpdateHazCompare(); return; }

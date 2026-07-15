@@ -832,14 +832,21 @@ async function handlePromiseHookScore(req, res) {
     try {
         const body = await readBody(req);
         const text = String(body.text || '').replace(/\s+/g, ' ').trim();
-        const idea = String(body.idea || '').replace(/\s+/g, ' ').trim();
-        // The interactive scorer always derives time from word count and the
-        // corpus-wide speaking rate. Ignore legacy duration fields so an old
-        // client cannot turn a blank control into a rejected numeric zero.
-        const durationSeconds = null;
+        const suppliedDuration = Number(body.durationSeconds);
+        const durationSeconds = Number.isFinite(suppliedDuration) && suppliedDuration > 0
+            ? suppliedDuration : null;
+        const maximumInputBytes = Math.max(
+            65536,
+            parseInt(process.env.PROMISE_HOOK_MAX_INPUT_BYTES || String(4 * 1024 * 1024), 10),
+        );
         if (!/[\p{L}\p{N}_]/u.test(text)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type at least one word to score"}'); return; }
-        if (text.length > 2400) { res.writeHead(413, { 'Content-Type': 'application/json' }); res.end('{"error":"the exact scorer accepts up to 2,400 characters per analyzed opening; the input was not truncated"}'); return; }
-        if (idea.length > 1200) { res.writeHead(413, { 'Content-Type': 'application/json' }); res.end('{"error":"the candidate idea anchor accepts up to 1,200 characters; the input was not truncated"}'); return; }
+        if (Buffer.byteLength(text, 'utf8') > maximumInputBytes) {
+            res.writeHead(413, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: `opening exceeds the configured ${maximumInputBytes}-byte transport budget; it was not truncated`,
+            }));
+            return;
+        }
         if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
         const scoreRunner = job => {
             if (job) { job.status = 'queued'; job.ts = Date.now(); }
@@ -849,18 +856,47 @@ async function handlePromiseHookScore(req, res) {
             const script = path.join(__dirname, 'buildings/jarvis/promise-lab/score_hook.py');
             const py = spawn(RAW_PYTHON, [script, '--json-stdin'], { env: RAW_PY_ENV, stdio: ['pipe', 'pipe', 'pipe'] });
             let so = '', se = '';
-            py.stdout.on('data', d => { so += d; if (so.length > 32e6) so = so.slice(-32e6); });
+            let settled = false;
+            const maximumOutputBytes = Math.max(
+                32 * 1024 * 1024,
+                parseInt(process.env.PROMISE_HOOK_MAX_OUTPUT_BYTES || String(128 * 1024 * 1024), 10),
+            );
+            py.stdout.on('data', d => {
+                if (settled) return;
+                so += d;
+                if (Buffer.byteLength(so, 'utf8') > maximumOutputBytes) {
+                    settled = true;
+                    try { py.kill('SIGKILL'); } catch (_) {}
+                    no(new Error(`hook scorer exceeded the configured ${maximumOutputBytes}-byte response budget`));
+                }
+            });
             py.stderr.on('data', d => { se += d; if (se.length > 20000) se = se.slice(-20000); });
-            py.stdin.end(JSON.stringify({ text, idea, durationSeconds }));
-            const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (_) {} no(new Error('hook scorer timeout')); }, 300000);
+            py.stdin.end(JSON.stringify({ text, durationSeconds }));
+            const scoreTimeout = Math.max(
+                300000,
+                parseInt(process.env.PROMISE_HOOK_SCORE_TIMEOUT_MS || '900000', 10),
+            );
+            const timer = setTimeout(() => {
+                if (settled) return;
+                settled = true;
+                try { py.kill('SIGKILL'); } catch (_) {}
+                no(new Error('hook scorer timeout'));
+            }, scoreTimeout);
             py.on('close', code => {
                 clearTimeout(timer);
+                if (settled) return;
+                settled = true;
                 const line = so.trim().split('\n').filter(value => value.trim().startsWith('{')).pop();
                 if (!line) return no(new Error((se.trim().split('\n').pop() || `hook scorer exited ${code}`).slice(-240)));
                 try { const value = JSON.parse(line); return value.error ? no(new Error(value.error)) : ok(value); }
                 catch (error) { return no(error); }
             });
-            py.on('error', error => { clearTimeout(timer); no(error); });
+            py.on('error', error => {
+                clearTimeout(timer);
+                if (settled) return;
+                settled = true;
+                no(error);
+            });
                 });
             });
         };
@@ -1757,6 +1793,35 @@ const server = http.createServer(async (req, res) => {
     // =========================================
     // RAW upload — embed an uploaded video's first-5s hook (visual/text/together) and
     // locate it in the existing map by nearest neighbours. Raw binary body; ext in X-Raw-Ext.
+    // ⬇ score a hook straight from a YouTube link: server downloads the short, extracts the
+    // 5-frame montage + first-5s transcript, embeds and scores — identical record to an upload.
+    if (pathname === '/api/raw/embed-youtube' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const yurl = String(body.url || '').trim().slice(0, 300);
+            if (!/^[\w-]{11}$/.test(yurl) && !/youtube\.com|youtu\.be/i.test(yurl)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"paste a YouTube link (watch, shorts, or youtu.be)"}'); return; }
+            const ytArgs = [path.join(__dirname, 'raw_upload.py'), '--youtube', yurl];
+            const yTitle = String(body.title || '').slice(0, 80).trim();
+            if (yTitle) ytArgs.push('--title', yTitle);
+            const ytRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
+                const py = spawn(RAW_PYTHON, ytArgs, { env: RAW_PY_ENV });
+                let out = '', err = '';
+                py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
+                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('YouTube score timeout (download + embed took >6 min)')); }, 360000);
+                py.on('close', () => {
+                    clearTimeout(timer);
+                    const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+                    if (!line) return no(new Error('no result — ' + (err.trim().split('\n').pop() || 'no output').slice(-160)));
+                    try { const j = JSON.parse(line); return j.error ? no(new Error(j.error)) : ok(j); } catch (e) { no(e); }
+                });
+                py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
+            }));
+            if (body.async) { const jobId = lqJobSubmit('raw-embed-youtube', ytRunner); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            const out = await ytRunner();
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(out));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
     if (pathname === '/api/raw/embed-upload' && req.method === 'POST') {
         const ext = (req.headers['x-raw-ext'] || 'mp4').replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'mp4';
         const title = (req.headers['x-raw-title'] || 'My upload').toString().slice(0, 80);

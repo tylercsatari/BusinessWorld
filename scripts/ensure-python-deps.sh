@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PYTHON_BIN="${RAW_PYTHON:-python3}"
-IMPORTS='import numpy, boto3, requests, scipy, sklearn'
+IMPORTS='import numpy, boto3, requests, scipy, sklearn, yt_dlp'
 
 if "$PYTHON_BIN" -c "$IMPORTS" >/dev/null 2>&1; then
   echo "Python scoring dependencies are already available."

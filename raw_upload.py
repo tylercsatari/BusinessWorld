@@ -190,7 +190,52 @@ def _run():
     try:                                                   # the client may send the REAL full length (it trims the upload to 6s)
         if args.get('duration'): dur_s = float(args['duration'])
     except Exception: dur_s = None
-    if args.get('image'):
+    extra = {}
+    if args.get('youtube'):
+        # ⬇ score straight from a YouTube link: download the short (lowest useful quality),
+        # then run the EXACT same 5-frame + first-5s-transcript pipeline as a manual upload.
+        m = re.search(r'(?:v=|youtu\.be/|/shorts/|/live/)([\w-]{11})', args['youtube']) or re.search(r'^([\w-]{11})$', args['youtube'].strip())
+        if not m:
+            print(json.dumps({'error': 'could not find a YouTube video id in that link'})); return
+        vid = m.group(1)
+        try:
+            import yt_dlp
+        except Exception:
+            print(json.dumps({'error': 'yt-dlp is not installed on this server yet — redeploy to pick it up'})); return
+        ytmp = tempfile.mkdtemp(prefix='rawyt_')
+        outp = os.path.join(ytmp, 'v.%(ext)s')
+        try:
+            class _Silent:
+                def debug(self, *a): pass
+                def warning(self, *a): pass
+                def error(self, *a): pass
+            ydl_opts = {'format': 'mp4[height<=480]/best[height<=480]/best', 'outtmpl': outp,
+                        'quiet': True, 'no_warnings': True, 'noprogress': True, 'noplaylist': True,
+                        'logger': _Silent(), 'socket_timeout': 30}
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(f'https://www.youtube.com/watch?v={vid}', download=True)
+            files = [os.path.join(ytmp, f) for f in os.listdir(ytmp)]
+            path = max(files, key=os.path.getsize) if files else None
+            if not path or os.path.getsize(path) < 10000:
+                print(json.dumps({'error': 'download produced no usable video (private/removed/region-locked?)'})); return
+            if dur_s is None:
+                try: dur_s = float(info.get('duration') or 0) or None
+                except Exception: dur_s = None
+            if not args.get('title'):
+                args['title'] = str(info.get('title') or vid)[:80]
+            extra = {'videoId': vid, 'sourceUrl': f'https://www.youtube.com/watch?v={vid}',
+                     'sourceTitle': str(info.get('title') or '')[:120], 'sourceViews': info.get('view_count'),
+                     'sourceChannel': str(info.get('channel') or info.get('uploader') or '')[:80]}
+            inp = hook_inputs(path)
+            if not inp:
+                print(json.dumps({'error': 'downloaded but could not extract frames (ffmpeg decode failed)'})); return
+            b64, txt, good = inp
+        except Exception as e:
+            msg = str(e)[:200]
+            print(json.dumps({'error': 'YouTube download failed: ' + msg})); return
+        finally:
+            shutil.rmtree(ytmp, ignore_errors=True)
+    elif args.get('image'):
         img = args['image']
         if not os.path.exists(img):
             print(json.dumps({'error': 'no image'})); return
@@ -326,9 +371,11 @@ def _run():
         },
     }
     out = {
+        **extra,
         'montage': b64,
-        'transcript': txt if good else '',
+        'transcript': txt,                                 # kept even when low-confidence so the UI can show the guess for correction
         'silent': (not good),
+        'dur_s': dur_s,
         'title': args.get('title', 'My hook'),
         'indicators': indicators,
         'steer': steer,
