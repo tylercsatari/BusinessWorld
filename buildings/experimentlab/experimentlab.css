@@ -1,0 +1,109 @@
+.experiment-lab-panel {
+    min-height: 100%;
+    background: #080d14;
+    color: #e5edf5;
+    font-family: 'Nunito', sans-serif;
+}
+
+.experiment-lab-header {
+    min-height: 92px;
+    padding: 18px 22px;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 1px solid #263341;
+    background: #0b121a;
+}
+
+.experiment-lab-mark {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    border: 1px solid #2dd4bf;
+    border-radius: 8px;
+    background: #10212a;
+    box-shadow: inset 0 -12px 22px rgba(45, 212, 191, 0.08);
+}
+
+.experiment-lab-flask {
+    color: #67e8f9;
+    font: 700 30px/1 Georgia, serif;
+}
+
+.experiment-lab-title-block {
+    min-width: 0;
+}
+
+.experiment-lab-kicker {
+    color: #2dd4bf;
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0;
+}
+
+.experiment-lab-title-block h2 {
+    margin: 1px 0 2px;
+    color: #f8fafc;
+    font-size: 22px;
+    line-height: 1.15;
+    letter-spacing: 0;
+}
+
+.experiment-lab-title-block p {
+    margin: 0;
+    color: #91a4b7;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.experiment-lab-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: #a8bac9;
+    font-size: 10px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.experiment-lab-status span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #84cc16;
+    box-shadow: 0 0 10px rgba(132, 204, 22, 0.7);
+}
+
+.experiment-lab-workspace {
+    min-width: 0;
+    overflow-x: hidden;
+}
+
+.experiment-lab-error {
+    margin: 20px;
+    padding: 14px;
+    border-left: 3px solid #f87171;
+    color: #fecaca;
+    background: #241117;
+    font-size: 12px;
+}
+
+@media (max-width: 640px) {
+    .experiment-lab-header {
+        grid-template-columns: 42px minmax(0, 1fr);
+        padding: 14px;
+    }
+
+    .experiment-lab-mark {
+        width: 40px;
+        height: 40px;
+    }
+
+    .experiment-lab-status {
+        grid-column: 2;
+    }
+}

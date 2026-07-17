@@ -7834,7 +7834,7 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
                 // Latest write always wins — no stale-writer rejection. The
                 // merge below still preserves a position when a client sends
                 // 0,0 (building not yet created on that client).
-                const BUILDING_NAMES = ['Workshop','Storage','Money Pit','The Pen','Employee Island','Science Center','Jarvis','Library','Finance','The House','Movie Theatre','Gym','Chocolate Bar','Video Lab'];
+                const BUILDING_NAMES = ['Workshop','Storage','Money Pit','The Pen','Employee Island','Science Center','Jarvis','Experiment Lab','Library','Finance','The House','Movie Theatre','Gym','Chocolate Bar','Video Lab'];
                 const MISSING_DEFAULTS = {
                     'Chocolate Bar': { x: 42, z: 12 },
                     'Gym': { x: 15, z: 30 },

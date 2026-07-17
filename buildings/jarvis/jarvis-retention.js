@@ -10,7 +10,7 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', amber: '#f59e0b', accent: '#38bdf8' };
-    let root = null, DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, SAVEDCHANNELS = null, SAVEDCHANNELDETAIL = {}, SAVEDCHANNELANALYSIS = {}, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
+    let root = null, mountMode = 'full', DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, SAVEDCHANNELS = null, SAVEDCHANNELDETAIL = {}, SAVEDCHANNELANALYSIS = {}, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     let PROMISE_UI = null;
@@ -3070,6 +3070,12 @@ const JarvisRetention = (function () {
     }
     function render() {
         if (!root) return;
+        if (mountMode === 'experiment') {
+            const bgNote = BGPEND > 0 ? `<div style="font-size:10px;color:${C.cyan};margin:0 0 8px;font-weight:600">Loading corpus context (${BGPEND} file${BGPEND > 1 ? 's' : ''} left)</div>` : '';
+            root.innerHTML = `<div style="background:${C.bg};padding:14px;color:${C.text};font-family:'Nunito',sans-serif">${bgNote}<div id="rtg-exppanel">${renderExperiment()}</div></div>`;
+            try { rtgAfterRender(); } catch (e) { }
+            return;
+        }
         // TWO GROUPS so it's clear what the channel selector affects:
         //  • PER-CHANNEL  — analyses of the selected account's own videos (scoped by the channel bar)
         //  • CORPUS       — built on ALL videos (your 211 + the 11k library); account-independent
@@ -3944,8 +3950,10 @@ const JarvisRetention = (function () {
           ${hooks.length > SHOW ? `<div style="text-align:center;margin-top:12px"><span data-savedmore style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:8px;padding:6px 18px;font-size:11px;font-weight:700">Load ${Math.min(60, hooks.length - SHOW)} more · ${hooks.length - SHOW} left</span></div>` : ''}`, 12);
     }
 
-    async function mount(el) {
+    async function mount(el, options) {
         root = el;
+        mountMode = options && options.mode === 'experiment' ? 'experiment' : 'full';
+        if (mountMode === 'experiment') st.sec = 'experiment';
         if (!root.__rb) {
             root.addEventListener('click', onClick); root.addEventListener('input', onInput); root.addEventListener('change', onChange);
             // clicking into the Generate box pre-warms the idea GPU — the cold boot overlaps typing
@@ -4004,7 +4012,8 @@ const JarvisRetention = (function () {
         }
         render();
     }
-    return { mount , __st: () => st };
+    function mountExperiment(el) { return mount(el, { mode: 'experiment' }); }
+    return { mount, mountExperiment, __st: () => st };
 })();
 if (typeof window !== 'undefined') window.JarvisRetention = JarvisRetention;
 if (typeof module !== 'undefined' && module.exports) module.exports = JarvisRetention;

@@ -124,6 +124,7 @@
     <link rel="stylesheet" href="buildings/gym/gym.css">
     <link rel="stylesheet" href="buildings/chocolatebar/chocolatebar.css">
     <link rel="stylesheet" href="buildings/jarvis/jarvis.css">
+    <link rel="stylesheet" href="buildings/experimentlab/experimentlab.css">
     <link rel="stylesheet" href="buildings/finance/finance.css">
     <link rel="stylesheet" href="buildings/employee/employee.css">
 </head>
@@ -215,6 +216,7 @@
     <div class="control-row"><span class="control-desc">Employee Island - Manage workers</span></div>
     <div class="control-row"><span class="control-desc">Science Center - Research & development</span></div>
     <div class="control-row"><span class="control-desc">Jarvis - Central intelligence hub</span></div>
+    <div class="control-row"><span class="control-desc">Experiment Lab - Shorts generation & scoring</span></div>
     <div class="control-row"><span class="control-desc">Library - Grand hall of knowledge</span></div>
     <div class="control-row"><span class="control-desc">Finance - Wall Street tower</span></div>
     <div class="control-row"><span class="control-desc">The House - Home sweet home</span></div>
@@ -280,10 +282,11 @@ function hashString(str) {
 <script src="buildings/chocolatebar/chocolatebar-ui.js"></script>
 <script src="buildings/jarvis/jarvis-variable-catalog.js"></script>
 <script src="buildings/jarvis/jarvis-upload-utils.js"></script>
-<script src="buildings/jarvis/jarvis-retention.js?v=saved-channels-1"></script>
+<script src="buildings/jarvis/jarvis-retention.js?v=experiment-lab-1"></script>
 <script src="buildings/jarvis/promise-lab-ui.js"></script>
 <script src="buildings/jarvis/jarvis-longquant.js"></script>
 <script src="buildings/jarvis/jarvis-ui.js"></script>
+<script src="buildings/experimentlab/experimentlab-ui.js?v=1"></script>
 <script src="buildings/finance/finance-ui.js"></script>
 <script src="buildings/employee/employee-service.js"></script>
 <script src="buildings/employee/employee-ui.js"></script>
@@ -652,7 +655,7 @@ function makeClickable(group, name, type = 'building') {
     return group;
 }
 
-let workshop, storage, moneyPit, pen, employeeIsland, scienceCenter, jarvis, library, finance, house, movieTheatre, gym, chocolateBar, videoLab;
+let workshop, storage, moneyPit, pen, employeeIsland, scienceCenter, jarvis, experimentLab, library, finance, house, movieTheatre, gym, chocolateBar, videoLab;
 let jarvisNetwork; // separate group for network graph (replaceable with real data)
 let zeusMesh; // Zeus the cat
 
@@ -1272,6 +1275,80 @@ function createScienceCenter() {
 
     g.scale.set(0.5, 0.5, 0.5);
     return makeClickable(g, 'Science Center');
+}
+
+// --- EXPERIMENT LAB: dedicated Shorts generation, grinding, and scoring building ---
+function createExperimentLab() {
+    const g = new THREE.Group();
+    const shellMat = new THREE.MeshStandardMaterial({ color: 0x17232d, roughness: 0.55, metalness: 0.35 });
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0x536878, roughness: 0.3, metalness: 0.65 });
+    const cyanMat = new THREE.MeshStandardMaterial({ color: 0x38d9cf, emissive: 0x149c98, emissiveIntensity: 0.9, roughness: 0.2 });
+    const limeMat = new THREE.MeshStandardMaterial({ color: 0x9edb35, emissive: 0x4f8d17, emissiveIntensity: 0.8, roughness: 0.25 });
+
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(7, 7.5, 0.55, 10), trimMat);
+    base.position.y = 0.28; base.receiveShadow = true; g.add(base);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(10, 4.4, 8), shellMat);
+    body.position.y = 2.65; body.castShadow = true; body.receiveShadow = true; g.add(body);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(10.7, 0.35, 8.7), trimMat);
+    roof.position.y = 4.95; roof.castShadow = true; g.add(roof);
+
+    const glassWindowMat = new THREE.MeshStandardMaterial({ color: 0x65e4df, emissive: 0x1c8e91, emissiveIntensity: 0.65, transparent: true, opacity: 0.72, roughness: 0.08 });
+    [-3.2, -1.35, 1.35, 3.2].forEach(x => {
+        const windowMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 1.35), glassWindowMat);
+        windowMesh.position.set(x, 2.75, 4.015); g.add(windowMesh);
+    });
+    const door = new THREE.Mesh(new THREE.BoxGeometry(1.45, 2.35, 0.18), trimMat);
+    door.position.set(0, 1.73, 4.05); g.add(door);
+    const doorLight = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.1), limeMat);
+    doorLight.position.set(0.48, 1.75, 4.17); g.add(doorLight);
+
+    const signTexture = canvasTex(512, 128, (ctx, w, h) => {
+        ctx.fillStyle = '#0b141c'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#2dd4bf'; ctx.lineWidth = 8; ctx.strokeRect(5, 5, w - 10, h - 10);
+        ctx.fillStyle = '#e8fbff'; ctx.font = '800 50px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('EXPERIMENT LAB', w / 2, h / 2 + 2);
+    }, false);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 1.3), new THREE.MeshBasicMaterial({ map: signTexture }));
+    sign.position.set(0, 4.05, 4.2); g.add(sign);
+
+    // Giant Erlenmeyer flask: the building remains unmistakable from the world camera.
+    const flask = new THREE.Group();
+    const glassMat = new THREE.MeshPhysicalMaterial({ color: 0xcffafe, transparent: true, opacity: 0.28, roughness: 0.05, metalness: 0.05, side: THREE.DoubleSide, depthWrite: false });
+    const flaskBody = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 3.0, 4.4, 32, 1, true), glassMat);
+    flaskBody.position.y = 7.2; flaskBody.castShadow = true; flask.add(flaskBody);
+    const flaskBottom = new THREE.Mesh(new THREE.CircleGeometry(3.0, 32), glassMat);
+    flaskBottom.rotation.x = -Math.PI / 2; flaskBottom.position.y = 5.02; flask.add(flaskBottom);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.15, 2.5, 32, 1, true), glassMat);
+    neck.position.y = 10.58; flask.add(neck);
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(1.18, 0.16, 10, 32), cyanMat);
+    lip.rotation.x = Math.PI / 2; lip.position.y = 11.86; flask.add(lip);
+
+    const liquid = new THREE.Mesh(new THREE.CylinderGeometry(1.85, 2.65, 2.25, 32), new THREE.MeshStandardMaterial({ color: 0x22c7bd, emissive: 0x087e79, emissiveIntensity: 0.75, transparent: true, opacity: 0.82, roughness: 0.18 }));
+    liquid.position.y = 6.22; liquid.userData.isExperimentLiquid = true; flask.add(liquid);
+    const liquidTop = new THREE.Mesh(new THREE.CircleGeometry(1.85, 32), cyanMat);
+    liquidTop.rotation.x = -Math.PI / 2; liquidTop.position.y = 7.36; liquidTop.userData.isExperimentLiquidTop = true; flask.add(liquidTop);
+
+    for (let i = 0; i < 14; i++) {
+        const bubble = new THREE.Mesh(new THREE.SphereGeometry(0.10 + (i % 3) * 0.035, 8, 8), i % 4 === 0 ? limeMat : cyanMat);
+        const angle = i * 2.39996, radius = 0.35 + (i % 5) * 0.28;
+        bubble.position.set(Math.cos(angle) * radius, 5.35 + (i % 7) * 0.3, Math.sin(angle) * radius);
+        bubble.userData = { isExperimentBubble: true, baseX: bubble.position.x, baseZ: bubble.position.z, phase: i * 0.67 };
+        flask.add(bubble);
+    }
+    g.add(flask);
+
+    // Three exterior test cells make the lab read as an active work surface, not a storefront.
+    [-4.4, 0, 4.4].forEach((x, i) => {
+        const cell = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.65, 1.9, 12), i === 1 ? cyanMat : limeMat);
+        cell.position.set(x, 1.35, -4.55); cell.userData = { isExperimentCell: true, phase: i * 1.7 }; g.add(cell);
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.08, 8, 20), trimMat);
+        ring.rotation.x = Math.PI / 2; ring.position.set(x, 2.3, -4.55); g.add(ring);
+    });
+
+    const labLight = new THREE.PointLight(0x31d9cc, 2.1, 24);
+    labLight.position.set(0, 8.2, 0); labLight.userData.isExperimentLight = true; g.add(labLight);
+    g.position.set(45, 0, -36);
+    return makeClickable(g, 'Experiment Lab');
 }
 
 // --- JARVIS: Transparent geodesic structure with neural network visualization ---
@@ -2320,9 +2397,9 @@ async function initProjectFlags(savedFlags) {
 }
 
 // --- Save / Load Layout ---
-const BUILDING_NAMES = ['Workshop', 'Storage', 'Money Pit', 'The Pen', 'Employee Island', 'Science Center', 'Jarvis', 'Library', 'Finance', 'The House', 'Movie Theatre', 'Gym', 'Chocolate Bar', 'Video Lab'];
+const BUILDING_NAMES = ['Workshop', 'Storage', 'Money Pit', 'The Pen', 'Employee Island', 'Science Center', 'Jarvis', 'Experiment Lab', 'Library', 'Finance', 'The House', 'Movie Theatre', 'Gym', 'Chocolate Bar', 'Video Lab'];
 function getBuildingByName(n) {
-    return { 'Workshop': workshop, 'Storage': storage, 'Money Pit': moneyPit, 'The Pen': pen, 'Employee Island': employeeIsland, 'Science Center': scienceCenter, 'Jarvis': jarvis, 'Library': library, 'Finance': finance, 'The House': house, 'Movie Theatre': movieTheatre, 'Gym': gym, 'Chocolate Bar': chocolateBar, 'Video Lab': videoLab }[n];
+    return { 'Workshop': workshop, 'Storage': storage, 'Money Pit': moneyPit, 'The Pen': pen, 'Employee Island': employeeIsland, 'Science Center': scienceCenter, 'Jarvis': jarvis, 'Experiment Lab': experimentLab, 'Library': library, 'Finance': finance, 'The House': house, 'Movie Theatre': movieTheatre, 'Gym': gym, 'Chocolate Bar': chocolateBar, 'Video Lab': videoLab }[n];
 }
 // This script is an ES module, so top-level functions are NOT global. auth-gate.js
 // (a separate script) calls window.getBuildingByName for the access poll + the
@@ -2422,6 +2499,7 @@ async function init() {
     employeeIsland = _mk(createEmployeeIsland, 'employeeIsland');
     scienceCenter = _mk(createScienceCenter, 'scienceCenter');
     jarvis = _mk(createJarvis, 'jarvis');
+    experimentLab = _mk(createExperimentLab, 'experimentLab');
     library = _mk(createLibrary, 'library');
     finance = _mk(createFinance, 'finance');
     house = _mk(createHouse, 'house');
@@ -2452,6 +2530,7 @@ async function init() {
         initDefaultPaths();
         retryLayoutLoad();     // load FAILED: keep this session read-only for layout until it loads
     }
+    ensureBuildingPath(experimentLab);
     scene.add(pathTileGroup);
     // Paths + building positions are final now. The early applyAccess (fired the
     // moment the building objects existed) ran BEFORE paths loaded, so re-apply
@@ -2470,7 +2549,7 @@ async function init() {
 
     // Snap buildings to grid (for initial default positions)
     if (!saved || !saved.buildings) {
-        [workshop, storage, moneyPit, pen, employeeIsland, scienceCenter, jarvis, library, finance, house, videoLab].forEach(b => {
+        [workshop, storage, moneyPit, pen, employeeIsland, scienceCenter, jarvis, experimentLab, library, finance, house, videoLab].forEach(b => {
             if (!b) return;
             b.position.x = snapToGrid(b.position.x);
             b.position.z = snapToGrid(b.position.z);
@@ -2512,7 +2591,7 @@ async function init() {
     const _ov = document.getElementById('loading-overlay'); if (_ov) _ov.style.display = 'none';
     if (!window.__animating) { window.__animating = true; try { animate(); } catch (e) { console.error('animate() failed:', e); } }
     try { document.getElementById('pen-scale-slider').addEventListener('input', () => _applyPenCreatureScales()); } catch (e) {}
-    window._bw = window._bw || { playerMesh: (typeof playerMesh !== 'undefined' ? playerMesh : null), camera, cameraTarget, scene, workshop, storage, moneyPit, pen, island: employeeIsland, scienceCenter, jarvis, library, finance, house, videoLab };
+    window._bw = window._bw || { playerMesh: (typeof playerMesh !== 'undefined' ? playerMesh : null), camera, cameraTarget, scene, workshop, storage, moneyPit, pen, island: employeeIsland, scienceCenter, jarvis, experimentLab, library, finance, house, videoLab };
     console.log('Business World loaded!');
     try { fetchPlaidBalance(); } catch (e) {}
   }
@@ -2917,6 +2996,19 @@ function initDefaultPaths() {
         [[0,0],[-1,1],[-2,1],[-3,2],[-4,3],[-5,3],[-6,4],[-7,5],[-8,5],[-9,6],[-10,7]], // to the house
     ];
     lines.forEach(pts => pts.forEach(([gx,gz]) => addPathTile(gx, gz)));
+}
+function ensureBuildingPath(building) {
+    if (!building) return;
+    const tx = Math.round(building.position.x / GRID_SIZE), tz = Math.round(building.position.z / GRID_SIZE);
+    let nearest = [0, 0], best = Infinity;
+    pathTiles.forEach(key => {
+        const [x, z] = key.split(',').map(Number), distance = Math.abs(tx - x) + Math.abs(tz - z);
+        if (distance < best) { best = distance; nearest = [x, z]; }
+    });
+    if (best <= 2) return;
+    let [x, z] = nearest;
+    while (x !== tx) { x += Math.sign(tx - x); addPathTile(x, z); }
+    while (z !== tz) { z += Math.sign(tz - z); addPathTile(x, z); }
 }
 function rebuildAllPaths() {
     // Remove old path meshes
@@ -3721,6 +3813,20 @@ function animate() {
         if (ch.userData.isJarvisRing) { ch.rotation.z = Math.sin(time * 0.4 + ch.position.y * 0.1) * 0.06; }
         if (ch.userData.isJarvisOrb) { ch.material.emissiveIntensity = 1.2 + Math.sin(time * 3) * 0.5; ch.scale.setScalar(1 + Math.sin(time * 2) * 0.08); }
         if (ch.userData.isJarvisSubOrb) { const i = ch.userData.orbitIndex; const a = time * 0.8 + (i / 3) * Math.PI * 2; const orbY = jarvis.children.find(c => c.userData.isJarvisOrb); const baseY = orbY ? orbY.position.y : 40; ch.position.set(Math.cos(a) * 3.5, baseY + Math.sin(time * 1.5 + i) * 0.5, Math.sin(a) * 3.5); }
+    });
+    // Experiment Lab: bubble motion and restrained instrument pulses.
+    if (experimentLab) experimentLab.traverse(ch => {
+        if (ch.userData.isExperimentBubble) {
+            const phase = ch.userData.phase || 0, rise = (time * 0.28 + phase * 0.17) % 1;
+            ch.position.y = 5.35 + rise * 2.0;
+            ch.position.x = ch.userData.baseX + Math.sin(time * 1.6 + phase) * 0.09;
+            ch.position.z = ch.userData.baseZ + Math.cos(time * 1.3 + phase) * 0.09;
+            ch.scale.setScalar(0.75 + Math.sin(rise * Math.PI) * 0.45);
+        }
+        if (ch.userData.isExperimentLiquid) ch.rotation.y = time * 0.08;
+        if (ch.userData.isExperimentLiquidTop) ch.scale.setScalar(1 + Math.sin(time * 1.4) * 0.025);
+        if (ch.userData.isExperimentCell) ch.scale.y = 0.96 + Math.sin(time * 2.1 + ch.userData.phase) * 0.04;
+        if (ch.userData.isExperimentLight) ch.intensity = 1.8 + Math.sin(time * 1.8) * 0.35;
     });
     // The House: Chimney smoke
     house.children.forEach(ch => { if (ch.userData.isSmoke) ch.children.forEach(pf => { const idx = pf.userData.smokeIndex, off = pf.userData.smokeOffset, t2 = (time * 0.3 + idx * 0.15) % 3; pf.position.set(Math.sin(time * 0.8 + off) * 0.2, idx * 0.35 + t2 * 1.2, Math.cos(time * 0.6 + off) * 0.15); pf.scale.setScalar(0.4 + t2 * 0.5); pf.material.opacity = Math.max(0, 0.25 - t2 * 0.09); }); });
