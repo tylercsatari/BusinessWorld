@@ -45,6 +45,7 @@ const jarvisVariableCatalog = require('./buildings/jarvis/jarvis-variable-catalo
 const jarvisMetrics = require('./buildings/jarvis/jarvis-metrics');
 const streamJson = require('./buildings/jarvis/stream-json');
 const viralIdeaEngine = require('./buildings/jarvis/viral-idea-engine');
+const savedChannelAnalysis = require('./buildings/jarvis/saved-channel-analysis');
 const PDFDocument = require('pdfkit');
 const { spawn } = require('child_process');
 const PORT = process.env.PORT || 8002;
@@ -824,6 +825,81 @@ function readBody(req) {
         });
         req.on('error', reject);
     });
+}
+
+const SAVED_CHANNEL_ROOT = 'raw/saved-channels/';
+const SAVED_CHANNEL_INDEX_KEY = SAVED_CHANNEL_ROOT + 'index.json';
+const SAVED_CHANNEL_REQUEST_ROOT = 'shorts/channel-import/requests/';
+
+function savedChannelId(channelUrl) {
+    const digest = require('crypto').createHash('sha256').update(String(channelUrl || '').toLowerCase()).digest('hex').slice(0, 16);
+    return 'ch' + digest;
+}
+
+function compactSavedChannel(manifest) {
+    return {
+        id: manifest.id,
+        url: manifest.url,
+        name: manifest.name,
+        status: manifest.status,
+        phase: manifest.phase,
+        createdAt: manifest.createdAt,
+        updatedAt: manifest.updatedAt,
+        discovered: manifest.discovered || 0,
+        completed: manifest.completed || 0,
+        failed: manifest.failed || 0,
+        queued: manifest.queued || 0,
+        current: manifest.current || null,
+        error: manifest.error || null,
+    };
+}
+
+async function readSavedChannelManifest(id) {
+    const buffer = await cloud.downloadFromR2(`${SAVED_CHANNEL_ROOT}${id}/manifest.json`).catch(() => null);
+    if (!buffer) return null;
+    try { return JSON.parse(buffer.toString('utf8')); } catch (e) { return null; }
+}
+
+async function readSavedChannelIndex() {
+    const buffer = await cloud.downloadFromR2(SAVED_CHANNEL_INDEX_KEY).catch(() => null);
+    if (!buffer) return { version: 1, channels: [] };
+    try {
+        const index = JSON.parse(buffer.toString('utf8'));
+        if (!Array.isArray(index.channels)) index.channels = [];
+        return index;
+    } catch (e) { return { version: 1, channels: [] }; }
+}
+
+async function writeSavedChannelIndex(index) {
+    index.version = 1;
+    index.updatedAt = Date.now();
+    await cloud.uploadToR2(SAVED_CHANNEL_INDEX_KEY, Buffer.from(JSON.stringify(index)), 'application/json');
+}
+
+async function upsertSavedChannelIndex(manifest) {
+    const index = await readSavedChannelIndex();
+    index.channels = index.channels.filter(channel => channel.id !== manifest.id);
+    index.channels.push(compactSavedChannel(manifest));
+    index.channels.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    await writeSavedChannelIndex(index);
+}
+
+async function writeSavedChannelManifest(manifest) {
+    manifest.updatedAt = Date.now();
+    const videos = Array.isArray(manifest.videos) ? manifest.videos : [];
+    manifest.discovered = videos.length;
+    manifest.completed = videos.filter(video => video.status === 'done').length;
+    manifest.failed = videos.filter(video => video.status === 'error').length;
+    manifest.queued = videos.filter(video => video.status === 'queued' || video.status === 'scoring').length;
+    await cloud.uploadToR2(`${SAVED_CHANNEL_ROOT}${manifest.id}/manifest.json`, Buffer.from(JSON.stringify(manifest)), 'application/json');
+    await upsertSavedChannelIndex(manifest);
+    return manifest;
+}
+
+async function removeSavedChannelIndex(id) {
+    const index = await readSavedChannelIndex();
+    index.channels = index.channels.filter(channel => channel.id !== id);
+    await writeSavedChannelIndex(index);
 }
 
 function requestIsLoopback(req) {
@@ -3632,6 +3708,162 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (buf) { res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(buf); }
             else { res.writeHead(404); res.end(); }
         } catch (e) { res.writeHead(500); res.end(); }
+        return;
+    }
+    // Saved Shorts channels. The server owns the durable manifest/API while the Mac relay
+    // does channel discovery + scoring on a residential IP. Every video record is produced by
+    // raw_upload.py, the exact scorer used by "score from link" above.
+    if (pathname === '/api/raw/saved-channels' && req.method === 'GET') {
+        try {
+            let index = await readSavedChannelIndex();
+            if (!index.channels.length) {
+                const keys = ((await cloud.listR2Keys(SAVED_CHANNEL_ROOT).catch(() => [])) || []).filter(key => /\/manifest\.json$/.test(key));
+                const manifests = [];
+                for (const key of keys.slice(0, 100)) {
+                    const id = key.split('/').slice(-2, -1)[0];
+                    const manifest = await readSavedChannelManifest(id);
+                    if (manifest) manifests.push(compactSavedChannel(manifest));
+                }
+                if (manifests.length) {
+                    index = { version: 1, channels: manifests.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)) };
+                    await writeSavedChannelIndex(index).catch(() => {});
+                }
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify({ channels: index.channels || [], featureContract: savedChannelAnalysis.contract }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    if (pathname === '/api/raw/saved-channel' && req.method === 'POST') {
+        try {
+            const body = (await readBody(req)) || {};
+            const channelUrl = videoAnalyzer.parseChannelUrl(String(body.url || '').trim());
+            if (!channelUrl) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Paste a YouTube channel URL, such as youtube.com/@creator.' }));
+                return;
+            }
+            const id = savedChannelId(channelUrl);
+            let manifest = await readSavedChannelManifest(id);
+            if (!manifest) {
+                manifest = {
+                    version: 1,
+                    featureContractVersion: savedChannelAnalysis.contract.version,
+                    id,
+                    url: channelUrl,
+                    name: channelUrl.split('/').pop(),
+                    status: 'queued',
+                    phase: 'queued',
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                    stopRequested: false,
+                    error: null,
+                    current: null,
+                    videos: [],
+                };
+            } else if (['queued', 'running', 'stopping'].includes(manifest.status)) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: true, alreadyRunning: true, channel: compactSavedChannel(manifest) }));
+                return;
+            } else {
+                manifest.status = 'queued';
+                manifest.phase = 'queued';
+                manifest.stopRequested = false;
+                manifest.error = null;
+                manifest.current = null;
+            }
+            await writeSavedChannelManifest(manifest);
+            await cloud.uploadToR2(`${SAVED_CHANNEL_REQUEST_ROOT}${id}.json`, Buffer.from(JSON.stringify({ id, url: channelUrl, retryErrors: !!body.retryErrors, ts: Date.now() })), 'application/json');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, channel: compactSavedChannel(manifest) }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    const savedChannelMontage = pathname.match(/^\/api\/raw\/saved-channel\/(ch[a-f0-9]{16})\/montage\/([\w-]{11})$/);
+    if (savedChannelMontage && (req.method === 'GET' || req.method === 'HEAD')) {
+        try {
+            const key = `${SAVED_CHANNEL_ROOT}${savedChannelMontage[1]}/montages/${savedChannelMontage[2]}.jpg`;
+            if (req.method === 'HEAD') {
+                const exists = await cloud.existsInR2(key).catch(() => false);
+                res.writeHead(exists ? 200 : 404, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(); return;
+            }
+            if (await redirectR2Object(res, key, { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
+            res.writeHead(404); res.end();
+        } catch (e) { res.writeHead(500); res.end(); }
+        return;
+    }
+    const savedChannelVideo = pathname.match(/^\/api\/raw\/saved-channel\/(ch[a-f0-9]{16})\/video\/([\w-]{11})$/);
+    if (savedChannelVideo && req.method === 'GET') {
+        try {
+            const buffer = await cloud.downloadFromR2(`${SAVED_CHANNEL_ROOT}${savedChannelVideo[1]}/videos/${savedChannelVideo[2]}.json`).catch(() => null);
+            res.writeHead(buffer ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(buffer ? buffer.toString('utf8') : JSON.stringify({ error: 'Scored video record not found.' }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    const savedChannelAction = pathname.match(/^\/api\/raw\/saved-channel\/(ch[a-f0-9]{16})(?:\/(analysis|stop|resume|delete))?$/);
+    if (savedChannelAction) {
+        const id = savedChannelAction[1], action = savedChannelAction[2] || 'detail';
+        try {
+            let manifest = await readSavedChannelManifest(id);
+            if (!manifest) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Saved channel not found.' })); return; }
+            if (action === 'detail' && req.method === 'GET') {
+                res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+                res.end(JSON.stringify({ ...manifest, featureContract: savedChannelAnalysis.contract }));
+                return;
+            }
+            if (action === 'analysis' && req.method === 'GET') {
+                const fingerprint = [manifest.completed || 0, manifest.failed || 0, manifest.discovered || 0, manifest.featureContractVersion || 0].join(':');
+                const cacheKey = `${SAVED_CHANNEL_ROOT}${id}/analysis.json`;
+                let analysis = null;
+                const cached = await cloud.downloadFromR2(cacheKey).catch(() => null);
+                if (cached) { try { const parsed = JSON.parse(cached.toString('utf8')); if (parsed.fingerprint === fingerprint) analysis = parsed; } catch (e) {} }
+                if (!analysis) {
+                    analysis = savedChannelAnalysis.analyzeChannel(manifest);
+                    analysis.fingerprint = fingerprint;
+                    await cloud.uploadToR2(cacheKey, Buffer.from(JSON.stringify(analysis)), 'application/json').catch(() => {});
+                }
+                res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+                res.end(JSON.stringify(analysis));
+                return;
+            }
+            if (action === 'stop' && req.method === 'POST') {
+                manifest.stopRequested = true;
+                manifest.status = manifest.status === 'queued' ? 'stopped' : 'stopping';
+                manifest.phase = manifest.status;
+                if (manifest.status === 'stopped') {
+                    manifest.current = null;
+                    await cloud.deleteFromR2(`${SAVED_CHANNEL_REQUEST_ROOT}${id}.json`).catch(() => {});
+                }
+                await writeSavedChannelManifest(manifest);
+                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, channel: compactSavedChannel(manifest) }));
+                return;
+            }
+            if (action === 'resume' && req.method === 'POST') {
+                manifest.stopRequested = false;
+                manifest.status = 'queued';
+                manifest.phase = 'queued';
+                manifest.current = null;
+                manifest.error = null;
+                for (const video of (manifest.videos || [])) if (video.status === 'error') { video.status = 'queued'; video.error = null; video.attempts = 0; }
+                await writeSavedChannelManifest(manifest);
+                await cloud.uploadToR2(`${SAVED_CHANNEL_REQUEST_ROOT}${id}.json`, Buffer.from(JSON.stringify({ id, url: manifest.url, retryErrors: true, ts: Date.now() })), 'application/json');
+                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, channel: compactSavedChannel(manifest) }));
+                return;
+            }
+            if (action === 'delete' && req.method === 'POST') {
+                await cloud.deleteFromR2(`${SAVED_CHANNEL_REQUEST_ROOT}${id}.json`).catch(() => {});
+                await cloud.deleteFromR2(`${SAVED_CHANNEL_ROOT}${id}/manifest.json`).catch(() => {});
+                await removeSavedChannelIndex(id).catch(() => {});
+                (async () => {
+                    const keys = await cloud.listR2Keys(`${SAVED_CHANNEL_ROOT}${id}/`).catch(() => []);
+                    for (let at = 0; at < keys.length; at += 20) await Promise.all(keys.slice(at, at + 20).map(key => cloud.deleteFromR2(key).catch(() => {})));
+                })().catch(() => {});
+                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true }));
+                return;
+            }
+            res.writeHead(405, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Method not allowed.' }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
     // ── Saved hooks: generated ideas / scored hooks the user wants to keep (R2 raw/saved-hooks/) ──

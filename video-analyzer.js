@@ -819,7 +819,7 @@ async function uploadAnalysisToR2(videoId, analysis) {
 
 // Parse a YouTube channel URL into a canonical form
 function parseChannelUrl(text) {
-    const m = text.match(/(?:https?:\/\/)?(?:www\.)?youtube\.com\/((?:@[\w.-]+|channel\/[\w-]+|c\/[\w.-]+))/i);
+    const m = text.match(/(?:https?:\/\/)?(?:www\.)?youtube\.com\/((?:@[\w.-]+|channel\/[\w-]+|c\/[\w.-]+|user\/[\w.-]+))/i);
     return m ? `https://www.youtube.com/${m[1]}` : null;
 }
 

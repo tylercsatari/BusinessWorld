@@ -200,6 +200,7 @@ def _run():
         vid = m.group(1)
         try:
             import yt_dlp
+            from yt_dlp.utils import download_range_func
         except Exception:
             print(json.dumps({'error': 'yt-dlp is not installed on this server yet — redeploy to pick it up'})); return
         ytmp = tempfile.mkdtemp(prefix='rawyt_')
@@ -211,7 +212,12 @@ def _run():
                 def error(self, *a): pass
             ydl_opts = {'format': 'mp4[height<=480]/best[height<=480]/best', 'outtmpl': outp,
                         'quiet': True, 'no_warnings': True, 'noprogress': True, 'noplaylist': True,
-                        'logger': _Silent(), 'socket_timeout': 30}
+                        'logger': _Silent(), 'socket_timeout': 30,
+                        # The scorer's measured input is exactly the first five seconds. Keep one
+                        # second of decode margin, but do not download a whole three-minute Short.
+                        # extract_info still returns the full source duration for realistic views.
+                        'download_ranges': download_range_func(None, [(0, 6)]),
+                        'force_keyframes_at_cuts': True}
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(f'https://www.youtube.com/watch?v={vid}', download=True)
             files = [os.path.join(ytmp, f) for f in os.listdir(ytmp)]

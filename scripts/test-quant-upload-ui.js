@@ -24,6 +24,7 @@ function liveHarness(kind) {
         '/api/retention/channels': { channels: [], active: 'main' },
         '/api/indicators/registry': { indicators: [], meta: { targets: [] } },
         '/api/raw/saved-hooks': { hooks: [] },
+        '/api/raw/saved-channels': { channels: [], featureContract: { groups: [], features: [] } },
         '/api/hooks/grind/runs': { runs: [] },
     };
     const replies = isLong ? {
