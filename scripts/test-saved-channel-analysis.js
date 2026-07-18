@@ -76,12 +76,14 @@ assert.strictEqual(insufficient.status, 'insufficient');
 
 const ui = fs.readFileSync(path.join(__dirname, '..', 'buildings/jarvis/jarvis-retention.js'), 'utf8');
 const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+const auth = fs.readFileSync(path.join(__dirname, '..', 'auth.js'), 'utf8');
 for (const marker of ['data-savedbank', 'data-savedchanneladd', 'data-savedchannelvideo', 'Prediction analysis', 'Which single indicators predict log views?', 'Execution risk · can an embedding score justify making the video?', 'data-savedchannelrisktarget', 'conservative EV', 'data-savedchannelmatrix', 'Closest high → high trajectory', 'continue ${unfinished} unfinished', "st.savedChannelSort = 'feature'", 'savedChannelMontageData']) {
     assert(ui.includes(marker), `Shorts Experiment UI is missing ${marker}`);
 }
 for (const route of ['/api/raw/saved-channels', '/api/raw/saved-channel', '/api/raw/hook-enrich', 'savedChannelAnalysis.analyzeChannel', 'serveR2ObjectForRequest(req, res, key']) {
     assert(server.includes(route), `server is missing ${route}`);
 }
+assert(auth.includes("saved-channel\\/ch[a-f0-9]{16}\\/montage"), 'saved-channel public-Short montages must be readable by media requests without exposing score records');
 
 console.log(JSON.stringify({
     ok: true,

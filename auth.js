@@ -164,6 +164,7 @@ function isPublic(pathname, method) {
     if (pathname.startsWith('/api/hooks/grpo/montage/')) return true; // GRPO per-input attempt montages, lets <img> load without a token
     if (pathname.startsWith('/api/raw/saved-montage/')) return true; // saved-hook montages (no data), lets <img> load without a token
     if (pathname.startsWith('/api/raw-long/saved-montage/')) return true; // saved-hook montages via raw-long alias
+    if (/^\/api\/raw\/saved-channel\/ch[a-f0-9]{16}\/montage\/[\w-]{11}$/.test(pathname)) return true; // saved-channel strips are frames from public Shorts; scores/manifests stay private
     if (pathname.startsWith('/api/raw/saved-hook/') || pathname.startsWith('/api/raw-long/saved-hook/')) return true; // saved-hook detail for full experiment read-out
     if (pathname.startsWith('/api/hooks/demo/status/')) return true; // demo generation progress (no data), pollable without a token
     if (pathname === '/api/hooks/generate') return true;            // "Generate a hook" button — own Gemini+Flux, rate-guarded server-side
