@@ -4,6 +4,9 @@ const ExperimentLabUI = (() => {
 
     function open(bodyEl) {
         container = bodyEl;
+        const modal = document.getElementById('modal');
+        if (modal) modal.classList.add('experiment-lab-modal');
+        container.classList.add('experiment-lab-modal-body');
         container.innerHTML = `
             <section class="experiment-lab-panel">
                 <header class="experiment-lab-header">
@@ -30,6 +33,9 @@ const ExperimentLabUI = (() => {
     }
 
     function close() {
+        const modal = document.getElementById('modal');
+        if (modal) modal.classList.remove('experiment-lab-modal');
+        if (container) container.classList.remove('experiment-lab-modal-body');
         container = null;
     }
 

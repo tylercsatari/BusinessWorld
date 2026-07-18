@@ -176,6 +176,7 @@ def discover_channel(url):
     with yt_dlp.YoutubeDL(options) as ydl:
         info = ydl.extract_info(target, download=False)
     entries = []
+    views_observed_at = int(time.time() * 1000)
     for raw in (info.get('entries') or []):
         video_id = str((raw or {}).get('id') or '')
         if not re.match(r'^[\w-]{11}$', video_id): continue
@@ -183,6 +184,7 @@ def discover_channel(url):
             'id': video_id,
             'title': str(raw.get('title') or video_id)[:160],
             'views': raw.get('view_count'),
+            'viewsObservedAt': views_observed_at,
             'duration': raw.get('duration'),
             'published': raw.get('upload_date') or raw.get('timestamp'),
             'sourceUrl': 'https://www.youtube.com/watch?v=' + video_id,
@@ -194,6 +196,16 @@ def discover_channel(url):
 def interactive_relay_waiting():
     try: return bool(list_json(REQ))
     except Exception: return False
+
+def append_view_snapshot(video, views, observed_at):
+    if views is None or observed_at is None: return
+    try: numeric_views = int(views)
+    except Exception: return
+    history = list(video.get('viewsHistory') or [])
+    snapshot = {'at': int(observed_at), 'views': numeric_views}
+    if not history or history[-1].get('at') != snapshot['at'] or history[-1].get('views') != snapshot['views']:
+        history.append(snapshot)
+    video['viewsHistory'] = history[-64:]
 
 def process_channel_request(key):
     request = get_json(key, {}) or {}
@@ -221,9 +233,18 @@ def process_channel_request(key):
                 if request.get('retryErrors') and previous.get('status') == 'error':
                     previous.update({'status': 'queued', 'error': None, 'attempts': 0})
                 previous['title'] = video.get('title') or previous.get('title')
-                if video.get('views') is not None: previous['views'] = video.get('views')
+                if video.get('views') is not None:
+                    if not previous.get('viewsHistory') and previous.get('views') is not None:
+                        append_view_snapshot(previous, previous.get('views'), previous.get('viewsObservedAt') or previous.get('scoredAt'))
+                    append_view_snapshot(previous, video.get('views'), video.get('viewsObservedAt'))
+                    previous['views'] = video.get('views')
+                    previous['viewsObservedAt'] = video.get('viewsObservedAt')
+                if video.get('duration') is not None: previous['duration'] = video.get('duration')
+                if video.get('published') is not None: previous['published'] = video.get('published')
                 merged.append(previous)
-            else: merged.append(video)
+            else:
+                append_view_snapshot(video, video.get('views'), video.get('viewsObservedAt'))
+                merged.append(video)
         merged.extend(old.values())
         manifest.update({'name': name or manifest.get('name'), 'videos': merged, 'phase': 'scoring'})
         save_manifest(manifest)
@@ -290,11 +311,13 @@ def process_channel_request(key):
             video.update({
                 'status': 'done', 'error': None, 'title': str(record.get('sourceTitle') or record.get('title') or video.get('title') or video['id'])[:160],
                 'views': record.get('sourceViews') if record.get('sourceViews') is not None else video.get('views'),
+                'viewsObservedAt': video.get('viewsObservedAt') or int(time.time() * 1000),
                 'duration': record.get('dur_s') or video.get('duration'), 'sourceUrl': record.get('sourceUrl') or video.get('sourceUrl'),
                 'sourceChannel': record.get('sourceChannel') or manifest.get('name'), 'silent': bool(record.get('silent')),
                 'transcript': str(record.get('transcript') or '')[:300], 'hasMontage': bool(montage),
                 'features': features, 'scoredAt': int(time.time() * 1000),
             })
+            append_view_snapshot(video, video.get('views'), video.get('viewsObservedAt'))
             manifest['name'] = record.get('sourceChannel') or manifest.get('name')
             save_manifest(manifest)
 

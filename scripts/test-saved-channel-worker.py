@@ -5,6 +5,17 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 import yt_relay_watcher as worker
 
+with open(os.path.join(ROOT, 'yt_relay_watcher.py'), encoding='utf-8') as source_file:
+    worker_source = source_file.read()
+assert "'viewsObservedAt': views_observed_at" in worker_source
+assert "previous['published'] = video.get('published')" in worker_source
+
+view_record = {}
+worker.append_view_snapshot(view_record, 100, 1000)
+worker.append_view_snapshot(view_record, 120, 2000)
+worker.append_view_snapshot(view_record, 120, 2000)
+assert view_record['viewsHistory'] == [{'at': 1000, 'views': 100}, {'at': 2000, 'views': 120}]
+
 steer = {}
 for definition in worker.FEATURE_CONTRACT['features']:
     if definition.get('source') == 'steer':

@@ -3813,7 +3813,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 return;
             }
             if (action === 'analysis' && req.method === 'GET') {
-                const fingerprint = [manifest.completed || 0, manifest.failed || 0, manifest.discovered || 0, manifest.featureContractVersion || 0].join(':');
+                const fingerprint = savedChannelAnalysis.savedChannelAnalysisFingerprint(manifest);
                 const cacheKey = `${SAVED_CHANNEL_ROOT}${id}/analysis.json`;
                 let analysis = null;
                 const cached = await cloud.downloadFromR2(cacheKey).catch(() => null);

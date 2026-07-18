@@ -1,11 +1,19 @@
 .experiment-lab-panel {
-    min-height: 100%;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     background: #080d14;
     color: #e5edf5;
     font-family: 'Nunito', sans-serif;
 }
 
 .experiment-lab-header {
+    position: relative;
+    flex: 0 0 auto;
     min-height: 92px;
     padding: 18px 22px;
     box-sizing: border-box;
@@ -79,8 +87,39 @@
 }
 
 .experiment-lab-workspace {
+    flex: 1 1 auto;
+    min-height: 0;
     min-width: 0;
+    overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+}
+
+.experiment-lab-workspace > div {
+    width: 100%;
+    min-height: 100%;
+    box-sizing: border-box;
+}
+
+#modal.experiment-lab-modal {
+    overflow: hidden;
+    padding: 0;
+    border-color: #263341;
+    background: #080d14;
+}
+
+#modal.experiment-lab-modal #modal-body,
+.experiment-lab-modal-body {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0;
+    box-sizing: border-box;
 }
 
 .experiment-lab-error {
@@ -93,9 +132,20 @@
 }
 
 @media (max-width: 640px) {
+    #modal.experiment-lab-modal {
+        width: 100vw;
+        max-width: 100vw;
+        height: 100dvh;
+        max-height: 100dvh;
+        border: 0;
+        border-radius: 0;
+    }
+
     .experiment-lab-header {
         grid-template-columns: 42px minmax(0, 1fr);
-        padding: 14px;
+        min-height: 66px;
+        padding: 10px 48px 10px 10px;
+        gap: 10px;
     }
 
     .experiment-lab-mark {
@@ -104,6 +154,81 @@
     }
 
     .experiment-lab-status {
-        grid-column: 2;
+        position: absolute;
+        top: 8px;
+        right: 46px;
+        font-size: 9px;
+    }
+
+    .experiment-lab-title-block h2 {
+        font-size: 18px;
+    }
+
+    .experiment-lab-title-block p {
+        display: none;
+    }
+
+    .experiment-lab-workspace {
+        padding-bottom: env(safe-area-inset-bottom, 0);
+        scrollbar-gutter: auto;
+    }
+
+    .experiment-lab-workspace > div {
+        padding: 8px !important;
+    }
+
+    .experiment-lab-workspace img,
+    .experiment-lab-workspace svg,
+    .experiment-lab-workspace video,
+    .experiment-lab-workspace canvas {
+        max-width: 100% !important;
+        height: auto;
+    }
+
+    .experiment-lab-workspace table {
+        display: block;
+        width: 100% !important;
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .experiment-lab-workspace input[type="text"],
+    .experiment-lab-workspace input[type="number"],
+    .experiment-lab-workspace input:not([type]),
+    .experiment-lab-workspace textarea {
+        flex: 1 1 100% !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        box-sizing: border-box;
+        font-size: 16px !important;
+    }
+
+    .experiment-lab-workspace [style*="min-width:2"],
+    .experiment-lab-workspace [style*="min-width:3"],
+    .experiment-lab-workspace [style*="flex:0 0"] {
+        min-width: 0 !important;
+        max-width: 100% !important;
+        flex-basis: 100% !important;
+    }
+
+    .experiment-lab-workspace [style*="width:220px"] {
+        width: 100% !important;
+    }
+
+    .experiment-lab-workspace [style*="grid-template-columns:repeat(auto-fit,minmax(330px"] {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .experiment-lab-workspace [data-savedbank],
+    .experiment-lab-workspace [data-savedchanneltab],
+    .experiment-lab-workspace [data-savedchannelgroup],
+    .experiment-lab-workspace [data-savedchannelfeature],
+    .experiment-lab-workspace [data-savedchannelsort],
+    .experiment-lab-workspace [data-savedchanneladd] {
+        display: inline-flex;
+        align-items: center;
+        min-height: 36px;
+        box-sizing: border-box;
     }
 }
