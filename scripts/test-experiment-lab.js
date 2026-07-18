@@ -18,6 +18,11 @@ async function main() {
     const browser = await chromium.launch({ headless: true });
     try {
         const page = await browser.newPage({ viewport: { width: 1280, height: 820 } });
+        await page.route('**/api/raw/saved-channel/**/montage/**', route => route.fulfill({
+            status: 200,
+            contentType: 'image/gif',
+            body: Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64'),
+        }));
         await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
         const channelId = 'ch0123456789abcdef';
         const videos = Array.from({ length: 20 }, (_, videoIndex) => {
@@ -146,7 +151,7 @@ async function main() {
         await firstMontage.scrollIntoViewIfNeeded();
         await page.waitForFunction(() => {
             const image = document.querySelector('[data-savedchannelmontage-video]');
-            return image && image.src.startsWith('data:image/') && image.complete && image.naturalWidth > 0;
+            return image && image.src.includes('/api/raw/saved-channel/') && image.complete && image.naturalWidth > 0;
         });
         assert.strictEqual(await firstMontage.evaluate(image => image.naturalWidth), 1, 'stored authenticated montage must decode as an image');
 

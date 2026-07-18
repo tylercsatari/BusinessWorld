@@ -10,7 +10,7 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', amber: '#f59e0b', accent: '#38bdf8' };
-    let root = null, mountMode = 'full', DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, SAVEDCHANNELS = null, SAVEDCHANNELDETAIL = {}, SAVEDCHANNELANALYSIS = {}, SAVEDCHANNELVIDEOCACHE = {}, SAVEDCHANNELMONTAGES = new Map(), NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
+    let root = null, mountMode = 'full', DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, SAVEDCHANNELS = null, SAVEDCHANNELDETAIL = {}, SAVEDCHANNELANALYSIS = {}, SAVEDCHANNELVIDEOCACHE = {}, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     let PROMISE_UI = null;
@@ -597,6 +597,7 @@ const JarvisRetention = (function () {
         const upLegend = ups.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">my uploads</span>${ups.map((u, i) => `<span data-rawupmark="${i}" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;border:1px solid ${st.rawUpSel === i ? upColor(i) : C.border};background:${upColor(i)}1e;border-radius:6px;padding:2px 7px;font-size:10px;color:${C.text}"><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:${upColor(i)};color:#0f172a;font-size:9px;font-weight:700;text-align:center;line-height:13px">${i + 1}</span>${esc((u.title || 'upload').replace(/\.[^.]+$/, '').slice(0, 22))}${u.silent ? ' 🔇' : ''}<span data-rawupdel="${i}" style="color:${C.mute};margin-left:2px">✕</span></span>`).join('')}</div>` : '';
         const upDetail = (st.rawUpSel != null && ups[st.rawUpSel]) ? (() => {
             const i = st.rawUpSel, U = ups[i], col = upColor(i);
+            const montageSrc = U.montageDataUrl || (U.montage ? 'data:image/jpeg;base64,' + U.montage : '');
             const uc = U.channels ? U.channels[chan] : null, pos = upPos(U);
             const nbrTitles = (uc && uc.neighbors ? uc.neighbors.slice(0, 4) : []).map(nb => {
                 const idx = (R.id || []).indexOf(nb.id);
@@ -610,7 +611,7 @@ const JarvisRetention = (function () {
             return `<div style="margin-top:10px;border:1px solid ${col};border-radius:10px;padding:12px;background:${C.card2}">
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="font-size:12px;font-weight:700;color:${C.text};line-height:1.4"><span style="color:${col}">⬆ #${i + 1}</span> · ${esc(U.title || 'My upload')}${U.silent ? ` <span style="color:${C.faint};font-weight:400;font-size:10px">· no voiceover</span>` : ''}</div><span data-rawupclose="1" style="cursor:pointer;color:${C.dim};font-size:16px;line-height:1;padding:0 4px">×</span></div>
                   <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">exact input embedded — first-5s frames, 1/sec</div>
-                  <img src="data:image/jpeg;base64,${U.montage}" style="width:100%;border-radius:6px;background:#000;margin-bottom:8px"/>
+                  ${montageSrc ? `<img src="${esc(montageSrc)}" style="width:100%;border-radius:6px;background:#000;margin-bottom:8px"/>` : ''}
                   ${(() => {
                       const ed = st.rawTransEdit && st.rawTransEdit.idx === st.rawUpSel ? st.rawTransEdit : null;
                       const head = `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:2px">transcript (first 5s)${U.transcriptSource ? ` · ${esc(U.transcriptSource)}` : ''}</div>`;
@@ -3544,55 +3545,18 @@ const JarvisRetention = (function () {
         return await new Promise((res, rej) => { const fr = new window.FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(b); });
     }
     function savedChannelMontageKey(channelId, videoId) { return `${channelId}:${videoId}`; }
-    async function savedChannelMontageData(channelId, videoId) {
-        const key = savedChannelMontageKey(channelId, videoId), cached = SAVEDCHANNELMONTAGES.get(key);
-        if (typeof cached === 'string') return cached;
-        if (cached && typeof cached.then === 'function') return cached;
-        const pending = urlToDataUrl(`/api/raw/saved-channel/${channelId}/montage/${videoId}`)
-            .then(dataUrl => {
-                SAVEDCHANNELMONTAGES.set(key, dataUrl);
-                return dataUrl;
-            }).catch(error => {
-                SAVEDCHANNELMONTAGES.delete(key);
-                throw error;
-            });
-        SAVEDCHANNELMONTAGES.set(key, pending);
-        return pending;
-    }
-    function hydrateSavedChannelImages() {
+    function wireSavedChannelImages() {
         if (!root) return;
-        if (st._savedChannelImageObserver) st._savedChannelImageObserver.disconnect();
-        const load = async image => {
-            if (!image || image.dataset.montageLoading === '1' || image.dataset.montageLoaded === '1') return;
-            image.dataset.montageLoading = '1';
-            const channelId = image.getAttribute('data-savedchannelmontage-channel');
-            const videoId = image.getAttribute('data-savedchannelmontage-video');
+        root.querySelectorAll('[data-savedchannelmontage-channel][data-savedchannelmontage-video]').forEach(image => {
+            if (image.dataset.montageWired === '1') return;
+            image.dataset.montageWired = '1';
             const state = image.parentElement && image.parentElement.querySelector('[data-savedchannelimagestate]');
-            try {
-                const dataUrl = await savedChannelMontageData(channelId, videoId);
-                if (!image.isConnected) return;
-                image.onload = () => {
-                    image.style.opacity = '1';
-                    image.dataset.montageLoaded = '1';
-                    if (state) state.style.display = 'none';
-                };
-                image.src = dataUrl;
-            } catch (error) {
-                if (image.isConnected && state) state.textContent = 'stored image unavailable · tap refresh to retry';
-            } finally { delete image.dataset.montageLoading; }
-        };
-        const images = Array.from(root.querySelectorAll('[data-savedchannelmontage-channel][data-savedchannelmontage-video]'));
-        if (!('IntersectionObserver' in window)) { images.forEach(load); return; }
-        const scrollRoot = root.matches && root.matches('.experiment-lab-workspace')
-            ? root
-            : root.querySelector('.experiment-lab-workspace');
-        const observer = new window.IntersectionObserver(entries => entries.forEach(entry => {
-            if (!entry.isIntersecting) return;
-            observer.unobserve(entry.target);
-            load(entry.target);
-        }), { root: scrollRoot || null, rootMargin: '240px 0px' });
-        st._savedChannelImageObserver = observer;
-        images.forEach(image => observer.observe(image));
+            const loaded = () => { image.style.opacity = '1'; if (state) state.style.display = 'none'; };
+            const failed = () => { image.style.opacity = '0'; if (state) { state.style.display = 'flex'; state.textContent = 'stored image unavailable · tap refresh to retry'; } };
+            image.onload = loaded;
+            image.onerror = failed;
+            if (image.complete) (image.naturalWidth > 0 ? loaded : failed)();
+        });
     }
     // Score a GENERATED hook through the SAME embed+score pipeline as a built/uploaded hook,
     // so it lands in the same indicator + embedded-space display.
@@ -3779,9 +3743,7 @@ const JarvisRetention = (function () {
                 const recordResponse = await fetch(`/api/raw/saved-channel/${channelId}/video/${videoId}`);
                 record = await recordResponse.json();
                 if (!recordResponse.ok || record.error) throw new Error(record.error || ('HTTP ' + recordResponse.status));
-                const montage = await savedChannelMontageData(channelId, videoId);
-                record.montage = String(montage).split('base64,').pop();
-                record.montageDataUrl = montage;
+                record.montageDataUrl = `/api/raw/saved-channel/${channelId}/montage/${videoId}`;
                 record.source = 'saved-channel'; record.savedChannelId = channelId; record.savedChannelVideoId = videoId;
                 SAVEDCHANNELVIDEOCACHE[cacheKey] = record;
             }
@@ -3882,7 +3844,7 @@ const JarvisRetention = (function () {
         });
     }
     function hydrateSavedChannelVisuals() {
-        hydrateSavedChannelImages();
+        wireSavedChannelImages();
         drawSavedChannelIndicatorMatrices();
     }
     function savedChannelBars(rows) {
@@ -4070,10 +4032,10 @@ const JarvisRetention = (function () {
         const card = video => {
             const active = st.savedChannelVideoBusy === video.id, complete = video.status === 'done', color = savedChannelStatusColor(video.status);
             const selectedCell = definition ? savedChannelFeatureCell(video, featureKey) : null, selectedScore = complete && featureKey ? scoreOf(video) : null;
-            const montageKey = savedChannelMontageKey(detail.id, video.id), cachedMontage = SAVEDCHANNELMONTAGES.get(montageKey);
             const hasStoredImage = complete && video.hasMontage;
+            const montageUrl = `/api/raw/saved-channel/${detail.id}/montage/${video.id}`;
             return `<div ${complete ? `data-savedchannelvideo="${detail.id}:${video.id}"` : ''} style="width:220px;min-height:150px;box-sizing:border-box;border:1px solid ${active ? C.cyan : C.border};border-radius:8px;background:${C.card2};padding:7px;cursor:${complete ? 'pointer' : 'default'};display:flex;flex-direction:column;gap:5px">
-              ${hasStoredImage ? `<div style="width:100%;aspect-ratio:5/1;position:relative;border-radius:5px;overflow:hidden;background:#020617"><img ${typeof cachedMontage === 'string' ? `src="${esc(cachedMontage)}" data-montage-loaded="1"` : ''} data-savedchannelmontage-channel="${detail.id}" data-savedchannelmontage-video="${video.id}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;opacity:${typeof cachedMontage === 'string' ? 1 : 0};transition:opacity .15s"/><span data-savedchannelimagestate style="${typeof cachedMontage === 'string' ? 'display:none;' : ''}position:absolute;inset:0;align-items:center;justify-content:center;padding:4px;text-align:center;color:${C.mute};font-size:8px;display:${typeof cachedMontage === 'string' ? 'none' : 'flex'}">loading stored image…</span></div>` : `<div style="width:100%;aspect-ratio:5/1;border-radius:5px;background:${C.card};display:flex;align-items:center;justify-content:center;color:${color};font-size:9px;font-weight:800">${active ? 'loading stored score…' : esc(video.status || 'queued')}</div>`}
+              ${hasStoredImage ? `<div style="width:100%;aspect-ratio:5/1;position:relative;border-radius:5px;overflow:hidden;background:#020617"><img src="${esc(montageUrl)}" data-savedchannelmontage-channel="${detail.id}" data-savedchannelmontage-video="${video.id}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;opacity:0;transition:opacity .15s"/><span data-savedchannelimagestate style="position:absolute;inset:0;align-items:center;justify-content:center;padding:4px;text-align:center;color:${C.mute};font-size:8px;display:flex">loading stored image…</span></div>` : `<div style="width:100%;aspect-ratio:5/1;border-radius:5px;background:${C.card};display:flex;align-items:center;justify-content:center;color:${color};font-size:9px;font-weight:800">${active ? 'loading stored score…' : esc(video.status || 'queued')}</div>`}
               <div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.3;min-height:26px">${esc(video.title || video.id)}</div>
               <div style="display:flex;justify-content:space-between;gap:5px;align-items:center"><span style="font-size:10px;color:${C.green};font-weight:900">${video.views != null ? fv(video.views) + ' views' : 'views unavailable'}</span>${complete ? `<a href="${esc(video.sourceUrl || ('https://youtube.com/watch?v=' + video.id))}" target="_blank" onclick="event.stopPropagation()" style="font-size:8px;color:${C.accent}">YouTube ↗</a>` : `<span style="font-size:8px;color:${color}">${esc(video.status)}</span>`}</div>
               ${definition ? `<div style="font-size:9px;color:${C.dim}">${esc(definition.group === 'together' ? 'Both' : definition.group)} · ${esc(definition.label)} <b style="color:${selectedScore >= 80 ? C.green : C.cyan}">${savedChannelFeatureDisplay(definition, selectedCell)}</b>${selectedScore != null ? ` · ${Math.round(selectedScore)}th` : ''}</div>` : ''}
