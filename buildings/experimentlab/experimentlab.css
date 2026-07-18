@@ -193,6 +193,13 @@
         -webkit-overflow-scrolling: touch;
     }
 
+    .experiment-lab-workspace table th,
+    .experiment-lab-workspace table td {
+        padding-left: 6px !important;
+        padding-right: 6px !important;
+        white-space: nowrap;
+    }
+
     .experiment-lab-workspace input[type="text"],
     .experiment-lab-workspace input[type="number"],
     .experiment-lab-workspace input:not([type]),
