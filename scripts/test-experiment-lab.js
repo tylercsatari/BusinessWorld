@@ -165,6 +165,11 @@ async function main() {
         const videoPath = `/api/raw/saved-channel/${channelId}/video/vid00000002`;
         await page.waitForFunction(pathname => window.__fetchCounts[pathname] === 1, videoPath);
         assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), 0, 'opening a saved scored Short must not invoke the embedding endpoint');
+        await page.waitForFunction(() => {
+            const image = document.querySelector('#rtg-exppanel img[style*="width:260px"][src*="vid00000002"]');
+            return image && image.complete && image.naturalWidth > 0;
+        });
+        assert(await page.locator('#rtg-exppanel').evaluate(panel => panel.textContent.includes('graphs — every channel')), 'stored score must open the complete graph read-out');
         await page.locator(`[data-savedchannelvideo="${channelId}:vid00000002"]`).click();
         assert.strictEqual(await page.evaluate(pathname => window.__fetchCounts[pathname], videoPath), 1, 'opening the same saved Short again must use the in-memory stored-artifact cache');
 
