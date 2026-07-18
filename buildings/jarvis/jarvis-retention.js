@@ -3255,6 +3255,7 @@ const JarvisRetention = (function () {
         const scrisktarget = e.target.closest('[data-savedchannelrisktarget]'); if (scrisktarget) { st.savedChannelRiskTarget = +scrisktarget.getAttribute('data-savedchannelrisktarget'); rtgUpdateExp(); return; }
         const scriskage = e.target.closest('[data-savedchannelriskage]'); if (scriskage) { st.savedChannelRiskAge = +scriskage.getAttribute('data-savedchannelriskage'); rtgUpdateExp(); return; }
         const scrisksignal = e.target.closest('[data-savedchannelrisksignal]'); if (scrisksignal) { st.savedChannelRiskSignal = scrisksignal.getAttribute('data-savedchannelrisksignal'); rtgUpdateExp(); return; }
+        const scanalysisfeature = e.target.closest('[data-savedchannelanalysisfeature]'); if (scanalysisfeature) { st.savedChannelVizFeature = scanalysisfeature.getAttribute('data-savedchannelanalysisfeature'); rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedchannelclear]')) { st.savedChannelMinPct = 0; st.savedChannelMinViews = 0; st.savedChannelQuery = ''; st.savedChannelShow = 60; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedchannelmore]')) { st.savedChannelShow = (st.savedChannelShow || 60) + 60; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedchannelanalysisreload]')) { if (st.savedChannelSel) loadSavedChannelAnalysis(st.savedChannelSel, true); return; }
@@ -3831,16 +3832,24 @@ const JarvisRetention = (function () {
             context.fillText('highest actual views', 10, top + 4);
             context.fillText('lowest actual views', 10, top + matrix.rows.length * rowHeight - 4);
             const readout = root.querySelector(`[data-savedchannelmatrixreadout="${channelId}"]`);
+            const matrixPosition = event => {
+                const rect = canvas.getBoundingClientRect(), x = (event.clientX - rect.left) * canvas.width / rect.width, y = (event.clientY - rect.top) * canvas.height / rect.height;
+                return { x, rowIndex: Math.floor((y - top) / rowHeight), columnIndex: Math.floor((x - left) / columnWidth) };
+            };
             canvas.onpointermove = event => {
                 if (!readout) return;
-                const rect = canvas.getBoundingClientRect(), x = (event.clientX - rect.left) * canvas.width / rect.width, y = (event.clientY - rect.top) * canvas.height / rect.height;
-                const rowIndex = Math.floor((y - top) / rowHeight), columnIndex = Math.floor((x - left) / columnWidth);
+                const { x, rowIndex, columnIndex } = matrixPosition(event);
                 const row = matrix.rows[rowIndex];
+                canvas.style.cursor = row ? 'pointer' : 'default';
                 if (!row) return;
                 if (columnIndex >= 0 && columnIndex < matrix.columns.length) {
                     const column = matrix.columns[columnIndex], value = row.values[columnIndex];
                     readout.textContent = `${row.title} · ${column.key}: ${value == null ? 'missing' : value.toFixed(1) + 'th within channel'} · actual ${fv(row.views)} views (${row.viewsPercentile.toFixed(1)}th)`;
                 } else if (x >= outcomeX && x <= outcomeX + 34) readout.textContent = `${row.title} · actual ${fv(row.views)} views · ${row.viewsPercentile.toFixed(1)}th within this channel`;
+            };
+            canvas.onclick = event => {
+                const position = matrixPosition(event), row = matrix.rows[position.rowIndex];
+                if (row) openSavedChannelVideo(channelId, row.id);
             };
         });
     }
@@ -3883,6 +3892,219 @@ const JarvisRetention = (function () {
         svg += `<text x="${W / 2}" y="${H - 4}" text-anchor="middle" fill="${C.mute}" font-size="9">number of indicators in forward path</text><text x="9" y="${H / 2}" transform="rotate(-90 9 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">OOF R²</text>`;
         return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
     }
+    function savedChannelFeatureColor(group) {
+        return group === 'visual' ? C.cyan : group === 'text' ? C.purple : group === 'together' ? C.green : C.amber;
+    }
+    function savedChannelOutcomeHistogram(profile) {
+        const bins = profile && profile.histogram || [];
+        if (!bins.length) return '';
+        const W = 500, H = 220, left = 36, right = 12, top = 14, bottom = 32, maxN = Math.max(1, ...bins.map(bin => bin.n));
+        const band = (W - left - right) / bins.length;
+        let svg = '';
+        bins.forEach((bin, index) => {
+            const height = bin.n / maxN * (H - top - bottom), x = left + index * band, y = H - bottom - height;
+            svg += `<rect x="${x + 1}" y="${y}" width="${Math.max(2, band - 2)}" height="${height}" fill="${C.cyan}" opacity=".7"><title>${bin.n} Shorts · ${fv(Math.pow(10, bin.logLow) - 1)} to ${fv(Math.pow(10, bin.logHigh) - 1)} views</title></rect>`;
+        });
+        const logLo = bins[0].logLow, logHi = bins[bins.length - 1].logHigh;
+        [profile.min, profile.median, profile.max].forEach((value, index) => {
+            const x = left + (Math.log10(value + 1) - logLo) / ((logHi - logLo) || 1) * (W - left - right);
+            svg += `<text x="${x}" y="${H - 8}" text-anchor="${index === 0 ? 'start' : index === 2 ? 'end' : 'middle'}" fill="${C.mute}" font-size="8">${fv(value)}</text>`;
+        });
+        svg += `<text x="${W / 2}" y="${H - 19}" text-anchor="middle" fill="${C.mute}" font-size="8">actual public views · logarithmic bins</text><text x="10" y="${H / 2}" transform="rotate(-90 10 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="8">Shorts</text>`;
+        return `<svg data-savedchanneloutcomehist viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
+    }
+    function savedChannelAgeScatter(analysis) {
+        const rows = ((analysis && analysis.indicatorMatrix && analysis.indicatorMatrix.rows) || []).filter(row => row.ageDays != null && row.ageDays > 0 && row.views > 0);
+        if (rows.length < 3) return note('Publication age is missing for too many Shorts to draw the age confound.', C.amber);
+        const points = rows.map(row => ({ ...row, x: Math.log10(row.ageDays + 1), y: Math.log10(row.views + 1) }));
+        const W = 500, H = 260, left = 40, right = 14, top = 14, bottom = 34;
+        const xLo = Math.min(...points.map(point => point.x)), xHi = Math.max(...points.map(point => point.x));
+        const yLo = Math.min(...points.map(point => point.y)), yHi = Math.max(...points.map(point => point.y));
+        const X = value => left + (value - xLo) / ((xHi - xLo) || 1) * (W - left - right), Y = value => H - bottom - (value - yLo) / ((yHi - yLo) || 1) * (H - top - bottom);
+        let svg = '';
+        points.forEach(point => { svg += `<circle data-savedchannelvideo="${esc(analysis.channelId)}:${esc(point.id)}" cx="${X(point.x)}" cy="${Y(point.y)}" r="3" fill="${C.amber}" opacity=".62" style="cursor:pointer"><title>${esc(point.title)} · ${point.ageDays.toFixed(0)} days old · ${fv(point.views)} views</title></circle>`; });
+        svg += `<text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="9">video age in days (log)</text><text x="10" y="${H / 2}" transform="rotate(-90 10 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">actual views (log)</text>`;
+        return `<svg data-savedchannelagescatter viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
+    }
+    function savedChannelEvidenceHeatmap(analysis, tailByKey) {
+        const rows = analysis && analysis.singles || [];
+        if (!rows.length) return '';
+        const metrics = [
+            { label: 'raw r', value: row => row.pearsonRawViews, center: 0, scale: 1 },
+            { label: 'log r', value: row => row.pearsonLogViews, center: 0, scale: 1 },
+            { label: 'rank ρ', value: row => row.spearmanViews, center: 0, scale: 1 },
+            { label: 'OOF R²', value: row => row.oof && row.oof.r2, center: 0, scale: .35 },
+            { label: 'OOF ρ', value: row => row.oof && row.oof.spearman, center: 0, scale: 1 },
+            { label: '10M AUC', value: row => (tailByKey[row.key] || {}).directionalAuc, center: .5, scale: .5 },
+            { label: '10M AP', value: row => (tailByKey[row.key] || {}).prAuc, center: 0, scale: 1 },
+            { label: 'top lift', value: row => ((tailByKey[row.key] || {}).topDecile || {}).lift, center: 1, scale: 2 },
+        ];
+        const W = 700, left = 154, top = 34, cellW = 64, rowH = 23, H = top + rows.length * rowH + 18;
+        const color = (value, metric) => {
+            if (value == null || !isFinite(value)) return '#202b3d';
+            const strength = clamp(Math.abs(value - metric.center) / metric.scale, 0, 1);
+            return value >= metric.center ? `hsl(158 68% ${18 + strength * 37}%)` : `hsl(350 72% ${18 + strength * 36}%)`;
+        };
+        let svg = '';
+        metrics.forEach((metric, index) => { svg += `<text x="${left + index * cellW + cellW / 2}" y="20" text-anchor="middle" fill="${C.mute}" font-size="8">${metric.label}</text>`; });
+        rows.forEach((row, rowIndex) => {
+            const y = top + rowIndex * rowH, groupColor = savedChannelFeatureColor(row.group);
+            svg += `<text data-savedchannelanalysisfeature="${esc(row.key)}" x="${left - 7}" y="${y + 15}" text-anchor="end" fill="${groupColor}" font-size="8.5" style="cursor:pointer">${esc(row.key)}</text>`;
+            metrics.forEach((metric, metricIndex) => {
+                const value = metric.value(row), x = left + metricIndex * cellW;
+                svg += `<rect x="${x + 1}" y="${y + 1}" width="${cellW - 2}" height="${rowH - 2}" rx="2" fill="${color(value, metric)}"><title>${esc(row.key)} · ${metric.label}: ${value == null ? 'missing' : (+value).toFixed(4)}</title></rect><text x="${x + cellW / 2}" y="${y + 15}" text-anchor="middle" fill="#f8fafc" font-size="8">${value == null ? '—' : (+value).toFixed(2)}</text>`;
+            });
+        });
+        return `<div style="overflow:auto"><svg data-savedchannelevidence viewBox="0 0 ${W} ${H}" style="display:block;width:700px;max-width:none;height:auto;background:${C.card2};border-radius:7px">${svg}</svg></div>`;
+    }
+    function savedChannelRelationshipHeatmap(analysis) {
+        const relationships = analysis && analysis.indicatorRelationships, columns = relationships && relationships.columns || [], matrix = relationships && relationships.matrix || [];
+        if (!columns.length || !matrix.length) return '';
+        const cell = 23, left = 145, top = 145, W = left + columns.length * cell + 15, H = top + columns.length * cell + 15;
+        const color = value => {
+            if (value == null || !isFinite(value)) return '#202b3d';
+            const strength = clamp(Math.abs(value), 0, 1);
+            return value >= 0 ? `hsl(178 65% ${14 + strength * 45}%)` : `hsl(348 70% ${14 + strength * 43}%)`;
+        };
+        let svg = '';
+        columns.forEach((column, index) => {
+            const groupColor = savedChannelFeatureColor(column.group), x = left + index * cell + cell / 2, y = top + index * cell + 15;
+            svg += `<text x="${left - 7}" y="${y}" text-anchor="end" fill="${groupColor}" font-size="8">${esc(column.key)}</text><g transform="translate(${x},${top - 7}) rotate(-58)"><text text-anchor="start" fill="${groupColor}" font-size="8">${esc(column.key)}</text></g>`;
+            columns.forEach((other, otherIndex) => {
+                const relationship = matrix[index] && matrix[index][otherIndex] || {}, value = relationship.spearman;
+                svg += `<rect x="${left + otherIndex * cell}" y="${top + index * cell}" width="${cell - 1}" height="${cell - 1}" fill="${color(value)}"><title>${esc(column.key)} ↔ ${esc(other.key)} · Spearman ${value == null ? 'missing' : (+value).toFixed(3)} · Pearson ${relationship.pearson == null ? 'missing' : (+relationship.pearson).toFixed(3)} · n=${relationship.n || 0}</title></rect>`;
+            });
+        });
+        return `<div style="overflow:auto"><svg data-savedchannelrelationships viewBox="0 0 ${W} ${H}" style="display:block;width:${W}px;max-width:none;height:${H}px;background:${C.card2};border-radius:7px">${svg}</svg></div>`;
+    }
+    function savedChannelProfileSpark(profile, analysis) {
+        const bins = profile && profile.bins || [];
+        if (!bins.length) return '';
+        const W = 190, H = 92, left = 8, right = 8, top = 8, bottom = 18;
+        const logs = bins.map(bin => Math.log10((bin.actualViewsMedian || 0) + 1));
+        const outcome = analysis.outcomeProfile || {}, lo = Math.log10((outcome.min || 0) + 1), hi = Math.log10((outcome.max || 1) + 1);
+        const X = index => left + index / Math.max(1, bins.length - 1) * (W - left - right), Y = value => H - bottom - (value - lo) / ((hi - lo) || 1) * (H - top - bottom);
+        const path = logs.map((value, index) => `${index ? 'L' : 'M'}${X(index)},${Y(value)}`).join(' '), tenM = Math.log10(10000001);
+        let svg = `<line x1="${left}" y1="${Y(tenM)}" x2="${W - right}" y2="${Y(tenM)}" stroke="${C.red}" stroke-dasharray="3 3" opacity=".65"/><path d="${path}" fill="none" stroke="${savedChannelFeatureColor(profile.group)}" stroke-width="2"/>`;
+        bins.forEach((bin, index) => { svg += `<circle cx="${X(index)}" cy="${Y(logs[index])}" r="2.5" fill="${savedChannelFeatureColor(profile.group)}"><title>score bucket ${index + 1}/${bins.length} · n=${bin.n} · median ${fv(bin.actualViewsMedian)} views · 10M hit ${(bin.hitRate10M * 100).toFixed(0)}%</title></circle>`; });
+        svg += `<text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="7.5">low score → high score</text>`;
+        return `<svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">${svg}</svg>`;
+    }
+    function savedChannelProfileAtlas(analysis) {
+        const profiles = analysis && analysis.featureProfiles || [];
+        if (!profiles.length) return '';
+        return `<div data-savedchannelprofileatlas style="display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:7px">${profiles.map(profile => `<div data-savedchannelanalysisfeature="${esc(profile.key)}" style="cursor:pointer;min-width:0;border-top:2px solid ${savedChannelFeatureColor(profile.group)};background:${C.card2};padding:6px"><div style="font-size:8.5px;color:${savedChannelFeatureColor(profile.group)};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(profile.key)}</div>${savedChannelProfileSpark(profile, analysis)}<div style="font-size:7.5px;color:${C.mute}">n=${profile.available} · ${profile.missing} missing</div></div>`).join('')}</div>`;
+    }
+    function savedChannelIndicatorScatter(analysis, featureKey) {
+        const matrix = analysis && analysis.indicatorMatrix, index = matrix && (matrix.columns || []).findIndex(column => column.key === featureKey);
+        if (!matrix || index < 0) return '';
+        const points = (matrix.rows || []).map(row => ({ ...row, x: row.values[index], y: Math.log10((row.views || 0) + 1) })).filter(point => point.x != null && isFinite(point.x) && isFinite(point.y));
+        if (points.length < 3) return '';
+        const W = 540, H = 300, left = 42, right = 14, top = 16, bottom = 36, yLo = Math.min(...points.map(point => point.y)), yHi = Math.max(...points.map(point => point.y));
+        const X = value => left + value / 100 * (W - left - right), Y = value => H - bottom - (value - yLo) / ((yHi - yLo) || 1) * (H - top - bottom);
+        const meanX = points.reduce((sum, point) => sum + point.x, 0) / points.length, meanY = points.reduce((sum, point) => sum + point.y, 0) / points.length;
+        const slope = points.reduce((sum, point) => sum + (point.x - meanX) * (point.y - meanY), 0) / (points.reduce((sum, point) => sum + (point.x - meanX) ** 2, 0) || 1), intercept = meanY - slope * meanX;
+        const definition = matrix.columns[index], color = savedChannelFeatureColor(definition.group);
+        let svg = '';
+        [0, 25, 50, 75, 100].forEach(value => { svg += `<line x1="${X(value)}" y1="${top}" x2="${X(value)}" y2="${H - bottom}" stroke="${C.border}"/><text x="${X(value)}" y="${H - 20}" text-anchor="middle" fill="${C.mute}" font-size="8">${value}th</text>`; });
+        svg += `<line x1="${X(0)}" y1="${Y(intercept)}" x2="${X(100)}" y2="${Y(intercept + slope * 100)}" stroke="${color}" stroke-width="2"/>`;
+        points.forEach(point => { svg += `<circle data-savedchannelvideo="${esc(analysis.channelId)}:${esc(point.id)}" cx="${X(point.x)}" cy="${Y(point.y)}" r="3" fill="${color}" opacity=".62" style="cursor:pointer"><title>${esc(point.title)} · ${featureKey} ${point.x.toFixed(1)}th · ${fv(point.views)} actual views</title></circle>`; });
+        svg += `<text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="9">${esc(featureKey)} · within-channel percentile</text><text x="10" y="${H / 2}" transform="rotate(-90 10 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">actual views (log)</text>`;
+        return `<svg data-savedchannelindicatorscatter viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
+    }
+    function savedChannelTrajectoryChart(profile) {
+        const bins = profile && profile.bins || [];
+        if (!bins.length) return '';
+        const W = 470, H = 300, left = 42, right = 14, top = 16, bottom = 36;
+        const values = bins.flatMap(bin => [bin.actualViewsP25, bin.actualViewsMedian, bin.actualViewsP75]).filter(value => value != null && isFinite(+value)).map(value => Math.log10(Number(value) + 1));
+        const lo = Math.min(...values), hi = Math.max(...values), X = index => left + index / Math.max(1, bins.length - 1) * (W - left - right), Y = value => H - bottom - (Math.log10(Number(value) + 1) - lo) / ((hi - lo) || 1) * (H - top - bottom);
+        const upper = bins.map((bin, index) => `${X(index)},${Y(bin.actualViewsP75)}`), lower = bins.slice().reverse().map((bin, reverseIndex) => `${X(bins.length - reverseIndex - 1)},${Y(bin.actualViewsP25)}`);
+        const color = savedChannelFeatureColor(profile.group);
+        let svg = `<polygon points="${upper.concat(lower).join(' ')}" fill="${color}" opacity=".12"/><path d="${bins.map((bin, index) => `${index ? 'L' : 'M'}${X(index)},${Y(bin.actualViewsMedian)}`).join(' ')}" fill="none" stroke="${color}" stroke-width="2"/>`;
+        bins.forEach((bin, index) => { svg += `<circle cx="${X(index)}" cy="${Y(bin.actualViewsMedian)}" r="3" fill="${color}"><title>bucket ${index + 1} · n=${bin.n} · views P25 ${fv(bin.actualViewsP25)}, median ${fv(bin.actualViewsMedian)}, P75 ${fv(bin.actualViewsP75)}</title></circle>`; });
+        svg += `<text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="9">indicator score bucket · low → high</text><text x="10" y="${H / 2}" transform="rotate(-90 10 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">actual views (log)</text>`;
+        return `<svg data-savedchanneltrajectory viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
+    }
+    function savedChannelIndicatorHitChart(profile) {
+        const bins = profile && profile.bins || [];
+        if (!bins.length) return '';
+        const W = 470, H = 300, left = 42, right = 14, top = 16, bottom = 36, X = index => left + index / Math.max(1, bins.length - 1) * (W - left - right), Y = value => top + (1 - clamp(value, 0, 1)) * (H - top - bottom), color = savedChannelFeatureColor(profile.group);
+        let svg = '';
+        [0, .25, .5, .75, 1].forEach(value => { svg += `<line x1="${left}" y1="${Y(value)}" x2="${W - right}" y2="${Y(value)}" stroke="${C.border}"/><text x="${left - 5}" y="${Y(value) + 3}" text-anchor="end" fill="${C.mute}" font-size="8">${value * 100}%</text>`; });
+        const upper = bins.map((bin, index) => `${X(index)},${Y(bin.hitRate10MCiHigh)}`), lower = bins.slice().reverse().map((bin, reverseIndex) => `${X(bins.length - reverseIndex - 1)},${Y(bin.hitRate10MCiLow)}`);
+        svg += `<polygon points="${upper.concat(lower).join(' ')}" fill="${color}" opacity=".12"/><path d="${bins.map((bin, index) => `${index ? 'L' : 'M'}${X(index)},${Y(bin.hitRate10M)}`).join(' ')}" fill="none" stroke="${color}" stroke-width="2"/>`;
+        bins.forEach((bin, index) => { svg += `<circle cx="${X(index)}" cy="${Y(bin.hitRate10M)}" r="3" fill="${color}"><title>bucket ${index + 1} · ${Math.round(bin.hitRate10M * bin.n)}/${bin.n} actual 10M hits · 95% CI ${(bin.hitRate10MCiLow * 100).toFixed(0)}–${(bin.hitRate10MCiHigh * 100).toFixed(0)}%</title></circle>`; });
+        svg += `<text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="9">indicator score bucket · low → high</text><text x="10" y="${H / 2}" transform="rotate(-90 10 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">actual 10M hit rate</text>`;
+        return `<svg data-savedchannelindicatorhits viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
+    }
+    function savedChannelDistributionStrip(profile) {
+        const distribution = profile && profile.rawDistribution;
+        if (!distribution) return '';
+        const definition = profile, values = [distribution.min, distribution.p10, distribution.p25, distribution.median, distribution.p75, distribution.p90, distribution.max], labels = ['min', 'P10', 'P25', 'median', 'P75', 'P90', 'max'];
+        return `<div data-savedchanneldistribution style="display:grid;grid-template-columns:repeat(7,minmax(65px,1fr));gap:1px;background:${C.border};border:1px solid ${C.border};overflow:auto">${values.map((value, index) => `<div style="background:${C.card2};padding:7px;min-width:65px"><div style="font-size:7.5px;color:${C.mute}">${labels[index]}</div><div style="font-size:10px;color:${index === 3 ? savedChannelFeatureColor(definition.group) : C.text};font-weight:800">${definition.unit === 'views' ? fv(value) : definition.unit === 'probability' ? (value * 100).toFixed(1) + '%' : fmtv(value, 2)}</div></div>`).join('')}</div>`;
+    }
+    function renderSavedChannelIndicatorExplorer(analysis) {
+        const profiles = analysis && analysis.featureProfiles || [], columns = analysis && analysis.indicatorMatrix && analysis.indicatorMatrix.columns || [];
+        if (!profiles.length) return '';
+        const preferred = analysis.signalSummary && analysis.signalSummary.strongestTrajectory && analysis.signalSummary.strongestTrajectory.key;
+        if (!st.savedChannelVizFeature || !profiles.some(profile => profile.key === st.savedChannelVizFeature)) st.savedChannelVizFeature = preferred || profiles[0].key;
+        const profile = profiles.find(item => item.key === st.savedChannelVizFeature) || profiles[0], definition = columns.find(item => item.key === profile.key) || profile;
+        const buttons = profiles.map(item => `<span data-savedchannelanalysisfeature="${esc(item.key)}" style="cursor:pointer;border:1px solid ${item.key === profile.key ? savedChannelFeatureColor(item.group) : C.border};background:${item.key === profile.key ? savedChannelFeatureColor(item.group) + '18' : C.card};color:${item.key === profile.key ? savedChannelFeatureColor(item.group) : C.dim};padding:3px 7px;font-size:8.5px;font-weight:700">${esc(item.key)}</span>`).join('');
+        return `<div data-savedchannelindicatorplayground style="border-top:1px solid ${C.border};padding-top:12px;margin-top:12px"><div style="font-size:14px;font-weight:900;color:${C.text}">Indicator playground · ${esc(profile.key)}</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin:3px 0 8px">Choose any one of the 21 stored outputs. The same videos appear in all three views: individual points, equal-count score buckets, and actual 10M outcomes. Click a point to open its persisted hook, image, and complete embedding trace.</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:9px">${buttons}</div>${savedChannelDistributionStrip(profile)}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;margin-top:10px"><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Every Short · ${esc(definition.key)} vs actual views</div>${savedChannelIndicatorScatter(analysis, profile.key)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Score buckets · actual-view trajectory</div>${savedChannelTrajectoryChart(profile)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Score buckets · actual 10M probability</div>${savedChannelIndicatorHitChart(profile)}</div></div></div>`;
+    }
+    function savedChannelResidualChart(points) {
+        points = (points || []).filter(point => isFinite(point.actualLog) && isFinite(point.predictedLog));
+        if (!points.length) return '';
+        const W = 500, H = 260, left = 42, right = 14, top = 16, bottom = 34, xs = points.map(point => point.predictedLog), residuals = points.map(point => point.actualLog - point.predictedLog), xLo = Math.min(...xs), xHi = Math.max(...xs), bound = Math.max(.1, ...residuals.map(Math.abs));
+        const X = value => left + (value - xLo) / ((xHi - xLo) || 1) * (W - left - right), Y = value => top + (bound - value) / (bound * 2) * (H - top - bottom);
+        let svg = `<line x1="${left}" y1="${Y(0)}" x2="${W - right}" y2="${Y(0)}" stroke="${C.mute}" stroke-dasharray="4 3"/>`;
+        points.forEach((point, index) => { const residual = residuals[index]; svg += `<circle cx="${X(point.predictedLog)}" cy="${Y(residual)}" r="3" fill="${residual >= 0 ? C.green : C.red}" opacity=".65"><title>${esc(point.title)} · predicted ${fv(point.predictedViews)} · actual ${fv(point.actualViews)} · ${residual >= 0 ? 'underpredicted' : 'overpredicted'} by ${Math.pow(10, Math.abs(residual)).toFixed(2)}×</title></circle>`; });
+        svg += `<text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="9">OOF predicted views (log)</text><text x="10" y="${H / 2}" transform="rotate(-90 10 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">actual − predicted (log)</text>`;
+        return `<svg data-savedchannelresiduals viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
+    }
+    function savedChannelContinuousCalibration(points) {
+        points = (points || []).filter(point => isFinite(point.actualLog) && isFinite(point.predictedLog)).sort((a, b) => a.predictedLog - b.predictedLog);
+        if (points.length < 4) return '';
+        const count = Math.min(10, Math.max(3, Math.floor(Math.sqrt(points.length)))), bins = [];
+        for (let index = 0; index < count; index++) {
+            const slice = points.slice(Math.floor(index * points.length / count), Math.floor((index + 1) * points.length / count));
+            if (slice.length) bins.push({ n: slice.length, predicted: slice.reduce((sum, point) => sum + point.predictedLog, 0) / slice.length, actual: slice.reduce((sum, point) => sum + point.actualLog, 0) / slice.length });
+        }
+        const values = bins.flatMap(bin => [bin.predicted, bin.actual]), lo = Math.min(...values), hi = Math.max(...values), W = 470, H = 260, pad = 34, X = value => pad + (value - lo) / ((hi - lo) || 1) * (W - pad * 2), Y = value => H - pad - (value - lo) / ((hi - lo) || 1) * (H - pad * 2);
+        let svg = `<line x1="${X(lo)}" y1="${Y(lo)}" x2="${X(hi)}" y2="${Y(hi)}" stroke="${C.mute}" stroke-dasharray="4 3"/>`;
+        svg += `<path d="${bins.map((bin, index) => `${index ? 'L' : 'M'}${X(bin.predicted)},${Y(bin.actual)}`).join(' ')}" fill="none" stroke="${C.green}" stroke-width="2"/>`;
+        bins.forEach(bin => { svg += `<circle cx="${X(bin.predicted)}" cy="${Y(bin.actual)}" r="${3 + Math.sqrt(bin.n)}" fill="${C.green}" opacity=".65"><title>n=${bin.n} · predicted ${fv(Math.pow(10, bin.predicted) - 1)} · actual ${fv(Math.pow(10, bin.actual) - 1)}</title></circle>`; });
+        svg += `<text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="9">mean OOF predicted views (log)</text><text x="10" y="${H / 2}" transform="rotate(-90 10 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">mean actual views (log)</text>`;
+        return `<svg data-savedchannelcontinuouscalibration viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
+    }
+    function savedChannelPredictionRankTrace(points) {
+        points = (points || []).filter(point => isFinite(point.actualLog) && isFinite(point.predictedLog)).sort((a, b) => b.actualViews - a.actualViews);
+        if (!points.length) return '';
+        const W = 520, H = 250, left = 28, right = 12, top = 15, bottom = 32, values = points.flatMap(point => [point.actualLog, point.predictedLog]), lo = Math.min(...values), hi = Math.max(...values), X = index => left + index / Math.max(1, points.length - 1) * (W - left - right), Y = value => H - bottom - (value - lo) / ((hi - lo) || 1) * (H - top - bottom);
+        const actual = points.map((point, index) => `${index ? 'L' : 'M'}${X(index)},${Y(point.actualLog)}`).join(' '), predicted = points.map((point, index) => `${index ? 'L' : 'M'}${X(index)},${Y(point.predictedLog)}`).join(' ');
+        const svg = `<path d="${actual}" fill="none" stroke="${C.text}" stroke-width="2"/><path d="${predicted}" fill="none" stroke="${C.cyan}" stroke-width="2" opacity=".85"/><text x="${left}" y="11" fill="${C.text}" font-size="8">actual</text><text x="${left + 42}" y="11" fill="${C.cyan}" font-size="8">OOF predicted</text><text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="9">Shorts ordered by actual views · highest → lowest</text><text x="9" y="${H / 2}" transform="rotate(-90 9 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">views (log)</text>`;
+        return `<svg data-savedchannelranktrace viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
+    }
+    function savedChannelSelectionFrequency(model) {
+        const selections = model && model.selections || [], counts = {};
+        selections.forEach(selection => (selection.features || []).forEach(key => { counts[key] = (counts[key] || 0) + (selection.folds || 0); }));
+        const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        if (!rows.length) return '';
+        const W = 500, H = rows.length * 23 + 24, left = 150, right = 28, max = Math.max(...rows.map(row => row[1]));
+        let svg = '';
+        rows.forEach(([key, count], index) => { const y = index * 23 + 5, width = count / max * (W - left - right); svg += `<text x="${left - 6}" y="${y + 11}" text-anchor="end" fill="${C.dim}" font-size="8.5">${esc(key)}</text><rect x="${left}" y="${y}" width="${width}" height="14" fill="${C.purple}" opacity=".72"/><text x="${left + width + 4}" y="${y + 11}" fill="${C.text}" font-size="8">${count} folds</text>`; });
+        return `<svg data-savedchannelselectionfrequency viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
+    }
+    function savedChannelCombinationLandscape(combos) {
+        combos = (combos || []).filter(row => row.r2 != null);
+        if (!combos.length) return '';
+        const W = 470, H = 260, left = 38, right = 14, top = 15, bottom = 34, lo = Math.min(-.1, ...combos.map(row => row.r2)), hi = Math.max(.1, ...combos.map(row => row.r2)), X = size => left + (size - 1) / 2 * (W - left - right), Y = value => H - bottom - (value - lo) / ((hi - lo) || 1) * (H - top - bottom);
+        let svg = `<line x1="${left}" y1="${Y(0)}" x2="${W - right}" y2="${Y(0)}" stroke="${C.mute}"/>`;
+        combos.forEach((row, index) => { const jitter = (((index * 7) % 13) - 6) * 1.3; svg += `<circle cx="${X(row.keys.length) + jitter}" cy="${Y(row.r2)}" r="${3 + Math.max(0, 2.5 - row.medianFactor / 2)}" fill="${row.r2 > 0 ? C.green : C.red}" opacity="${index < 5 ? .9 : .55}"><title>${row.keys.join(' + ')} · OOF R² ${row.r2} · error ${row.medianFactor}×</title></circle>`; });
+        [1, 2, 3].forEach(size => { svg += `<text x="${X(size)}" y="${H - 16}" text-anchor="middle" fill="${C.mute}" font-size="8">${size} indicator${size > 1 ? 's' : ''}</text>`; });
+        svg += `<text x="${W / 2}" y="${H - 4}" text-anchor="middle" fill="${C.mute}" font-size="8">top returned exhaustive candidates</text><text x="9" y="${H / 2}" transform="rotate(-90 9 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">OOF R²</text>`;
+        return `<svg data-savedchannelcombinationlandscape viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
+    }
     function savedChannelRiskCurve(signal, baseRate) {
         const rows = (signal && signal.thresholds || []).filter(row => row.n > 0 && row.hitRate != null && row.threshold > 0);
         if (!rows.length) return '';
@@ -3916,6 +4138,68 @@ const JarvisRetention = (function () {
         svg += `<text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="9">embedded views score buckets (low → high)</text><text x="10" y="${H / 2}" transform="rotate(-90 10 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">actual target hit rate</text>`;
         return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
     }
+    function savedChannelBinaryCurve(points, kind) {
+        points = (points || []).filter(point => isFinite(point.probability) && (point.hit === 0 || point.hit === 1)).sort((a, b) => b.probability - a.probability);
+        const positives = points.filter(point => point.hit).length, negatives = points.length - positives;
+        if (!positives || !negatives) return '';
+        const W = 410, H = 250, pad = 34, X = value => pad + clamp(value, 0, 1) * (W - pad * 2), Y = value => H - pad - clamp(value, 0, 1) * (H - pad * 2);
+        let hits = 0, misses = 0, path = kind === 'roc' ? [{ x: 0, y: 0, threshold: 1 }] : [{ x: 0, y: 1, threshold: 1 }];
+        points.forEach((point, index) => {
+            if (point.hit) hits++; else misses++;
+            path.push(kind === 'roc'
+                ? { x: misses / negatives, y: hits / positives, threshold: point.probability }
+                : { x: hits / positives, y: hits / (index + 1), threshold: point.probability });
+        });
+        let svg = kind === 'roc' ? `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(1)}" y2="${Y(1)}" stroke="${C.mute}" stroke-dasharray="4 3"/>` : '';
+        svg += `<path d="${path.map((point, index) => `${index ? 'L' : 'M'}${X(point.x)},${Y(point.y)}`).join(' ')}" fill="none" stroke="${kind === 'roc' ? C.green : C.purple}" stroke-width="2"/>`;
+        path.filter((_, index) => index && index % Math.max(1, Math.floor(points.length / 8)) === 0).forEach(point => { svg += `<circle cx="${X(point.x)}" cy="${Y(point.y)}" r="2.5" fill="${kind === 'roc' ? C.green : C.purple}"><title>threshold ${(point.threshold * 100).toFixed(0)}% · ${kind === 'roc' ? `false-positive ${(point.x * 100).toFixed(0)}% · true-positive ${(point.y * 100).toFixed(0)}%` : `recall ${(point.x * 100).toFixed(0)}% · precision ${(point.y * 100).toFixed(0)}%`}</title></circle>`; });
+        svg += `<text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="9">${kind === 'roc' ? 'false-positive rate' : 'recall'}</text><text x="10" y="${H / 2}" transform="rotate(-90 10 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">${kind === 'roc' ? 'true-positive rate' : 'precision'}</text>`;
+        return `<svg data-savedchannelrisk${kind} viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
+    }
+    function savedChannelBinaryReliability(model) {
+        const bins = model && model.calibrationBins || [];
+        if (!bins.length) return '';
+        const W = 410, H = 250, pad = 34, X = value => pad + clamp(value, 0, 1) * (W - pad * 2), Y = value => H - pad - clamp(value, 0, 1) * (H - pad * 2);
+        let svg = `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(1)}" y2="${Y(1)}" stroke="${C.mute}" stroke-dasharray="4 3"/><path d="${bins.map((bin, index) => `${index ? 'L' : 'M'}${X(bin.predicted)},${Y(bin.observed)}`).join(' ')}" fill="none" stroke="${C.cyan}" stroke-width="2"/>`;
+        bins.forEach(bin => { svg += `<circle cx="${X(bin.predicted)}" cy="${Y(bin.observed)}" r="${3 + Math.sqrt(bin.n)}" fill="${C.cyan}" opacity=".7"><title>n=${bin.n} · predicted ${(bin.predicted * 100).toFixed(0)}% · observed ${(bin.observed * 100).toFixed(0)}%</title></circle>`; });
+        svg += `<text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="9">OOF predicted 10M probability</text><text x="10" y="${H / 2}" transform="rotate(-90 10 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">observed 10M rate</text>`;
+        return `<svg data-savedchannelriskreliability viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
+    }
+    function savedChannelBinaryOutcomeStrip(model) {
+        const points = model && model.points || [];
+        if (!points.length) return '';
+        const W = 520, H = 170, left = 30, right = 12, X = value => left + clamp(value, 0, 1) * (W - left - right);
+        let svg = `<line x1="${left}" y1="58" x2="${W - right}" y2="58" stroke="${C.green}" opacity=".45"/><line x1="${left}" y1="112" x2="${W - right}" y2="112" stroke="${C.red}" opacity=".45"/>`;
+        points.forEach((point, index) => { const y = (point.hit ? 58 : 112) + ((index * 7) % 9 - 4) * 2; svg += `<circle data-savedchannelvideo="${esc(st.savedChannelSel || '')}:${esc(point.id)}" cx="${X(point.probability)}" cy="${y}" r="3" fill="${point.hit ? C.green : C.red}" opacity=".7" style="cursor:pointer"><title>${esc(point.title)} · predicted ${(point.probability * 100).toFixed(1)}% · ${fv(point.actualViews)} actual views · ${point.hit ? 'hit' : 'miss'}</title></circle>`; });
+        svg += `<text x="${left - 4}" y="61" text-anchor="end" fill="${C.green}" font-size="8">hit</text><text x="${left - 4}" y="115" text-anchor="end" fill="${C.red}" font-size="8">miss</text><text x="${W / 2}" y="${H - 6}" text-anchor="middle" fill="${C.mute}" font-size="9">OOF predicted 10M probability · 0% → 100%</text>`;
+        return `<svg data-savedchannelriskoutcomes viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
+    }
+    function savedChannelTargetLandscape(risk) {
+        const rows = (risk && risk.targets || []).map(target => {
+            const cohort = (target.cohorts || []).find(item => +item.minAgeDays === 0);
+            const best = cohort && (cohort.featureRankings || []).filter(item => item.directionalAuc != null)[0];
+            return cohort ? { targetViews: target.targetViews, baseRate: cohort.baseRate, bestAuc: best && best.directionalAuc, bestKey: best && best.key, n: cohort.n } : null;
+        }).filter(Boolean);
+        if (!rows.length) return '';
+        const W = 560, H = 250, left = 42, right = 14, top = 16, bottom = 36, logs = rows.map(row => Math.log10(row.targetViews)), lo = Math.min(...logs), hi = Math.max(...logs), X = value => left + (Math.log10(value) - lo) / ((hi - lo) || 1) * (W - left - right), Y = value => top + (1 - clamp(value, 0, 1)) * (H - top - bottom);
+        let svg = '';
+        [.25, .5, .75, 1].forEach(value => { svg += `<line x1="${left}" y1="${Y(value)}" x2="${W - right}" y2="${Y(value)}" stroke="${C.border}"/><text x="${left - 5}" y="${Y(value) + 3}" text-anchor="end" fill="${C.mute}" font-size="8">${Math.round(value * 100)}%</text>`; });
+        svg += `<path d="${rows.map((row, index) => `${index ? 'L' : 'M'}${X(row.targetViews)},${Y(row.baseRate)}`).join(' ')}" fill="none" stroke="${C.red}" stroke-width="2"/><path d="${rows.filter(row => row.bestAuc != null).map((row, index) => `${index ? 'L' : 'M'}${X(row.targetViews)},${Y(row.bestAuc)}`).join(' ')}" fill="none" stroke="${C.green}" stroke-width="2"/>`;
+        rows.forEach(row => { svg += `<circle cx="${X(row.targetViews)}" cy="${Y(row.baseRate)}" r="3" fill="${C.red}"><title>actual ≥ ${fv(row.targetViews)} · ${(row.baseRate * 100).toFixed(1)}% base rate · n=${row.n}</title></circle>${row.bestAuc != null ? `<circle cx="${X(row.targetViews)}" cy="${Y(row.bestAuc)}" r="3" fill="${C.green}"><title>actual ≥ ${fv(row.targetViews)} · best single ${row.bestKey} · AUC ${row.bestAuc.toFixed(3)}</title></circle>` : ''}`; });
+        svg += `<text x="${left}" y="11" fill="${C.red}" font-size="8">base hit rate</text><text x="${left + 62}" y="11" fill="${C.green}" font-size="8">best single AUC</text><text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="9">actual view win condition (log)</text>`;
+        return `<svg data-savedchanneltargetlandscape viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border-radius:7px">${svg}</svg>`;
+    }
+    function savedChannelRiskSignalAtlas(cohort) {
+        const signals = cohort && cohort.viewsSignals || [];
+        if (!signals.length) return '';
+        return `<div data-savedchannelrisksignalatlas style="display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:7px">${signals.map(signal => {
+            const rows = (signal.thresholds || []).filter(row => row.n && row.hitRate != null && row.threshold > 0);
+            if (!rows.length) return '';
+            const W = 210, H = 105, left = 8, right = 8, top = 8, bottom = 17, logs = rows.map(row => Math.log10(row.threshold)), lo = Math.min(...logs), hi = Math.max(...logs), X = value => left + (Math.log10(value) - lo) / ((hi - lo) || 1) * (W - left - right), Y = value => top + (1 - clamp(value, 0, 1)) * (H - top - bottom);
+            const svg = `<line x1="${left}" y1="${Y(signal.baseRate)}" x2="${W - right}" y2="${Y(signal.baseRate)}" stroke="${C.amber}" stroke-dasharray="3 3"/><path d="${rows.map((row, index) => `${index ? 'L' : 'M'}${X(row.threshold)},${Y(row.hitRate)}`).join(' ')}" fill="none" stroke="${C.cyan}" stroke-width="2"/>${rows.map(row => `<circle cx="${X(row.threshold)}" cy="${Y(row.hitRate)}" r="2"><title>score ≥ ${fv(row.threshold)} · ${row.hits}/${row.n} hit · CI ${(row.ciLow * 100).toFixed(0)}–${(row.ciHigh * 100).toFixed(0)}%</title></circle>`).join('')}<text x="${W / 2}" y="${H - 4}" text-anchor="middle" fill="${C.mute}" font-size="7">embedded cutoff → hit rate</text>`;
+            return `<div data-savedchannelrisksignal="${esc(signal.key)}" style="cursor:pointer;background:${C.card2};padding:6px;border-top:2px solid ${signal.key === st.savedChannelRiskSignal ? C.cyan : C.border}"><div style="font-size:8px;color:${C.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(signal.label)}</div><svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">${svg}</svg></div>`;
+        }).join('')}</div>`;
+    }
     function renderSavedChannelRisk(analysis) {
         const risk = analysis && analysis.risk;
         if (!risk || !(risk.targets || []).length) return '';
@@ -3946,6 +4230,7 @@ const JarvisRetention = (function () {
         const riskCombos = (model.topCombinations || []).slice(0, 12);
         const probabilityRows = target.targetViews === 10000000 ? (risk.probabilityCalibration || []).filter(row => row.metrics) : [];
         const riskModelCards = model.status === 'ready' ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:7px;margin:8px 0 10px">${statc('Blind 10M ROC AUC', nested && nested.rocAuc != null ? nested.rocAuc.toFixed(3) : '—', C.green)}${statc('Blind 10M average precision', nested && nested.prAuc != null ? nested.prAuc.toFixed(3) : '—', C.cyan)}${statc('Brier skill vs base rate', nested && nested.brierSkill != null ? nested.brierSkill.toFixed(3) : '—', C.purple)}${statc('Calibration error', nested && nested.calibrationError != null ? (nested.calibrationError * 100).toFixed(1) + ' pts' : '—', C.amber)}${statc('Newer-video ROC AUC', chronological && chronological.rocAuc != null ? chronological.rocAuc.toFixed(3) : '—', C.green)}</div>` : note(`<b>10M combination model needs both outcomes.</b> This channel currently has ${model.positives || 0} hits and ${model.negatives || 0} misses; conditional threshold tables remain valid but a classifier cannot be blind-tested yet.`, C.amber);
+        const riskModelVisuals = model.status === 'ready' && nested ? `<div style="font-size:10px;font-weight:800;color:${C.text};margin:8px 0 4px">Every blind 10M prediction, from four angles</div><div style="font-size:9px;color:${C.mute};line-height:1.4;margin-bottom:6px">ROC shows separation, precision–recall shows performance under the observed hit rate, reliability shows whether 70% really means roughly 70%, and the outcome strip exposes every false positive and false negative.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:9px;margin-bottom:10px"><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">ROC curve</div>${savedChannelBinaryCurve(nested.points, 'roc')}</div><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">Precision–recall curve</div>${savedChannelBinaryCurve(nested.points, 'pr')}</div><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">Probability reliability</div>${savedChannelBinaryReliability(nested)}</div><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">Every held-out hit and miss</div>${savedChannelBinaryOutcomeStrip(nested)}</div></div>` : '';
         const riskComboTable = riskCombos.length ? `<div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Top tail-risk combinations (exploratory OOF ranking)</div><div style="overflow:auto;max-height:300px;margin-bottom:10px"><table style="width:100%;min-width:560px;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">indicators</th><th>Brier skill</th><th>ROC AUC</th><th>average precision</th><th>calibration error</th></tr></thead><tbody>${riskCombos.map(row => `<tr style="border-top:1px solid ${C.border}"><td style="padding:5px;color:${C.text}">${row.keys.map(esc).join(' + ')}</td><td style="text-align:right">${fmtv(row.brierSkill, 3)}</td><td style="text-align:right">${fmtv(row.rocAuc, 3)}</td><td style="text-align:right">${fmtv(row.prAuc, 3)}</td><td style="text-align:right">${row.calibrationError == null ? '—' : (row.calibrationError * 100).toFixed(1) + ' pts'}</td></tr>`).join('')}</tbody></table></div>` : '';
         const probabilityTable = probabilityRows.length ? `<div style="font-size:10px;font-weight:800;color:${C.text};margin:8px 0 4px">Dedicated &gt;10M class outputs · calibration against actual &gt;10M views</div><div style="font-size:9px;color:${C.mute};margin-bottom:4px">This is the explicit 10M classifier, shown separately from the ordinary views-embedding threshold study above.</div><div style="overflow:auto;margin-bottom:10px"><table style="width:100%;min-width:530px;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">probability output</th><th>sample</th><th>Brier skill</th><th>ROC AUC</th><th>average precision</th><th>calibration error</th></tr></thead><tbody>${probabilityRows.map(row => `<tr style="border-top:1px solid ${C.border}"><td style="padding:5px;color:${C.text}">${esc(row.key)}</td><td style="text-align:right">${row.available}</td><td style="text-align:right">${fmtv(row.metrics.brierSkill, 3)}</td><td style="text-align:right">${fmtv(row.metrics.rocAuc, 3)}</td><td style="text-align:right">${fmtv(row.metrics.prAuc, 3)}</td><td style="text-align:right">${row.metrics.calibrationError == null ? '—' : (row.metrics.calibrationError * 100).toFixed(1) + ' pts'}</td></tr>`).join('')}</tbody></table></div>` : '';
         return `<div style="border:1px solid ${C.red}66;background:${C.red}08;border-radius:8px;padding:11px;margin-bottom:14px">
@@ -3957,10 +4242,11 @@ const JarvisRetention = (function () {
           ${note(`<b>Read the lower confidence bound, not just the hit rate.</b> If one Short scored above 50M and succeeded, the observed hit rate is 100%, but its 95% lower bound is only 21%. “100% of the time” becomes defensible only after the sample and its lower bound are both strong. Fixed cutoffs such as 30M and 50M are safer to interpret than choosing whichever row looks best after seeing the table; the “best observed” card is exploratory. ${risk.viewAgeConfound && risk.viewAgeConfound.pearsonLogAgeToLogViews != null ? `Current log-age/log-views correlation: <b>${risk.viewAgeConfound.pearsonLogAgeToLogViews}</b>.` : ''}`, C.cyan)}
           <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;background:${C.card2};border:1px solid ${C.border};border-radius:7px;padding:8px;margin:9px 0"><label style="font-size:9px;color:${C.mute}">relative upside if hit<input data-savedchannelriskwin type="number" min="0" step="0.1" value="${win}" style="display:block;width:110px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:5px;padding:5px;margin-top:2px"/></label><label style="font-size:9px;color:${C.mute}">relative cost if miss<input data-savedchannelriskloss type="number" min="0" step="0.1" value="${loss}" style="display:block;width:110px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:5px;padding:5px;margin-top:2px"/></label><div style="font-size:9px;color:${C.dim};padding-bottom:5px">break-even hit rate: <b style="color:${C.text}">${breakEven == null ? '—' : (breakEven * 100).toFixed(1) + '%'}</b> · EV = hit% × upside − miss% × cost · conservative EV uses the 95% lower hit-rate bound</div></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:10px;margin-bottom:10px"><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Threshold → actual hit probability</div>${savedChannelRiskCurve(signal, cohort.baseRate)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Embedding-score buckets → actual hit probability</div>${savedChannelRiskCalibration(signal)}</div></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:10px;margin-bottom:10px"><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">How the decision changes as the win condition rises</div>${savedChannelTargetLandscape(risk)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">All views-valued signals · same target and age cohort</div>${savedChannelRiskSignalAtlas(cohort)}</div></div>
           <div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">What happens above each ordinary views-embedding cutoff?</div>
           <div style="overflow:auto;max-height:430px;margin-bottom:12px"><table style="width:100%;min-width:880px;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">embedded score</th><th>sample</th><th>hit rate</th><th>95% CI</th><th>lift</th><th>recall</th><th>false +</th><th>actual P25</th><th>actual median</th><th>EV</th><th>conservative EV</th></tr></thead><tbody>${thresholdRows.map(riskRow).join('')}</tbody></table></div>
           <div style="font-size:11px;font-weight:900;color:${C.text};margin:10px 0 3px">Blind 10M tail model · combinations and future stability</div>
-          <div style="font-size:9px;color:${C.mute};line-height:1.45">${esc(model.validation || '')} ${model.exhaustiveCandidates ? `${model.exhaustiveCandidates.toLocaleString()} single/pair/triple combinations are searched.` : ''}${nested && nested.selections && nested.selections.length ? ` Most frequently selected inside folds: <b style="color:${C.text}">${nested.selections.slice(0, 3).map(selection => selection.features.map(esc).join(' + ') + ` (${selection.folds})`).join(' · ')}</b>.` : ''}${chronological && chronological.features ? ` Forward test used <b style="color:${C.text}">${chronological.features.map(esc).join(' + ')}</b>.` : ''}</div>${riskModelCards}${riskComboTable}${probabilityTable}
+          <div style="font-size:9px;color:${C.mute};line-height:1.45">${esc(model.validation || '')} ${model.exhaustiveCandidates ? `${model.exhaustiveCandidates.toLocaleString()} single/pair/triple combinations are searched.` : ''}${nested && nested.selections && nested.selections.length ? ` Most frequently selected inside folds: <b style="color:${C.text}">${nested.selections.slice(0, 3).map(selection => selection.features.map(esc).join(' + ') + ` (${selection.folds})`).join(' · ')}</b>.` : ''}${chronological && chronological.features ? ` Forward test used <b style="color:${C.text}">${chronological.features.map(esc).join(' + ')}</b>.` : ''}</div>${riskModelCards}${riskModelVisuals}${riskComboTable}${probabilityTable}
           <div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Every indicator as a tail classifier for this target</div>
           <div style="overflow:auto;max-height:390px"><table style="width:100%;min-width:650px;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">indicator</th><th>direction</th><th>ROC AUC</th><th>average precision</th><th>top 10% hit</th><th>95% CI</th><th>lift</th></tr></thead><tbody>${featureRows.map(row => `<tr style="border-top:1px solid ${C.border}"><td style="padding:5px;color:${C.text}">${esc(row.key)}</td><td style="text-align:right;color:${row.direction === 'higher' ? C.green : C.amber}">${row.direction} is better</td><td style="text-align:right">${fmtv(row.directionalAuc, 3)}</td><td style="text-align:right">${fmtv(row.prAuc, 3)}</td><td style="text-align:right">${row.topDecile && row.topDecile.hitRate != null ? (row.topDecile.hitRate * 100).toFixed(0) + `% (${row.topDecile.hits}/${row.topDecile.n})` : '—'}</td><td style="text-align:right">${row.topDecile && row.topDecile.ciLow != null ? `${(row.topDecile.ciLow * 100).toFixed(0)}–${(row.topDecile.ciHigh * 100).toFixed(0)}%` : '—'}</td><td style="text-align:right">${row.topDecile && row.topDecile.lift != null ? row.topDecile.lift.toFixed(2) + '×' : '—'}</td></tr>`).join('')}</tbody></table></div>
         </div>`;
@@ -3979,11 +4265,20 @@ const JarvisRetention = (function () {
         const tenMillionCohort = tenMillionTarget && (tenMillionTarget.cohorts || []).find(cohort => +cohort.minAgeDays === 0);
         const tailByKey = {}; (tenMillionCohort && tenMillionCohort.featureRankings || []).forEach(row => { tailByKey[row.key] = row; });
         const signalCards = `<div style="font-size:13px;font-weight:900;color:${C.text};margin:12px 0 3px">What actually follows views?</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:7px">These answer different questions instead of hiding them inside an arbitrary weighted score. Rank trajectory asks whether high indicator scores track high actual views. Blind prediction asks whether one indicator predicts unseen log views. Tail separation asks whether it distinguishes actual 10M+ outcomes.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:7px;margin-bottom:10px">${statc('Closest high → high trajectory', trajectory ? `${esc(trajectory.key)} · ρ ${fmtv(trajectory.spearmanViews, 3)}` : '—', C.green)}${statc('Best blind single indicator', blindSingle && blindSingle.oof ? `${esc(blindSingle.key)} · R² ${fmtv(blindSingle.oof.r2, 3)}` : '—', C.cyan)}${statc('Strongest actual 10M separator', tailSingle ? `${esc(tailSingle.key)} · AUC ${fmtv(tailSingle.directionalAuc, 3)}` : '—', C.red)}${statc('All-signal selection-safe model', nested && nested.r2 != null ? `R² ${nested.r2.toFixed(3)}` : '—', C.purple)}</div>`;
+        const processMap = `<div data-savedchannelprocessmap style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:1px;background:${C.border};border:1px solid ${C.border};margin:9px 0 12px"><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.cyan}">1 · STORED INPUTS</b><div style="font-size:8px;color:${C.mute};margin-top:3px">5-frame montage · transcript · public views · publication age</div></div><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.purple}">2 · 21 OUTPUTS</b><div style="font-size:8px;color:${C.mute};margin-top:3px">visual · text · both · novelty, using the saved scoring artifact</div></div><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.green}">3 · BLIND TESTS</b><div style="font-size:8px;color:${C.mute};margin-top:3px">fold-local preprocessing · held-out continuous views · held-out 10M outcomes</div></div><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.amber}">4 · DECISION EVIDENCE</b><div style="font-size:8px;color:${C.mute};margin-top:3px">trajectory · prediction error · calibration · uncertainty · false positives</div></div></div>`;
+        const predictionDiagnostics = nested && nested.points ? `<div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">Blind-prediction diagnostics · every error stays visible</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:7px">Each point was predicted by a model that did not train on that Short. The six views below expose accuracy, bias, calibration, rank tracking, fold-selection stability, and the geometry of the searched combinations.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;margin-bottom:12px"><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Predicted vs actual</div>${savedChannelPredictionScatter(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Residuals · where the model misses</div>${savedChannelResidualChart(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Continuous calibration</div>${savedChannelContinuousCalibration(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Actual and predicted rank trajectory</div>${savedChannelPredictionRankTrace(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Indicators repeatedly selected inside folds</div>${savedChannelSelectionFrequency(nested)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Top exhaustive combination landscape</div>${savedChannelCombinationLandscape(analysis.topCombinations)}</div></div>` : '';
         return `${renderSavedChannelRisk(analysis)}<div style="font-size:13px;font-weight:900;color:${C.text};margin:4px 0">Continuous views forecast</div><div style="font-size:11px;color:${C.dim};line-height:1.5;margin-bottom:10px"><b style="color:${C.text}">${analysis.n} Shorts</b> · outcome: ${esc(analysis.outcome.primary)} · transcript coverage ${(analysis.transcriptCoverage * 100).toFixed(0)}%. ${esc(analysis.outcome.validation)}</div>
+          ${processMap}
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-bottom:12px">${metric('Selection-safe model', nested, C.green)}${metric('All 21 indicators', all, C.cyan)}${metric('Best exploratory combo', best, C.purple)}${statc('Typical error factor', nested && nested.medianFactor ? nested.medianFactor.toFixed(2) + '×' : '—', C.amber)}</div>
           ${note(`<b>Search coverage:</b> ${analysis.search.exhaustiveCandidates.toLocaleString()} single/pair/triple combinations tested exhaustively; ${analysis.search.forwardPathModels} forward models cover sizes 1–21; the all-21 ridge model tests every indicator together. The headline model selects inside training folds, then predicts unseen Shorts, so the reported score does not grade a combination on the videos that chose it.`, C.green)}
-          ${signalCards}${savedChannelSignalMatrix(analysis)}
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px;margin-bottom:12px"><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:5px">Which single indicators predict log views?</div>${savedChannelBars(analysis.singles)}</div><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:5px">Blind predictions vs actual views</div>${savedChannelPredictionScatter(nested && nested.points)}</div><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:5px">Does adding indicators improve prediction?</div>${savedChannelPathChart(analysis.forwardPath)}</div></div>
+          ${signalCards}
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:10px;margin-bottom:12px"><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:4px">Actual-view distribution</div><div style="font-size:8.5px;color:${C.mute};margin-bottom:4px">The outcome the model is trying to predict. A wide, skewed range is why views are modeled in log space.</div>${savedChannelOutcomeHistogram(analysis.outcomeProfile)}</div><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:4px">Publication age vs accumulated views</div><div style="font-size:8.5px;color:${C.mute};margin-bottom:4px">Every point is a Short. This makes right-censoring visible instead of burying it in a correlation number.</div>${savedChannelAgeScatter(analysis)}</div><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:4px">Which single indicators predict log views?</div><div style="font-size:8.5px;color:${C.mute};margin-bottom:4px">Positive OOF R² adds blind predictive value; negative values are worse than the training-fold mean.</div>${savedChannelBars(analysis.singles)}</div><div><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:4px">Does adding indicators improve prediction?</div><div style="font-size:8.5px;color:${C.mute};margin-bottom:4px">The deterministic forward path shows when another signal helps and when redundancy starts to hurt.</div>${savedChannelPathChart(analysis.forwardPath)}</div></div>
+          <div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">Every indicator · every kind of evidence</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:6px">Green means the displayed metric is above its neutral point; red means below. Click an indicator label to inspect every underlying Short. This heatmap does not combine unlike metrics into one arbitrary score.</div>${savedChannelEvidenceHeatmap(analysis, tailByKey)}
+          ${savedChannelSignalMatrix(analysis)}
+          ${renderSavedChannelIndicatorExplorer(analysis)}
+          <div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">All 21 score trajectories</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:6px">Each mini-map bins Shorts from low to high on one indicator and plots median actual views. The red guide is 10M. Click any map to load it into the full playground above.</div>${savedChannelProfileAtlas(analysis)}
+          <div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">Indicator redundancy · 21 × 21</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:6px">Pairwise Spearman correlation of the exact values used by the models. Bright teal means two indicators move together; bright red means they move in opposite directions; dark cells are comparatively independent. Hover any cell for Pearson, Spearman, and sample size.</div>${savedChannelRelationshipHeatmap(analysis)}
+          ${predictionDiagnostics}
           <div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:3px">21-indicator evidence matrix</div><div style="font-size:9px;color:${C.mute};line-height:1.4;margin-bottom:5px">Continuous correlation, held-out prediction, and actual 10M discrimination are shown side by side. Negative OOF R² means the indicator predicts unseen Shorts worse than the channel mean; it is evidence of noise, not a hidden positive score.</div>
           <div style="overflow:auto;max-height:430px;margin-bottom:12px"><table style="width:100%;min-width:790px;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">indicator</th><th>coverage</th><th>raw r</th><th>log r</th><th>trajectory ρ</th><th>blind OOF R²</th><th>error factor</th><th>10M AUC</th><th>10M AP</th><th>top-decile lift</th></tr></thead><tbody>${(analysis.singles || []).map(row => { const tail = tailByKey[row.key] || {}; return `<tr style="border-top:1px solid ${C.border}"><td style="padding:5px;color:${C.text}">${esc(row.key)}</td><td style="text-align:right">${(row.coverage * 100).toFixed(0)}%</td><td style="text-align:right">${fmtv(row.pearsonRawViews, 3)}</td><td style="text-align:right">${fmtv(row.pearsonLogViews, 3)}</td><td style="text-align:right;color:${row.spearmanViews > 0 ? C.green : C.dim}">${fmtv(row.spearmanViews, 3)}</td><td style="text-align:right;color:${row.oof && row.oof.r2 > 0 ? C.green : C.dim}">${row.oof ? fmtv(row.oof.r2, 3) : '—'}</td><td style="text-align:right">${row.oof ? fmtv(row.oof.medianFactor, 2) + '×' : '—'}</td><td style="text-align:right">${fmtv(tail.directionalAuc, 3)}${tail.direction ? ` ${tail.direction === 'higher' ? '↑' : '↓'}` : ''}</td><td style="text-align:right">${fmtv(tail.prAuc, 3)}</td><td style="text-align:right">${tail.topDecile && tail.topDecile.lift != null ? tail.topDecile.lift.toFixed(2) + '×' : '—'}</td></tr>`; }).join('')}</tbody></table></div>
           <div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:5px">Top exploratory combinations</div>

@@ -737,9 +737,112 @@ function buildIndicatorMatrix(rows) {
             id: row.id,
             title: row.title,
             views: row.views,
+            publishedAt: row.publishedAt,
+            ageDays: row.ageDays == null ? null : Number(row.ageDays.toFixed(2)),
             viewsPercentile: rows.length <= 1 ? 100 : Number((viewRanks[rowIndex] / (rows.length - 1) * 100).toFixed(2)),
             values: percentileByFeature.map(values => values.has(rowIndex) ? values.get(rowIndex) : null),
+            rawValues: definitions.map(definition => rawFeatureValue(row.video, definition)),
         })).sort((a, b) => b.views - a.views || stableHash(a.id) - stableHash(b.id)),
+    };
+}
+
+function buildIndicatorRelationships(rows) {
+    const definitions = contract.features;
+    const matrix = definitions.map(left => definitions.map(right => {
+        const observed = rows.map(row => ({
+            left: modelFeatureValue(row.video, left),
+            right: modelFeatureValue(row.video, right),
+        })).filter(point => finite(point.left) && finite(point.right));
+        const xs = observed.map(point => Number(point.left)), ys = observed.map(point => Number(point.right));
+        return {
+            n: observed.length,
+            pearson: pearson(xs, ys),
+            spearman: spearman(xs, ys),
+        };
+    }));
+    return {
+        normalization: 'Pairwise-complete correlation of the exact feature values used by the models. Spearman exposes monotonic redundancy; Pearson exposes linear redundancy.',
+        columns: definitions.map(definition => ({ key: definition.key, group: definition.group, label: definition.label })),
+        matrix,
+    };
+}
+
+function buildFeatureProfiles(rows) {
+    return contract.features.map(definition => {
+        const observed = rows.map(row => ({
+            id: row.id,
+            title: row.title,
+            score: modelFeatureValue(row.video, definition),
+            raw: rawFeatureValue(row.video, definition),
+            views: row.views,
+        })).filter(point => finite(point.score));
+        const sorted = observed.slice().sort((a, b) => Number(a.score) - Number(b.score) || stableHash(a.id) - stableHash(b.id));
+        const binCount = Math.min(10, Math.max(2, Math.floor(Math.sqrt(sorted.length))));
+        const bins = [];
+        for (let bin = 0; bin < binCount; bin++) {
+            const start = Math.floor(bin * sorted.length / binCount), end = Math.floor((bin + 1) * sorted.length / binCount);
+            const points = sorted.slice(start, end);
+            if (!points.length) continue;
+            const views = points.map(point => point.views), hits = points.filter(point => point.views >= 10000000).length;
+            const interval = wilsonInterval(hits, points.length);
+            bins.push({
+                n: points.length,
+                scoreMedian: median(points.map(point => Number(point.score))),
+                rawMedian: median(points.map(point => point.raw).filter(finite).map(Number)),
+                actualViewsP25: quantile(views, 0.25),
+                actualViewsMedian: median(views),
+                actualViewsP75: quantile(views, 0.75),
+                hitRate10M: hits / points.length,
+                hitRate10MCiLow: interval.low,
+                hitRate10MCiHigh: interval.high,
+            });
+        }
+        const raw = observed.map(point => point.raw).filter(finite).map(Number);
+        return {
+            key: definition.key,
+            group: definition.group,
+            label: definition.label,
+            unit: definition.unit,
+            available: observed.length,
+            missing: rows.length - observed.length,
+            rawDistribution: raw.length ? {
+                min: Math.min(...raw),
+                p10: quantile(raw, 0.1),
+                p25: quantile(raw, 0.25),
+                median: median(raw),
+                p75: quantile(raw, 0.75),
+                p90: quantile(raw, 0.9),
+                max: Math.max(...raw),
+            } : null,
+            bins,
+        };
+    });
+}
+
+function buildOutcomeProfile(rows) {
+    const views = rows.map(row => row.views).filter(finite).map(Number);
+    const logs = views.map(value => Math.log10(value + 1));
+    const binCount = Math.min(14, Math.max(5, Math.floor(Math.sqrt(logs.length))));
+    const lo = Math.min(...logs), hi = Math.max(...logs), width = (hi - lo) / binCount || 1;
+    const histogram = Array.from({ length: binCount }, (_, index) => ({
+        logLow: lo + index * width,
+        logHigh: index === binCount - 1 ? hi : lo + (index + 1) * width,
+        n: 0,
+    }));
+    logs.forEach(value => {
+        const index = Math.min(binCount - 1, Math.max(0, Math.floor((value - lo) / width)));
+        histogram[index].n++;
+    });
+    return {
+        n: views.length,
+        min: Math.min(...views),
+        p10: quantile(views, 0.1),
+        p25: quantile(views, 0.25),
+        median: median(views),
+        p75: quantile(views, 0.75),
+        p90: quantile(views, 0.9),
+        max: Math.max(...views),
+        histogram,
     };
 }
 
@@ -758,7 +861,7 @@ function savedChannelAnalysisFingerprint(manifest) {
             stableHash(JSON.stringify(video.viewsHistory || [])).toString(16),
         ].join(':');
     }).sort();
-    return `v3:${stableHash(rows.join('|')).toString(16)}:${rows.length}`;
+    return `v4:${stableHash(rows.join('|')).toString(16)}:${rows.length}`;
 }
 
 function analyzeChannel(manifest) {
@@ -766,7 +869,7 @@ function analyzeChannel(manifest) {
     const rows = buildRows(manifest || {}, generatedAt);
     const keys = contract.features.map(feature => feature.key);
     if (rows.length < 8) return {
-        version: 3,
+        version: 4,
         generatedAt,
         channelId: manifest && manifest.id,
         n: rows.length,
@@ -820,7 +923,7 @@ function analyzeChannel(manifest) {
     const strongestTail = primaryCohort && (primaryCohort.featureRankings || []).filter(row => row.directionalAuc != null)[0] || null;
 
     return {
-        version: 3,
+        version: 4,
         generatedAt,
         channelId: manifest && manifest.id,
         channelName: manifest && manifest.name,
@@ -849,6 +952,9 @@ function analyzeChannel(manifest) {
             note: 'Trajectory uses positive Spearman rank correlation, blind-single uses out-of-fold R², and tail separation uses directional ROC AUC for actual 10M+ outcomes. They remain separate so no arbitrary weighting is disguised as one score.',
         },
         indicatorMatrix: buildIndicatorMatrix(rows),
+        indicatorRelationships: buildIndicatorRelationships(rows),
+        featureProfiles: buildFeatureProfiles(rows),
+        outcomeProfile: buildOutcomeProfile(rows),
         topCombinations: candidateScores.slice(0, 30),
         bestBySize: [1, 2, 3].map(size => candidateScores.find(row => row.keys.length === size)).filter(Boolean),
         forwardPath: path,

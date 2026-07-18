@@ -40,6 +40,7 @@ for (let index = 0; index < 96; index++) {
 
 const first = analysis.analyzeChannel({ id: 'chtest', name: 'Synthetic', videos });
 assert.strictEqual(first.status, 'ready');
+assert.strictEqual(first.version, 4, 'visual analysis contract version must invalidate legacy cached responses');
 assert.strictEqual(first.n, 96);
 assert.strictEqual(first.search.exhaustiveCandidates, 1561);
 assert.strictEqual(first.singles[0].key, 'visual.keep', 'the known synthetic signal must rank first');
@@ -49,6 +50,15 @@ assert.strictEqual(first.models.nestedSelected.points.length, videos.length);
 assert.strictEqual(first.indicatorMatrix.columns.length, 21, 'matrix must contain every canonical indicator');
 assert.strictEqual(first.indicatorMatrix.rows.length, videos.length, 'matrix must retain every scored Short');
 assert.strictEqual(first.indicatorMatrix.rows[0].views, Math.max(...videos.map(video => video.views)), 'matrix rows should make actual-view trajectory visually explicit');
+assert.strictEqual(first.indicatorMatrix.rows[0].rawValues.length, 21, 'matrix must retain exact stored values for point-level readouts');
+assert.strictEqual(first.indicatorRelationships.columns.length, 21, 'redundancy map must cover every indicator');
+assert.strictEqual(first.indicatorRelationships.matrix.length, 21, 'redundancy map must contain every row');
+assert.strictEqual(first.indicatorRelationships.matrix[0].length, 21, 'redundancy map must be square');
+assert(first.indicatorRelationships.matrix[0][0].spearman > 0.99, 'an indicator must be perfectly rank-correlated with itself');
+assert.strictEqual(first.featureProfiles.length, 21, 'every indicator needs a visible score-to-outcome profile');
+assert(first.featureProfiles.every(profile => profile.bins.length >= 2), 'every populated indicator needs visible trajectory bins');
+assert(first.featureProfiles.find(profile => profile.key === 'text.keep').missing > 0, 'profile coverage must surface missing text inputs');
+assert(first.outcomeProfile.histogram.reduce((sum, bin) => sum + bin.n, 0) === videos.length, 'outcome histogram must account for every analyzed Short');
 assert.strictEqual(first.signalSummary.strongestTrajectory.key, 'visual.keep', 'known high-to-high signal should lead the trajectory summary');
 assert.strictEqual(first.signalSummary.strongestBlindSingle.key, 'visual.keep', 'known held-out signal should lead the blind summary');
 assert(first.singles.find(row => row.key === 'text.keep').coverage < 1, 'missing transcripts must be reported, not silently counted as observed');
@@ -66,8 +76,8 @@ assert.notStrictEqual(fingerprint, analysis.savedChannelAnalysisFingerprint({ vi
 
 const second = analysis.analyzeChannel({ id: 'chtest', name: 'Synthetic', videos });
 assert.deepStrictEqual(
-    { singles: first.singles, combinations: first.topCombinations, path: first.forwardPath, nested: first.models.nestedSelected },
-    { singles: second.singles, combinations: second.topCombinations, path: second.forwardPath, nested: second.models.nestedSelected },
+    { singles: first.singles, combinations: first.topCombinations, path: first.forwardPath, nested: first.models.nestedSelected, relationships: first.indicatorRelationships, profiles: first.featureProfiles, outcome: first.outcomeProfile },
+    { singles: second.singles, combinations: second.topCombinations, path: second.forwardPath, nested: second.models.nestedSelected, relationships: second.indicatorRelationships, profiles: second.featureProfiles, outcome: second.outcomeProfile },
     'analysis must be deterministic'
 );
 
@@ -77,7 +87,7 @@ assert.strictEqual(insufficient.status, 'insufficient');
 const ui = fs.readFileSync(path.join(__dirname, '..', 'buildings/jarvis/jarvis-retention.js'), 'utf8');
 const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
 const auth = fs.readFileSync(path.join(__dirname, '..', 'auth.js'), 'utf8');
-for (const marker of ['data-savedbank', 'data-savedchanneladd', 'data-savedchannelvideo', 'Prediction analysis', 'Which single indicators predict log views?', 'Execution risk · can an embedding score justify making the video?', 'data-savedchannelrisktarget', 'conservative EV', 'data-savedchannelmatrix', 'Closest high → high trajectory', 'continue ${unfinished} unfinished', "st.savedChannelSort = 'feature'", 'wireSavedChannelImages', 'record.montageDataUrl = `/api/raw/saved-channel/']) {
+for (const marker of ['data-savedbank', 'data-savedchanneladd', 'data-savedchannelvideo', 'Prediction analysis', 'Which single indicators predict log views?', 'Execution risk · can an embedding score justify making the video?', 'data-savedchannelrisktarget', 'conservative EV', 'data-savedchannelmatrix', 'Closest high → high trajectory', 'data-savedchannelindicatorplayground', 'data-savedchannelrelationships', 'data-savedchannelprofileatlas', 'data-savedchannelresiduals', 'savedChannelBinaryCurve', 'continue ${unfinished} unfinished', "st.savedChannelSort = 'feature'", 'wireSavedChannelImages', 'record.montageDataUrl = `/api/raw/saved-channel/']) {
     assert(ui.includes(marker), `Shorts Experiment UI is missing ${marker}`);
 }
 for (const route of ['/api/raw/saved-channels', '/api/raw/saved-channel', '/api/raw/hook-enrich', 'savedChannelAnalysis.analyzeChannel', 'serveR2ObjectForRequest(req, res, key']) {
