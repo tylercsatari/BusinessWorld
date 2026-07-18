@@ -299,13 +299,26 @@ def process_channel_request(key):
                 continue
 
             montage = record.pop('montage', None)
+            montage_saved = False
+            montage_error = 'scorer did not return a montage'
             if montage:
-                try:
-                    s3.put_object(Bucket=BUCKET, Key=CHANNEL_ROOT + channel_id + '/montages/' + video['id'] + '.jpg',
-                                  Body=base64.b64decode(montage), ContentType='image/jpeg')
-                except Exception as exc:
-                    log('channel %s montage upload %s: %s' % (channel_id, video['id'], str(exc)[:100]))
-            record.update({'savedChannelId': channel_id, 'savedAt': int(time.time() * 1000), 'hasMontage': bool(montage)})
+                for upload_attempt in range(3):
+                    try:
+                        s3.put_object(Bucket=BUCKET, Key=CHANNEL_ROOT + channel_id + '/montages/' + video['id'] + '.jpg',
+                                      Body=base64.b64decode(montage), ContentType='image/jpeg')
+                        montage_saved = True
+                        break
+                    except Exception as exc:
+                        montage_error = str(exc)[:220]
+                        log('channel %s montage upload %s attempt %d: %s' % (channel_id, video['id'], upload_attempt + 1, str(exc)[:100]))
+                        if upload_attempt < 2: time.sleep(2 ** upload_attempt)
+            if not montage_saved:
+                video.update({'status': 'error', 'error': 'stored image failed: ' + montage_error})
+                if video['attempts'] < 3: video['status'] = 'queued'
+                save_manifest(manifest)
+                if video['status'] == 'queued': time.sleep(min(20, video['attempts'] * 5))
+                continue
+            record.update({'savedChannelId': channel_id, 'savedAt': int(time.time() * 1000), 'hasMontage': montage_saved})
             put_json(CHANNEL_ROOT + channel_id + '/videos/' + video['id'] + '.json', record)
             features = compact_features(record, registry)
             video.update({
@@ -314,7 +327,7 @@ def process_channel_request(key):
                 'viewsObservedAt': video.get('viewsObservedAt') or int(time.time() * 1000),
                 'duration': record.get('dur_s') or video.get('duration'), 'sourceUrl': record.get('sourceUrl') or video.get('sourceUrl'),
                 'sourceChannel': record.get('sourceChannel') or manifest.get('name'), 'silent': bool(record.get('silent')),
-                'transcript': str(record.get('transcript') or '')[:300], 'hasMontage': bool(montage),
+                'transcript': str(record.get('transcript') or '')[:300], 'hasMontage': montage_saved,
                 'features': features, 'scoredAt': int(time.time() * 1000),
             })
             append_view_snapshot(video, video.get('views'), video.get('viewsObservedAt'))
@@ -322,11 +335,13 @@ def process_channel_request(key):
             save_manifest(manifest)
 
         manifest = get_json(manifest_key, manifest) or manifest
-        manifest.update({'status': 'done', 'phase': 'done', 'current': None, 'stopRequested': False})
+        recount_manifest(manifest)
+        terminal_status = 'done' if manifest.get('completed', 0) >= manifest.get('discovered', 0) else 'partial'
+        manifest.update({'status': terminal_status, 'phase': terminal_status, 'current': None, 'stopRequested': False})
         save_manifest(manifest)
         try: s3.delete_object(Bucket=BUCKET, Key=CHANNEL_ROOT + channel_id + '/analysis.json')
         except Exception: pass
-        log('channel %s done: %d scored, %d errors' % (channel_id, manifest.get('completed', 0), manifest.get('failed', 0)))
+        log('channel %s %s: %d scored, %d unfinished' % (channel_id, terminal_status, manifest.get('completed', 0), manifest.get('failed', 0) + manifest.get('queued', 0)))
     except Exception as exc:
         manifest = get_json(manifest_key, manifest) or manifest
         manifest.update({'status': 'error', 'phase': 'error', 'current': None, 'error': str(exc)[:400]})

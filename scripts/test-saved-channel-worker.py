@@ -9,6 +9,15 @@ with open(os.path.join(ROOT, 'yt_relay_watcher.py'), encoding='utf-8') as source
     worker_source = source_file.read()
 assert "'viewsObservedAt': views_observed_at" in worker_source
 assert "previous['published'] = video.get('published')" in worker_source
+assert "terminal_status = 'done' if" in worker_source
+assert "montage_saved = False" in worker_source
+assert "if not montage_saved:" in worker_source
+assert "'stored image failed: ' + montage_error" in worker_source
+
+with open(os.path.join(ROOT, 'raw_upload.py'), encoding='utf-8') as raw_upload_file:
+    raw_upload_source = raw_upload_file.read()
+assert "if 'ffmpeg exited with code 183' not in str(range_error)" in raw_upload_source
+assert "fallback_opts.pop('download_ranges', None)" in raw_upload_source
 
 view_record = {}
 worker.append_view_snapshot(view_record, 100, 1000)

@@ -46,6 +46,11 @@ assert.strictEqual(first.singles[0].key, 'visual.keep', 'the known synthetic sig
 assert(first.singles[0].oof.r2 > 0.8, 'known signal should predict unseen rows');
 assert(first.models.nestedSelected.r2 > 0.7, 'nested selection should recover the held-out signal');
 assert.strictEqual(first.models.nestedSelected.points.length, videos.length);
+assert.strictEqual(first.indicatorMatrix.columns.length, 21, 'matrix must contain every canonical indicator');
+assert.strictEqual(first.indicatorMatrix.rows.length, videos.length, 'matrix must retain every scored Short');
+assert.strictEqual(first.indicatorMatrix.rows[0].views, Math.max(...videos.map(video => video.views)), 'matrix rows should make actual-view trajectory visually explicit');
+assert.strictEqual(first.signalSummary.strongestTrajectory.key, 'visual.keep', 'known high-to-high signal should lead the trajectory summary');
+assert.strictEqual(first.signalSummary.strongestBlindSingle.key, 'visual.keep', 'known held-out signal should lead the blind summary');
 assert(first.singles.find(row => row.key === 'text.keep').coverage < 1, 'missing transcripts must be reported, not silently counted as observed');
 assert.strictEqual(first.risk.model.status, 'ready', '10M tail-risk model should run when both outcomes exist');
 assert(first.risk.model.nestedSelected.brierSkill > 0.5, 'selection-safe tail model should recover the synthetic hit signal');
@@ -71,10 +76,10 @@ assert.strictEqual(insufficient.status, 'insufficient');
 
 const ui = fs.readFileSync(path.join(__dirname, '..', 'buildings/jarvis/jarvis-retention.js'), 'utf8');
 const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-for (const marker of ['data-savedbank', 'data-savedchanneladd', 'data-savedchannelvideo', 'Prediction analysis', 'Which single indicators predict log views?', 'Execution risk · can an embedding score justify making the video?', 'data-savedchannelrisktarget', 'conservative EV']) {
+for (const marker of ['data-savedbank', 'data-savedchanneladd', 'data-savedchannelvideo', 'Prediction analysis', 'Which single indicators predict log views?', 'Execution risk · can an embedding score justify making the video?', 'data-savedchannelrisktarget', 'conservative EV', 'data-savedchannelmatrix', 'Closest high → high trajectory', 'continue ${unfinished} unfinished', "st.savedChannelSort = 'feature'", 'savedChannelMontageData']) {
     assert(ui.includes(marker), `Shorts Experiment UI is missing ${marker}`);
 }
-for (const route of ['/api/raw/saved-channels', '/api/raw/saved-channel', 'savedChannelAnalysis.analyzeChannel']) {
+for (const route of ['/api/raw/saved-channels', '/api/raw/saved-channel', '/api/raw/hook-enrich', 'savedChannelAnalysis.analyzeChannel', 'serveR2ObjectForRequest(req, res, key']) {
     assert(server.includes(route), `server is missing ${route}`);
 }
 

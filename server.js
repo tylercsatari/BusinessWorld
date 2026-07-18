@@ -3783,11 +3783,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if (savedChannelMontage && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
             const key = `${SAVED_CHANNEL_ROOT}${savedChannelMontage[1]}/montages/${savedChannelMontage[2]}.jpg`;
-            if (req.method === 'HEAD') {
-                const exists = await cloud.existsInR2(key).catch(() => false);
-                res.writeHead(exists ? 200 : 404, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); res.end(); return;
-            }
-            if (await redirectR2Object(res, key, { cacheControl: 'public, max-age=86400' }).catch(() => false)) return;
+            // The gallery fetches this route with its bearer token, then creates a local object/data
+            // URL for <img>. Stream the private R2 object through this authenticated origin so an
+            // unsigned <img> request never receives a 401 and a cross-origin redirect is unnecessary.
+            if (await serveR2ObjectForRequest(req, res, key, 'image/jpeg', { cacheControl: 'private, max-age=86400' }).catch(() => false)) return;
             res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
         return;
@@ -3796,7 +3795,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if (savedChannelVideo && req.method === 'GET') {
         try {
             const buffer = await cloud.downloadFromR2(`${SAVED_CHANNEL_ROOT}${savedChannelVideo[1]}/videos/${savedChannelVideo[2]}.json`).catch(() => null);
-            res.writeHead(buffer ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.writeHead(buffer ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=86400' });
             res.end(buffer ? buffer.toString('utf8') : JSON.stringify({ error: 'Scored video record not found.' }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
@@ -3845,9 +3844,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 manifest.phase = 'queued';
                 manifest.current = null;
                 manifest.error = null;
-                for (const video of (manifest.videos || [])) if (video.status === 'error') { video.status = 'queued'; video.error = null; video.attempts = 0; }
+                manifest.resumeRequestedAt = Date.now();
+                for (const video of (manifest.videos || [])) {
+                    if (video.status === 'done') continue;
+                    video.status = 'queued'; video.error = null; video.attempts = 0;
+                }
                 await writeSavedChannelManifest(manifest);
-                await cloud.uploadToR2(`${SAVED_CHANNEL_REQUEST_ROOT}${id}.json`, Buffer.from(JSON.stringify({ id, url: manifest.url, retryErrors: true, ts: Date.now() })), 'application/json');
+                await cloud.uploadToR2(`${SAVED_CHANNEL_REQUEST_ROOT}${id}.json`, Buffer.from(JSON.stringify({ id, url: manifest.url, retryErrors: true, resume: true, ts: Date.now() })), 'application/json');
                 res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, channel: compactSavedChannel(manifest) }));
                 return;
             }
@@ -3904,6 +3907,24 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 await cloud.uploadToR2('raw/saved-hooks/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
             } catch (e) {}
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, id }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    if (pathname === '/api/raw/hook-enrich' && req.method === 'POST') {
+        try {
+            const body = (await readBody(req)) || {};
+            const id = String(body.id || '').replace(/[^a-z0-9]/gi, '');
+            if (!id) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no hook id"}'); return; }
+            const key = `raw/saved-hooks/${id}.json`;
+            const existing = await cloud.downloadFromR2(key).catch(() => null);
+            if (!existing) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"saved hook not found"}'); return; }
+            const rec = JSON.parse(existing.toString('utf8'));
+            for (const field of ['indicators', 'steer', 'channels', 'emb_preview', 'input_manifest']) {
+                if (body[field] && typeof body[field] === 'object') rec[field] = body[field];
+            }
+            rec.enrichedAt = Date.now();
+            await cloud.uploadToR2(key, Buffer.from(JSON.stringify(rec)), 'application/json');
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}');
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }

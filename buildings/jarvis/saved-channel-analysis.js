@@ -716,6 +716,33 @@ function targetRisk(rows, targetViews) {
     return { targetViews, cohorts };
 }
 
+function buildIndicatorMatrix(rows) {
+    const definitions = contract.features;
+    const percentileByFeature = definitions.map(definition => {
+        const observed = rows.map((row, rowIndex) => ({ rowIndex, value: modelFeatureValue(row.video, definition) }))
+            .filter(point => finite(point.value));
+        const ranked = rank(observed.map(point => Number(point.value)));
+        const values = new Map();
+        observed.forEach((point, index) => {
+            const percentile = observed.length <= 1 ? 100 : ranked[index] / (observed.length - 1) * 100;
+            values.set(point.rowIndex, Number(percentile.toFixed(2)));
+        });
+        return values;
+    });
+    const viewRanks = rank(rows.map(row => row.views));
+    return {
+        normalization: 'Within-channel percentile of the exact feature value used by the prediction models. Rows are ordered by actual public views; sorting is descriptive and never enters training.',
+        columns: definitions.map(definition => ({ key: definition.key, group: definition.group, label: definition.label })),
+        rows: rows.map((row, rowIndex) => ({
+            id: row.id,
+            title: row.title,
+            views: row.views,
+            viewsPercentile: rows.length <= 1 ? 100 : Number((viewRanks[rowIndex] / (rows.length - 1) * 100).toFixed(2)),
+            values: percentileByFeature.map(values => values.has(rowIndex) ? values.get(rowIndex) : null),
+        })).sort((a, b) => b.views - a.views || stableHash(a.id) - stableHash(b.id)),
+    };
+}
+
 function savedChannelAnalysisFingerprint(manifest) {
     const rows = (manifest && manifest.videos || []).map(video => {
         const features = video.features || {};
@@ -731,7 +758,7 @@ function savedChannelAnalysisFingerprint(manifest) {
             stableHash(JSON.stringify(video.viewsHistory || [])).toString(16),
         ].join(':');
     }).sort();
-    return `v2:${stableHash(rows.join('|')).toString(16)}:${rows.length}`;
+    return `v3:${stableHash(rows.join('|')).toString(16)}:${rows.length}`;
 }
 
 function analyzeChannel(manifest) {
@@ -739,7 +766,7 @@ function analyzeChannel(manifest) {
     const rows = buildRows(manifest || {}, generatedAt);
     const keys = contract.features.map(feature => feature.key);
     if (rows.length < 8) return {
-        version: 2,
+        version: 3,
         generatedAt,
         channelId: manifest && manifest.id,
         n: rows.length,
@@ -784,8 +811,16 @@ function analyzeChannel(manifest) {
     const viewAgeCorrelation = datedRows.length >= 3
         ? pearson(datedRows.map(row => Math.log10(row.ageDays + 1)), datedRows.map(row => row.y)) : null;
 
+    const primaryRisk = riskTargets.find(target => target.targetViews === primaryRiskTarget);
+    const primaryCohort = primaryRisk && primaryRisk.cohorts.find(cohort => cohort.minAgeDays === 0);
+    const strongestTrajectory = singles.filter(row => row.spearmanViews != null && row.spearmanViews > 0)
+        .sort((a, b) => b.spearmanViews - a.spearmanViews)[0] || null;
+    const strongestBlindSingle = singles.filter(row => row.oof && row.oof.r2 != null)
+        .sort((a, b) => b.oof.r2 - a.oof.r2)[0] || null;
+    const strongestTail = primaryCohort && (primaryCohort.featureRankings || []).filter(row => row.directionalAuc != null)[0] || null;
+
     return {
-        version: 2,
+        version: 3,
         generatedAt,
         channelId: manifest && manifest.id,
         channelName: manifest && manifest.name,
@@ -807,6 +842,13 @@ function analyzeChannel(manifest) {
             note: 'Singles, pairs, and triples are exhaustive. Larger sets use a deterministic forward path plus an all-21 ridge model; the nested-selected score is the selection-safe headline.',
         },
         singles,
+        signalSummary: {
+            strongestTrajectory,
+            strongestBlindSingle,
+            strongestTail,
+            note: 'Trajectory uses positive Spearman rank correlation, blind-single uses out-of-fold R², and tail separation uses directional ROC AUC for actual 10M+ outcomes. They remain separate so no arbitrary weighting is disguised as one score.',
+        },
+        indicatorMatrix: buildIndicatorMatrix(rows),
         topCombinations: candidateScores.slice(0, 30),
         bestBySize: [1, 2, 3].map(size => candidateScores.find(row => row.keys.length === size)).filter(Boolean),
         forwardPath: path,

@@ -218,8 +218,25 @@ def _run():
                         # extract_info still returns the full source duration for realistic views.
                         'download_ranges': download_range_func(None, [(0, 6)]),
                         'force_keyframes_at_cuts': True}
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(f'https://www.youtube.com/watch?v={vid}', download=True)
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(f'https://www.youtube.com/watch?v={vid}', download=True)
+            except Exception as range_error:
+                # Some Shorts expose a progressive MP4 that ffmpeg cannot cut with
+                # download_ranges (exit 183) even though the full file is tiny and valid.
+                # Retry only that repeatable transport failure without range cutting.
+                if 'ffmpeg exited with code 183' not in str(range_error):
+                    raise
+                for filename in os.listdir(ytmp):
+                    try: os.remove(os.path.join(ytmp, filename))
+                    except OSError: pass
+                fallback_opts = dict(ydl_opts)
+                fallback_opts.pop('download_ranges', None)
+                fallback_opts.pop('force_keyframes_at_cuts', None)
+                fallback_opts['format'] = 'bestvideo[ext=mp4][height<=480]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best'
+                fallback_opts['merge_output_format'] = 'mp4'
+                with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                    info = ydl.extract_info(f'https://www.youtube.com/watch?v={vid}', download=True)
             files = [os.path.join(ytmp, f) for f in os.listdir(ytmp)]
             path = max(files, key=os.path.getsize) if files else None
             if not path or os.path.getsize(path) < 10000:
