@@ -76,6 +76,59 @@
     gap: 13px;
 }
 
+.casino-setup {
+    width: min(100%, 470px);
+    flex: 1;
+    min-height: 0;
+    margin: 0 auto;
+    padding: 24px 16px max(20px, env(safe-area-inset-bottom));
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 13px;
+    text-align: center;
+}
+.casino-setup-lock {
+    width: 82px;
+    height: 82px;
+    display: grid;
+    place-items: center;
+    color: white;
+    background: repeating-conic-gradient(#f5e3ad 0 10deg, #bd2731 10deg 35deg);
+    border: 5px dashed #fff4ca;
+    border-radius: 50%;
+    box-shadow: 0 0 0 8px rgba(255,255,255,.035), 0 0 30px rgba(228,185,87,.2);
+    font-size: 38px;
+}
+.casino-setup h3 { margin: -3px 0 0; color: var(--casino-text); font: 29px/1 'Fredoka One', cursive; }
+.casino-setup > p:not(.casino-disclaimer) { max-width: 410px; margin: 0; color: var(--casino-muted); font-size: 12px; line-height: 1.48; }
+.casino-login-link { width: 100%; text-decoration: none; }
+.casino-setup-steps {
+    width: 100%;
+    margin: 0;
+    padding: 11px 12px 11px 31px;
+    color: #c9d5cc;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(228,185,87,.18);
+    border-radius: 11px;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1.55;
+    text-align: left;
+}
+.casino-secondary {
+    width: 100%;
+    min-height: 48px;
+    color: var(--casino-text);
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 11px;
+    font: 900 13px/1 'Nunito', sans-serif;
+}
+.casino-secondary:active { background: rgba(255,255,255,.12); transform: scale(.985); }
+
 .casino-table {
     width: 142px;
     height: 83px;

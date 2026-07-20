@@ -1,6 +1,8 @@
 'use strict';
 
 const CasinoUI = (() => {
+    const GTOBASE_VIEWER_URL = 'https://app.gtobase.com/viewer?id=109&q=20#onePlayer-strategy';
+    const GTOBASE_SETUP_KEY = 'casinoGtoBaseSetupComplete';
     let container = null;
     let screen = 'entry';
     let heroHand = '';
@@ -18,8 +20,28 @@ const CasinoUI = (() => {
 
     function render() {
         return `<section class="casino-panel" aria-label="Casino poker coach">
-            ${screen === 'entry' ? renderEntry() : screen === 'incoming' ? renderIncoming() : renderCall()}
+            ${screen === 'setup' ? renderSetup() : screen === 'entry' ? renderEntry() : screen === 'incoming' ? renderIncoming() : renderCall()}
         </section>`;
+    }
+
+    function renderSetup() {
+        return `${renderHeader('One-time GTOBase setup')}
+            <main class="casino-setup">
+                <div class="casino-setup-lock" aria-hidden="true">♠</div>
+                <span class="casino-eyebrow">First-time setup</span>
+                <h3>Sign in on GTOBase</h3>
+                <p>Open the real GTOBase page, sign in with Google, and let your phone's browser or password manager remember the login. Your Google password never passes through Business World.</p>
+                <a id="casino-gtobase-login" class="casino-primary casino-login-link" href="${GTOBASE_VIEWER_URL}" target="_blank" rel="noopener noreferrer">
+                    <span>Open GTOBase login</span><span aria-hidden="true">↗</span>
+                </a>
+                <ol class="casino-setup-steps">
+                    <li>Sign in to GTOBase in the new browser tab.</li>
+                    <li>Choose “save password” if your phone offers it.</li>
+                    <li>Return here and tap the button below.</li>
+                </ol>
+                <button id="casino-login-done" class="casino-secondary" type="button">I'm signed in — continue</button>
+                <p class="casino-disclaimer">Business World stores only a setup-complete flag, never your Google credentials.</p>
+            </main>`;
     }
 
     function renderHeader(subtitle) {
@@ -98,9 +120,18 @@ const CasinoUI = (() => {
     }
 
     function bind() {
-        if (screen === 'entry') bindEntry();
+        if (screen === 'setup') bindSetup();
+        else if (screen === 'entry') bindEntry();
         else if (screen === 'incoming') bindIncoming();
         else bindCall();
+    }
+
+    function bindSetup() {
+        document.getElementById('casino-login-done').addEventListener('click', () => {
+            try { localStorage.setItem(GTOBASE_SETUP_KEY, 'yes'); } catch (error) {}
+            screen = 'entry';
+            refresh();
+        });
     }
 
     function bindEntry() {
@@ -361,7 +392,13 @@ const CasinoUI = (() => {
     }
 
     return {
-        open(bodyEl) { container = bodyEl; screen = 'entry'; refresh(); },
+        open(bodyEl) {
+            container = bodyEl;
+            let setupComplete = false;
+            try { setupComplete = localStorage.getItem(GTOBASE_SETUP_KEY) === 'yes'; } catch (error) {}
+            screen = setupComplete ? 'entry' : 'setup';
+            refresh();
+        },
         close() { releaseAudio(); if (container) container.innerHTML = ''; container = null; }
     };
 })();

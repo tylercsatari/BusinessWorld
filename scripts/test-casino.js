@@ -22,6 +22,10 @@ assert(index.includes("makeClickable(g, 'Casino')"), 'Casino is not clickable in
 assert(index.includes("'Casino': casino"), 'Casino is absent from the persistent building lookup');
 assert(index.includes("_mk(createCasino, 'casino')"), 'Casino is not created during world initialization');
 assert(casinoUi.includes("BuildingRegistry.register('Casino'"), 'Casino is absent from BuildingRegistry');
+assert(casinoUi.includes('casinoGtoBaseSetupComplete'), 'Casino does not remember first-time GTOBase setup');
+assert(casinoUi.includes('https://app.gtobase.com/viewer?id=109&q=20#onePlayer-strategy'), 'Casino setup does not open the requested GTOBase viewer');
+assert(casinoUi.includes('casino-gtobase-login'), 'Casino is missing the first-time GTOBase login action');
+assert(casinoUi.includes('rel="noopener noreferrer"'), 'GTOBase login handoff is missing opener protection');
 assert(casinoUi.includes('casino-hand-input'), 'Casino is missing mobile hole-card entry');
 assert(casinoUi.includes('casino-answer'), 'Casino is missing the incoming call answer action');
 assert(casinoUi.includes('casino-mic'), 'Casino is missing voice input');
@@ -32,6 +36,7 @@ assert(casinoAgent.includes('9: Object.freeze([30, 25, 20, 17, 15, 12.5, 10])'),
 assert(casinoAgent.includes('8: Object.freeze([40, 50, 75, 100])'), '8-max reference stacks are incomplete');
 assert(casinoAgent.includes('NOT connected to the paid GTOBase solver'), 'Approximate advice is not clearly constrained');
 assert(!casinoUi.includes('<iframe'), 'Casino must not embed the third-party GTOBase login flow');
+assert(!casinoUi.includes('type="password"'), 'Casino must not collect Google passwords');
 assert(!casinoUi.toLowerCase().includes('tylerdaviscsatari'), 'Casino UI must not contain private login details');
 assert(!casinoAgent.toLowerCase().includes('tylerdaviscsatari'), 'Casino agent must not contain private login details');
 assert(authGate.includes("'Casino'"), 'Casino is absent from profile permissions');
