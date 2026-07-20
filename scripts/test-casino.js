@@ -45,8 +45,9 @@ assert(casinoUi.includes('now - lastVoiceAt > 900'), 'Casino does not send speec
 assert(casinoUi.includes('set Microphone to Allow'), 'Casino is missing mobile permission recovery guidance');
 assert(casinoUi.includes('data:audio/wav;base64'), 'Casino does not unlock mobile audio from the Answer gesture');
 assert(casinoUi.includes("queueSpeak('What is the action?', `prompt:${tylerCallStartedAt}`)"), 'Casino does not speak the action prompt after Tyler answers');
-assert(casinoUi.includes('for (const reply of newReplies)'), 'Casino does not queue every new AI reply for speech');
-assert(casinoUi.includes('queueSpeak(reply.content, reply.id)'), 'Casino AI replies are not deduplicated in the speech queue');
+assert(!casinoUi.includes('for (const reply of newReplies)'), 'Casino must not queue multiple AI replies from one poll');
+assert(casinoUi.includes('queueSpeak(newestReply.content, newestReply.id, true)'), 'Casino does not select exactly one newest AI reply');
+assert(casinoUi.includes('isAiReply && aiReplyQueuedOrPlaying'), 'Casino has no hard single-reply playback gate');
 assert(!casinoUi.includes('showHumanReply('), 'Casino must not duplicate an AI reply above the chat transcript');
 assert(casinoUi.includes('recentSpeechContent.has(normalized)'), 'Casino does not suppress duplicate reply content');
 assert(casinoUi.includes('now - queuedAt > 30000'), 'Casino duplicate reply suppression has no bounded window');

@@ -31,6 +31,7 @@ const CasinoUI = (() => {
     let queuedSpeechIds = new Set();
     let recentSpeechContent = new Map();
     let speechGeneration = 0;
+    let aiReplyQueuedOrPlaying = false;
     let busy = false;
     let seenMessageIds = new Set();
     let tylerCallStartedAt = '';
@@ -222,11 +223,9 @@ const CasinoUI = (() => {
                 displayMessage(message);
                 if (roleMode === 'tyler' && message.sender === 'operator') newReplies.push(message);
             }
-            for (const reply of newReplies) {
-                queueSpeak(reply.content, reply.id);
-            }
             const newestReply = newReplies[newReplies.length - 1];
             if (newestReply) {
+                queueSpeak(newestReply.content, newestReply.id, true);
                 updateStatus(`${newReplies.length > 1 ? `${newReplies.length} AI replies` : 'AI replied'} — speaking now.`);
             }
         } catch (error) {
@@ -495,8 +494,9 @@ const CasinoUI = (() => {
         }
     }
 
-    function queueSpeak(text, messageId) {
+    function queueSpeak(text, messageId, isAiReply = false) {
         if (messageId && queuedSpeechIds.has(messageId)) return;
+        if (isAiReply && aiReplyQueuedOrPlaying) return;
         const normalized = String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
         const now = Date.now();
         for (const [content, queuedAt] of recentSpeechContent) {
@@ -505,8 +505,12 @@ const CasinoUI = (() => {
         if (normalized && recentSpeechContent.has(normalized)) return;
         if (messageId) queuedSpeechIds.add(messageId);
         if (normalized) recentSpeechContent.set(normalized, now);
+        if (isAiReply) aiReplyQueuedOrPlaying = true;
         const generation = speechGeneration;
-        speechChain = speechChain.then(() => generation === speechGeneration ? speak(text, generation) : undefined).catch(() => {});
+        speechChain = speechChain
+            .then(() => generation === speechGeneration ? speak(text, generation) : undefined)
+            .catch(() => {})
+            .finally(() => { if (isAiReply) aiReplyQueuedOrPlaying = false; });
     }
 
     async function playTtsBlob(blob) {
@@ -597,6 +601,7 @@ const CasinoUI = (() => {
         seenMessageIds.clear();
         queuedSpeechIds.clear();
         recentSpeechContent.clear();
+        aiReplyQueuedOrPlaying = false;
         refresh();
     }
 
@@ -604,6 +609,7 @@ const CasinoUI = (() => {
         stopRingtone();
         releaseStream();
         isSpeakingReply = false;
+        aiReplyQueuedOrPlaying = false;
         if (playbackSource) { try { playbackSource.stop(); } catch (error) {} }
         playbackSource = null;
         if (playbackContext) { try { playbackContext.close(); } catch (error) {} }
