@@ -28,6 +28,7 @@ const CasinoUI = (() => {
     let playbackContext = null;
     let playbackSource = null;
     let speechChain = Promise.resolve();
+    let queuedSpeechIds = new Set();
     let busy = false;
     let seenMessageIds = new Set();
     let tylerCallStartedAt = '';
@@ -94,12 +95,12 @@ const CasinoUI = (() => {
                     <div><strong>${operator ? 'Solver desk' : escapeHtml(heroHand || 'Live hand')}</strong><span>${operator ? 'Human response mode' : 'Live hand'}</span></div>
                     ${operator ? `<a class="casino-solver-link" href="${GTOBASE_VIEWER_URL}" target="_blank" rel="noopener noreferrer">Open GTOBase ↗</a>` : ''}
                 </div>
-                <div id="casino-decision" class="casino-decision">
+                <div id="casino-decision" class="casino-decision" aria-hidden="true">
                     <span class="casino-decision-label">${operator ? 'AI mode' : 'Human solver connected'}</span>
                     <strong>${operator ? 'Waiting for Tyler.' : 'Tell me what happened.'}</strong>
                     <p>${operator ? 'Calculate the exact move in GTOBase, then type the reply below.' : 'Your message is sent to the human solver desk. Their reply will be read aloud.'}</p>
                 </div>
-                <div id="casino-transcript" class="casino-transcript"></div>
+                <div id="casino-transcript" class="casino-transcript" aria-hidden="true"></div>
                 <div id="casino-recording-status" class="casino-recording-status">${operator ? 'Live inbox connected.' : 'Starting the always-on microphone…'}</div>
                 ${operator ? '' : `<div class="casino-call-controls">
                     <button id="casino-speaker-toggle" class="casino-audio-toggle casino-audio-icon ${speakerOn ? '' : 'quiet'}" type="button" aria-label="${speakerOn ? 'Switch to handheld mode' : 'Switch to speakerphone'}" title="${speakerOn ? 'Speakerphone on' : 'Handheld mode'}">${speakerIcon()}</button>
@@ -163,7 +164,7 @@ const CasinoUI = (() => {
             const listening = startAlwaysOnListening();
             await sendSharedMessage(`New hand: ${heroHand}.`, 'hand');
             const microphoneReady = await listening;
-            queueSpeak('What is the action?');
+            queueSpeak('What is the action?', `prompt:${tylerCallStartedAt}`);
             if (microphoneReady) updateStatus('What is the action? Listening continuously — each pause sends your words.');
         });
     }
@@ -217,7 +218,7 @@ const CasinoUI = (() => {
                 if (roleMode === 'tyler' && message.sender === 'operator') newReplies.push(message);
             }
             for (const reply of newReplies) {
-                queueSpeak(reply.content);
+                queueSpeak(reply.content, reply.id);
             }
             const newestReply = newReplies[newReplies.length - 1];
             if (newestReply) {
@@ -501,7 +502,11 @@ const CasinoUI = (() => {
         }
     }
 
-    function queueSpeak(text) { speechChain = speechChain.then(() => speak(text)).catch(() => {}); }
+    function queueSpeak(text, messageId) {
+        if (messageId && queuedSpeechIds.has(messageId)) return;
+        if (messageId) queuedSpeechIds.add(messageId);
+        speechChain = speechChain.then(() => speak(text)).catch(() => {});
+    }
 
     async function playTtsBlob(blob) {
         if (playbackContext) {
@@ -546,10 +551,7 @@ const CasinoUI = (() => {
             if (!response.ok) throw new Error('TTS unavailable');
             await playTtsBlob(await response.blob());
         } catch (error) {
-            if ('speechSynthesis' in window) {
-                const utterance = new SpeechSynthesisUtterance(text); utterance.volume = speakerOn ? 1 : 0.2; utterance.rate = 1.3;
-                await new Promise(resolve => { utterance.onend = resolve; utterance.onerror = resolve; window.speechSynthesis.speak(utterance); });
-            }
+            updateStatus('AI voice playback failed. The reply is still visible on screen.');
         } finally {
             isSpeakingReply = false;
             lastVoiceAt = Date.now();
@@ -581,7 +583,7 @@ const CasinoUI = (() => {
         mediaStream = null;
     }
 
-    function reset() { releaseAudio(); stopPolling(); screen = 'entry'; tylerCallStartedAt = ''; seenMessageIds.clear(); refresh(); }
+    function reset() { releaseAudio(); stopPolling(); screen = 'entry'; tylerCallStartedAt = ''; seenMessageIds.clear(); queuedSpeechIds.clear(); refresh(); }
 
     function releaseAudio() {
         stopRingtone();
