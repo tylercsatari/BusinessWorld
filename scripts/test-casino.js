@@ -21,7 +21,8 @@ assert(index.includes("_mk(createCasino, 'casino')"), 'Casino is not created dur
 assert(casinoUi.includes("BuildingRegistry.register('Casino'"), 'Casino is absent from BuildingRegistry');
 assert(casinoUi.includes('https://app.gtobase.com/viewer?id=109&q=20#onePlayer-strategy'), 'Casino does not target the requested GTOBase chart');
 assert(casinoUi.includes('rel="noopener noreferrer"'), 'External viewer link is missing opener protection');
-assert(casinoUi.includes('title="GTOBase MTT 9-max 20bb poker strategy viewer"'), 'Embedded viewer needs an accessible title');
+assert(casinoUi.includes('Open 20bb range chart'), 'Casino is missing the mobile chart launch action');
+assert(!casinoUi.includes('<iframe'), 'Casino must not embed the third-party GTOBase login flow');
 assert(authGate.includes("'Casino'"), 'Casino is absent from profile permissions');
 assert(server.includes("'Casino'"), 'Casino is absent from server-side layout persistence');
 

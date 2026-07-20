@@ -15,54 +15,40 @@ const CasinoUI = (() => {
                             <p>GTO poker strategy room · MTT 9-max · 20bb</p>
                         </div>
                     </div>
-                    <div class="casino-actions">
-                        <button class="casino-button casino-button-secondary" type="button" data-casino-action="reload">Reload chart</button>
-                        <a class="casino-button casino-button-primary" href="${VIEWER_URL}" target="_blank" rel="noopener noreferrer">Open GTOBase</a>
-                    </div>
                 </header>
-                <div class="casino-viewer-wrap">
-                    <iframe
-                        class="casino-viewer"
-                        title="GTOBase MTT 9-max 20bb poker strategy viewer"
-                        src="${VIEWER_URL}"
-                        referrerpolicy="strict-origin-when-cross-origin"
-                        loading="eager"
-                        allowfullscreen></iframe>
-                </div>
-                <footer class="casino-help">
-                    <span class="casino-status" data-casino-status>Loading the 20bb range chart…</span>
-                    <span>If GTOBase asks you to sign in, use <strong>Open GTOBase</strong>, sign in there, then return and reload the chart.</span>
-                </footer>
+                <main class="casino-launcher">
+                    <div class="casino-table" aria-hidden="true">
+                        <span class="casino-card casino-card-one">A♠</span>
+                        <span class="casino-card casino-card-two">K♠</span>
+                        <span class="casino-table-chip">20<small>bb</small></span>
+                    </div>
+                    <div class="casino-copy">
+                        <span class="casino-eyebrow">Preflop range room</span>
+                        <h3>Play the 20bb chart full screen</h3>
+                        <p>GTOBase must open as its own page on mobile so Google login and your paid solver session work correctly.</p>
+                    </div>
+                    <dl class="casino-spot">
+                        <div><dt>Game</dt><dd>MTT</dd></div>
+                        <div><dt>Table</dt><dd>9-max</dd></div>
+                        <div><dt>Stack</dt><dd>20bb</dd></div>
+                        <div><dt>Start</dt><dd>UTG</dd></div>
+                    </dl>
+                    <a class="casino-launch-button" href="${VIEWER_URL}" target="_blank" rel="noopener noreferrer">
+                        <span>Open 20bb range chart</span>
+                        <span aria-hidden="true">→</span>
+                    </a>
+                    <p class="casino-return-note">When you finish checking a hand, return to the Business World tab to reopen the Casino.</p>
+                </main>
             </section>`;
-    }
-
-    function bindEvents() {
-        const frame = container.querySelector('.casino-viewer');
-        const status = container.querySelector('[data-casino-status]');
-        const reload = container.querySelector('[data-casino-action="reload"]');
-
-        frame.addEventListener('load', () => {
-            status.textContent = 'GTOBase viewer loaded';
-            status.classList.add('is-ready');
-        });
-
-        reload.addEventListener('click', () => {
-            status.textContent = 'Reloading the 20bb range chart…';
-            status.classList.remove('is-ready');
-            frame.src = VIEWER_URL;
-        });
     }
 
     return {
         open(bodyEl) {
             container = bodyEl;
             container.innerHTML = render();
-            bindEvents();
         },
         close() {
             if (!container) return;
-            const frame = container.querySelector('.casino-viewer');
-            if (frame) frame.src = 'about:blank';
             container.innerHTML = '';
             container = null;
         }
