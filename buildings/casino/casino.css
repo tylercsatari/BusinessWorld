@@ -63,6 +63,30 @@
     text-transform: uppercase;
 }
 
+.casino-role-switch {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 5px 8px;
+    background: #06110c;
+    border-bottom: 1px solid rgba(228,185,87,.2);
+}
+.casino-role-switch button {
+    min-height: 34px;
+    color: #9aaca0;
+    background: rgba(255,255,255,.035);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 9px;
+    font: 900 11px/1 'Nunito', sans-serif;
+}
+.casino-role-switch button.active {
+    color: #1a1205;
+    background: var(--casino-gold-bright);
+    border-color: #ffe9ad;
+    box-shadow: 0 3px 12px rgba(228,185,87,.16);
+}
+
 .casino-entry {
     width: min(100%, 470px);
     flex: 1;
@@ -313,6 +337,8 @@
     background: radial-gradient(circle at 50% 22%, #19583b 0, #08150f 38%, #020504 100%);
     text-align: center;
 }
+
+.casino-panel > .casino-incoming { height: auto; flex: 1; min-height: 0; }
 .casino-call-avatar {
     width: 104px;
     height: 104px;
@@ -354,6 +380,21 @@
 .casino-call-topline strong { overflow: hidden; color: var(--casino-gold-bright); font-size: 17px; text-overflow: ellipsis; white-space: nowrap; }
 .casino-call-topline div span { color: var(--casino-muted); font-size: 9px; font-weight: 800; }
 .casino-stack-pill { flex: 0 0 auto; padding: 5px 8px; color: #152016; background: #b8e5c6; border-radius: 999px; font-size: 9px; font-weight: 1000; }
+.casino-solver-link,
+.casino-audio-toggle {
+    flex: 0 0 auto;
+    min-height: 31px;
+    display: grid;
+    place-items: center;
+    padding: 6px 9px;
+    color: #172118;
+    background: #b8e5c6;
+    border: 0;
+    border-radius: 9px;
+    font: 1000 9px/1 'Nunito', sans-serif;
+    text-decoration: none;
+}
+.casino-audio-toggle.quiet { color: #f8eed5; background: #654f28; }
 .casino-decision {
     padding: 10px 12px;
     background: linear-gradient(135deg, rgba(228,185,87,.11), rgba(255,255,255,.035));
@@ -374,6 +415,8 @@
     padding: 3px 1px;
 }
 .casino-message { max-width: 86%; padding: 8px 10px; border-radius: 12px; font-size: 11px; line-height: 1.35; white-space: pre-wrap; }
+.casino-message small { display: block; margin-bottom: 3px; opacity: .62; font-size: 7px; font-weight: 1000; letter-spacing: .08em; text-transform: uppercase; }
+.casino-message span { display: block; }
 .casino-message.user { align-self: flex-end; color: #172118; background: #d7f2de; border-bottom-right-radius: 3px; }
 .casino-message.assistant { align-self: flex-start; color: var(--casino-text); background: var(--casino-surface-2); border: 1px solid rgba(228,185,87,.18); border-bottom-left-radius: 3px; }
 .casino-message.error { align-self: center; color: #ffd7d7; background: rgba(163,42,48,.45); }
@@ -402,6 +445,8 @@
 .casino-action-form input { min-width: 0; height: 42px; padding: 9px 11px; color: white; background: rgba(255,255,255,.065); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; outline: none; font: 700 12px/1.2 'Nunito', sans-serif; }
 .casino-action-form input:focus { border-color: var(--casino-gold); }
 .casino-action-form button { color: #1b1305; background: var(--casino-gold-bright); border: 0; border-radius: 10px; font-size: 22px; font-weight: 1000; }
+.casino-call.operator-mode .casino-transcript { min-height: 180px; }
+.casino-call.operator-mode .casino-action-form input { height: 50px; font-size: 14px; }
 
 @media (max-height: 680px) {
     .casino-entry { gap: 9px; padding-top: 10px; }

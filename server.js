@@ -1665,6 +1665,35 @@ function aiVideoPromptMessages(count, context, runIndex, totalRuns) {
 }
 
 const _staticGz = new Map();   // filePath → {mt, gz}: gzipped big static files, keyed by Last-Modified
+const CASINO_CHAT_R2_KEY = 'data/casino-coach-chat.json';
+let casinoChatCache = null;
+let casinoChatWrite = Promise.resolve();
+
+async function loadCasinoChat() {
+    if (casinoChatCache) return casinoChatCache;
+    let messages = [];
+    try {
+        const buf = await cloud.downloadFromR2(CASINO_CHAT_R2_KEY);
+        if (buf) messages = JSON.parse(buf.toString('utf8'));
+    } catch (error) {
+        console.warn('Casino chat load failed:', error.message);
+    }
+    casinoChatCache = Array.isArray(messages) ? messages : [];
+    return casinoChatCache;
+}
+
+function appendCasinoChat(entry) {
+    const write = casinoChatWrite.then(async () => {
+        const messages = (await loadCasinoChat()).slice();
+        messages.push(entry);
+        casinoChatCache = messages.slice(-500);
+        await cloud.uploadToR2(CASINO_CHAT_R2_KEY, Buffer.from(JSON.stringify(casinoChatCache)), 'application/json');
+        return entry;
+    });
+    casinoChatWrite = write.catch(error => { console.warn('Casino chat write failed:', error.message); });
+    return write;
+}
+
 const STATIC_STREAM_THRESHOLD = Math.max(
     1024 * 1024,
     parseInt(process.env.STATIC_STREAM_THRESHOLD || String(16 * 1024 * 1024), 10)
@@ -1879,6 +1908,52 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
             return;
         }
         req._account = decision.account;
+    }
+
+    // =========================================
+    // CASINO: shared human poker-coach channel
+    // =========================================
+    if (pathname === '/api/casino/messages' && req.method === 'GET') {
+        try {
+            await casinoChatWrite.catch(() => {});
+            const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get('limit') || '100', 10)));
+            const messages = (await loadCasinoChat()).slice(-limit);
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+            res.end(JSON.stringify({ messages }));
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/casino/messages' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const content = String(body.content || '').trim().slice(0, 2000);
+            const sender = body.sender === 'operator' ? 'operator' : body.sender === 'tyler' ? 'tyler' : '';
+            if (!sender || !content) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'sender and content are required' }));
+                return;
+            }
+            const account = req._account || {};
+            const entry = {
+                id: require('crypto').randomUUID(),
+                sender,
+                content,
+                kind: body.kind === 'hand' ? 'hand' : 'message',
+                author: String(account.displayName || account.name || account.email || sender).slice(0, 80),
+                timestamp: new Date().toISOString()
+            };
+            await appendCasinoChat(entry);
+            res.writeHead(201, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ message: entry }));
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
     }
 
     // =========================================

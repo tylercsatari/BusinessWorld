@@ -106,6 +106,7 @@ function routeBuilding(pathname) {
     if (/^\/api\/data\/invoices/.test(pathname) || /^\/api\/invoices\//.test(pathname)) return 'Library';
     if (/^\/api\/(jarvis|tribe|longquant|shortsquant)\//.test(pathname)) return 'Jarvis';
     if (/^\/api\/(gemini|videolab)\//.test(pathname)) return 'Video Lab';
+    if (/^\/api\/casino\//.test(pathname)) return 'Casino';
     if (/^\/api\/(openai|kimi)\//.test(pathname)) return 'shared';      // AI used across buildings
     if (pathname === '/load-layout' || pathname === '/api/config' || pathname === '/config.js') return 'shared';
     if (/^\/api\/data\/settings/.test(pathname)) return 'shared';
