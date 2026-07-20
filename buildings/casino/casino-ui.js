@@ -2,7 +2,6 @@
 
 const CasinoUI = (() => {
     const GTOBASE_VIEWER_URL = 'https://app.gtobase.com/viewer?id=109&q=20#onePlayer-strategy';
-    const GTOBASE_SETUP_KEY = 'casinoGtoBaseSetupComplete';
     const ROLE_KEY = 'casinoCoachRole';
     const SPEAKER_KEY = 'casinoSpeakerOn';
     const LAST_SPOKEN_KEY = 'casinoLastSpokenOperatorAt';
@@ -12,8 +11,6 @@ const CasinoUI = (() => {
     let roleMode = 'tyler';
     let speakerOn = true;
     let heroHand = '';
-    let tableSize = 9;
-    let stackBb = 30;
     let mediaRecorder = null;
     let mediaStream = null;
     let audioChunks = [];
@@ -28,7 +25,7 @@ const CasinoUI = (() => {
 
     function render() {
         return `<section class="casino-panel" aria-label="Casino poker coach">
-            ${screen === 'setup' ? renderSetup() : screen === 'gtobase-login' ? renderGtoBaseLogin() : screen === 'entry' ? renderEntry() : screen === 'incoming' ? renderIncoming() : renderCall()}
+            ${screen === 'entry' ? renderEntry() : screen === 'incoming' ? renderIncoming() : renderCall()}
         </section>`;
     }
 
@@ -44,37 +41,6 @@ const CasinoUI = (() => {
         </nav>`;
     }
 
-    function renderSetup() {
-        return `${renderHeader('One-time GTOBase setup')}
-            <main class="casino-setup">
-                <div class="casino-setup-lock" aria-hidden="true">♠</div>
-                <span class="casino-eyebrow">First-time setup</span>
-                <h3>Sign in on GTOBase</h3>
-                <p>Open the real GTOBase page and sign in. Your Google password never passes through Business World.</p>
-                <button id="casino-gtobase-login" class="casino-primary casino-login-link" type="button"><span>Sign in inside Casino</span><span>→</span></button>
-                <button id="casino-login-done" class="casino-secondary" type="button">I'm signed in — continue</button>
-                <p class="casino-disclaimer">Business World stores only a setup-complete flag, never your Google credentials.</p>
-            </main>`;
-    }
-
-    function renderGtoBaseLogin() {
-        return `<main class="casino-embed-screen">
-            <header class="casino-embed-toolbar">
-                <button id="casino-login-back" type="button" aria-label="Back to setup">‹</button>
-                <div><strong>GTOBase sign in</strong><span>Scaled for your phone</span></div>
-                <button id="casino-login-zoom" type="button" aria-label="Zoom GTOBase out">−</button>
-            </header>
-            <p class="casino-embed-note">Scroll directly inside the white area. Tap − if you need to see more.</p>
-            <div id="casino-login-viewport" class="casino-embed-viewport">
-                <iframe id="casino-gtobase-frame" title="GTOBase login" src="${GTOBASE_VIEWER_URL}" scrolling="yes" allow="fullscreen; clipboard-read; clipboard-write"></iframe>
-            </div>
-            <footer class="casino-embed-footer">
-                <a href="${GTOBASE_VIEWER_URL}" target="_blank" rel="noopener noreferrer">Open full browser</a>
-                <button id="casino-embedded-login-done" type="button">I'm signed in</button>
-            </footer>
-        </main>`;
-    }
-
     function renderEntry() {
         return `${renderHeader('Human solver call')}
             <main class="casino-entry">
@@ -83,9 +49,6 @@ const CasinoUI = (() => {
                 <form id="casino-hand-form" class="casino-hand-form">
                     <label for="casino-hand-input">Hole cards</label>
                     <input id="casino-hand-input" type="text" autocomplete="off" autocapitalize="characters" maxlength="40" placeholder="Example: A♠ K♠ or ace king suited" required>
-                    <div class="casino-segment" role="group" aria-label="Table size"><button type="button" data-table-size="9" class="active">9-max</button><button type="button" data-table-size="8">8-max</button></div>
-                    <label for="casino-stack-input">Your stack (bb)</label>
-                    <input id="casino-stack-input" type="number" inputmode="decimal" min="1" max="300" step="0.5" value="30" required>
                     <p id="casino-entry-error" class="casino-form-error" role="alert"></p>
                     <button class="casino-primary" type="submit"><span>Call poker coach</span><span>☎</span></button>
                 </form>
@@ -97,7 +60,7 @@ const CasinoUI = (() => {
         return `${renderHeader('Incoming solver call')}
             <main class="casino-incoming">
                 <div class="casino-call-avatar" aria-hidden="true">♠</div><span class="casino-call-label">Incoming call</span><h2>Poker Coach</h2>
-                <p>${escapeHtml(heroHand)} · ${tableSize}-max · ${formatNumber(stackBb)}bb</p>
+                <p>${escapeHtml(heroHand)}</p>
                 <div class="casino-call-actions">
                     <button id="casino-decline" class="casino-call-button decline" type="button"><span>×</span><small>Decline</small></button>
                     <button id="casino-answer" class="casino-call-button answer" type="button"><span>☎</span><small>Answer</small></button>
@@ -110,7 +73,7 @@ const CasinoUI = (() => {
         return `${renderHeader(operator ? 'Solver desk · connected' : 'Poker Coach · connected')}
             <main class="casino-call ${operator ? 'operator-mode' : 'tyler-mode'}">
                 <div class="casino-call-topline">
-                    <div><strong>${operator ? 'Solver desk' : escapeHtml(heroHand || 'Live hand')}</strong><span>${operator ? 'Human response mode' : `${tableSize}-max · ${formatNumber(stackBb)}bb`}</span></div>
+                    <div><strong>${operator ? 'Solver desk' : escapeHtml(heroHand || 'Live hand')}</strong><span>${operator ? 'Human response mode' : 'Live hand'}</span></div>
                     ${operator ? `<a class="casino-solver-link" href="${GTOBASE_VIEWER_URL}" target="_blank" rel="noopener noreferrer">Open GTOBase ↗</a>` : `<button id="casino-speaker-toggle" class="casino-audio-toggle ${speakerOn ? '' : 'quiet'}" type="button">${speakerOn ? '🔊 Speaker' : '🔈 Quiet'}</button>`}
                 </div>
                 <div id="casino-decision" class="casino-decision" aria-live="polite">
@@ -130,9 +93,7 @@ const CasinoUI = (() => {
 
     function bind() {
         bindRoleSwitch();
-        if (screen === 'setup') bindSetup();
-        else if (screen === 'gtobase-login') bindGtoBaseLogin();
-        else if (screen === 'entry') bindEntry();
+        if (screen === 'entry') bindEntry();
         else if (screen === 'incoming') bindIncoming();
         else bindCall();
     }
@@ -148,47 +109,20 @@ const CasinoUI = (() => {
         stopPolling();
         seenMessageIds.clear();
         if (roleMode === 'operator') screen = 'call';
-        else screen = isGtoBaseSetupComplete() ? 'entry' : 'setup';
-        refresh();
-    }
-
-    function bindSetup() {
-        document.getElementById('casino-gtobase-login').addEventListener('click', () => { screen = 'gtobase-login'; refresh(); });
-        document.getElementById('casino-login-done').addEventListener('click', finishGtoBaseSetup);
-    }
-
-    function bindGtoBaseLogin() {
-        document.getElementById('casino-login-back').addEventListener('click', () => { screen = 'setup'; refresh(); });
-        document.getElementById('casino-login-zoom').addEventListener('click', event => {
-            const zoomedOut = document.getElementById('casino-login-viewport').classList.toggle('zoomed-out');
-            event.currentTarget.textContent = zoomedOut ? '+' : '−';
-        });
-        document.getElementById('casino-embedded-login-done').addEventListener('click', finishGtoBaseSetup);
-    }
-
-    function finishGtoBaseSetup() {
-        try { localStorage.setItem(GTOBASE_SETUP_KEY, 'yes'); } catch (error) {}
-        screen = roleMode === 'operator' ? 'call' : 'entry';
+        else screen = 'entry';
         refresh();
     }
 
     function bindEntry() {
         const form = document.getElementById('casino-hand-form');
-        const buttons = container.querySelectorAll('[data-table-size]');
-        buttons.forEach(button => button.addEventListener('click', () => {
-            tableSize = Number(button.dataset.tableSize);
-            buttons.forEach(item => item.classList.toggle('active', item === button));
-            document.getElementById('casino-stack-input').value = tableSize === 9 ? '30' : '50';
-        }));
         form.addEventListener('submit', event => {
             event.preventDefault();
             const hand = document.getElementById('casino-hand-input').value.trim();
-            const stack = Number(document.getElementById('casino-stack-input').value);
-            if (hand.length < 2 || !Number.isFinite(stack) || stack <= 0) {
-                document.getElementById('casino-entry-error').textContent = 'Enter your two cards and a valid stack.';
+            if (hand.length < 2) {
+                document.getElementById('casino-entry-error').textContent = 'Enter your hole cards.';
                 return;
             }
-            heroHand = hand; stackBb = stack; screen = 'incoming'; refresh();
+            heroHand = hand; screen = 'incoming'; refresh();
         });
     }
 
@@ -201,8 +135,9 @@ const CasinoUI = (() => {
             screen = 'call';
             seenMessageIds.clear();
             refresh();
-            await sendSharedMessage(`New hand: ${heroHand}. ${tableSize}-max. ${formatNumber(stackBb)} big blinds.`, 'hand');
-            updateStatus('Connected. Tap the microphone when you are ready to talk.');
+            await sendSharedMessage(`New hand: ${heroHand}.`, 'hand');
+            queueSpeak('What is the action?');
+            updateStatus('What is the action? Tap the microphone after the prompt to answer.');
         });
     }
 
@@ -440,10 +375,8 @@ const CasinoUI = (() => {
         if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     }
 
-    function isGtoBaseSetupComplete() { try { return localStorage.getItem(GTOBASE_SETUP_KEY) === 'yes'; } catch (error) { return false; } }
     function persistLastSpoken() { try { localStorage.setItem(LAST_SPOKEN_KEY, lastSpokenOperatorAt); } catch (error) {} }
     function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]); }
-    function formatNumber(value) { return Number(value) % 1 ? Number(value).toFixed(1) : String(Number(value)); }
 
     return {
         open(bodyEl) {
@@ -451,7 +384,7 @@ const CasinoUI = (() => {
             try { roleMode = localStorage.getItem(ROLE_KEY) === 'operator' ? 'operator' : 'tyler'; } catch (error) { roleMode = 'tyler'; }
             try { speakerOn = localStorage.getItem(SPEAKER_KEY) !== 'no'; } catch (error) { speakerOn = true; }
             try { lastSpokenOperatorAt = localStorage.getItem(LAST_SPOKEN_KEY) || ''; } catch (error) { lastSpokenOperatorAt = ''; }
-            screen = roleMode === 'operator' ? 'call' : isGtoBaseSetupComplete() ? 'entry' : 'setup';
+            screen = roleMode === 'operator' ? 'call' : 'entry';
             refresh();
         },
         close() { releaseAudio(); stopPolling(); if (container) container.innerHTML = ''; container = null; }
