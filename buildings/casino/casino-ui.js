@@ -20,7 +20,7 @@ const CasinoUI = (() => {
 
     function render() {
         return `<section class="casino-panel" aria-label="Casino poker coach">
-            ${screen === 'setup' ? renderSetup() : screen === 'entry' ? renderEntry() : screen === 'incoming' ? renderIncoming() : renderCall()}
+            ${screen === 'setup' ? renderSetup() : screen === 'gtobase-login' ? renderGtoBaseLogin() : screen === 'entry' ? renderEntry() : screen === 'incoming' ? renderIncoming() : renderCall()}
         </section>`;
     }
 
@@ -31,17 +31,35 @@ const CasinoUI = (() => {
                 <span class="casino-eyebrow">First-time setup</span>
                 <h3>Sign in on GTOBase</h3>
                 <p>Open the real GTOBase page, sign in with Google, and let your phone's browser or password manager remember the login. Your Google password never passes through Business World.</p>
-                <a id="casino-gtobase-login" class="casino-primary casino-login-link" href="${GTOBASE_VIEWER_URL}" target="_blank" rel="noopener noreferrer">
-                    <span>Open GTOBase login</span><span aria-hidden="true">↗</span>
-                </a>
+                <button id="casino-gtobase-login" class="casino-primary casino-login-link" type="button">
+                    <span>Sign in inside Casino</span><span aria-hidden="true">→</span>
+                </button>
                 <ol class="casino-setup-steps">
-                    <li>Sign in to GTOBase in the new browser tab.</li>
+                    <li>Sign in to GTOBase in the embedded panel.</li>
                     <li>Choose “save password” if your phone offers it.</li>
                     <li>Return here and tap the button below.</li>
                 </ol>
                 <button id="casino-login-done" class="casino-secondary" type="button">I'm signed in — continue</button>
                 <p class="casino-disclaimer">Business World stores only a setup-complete flag, never your Google credentials.</p>
             </main>`;
+    }
+
+    function renderGtoBaseLogin() {
+        return `<main class="casino-embed-screen">
+            <header class="casino-embed-toolbar">
+                <button id="casino-login-back" type="button" aria-label="Back to setup">‹</button>
+                <div><strong>GTOBase sign in</strong><span>Scaled for your phone</span></div>
+                <button id="casino-login-zoom" type="button" aria-label="Zoom GTOBase out">−</button>
+            </header>
+            <p class="casino-embed-note">Scroll directly inside the white area. Tap − if you need to see more of the page.</p>
+            <div id="casino-login-viewport" class="casino-embed-viewport">
+                <iframe id="casino-gtobase-frame" title="GTOBase login" src="${GTOBASE_VIEWER_URL}" scrolling="yes" allow="fullscreen; clipboard-read; clipboard-write"></iframe>
+            </div>
+            <footer class="casino-embed-footer">
+                <a href="${GTOBASE_VIEWER_URL}" target="_blank" rel="noopener noreferrer">Open full browser</a>
+                <button id="casino-embedded-login-done" type="button">I'm signed in</button>
+            </footer>
+        </main>`;
     }
 
     function renderHeader(subtitle) {
@@ -121,17 +139,40 @@ const CasinoUI = (() => {
 
     function bind() {
         if (screen === 'setup') bindSetup();
+        else if (screen === 'gtobase-login') bindGtoBaseLogin();
         else if (screen === 'entry') bindEntry();
         else if (screen === 'incoming') bindIncoming();
         else bindCall();
     }
 
     function bindSetup() {
-        document.getElementById('casino-login-done').addEventListener('click', () => {
-            try { localStorage.setItem(GTOBASE_SETUP_KEY, 'yes'); } catch (error) {}
-            screen = 'entry';
+        document.getElementById('casino-gtobase-login').addEventListener('click', () => {
+            screen = 'gtobase-login';
             refresh();
         });
+        document.getElementById('casino-login-done').addEventListener('click', () => {
+            finishGtoBaseSetup();
+        });
+    }
+
+    function bindGtoBaseLogin() {
+        document.getElementById('casino-login-back').addEventListener('click', () => {
+            screen = 'setup';
+            refresh();
+        });
+        document.getElementById('casino-login-zoom').addEventListener('click', event => {
+            const viewport = document.getElementById('casino-login-viewport');
+            const zoomedOut = viewport.classList.toggle('zoomed-out');
+            event.currentTarget.textContent = zoomedOut ? '+' : '−';
+            event.currentTarget.setAttribute('aria-label', zoomedOut ? 'Zoom GTOBase in' : 'Zoom GTOBase out');
+        });
+        document.getElementById('casino-embedded-login-done').addEventListener('click', finishGtoBaseSetup);
+    }
+
+    function finishGtoBaseSetup() {
+        try { localStorage.setItem(GTOBASE_SETUP_KEY, 'yes'); } catch (error) {}
+        screen = 'entry';
+        refresh();
     }
 
     function bindEntry() {
