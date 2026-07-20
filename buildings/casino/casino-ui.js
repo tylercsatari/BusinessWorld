@@ -227,7 +227,6 @@ const CasinoUI = (() => {
             }
             const newestReply = newReplies[newReplies.length - 1];
             if (newestReply) {
-                showHumanReply(newestReply.content);
                 updateStatus(`${newReplies.length > 1 ? `${newReplies.length} AI replies` : 'AI replied'} — speaking now.`);
             }
         } catch (error) {
@@ -276,17 +275,6 @@ const CasinoUI = (() => {
     function displayMessage(message) {
         const sender = message.sender === 'operator' ? 'operator' : 'tyler';
         addMessage(message.content, sender === roleMode ? 'self' : 'remote', sender === 'operator' ? 'AI' : 'Tyler');
-    }
-
-    function showHumanReply(text) {
-        const card = document.getElementById('casino-decision');
-        if (!card) return;
-        card.classList.add('has-action');
-        card.replaceChildren();
-        const label = document.createElement('span'); label.className = 'casino-decision-label'; label.textContent = 'AI reply';
-        const action = document.createElement('strong'); action.textContent = text;
-        const detail = document.createElement('p'); detail.textContent = 'Written by the AI operator using the solver.';
-        card.append(label, action, detail);
     }
 
     function updateStatus(text, active) {
