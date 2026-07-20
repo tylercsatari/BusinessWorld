@@ -32,6 +32,9 @@ assert(casinoUi.includes('/api/openai/tts'), 'Casino is not connected to voice p
 assert(casinoUi.includes('/api/casino/messages'), 'Casino is not connected to the shared coach channel');
 assert(casinoUi.includes('data-casino-role="tyler"'), 'Casino is missing Tyler mode');
 assert(casinoUi.includes('data-casino-role="operator"'), 'Casino is missing AI Robot mode');
+assert(casinoUi.includes('>AI</button>'), 'Casino operator role must be labeled AI');
+assert(casinoUi.includes("sender === roleMode ? 'self' : 'remote'"), 'Casino message sides are not relative to the current viewer');
+assert(casinoUi.includes("sender === 'operator' ? 'AI' : 'Tyler'"), 'Casino messages do not use the correct sender labels');
 assert(casinoUi.includes('casino-speaker-toggle'), 'Casino is missing the speaker/quiet control');
 assert(casinoUi.includes('casino-audio-icon'), 'Casino speaker control is not an icon in the call controls');
 assert(casinoUi.includes('selectAudioOutput'), 'Casino does not offer supported private audio output selection');
@@ -42,6 +45,9 @@ assert(casinoUi.includes('now - lastVoiceAt > 900'), 'Casino does not send speec
 assert(casinoUi.includes('set Microphone to Allow'), 'Casino is missing mobile permission recovery guidance');
 assert(casinoUi.includes('data:audio/wav;base64'), 'Casino does not unlock mobile audio from the Answer gesture');
 assert(casinoUi.includes("queueSpeak('What is the action?')"), 'Casino does not speak the action prompt after Tyler answers');
+assert(casinoUi.includes('for (const reply of newReplies)'), 'Casino does not queue every new AI reply for speech');
+assert(casinoUi.includes('queueSpeak(reply.content)'), 'Casino AI replies are not sent to the speech queue');
+assert(casinoUi.includes('playbackContext.decodeAudioData'), 'Casino does not use its unlocked mobile audio context for replies');
 assert(casinoUi.includes('tylerCallStartedAt'), 'Casino does not isolate Tyler’s current-call transcript');
 assert(casinoUi.includes("roleMode === 'operator' ? 5000 : 200"), 'AI Robot does not load the retained conversation history');
 assert(casinoUi.includes('function startRingtone()'), 'Casino does not ring for an incoming call');

@@ -4,7 +4,6 @@ const CasinoUI = (() => {
     const GTOBASE_VIEWER_URL = 'https://app.gtobase.com/viewer?id=109&q=20#onePlayer-strategy';
     const ROLE_KEY = 'casinoCoachRole';
     const SPEAKER_KEY = 'casinoSpeakerOn';
-    const LAST_SPOKEN_KEY = 'casinoLastSpokenOperatorAt';
     const POLL_MS = 1200;
     let container = null;
     let screen = 'entry';
@@ -26,10 +25,11 @@ const CasinoUI = (() => {
     let messageSendChain = Promise.resolve();
     let pollTimer = null;
     let ttsAudio = null;
+    let playbackContext = null;
+    let playbackSource = null;
     let speechChain = Promise.resolve();
     let busy = false;
     let seenMessageIds = new Set();
-    let lastSpokenOperatorAt = '';
     let tylerCallStartedAt = '';
     let ringContext = null;
     let ringTimer = null;
@@ -55,7 +55,7 @@ const CasinoUI = (() => {
         </header>
         <nav class="casino-role-switch" aria-label="Poker coach role">
             <button type="button" data-casino-role="tyler" class="${roleMode === 'tyler' ? 'active' : ''}">Tyler</button>
-            <button type="button" data-casino-role="operator" class="${roleMode === 'operator' ? 'active' : ''}">AI Robot</button>
+            <button type="button" data-casino-role="operator" class="${roleMode === 'operator' ? 'active' : ''}">AI</button>
         </nav>`;
     }
 
@@ -95,7 +95,7 @@ const CasinoUI = (() => {
                     ${operator ? `<a class="casino-solver-link" href="${GTOBASE_VIEWER_URL}" target="_blank" rel="noopener noreferrer">Open GTOBase ↗</a>` : ''}
                 </div>
                 <div id="casino-decision" class="casino-decision" aria-live="polite">
-                    <span class="casino-decision-label">${operator ? 'AI Robot mode' : 'Human solver connected'}</span>
+                    <span class="casino-decision-label">${operator ? 'AI mode' : 'Human solver connected'}</span>
                     <strong>${operator ? 'Waiting for Tyler.' : 'Tell me what happened.'}</strong>
                     <p>${operator ? 'Calculate the exact move in GTOBase, then type the reply below.' : 'Your message is sent to the human solver desk. Their reply will be read aloud.'}</p>
                 </div>
@@ -156,8 +156,6 @@ const CasinoUI = (() => {
         document.getElementById('casino-answer').addEventListener('click', async () => {
             stopRingtone();
             unlockAudio();
-            lastSpokenOperatorAt = new Date().toISOString();
-            persistLastSpoken();
             tylerCallStartedAt = new Date().toISOString();
             screen = 'call';
             seenMessageIds.clear();
@@ -210,20 +208,21 @@ const CasinoUI = (() => {
             if (!response.ok) throw new Error(`Inbox unavailable (${response.status})`);
             const data = await response.json();
             const messages = Array.isArray(data.messages) ? data.messages : [];
-            let newestReply = null;
+            const newReplies = [];
             for (const message of messages) {
                 if (!message.id || seenMessageIds.has(message.id)) continue;
                 seenMessageIds.add(message.id);
                 if (roleMode === 'tyler' && tylerCallStartedAt && message.timestamp < tylerCallStartedAt) continue;
-                addMessage(message.content, message.sender === 'operator' ? 'assistant' : 'user', message.sender === 'operator' ? 'AI Robot' : 'Tyler');
-                if (roleMode === 'tyler' && message.sender === 'operator' && message.timestamp > lastSpokenOperatorAt) newestReply = message;
+                displayMessage(message);
+                if (roleMode === 'tyler' && message.sender === 'operator') newReplies.push(message);
             }
+            for (const reply of newReplies) {
+                queueSpeak(reply.content);
+            }
+            const newestReply = newReplies[newReplies.length - 1];
             if (newestReply) {
-                lastSpokenOperatorAt = newestReply.timestamp;
-                persistLastSpoken();
                 showHumanReply(newestReply.content);
-                queueSpeak(newestReply.content);
-                updateStatus('Human solver replied. The microphone will resume after the reply.');
+                updateStatus(`${newReplies.length > 1 ? `${newReplies.length} AI replies` : 'AI replied'} — speaking now.`);
             }
         } catch (error) {
             updateStatus(error.message);
@@ -249,7 +248,7 @@ const CasinoUI = (() => {
             if (!response.ok) throw new Error(data.error || `Send failed (${response.status})`);
             if (data.message && !seenMessageIds.has(data.message.id)) {
                 seenMessageIds.add(data.message.id);
-                addMessage(data.message.content, sender === 'operator' ? 'assistant' : 'user', sender === 'operator' ? 'AI Robot' : 'Tyler');
+                displayMessage(data.message);
             }
             updateStatus(sender === 'operator' ? 'Reply delivered to Tyler.' : 'Delivered. Waiting for the human solver.');
         } catch (error) {
@@ -268,14 +267,19 @@ const CasinoUI = (() => {
         bubble.append(who, content); transcript.appendChild(bubble); transcript.scrollTop = transcript.scrollHeight;
     }
 
+    function displayMessage(message) {
+        const sender = message.sender === 'operator' ? 'operator' : 'tyler';
+        addMessage(message.content, sender === roleMode ? 'self' : 'remote', sender === 'operator' ? 'AI' : 'Tyler');
+    }
+
     function showHumanReply(text) {
         const card = document.getElementById('casino-decision');
         if (!card) return;
         card.classList.add('has-action');
         card.replaceChildren();
-        const label = document.createElement('span'); label.className = 'casino-decision-label'; label.textContent = 'Human solver reply';
+        const label = document.createElement('span'); label.className = 'casino-decision-label'; label.textContent = 'AI reply';
         const action = document.createElement('strong'); action.textContent = text;
-        const detail = document.createElement('p'); detail.textContent = 'Written by the AI Robot operator, not generated by the model.';
+        const detail = document.createElement('p'); detail.textContent = 'Written by the AI operator using the solver.';
         card.append(label, action, detail);
     }
 
@@ -451,6 +455,17 @@ const CasinoUI = (() => {
     }
 
     function unlockAudio() {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass && !playbackContext) {
+            try {
+                playbackContext = new AudioContextClass();
+                if (playbackContext.state === 'suspended') playbackContext.resume().catch(() => {});
+                const silentSource = playbackContext.createBufferSource();
+                silentSource.buffer = playbackContext.createBuffer(1, 1, 22050);
+                silentSource.connect(playbackContext.destination);
+                silentSource.start(0);
+            } catch (error) { playbackContext = null; }
+        }
         if (!ttsAudio) ttsAudio = new Audio();
         const previousSource = ttsAudio.src;
         ttsAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGFpYQAAAAA=';
@@ -488,21 +503,48 @@ const CasinoUI = (() => {
 
     function queueSpeak(text) { speechChain = speechChain.then(() => speak(text)).catch(() => {}); }
 
+    async function playTtsBlob(blob) {
+        if (playbackContext) {
+            try {
+                if (playbackContext.state === 'suspended') await playbackContext.resume();
+                const audioBuffer = await playbackContext.decodeAudioData(await blob.arrayBuffer());
+                const source = playbackContext.createBufferSource();
+                const gain = playbackContext.createGain();
+                gain.gain.value = speakerOn ? 1 : 0.2;
+                source.buffer = audioBuffer;
+                source.connect(gain);
+                gain.connect(playbackContext.destination);
+                playbackSource = source;
+                await new Promise((resolve, reject) => {
+                    source.onended = resolve;
+                    try { source.start(0); } catch (error) { reject(error); }
+                });
+                if (playbackSource === source) playbackSource = null;
+                return;
+            } catch (error) { playbackSource = null; }
+        }
+        const url = URL.createObjectURL(blob);
+        ttsAudio.pause();
+        ttsAudio.src = url;
+        ttsAudio.volume = speakerOn ? 1 : 0.2;
+        await new Promise((resolve, reject) => {
+            ttsAudio.onended = () => { URL.revokeObjectURL(url); ttsAudio.src = ''; resolve(); };
+            ttsAudio.onerror = reject;
+            ttsAudio.play().catch(reject);
+        });
+    }
+
     async function speak(text) {
         if (roleMode !== 'tyler') return;
         isSpeakingReply = true;
         if (mediaRecorder && mediaRecorder.state === 'recording') finishVoiceSegment();
         setLiveMicState('paused');
+        updateStatus('AI is speaking…', true);
         try {
             await applyAudioMode(false);
             const response = await fetch('/api/openai/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: text, voice: 'alloy' }) });
             if (!response.ok) throw new Error('TTS unavailable');
-            const blob = await response.blob(); const url = URL.createObjectURL(blob);
-            ttsAudio.pause(); ttsAudio.src = url; ttsAudio.volume = speakerOn ? 1 : 0.2;
-            await new Promise((resolve, reject) => {
-                ttsAudio.onended = () => { URL.revokeObjectURL(url); ttsAudio.src = ''; resolve(); };
-                ttsAudio.onerror = reject; ttsAudio.play().catch(reject);
-            });
+            await playTtsBlob(await response.blob());
         } catch (error) {
             if ('speechSynthesis' in window) {
                 const utterance = new SpeechSynthesisUtterance(text); utterance.volume = speakerOn ? 1 : 0.2;
@@ -511,7 +553,10 @@ const CasinoUI = (() => {
         } finally {
             isSpeakingReply = false;
             lastVoiceAt = Date.now();
-            if (alwaysListening) setLiveMicState('listening');
+            if (alwaysListening) {
+                setLiveMicState('listening');
+                updateStatus('Still listening — keep talking whenever you need to.');
+            }
         }
     }
 
@@ -541,11 +586,14 @@ const CasinoUI = (() => {
     function releaseAudio() {
         stopRingtone();
         releaseStream();
+        if (playbackSource) { try { playbackSource.stop(); } catch (error) {} }
+        playbackSource = null;
+        if (playbackContext) { try { playbackContext.close(); } catch (error) {} }
+        playbackContext = null;
         if (ttsAudio) { ttsAudio.pause(); ttsAudio.src = ''; }
         if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     }
 
-    function persistLastSpoken() { try { localStorage.setItem(LAST_SPOKEN_KEY, lastSpokenOperatorAt); } catch (error) {} }
     function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]); }
 
     return {
@@ -553,7 +601,6 @@ const CasinoUI = (() => {
             container = bodyEl;
             try { roleMode = localStorage.getItem(ROLE_KEY) === 'operator' ? 'operator' : 'tyler'; } catch (error) { roleMode = 'tyler'; }
             try { speakerOn = localStorage.getItem(SPEAKER_KEY) !== 'no'; } catch (error) { speakerOn = true; }
-            try { lastSpokenOperatorAt = localStorage.getItem(LAST_SPOKEN_KEY) || ''; } catch (error) { lastSpokenOperatorAt = ''; }
             screen = roleMode === 'operator' ? 'call' : 'entry';
             refresh();
         },
