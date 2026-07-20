@@ -41,7 +41,7 @@ assert(casinoUi.includes('selectAudioOutput'), 'Casino does not offer supported 
 assert(!casinoUi.includes('CasinoAgent.run'), 'Casino must not generate poker strategy estimates');
 assert(casinoUi.includes('startAlwaysOnListening()'), 'Casino does not start continuous listening when the call is answered');
 assert(casinoUi.includes('monitorVoiceActivity()'), 'Casino is missing silence-delimited voice activity detection');
-assert(casinoUi.includes('now - lastVoiceAt > 900'), 'Casino does not send speech after a short silence');
+assert(casinoUi.includes('now - lastVoiceAt > 600'), 'Casino does not send speech after a short silence');
 assert(casinoUi.includes('set Microphone to Allow'), 'Casino is missing mobile permission recovery guidance');
 assert(casinoUi.includes('data:audio/wav;base64'), 'Casino does not unlock mobile audio from the Answer gesture');
 assert(casinoUi.includes("queueSpeak('What is the action?', `prompt:${tylerCallStartedAt}`)"), 'Casino does not speak the action prompt after Tyler answers');
@@ -51,9 +51,13 @@ assert(casinoUi.includes('isAiReply && aiReplyQueuedOrPlaying'), 'Casino has no 
 assert(!casinoUi.includes('showHumanReply('), 'Casino must not duplicate an AI reply above the chat transcript');
 assert(casinoUi.includes('recentSpeechContent.has(normalized)'), 'Casino does not suppress duplicate reply content');
 assert(casinoUi.includes('now - queuedAt > 30000'), 'Casino duplicate reply suppression has no bounded window');
-assert(casinoUi.includes('generation === speechGeneration ? speak(text, generation)'), 'Casino can play stale speech from another call');
+assert(casinoUi.includes('generation === speechGeneration ? speak(text, generation, messageId, isAiReply)'), 'Casino can play stale speech from another call');
 assert(casinoUi.includes('playbackContext.decodeAudioData'), 'Casino does not use its unlocked mobile audio context for replies');
-assert(casinoUi.includes('gain.gain.value = speakerOn ? 2 : 0.4'), 'Casino AI voice is not using doubled gain');
+assert(casinoUi.includes('gain.gain.value = speakerOn ? 2 : 1'), 'Casino handset playback is being muted instead of rerouted');
+assert(casinoUi.includes("navigator.audioSession.type = speakerOn ? 'playback' : 'play-and-record'"), 'Casino does not request handset audio routing');
+assert(casinoUi.includes('function playHangupSound()'), 'Casino is missing the hang-up sound');
+assert(casinoUi.includes('const POLL_MS = 350'), 'Casino message polling is not configured for low latency');
+assert(casinoUi.includes('/api/casino/tts/'), 'Casino does not request prewarmed AI reply audio');
 assert(!casinoUi.includes('class="casino-transcript" aria-live'), 'Casino transcript must not duplicate explicit voice playback through a live region');
 assert(casinoUi.includes('class="casino-transcript" aria-hidden="true"'), 'Casino transcript must be hidden from competing screen-reader narration');
 assert(casinoUi.includes('speed: 1.3'), 'Casino AI voice is not configured for faster playback');
@@ -75,6 +79,8 @@ assert(auth.includes("return 'Casino'"), 'Casino message API is not permission-g
 assert(server.includes("pathname === '/api/casino/messages' && req.method === 'GET'"), 'Casino message inbox route is missing');
 assert(server.includes("pathname === '/api/casino/messages' && req.method === 'POST'"), 'Casino message send route is missing');
 assert(server.includes('CASINO_CHAT_R2_KEY'), 'Casino messages are not persisted to R2');
+assert(server.includes('function primeCasinoTts(entry)'), 'Casino does not pre-generate operator reply audio');
+assert(server.includes("pathname.match(/^\\/api\\/casino\\/tts\\/([0-9a-f-]+)$/i)"), 'Casino prewarmed audio route is missing');
 assert(server.includes('Number(body.speed) || 1'), 'Casino TTS proxy does not forward supported speech speed');
 assert(server.includes('messages.slice(-5000)'), 'Casino does not retain the full operator conversation window');
 

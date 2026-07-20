@@ -1668,6 +1668,32 @@ const _staticGz = new Map();   // filePath → {mt, gz}: gzipped big static file
 const CASINO_CHAT_R2_KEY = 'data/casino-coach-chat.json';
 let casinoChatCache = null;
 let casinoChatWrite = Promise.resolve();
+const casinoTtsCache = new Map();
+
+function primeCasinoTts(entry) {
+    if (!entry || entry.sender !== 'operator' || !process.env.OPENAI_API_KEY) return;
+    const job = (async () => {
+        const response = await fetch('https://api.openai.com/v1/audio/speech', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
+                voice: process.env.OPENAI_TTS_VOICE || 'alloy',
+                input: entry.content,
+                speed: 1.3,
+                response_format: 'mp3'
+            })
+        });
+        if (!response.ok) throw new Error(`TTS prewarm failed (${response.status})`);
+        return {
+            contentType: response.headers.get('content-type') || 'audio/mpeg',
+            buffer: Buffer.from(await response.arrayBuffer())
+        };
+    })();
+    casinoTtsCache.set(entry.id, { createdAt: Date.now(), job });
+    job.catch(error => { console.warn('Casino TTS prewarm failed:', error.message); casinoTtsCache.delete(entry.id); });
+    while (casinoTtsCache.size > 50) casinoTtsCache.delete(casinoTtsCache.keys().next().value);
+}
 
 async function loadCasinoChat() {
     if (casinoChatCache) return casinoChatCache;
@@ -1927,6 +1953,25 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
         return;
     }
 
+    const casinoTtsMatch = pathname.match(/^\/api\/casino\/tts\/([0-9a-f-]+)$/i);
+    if (casinoTtsMatch && req.method === 'GET') {
+        const cached = casinoTtsCache.get(casinoTtsMatch[1]);
+        if (!cached || Date.now() - cached.createdAt > 120000) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Prewarmed audio unavailable' }));
+            return;
+        }
+        try {
+            const audio = await cached.job;
+            res.writeHead(200, { 'Content-Type': audio.contentType, 'Cache-Control': 'no-store' });
+            res.end(audio.buffer);
+        } catch (error) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+    }
+
     if (pathname === '/api/casino/messages' && req.method === 'POST') {
         try {
             const body = await readBody(req);
@@ -1946,6 +1991,7 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
                 author: String(account.displayName || account.name || account.email || sender).slice(0, 80),
                 timestamp: new Date().toISOString()
             };
+            primeCasinoTts(entry);
             await appendCasinoChat(entry);
             res.writeHead(201, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ message: entry }));

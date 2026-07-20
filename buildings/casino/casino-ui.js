@@ -4,7 +4,7 @@ const CasinoUI = (() => {
     const GTOBASE_VIEWER_URL = 'https://app.gtobase.com/viewer?id=109&q=20#onePlayer-strategy';
     const ROLE_KEY = 'casinoCoachRole';
     const SPEAKER_KEY = 'casinoSpeakerOn';
-    const POLL_MS = 1200;
+    const POLL_MS = 350;
     let container = null;
     let screen = 'entry';
     let roleMode = 'tyler';
@@ -24,6 +24,7 @@ const CasinoUI = (() => {
     let transcriptionChain = Promise.resolve();
     let messageSendChain = Promise.resolve();
     let pollTimer = null;
+    let pollInFlight = false;
     let ttsAudio = null;
     let playbackContext = null;
     let playbackSource = null;
@@ -156,7 +157,7 @@ const CasinoUI = (() => {
     }
 
     function bindIncoming() {
-        document.getElementById('casino-decline').addEventListener('click', () => { stopRingtone(); reset(); });
+        document.getElementById('casino-decline').addEventListener('click', () => { stopRingtone(); playHangupSound(); reset(); });
         document.getElementById('casino-answer').addEventListener('click', async () => {
             stopRingtone();
             unlockAudio();
@@ -178,7 +179,7 @@ const CasinoUI = (() => {
     function bindCall() {
         startPolling();
         const end = document.getElementById('casino-end-call');
-        if (end) end.addEventListener('click', reset);
+        if (end) end.addEventListener('click', () => { playHangupSound(); reset(); });
         const audioToggle = document.getElementById('casino-speaker-toggle');
         if (audioToggle) audioToggle.addEventListener('click', toggleSpeakerMode);
         document.getElementById('casino-action-form').addEventListener('submit', event => {
@@ -209,7 +210,8 @@ const CasinoUI = (() => {
     }
 
     async function pollMessages() {
-        if (!container || screen !== 'call') return;
+        if (!container || screen !== 'call' || pollInFlight) return;
+        pollInFlight = true;
         try {
             const response = await fetch(`/api/casino/messages?limit=${roleMode === 'operator' ? 5000 : 200}`);
             if (!response.ok) throw new Error(`Inbox unavailable (${response.status})`);
@@ -230,6 +232,8 @@ const CasinoUI = (() => {
             }
         } catch (error) {
             updateStatus(error.message);
+        } finally {
+            pollInFlight = false;
         }
     }
 
@@ -339,7 +343,7 @@ const CasinoUI = (() => {
             setLiveMicState('speaking');
         } else {
             if (!mediaRecorder) noiseFloor = Math.max(0.006, Math.min(0.025, noiseFloor * 0.97 + rms * 0.03));
-            if (mediaRecorder && mediaRecorder.state === 'recording' && now - lastVoiceAt > 900 && now - voiceStartedAt > 450) finishVoiceSegment();
+            if (mediaRecorder && mediaRecorder.state === 'recording' && now - lastVoiceAt > 600 && now - voiceStartedAt > 300) finishVoiceSegment();
             if (!mediaRecorder) setLiveMicState('listening');
         }
         if (mediaRecorder && mediaRecorder.state === 'recording' && now - voiceStartedAt > 15000) finishVoiceSegment();
@@ -447,11 +451,41 @@ const CasinoUI = (() => {
         if (navigator.vibrate) navigator.vibrate(0);
     }
 
+    function playHangupSound() {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        try {
+            const context = new AudioContextClass({ latencyHint: 'interactive' });
+            if (context.state === 'suspended') context.resume().catch(() => {});
+            const gain = context.createGain();
+            const first = context.createOscillator();
+            const second = context.createOscillator();
+            const now = context.currentTime;
+            gain.connect(context.destination);
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(0.2, now + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
+            gain.gain.setValueAtTime(0.0001, now + 0.15);
+            gain.gain.exponentialRampToValueAtTime(0.18, now + 0.17);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.34);
+            first.frequency.value = 480;
+            second.frequency.value = 300;
+            first.connect(gain);
+            second.connect(gain);
+            first.start(now);
+            first.stop(now + 0.14);
+            second.start(now + 0.15);
+            second.stop(now + 0.35);
+            if (navigator.vibrate) navigator.vibrate(45);
+            setTimeout(() => { try { context.close(); } catch (error) {} }, 450);
+        } catch (error) {}
+    }
+
     function unlockAudio() {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (AudioContextClass && !playbackContext) {
             try {
-                playbackContext = new AudioContextClass();
+                playbackContext = new AudioContextClass({ latencyHint: 'interactive' });
                 if (playbackContext.state === 'suspended') playbackContext.resume().catch(() => {});
                 const silentSource = playbackContext.createBufferSource();
                 silentSource.buffer = playbackContext.createBuffer(1, 1, 22050);
@@ -472,7 +506,7 @@ const CasinoUI = (() => {
     async function toggleSpeakerMode() {
         speakerOn = !speakerOn;
         try { localStorage.setItem(SPEAKER_KEY, speakerOn ? 'yes' : 'no'); } catch (error) {}
-        await applyAudioMode(true);
+        const routed = await applyAudioMode(true);
         const button = document.getElementById('casino-speaker-toggle');
         if (button) {
             button.innerHTML = speakerIcon();
@@ -480,18 +514,33 @@ const CasinoUI = (() => {
             button.setAttribute('aria-label', speakerOn ? 'Switch to handheld mode' : 'Switch to speakerphone');
             button.title = speakerOn ? 'Speakerphone on' : 'Handheld mode';
         }
-        updateStatus(speakerOn ? 'Speakerphone is on.' : 'Handheld mode is on. Hold the phone to your ear.');
+        updateStatus(speakerOn
+            ? 'Speakerphone is on.'
+            : routed ? 'Handset mode is on. Hold the phone to your ear.' : 'Handset mode requested. Hold the phone to your ear or select an earpiece if prompted.');
     }
 
     async function applyAudioMode(userGesture) {
         if (!ttsAudio) ttsAudio = new Audio();
-        ttsAudio.volume = speakerOn ? 1 : 0.4;
-        try { if (navigator.audioSession) navigator.audioSession.type = speakerOn ? 'playback' : 'play-and-record'; } catch (error) {}
+        let routed = speakerOn;
+        ttsAudio.volume = speakerOn ? 1 : 0.8;
+        try {
+            if (navigator.audioSession) {
+                navigator.audioSession.type = speakerOn ? 'playback' : 'play-and-record';
+                routed = true;
+            }
+        } catch (error) {}
         if (!speakerOn && userGesture && navigator.mediaDevices && navigator.mediaDevices.selectAudioOutput && ttsAudio.setSinkId) {
-            try { const device = await navigator.mediaDevices.selectAudioOutput(); if (device && device.deviceId) await ttsAudio.setSinkId(device.deviceId); } catch (error) {}
+            try {
+                const device = await navigator.mediaDevices.selectAudioOutput();
+                if (device && device.deviceId) { await ttsAudio.setSinkId(device.deviceId); routed = true; }
+            } catch (error) {}
         } else if (speakerOn && ttsAudio.setSinkId) {
             try { await ttsAudio.setSinkId('default'); } catch (error) {}
         }
+        if (userGesture && playbackContext && playbackContext.state !== 'closed') {
+            try { await playbackContext.suspend(); await playbackContext.resume(); } catch (error) {}
+        }
+        return routed;
     }
 
     function queueSpeak(text, messageId, isAiReply = false) {
@@ -508,7 +557,7 @@ const CasinoUI = (() => {
         if (isAiReply) aiReplyQueuedOrPlaying = true;
         const generation = speechGeneration;
         speechChain = speechChain
-            .then(() => generation === speechGeneration ? speak(text, generation) : undefined)
+            .then(() => generation === speechGeneration ? speak(text, generation, messageId, isAiReply) : undefined)
             .catch(() => {})
             .finally(() => { if (isAiReply) aiReplyQueuedOrPlaying = false; });
     }
@@ -520,7 +569,7 @@ const CasinoUI = (() => {
                 const audioBuffer = await playbackContext.decodeAudioData(await blob.arrayBuffer());
                 const source = playbackContext.createBufferSource();
                 const gain = playbackContext.createGain();
-                gain.gain.value = speakerOn ? 2 : 0.4;
+                gain.gain.value = speakerOn ? 2 : 1;
                 source.buffer = audioBuffer;
                 source.connect(gain);
                 gain.connect(playbackContext.destination);
@@ -536,7 +585,7 @@ const CasinoUI = (() => {
         const url = URL.createObjectURL(blob);
         ttsAudio.pause();
         ttsAudio.src = url;
-        ttsAudio.volume = speakerOn ? 1 : 0.4;
+        ttsAudio.volume = speakerOn ? 1 : 0.8;
         await new Promise((resolve, reject) => {
             ttsAudio.onended = () => { URL.revokeObjectURL(url); ttsAudio.src = ''; resolve(); };
             ttsAudio.onerror = reject;
@@ -544,7 +593,7 @@ const CasinoUI = (() => {
         });
     }
 
-    async function speak(text, generation) {
+    async function speak(text, generation, messageId, isAiReply) {
         if (roleMode !== 'tyler' || generation !== speechGeneration) return;
         isSpeakingReply = true;
         if (mediaRecorder && mediaRecorder.state === 'recording') finishVoiceSegment();
@@ -552,7 +601,10 @@ const CasinoUI = (() => {
         updateStatus('AI is speaking…', true);
         try {
             await applyAudioMode(false);
-            const response = await fetch('/api/openai/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: text, voice: 'alloy', speed: 1.3 }) });
+            let response = isAiReply && messageId ? await fetch(`/api/casino/tts/${encodeURIComponent(messageId)}`) : null;
+            if (!response || !response.ok) {
+                response = await fetch('/api/openai/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: text, voice: 'alloy', speed: 1.3 }) });
+            }
             if (!response.ok) throw new Error('TTS unavailable');
             if (generation !== speechGeneration) return;
             await playTtsBlob(await response.blob());
