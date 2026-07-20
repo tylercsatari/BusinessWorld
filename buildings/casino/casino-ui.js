@@ -29,6 +29,8 @@ const CasinoUI = (() => {
     let playbackSource = null;
     let speechChain = Promise.resolve();
     let queuedSpeechIds = new Set();
+    let recentSpeechContent = new Map();
+    let speechGeneration = 0;
     let busy = false;
     let seenMessageIds = new Set();
     let tylerCallStartedAt = '';
@@ -157,6 +159,9 @@ const CasinoUI = (() => {
         document.getElementById('casino-answer').addEventListener('click', async () => {
             stopRingtone();
             unlockAudio();
+            speechGeneration += 1;
+            queuedSpeechIds.clear();
+            recentSpeechContent.clear();
             tylerCallStartedAt = new Date().toISOString();
             screen = 'call';
             seenMessageIds.clear();
@@ -504,8 +509,16 @@ const CasinoUI = (() => {
 
     function queueSpeak(text, messageId) {
         if (messageId && queuedSpeechIds.has(messageId)) return;
+        const normalized = String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        const now = Date.now();
+        for (const [content, queuedAt] of recentSpeechContent) {
+            if (now - queuedAt > 30000) recentSpeechContent.delete(content);
+        }
+        if (normalized && recentSpeechContent.has(normalized)) return;
         if (messageId) queuedSpeechIds.add(messageId);
-        speechChain = speechChain.then(() => speak(text)).catch(() => {});
+        if (normalized) recentSpeechContent.set(normalized, now);
+        const generation = speechGeneration;
+        speechChain = speechChain.then(() => generation === speechGeneration ? speak(text, generation) : undefined).catch(() => {});
     }
 
     async function playTtsBlob(blob) {
@@ -539,8 +552,8 @@ const CasinoUI = (() => {
         });
     }
 
-    async function speak(text) {
-        if (roleMode !== 'tyler') return;
+    async function speak(text, generation) {
+        if (roleMode !== 'tyler' || generation !== speechGeneration) return;
         isSpeakingReply = true;
         if (mediaRecorder && mediaRecorder.state === 'recording') finishVoiceSegment();
         setLiveMicState('paused');
@@ -549,15 +562,18 @@ const CasinoUI = (() => {
             await applyAudioMode(false);
             const response = await fetch('/api/openai/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: text, voice: 'alloy', speed: 1.3 }) });
             if (!response.ok) throw new Error('TTS unavailable');
+            if (generation !== speechGeneration) return;
             await playTtsBlob(await response.blob());
         } catch (error) {
-            updateStatus('AI voice playback failed. The reply is still visible on screen.');
+            if (generation === speechGeneration) updateStatus('AI voice playback failed. The reply is still visible on screen.');
         } finally {
-            isSpeakingReply = false;
-            lastVoiceAt = Date.now();
-            if (alwaysListening) {
-                setLiveMicState('listening');
-                updateStatus('Still listening — keep talking whenever you need to.');
+            if (generation === speechGeneration) {
+                isSpeakingReply = false;
+                lastVoiceAt = Date.now();
+                if (alwaysListening) {
+                    setLiveMicState('listening');
+                    updateStatus('Still listening — keep talking whenever you need to.');
+                }
             }
         }
     }
@@ -583,11 +599,23 @@ const CasinoUI = (() => {
         mediaStream = null;
     }
 
-    function reset() { releaseAudio(); stopPolling(); screen = 'entry'; tylerCallStartedAt = ''; seenMessageIds.clear(); queuedSpeechIds.clear(); refresh(); }
+    function reset() {
+        speechGeneration += 1;
+        speechChain = Promise.resolve();
+        releaseAudio();
+        stopPolling();
+        screen = 'entry';
+        tylerCallStartedAt = '';
+        seenMessageIds.clear();
+        queuedSpeechIds.clear();
+        recentSpeechContent.clear();
+        refresh();
+    }
 
     function releaseAudio() {
         stopRingtone();
         releaseStream();
+        isSpeakingReply = false;
         if (playbackSource) { try { playbackSource.stop(); } catch (error) {} }
         playbackSource = null;
         if (playbackContext) { try { playbackContext.close(); } catch (error) {} }

@@ -47,6 +47,9 @@ assert(casinoUi.includes('data:audio/wav;base64'), 'Casino does not unlock mobil
 assert(casinoUi.includes("queueSpeak('What is the action?', `prompt:${tylerCallStartedAt}`)"), 'Casino does not speak the action prompt after Tyler answers');
 assert(casinoUi.includes('for (const reply of newReplies)'), 'Casino does not queue every new AI reply for speech');
 assert(casinoUi.includes('queueSpeak(reply.content, reply.id)'), 'Casino AI replies are not deduplicated in the speech queue');
+assert(casinoUi.includes('recentSpeechContent.has(normalized)'), 'Casino does not suppress duplicate reply content');
+assert(casinoUi.includes('now - queuedAt > 30000'), 'Casino duplicate reply suppression has no bounded window');
+assert(casinoUi.includes('generation === speechGeneration ? speak(text, generation)'), 'Casino can play stale speech from another call');
 assert(casinoUi.includes('playbackContext.decodeAudioData'), 'Casino does not use its unlocked mobile audio context for replies');
 assert(!casinoUi.includes('class="casino-transcript" aria-live'), 'Casino transcript must not duplicate explicit voice playback through a live region');
 assert(casinoUi.includes('class="casino-transcript" aria-hidden="true"'), 'Casino transcript must be hidden from competing screen-reader narration');
@@ -59,7 +62,7 @@ assert(casinoUi.includes('ringTimer = setInterval(pulse, 1600)'), 'Casino ringto
 assert(casinoUi.includes('navigator.vibrate([350, 200, 350])'), 'Casino incoming call does not request supported vibration');
 assert(casinoUi.includes('function stopRingtone()'), 'Casino cannot stop its ringtone');
 assert(casinoUi.includes('aria-label="Hang up"'), 'Casino hang-up button is not accessible');
-assert(casinoUi.includes("function reset() { releaseAudio(); stopPolling(); screen = 'entry'; tylerCallStartedAt = ''"), 'Hanging up does not return Tyler to hand entry');
+assert(casinoUi.includes("screen = 'entry';") && casinoUi.includes("tylerCallStartedAt = '';"), 'Hanging up does not return Tyler to hand entry');
 assert(!casinoUi.includes('type="password"'), 'Casino must not collect Google passwords');
 assert(!casinoUi.toLowerCase().includes('tylerdaviscsatari'), 'Casino UI must not contain private login details');
 assert(authGate.includes("'Casino'"), 'Casino is absent from profile permissions');
