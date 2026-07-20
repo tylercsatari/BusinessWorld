@@ -48,6 +48,9 @@ assert(casinoUi.includes("queueSpeak('What is the action?')"), 'Casino does not 
 assert(casinoUi.includes('for (const reply of newReplies)'), 'Casino does not queue every new AI reply for speech');
 assert(casinoUi.includes('queueSpeak(reply.content)'), 'Casino AI replies are not sent to the speech queue');
 assert(casinoUi.includes('playbackContext.decodeAudioData'), 'Casino does not use its unlocked mobile audio context for replies');
+assert(!casinoUi.includes('class="casino-transcript" aria-live'), 'Casino transcript must not duplicate explicit voice playback through a live region');
+assert(casinoUi.includes('speed: 1.3'), 'Casino AI voice is not configured for faster playback');
+assert(casinoUi.includes('utterance.rate = 1.3'), 'Casino fallback voice is not configured for faster playback');
 assert(casinoUi.includes('tylerCallStartedAt'), 'Casino does not isolate Tyler’s current-call transcript');
 assert(casinoUi.includes("roleMode === 'operator' ? 5000 : 200"), 'AI Robot does not load the retained conversation history');
 assert(casinoUi.includes('function startRingtone()'), 'Casino does not ring for an incoming call');
@@ -64,6 +67,7 @@ assert(auth.includes("return 'Casino'"), 'Casino message API is not permission-g
 assert(server.includes("pathname === '/api/casino/messages' && req.method === 'GET'"), 'Casino message inbox route is missing');
 assert(server.includes("pathname === '/api/casino/messages' && req.method === 'POST'"), 'Casino message send route is missing');
 assert(server.includes('CASINO_CHAT_R2_KEY'), 'Casino messages are not persisted to R2');
+assert(server.includes('Number(body.speed) || 1'), 'Casino TTS proxy does not forward supported speech speed');
 assert(server.includes('messages.slice(-5000)'), 'Casino does not retain the full operator conversation window');
 
 console.log('Casino integration checks passed.');

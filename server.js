@@ -2331,7 +2331,8 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
         const payload = {
             model: body.model || process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
             voice: body.voice || process.env.OPENAI_TTS_VOICE || 'alloy',
-            input: body.input
+            input: body.input,
+            speed: Math.max(0.25, Math.min(4, Number(body.speed) || 1))
         };
 
         await proxyFetch(res, 'https://api.openai.com/v1/audio/speech', {

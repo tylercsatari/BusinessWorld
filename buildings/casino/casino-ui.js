@@ -94,12 +94,12 @@ const CasinoUI = (() => {
                     <div><strong>${operator ? 'Solver desk' : escapeHtml(heroHand || 'Live hand')}</strong><span>${operator ? 'Human response mode' : 'Live hand'}</span></div>
                     ${operator ? `<a class="casino-solver-link" href="${GTOBASE_VIEWER_URL}" target="_blank" rel="noopener noreferrer">Open GTOBase ↗</a>` : ''}
                 </div>
-                <div id="casino-decision" class="casino-decision" aria-live="polite">
+                <div id="casino-decision" class="casino-decision">
                     <span class="casino-decision-label">${operator ? 'AI mode' : 'Human solver connected'}</span>
                     <strong>${operator ? 'Waiting for Tyler.' : 'Tell me what happened.'}</strong>
                     <p>${operator ? 'Calculate the exact move in GTOBase, then type the reply below.' : 'Your message is sent to the human solver desk. Their reply will be read aloud.'}</p>
                 </div>
-                <div id="casino-transcript" class="casino-transcript" aria-live="polite"></div>
+                <div id="casino-transcript" class="casino-transcript"></div>
                 <div id="casino-recording-status" class="casino-recording-status">${operator ? 'Live inbox connected.' : 'Starting the always-on microphone…'}</div>
                 ${operator ? '' : `<div class="casino-call-controls">
                     <button id="casino-speaker-toggle" class="casino-audio-toggle casino-audio-icon ${speakerOn ? '' : 'quiet'}" type="button" aria-label="${speakerOn ? 'Switch to handheld mode' : 'Switch to speakerphone'}" title="${speakerOn ? 'Speakerphone on' : 'Handheld mode'}">${speakerIcon()}</button>
@@ -542,12 +542,12 @@ const CasinoUI = (() => {
         updateStatus('AI is speaking…', true);
         try {
             await applyAudioMode(false);
-            const response = await fetch('/api/openai/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: text, voice: 'alloy' }) });
+            const response = await fetch('/api/openai/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: text, voice: 'alloy', speed: 1.3 }) });
             if (!response.ok) throw new Error('TTS unavailable');
             await playTtsBlob(await response.blob());
         } catch (error) {
             if ('speechSynthesis' in window) {
-                const utterance = new SpeechSynthesisUtterance(text); utterance.volume = speakerOn ? 1 : 0.2;
+                const utterance = new SpeechSynthesisUtterance(text); utterance.volume = speakerOn ? 1 : 0.2; utterance.rate = 1.3;
                 await new Promise(resolve => { utterance.onend = resolve; utterance.onerror = resolve; window.speechSynthesis.speak(utterance); });
             }
         } finally {
