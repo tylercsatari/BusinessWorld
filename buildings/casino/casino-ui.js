@@ -28,11 +28,11 @@ const CasinoUI = (() => {
     let ttsAudio = null;
     let playbackContext = null;
     let playbackSource = null;
+    let speechAbortController = null;
     let speechChain = Promise.resolve();
     let queuedSpeechIds = new Set();
     let recentSpeechContent = new Map();
     let speechGeneration = 0;
-    let aiReplyQueuedOrPlaying = false;
     let busy = false;
     let seenMessageIds = new Set();
     let tylerCallStartedAt = '';
@@ -225,9 +225,9 @@ const CasinoUI = (() => {
                 displayMessage(message);
                 if (roleMode === 'tyler' && message.sender === 'operator') newReplies.push(message);
             }
+            for (const reply of newReplies) queueSpeak(reply.content, reply.id, true);
             const newestReply = newReplies[newReplies.length - 1];
             if (newestReply) {
-                queueSpeak(newestReply.content, newestReply.id, true);
                 updateStatus(`${newReplies.length > 1 ? `${newReplies.length} AI replies` : 'AI replied'} — speaking now.`);
             }
         } catch (error) {
@@ -451,12 +451,12 @@ const CasinoUI = (() => {
         if (navigator.vibrate) navigator.vibrate(0);
     }
 
-    function playHangupSound() {
+    async function playHangupSound() {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (!AudioContextClass) return;
         try {
             const context = new AudioContextClass({ latencyHint: 'interactive' });
-            if (context.state === 'suspended') context.resume().catch(() => {});
+            if (context.state === 'suspended') await context.resume();
             const gain = context.createGain();
             const first = context.createOscillator();
             const second = context.createOscillator();
@@ -545,28 +545,26 @@ const CasinoUI = (() => {
 
     function queueSpeak(text, messageId, isAiReply = false) {
         if (messageId && queuedSpeechIds.has(messageId)) return;
-        if (isAiReply && aiReplyQueuedOrPlaying) return;
         const normalized = String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
         const now = Date.now();
         for (const [content, queuedAt] of recentSpeechContent) {
-            if (now - queuedAt > 30000) recentSpeechContent.delete(content);
+            if (now - queuedAt > 5000) recentSpeechContent.delete(content);
         }
         if (normalized && recentSpeechContent.has(normalized)) return;
         if (messageId) queuedSpeechIds.add(messageId);
         if (normalized) recentSpeechContent.set(normalized, now);
-        if (isAiReply) aiReplyQueuedOrPlaying = true;
         const generation = speechGeneration;
         speechChain = speechChain
             .then(() => generation === speechGeneration ? speak(text, generation, messageId, isAiReply) : undefined)
-            .catch(() => {})
-            .finally(() => { if (isAiReply) aiReplyQueuedOrPlaying = false; });
+            .catch(() => {});
     }
 
-    async function playTtsBlob(blob) {
-        if (playbackContext) {
+    async function playTtsBlob(blob, generation) {
+        if (speakerOn && playbackContext) {
             try {
                 if (playbackContext.state === 'suspended') await playbackContext.resume();
                 const audioBuffer = await playbackContext.decodeAudioData(await blob.arrayBuffer());
+                if (generation !== speechGeneration) return;
                 const source = playbackContext.createBufferSource();
                 const gain = playbackContext.createGain();
                 gain.gain.value = speakerOn ? 2 : 1;
@@ -586,6 +584,7 @@ const CasinoUI = (() => {
         ttsAudio.pause();
         ttsAudio.src = url;
         ttsAudio.volume = speakerOn ? 1 : 0.8;
+        if (generation !== speechGeneration) { URL.revokeObjectURL(url); ttsAudio.src = ''; return; }
         await new Promise((resolve, reject) => {
             ttsAudio.onended = () => { URL.revokeObjectURL(url); ttsAudio.src = ''; resolve(); };
             ttsAudio.onerror = reject;
@@ -595,22 +594,29 @@ const CasinoUI = (() => {
 
     async function speak(text, generation, messageId, isAiReply) {
         if (roleMode !== 'tyler' || generation !== speechGeneration) return;
+        let controller = null;
         isSpeakingReply = true;
         if (mediaRecorder && mediaRecorder.state === 'recording') finishVoiceSegment();
         setLiveMicState('paused');
         updateStatus('AI is speaking…', true);
         try {
             await applyAudioMode(false);
-            let response = isAiReply && messageId ? await fetch(`/api/casino/tts/${encodeURIComponent(messageId)}`) : null;
+            controller = new AbortController();
+            speechAbortController = controller;
+            const signal = controller.signal;
+            let response = isAiReply && messageId ? await fetch(`/api/casino/tts/${encodeURIComponent(messageId)}`, { signal }) : null;
             if (!response || !response.ok) {
-                response = await fetch('/api/openai/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: text, voice: 'alloy', speed: 1.3 }) });
+                response = await fetch('/api/openai/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: text, voice: 'alloy', speed: 1.3 }), signal });
             }
             if (!response.ok) throw new Error('TTS unavailable');
             if (generation !== speechGeneration) return;
-            await playTtsBlob(await response.blob());
+            const blob = await response.blob();
+            if (generation !== speechGeneration) return;
+            await playTtsBlob(blob, generation);
         } catch (error) {
-            if (generation === speechGeneration) updateStatus('AI voice playback failed. The reply is still visible on screen.');
+            if (error.name !== 'AbortError' && generation === speechGeneration) updateStatus('AI voice playback failed. The reply is still visible on screen.');
         } finally {
+            if (speechAbortController === controller) speechAbortController = null;
             if (generation === speechGeneration) {
                 isSpeakingReply = false;
                 lastVoiceAt = Date.now();
@@ -653,7 +659,6 @@ const CasinoUI = (() => {
         seenMessageIds.clear();
         queuedSpeechIds.clear();
         recentSpeechContent.clear();
-        aiReplyQueuedOrPlaying = false;
         refresh();
     }
 
@@ -661,7 +666,8 @@ const CasinoUI = (() => {
         stopRingtone();
         releaseStream();
         isSpeakingReply = false;
-        aiReplyQueuedOrPlaying = false;
+        if (speechAbortController) speechAbortController.abort();
+        speechAbortController = null;
         if (playbackSource) { try { playbackSource.stop(); } catch (error) {} }
         playbackSource = null;
         if (playbackContext) { try { playbackContext.close(); } catch (error) {} }
