@@ -202,7 +202,7 @@ const CasinoUI = (() => {
             seenMessageIds.clear();
             refresh();
             await sendSharedMessage(`New hand: ${heroHand}. ${tableSize}-max. ${formatNumber(stackBb)} big blinds.`, 'hand');
-            await startRecording();
+            updateStatus('Connected. Tap the microphone when you are ready to talk.');
         });
     }
 
@@ -331,7 +331,14 @@ const CasinoUI = (() => {
             mediaRecorder.start(250);
             recordingStarted = Date.now(); setMicVisual(true); updateRecordingClock();
             recordingTimer = setInterval(updateRecordingClock, 1000);
-        } catch (error) { updateStatus('Microphone permission was denied. Type the action below.'); releaseStream(); }
+        } catch (error) {
+            console.warn('Casino microphone error:', error && error.name, error && error.message);
+            const blocked = error && (error.name === 'NotAllowedError' || error.name === 'SecurityError');
+            updateStatus(blocked
+                ? 'Microphone is blocked for Business World. Open this site’s browser settings, set Microphone to Allow, then tap the mic again.'
+                : 'The microphone could not start. Close other apps using it, then tap the mic again.');
+            releaseStream();
+        }
     }
 
     function updateRecordingClock() { updateStatus(`Listening… ${Math.floor((Date.now() - recordingStarted) / 1000)}s · tap to send`, true); }
@@ -364,7 +371,16 @@ const CasinoUI = (() => {
         button.querySelector('small').textContent = recording ? 'Tap to send' : 'Tap to talk';
     }
 
-    function unlockAudio() { if (!ttsAudio) ttsAudio = new Audio(); applyAudioMode(false); }
+    function unlockAudio() {
+        if (!ttsAudio) ttsAudio = new Audio();
+        const previousSource = ttsAudio.src;
+        ttsAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGFpYQAAAAA=';
+        ttsAudio.play().then(() => {
+            ttsAudio.pause();
+            ttsAudio.src = previousSource || '';
+        }).catch(() => { ttsAudio.src = previousSource || ''; });
+        applyAudioMode(false);
+    }
 
     async function toggleSpeakerMode() {
         speakerOn = !speakerOn;
