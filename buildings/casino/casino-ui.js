@@ -13,15 +13,33 @@ const CasinoUI = (() => {
     let heroHand = '';
     let mediaRecorder = null;
     let mediaStream = null;
-    let audioChunks = [];
-    let recordingStarted = 0;
-    let recordingTimer = null;
+    let audioContext = null;
+    let audioAnalyser = null;
+    let vadSamples = null;
+    let vadFrame = null;
+    let voiceStartedAt = 0;
+    let lastVoiceAt = 0;
+    let noiseFloor = 0.012;
+    let alwaysListening = false;
+    let isSpeakingReply = false;
+    let transcriptionChain = Promise.resolve();
+    let messageSendChain = Promise.resolve();
     let pollTimer = null;
     let ttsAudio = null;
     let speechChain = Promise.resolve();
     let busy = false;
     let seenMessageIds = new Set();
     let lastSpokenOperatorAt = '';
+    let tylerCallStartedAt = '';
+    let ringContext = null;
+    let ringTimer = null;
+    let ringStops = [];
+
+    function speakerIcon() {
+        return speakerOn
+            ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Z"/><path class="sound-wave" d="M16 8.5c1.8 2 1.8 5 0 7M18.7 6c3.2 3.5 3.2 8.5 0 12"/></svg>'
+            : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Z"/><path class="sound-wave" d="m16.5 9 4 6m0-6-4 6"/></svg>';
+    }
 
     function render() {
         return `<section class="casino-panel" aria-label="Casino poker coach">
@@ -62,7 +80,7 @@ const CasinoUI = (() => {
                 <div class="casino-call-avatar" aria-hidden="true">♠</div><span class="casino-call-label">Incoming call</span><h2>Poker Coach</h2>
                 <p>${escapeHtml(heroHand)}</p>
                 <div class="casino-call-actions">
-                    <button id="casino-decline" class="casino-call-button decline" type="button"><span>×</span><small>Decline</small></button>
+                    <button id="casino-decline" class="casino-call-button decline" type="button"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 15.2c4.8-3.7 10.2-3.7 15 0l-2.2 3.3c-.3.5-.9.7-1.4.4l-2.2-1.2c-.3-.2-.5-.5-.5-.9v-1.1c-.8-.2-1.6-.2-2.4 0v1.1c0 .4-.2.7-.5.9l-2.2 1.2c-.5.3-1.1.1-1.4-.4l-2.2-3.3Z"/></svg></span><small>Decline</small></button>
                     <button id="casino-answer" class="casino-call-button answer" type="button"><span>☎</span><small>Answer</small></button>
                 </div>
             </main>`;
@@ -74,7 +92,7 @@ const CasinoUI = (() => {
             <main class="casino-call ${operator ? 'operator-mode' : 'tyler-mode'}">
                 <div class="casino-call-topline">
                     <div><strong>${operator ? 'Solver desk' : escapeHtml(heroHand || 'Live hand')}</strong><span>${operator ? 'Human response mode' : 'Live hand'}</span></div>
-                    ${operator ? `<a class="casino-solver-link" href="${GTOBASE_VIEWER_URL}" target="_blank" rel="noopener noreferrer">Open GTOBase ↗</a>` : `<button id="casino-speaker-toggle" class="casino-audio-toggle ${speakerOn ? '' : 'quiet'}" type="button">${speakerOn ? '🔊 Speaker' : '🔈 Quiet'}</button>`}
+                    ${operator ? `<a class="casino-solver-link" href="${GTOBASE_VIEWER_URL}" target="_blank" rel="noopener noreferrer">Open GTOBase ↗</a>` : ''}
                 </div>
                 <div id="casino-decision" class="casino-decision" aria-live="polite">
                     <span class="casino-decision-label">${operator ? 'AI Robot mode' : 'Human solver connected'}</span>
@@ -82,8 +100,12 @@ const CasinoUI = (() => {
                     <p>${operator ? 'Calculate the exact move in GTOBase, then type the reply below.' : 'Your message is sent to the human solver desk. Their reply will be read aloud.'}</p>
                 </div>
                 <div id="casino-transcript" class="casino-transcript" aria-live="polite"></div>
-                <div id="casino-recording-status" class="casino-recording-status">${operator ? 'Live inbox connected.' : 'Tap the microphone or type the action.'}</div>
-                ${operator ? '' : `<div class="casino-call-controls"><button id="casino-mic" class="casino-mic" type="button" aria-label="Start recording"><span>🎙</span><small>Tap to talk</small></button><button id="casino-end-call" class="casino-end-call" type="button" aria-label="End call">×</button></div>`}
+                <div id="casino-recording-status" class="casino-recording-status">${operator ? 'Live inbox connected.' : 'Starting the always-on microphone…'}</div>
+                ${operator ? '' : `<div class="casino-call-controls">
+                    <button id="casino-speaker-toggle" class="casino-audio-toggle casino-audio-icon ${speakerOn ? '' : 'quiet'}" type="button" aria-label="${speakerOn ? 'Switch to handheld mode' : 'Switch to speakerphone'}" title="${speakerOn ? 'Speakerphone on' : 'Handheld mode'}">${speakerIcon()}</button>
+                    <div id="casino-live-mic" class="casino-mic live" aria-label="Microphone always listening"><span>🎙</span><small>Always listening</small></div>
+                    <button id="casino-end-call" class="casino-end-call" type="button" aria-label="Hang up" title="Hang up"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 15.2c4.8-3.7 10.2-3.7 15 0l-2.2 3.3c-.3.5-.9.7-1.4.4l-2.2-1.2c-.3-.2-.5-.5-.5-.9v-1.1c-.8-.2-1.6-.2-2.4 0v1.1c0 .4-.2.7-.5.9l-2.2 1.2c-.5.3-1.1.1-1.4-.4l-2.2-3.3Z"/></svg></button>
+                </div>`}
                 <form id="casino-action-form" class="casino-action-form">
                     <input id="casino-action-input" type="text" autocomplete="off" placeholder="${operator ? 'Type exact solver move for Tyler…' : 'Type the poker action instead…'}">
                     <button type="submit" aria-label="Send message">↑</button>
@@ -122,29 +144,34 @@ const CasinoUI = (() => {
                 document.getElementById('casino-entry-error').textContent = 'Enter your hole cards.';
                 return;
             }
-            heroHand = hand; screen = 'incoming'; refresh();
+            heroHand = hand;
+            startRingtone();
+            screen = 'incoming';
+            refresh();
         });
     }
 
     function bindIncoming() {
-        document.getElementById('casino-decline').addEventListener('click', reset);
+        document.getElementById('casino-decline').addEventListener('click', () => { stopRingtone(); reset(); });
         document.getElementById('casino-answer').addEventListener('click', async () => {
+            stopRingtone();
             unlockAudio();
             lastSpokenOperatorAt = new Date().toISOString();
             persistLastSpoken();
+            tylerCallStartedAt = new Date().toISOString();
             screen = 'call';
             seenMessageIds.clear();
             refresh();
+            const listening = startAlwaysOnListening();
             await sendSharedMessage(`New hand: ${heroHand}.`, 'hand');
+            const microphoneReady = await listening;
             queueSpeak('What is the action?');
-            updateStatus('What is the action? Tap the microphone after the prompt to answer.');
+            if (microphoneReady) updateStatus('What is the action? Listening continuously — each pause sends your words.');
         });
     }
 
     function bindCall() {
         startPolling();
-        const mic = document.getElementById('casino-mic');
-        if (mic) mic.addEventListener('click', () => mediaRecorder && mediaRecorder.state === 'recording' ? stopRecording() : startRecording());
         const end = document.getElementById('casino-end-call');
         if (end) end.addEventListener('click', reset);
         const audioToggle = document.getElementById('casino-speaker-toggle');
@@ -179,7 +206,7 @@ const CasinoUI = (() => {
     async function pollMessages() {
         if (!container || screen !== 'call') return;
         try {
-            const response = await fetch('/api/casino/messages?limit=100');
+            const response = await fetch(`/api/casino/messages?limit=${roleMode === 'operator' ? 5000 : 200}`);
             if (!response.ok) throw new Error(`Inbox unavailable (${response.status})`);
             const data = await response.json();
             const messages = Array.isArray(data.messages) ? data.messages : [];
@@ -187,6 +214,7 @@ const CasinoUI = (() => {
             for (const message of messages) {
                 if (!message.id || seenMessageIds.has(message.id)) continue;
                 seenMessageIds.add(message.id);
+                if (roleMode === 'tyler' && tylerCallStartedAt && message.timestamp < tylerCallStartedAt) continue;
                 addMessage(message.content, message.sender === 'operator' ? 'assistant' : 'user', message.sender === 'operator' ? 'AI Robot' : 'Tyler');
                 if (roleMode === 'tyler' && message.sender === 'operator' && message.timestamp > lastSpokenOperatorAt) newestReply = message;
             }
@@ -195,29 +223,35 @@ const CasinoUI = (() => {
                 persistLastSpoken();
                 showHumanReply(newestReply.content);
                 queueSpeak(newestReply.content);
-                updateStatus('Human solver replied. Tap the microphone to continue.');
+                updateStatus('Human solver replied. The microphone will resume after the reply.');
             }
         } catch (error) {
             updateStatus(error.message);
         }
     }
 
-    async function sendSharedMessage(text, kind) {
-        if (busy) return;
+    function sendSharedMessage(text, kind) {
+        const sender = roleMode;
+        const task = messageSendChain.then(() => postSharedMessage(text, kind, sender));
+        messageSendChain = task.catch(() => {});
+        return task;
+    }
+
+    async function postSharedMessage(text, kind, sender) {
         busy = true;
-        updateStatus(roleMode === 'operator' ? 'Sending exact reply…' : 'Sending to human solver…', true);
+        updateStatus(sender === 'operator' ? 'Sending exact reply…' : 'Sending to human solver…', true);
         try {
             const response = await fetch('/api/casino/messages', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sender: roleMode, content: text, kind })
+                body: JSON.stringify({ sender, content: text, kind })
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || `Send failed (${response.status})`);
             if (data.message && !seenMessageIds.has(data.message.id)) {
                 seenMessageIds.add(data.message.id);
-                addMessage(data.message.content, roleMode === 'operator' ? 'assistant' : 'user', roleMode === 'operator' ? 'AI Robot' : 'Tyler');
+                addMessage(data.message.content, sender === 'operator' ? 'assistant' : 'user', sender === 'operator' ? 'AI Robot' : 'Tyler');
             }
-            updateStatus(roleMode === 'operator' ? 'Reply delivered to Tyler.' : 'Delivered. Waiting for the human solver.');
+            updateStatus(sender === 'operator' ? 'Reply delivered to Tyler.' : 'Delivered. Waiting for the human solver.');
         } catch (error) {
             addMessage(error.message, 'error', 'System');
             updateStatus('Message was not delivered. Try again.');
@@ -250,60 +284,170 @@ const CasinoUI = (() => {
         if (status) { status.textContent = text; status.classList.toggle('active', Boolean(active)); }
     }
 
-    async function startRecording() {
-        if (roleMode !== 'tyler' || busy || !navigator.mediaDevices || !window.MediaRecorder) {
-            if (!navigator.mediaDevices || !window.MediaRecorder) updateStatus('Voice is unavailable here. Type the action below.');
-            return;
+    async function startAlwaysOnListening() {
+        if (roleMode !== 'tyler' || !navigator.mediaDevices || !window.MediaRecorder) {
+            updateStatus('Continuous voice is unavailable here. Type the action below.');
+            return false;
         }
         releaseStream();
+        alwaysListening = true;
         try {
-            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
-            mediaRecorder = mimeType ? new MediaRecorder(mediaStream, { mimeType }) : new MediaRecorder(mediaStream);
-            audioChunks = [];
-            mediaRecorder.ondataavailable = event => { if (event.data.size) audioChunks.push(event.data); };
-            mediaRecorder.onstop = transcribeRecording;
-            mediaRecorder.start(250);
-            recordingStarted = Date.now(); setMicVisual(true); updateRecordingClock();
-            recordingTimer = setInterval(updateRecordingClock, 1000);
+            mediaStream = await navigator.mediaDevices.getUserMedia({
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+            });
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) throw new Error('Audio level detection is unavailable');
+            audioContext = new AudioContextClass();
+            if (audioContext.state === 'suspended') await audioContext.resume();
+            const source = audioContext.createMediaStreamSource(mediaStream);
+            audioAnalyser = audioContext.createAnalyser();
+            audioAnalyser.fftSize = 512;
+            audioAnalyser.smoothingTimeConstant = 0.35;
+            vadSamples = new Uint8Array(audioAnalyser.fftSize);
+            source.connect(audioAnalyser);
+            noiseFloor = 0.012;
+            monitorVoiceActivity();
+            setLiveMicState('listening');
+            updateStatus('Microphone is always on. Speak naturally; a short pause sends each transcription.');
+            return true;
         } catch (error) {
             console.warn('Casino microphone error:', error && error.name, error && error.message);
             const blocked = error && (error.name === 'NotAllowedError' || error.name === 'SecurityError');
             updateStatus(blocked
-                ? 'Microphone is blocked for Business World. Open this site’s browser settings, set Microphone to Allow, then tap the mic again.'
-                : 'The microphone could not start. Close other apps using it, then tap the mic again.');
+                ? 'Microphone is blocked for Business World. Open this site’s browser settings, set Microphone to Allow, hang up, and answer again.'
+                : 'The microphone could not start. Close other apps using it, hang up, and answer again.');
             releaseStream();
+            return false;
         }
     }
 
-    function updateRecordingClock() { updateStatus(`Listening… ${Math.floor((Date.now() - recordingStarted) / 1000)}s · tap to send`, true); }
+    function monitorVoiceActivity() {
+        if (!alwaysListening || !audioAnalyser || !vadSamples) return;
+        audioAnalyser.getByteTimeDomainData(vadSamples);
+        let sum = 0;
+        for (const sample of vadSamples) {
+            const normalized = (sample - 128) / 128;
+            sum += normalized * normalized;
+        }
+        const rms = Math.sqrt(sum / vadSamples.length);
+        const threshold = Math.max(0.018, noiseFloor * 2.35);
+        const now = Date.now();
 
-    function stopRecording() {
-        clearInterval(recordingTimer); recordingTimer = null;
-        if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
-        setMicVisual(false); updateStatus('Transcribing…', true);
+        if (isSpeakingReply) {
+            if (mediaRecorder && mediaRecorder.state === 'recording') finishVoiceSegment();
+            setLiveMicState('paused');
+        } else if (rms > threshold) {
+            if (!mediaRecorder) startVoiceSegment();
+            lastVoiceAt = now;
+            setLiveMicState('speaking');
+        } else {
+            if (!mediaRecorder) noiseFloor = Math.max(0.006, Math.min(0.025, noiseFloor * 0.97 + rms * 0.03));
+            if (mediaRecorder && mediaRecorder.state === 'recording' && now - lastVoiceAt > 900 && now - voiceStartedAt > 450) finishVoiceSegment();
+            if (!mediaRecorder) setLiveMicState('listening');
+        }
+        if (mediaRecorder && mediaRecorder.state === 'recording' && now - voiceStartedAt > 15000) finishVoiceSegment();
+        vadFrame = requestAnimationFrame(monitorVoiceActivity);
     }
 
-    async function transcribeRecording() {
-        const recorderType = mediaRecorder && mediaRecorder.mimeType || 'audio/webm';
-        const chunks = audioChunks.slice(); audioChunks = []; releaseStream();
-        if (!chunks.length) { updateStatus('No audio captured. Tap to try again.'); return; }
+    function startVoiceSegment() {
+        if (!mediaStream || !alwaysListening || isSpeakingReply) return;
+        const chunks = [];
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+            : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+                : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+        const recorder = mimeType ? new MediaRecorder(mediaStream, { mimeType }) : new MediaRecorder(mediaStream);
+        mediaRecorder = recorder;
+        recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+        recorder.onstop = () => {
+            if (mediaRecorder === recorder) mediaRecorder = null;
+            if (chunks.length && alwaysListening) {
+                const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
+                transcriptionChain = transcriptionChain.then(() => transcribeVoiceSegment(blob)).catch(() => {});
+            }
+        };
+        recorder.onerror = () => { if (mediaRecorder === recorder) mediaRecorder = null; };
+        voiceStartedAt = Date.now();
+        lastVoiceAt = voiceStartedAt;
+        recorder.start(250);
+    }
+
+    function finishVoiceSegment() {
+        if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
+        try { mediaRecorder.stop(); } catch (error) {}
+        updateStatus('Pause detected — transcribing while the microphone stays on.', true);
+    }
+
+    async function transcribeVoiceSegment(blob) {
         try {
-            const audio = await blobToBase64(new Blob(chunks, { type: recorderType }));
-            const response = await fetch('/api/openai/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audio, mimeType: recorderType }) });
+            const audio = await blobToBase64(blob);
+            const response = await fetch('/api/openai/transcribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ audio, mimeType: blob.type })
+            });
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || 'Transcription failed');
             const text = String(result.text || '').trim();
-            if (!text) { updateStatus('I did not hear anything. Tap to try again.'); return; }
-            await sendSharedMessage(text, 'message');
-        } catch (error) { addMessage(`Voice error: ${error.message}`, 'error', 'System'); updateStatus('Type the action below or tap to try again.'); }
+            if (text) await sendSharedMessage(text, 'message');
+            if (alwaysListening && !isSpeakingReply) updateStatus('Sent. Still listening — keep talking whenever you need to.');
+        } catch (error) {
+            addMessage(`Voice error: ${error.message}`, 'error', 'System');
+            if (alwaysListening) updateStatus('That phrase did not send. The microphone is still listening.');
+        }
     }
 
-    function setMicVisual(recording) {
-        const button = document.getElementById('casino-mic');
-        if (!button) return;
-        button.classList.toggle('recording', recording);
-        button.querySelector('small').textContent = recording ? 'Tap to send' : 'Tap to talk';
+    function setLiveMicState(state) {
+        const mic = document.getElementById('casino-live-mic');
+        if (!mic) return;
+        mic.classList.toggle('recording', state === 'speaking');
+        mic.classList.toggle('paused', state === 'paused');
+        const label = mic.querySelector('small');
+        if (label) label.textContent = state === 'speaking' ? 'Hearing you' : state === 'paused' ? 'Reply playing' : 'Always listening';
+    }
+
+    function startRingtone() {
+        stopRingtone();
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        try {
+            ringContext = new AudioContextClass();
+            if (ringContext.state === 'suspended') ringContext.resume().catch(() => {});
+            const pulse = () => {
+                if (!ringContext || ringContext.state === 'closed') return;
+                const gain = ringContext.createGain();
+                const firstTone = ringContext.createOscillator();
+                const secondTone = ringContext.createOscillator();
+                firstTone.frequency.value = 440;
+                secondTone.frequency.value = 480;
+                firstTone.connect(gain);
+                secondTone.connect(gain);
+                gain.connect(ringContext.destination);
+                const now = ringContext.currentTime;
+                gain.gain.setValueAtTime(0.0001, now);
+                gain.gain.exponentialRampToValueAtTime(0.12, now + 0.03);
+                gain.gain.setValueAtTime(0.12, now + 0.55);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
+                firstTone.start(now);
+                secondTone.start(now);
+                firstTone.stop(now + 0.72);
+                secondTone.stop(now + 0.72);
+                ringStops.push(firstTone, secondTone);
+                setTimeout(() => { ringStops = ringStops.filter(tone => tone !== firstTone && tone !== secondTone); }, 800);
+            };
+            pulse();
+            ringTimer = setInterval(pulse, 1600);
+            if (navigator.vibrate) navigator.vibrate([350, 200, 350]);
+        } catch (error) {}
+    }
+
+    function stopRingtone() {
+        if (ringTimer) clearInterval(ringTimer);
+        ringTimer = null;
+        for (const oscillator of ringStops) { try { oscillator.stop(); } catch (error) {} }
+        ringStops = [];
+        if (ringContext) { try { ringContext.close(); } catch (error) {} }
+        ringContext = null;
+        if (navigator.vibrate) navigator.vibrate(0);
     }
 
     function unlockAudio() {
@@ -322,8 +466,13 @@ const CasinoUI = (() => {
         try { localStorage.setItem(SPEAKER_KEY, speakerOn ? 'yes' : 'no'); } catch (error) {}
         await applyAudioMode(true);
         const button = document.getElementById('casino-speaker-toggle');
-        if (button) { button.textContent = speakerOn ? '🔊 Speaker' : '🔈 Quiet'; button.classList.toggle('quiet', !speakerOn); }
-        updateStatus(speakerOn ? 'Speaker mode is on.' : 'Quiet mode is on. Choose an earpiece or headphones if your browser offers an output picker.');
+        if (button) {
+            button.innerHTML = speakerIcon();
+            button.classList.toggle('quiet', !speakerOn);
+            button.setAttribute('aria-label', speakerOn ? 'Switch to handheld mode' : 'Switch to speakerphone');
+            button.title = speakerOn ? 'Speakerphone on' : 'Handheld mode';
+        }
+        updateStatus(speakerOn ? 'Speakerphone is on.' : 'Handheld mode is on. Hold the phone to your ear.');
     }
 
     async function applyAudioMode(userGesture) {
@@ -341,8 +490,11 @@ const CasinoUI = (() => {
 
     async function speak(text) {
         if (roleMode !== 'tyler') return;
-        await applyAudioMode(false);
+        isSpeakingReply = true;
+        if (mediaRecorder && mediaRecorder.state === 'recording') finishVoiceSegment();
+        setLiveMicState('paused');
         try {
+            await applyAudioMode(false);
             const response = await fetch('/api/openai/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: text, voice: 'alloy' }) });
             if (!response.ok) throw new Error('TTS unavailable');
             const blob = await response.blob(); const url = URL.createObjectURL(blob);
@@ -356,6 +508,10 @@ const CasinoUI = (() => {
                 const utterance = new SpeechSynthesisUtterance(text); utterance.volume = speakerOn ? 1 : 0.2;
                 await new Promise(resolve => { utterance.onend = resolve; utterance.onerror = resolve; window.speechSynthesis.speak(utterance); });
             }
+        } finally {
+            isSpeakingReply = false;
+            lastVoiceAt = Date.now();
+            if (alwaysListening) setLiveMicState('listening');
         }
     }
 
@@ -363,13 +519,27 @@ const CasinoUI = (() => {
         return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onloadend = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(blob); });
     }
 
-    function releaseStream() { if (mediaStream) mediaStream.getTracks().forEach(track => track.stop()); mediaStream = null; mediaRecorder = null; }
+    function releaseStream() {
+        alwaysListening = false;
+        if (vadFrame) cancelAnimationFrame(vadFrame);
+        vadFrame = null;
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.onstop = null;
+            try { mediaRecorder.stop(); } catch (error) {}
+        }
+        mediaRecorder = null;
+        if (audioContext) { try { audioContext.close(); } catch (error) {} }
+        audioContext = null;
+        audioAnalyser = null;
+        vadSamples = null;
+        if (mediaStream) mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+    }
 
-    function reset() { releaseAudio(); stopPolling(); screen = 'entry'; seenMessageIds.clear(); refresh(); }
+    function reset() { releaseAudio(); stopPolling(); screen = 'entry'; tylerCallStartedAt = ''; seenMessageIds.clear(); refresh(); }
 
     function releaseAudio() {
-        clearInterval(recordingTimer); recordingTimer = null;
-        if (mediaRecorder && mediaRecorder.state === 'recording') { mediaRecorder.onstop = null; try { mediaRecorder.stop(); } catch (error) {} }
+        stopRingtone();
         releaseStream();
         if (ttsAudio) { ttsAudio.pause(); ttsAudio.src = ''; }
         if ('speechSynthesis' in window) window.speechSynthesis.cancel();

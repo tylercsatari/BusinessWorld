@@ -33,13 +33,23 @@ assert(casinoUi.includes('/api/casino/messages'), 'Casino is not connected to th
 assert(casinoUi.includes('data-casino-role="tyler"'), 'Casino is missing Tyler mode');
 assert(casinoUi.includes('data-casino-role="operator"'), 'Casino is missing AI Robot mode');
 assert(casinoUi.includes('casino-speaker-toggle'), 'Casino is missing the speaker/quiet control');
+assert(casinoUi.includes('casino-audio-icon'), 'Casino speaker control is not an icon in the call controls');
 assert(casinoUi.includes('selectAudioOutput'), 'Casino does not offer supported private audio output selection');
 assert(!casinoUi.includes('CasinoAgent.run'), 'Casino must not generate poker strategy estimates');
-assert(!casinoUi.includes('await startRecording();'), 'Casino must request microphone permission from the direct mic tap, not after async work');
+assert(casinoUi.includes('startAlwaysOnListening()'), 'Casino does not start continuous listening when the call is answered');
+assert(casinoUi.includes('monitorVoiceActivity()'), 'Casino is missing silence-delimited voice activity detection');
+assert(casinoUi.includes('now - lastVoiceAt > 900'), 'Casino does not send speech after a short silence');
 assert(casinoUi.includes('set Microphone to Allow'), 'Casino is missing mobile permission recovery guidance');
 assert(casinoUi.includes('data:audio/wav;base64'), 'Casino does not unlock mobile audio from the Answer gesture');
 assert(casinoUi.includes("queueSpeak('What is the action?')"), 'Casino does not speak the action prompt after Tyler answers');
-assert(casinoUi.includes("function reset() { releaseAudio(); stopPolling(); screen = 'entry'"), 'Hanging up does not return Tyler to hand entry');
+assert(casinoUi.includes('tylerCallStartedAt'), 'Casino does not isolate Tyler’s current-call transcript');
+assert(casinoUi.includes("roleMode === 'operator' ? 5000 : 200"), 'AI Robot does not load the retained conversation history');
+assert(casinoUi.includes('function startRingtone()'), 'Casino does not ring for an incoming call');
+assert(casinoUi.includes('ringTimer = setInterval(pulse, 1600)'), 'Casino ringtone does not repeat');
+assert(casinoUi.includes('navigator.vibrate([350, 200, 350])'), 'Casino incoming call does not request supported vibration');
+assert(casinoUi.includes('function stopRingtone()'), 'Casino cannot stop its ringtone');
+assert(casinoUi.includes('aria-label="Hang up"'), 'Casino hang-up button is not accessible');
+assert(casinoUi.includes("function reset() { releaseAudio(); stopPolling(); screen = 'entry'; tylerCallStartedAt = ''"), 'Hanging up does not return Tyler to hand entry');
 assert(!casinoUi.includes('type="password"'), 'Casino must not collect Google passwords');
 assert(!casinoUi.toLowerCase().includes('tylerdaviscsatari'), 'Casino UI must not contain private login details');
 assert(authGate.includes("'Casino'"), 'Casino is absent from profile permissions');
@@ -48,5 +58,6 @@ assert(auth.includes("return 'Casino'"), 'Casino message API is not permission-g
 assert(server.includes("pathname === '/api/casino/messages' && req.method === 'GET'"), 'Casino message inbox route is missing');
 assert(server.includes("pathname === '/api/casino/messages' && req.method === 'POST'"), 'Casino message send route is missing');
 assert(server.includes('CASINO_CHAT_R2_KEY'), 'Casino messages are not persisted to R2');
+assert(server.includes('messages.slice(-5000)'), 'Casino does not retain the full operator conversation window');
 
 console.log('Casino integration checks passed.');

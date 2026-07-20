@@ -1686,7 +1686,7 @@ function appendCasinoChat(entry) {
     const write = casinoChatWrite.then(async () => {
         const messages = (await loadCasinoChat()).slice();
         messages.push(entry);
-        casinoChatCache = messages.slice(-500);
+        casinoChatCache = messages.slice(-5000);
         await cloud.uploadToR2(CASINO_CHAT_R2_KEY, Buffer.from(JSON.stringify(casinoChatCache)), 'application/json');
         return entry;
     });
@@ -1916,7 +1916,7 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
     if (pathname === '/api/casino/messages' && req.method === 'GET') {
         try {
             await casinoChatWrite.catch(() => {});
-            const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get('limit') || '100', 10)));
+            const limit = Math.max(1, Math.min(5000, parseInt(url.searchParams.get('limit') || '100', 10)));
             const messages = (await loadCasinoChat()).slice(-limit);
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
             res.end(JSON.stringify({ messages }));
