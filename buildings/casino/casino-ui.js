@@ -421,8 +421,8 @@ const CasinoUI = (() => {
                 gain.connect(ringContext.destination);
                 const now = ringContext.currentTime;
                 gain.gain.setValueAtTime(0.0001, now);
-                gain.gain.exponentialRampToValueAtTime(0.12, now + 0.03);
-                gain.gain.setValueAtTime(0.12, now + 0.55);
+                gain.gain.exponentialRampToValueAtTime(0.24, now + 0.03);
+                gain.gain.setValueAtTime(0.24, now + 0.55);
                 gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
                 firstTone.start(now);
                 secondTone.start(now);
@@ -485,7 +485,7 @@ const CasinoUI = (() => {
 
     async function applyAudioMode(userGesture) {
         if (!ttsAudio) ttsAudio = new Audio();
-        ttsAudio.volume = speakerOn ? 1 : 0.2;
+        ttsAudio.volume = speakerOn ? 1 : 0.4;
         try { if (navigator.audioSession) navigator.audioSession.type = speakerOn ? 'playback' : 'play-and-record'; } catch (error) {}
         if (!speakerOn && userGesture && navigator.mediaDevices && navigator.mediaDevices.selectAudioOutput && ttsAudio.setSinkId) {
             try { const device = await navigator.mediaDevices.selectAudioOutput(); if (device && device.deviceId) await ttsAudio.setSinkId(device.deviceId); } catch (error) {}
@@ -520,7 +520,7 @@ const CasinoUI = (() => {
                 const audioBuffer = await playbackContext.decodeAudioData(await blob.arrayBuffer());
                 const source = playbackContext.createBufferSource();
                 const gain = playbackContext.createGain();
-                gain.gain.value = speakerOn ? 1 : 0.2;
+                gain.gain.value = speakerOn ? 2 : 0.4;
                 source.buffer = audioBuffer;
                 source.connect(gain);
                 gain.connect(playbackContext.destination);
@@ -536,7 +536,7 @@ const CasinoUI = (() => {
         const url = URL.createObjectURL(blob);
         ttsAudio.pause();
         ttsAudio.src = url;
-        ttsAudio.volume = speakerOn ? 1 : 0.2;
+        ttsAudio.volume = speakerOn ? 1 : 0.4;
         await new Promise((resolve, reject) => {
             ttsAudio.onended = () => { URL.revokeObjectURL(url); ttsAudio.src = ''; resolve(); };
             ttsAudio.onerror = reject;

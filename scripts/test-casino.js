@@ -53,6 +53,7 @@ assert(casinoUi.includes('recentSpeechContent.has(normalized)'), 'Casino does no
 assert(casinoUi.includes('now - queuedAt > 30000'), 'Casino duplicate reply suppression has no bounded window');
 assert(casinoUi.includes('generation === speechGeneration ? speak(text, generation)'), 'Casino can play stale speech from another call');
 assert(casinoUi.includes('playbackContext.decodeAudioData'), 'Casino does not use its unlocked mobile audio context for replies');
+assert(casinoUi.includes('gain.gain.value = speakerOn ? 2 : 0.4'), 'Casino AI voice is not using doubled gain');
 assert(!casinoUi.includes('class="casino-transcript" aria-live'), 'Casino transcript must not duplicate explicit voice playback through a live region');
 assert(casinoUi.includes('class="casino-transcript" aria-hidden="true"'), 'Casino transcript must be hidden from competing screen-reader narration');
 assert(casinoUi.includes('speed: 1.3'), 'Casino AI voice is not configured for faster playback');
@@ -61,6 +62,7 @@ assert(casinoUi.includes('tylerCallStartedAt'), 'Casino does not isolate Tylerâ€
 assert(casinoUi.includes("roleMode === 'operator' ? 5000 : 200"), 'AI Robot does not load the retained conversation history');
 assert(casinoUi.includes('function startRingtone()'), 'Casino does not ring for an incoming call');
 assert(casinoUi.includes('ringTimer = setInterval(pulse, 1600)'), 'Casino ringtone does not repeat');
+assert(casinoUi.includes('exponentialRampToValueAtTime(0.24'), 'Casino ringtone is not using doubled gain');
 assert(casinoUi.includes('navigator.vibrate([350, 200, 350])'), 'Casino incoming call does not request supported vibration');
 assert(casinoUi.includes('function stopRingtone()'), 'Casino cannot stop its ringtone');
 assert(casinoUi.includes('aria-label="Hang up"'), 'Casino hang-up button is not accessible');
