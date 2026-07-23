@@ -137,6 +137,128 @@ def hook_inputs(src):
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+class _YoutubeLogger:
+    def debug(self, *args): pass
+    def warning(self, *args): pass
+    def error(self, *args): pass
+
+def _clear_youtube_downloads(folder):
+    for filename in os.listdir(folder):
+        try:
+            path = os.path.join(folder, filename)
+            if os.path.isdir(path): shutil.rmtree(path, ignore_errors=True)
+            else: os.remove(path)
+        except OSError:
+            pass
+
+def _youtube_profiles():
+    """Ordered auth profiles for the one shared link-scoring downloader.
+
+    Render gets the anonymous attempt and relays access failures to the Mac.
+    The Mac can then use an exported cookie file or the user's browser session;
+    browser cookies are never requested on Linux/Render.
+    """
+    profiles = [('anonymous', {})]
+    cookie_file = env('RAW_YOUTUBE_COOKIES_FILE') or env('YTDLP_COOKIES_FILE')
+    if not cookie_file:
+        local_cookie_file = os.path.join(HERE, 'raw-cookies.txt')
+        if os.path.isfile(local_cookie_file) and os.path.getsize(local_cookie_file) > 0:
+            cookie_file = local_cookie_file
+    if cookie_file and os.path.isfile(os.path.expanduser(cookie_file)):
+        profiles.append(('cookie-file', {'cookiefile': os.path.expanduser(cookie_file)}))
+
+    configured = env('RAW_YOUTUBE_COOKIES_FROM_BROWSER') or env('YTDLP_COOKIES_FROM_BROWSER')
+    browsers = re.split(r'[\s,]+', configured.strip()) if configured else (
+        ['chrome', 'safari'] if sys.platform == 'darwin' else [])
+    seen = set()
+    for browser in browsers:
+        browser = browser.strip().lower()
+        if browser and browser not in seen:
+            seen.add(browser)
+            profiles.append(('browser-' + browser, {'cookiesfrombrowser': (browser,)}))
+    return profiles
+
+def _youtube_download_options(folder, auth_options, ranged=True):
+    import yt_dlp
+    from yt_dlp.utils import download_range_func
+    options = {
+        'format': 'mp4[height<=480]/best[height<=480]/best',
+        'outtmpl': os.path.join(folder, 'v.%(ext)s'),
+        'quiet': True,
+        'no_warnings': True,
+        'noprogress': True,
+        'noplaylist': True,
+        'logger': _YoutubeLogger(),
+        'socket_timeout': 30,
+        'retries': 3,
+        'fragment_retries': 3,
+        'js_runtimes': {'node': {}},
+        'remote_components': ['ejs:github'],
+    }
+    options.update(auth_options)
+    if auth_options:
+        # The authenticated Safari client exposes a stable muxed HLS stream and
+        # avoids the mweb media URLs that currently resolve but fail with 403.
+        options['extractor_args'] = {'youtube': {'player_client': ['web_safari']}}
+    if ranged:
+        options['download_ranges'] = download_range_func(None, [(0, 6)])
+        options['force_keyframes_at_cuts'] = True
+    else:
+        options['format'] = 'bestvideo[ext=mp4][height<=480]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best'
+        options['merge_output_format'] = 'mp4'
+    return options
+
+def _downloaded_youtube_file(folder):
+    candidates = []
+    for filename in os.listdir(folder):
+        path = os.path.join(folder, filename)
+        if (os.path.isfile(path) and not filename.endswith(('.part', '.ytdl', '.json'))
+                and os.path.getsize(path) >= 10000):
+            candidates.append(path)
+    return max(candidates, key=os.path.getsize) if candidates else None
+
+def download_youtube_hook(video_id, folder):
+    """Download the measured six-second opening, returning info/path/profile.
+
+    All callers use this function, so direct scoring and the R2 Mac relay cannot
+    drift into different YouTube acquisition behavior.
+    """
+    import yt_dlp
+    source = f'https://www.youtube.com/watch?v={video_id}'
+    failures = []
+    profiles = _youtube_profiles()
+    for profile, auth_options in profiles:
+        _clear_youtube_downloads(folder)
+        try:
+            with yt_dlp.YoutubeDL(_youtube_download_options(folder, auth_options, ranged=True)) as ydl:
+                info = ydl.extract_info(source, download=True)
+            path = _downloaded_youtube_file(folder)
+            if path:
+                return info, path, profile
+            raise RuntimeError('download produced no usable video')
+        except Exception as range_error:
+            failures.append((profile, str(range_error)))
+            message = str(range_error).lower()
+            # Preserve the historical progressive-MP4 recovery. For an
+            # authenticated profile, also recover from a range/ffmpeg transport
+            # failure by downloading the small 480p source normally.
+            should_try_full = 'ffmpeg exited with code 183' in message or bool(auth_options)
+            if not should_try_full:
+                continue
+            _clear_youtube_downloads(folder)
+            try:
+                with yt_dlp.YoutubeDL(_youtube_download_options(folder, auth_options, ranged=False)) as ydl:
+                    info = ydl.extract_info(source, download=True)
+                path = _downloaded_youtube_file(folder)
+                if path:
+                    return info, path, profile + '-full'
+                raise RuntimeError('full download produced no usable video')
+            except Exception as full_error:
+                failures.append((profile + '-full', str(full_error)))
+    message = failures[-1][1] if failures else 'no downloader profile was available'
+    attempted = ', '.join(profile for profile, _ in failures) or 'none'
+    raise RuntimeError(f'{message} (attempted: {attempted})')
+
 import gc, tempfile
 # The scorer was taking 310s on the deploy (>240s kill → error) vs 26s locally: re-downloading three
 # ~72MB embedding files from R2 every upload and holding them in RAM swap-thrashed the tight box.
@@ -200,47 +322,11 @@ def _run():
         vid = m.group(1)
         try:
             import yt_dlp
-            from yt_dlp.utils import download_range_func
         except Exception:
             print(json.dumps({'error': 'yt-dlp is not installed on this server yet — redeploy to pick it up'})); return
         ytmp = tempfile.mkdtemp(prefix='rawyt_')
-        outp = os.path.join(ytmp, 'v.%(ext)s')
         try:
-            class _Silent:
-                def debug(self, *a): pass
-                def warning(self, *a): pass
-                def error(self, *a): pass
-            ydl_opts = {'format': 'mp4[height<=480]/best[height<=480]/best', 'outtmpl': outp,
-                        'quiet': True, 'no_warnings': True, 'noprogress': True, 'noplaylist': True,
-                        'logger': _Silent(), 'socket_timeout': 30,
-                        # The scorer's measured input is exactly the first five seconds. Keep one
-                        # second of decode margin, but do not download a whole three-minute Short.
-                        # extract_info still returns the full source duration for realistic views.
-                        'download_ranges': download_range_func(None, [(0, 6)]),
-                        'force_keyframes_at_cuts': True}
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(f'https://www.youtube.com/watch?v={vid}', download=True)
-            except Exception as range_error:
-                # Some Shorts expose a progressive MP4 that ffmpeg cannot cut with
-                # download_ranges (exit 183) even though the full file is tiny and valid.
-                # Retry only that repeatable transport failure without range cutting.
-                if 'ffmpeg exited with code 183' not in str(range_error):
-                    raise
-                for filename in os.listdir(ytmp):
-                    try: os.remove(os.path.join(ytmp, filename))
-                    except OSError: pass
-                fallback_opts = dict(ydl_opts)
-                fallback_opts.pop('download_ranges', None)
-                fallback_opts.pop('force_keyframes_at_cuts', None)
-                fallback_opts['format'] = 'bestvideo[ext=mp4][height<=480]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best'
-                fallback_opts['merge_output_format'] = 'mp4'
-                with yt_dlp.YoutubeDL(fallback_opts) as ydl:
-                    info = ydl.extract_info(f'https://www.youtube.com/watch?v={vid}', download=True)
-            files = [os.path.join(ytmp, f) for f in os.listdir(ytmp)]
-            path = max(files, key=os.path.getsize) if files else None
-            if not path or os.path.getsize(path) < 10000:
-                print(json.dumps({'error': 'download produced no usable video (private/removed/region-locked?)'})); return
+            info, path, acquisition = download_youtube_hook(vid, ytmp)
             if dur_s is None:
                 try: dur_s = float(info.get('duration') or 0) or None
                 except Exception: dur_s = None
@@ -248,7 +334,8 @@ def _run():
                 args['title'] = str(info.get('title') or vid)[:80]
             extra = {'videoId': vid, 'sourceUrl': f'https://www.youtube.com/watch?v={vid}',
                      'sourceTitle': str(info.get('title') or '')[:120], 'sourceViews': info.get('view_count'),
-                     'sourceChannel': str(info.get('channel') or info.get('uploader') or '')[:80]}
+                     'sourceChannel': str(info.get('channel') or info.get('uploader') or '')[:80],
+                     'sourceAcquisition': acquisition}
             inp = hook_inputs(path)
             if not inp:
                 print(json.dumps({'error': 'downloaded but could not extract frames (ffmpeg decode failed)'})); return

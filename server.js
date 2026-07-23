@@ -2032,7 +2032,7 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
                 try { return await ytRunner(); }
                 catch (e) {
                     const msg = String((e && e.message) || e);
-                    if (!/cookie|bot|confirm|sign in|authenticat|403/i.test(msg)) throw e;
+                    if (!/cookie|bot|confirm|sign in|authenticat|403|429|too many requests|ffmpeg exited with code (8|183)/i.test(msg)) throw e;
                     // YouTube bot-blocks this datacenter IP — relay the job through the Mac watcher,
                     // which downloads on a residential IP and runs the identical scoring pipeline.
                     const rid = 'y' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
