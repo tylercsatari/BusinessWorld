@@ -3804,6 +3804,66 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         await serveR2Gz(req, res, `raw/${ch}/map.json`, 300e3, { n: 0, channel: ch });
         return;
     }
+    if (pathname === '/api/raw/predictor-lab' && req.method === 'GET') {
+        let fallback = {
+            version: 2,
+            status: 'not_ready',
+            message: 'The leakage-safe predictor artifact has not been built yet.',
+        };
+        try {
+            const localPath = path.join(__dirname, 'buildings/jarvis/predictor-lab/results.json');
+            if (fs.existsSync(localPath)) fallback = JSON.parse(fs.readFileSync(localPath, 'utf8'));
+        } catch (e) {}
+        await serveR2Gz(req, res, 'raw/predictor-lab/results.json', 300e3, fallback);
+        return;
+    }
+    if (pathname === '/api/raw/predictor-lab/status' && req.method === 'GET') {
+        let analysis = { version: 2, stage: 'idle', updatedAt: 0, message: 'No predictor analysis is reporting progress.' };
+        let embedding = { version: 1, stage: 'idle', heartbeat: 0, message: 'No Science Center embedding job is reporting progress.' };
+        let metadata = { version: 1, stage: 'idle', updatedAt: 0, message: 'No saved-channel metadata job is reporting progress.' };
+        try {
+            const resultPath = path.join(__dirname, 'buildings/jarvis/predictor-lab/results.json');
+            if (fs.existsSync(resultPath)) {
+                const result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+                const artifactState = result.artifactState || {};
+                analysis = {
+                    version: 2,
+                    stage: artifactState.complete ? 'complete' : 'partial',
+                    updatedAt: result.generatedAt || 0,
+                    message: artifactState.message || 'Local predictor research artifact is ready.',
+                    coverage: result.coverage || {},
+                    artifactState,
+                };
+            }
+        } catch (e) {}
+        try {
+            const [analysisBuffer, embeddingBuffer, metadataBuffer] = await Promise.all([
+                cloud.downloadFromR2('raw/predictor-lab/status.json').catch(() => null),
+                cloud.downloadFromR2('raw/predictor-lab/embed-status.json').catch(() => null),
+                cloud.downloadFromR2('raw/predictor-lab/metadata-status.json').catch(() => null),
+            ]);
+            if (analysisBuffer) analysis = JSON.parse(analysisBuffer.toString('utf8'));
+            if (embeddingBuffer) embedding = JSON.parse(embeddingBuffer.toString('utf8'));
+            if (metadataBuffer) metadata = JSON.parse(metadataBuffer.toString('utf8'));
+        } catch (e) {}
+        const embeddingActive = embedding.stage === 'running';
+        const metadataActive = metadata.stage === 'running';
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({
+            version: 2,
+            stage: embeddingActive ? 'embedding' : metadataActive ? 'metadata' : analysis.stage,
+            phase: embeddingActive ? embedding.phase : metadataActive ? metadata.phase : analysis.phase,
+            completed: embeddingActive ? embedding.processed : metadataActive ? metadata.processed : analysis.completed,
+            total: embeddingActive ? (Number(embedding.processed || 0) + Number(embedding.queued || 0)) : metadataActive ? metadata.total : analysis.total,
+            updatedAt: Math.max(Number(analysis.updatedAt || 0), Number(embedding.heartbeat || 0), Number(metadata.updatedAt || 0)),
+            message: embeddingActive ? embedding.message : metadataActive ? metadata.message : analysis.message,
+            coverage: analysis.coverage || {},
+            analysis,
+            embedding,
+            metadata,
+        }));
+        return;
+    }
     // Long Quant raw embeddings (title+thumbnail), namespaced raw-long/. Built later by raw_embed_long.py.
     if (pathname === '/api/raw-long/map' && req.method === 'GET') {
         const ch = (url.searchParams.get('channel') || 'visual').replace(/[^a-z]/g, '');

@@ -335,6 +335,8 @@ def _run():
             extra = {'videoId': vid, 'sourceUrl': f'https://www.youtube.com/watch?v={vid}',
                      'sourceTitle': str(info.get('title') or '')[:120], 'sourceViews': info.get('view_count'),
                      'sourceChannel': str(info.get('channel') or info.get('uploader') or '')[:80],
+                     'sourcePublished': info.get('upload_date') or info.get('timestamp'),
+                     'sourceSubscribers': info.get('channel_follower_count'),
                      'sourceAcquisition': acquisition}
             inp = hook_inputs(path)
             if not inp:

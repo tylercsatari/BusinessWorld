@@ -327,6 +327,8 @@ def process_channel_request(key):
                 'viewsObservedAt': video.get('viewsObservedAt') or int(time.time() * 1000),
                 'duration': record.get('dur_s') or video.get('duration'), 'sourceUrl': record.get('sourceUrl') or video.get('sourceUrl'),
                 'sourceChannel': record.get('sourceChannel') or manifest.get('name'), 'silent': bool(record.get('silent')),
+                'published': record.get('sourcePublished') or video.get('published'),
+                'subscribers': record.get('sourceSubscribers') if record.get('sourceSubscribers') is not None else video.get('subscribers'),
                 'transcript': str(record.get('transcript') or '')[:300], 'hasMontage': montage_saved,
                 'features': features, 'scoredAt': int(time.time() * 1000),
             })

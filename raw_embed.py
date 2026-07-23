@@ -53,6 +53,11 @@ DIM = 1536
 WORKERS = int(os.environ.get('RAW_WORKERS', '6'))      # lower (e.g. 2) for owned/YouTube downloads to avoid bot-detection bursts
 RAW_MAX = int(os.environ.get('RAW_MAX', '1000000'))    # default: everything stored
 OWNED_JITTER = float(os.environ.get('RAW_OWNED_JITTER', '0'))   # seconds of random pre-download sleep on YouTube pulls (gentle pacing)
+BACKFILL_MODE = os.environ.get('RAW_BACKFILL') == '1'
+CHECKPOINT_EVERY = max(100, int(os.environ.get('RAW_CHECKPOINT_EVERY', '5000' if BACKFILL_MODE else '100')))
+MAP_EVERY = max(0, int(os.environ.get('RAW_MAP_EVERY', '0' if BACKFILL_MODE else '500')))
+STATUS_EVERY = max(10, int(os.environ.get('RAW_STATUS_EVERY', '50')))
+STREAM_R2 = os.environ.get('RAW_STREAM_R2', '1') != '0'
 EMB_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent'
 CHANS = ['visual', 'text', 'together']
 
@@ -80,6 +85,14 @@ def r2_get(key):
     try: return s3.get_object(Bucket=BUCKET, Key=key)['Body'].read()
     except Exception: return None
 def r2_put(key, data, ct): s3.put_object(Bucket=BUCKET, Key=key, Body=data, ContentType=ct)
+def emit_status(stage, **extra):
+    payload = {
+        'version': 1, 'stage': stage, 'heartbeat': int(time.time() * 1000),
+        'workerPid': os.getpid(), 'workers': WORKERS, 'checkpointEvery': CHECKPOINT_EVERY,
+        'streamingFirstFiveSeconds': STREAM_R2, **extra,
+    }
+    try: r2_put('raw/predictor-lab/embed-status.json', json.dumps(payload).encode(), 'application/json')
+    except Exception: pass
 
 
 def embed(parts, tries=6):
@@ -120,15 +133,37 @@ def hook_inputs(vid, src='lib'):
                     if f.startswith('v.'): mp4 = os.path.join(tmp, f); break
             if not os.path.exists(mp4): return None
         else:
-            s3.download_file(BUCKET, f'library/videos/{vid}.mp4', mp4)
-        subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-t', '5', '-i', mp4, '-vf', 'fps=1,scale=320:-1,tile=5x1', '-frames:v', '1', mon], timeout=40)
+            streamed = False
+            if STREAM_R2:
+                try:
+                    signed = s3.generate_presigned_url(
+                        'get_object',
+                        Params={'Bucket': BUCKET, 'Key': f'library/videos/{vid}.mp4'},
+                        ExpiresIn=600,
+                    )
+                    subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-i', signed, '-t', '5',
+                                    '-vf', 'fps=1,scale=320:-1,tile=5x1', '-frames:v', '1', mon], timeout=60)
+                    if os.path.exists(mon):
+                        streamed = True
+                        try:
+                            subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-i', signed, '-t', '5',
+                                            '-vn', '-ar', '16000', '-ac', '1', wav], timeout=60)
+                        except Exception:
+                            pass
+                except Exception:
+                    streamed = False
+            if not streamed:
+                s3.download_file(BUCKET, f'library/videos/{vid}.mp4', mp4)
+        if src == 'owned' or not STREAM_R2 or not os.path.exists(mon):
+            subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-t', '5', '-i', mp4, '-vf', 'fps=1,scale=320:-1,tile=5x1', '-frames:v', '1', mon], timeout=40)
         if not os.path.exists(mon): return None
         montage = open(mon, 'rb').read()
         r2_put(f'raw/montage/{vid}.jpg', montage, 'image/jpeg')
         b64 = base64.b64encode(montage).decode()
         txt, good = '', False
         try:
-            subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-t', '5', '-i', mp4, '-vn', '-ar', '16000', '-ac', '1', wav], timeout=40)
+            if not os.path.exists(wav) and os.path.exists(mp4):
+                subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-t', '5', '-i', mp4, '-vn', '-ar', '16000', '-ac', '1', wav], timeout=40)
             if os.path.exists(wav): txt, good = whisper_text(wav)
         except Exception: pass
         return b64, txt, good
@@ -140,10 +175,20 @@ def hook_inputs(vid, src='lib'):
 
 # ---- load library (metadata) ----
 libdb = json.loads(r2_get('library/db.json') or b'{"videos":{}}')
+def is_stored_short(v):
+    try:
+        return (
+            bool(v.get('stored') and v.get('videoId'))
+            and float(v.get('height') or 0) > float(v.get('width') or 0)
+            and 0 < float(v.get('durationSec') or 0) <= 180
+        )
+    except (TypeError, ValueError):
+        return False
 stored = [{'videoId': v['videoId'], 'views': v.get('views'), 'subs': v.get('subs'),
            'title': v.get('title'), 'outlier': v.get('outlier'), 'src': 'lib', 'mine': False}
-          for v in libdb['videos'].values() if v.get('stored') and v.get('videoId')]
-print(f"library: {len(stored)} stored on R2", flush=True)
+          for v in libdb['videos'].values() if is_stored_short(v)]
+scienceids = {v['videoId'] for v in stored}
+print(f"library: {len(stored)} stored vertical Shorts on R2", flush=True)
 
 # ---- load OWNED videos from EVERY account (channels.json) — same pipeline, mine=True, tagged with
 #      the owning account so steered keep/ret5/realviews can later be refit per account. Main = the
@@ -262,6 +307,16 @@ lock = threading.Lock(); cnt = [0]; fails = [0]; t0 = time.time()
 print(f"todo: {len(todo)} of {len(stored)} stored need embedding and/or a montage", flush=True)
 
 
+def science_complete():
+    return {c: len(done[c] & scienceids) for c in CHANS}
+
+
+emit_status('running' if todo else 'complete', discovered=len(stored), eligible=len(stored), queued=len(todo),
+            processed=0, failed=0, complete={c: len(done[c]) for c in CHANS},
+            scienceEligible=len(scienceids), scienceComplete=science_complete(),
+            message='Embedding canonical first-five-second inputs')
+
+
 def heldout(X, views):
     Xn = X / (np.linalg.norm(X, axis=1, keepdims=True) + 1e-9)
     lv = np.log10(views + 1); y = (views > 1e7).astype(int)
@@ -340,8 +395,9 @@ def save_npz(c):
 
 
 migrate_clean()                # apply the no-voiceover gate to already-embedded data
-for c in CHANS: save_npz(c)     # persist mine/silent flags + cleaned text/together
-for c in CHANS: build_map(c)    # immediate maps from whatever's already embedded
+if not BACKFILL_MODE:
+    for c in CHANS: save_npz(c)     # persist mine/silent flags + cleaned text/together
+    for c in CHANS: build_map(c)    # immediate maps from whatever's already embedded
 
 
 def work(v):
@@ -356,7 +412,10 @@ def work(v):
     embeds = {}
     if vid not in done['visual']: embeds['visual'] = embed([img_part(b64)])
     if good and vid not in done['text']: embeds['text'] = embed([{'text': txt}])
-    if vid not in done['together']: embeds['together'] = embed([img_part(b64)] + ([{'text': txt}] if good else []))
+    if vid not in done['together']:
+        # With no voiceover the visual and together requests contain the exact same
+        # content. Reuse that deterministic vector instead of paying for it twice.
+        embeds['together'] = embeds.get('visual') if not good and embeds.get('visual') is not None else embed([img_part(b64)] + ([{'text': txt}] if good else []))
     mine = bool(v.get('mine'))
     with lock:
         ov = v.get('outlier')
@@ -370,17 +429,35 @@ def work(v):
             s['mine'].append(mine); s['silent'].append(False if c == 'text' else (not good))
             done[c].add(vid)
         cnt[0] += 1
-        if cnt[0] % 100 == 0:
+        if cnt[0] % STATUS_EVERY == 0:
             el = time.time() - t0
             nm = sum(store['visual']['mine'])
             print(f"  {cnt[0]}/{len(todo)} · {el/60:.0f}m · visual {len(store['visual']['ids'])} text {len(store['text']['ids'])} together {len(store['together']['ids'])} · mine {nm} · fails {fails[0]}", flush=True)
+            rate = cnt[0] / max(el, 1)
+            emit_status('running', discovered=len(stored), eligible=len(stored), queued=max(0, len(todo) - cnt[0]),
+                        processed=cnt[0], failed=fails[0], complete={c: len(done[c]) for c in CHANS},
+                        scienceEligible=len(scienceids), scienceComplete=science_complete(),
+                        ratePerMinute=round(rate * 60, 2), etaSeconds=round((len(todo) - cnt[0]) / rate) if rate > 0 else None,
+                        message=f'Embedding {cnt[0]:,} of {len(todo):,} queued Shorts')
+        if cnt[0] % CHECKPOINT_EVERY == 0:
             for c in CHANS: save_npz(c)
-            if cnt[0] % 500 == 0:
+            if MAP_EVERY and cnt[0] % MAP_EVERY == 0:
                 for c in CHANS: build_map(c)
 
 
 with ThreadPoolExecutor(WORKERS) as ex:
     list(ex.map(work, todo))
-for c in CHANS: save_npz(c); build_map(c)
+for c in CHANS:
+    save_npz(c)
+if not BACKFILL_MODE:
+    # A full 60K-point SVD/UMAP map is both memory-heavy and unusable in the
+    # browser. The backfill updates the canonical vectors; the existing map stays
+    # live until the dedicated sampled-map builder refreshes it.
+    for c in CHANS:
+        build_map(c)
+emit_status('complete', discovered=len(stored), eligible=len(stored), queued=0, processed=cnt[0], failed=fails[0],
+            complete={c: len(done[c]) for c in CHANS}, ratePerMinute=round(cnt[0] / max(time.time() - t0, 1) * 60, 2),
+            scienceEligible=len(scienceids), scienceComplete=science_complete(),
+            etaSeconds=0, message='Canonical Science Center embedding pass complete')
 print('done', {c: len(store[c]['ids']) for c in CHANS}, 'fails', fails[0], flush=True)
 print('(re-run to retry any fails — they stay in `todo` until embedded + montaged)', flush=True)
