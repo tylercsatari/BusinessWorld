@@ -3930,22 +3930,62 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (!manifest) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Saved channel not found.' })); return; }
             if (action === 'detail' && req.method === 'GET') {
                 res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-                res.end(JSON.stringify({ ...manifest, featureContract: savedChannelAnalysis.contract }));
+                res.end(JSON.stringify({
+                    ...manifest,
+                    featureContract: savedChannelAnalysis.contract,
+                    analysisFingerprint: savedChannelAnalysis.savedChannelAnalysisFingerprint(manifest),
+                }));
                 return;
             }
             if (action === 'analysis' && req.method === 'GET') {
                 const fingerprint = savedChannelAnalysis.savedChannelAnalysisFingerprint(manifest);
                 const cacheKey = `${SAVED_CHANNEL_ROOT}${id}/analysis.json`;
+                const etag = `"${fingerprint}"`;
+                const cacheHeaders = {
+                    'Cache-Control': 'private, max-age=0, must-revalidate',
+                    'ETag': etag,
+                    'Vary': 'Authorization',
+                };
+                if (req.headers['if-none-match'] === etag) {
+                    res.writeHead(304, cacheHeaders);
+                    res.end();
+                    return;
+                }
                 let analysis = null;
+                let cacheStatus = 'generated';
+                let persisted = false;
                 const cached = await cloud.downloadFromR2(cacheKey).catch(() => null);
-                if (cached) { try { const parsed = JSON.parse(cached.toString('utf8')); if (parsed.fingerprint === fingerprint) analysis = parsed; } catch (e) {} }
+                if (cached) {
+                    try {
+                        const parsed = JSON.parse(cached.toString('utf8'));
+                        if (parsed.fingerprint === fingerprint) {
+                            analysis = parsed;
+                            cacheStatus = 'hit';
+                            persisted = true;
+                        }
+                    } catch (e) {}
+                }
                 if (!analysis) {
                     analysis = savedChannelAnalysis.analyzeChannel(manifest);
                     analysis.fingerprint = fingerprint;
-                    await cloud.uploadToR2(cacheKey, Buffer.from(JSON.stringify(analysis)), 'application/json').catch(() => {});
+                    persisted = await cloud.uploadToR2(cacheKey, Buffer.from(JSON.stringify(analysis)), 'application/json')
+                        .then(() => true).catch(() => false);
                 }
-                res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-                res.end(JSON.stringify(analysis));
+                const response = {
+                    ...analysis,
+                    artifact: {
+                        cacheStatus,
+                        persisted,
+                        storage: persisted ? 'R2' : 'response only',
+                        fingerprint,
+                        generatedAt: analysis.generatedAt,
+                        note: persisted
+                            ? 'The analysis is saved and reused until a scored video, view count, publication date, or embedding changes.'
+                            : 'The analysis completed, but its persistent artifact could not be written.',
+                    },
+                };
+                res.writeHead(200, { 'Content-Type': 'application/json', ...cacheHeaders, 'X-Saved-Analysis': cacheStatus });
+                res.end(JSON.stringify(response));
                 return;
             }
             if (action === 'stop' && req.method === 'POST') {

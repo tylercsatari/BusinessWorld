@@ -716,6 +716,38 @@ function targetRisk(rows, targetViews) {
     return { targetViews, cohorts };
 }
 
+function matchedViewsQuestions(riskTargets) {
+    const normalViewsKeys = new Set(['visual.views', 'text.views', 'together.views']);
+    return [30000000, 50000000].map(targetViews => {
+        const target = riskTargets.find(item => item.targetViews === targetViews);
+        const cohort = target && target.cohorts.find(item => item.minAgeDays === 0);
+        return {
+            targetViews,
+            scoreThreshold: targetViews,
+            eligible: cohort ? cohort.n : 0,
+            positives: cohort ? cohort.positives : 0,
+            baseRate: cohort ? cohort.baseRate : null,
+            signals: cohort ? cohort.viewsSignals.filter(signal => normalViewsKeys.has(signal.key)).map(signal => {
+                const threshold = signal.thresholds.find(row => row.threshold === targetViews);
+                return {
+                    key: signal.key,
+                    label: signal.label,
+                    available: signal.available,
+                    passed: threshold ? threshold.n : 0,
+                    hits: threshold ? threshold.hits : 0,
+                    misses: threshold ? threshold.misses : 0,
+                    hitRate: threshold ? threshold.hitRate : null,
+                    ciLow: threshold ? threshold.ciLow : null,
+                    ciHigh: threshold ? threshold.ciHigh : null,
+                    lift: threshold ? threshold.lift : null,
+                    recall: threshold ? threshold.recall : null,
+                    actualViewsMedian: threshold ? threshold.actualViewsMedian : null,
+                };
+            }) : [],
+        };
+    });
+}
+
 function buildIndicatorMatrix(rows) {
     const definitions = contract.features;
     const percentileByFeature = definitions.map(definition => {
@@ -861,18 +893,28 @@ function savedChannelAnalysisFingerprint(manifest) {
             stableHash(JSON.stringify(video.viewsHistory || [])).toString(16),
         ].join(':');
     }).sort();
-    return `v4:${stableHash(rows.join('|')).toString(16)}:${rows.length}`;
+    return `v5:${stableHash(rows.join('|')).toString(16)}:${rows.length}`;
 }
 
 function analyzeChannel(manifest) {
     const generatedAt = Date.now();
     const rows = buildRows(manifest || {}, generatedAt);
     const keys = contract.features.map(feature => feature.key);
+    const manifestVideos = manifest && manifest.videos || [];
+    const eligibility = {
+        discovered: manifestVideos.length,
+        completed: manifestVideos.filter(video => video && video.status === 'done').length,
+        completedWithPublicViews: rows.length,
+        knownPublicationDates: rows.filter(row => row.ageDays != null).length,
+        missingPublicationDates: rows.filter(row => row.ageDays == null).length,
+        note: 'All-ages analysis requires only a completed score and positive public views. Minimum-age cohorts additionally require a publication timestamp.',
+    };
     if (rows.length < 8) return {
-        version: 4,
+        version: 5,
         generatedAt,
         channelId: manifest && manifest.id,
         n: rows.length,
+        eligibility,
         featureContract: contract,
         status: 'insufficient',
         message: 'At least 8 scored Shorts with public view counts are required for held-out analysis.',
@@ -894,6 +936,7 @@ function analyzeChannel(manifest) {
     const primaryRiskTarget = 10000000;
     const riskTargetValues = [100000, 300000, 1000000, 3000000, 10000000, 30000000, 50000000, 100000000];
     const riskTargets = riskTargetValues.map(targetViews => targetRisk(rows, targetViews));
+    const matchedQuestions = matchedViewsQuestions(riskTargets);
     const riskRows = rows.map(row => ({ ...row, y: row.views >= primaryRiskTarget ? 1 : 0 }));
     const riskPositives = riskRows.filter(row => row.y >= 0.5).length, riskNegatives = riskRows.length - riskPositives;
     let riskCandidateScores = [], riskNested = null, riskAll = null, riskChronological = null;
@@ -923,12 +966,13 @@ function analyzeChannel(manifest) {
     const strongestTail = primaryCohort && (primaryCohort.featureRankings || []).filter(row => row.directionalAuc != null)[0] || null;
 
     return {
-        version: 4,
+        version: 5,
         generatedAt,
         channelId: manifest && manifest.id,
         channelName: manifest && manifest.name,
         status: 'ready',
         n: rows.length,
+        eligibility,
         transcriptCoverage: rows.filter(row => !row.video.silent).length / rows.length,
         featureContract: contract,
         outcome: {
@@ -967,6 +1011,7 @@ function analyzeChannel(manifest) {
             primaryTargetViews: primaryRiskTarget,
             targetOptions: riskTargetValues,
             targets: riskTargets,
+            matchedQuestions,
             viewAgeConfound: {
                 knownAge: datedRows.length,
                 total: rows.length,

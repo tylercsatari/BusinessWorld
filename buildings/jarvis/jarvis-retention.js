@@ -16,7 +16,7 @@ const JarvisRetention = (function () {
     let PROMISE_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelRiskTarget: 10000000, savedChannelRiskAge: 30, savedChannelRiskSignal: 'together.views', savedChannelRiskWin: 1, savedChannelRiskLoss: 1 };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskWin: 1, savedChannelRiskLoss: 1 };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
@@ -3255,6 +3255,7 @@ const JarvisRetention = (function () {
         const scrisktarget = e.target.closest('[data-savedchannelrisktarget]'); if (scrisktarget) { st.savedChannelRiskTarget = +scrisktarget.getAttribute('data-savedchannelrisktarget'); rtgUpdateExp(); return; }
         const scriskage = e.target.closest('[data-savedchannelriskage]'); if (scriskage) { st.savedChannelRiskAge = +scriskage.getAttribute('data-savedchannelriskage'); rtgUpdateExp(); return; }
         const scrisksignal = e.target.closest('[data-savedchannelrisksignal]'); if (scrisksignal) { st.savedChannelRiskSignal = scrisksignal.getAttribute('data-savedchannelrisksignal'); rtgUpdateExp(); return; }
+        const scriskcutoff = e.target.closest('[data-savedchannelriskcutoff]'); if (scriskcutoff) { st.savedChannelRiskCutoff = +scriskcutoff.getAttribute('data-savedchannelriskcutoff'); rtgUpdateExp(); return; }
         const scanalysisfeature = e.target.closest('[data-savedchannelanalysisfeature]'); if (scanalysisfeature) { st.savedChannelVizFeature = scanalysisfeature.getAttribute('data-savedchannelanalysisfeature'); rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedchannelclear]')) { st.savedChannelMinPct = 0; st.savedChannelMinViews = 0; st.savedChannelQuery = ''; st.savedChannelShow = 60; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedchannelmore]')) { st.savedChannelShow = (st.savedChannelShow || 60) + 60; rtgUpdateExp(); return; }
@@ -3660,7 +3661,8 @@ const JarvisRetention = (function () {
             SAVEDCHANNELDETAIL[id] = j;
             const oldFingerprint = previous && [previous.completed, previous.failed, previous.discovered].join(':');
             const nextFingerprint = [j.completed, j.failed, j.discovered].join(':');
-            if (oldFingerprint && oldFingerprint !== nextFingerprint) delete SAVEDCHANNELANALYSIS[id];
+            const analysisChanged = previous && previous.analysisFingerprint && j.analysisFingerprint && previous.analysisFingerprint !== j.analysisFingerprint;
+            if (analysisChanged || (oldFingerprint && oldFingerprint !== nextFingerprint)) delete SAVEDCHANNELANALYSIS[id];
             return j;
         } catch (e) {
             SAVEDCHANNELDETAIL[id] = { id, error: e.message || String(e) };
@@ -3722,7 +3724,7 @@ const JarvisRetention = (function () {
         if (!id || (SAVEDCHANNELANALYSIS[id] && !force)) return;
         SAVEDCHANNELANALYSIS[id] = { loading: 1 }; rtgUpdateExp();
         try {
-            const r = await fetch(`/api/raw/saved-channel/${id}/analysis`, { cache: 'no-store' });
+            const r = await fetch(`/api/raw/saved-channel/${id}/analysis`, { cache: force ? 'reload' : 'default' });
             const j = await r.json();
             if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
             SAVEDCHANNELANALYSIS[id] = j;
@@ -4200,24 +4202,146 @@ const JarvisRetention = (function () {
             return `<div data-savedchannelrisksignal="${esc(signal.key)}" style="cursor:pointer;background:${C.card2};padding:6px;border-top:2px solid ${signal.key === st.savedChannelRiskSignal ? C.cyan : C.border}"><div style="font-size:8px;color:${C.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(signal.label)}</div><svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">${svg}</svg></div>`;
         }).join('')}</div>`;
     }
+    function savedChannelMatchedViewsQuestions(risk) {
+        if (risk && Array.isArray(risk.matchedQuestions) && risk.matchedQuestions.length) return risk.matchedQuestions;
+        const keys = new Set(['visual.views', 'text.views', 'together.views']);
+        return [30000000, 50000000].map(targetViews => {
+            const target = (risk && risk.targets || []).find(item => +item.targetViews === targetViews);
+            const cohort = target && (target.cohorts || []).find(item => +item.minAgeDays === 0);
+            return {
+                targetViews,
+                scoreThreshold: targetViews,
+                eligible: cohort ? cohort.n : 0,
+                positives: cohort ? cohort.positives : 0,
+                baseRate: cohort ? cohort.baseRate : null,
+                signals: cohort ? (cohort.viewsSignals || []).filter(signal => keys.has(signal.key)).map(signal => {
+                    const threshold = (signal.thresholds || []).find(row => +row.threshold === targetViews);
+                    return {
+                        key: signal.key,
+                        label: signal.label,
+                        available: signal.available,
+                        passed: threshold ? threshold.n : 0,
+                        hits: threshold ? threshold.hits : 0,
+                        misses: threshold ? threshold.misses : 0,
+                        hitRate: threshold ? threshold.hitRate : null,
+                        ciLow: threshold ? threshold.ciLow : null,
+                        ciHigh: threshold ? threshold.ciHigh : null,
+                        lift: threshold ? threshold.lift : null,
+                        recall: threshold ? threshold.recall : null,
+                        actualViewsMedian: threshold ? threshold.actualViewsMedian : null,
+                    };
+                }) : [],
+            };
+        });
+    }
+    function savedChannelMatchedViewsPanel(risk) {
+        const questions = savedChannelMatchedViewsQuestions(risk);
+        if (!questions.length) return '';
+        const signalName = key => key === 'visual.views' ? 'Visual only' : key === 'text.views' ? 'Spoken text only' : 'Visual + text';
+        return `<div data-savedchannelmatchedquestions style="border:1px solid ${C.cyan}55;background:${C.cyan}07;padding:10px;margin:10px 0">
+          <div style="font-size:12px;font-weight:900;color:${C.text}">The literal 30M and 50M questions</div>
+          <div style="font-size:9px;color:${C.mute};line-height:1.45;margin:3px 0 8px">Each result asks: “Among this channel’s Shorts whose ordinary trained views-axis score was at least the cutoff, how many later had at least that many observed public views?” It is an observed channel-specific frequency, not a guarantee and not the separate 10M classifier.</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:8px">${questions.map(question => `<div style="border:1px solid ${C.border};background:${C.card2};padding:8px">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><b style="font-size:11px;color:${C.cyan}">Embedded ≥ ${fv(question.scoreThreshold)} → actual ≥ ${fv(question.targetViews)}</b><span style="font-size:8px;color:${C.mute}">baseline ${question.baseRate == null ? '—' : `${question.positives}/${question.eligible} · ${(question.baseRate * 100).toFixed(1)}%`}</span></div>
+            <div style="display:grid;gap:5px;margin-top:6px">${(question.signals || []).map(signal => `<div style="border-top:1px solid ${C.border};padding-top:5px">
+              <div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:9px;color:${C.text}">${signalName(signal.key)}</b><span style="font-size:9px;color:${signal.hitRate != null && signal.hitRate > question.baseRate ? C.green : C.cyan}">${signal.passed ? `${signal.hits}/${signal.passed} hit · ${(signal.hitRate * 100).toFixed(1)}%` : 'no scores reached cutoff'}</span></div>
+              <div style="font-size:8px;color:${C.mute};line-height:1.35">${signal.passed ? `95% uncertainty range ${(signal.ciLow * 100).toFixed(1)}–${(signal.ciHigh * 100).toFixed(1)}% · ${signal.lift == null ? 'lift unavailable' : signal.lift.toFixed(2) + '× channel baseline'} · median actual ${fv(signal.actualViewsMedian)}` : `${signal.available || question.eligible} eligible scored Shorts exist, but zero had a ${signalName(signal.key).toLowerCase()} views-axis score this high.`}</div>
+            </div>`).join('')}</div>
+          </div>`).join('')}</div>
+        </div>`;
+    }
+    function savedChannelRiskPointData(analysis, signalKey, targetViews, cutoff, minAgeDays) {
+        const matrix = analysis && analysis.indicatorMatrix;
+        if (!matrix || !(matrix.columns || []).length) return { points: [], column: null };
+        const columnIndex = matrix.columns.findIndex(column => column.key === signalKey);
+        if (columnIndex < 0) return { points: [], column: null };
+        const points = (matrix.rows || []).map(row => ({
+            id: row.id,
+            title: row.title,
+            actualViews: +row.views,
+            score: +(row.rawValues || [])[columnIndex],
+            ageDays: row.ageDays,
+        })).filter(point => point.actualViews > 0 && point.score > 0 && (!minAgeDays || (point.ageDays != null && point.ageDays >= minAgeDays)));
+        points.forEach(point => {
+            point.passed = point.score >= cutoff;
+            point.hit = point.actualViews >= targetViews;
+        });
+        return { points, column: matrix.columns[columnIndex] };
+    }
+    function savedChannelViewsProjection(analysis, signalKey, targetViews, cutoff, minAgeDays) {
+        const data = savedChannelRiskPointData(analysis, signalKey, targetViews, cutoff, minAgeDays), points = data.points;
+        if (!points.length) return note('<b>No plottable videos for this selection.</b> Choose all ages when publication dates are unavailable, or choose a signal with stored views-axis values.', C.amber);
+        const W = 660, H = 390, left = 52, right = 18, top = 22, bottom = 46;
+        const xLogs = points.map(point => Math.log10(point.score)).concat(Math.log10(cutoff));
+        const yLogs = points.map(point => Math.log10(point.actualViews)).concat(Math.log10(targetViews));
+        const xLo = Math.floor(Math.min(...xLogs)), xHi = Math.ceil(Math.max(...xLogs));
+        const yLo = Math.floor(Math.min(...yLogs)), yHi = Math.ceil(Math.max(...yLogs));
+        const X = value => left + (Math.log10(value) - xLo) / ((xHi - xLo) || 1) * (W - left - right);
+        const Y = value => H - bottom - (Math.log10(value) - yLo) / ((yHi - yLo) || 1) * (H - top - bottom);
+        let svg = '';
+        for (let power = xLo; power <= xHi; power++) {
+            const value = Math.pow(10, power), x = X(value);
+            svg += `<line x1="${x}" y1="${top}" x2="${x}" y2="${H - bottom}" stroke="${C.border}"/><text x="${x}" y="${H - bottom + 15}" text-anchor="middle" fill="${C.mute}" font-size="8">${fv(value)}</text>`;
+        }
+        for (let power = yLo; power <= yHi; power++) {
+            const value = Math.pow(10, power), y = Y(value);
+            svg += `<line x1="${left}" y1="${y}" x2="${W - right}" y2="${y}" stroke="${C.border}"/><text x="${left - 6}" y="${y + 3}" text-anchor="end" fill="${C.mute}" font-size="8">${fv(value)}</text>`;
+        }
+        svg += `<line x1="${X(cutoff)}" y1="${top}" x2="${X(cutoff)}" y2="${H - bottom}" stroke="${C.cyan}" stroke-width="2" stroke-dasharray="5 3"/><line x1="${left}" y1="${Y(targetViews)}" x2="${W - right}" y2="${Y(targetViews)}" stroke="${C.red}" stroke-width="2" stroke-dasharray="5 3"/>`;
+        points.forEach(point => {
+            const color = point.passed && point.hit ? C.green : point.passed ? C.red : point.hit ? C.amber : C.mute;
+            svg += `<circle data-savedchannelvideo="${esc(analysis.channelId)}:${esc(point.id)}" cx="${X(point.score).toFixed(1)}" cy="${Y(point.actualViews).toFixed(1)}" r="${point.passed || point.hit ? 4 : 2.7}" fill="${color}" opacity="${point.passed || point.hit ? .82 : .42}" style="cursor:pointer"><title>${esc(point.title)} · embedded ${fv(point.score)} · actual ${fv(point.actualViews)} · ${point.passed ? 'passed cutoff' : 'below cutoff'} · ${point.hit ? 'actual hit' : 'actual miss'}</title></circle>`;
+        });
+        svg += `<text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="9">${esc(signalKey)} embedded views-axis score (log)</text><text x="11" y="${H / 2}" transform="rotate(-90 11 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">observed public views (log)</text><text x="${X(cutoff) + 5}" y="${top + 10}" fill="${C.cyan}" font-size="8">score cutoff ${fv(cutoff)}</text><text x="${W - right}" y="${Y(targetViews) - 5}" text-anchor="end" fill="${C.red}" font-size="8">actual target ${fv(targetViews)}</text>`;
+        return `<div><svg data-savedchannelriskprojection viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border:1px solid ${C.border}">${svg}</svg><div style="display:flex;gap:11px;flex-wrap:wrap;margin-top:4px;font-size:8px;color:${C.mute}"><span style="color:${C.green}">● passed + hit</span><span style="color:${C.red}">● passed + missed</span><span style="color:${C.amber}">● actual hit below score cutoff</span><span>● below both</span><span>click any dot for its saved 21-embedding artifact</span></div></div>`;
+    }
+    function savedChannelViewsEvidenceTable(analysis, signalKey, targetViews, cutoff, minAgeDays) {
+        const points = savedChannelRiskPointData(analysis, signalKey, targetViews, cutoff, minAgeDays).points
+            .sort((a, b) => b.score - a.score || b.actualViews - a.actualViews);
+        if (!points.length) return '';
+        return `<div data-savedchannelriskevidence style="overflow:auto;max-height:390px;border:1px solid ${C.border}"><table style="width:100%;min-width:680px;border-collapse:collapse;font-size:9px"><thead style="position:sticky;top:0;background:${C.card2};z-index:1"><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:6px">every eligible Short</th><th>embedded score</th><th>actual views</th><th>score test</th><th>actual result</th></tr></thead><tbody>${points.map(point => `<tr data-savedchannelvideo="${esc(analysis.channelId)}:${esc(point.id)}" style="cursor:pointer;border-top:1px solid ${C.border};background:${point.passed && point.hit ? C.green + '0c' : point.passed ? C.red + '0c' : 'transparent'}"><td style="padding:6px;color:${C.text};max-width:410px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(point.title)}</td><td style="text-align:right;color:${point.passed ? C.cyan : C.dim}">${fv(point.score)}</td><td style="text-align:right;color:${point.hit ? C.green : C.text}">${fv(point.actualViews)}</td><td style="text-align:right">${point.passed ? `≥ ${fv(cutoff)}` : `< ${fv(cutoff)}`}</td><td style="text-align:right;color:${point.hit ? C.green : C.red}">${point.hit ? 'hit' : 'miss'}</td></tr>`).join('')}</tbody></table></div>`;
+    }
+    function savedChannelMetricGlossary() {
+        const entries = [
+            ['Eligible Shorts', 'Finished saved scores with a positive observed public-view count. Age-filtered cohorts also require a publication date.'],
+            ['Base hit rate', 'How often the actual view target was reached before using any embedding cutoff. This is the channel-specific baseline.'],
+            ['Threshold → hit probability', 'Of the Shorts scoring at or above the chosen embedded cutoff, the observed fraction that reached the actual view target.'],
+            ['95% CI', 'The uncertainty range around that observed fraction. The lower bound is the safer planning number when money is at risk.'],
+            ['Lift', 'Threshold hit rate divided by the channel base hit rate. 2× means the selected group hit twice as often as this channel overall.'],
+            ['Recall', 'The share of all actual winners that the cutoff captured. A strict cutoff can have high precision but miss many winners.'],
+            ['ROC AUC', 'Ranking separation: 0.5 is random and 1.0 is perfect. It is not the probability that a video will win.'],
+            ['Best single AUC', 'The one indicator with the strongest rank separation for that target. It is descriptive and should be confirmed out of sample.'],
+        ];
+        return `<details data-savedchannelriskglossary style="border:1px solid ${C.border};background:${C.card2};padding:8px;margin:8px 0"><summary style="cursor:pointer;font-size:10px;font-weight:900;color:${C.text}">Plain-English guide to every risk metric</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:7px;margin-top:8px">${entries.map(([name, description]) => `<div><b style="font-size:9px;color:${C.cyan}">${name}</b><div style="font-size:8px;color:${C.mute};line-height:1.4">${description}</div></div>`).join('')}</div></details>`;
+    }
     function renderSavedChannelRisk(analysis) {
         const risk = analysis && analysis.risk;
         if (!risk || !(risk.targets || []).length) return '';
         const targetValue = +(st.savedChannelRiskTarget || risk.primaryTargetViews || 10000000);
         const target = risk.targets.find(row => +row.targetViews === targetValue) || risk.targets[0];
         const ageValue = +(st.savedChannelRiskAge || 0);
-        const cohort = (target.cohorts || []).find(row => +row.minAgeDays === ageValue) || (target.cohorts || [])[0];
+        const requestedCohort = (target.cohorts || []).find(row => +row.minAgeDays === ageValue);
+        const allAgeCohort = (target.cohorts || []).find(row => +row.minAgeDays === 0) || (target.cohorts || [])[0];
+        const fellBackToAllAges = !!(requestedCohort && !requestedCohort.n && allAgeCohort && allAgeCohort.n);
+        const cohort = fellBackToAllAges ? allAgeCohort : requestedCohort || allAgeCohort;
+        if (fellBackToAllAges) st.savedChannelRiskAge = 0;
         if (!cohort) return '';
         const signals = cohort.viewsSignals || [];
         let signal = signals.find(row => row.key === st.savedChannelRiskSignal);
         if (!signal) { signal = signals.find(row => row.key === 'together.views') || signals[0]; if (signal) st.savedChannelRiskSignal = signal.key; }
         const targetButtons = (risk.targetOptions || []).map(value => `<span data-savedchannelrisktarget="${value}" style="cursor:pointer;border:1px solid ${target.targetViews === value ? C.red : C.border};background:${target.targetViews === value ? C.red + '18' : C.card};color:${target.targetViews === value ? C.red : C.dim};border-radius:5px;padding:4px 8px;font-size:9px;font-weight:800">actual ≥ ${fv(value)}</span>`).join('');
-        const ageButtons = (target.cohorts || []).map(row => `<span data-savedchannelriskage="${row.minAgeDays}" style="cursor:pointer;border:1px solid ${cohort.minAgeDays === row.minAgeDays ? C.amber : C.border};background:${cohort.minAgeDays === row.minAgeDays ? C.amber + '18' : C.card};color:${cohort.minAgeDays === row.minAgeDays ? C.amber : C.dim};border-radius:5px;padding:4px 8px;font-size:9px">${row.minAgeDays ? `≥${row.minAgeDays}d old` : 'all ages'} · n=${row.n}</span>`).join('');
+        const ageButtons = (target.cohorts || []).map(row => {
+            const unavailable = row.minAgeDays && !row.n && risk.viewAgeConfound && !risk.viewAgeConfound.knownAge;
+            return `<span data-savedchannelriskage="${row.minAgeDays}" title="${unavailable ? 'Unavailable because imported Shorts do not have publication timestamps.' : ''}" style="cursor:${unavailable ? 'help' : 'pointer'};opacity:${unavailable ? .48 : 1};border:1px solid ${cohort.minAgeDays === row.minAgeDays ? C.amber : C.border};background:${cohort.minAgeDays === row.minAgeDays ? C.amber + '18' : C.card};color:${cohort.minAgeDays === row.minAgeDays ? C.amber : C.dim};border-radius:5px;padding:4px 8px;font-size:9px">${row.minAgeDays ? `≥${row.minAgeDays}d old` : 'all ages'} · ${unavailable ? 'no dates' : `n=${row.n}`}</span>`;
+        }).join('');
         const signalButtons = signals.map(row => `<span data-savedchannelrisksignal="${esc(row.key)}" style="cursor:pointer;border:1px solid ${signal && signal.key === row.key ? C.cyan : C.border};background:${signal && signal.key === row.key ? C.cyan + '18' : C.card};color:${signal && signal.key === row.key ? C.cyan : C.dim};border-radius:5px;padding:4px 8px;font-size:9px">${esc(row.label)}</span>`).join('');
         const win = Math.max(0, +(st.savedChannelRiskWin == null ? 1 : st.savedChannelRiskWin));
         const loss = Math.max(0, +(st.savedChannelRiskLoss == null ? 1 : st.savedChannelRiskLoss));
         const breakEven = win + loss > 0 ? loss / (win + loss) : null;
         const thresholdRows = signal ? signal.thresholds || [] : [];
+        const cutoff = Math.max(1, +(st.savedChannelRiskCutoff || 30000000));
+        const selectedThreshold = thresholdRows.find(row => +row.threshold === cutoff);
+        const cutoffButtons = [30000000, 50000000].map(value => `<span data-savedchannelriskcutoff="${value}" style="cursor:pointer;border:1px solid ${cutoff === value ? C.cyan : C.border};background:${cutoff === value ? C.cyan + '18' : C.card};color:${cutoff === value ? C.cyan : C.dim};border-radius:5px;padding:4px 8px;font-size:9px;font-weight:800">embedded ≥ ${fv(value)}</span>`).join('');
         const riskRow = row => {
             const expected = row.hitRate == null ? null : row.hitRate * win - (1 - row.hitRate) * loss;
             const conservative = row.ciLow == null ? null : row.ciLow * win - (1 - row.ciLow) * loss;
@@ -4233,13 +4357,28 @@ const JarvisRetention = (function () {
         const riskModelVisuals = model.status === 'ready' && nested ? `<div style="font-size:10px;font-weight:800;color:${C.text};margin:8px 0 4px">Every blind 10M prediction, from four angles</div><div style="font-size:9px;color:${C.mute};line-height:1.4;margin-bottom:6px">ROC shows separation, precision–recall shows performance under the observed hit rate, reliability shows whether 70% really means roughly 70%, and the outcome strip exposes every false positive and false negative.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:9px;margin-bottom:10px"><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">ROC curve</div>${savedChannelBinaryCurve(nested.points, 'roc')}</div><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">Precision–recall curve</div>${savedChannelBinaryCurve(nested.points, 'pr')}</div><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">Probability reliability</div>${savedChannelBinaryReliability(nested)}</div><div><div style="font-size:9px;color:${C.dim};margin-bottom:3px">Every held-out hit and miss</div>${savedChannelBinaryOutcomeStrip(nested)}</div></div>` : '';
         const riskComboTable = riskCombos.length ? `<div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Top tail-risk combinations (exploratory OOF ranking)</div><div style="overflow:auto;max-height:300px;margin-bottom:10px"><table style="width:100%;min-width:560px;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">indicators</th><th>Brier skill</th><th>ROC AUC</th><th>average precision</th><th>calibration error</th></tr></thead><tbody>${riskCombos.map(row => `<tr style="border-top:1px solid ${C.border}"><td style="padding:5px;color:${C.text}">${row.keys.map(esc).join(' + ')}</td><td style="text-align:right">${fmtv(row.brierSkill, 3)}</td><td style="text-align:right">${fmtv(row.rocAuc, 3)}</td><td style="text-align:right">${fmtv(row.prAuc, 3)}</td><td style="text-align:right">${row.calibrationError == null ? '—' : (row.calibrationError * 100).toFixed(1) + ' pts'}</td></tr>`).join('')}</tbody></table></div>` : '';
         const probabilityTable = probabilityRows.length ? `<div style="font-size:10px;font-weight:800;color:${C.text};margin:8px 0 4px">Dedicated &gt;10M class outputs · calibration against actual &gt;10M views</div><div style="font-size:9px;color:${C.mute};margin-bottom:4px">This is the explicit 10M classifier, shown separately from the ordinary views-embedding threshold study above.</div><div style="overflow:auto;margin-bottom:10px"><table style="width:100%;min-width:530px;border-collapse:collapse;font-size:9px"><thead><tr style="color:${C.mute};text-align:right"><th style="text-align:left;padding:5px">probability output</th><th>sample</th><th>Brier skill</th><th>ROC AUC</th><th>average precision</th><th>calibration error</th></tr></thead><tbody>${probabilityRows.map(row => `<tr style="border-top:1px solid ${C.border}"><td style="padding:5px;color:${C.text}">${esc(row.key)}</td><td style="text-align:right">${row.available}</td><td style="text-align:right">${fmtv(row.metrics.brierSkill, 3)}</td><td style="text-align:right">${fmtv(row.metrics.rocAuc, 3)}</td><td style="text-align:right">${fmtv(row.metrics.prAuc, 3)}</td><td style="text-align:right">${row.metrics.calibrationError == null ? '—' : (row.metrics.calibrationError * 100).toFixed(1) + ' pts'}</td></tr>`).join('')}</tbody></table></div>` : '';
+        const selectedConclusion = selectedThreshold && selectedThreshold.n
+            ? `<b>${selectedThreshold.hits} of ${selectedThreshold.n}</b> Shorts with <b>${esc(signal.label)} ≥ ${fv(cutoff)}</b> actually reached <b>${fv(target.targetViews)}</b>: <b>${(selectedThreshold.hitRate * 100).toFixed(1)}%</b> observed, with a 95% range of <b>${(selectedThreshold.ciLow * 100).toFixed(1)}–${(selectedThreshold.ciHigh * 100).toFixed(1)}%</b>. The channel baseline is ${cohort.baseRate == null ? 'unavailable' : `<b>${(cohort.baseRate * 100).toFixed(1)}%</b>`}.`
+            : `<b>${cohort.n} Shorts are eligible.</b> None has a ${esc(signal && signal.label || 'selected')} score at or above <b>${fv(cutoff)}</b>, so this channel provides no evidence for that cutoff yet. This is not “zero eligible Shorts.”`;
+        const ageWarning = risk.viewAgeConfound && !risk.viewAgeConfound.knownAge
+            ? note(`<b>Publication dates are missing for all ${risk.viewAgeConfound.total} scored Shorts.</b> The full all-ages analysis is valid and is selected automatically. Minimum-age controls are unavailable until the importer stores publication timestamps; they no longer erase the completed dataset.`, C.amber) : '';
+        const projection = signal ? savedChannelViewsProjection(analysis, signal.key, target.targetViews, cutoff, cohort.minAgeDays) : '';
+        const pointTable = signal ? savedChannelViewsEvidenceTable(analysis, signal.key, target.targetViews, cutoff, cohort.minAgeDays) : '';
         return `<div style="border:1px solid ${C.red}66;background:${C.red}08;border-radius:8px;padding:11px;margin-bottom:14px">
           <div style="display:flex;justify-content:space-between;gap:8px;align-items:start;flex-wrap:wrap;margin-bottom:5px"><div><div style="font-size:13px;font-weight:900;color:${C.text}">Execution risk · can an embedding score justify making the video?</div><div style="font-size:9px;color:${C.mute};max-width:900px;line-height:1.45">This is separate from the trained “chance over 10M” cluster. It asks whether ordinary views embeddings such as Visual Views, Text Views, or Both Views actually precede a public-view outcome, and reports false-positive risk with uncertainty.</div></div><span style="font-size:9px;color:${C.amber}">observed views snapshot · age controlled below</span></div>
+          ${savedChannelMetricGlossary()}
+          ${savedChannelMatchedViewsPanel(risk)}
           <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:8px 0"><b style="font-size:9px;color:${C.mute}">WIN CONDITION</b>${targetButtons}</div>
           <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:8px 0"><b style="font-size:9px;color:${C.mute}">MINIMUM VIDEO AGE</b>${ageButtons}</div>
+          ${ageWarning}
           <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:8px 0"><b style="font-size:9px;color:${C.mute}">SIGNAL</b>${signalButtons}</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:8px 0"><b style="font-size:9px;color:${C.mute}">SCORE CUTOFF TO AUDIT</b>${cutoffButtons}</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:7px;margin:8px 0">${statc('Eligible Shorts', cohort.n, C.text)}${statc(`Actual ≥ ${fv(target.targetViews)}`, `${cohort.positives} · ${cohort.baseRate == null ? '—' : (cohort.baseRate * 100).toFixed(1) + '%'}`, C.red)}${statc('Known publication age', `${cohort.knownAge}/${cohort.n}`, C.amber)}${statc('Forward view snapshots', risk.viewHistory ? `${risk.viewHistory.videosWithMultipleSnapshots}/${risk.viewHistory.total}` : '—', C.purple)}${statc('Best observed CI floor', best && best.ciLow != null ? `${fv(best.threshold)} → ≥${(best.ciLow * 100).toFixed(0)}%` : '—', C.green)}</div>
+          ${note(selectedConclusion, selectedThreshold && selectedThreshold.n ? C.green : C.amber)}
           ${note(`<b>Read the lower confidence bound, not just the hit rate.</b> If one Short scored above 50M and succeeded, the observed hit rate is 100%, but its 95% lower bound is only 21%. “100% of the time” becomes defensible only after the sample and its lower bound are both strong. Fixed cutoffs such as 30M and 50M are safer to interpret than choosing whichever row looks best after seeing the table; the “best observed” card is exploratory. ${risk.viewAgeConfound && risk.viewAgeConfound.pearsonLogAgeToLogViews != null ? `Current log-age/log-views correlation: <b>${risk.viewAgeConfound.pearsonLogAgeToLogViews}</b>.` : ''}`, C.cyan)}
+          <div style="font-size:11px;font-weight:900;color:${C.text};margin:11px 0 3px">Every video behind the selected probability</div>
+          <div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:6px">Horizontal position is the stored one-dimensional projection on the trained ${esc(signal && signal.key || '')} views axis; vertical position is observed public views. The dashed lines make every true positive, false positive, missed winner, and true negative inspectable.</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;margin-bottom:10px">${projection}${pointTable}</div>
           <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;background:${C.card2};border:1px solid ${C.border};border-radius:7px;padding:8px;margin:9px 0"><label style="font-size:9px;color:${C.mute}">relative upside if hit<input data-savedchannelriskwin type="number" min="0" step="0.1" value="${win}" style="display:block;width:110px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:5px;padding:5px;margin-top:2px"/></label><label style="font-size:9px;color:${C.mute}">relative cost if miss<input data-savedchannelriskloss type="number" min="0" step="0.1" value="${loss}" style="display:block;width:110px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:5px;padding:5px;margin-top:2px"/></label><div style="font-size:9px;color:${C.dim};padding-bottom:5px">break-even hit rate: <b style="color:${C.text}">${breakEven == null ? '—' : (breakEven * 100).toFixed(1) + '%'}</b> · EV = hit% × upside − miss% × cost · conservative EV uses the 95% lower hit-rate bound</div></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:10px;margin-bottom:10px"><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Threshold → actual hit probability</div>${savedChannelRiskCurve(signal, cohort.baseRate)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Embedding-score buckets → actual hit probability</div>${savedChannelRiskCalibration(signal)}</div></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:10px;margin-bottom:10px"><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">How the decision changes as the win condition rises</div>${savedChannelTargetLandscape(risk)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">All views-valued signals · same target and age cohort</div>${savedChannelRiskSignalAtlas(cohort)}</div></div>
@@ -4254,7 +4393,7 @@ const JarvisRetention = (function () {
     function renderSavedChannelAnalysis(detail) {
         const id = detail.id, analysis = SAVEDCHANNELANALYSIS[id];
         if (!analysis) { window.setTimeout(() => loadSavedChannelAnalysis(id), 0); return `<div style="padding:28px;text-align:center;color:${C.dim}">Preparing held-out channel analysis…</div>`; }
-        if (analysis.loading) return `<div style="padding:28px;text-align:center;color:${C.cyan}">Analyzing every indicator and combination out of fold…</div>`;
+        if (analysis.loading) return `<div style="padding:28px;text-align:center;color:${C.cyan}">Loading the saved prediction-analysis artifact…</div>`;
         if (analysis.error) return `<div style="padding:18px;color:${C.red}">${esc(analysis.error)} <span data-savedchannelanalysisreload style="cursor:pointer;text-decoration:underline;color:${C.accent}">retry</span></div>`;
         if (analysis.status === 'insufficient') return note(`<b>${analysis.n} scored Shorts.</b> ${esc(analysis.message || '')}`, C.amber);
         const nested = analysis.models && analysis.models.nestedSelected, all = analysis.models && analysis.models.allIndicators, best = analysis.models && analysis.models.bestExploratory;
@@ -4267,7 +4406,9 @@ const JarvisRetention = (function () {
         const signalCards = `<div style="font-size:13px;font-weight:900;color:${C.text};margin:12px 0 3px">What actually follows views?</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:7px">These answer different questions instead of hiding them inside an arbitrary weighted score. Rank trajectory asks whether high indicator scores track high actual views. Blind prediction asks whether one indicator predicts unseen log views. Tail separation asks whether it distinguishes actual 10M+ outcomes.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:7px;margin-bottom:10px">${statc('Closest high → high trajectory', trajectory ? `${esc(trajectory.key)} · ρ ${fmtv(trajectory.spearmanViews, 3)}` : '—', C.green)}${statc('Best blind single indicator', blindSingle && blindSingle.oof ? `${esc(blindSingle.key)} · R² ${fmtv(blindSingle.oof.r2, 3)}` : '—', C.cyan)}${statc('Strongest actual 10M separator', tailSingle ? `${esc(tailSingle.key)} · AUC ${fmtv(tailSingle.directionalAuc, 3)}` : '—', C.red)}${statc('All-signal selection-safe model', nested && nested.r2 != null ? `R² ${nested.r2.toFixed(3)}` : '—', C.purple)}</div>`;
         const processMap = `<div data-savedchannelprocessmap style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:1px;background:${C.border};border:1px solid ${C.border};margin:9px 0 12px"><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.cyan}">1 · STORED INPUTS</b><div style="font-size:8px;color:${C.mute};margin-top:3px">5-frame montage · transcript · public views · publication age</div></div><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.purple}">2 · 21 OUTPUTS</b><div style="font-size:8px;color:${C.mute};margin-top:3px">visual · text · both · novelty, using the saved scoring artifact</div></div><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.green}">3 · BLIND TESTS</b><div style="font-size:8px;color:${C.mute};margin-top:3px">fold-local preprocessing · held-out continuous views · held-out 10M outcomes</div></div><div style="background:${C.card2};padding:9px"><b style="font-size:9px;color:${C.amber}">4 · DECISION EVIDENCE</b><div style="font-size:8px;color:${C.mute};margin-top:3px">trajectory · prediction error · calibration · uncertainty · false positives</div></div></div>`;
         const predictionDiagnostics = nested && nested.points ? `<div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">Blind-prediction diagnostics · every error stays visible</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:7px">Each point was predicted by a model that did not train on that Short. The six views below expose accuracy, bias, calibration, rank tracking, fold-selection stability, and the geometry of the searched combinations.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;margin-bottom:12px"><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Predicted vs actual</div>${savedChannelPredictionScatter(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Residuals · where the model misses</div>${savedChannelResidualChart(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Continuous calibration</div>${savedChannelContinuousCalibration(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Actual and predicted rank trajectory</div>${savedChannelPredictionRankTrace(nested.points)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Indicators repeatedly selected inside folds</div>${savedChannelSelectionFrequency(nested)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Top exhaustive combination landscape</div>${savedChannelCombinationLandscape(analysis.topCombinations)}</div></div>` : '';
-        return `${renderSavedChannelRisk(analysis)}<div style="font-size:13px;font-weight:900;color:${C.text};margin:4px 0">Continuous views forecast</div><div style="font-size:11px;color:${C.dim};line-height:1.5;margin-bottom:10px"><b style="color:${C.text}">${analysis.n} Shorts</b> · outcome: ${esc(analysis.outcome.primary)} · transcript coverage ${(analysis.transcriptCoverage * 100).toFixed(0)}%. ${esc(analysis.outcome.validation)}</div>
+        const artifact = analysis.artifact;
+        const artifactBanner = artifact ? `<div data-savedchannelanalysisartifact style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;border:1px solid ${artifact.persisted ? C.green : C.amber}55;background:${artifact.persisted ? C.green : C.amber}0b;padding:8px;margin-bottom:10px"><div><b style="font-size:10px;color:${artifact.persisted ? C.green : C.amber}">${artifact.cacheStatus === 'hit' ? 'Loaded saved analysis' : artifact.persisted ? 'Calculated once and saved' : 'Calculated, but not persisted'}</b><div style="font-size:8px;color:${C.mute};margin-top:2px">${esc(artifact.note || '')}${artifact.generatedAt ? ` · generated ${esc(new Date(artifact.generatedAt).toLocaleString())}` : ''}</div></div><span data-savedchannelanalysisreload style="cursor:pointer;border:1px solid ${C.border};padding:4px 8px;font-size:8px;color:${C.dim}">recalculate after source changes</span></div>` : '';
+        return `${artifactBanner}${renderSavedChannelRisk(analysis)}<div style="font-size:13px;font-weight:900;color:${C.text};margin:4px 0">Continuous views forecast</div><div style="font-size:11px;color:${C.dim};line-height:1.5;margin-bottom:10px"><b style="color:${C.text}">${analysis.n} Shorts</b> · outcome: ${esc(analysis.outcome.primary)} · transcript coverage ${(analysis.transcriptCoverage * 100).toFixed(0)}%. ${esc(analysis.outcome.validation)}</div>
           ${processMap}
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-bottom:12px">${metric('Selection-safe model', nested, C.green)}${metric('All 21 indicators', all, C.cyan)}${metric('Best exploratory combo', best, C.purple)}${statc('Typical error factor', nested && nested.medianFactor ? nested.medianFactor.toFixed(2) + '×' : '—', C.amber)}</div>
           ${note(`<b>Search coverage:</b> ${analysis.search.exhaustiveCandidates.toLocaleString()} single/pair/triple combinations tested exhaustively; ${analysis.search.forwardPathModels} forward models cover sizes 1–21; the all-21 ridge model tests every indicator together. The headline model selects inside training folds, then predicts unseen Shorts, so the reported score does not grade a combination on the videos that chose it.`, C.green)}

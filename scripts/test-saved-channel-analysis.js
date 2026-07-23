@@ -40,8 +40,10 @@ for (let index = 0; index < 96; index++) {
 
 const first = analysis.analyzeChannel({ id: 'chtest', name: 'Synthetic', videos });
 assert.strictEqual(first.status, 'ready');
-assert.strictEqual(first.version, 4, 'visual analysis contract version must invalidate legacy cached responses');
+assert.strictEqual(first.version, 5, 'visual analysis contract version must invalidate legacy cached responses');
 assert.strictEqual(first.n, 96);
+assert.strictEqual(first.eligibility.completedWithPublicViews, 96, 'eligibility must distinguish scored public-view rows from optional age metadata');
+assert.strictEqual(first.eligibility.knownPublicationDates, 96);
 assert.strictEqual(first.search.exhaustiveCandidates, 1561);
 assert.strictEqual(first.singles[0].key, 'visual.keep', 'the known synthetic signal must rank first');
 assert(first.singles[0].oof.r2 > 0.8, 'known signal should predict unseen rows');
@@ -69,6 +71,10 @@ const visualViewsRisk = tenMillionRisk.viewsSignals.find(signalRow => signalRow.
 const thirtyMillionThreshold = visualViewsRisk.thresholds.find(row => row.threshold === 30000000);
 assert(thirtyMillionThreshold.n > 0 && thirtyMillionThreshold.hitRate > tenMillionRisk.baseRate, '30M normal-views embedding threshold should show conditional lift');
 assert(thirtyMillionThreshold.ciLow < thirtyMillionThreshold.hitRate, 'risk table must expose uncertainty instead of treating an observed hit rate as certainty');
+const matchedThirtyMillion = first.risk.matchedQuestions.find(question => question.targetViews === 30000000);
+assert.strictEqual(matchedThirtyMillion.scoreThreshold, 30000000, 'fixed risk questions must compare like-for-like embedded and actual view cutoffs');
+assert.deepStrictEqual(matchedThirtyMillion.signals.map(signal => signal.key), ['visual.views', 'text.views', 'together.views'], 'fixed risk questions must keep visual, text, and combined ordinary views axes distinct');
+assert(matchedThirtyMillion.signals[0].passed > 0, 'fixed 30M evidence must retain the sample behind the probability');
 assert(first.risk.model.chronological && first.risk.model.chronological.testN > 0, 'newer Shorts must receive a forward chronological blind check');
 const fingerprint = analysis.savedChannelAnalysisFingerprint({ videos });
 const changedVideos = videos.map((video, index) => index ? video : { ...video, views: video.views + 1 });
@@ -87,11 +93,14 @@ assert.strictEqual(insufficient.status, 'insufficient');
 const ui = fs.readFileSync(path.join(__dirname, '..', 'buildings/jarvis/jarvis-retention.js'), 'utf8');
 const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
 const auth = fs.readFileSync(path.join(__dirname, '..', 'auth.js'), 'utf8');
-for (const marker of ['data-savedbank', 'data-savedchanneladd', 'data-savedchannelvideo', 'Prediction analysis', 'Which single indicators predict log views?', 'Execution risk · can an embedding score justify making the video?', 'data-savedchannelrisktarget', 'conservative EV', 'data-savedchannelmatrix', 'Closest high → high trajectory', 'data-savedchannelindicatorplayground', 'data-savedchannelrelationships', 'data-savedchannelprofileatlas', 'data-savedchannelresiduals', 'savedChannelBinaryCurve', 'continue ${unfinished} unfinished', "st.savedChannelSort = 'feature'", 'wireSavedChannelImages', 'record.montageDataUrl = `/api/raw/saved-channel/']) {
+for (const marker of ['data-savedbank', 'data-savedchanneladd', 'data-savedchannelvideo', 'Prediction analysis', 'Which single indicators predict log views?', 'Execution risk · can an embedding score justify making the video?', 'data-savedchannelrisktarget', 'data-savedchannelriskcutoff', 'data-savedchannelmatchedquestions', 'data-savedchannelriskprojection', 'data-savedchannelriskevidence', 'data-savedchannelriskglossary', 'data-savedchannelanalysisartifact', 'conservative EV', 'data-savedchannelmatrix', 'Closest high → high trajectory', 'data-savedchannelindicatorplayground', 'data-savedchannelrelationships', 'data-savedchannelprofileatlas', 'data-savedchannelresiduals', 'savedChannelBinaryCurve', 'continue ${unfinished} unfinished', "st.savedChannelSort = 'feature'", 'wireSavedChannelImages', 'record.montageDataUrl = `/api/raw/saved-channel/']) {
     assert(ui.includes(marker), `Shorts Experiment UI is missing ${marker}`);
 }
 for (const route of ['/api/raw/saved-channels', '/api/raw/saved-channel', '/api/raw/hook-enrich', 'savedChannelAnalysis.analyzeChannel', 'serveR2ObjectForRequest(req, res, key']) {
     assert(server.includes(route), `server is missing ${route}`);
+}
+for (const cacheMarker of ["'X-Saved-Analysis'", "'ETag': etag", "storage: persisted ? 'R2'"]) {
+    assert(server.includes(cacheMarker), `saved analysis persistence is missing ${cacheMarker}`);
 }
 assert(auth.includes("saved-channel\\/ch[a-f0-9]{16}\\/montage"), 'saved-channel public-Short montages must be readable by media requests without exposing score records');
 
