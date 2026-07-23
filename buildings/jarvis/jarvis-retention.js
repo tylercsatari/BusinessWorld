@@ -16,7 +16,7 @@ const JarvisRetention = (function () {
     let PROMISE_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1 };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1 };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
@@ -3248,7 +3248,8 @@ const JarvisRetention = (function () {
         const scstop = e.target.closest('[data-savedchannelstop]'); if (scstop) { savedChannelAction(scstop.getAttribute('data-savedchannelstop'), 'stop'); return; }
         const scresume = e.target.closest('[data-savedchannelresume]'); if (scresume) { savedChannelAction(scresume.getAttribute('data-savedchannelresume'), 'resume'); return; }
         const scdelete = e.target.closest('[data-savedchanneldelete]'); if (scdelete) { savedChannelAction(scdelete.getAttribute('data-savedchanneldelete'), 'delete'); return; }
-        const sctab = e.target.closest('[data-savedchanneltab]'); if (sctab) { st.savedChannelTab = sctab.getAttribute('data-savedchanneltab'); if (st.savedChannelTab === 'analysis' && st.savedChannelSel) loadSavedChannelAnalysis(st.savedChannelSel); else rtgUpdateExp(); return; }
+        const sctab = e.target.closest('[data-savedchanneltab]'); if (sctab) { st.savedChannelTab = sctab.getAttribute('data-savedchanneltab'); if ((st.savedChannelTab === 'analysis' || st.savedChannelTab === 'atlas') && st.savedChannelSel) loadSavedChannelAnalysis(st.savedChannelSel); rtgUpdateExp(); return; }
+        const scatlasscale = e.target.closest('[data-savedchannelatlasscale]'); if (scatlasscale) { st.savedChannelAtlasScale = scatlasscale.getAttribute('data-savedchannelatlasscale'); rtgUpdateExp(); return; }
         const scgroup = e.target.closest('[data-savedchannelgroup]'); if (scgroup) { st.savedChannelGroup = scgroup.getAttribute('data-savedchannelgroup'); st.savedChannelFeature = null; st.savedChannelMinPct = 0; st.savedChannelSort = st.savedChannelGroup === 'views' ? 'views' : 'feature'; st.savedChannelShow = 60; rtgUpdateExp(); return; }
         const scfeature = e.target.closest('[data-savedchannelfeature]'); if (scfeature) { st.savedChannelFeature = scfeature.getAttribute('data-savedchannelfeature'); st.savedChannelSort = 'feature'; st.savedChannelShow = 60; rtgUpdateExp(); return; }
         const scsort = e.target.closest('[data-savedchannelsort]'); if (scsort) { st.savedChannelSort = scsort.getAttribute('data-savedchannelsort'); rtgUpdateExp(); return; }
@@ -3863,6 +3864,7 @@ const JarvisRetention = (function () {
     function hydrateSavedChannelVisuals() {
         wireSavedChannelImages();
         drawSavedChannelIndicatorMatrices();
+        drawSavedChannelRelationshipPlots();
     }
     function savedChannelBars(rows) {
         rows = (rows || []).filter(row => row.oof && row.oof.r2 != null).slice(0, 12);
@@ -4058,6 +4060,151 @@ const JarvisRetention = (function () {
         const profile = profiles.find(item => item.key === st.savedChannelVizFeature) || profiles[0], definition = columns.find(item => item.key === profile.key) || profile;
         const buttons = profiles.map(item => `<span data-savedchannelanalysisfeature="${esc(item.key)}" style="cursor:pointer;border:1px solid ${item.key === profile.key ? savedChannelFeatureColor(item.group) : C.border};background:${item.key === profile.key ? savedChannelFeatureColor(item.group) + '18' : C.card};color:${item.key === profile.key ? savedChannelFeatureColor(item.group) : C.dim};padding:3px 7px;font-size:8.5px;font-weight:700">${esc(item.key)}</span>`).join('');
         return `<div data-savedchannelindicatorplayground style="border-top:1px solid ${C.border};padding-top:12px;margin-top:12px"><div style="font-size:14px;font-weight:900;color:${C.text}">Indicator playground · ${esc(profile.key)}</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin:3px 0 8px">Choose any one of the 21 stored outputs. The same videos appear in all three views: individual points, equal-count score buckets, and actual 10M outcomes. Click a point to open its persisted hook, image, and complete embedding trace.</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:9px">${buttons}</div>${savedChannelDistributionStrip(profile)}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;margin-top:10px"><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Every Short · ${esc(definition.key)} vs actual views</div>${savedChannelIndicatorScatter(analysis, profile.key)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Score buckets · actual-view trajectory</div>${savedChannelTrajectoryChart(profile)}</div><div><div style="font-size:10px;font-weight:800;color:${C.text};margin-bottom:4px">Score buckets · actual 10M probability</div>${savedChannelIndicatorHitChart(profile)}</div></div></div>`;
+    }
+    function savedChannelAtlasValueLabel(definition, value) {
+        if (value == null || !isFinite(+value)) return 'missing';
+        value = +value;
+        if (definition.unit === 'views') return fv(value);
+        if (definition.unit === 'probability') return (value * 100).toFixed(1) + '%';
+        if (definition.unit === 'percent') return value.toFixed(1) + '%';
+        return Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(2);
+    }
+    function savedChannelAtlasAxisValue(definition, value) {
+        value = +value;
+        return definition.unit === 'views' ? Math.log10(Math.max(0, value) + 1) : value;
+    }
+    function savedChannelAtlasPlotCard(analysis, definition, single) {
+        const matrix = analysis && analysis.indicatorMatrix, index = matrix && (matrix.columns || []).findIndex(column => column.key === definition.key);
+        const available = index < 0 ? 0 : (matrix.rows || []).filter(row => {
+            const raw = row.rawValues && row.rawValues[index];
+            return raw != null && isFinite(+raw) && row.views != null && isFinite(+row.views) && +row.views > 0;
+        }).length;
+        const total = matrix && matrix.rows ? matrix.rows.length : 0, missing = Math.max(0, total - available), color = savedChannelFeatureColor(definition.group);
+        const rho = single && single.spearmanViews, r2 = single && single.oof && single.oof.r2, logR = single && single.pearsonLogViews;
+        const stat = (label, value, statColor) => `<span title="${label}" style="font-size:8px;color:${C.mute}">${label} <b style="color:${statColor || C.text}">${value}</b></span>`;
+        return `<div data-savedchannelrelationshipcard="${esc(definition.key)}" style="min-width:0;border-top:2px solid ${color};background:${C.card2};padding:8px">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:start"><div style="min-width:0"><div style="font-size:10px;font-weight:900;color:${color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(definition.label)}</div><div style="font-size:7.5px;color:${C.mute};margin-top:1px">${esc(definition.key)} · exact stored output</div></div><div style="font-size:8px;color:${C.dim};white-space:nowrap">${available}/${total} videos</div></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin:5px 0 3px">${stat('rank ρ', rho == null ? '—' : sgn(rho, 3), rho == null ? C.dim : rho >= 0 ? C.green : C.red)}${stat('log r', logR == null ? '—' : sgn(logR, 3), logR == null ? C.dim : logR >= 0 ? C.green : C.red)}${stat('blind R²', r2 == null ? '—' : sgn(r2, 3), r2 == null ? C.dim : r2 > 0 ? C.cyan : C.red)}${missing ? stat('missing', missing, C.amber) : ''}</div>
+          <canvas data-savedchannelrelationshipplot="${esc(analysis.channelId)}" data-savedchannelrelationshipfeature="${esc(definition.key)}" width="520" height="285" tabindex="0" role="button" aria-label="${esc(definition.label)} versus actual public views. Tap or click a point to open that saved Short." style="display:block;width:100%;height:auto;min-height:180px;touch-action:manipulation;cursor:crosshair"></canvas>
+          <div data-savedchannelrelationshipreadout style="min-height:28px;font-size:8px;line-height:1.35;color:${C.mute};padding-top:3px">Tap or click a point to open its stored montage, transcript, and embedding graphs.</div>
+        </div>`;
+    }
+    function renderSavedChannelRelationshipAtlas(detail) {
+        const id = detail.id, analysis = SAVEDCHANNELANALYSIS[id];
+        if (!analysis) { window.setTimeout(() => loadSavedChannelAnalysis(id), 0); return `<div style="padding:28px;text-align:center;color:${C.dim}">Preparing the 21-relationship atlas…</div>`; }
+        if (analysis.loading) return `<div style="padding:28px;text-align:center;color:${C.cyan}">Loading the saved channel-analysis artifact…</div>`;
+        if (analysis.error) return `<div style="padding:18px;color:${C.red}">${esc(analysis.error)} <span data-savedchannelanalysisreload style="cursor:pointer;text-decoration:underline;color:${C.accent}">retry</span></div>`;
+        if (analysis.status === 'insufficient') return note(`<b>${analysis.n} scored Shorts.</b> ${esc(analysis.message || '')}`, C.amber);
+        const contract = savedChannelContract(detail), definitions = contract.features || [], groups = contract.groups || [], singles = {};
+        (analysis.singles || []).forEach(single => { singles[single.key] = single; });
+        const scale = st.savedChannelAtlasScale === 'raw' ? 'raw' : 'log';
+        const scaleButton = (key, label) => `<span data-savedchannelatlasscale="${key}" role="button" aria-pressed="${scale === key ? 'true' : 'false'}" style="cursor:pointer;border:1px solid ${scale === key ? C.cyan : C.border};background:${scale === key ? C.cyan + '18' : 'transparent'};color:${scale === key ? C.cyan : C.dim};padding:4px 8px;font-size:9px;font-weight:800">${label}</span>`;
+        const trajectory = analysis.signalSummary && analysis.signalSummary.strongestTrajectory, blind = analysis.signalSummary && analysis.signalSummary.strongestBlindSingle;
+        const groupSections = groups.map(group => {
+            const items = definitions.filter(definition => definition.group === group.key);
+            if (!items.length) return '';
+            const color = savedChannelFeatureColor(group.key);
+            return `<section data-savedchannelrelationshipgroup="${esc(group.key)}" style="border-top:1px solid ${C.border};padding-top:12px;margin-top:14px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:7px"><div><div style="font-size:13px;font-weight:900;color:${color}">${esc(group.label)}</div><div style="font-size:8.5px;color:${C.mute};margin-top:2px">${esc(group.description || '')}</div></div><div style="font-size:8px;color:${C.dim}">${items.length} independent outputs</div></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:8px">${items.map(definition => savedChannelAtlasPlotCard(analysis, definition, singles[definition.key])).join('')}</div></section>`;
+        }).join('');
+        return `<div data-savedchannelrelationshipatlas>
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap;margin-bottom:9px"><div style="max-width:820px"><div style="font-size:15px;font-weight:900;color:${C.text}">Every embedding output × actual views</div><div style="font-size:9px;color:${C.mute};line-height:1.5;margin-top:3px">Every point is one scored Short from <b style="color:${C.text}">${esc(detail.name || 'this channel')}</b>. X is that video's exact stored model output. Y is its observed public-view count. View-valued X axes use logarithmic spacing so one extreme estimate cannot flatten the rest; percentages, probabilities, and outlier scores stay on their native scale.</div></div><div style="display:flex;gap:4px;align-items:center"><span style="font-size:8px;color:${C.mute};margin-right:3px">Y axis</span>${scaleButton('log', 'log views')}${scaleButton('raw', 'raw views')}</div></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1px;background:${C.border};border:1px solid ${C.border};margin-bottom:10px"><div style="background:${C.card2};padding:8px"><div style="font-size:8px;color:${C.mute}">VIDEOS IN EVERY PLANE</div><div style="font-size:15px;font-weight:900;color:${C.text}">${analysis.n}</div><div style="font-size:8px;color:${C.dim}">missing text outputs are left missing</div></div><div style="background:${C.card2};padding:8px"><div style="font-size:8px;color:${C.mute}">CLOSEST HIGH → HIGH</div><div style="font-size:11px;font-weight:900;color:${C.green}">${trajectory ? `${esc(trajectory.key)} · ρ ${sgn(trajectory.spearmanViews, 3)}` : '—'}</div><div style="font-size:8px;color:${C.dim}">descriptive rank relationship</div></div><div style="background:${C.card2};padding:8px"><div style="font-size:8px;color:${C.mute}">BEST BLIND SINGLE</div><div style="font-size:11px;font-weight:900;color:${C.cyan}">${blind && blind.oof ? `${esc(blind.key)} · R² ${sgn(blind.oof.r2, 3)}` : '—'}</div><div style="font-size:8px;color:${C.dim}">out-of-fold log-view prediction</div></div></div>
+          <div style="font-size:8.5px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">How to read every plane:</b> the solid line is a descriptive least-squares fit through the displayed points. <b>Rank ρ</b> asks whether higher scores generally accompany higher views. <b>Log r</b> is linear correlation with log views. <b>Blind R²</b> predicts unseen Shorts using only that one indicator; a value at or below zero means it did not beat the training-fold mean. The line is descriptive, while Blind R² is the predictive test.</div>
+          ${groupSections}
+        </div>`;
+    }
+    function drawSavedChannelRelationshipPlots() {
+        if (!root) return;
+        root.querySelectorAll('[data-savedchannelrelationshipplot]').forEach(canvas => {
+            const channelId = canvas.getAttribute('data-savedchannelrelationshipplot'), featureKey = canvas.getAttribute('data-savedchannelrelationshipfeature');
+            const analysis = SAVEDCHANNELANALYSIS[channelId], detail = SAVEDCHANNELDETAIL[channelId], matrix = analysis && analysis.indicatorMatrix;
+            const contract = savedChannelContract(detail), definition = (contract.features || []).find(item => item.key === featureKey);
+            const index = matrix && (matrix.columns || []).findIndex(column => column.key === featureKey);
+            if (!analysis || !matrix || !definition || index < 0) return;
+            const points = (matrix.rows || []).map(row => {
+                const raw = row.rawValues && row.rawValues[index], views = +row.views;
+                if (raw == null || !isFinite(+raw) || !(views > 0)) return null;
+                return { id: row.id, title: row.title || row.id, raw: +raw, views, x: savedChannelAtlasAxisValue(definition, raw), y: st.savedChannelAtlasScale === 'raw' ? views : Math.log10(views + 1) };
+            }).filter(Boolean);
+            const context = canvas.getContext('2d'), W = 520, H = 285, left = 54, right = 14, top = 14, bottom = 42;
+            canvas.width = W; canvas.height = H;
+            context.fillStyle = C.card2; context.fillRect(0, 0, W, H);
+            const readout = canvas.parentElement && canvas.parentElement.querySelector('[data-savedchannelrelationshipreadout]');
+            if (points.length < 2) {
+                context.fillStyle = C.mute; context.font = '11px sans-serif'; context.fillText('Not enough stored values to plot.', left, H / 2);
+                return;
+            }
+            let xLo = Math.min(...points.map(point => point.x)), xHi = Math.max(...points.map(point => point.x));
+            let yLo = Math.min(...points.map(point => point.y)), yHi = Math.max(...points.map(point => point.y));
+            const xPad = (xHi - xLo || Math.max(1, Math.abs(xLo)) * .1) * .04, yPad = (yHi - yLo || Math.max(1, Math.abs(yLo)) * .1) * .05;
+            xLo -= xPad; xHi += xPad; yLo -= yPad; yHi += yPad;
+            const X = value => left + (value - xLo) / ((xHi - xLo) || 1) * (W - left - right), Y = value => H - bottom - (value - yLo) / ((yHi - yLo) || 1) * (H - top - bottom);
+            context.font = '8px sans-serif'; context.textBaseline = 'middle'; context.strokeStyle = C.border; context.fillStyle = C.mute; context.lineWidth = 1;
+            for (let tick = 0; tick < 5; tick++) {
+                const ratio = tick / 4, xValue = xLo + ratio * (xHi - xLo), yValue = yLo + ratio * (yHi - yLo), x = X(xValue), y = Y(yValue);
+                context.beginPath(); context.moveTo(x, top); context.lineTo(x, H - bottom); context.stroke();
+                context.textAlign = tick === 0 ? 'left' : tick === 4 ? 'right' : 'center';
+                const rawTick = definition.unit === 'views' ? Math.pow(10, xValue) - 1 : xValue;
+                context.fillText(savedChannelAtlasValueLabel(definition, rawTick), x, H - bottom + 13);
+                context.beginPath(); context.moveTo(left, y); context.lineTo(W - right, y); context.stroke();
+                context.textAlign = 'right';
+                const viewsTick = st.savedChannelAtlasScale === 'raw' ? yValue : Math.pow(10, yValue) - 1;
+                context.fillText(fv(Math.max(0, viewsTick)), left - 5, y);
+            }
+            const meanX = points.reduce((sum, point) => sum + point.x, 0) / points.length, meanY = points.reduce((sum, point) => sum + point.y, 0) / points.length;
+            const varianceX = points.reduce((sum, point) => sum + (point.x - meanX) ** 2, 0), slope = points.reduce((sum, point) => sum + (point.x - meanX) * (point.y - meanY), 0) / (varianceX || 1), intercept = meanY - slope * meanX;
+            const lineStart = clamp(intercept + slope * xLo, yLo, yHi), lineEnd = clamp(intercept + slope * xHi, yLo, yHi), color = savedChannelFeatureColor(definition.group);
+            context.strokeStyle = color; context.lineWidth = 2; context.globalAlpha = .9;
+            context.beginPath(); context.moveTo(X(xLo), Y(lineStart)); context.lineTo(X(xHi), Y(lineEnd)); context.stroke();
+            const radius = points.length > 700 ? 1.7 : points.length > 250 ? 2.1 : 2.7;
+            context.fillStyle = color; context.globalAlpha = points.length > 700 ? .46 : .62;
+            const plotted = points.slice().sort((a, b) => a.views - b.views).map(point => {
+                const plottedPoint = { ...point, px: X(point.x), py: Y(point.y) };
+                context.beginPath(); context.arc(plottedPoint.px, plottedPoint.py, radius, 0, Math.PI * 2); context.fill();
+                return plottedPoint;
+            });
+            context.globalAlpha = 1; context.fillStyle = C.mute; context.font = '9px sans-serif'; context.textAlign = 'center';
+            context.fillText(`${definition.label} · exact stored output${definition.unit === 'views' ? ' (log spacing)' : ''}`, (left + W - right) / 2, H - 7);
+            context.save(); context.translate(11, (top + H - bottom) / 2); context.rotate(-Math.PI / 2); context.fillText(`actual public views (${st.savedChannelAtlasScale === 'raw' ? 'raw' : 'log spacing'})`, 0, 0); context.restore();
+            canvas._savedChannelRelationshipPoints = plotted;
+            const nearest = event => {
+                const rect = canvas.getBoundingClientRect(), px = (event.clientX - rect.left) * W / rect.width, py = (event.clientY - rect.top) * H / rect.height;
+                let best = null, bestDistance = Infinity;
+                plotted.forEach(point => {
+                    const distance = Math.hypot(point.px - px, point.py - py);
+                    if (distance < bestDistance) { best = point; bestDistance = distance; }
+                });
+                return bestDistance <= Math.max(10, 12 * W / rect.width) ? best : null;
+            };
+            canvas.onpointermove = event => {
+                const point = nearest(event); canvas._savedChannelRelationshipHover = point; canvas.style.cursor = point ? 'pointer' : 'crosshair';
+                if (point) canvas.setAttribute('data-savedchannelvideo', `${channelId}:${point.id}`);
+                else canvas.removeAttribute('data-savedchannelvideo');
+                if (readout) readout.innerHTML = point ? `<b style="color:${C.text}">${esc(point.title)}</b><br>${esc(definition.label)} <b style="color:${color}">${savedChannelAtlasValueLabel(definition, point.raw)}</b> · actual <b style="color:${C.green}">${fv(point.views)} views</b> · click to open stored score` : 'Tap or click a point to open its stored montage, transcript, and embedding graphs.';
+            };
+            canvas.onpointerdown = event => {
+                const point = nearest(event);
+                if (point) canvas.setAttribute('data-savedchannelvideo', `${channelId}:${point.id}`);
+                else canvas.removeAttribute('data-savedchannelvideo');
+            };
+            canvas.onpointerleave = () => {
+                canvas._savedChannelRelationshipHover = null; canvas.style.cursor = 'crosshair';
+                if (readout) readout.textContent = 'Tap or click a point to open its stored montage, transcript, and embedding graphs.';
+            };
+            canvas.onclick = event => {
+                const point = nearest(event);
+                canvas.setAttribute('data-savedchannelrelationshipselection', point ? point.id : '');
+                if (point) canvas.setAttribute('data-savedchannelvideo', `${channelId}:${point.id}`);
+                else canvas.removeAttribute('data-savedchannelvideo');
+            };
+            canvas.onkeydown = event => {
+                if ((event.key === 'Enter' || event.key === ' ') && canvas._savedChannelRelationshipHover) {
+                    event.preventDefault();
+                    canvas.setAttribute('data-savedchannelvideo', `${channelId}:${canvas._savedChannelRelationshipHover.id}`);
+                    openSavedChannelVideo(channelId, canvas._savedChannelRelationshipHover.id);
+                }
+            };
+        });
     }
     function savedChannelResidualChart(points) {
         points = (points || []).filter(point => isFinite(point.actualLog) && isFinite(point.predictedLog));
@@ -4618,8 +4765,8 @@ const JarvisRetention = (function () {
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:6px;margin-bottom:8px">${statc('Status', String(detail.status || 'queued'), statusColor)}${statc('Scored', `${completed}/${total}`, C.green)}${statc('Queued', detail.queued || 0, C.cyan)}${statc('Errors', failed, failed ? C.red : C.dim)}</div>
           <div style="height:7px;background:${C.border};border-radius:5px;overflow:hidden;margin-bottom:5px"><span style="display:block;width:${progress.toFixed(1)}%;height:100%;background:${statusColor}"></span></div>
           <div style="font-size:9px;color:${C.dim};margin-bottom:10px">${detail.current ? `Running now: <b style="color:${C.cyan}">${esc(detail.current.title || detail.current.id)}</b> · ${completed + failed + 1} of ${total}` : unfinished ? `Incomplete: <b style="color:${C.orange}">${completed}/${total} stored</b> · ${unfinished} can continue from the server button above` : detail.status === 'done' ? `Finished: ${completed}/${total} scored and stored` : `Phase: ${esc(detail.phase || detail.status || 'queued')}`}</div>
-          <div style="display:flex;border-bottom:1px solid ${C.border};margin-bottom:10px">${tabButton('library', `Library (${total})`)}${tabButton('analysis', 'Prediction analysis')}</div>
-          ${tab === 'analysis' ? renderSavedChannelAnalysis(detail) : renderSavedChannelLibrary(detail)}`, 12);
+          <div style="display:flex;border-bottom:1px solid ${C.border};margin-bottom:10px;overflow-x:auto">${tabButton('library', `Library (${total})`)}${tabButton('analysis', 'Prediction analysis')}${tabButton('atlas', 'Relationship atlas (21)')}</div>
+          ${tab === 'analysis' ? renderSavedChannelAnalysis(detail) : tab === 'atlas' ? renderSavedChannelRelationshipAtlas(detail) : renderSavedChannelLibrary(detail)}`, 12);
     }
     function savedChannelsPanel() {
         const channels = (SAVEDCHANNELS && SAVEDCHANNELS.channels) || [];
