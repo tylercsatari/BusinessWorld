@@ -106,7 +106,10 @@ async function mount(page, artifact, status, artifactStatus, failImages) {
                             .replace(/'/g, '&#39;');
                     },
                     formatNumber: function(value) {
-                        return Math.round(Number(value) || 0).toLocaleString();
+                        var number = Math.round(Number(value) || 0);
+                        return Math.abs(number) >= 1000
+                            ? Math.round(number / 1000) + 'K'
+                            : number.toLocaleString();
                     },
                     onRender: repaint
                 });
@@ -131,6 +134,7 @@ async function waitForLoaded(page) {
 
 async function verifyDesktop(page, artifact) {
     await waitForLoaded(page);
+    await page.getByText('gemini-embedding-2 / 1,536D', { exact: true }).waitFor();
     await page.getByText(`${artifact.hooks.length} hooks`, { exact: true }).waitFor();
     await page.getByRole('heading', {
         name: 'Surrogate reconstruction against existing keep estimates',
@@ -194,6 +198,7 @@ async function verifyDesktop(page, artifact) {
     await page.getByRole('heading', {
         name: 'Co-occurrence across feature-family clusters',
     }).waitFor();
+    await page.getByText('2,989 retained tests', { exact: true }).waitFor();
     const coOccurrenceCopy = page.locator('.ops-section-copy').filter({
         hasText: 'descriptive enrichment patterns within this saved-hook bank',
     });
@@ -342,6 +347,11 @@ async function main() {
         targetNature: 'Existing keep estimates; not observed swipe.',
         folds: 5,
     };
+    const baseInteractions = richerArtifact.interactions.together_keep;
+    richerArtifact.interactions.together_keep = Array.from(
+        { length: 2989 },
+        (_, index) => ({ ...baseInteractions[index % baseInteractions.length] }),
+    );
     const browser = await chromium.launch({ headless: true });
     try {
         const desktop = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
