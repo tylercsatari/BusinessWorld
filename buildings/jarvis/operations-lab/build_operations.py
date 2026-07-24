@@ -502,16 +502,20 @@ class GeminiVisionClient:
 
     def _clear_error(self) -> None:
         with self._gate:
-            had_error = self._active_error is not None
+            had_error = (
+                self._active_error is not None
+                and time.monotonic() >= self._blocked_until
+            )
+            if not had_error:
+                return
             self._active_error = None
             self._blocked_until = 0.0
-        if had_error:
-            emit_status(
-                "describing",
-                force=True,
-                providerError=None,
-                message="Gemini access restored; description extraction resumed on the same hook.",
-            )
+        emit_status(
+            "describing",
+            force=True,
+            providerError=None,
+            message="Gemini access restored; description extraction resumed on the same hook.",
+        )
 
     def describe(self, image: bytes) -> dict[str, Any]:
         encoded = base64.b64encode(image).decode("ascii")
@@ -883,17 +887,30 @@ def embed_all(
                     except Exception as exc:
                         message = str(exc)
                         error = classify_provider_exception(message)
-                        stage = "blocked" if error["kind"] == "credits_or_quota_exhausted" else "degraded"
+                        permanent = getattr(exc, "retryable", True) is False
+                        stage = (
+                            "error" if permanent else
+                            "blocked" if error["kind"] == "credits_or_quota_exhausted" else
+                            "degraded"
+                        )
                         emit_status(
                             stage,
                             force=True,
                             feature=key,
                             providerError=error,
                             message=(
+                                "Gemini embedding configuration or request is not retryable. "
+                                "Cached batches remain preserved."
+                                if permanent else
                                 "Gemini embedding access is blocked. No feature is marked complete; "
                                 "cached batches are preserved and this feature will retry."
                             ),
                         )
+                        if permanent:
+                            raise RuntimeError(
+                                "Gemini embedding configuration or request is not retryable: "
+                                f"{error['message']}"
+                            ) from exc
                         if error["kind"] != "credits_or_quota_exhausted":
                             failures += 1
                             if failures >= MAX_RETRIES:
@@ -949,6 +966,7 @@ def candidate_clusters(values: np.ndarray, feature_index: int) -> tuple[np.ndarr
 
     max_k = max(2, int(math.ceil(math.log2(max(n, 4)))))
     max_k = min(max_k, n - 1)
+    resamples = 10
     candidates = []
     labels_by_k: dict[int, np.ndarray] = {}
     for k in range(2, max_k + 1):
@@ -962,9 +980,10 @@ def candidate_clusters(values: np.ndarray, feature_index: int) -> tuple[np.ndarr
         labels_by_k[k] = labels
         bootstrap_scores = []
         bootstrap_stability = []
-        for repeat in range(5):
+        for repeat in range(resamples):
             rng = np.random.default_rng(SEED + feature_index * 1009 + k * 37 + repeat)
-            subset = np.sort(rng.choice(n, size=max(k * 3, int(n * 0.8)), replace=False))
+            subset_size = min(n, max(k * 3, int(math.ceil(n * 0.8))))
+            subset = np.sort(rng.choice(n, size=subset_size, replace=False))
             boot_model = KMeans(
                 n_clusters=k,
                 n_init=10,
@@ -980,19 +999,23 @@ def candidate_clusters(values: np.ndarray, feature_index: int) -> tuple[np.ndarr
         candidates.append({
             "k": k,
             "silhouette": float(np.mean(bootstrap_scores)),
-            "silhouetteSe": float(np.std(bootstrap_scores, ddof=1) / math.sqrt(len(bootstrap_scores))),
+            "silhouetteSd": float(np.std(bootstrap_scores, ddof=1)),
             "stability": float(np.mean(bootstrap_stability)),
             "minCluster": int(counts.min()),
             "maxCluster": int(counts.max()),
         })
     best = max(candidates, key=lambda row: row["silhouette"])
-    cutoff = best["silhouette"] - best["silhouetteSe"]
+    cutoff = best["silhouette"] - best["silhouetteSd"]
     chosen = min(
         (row for row in candidates if row["silhouette"] >= cutoff),
         key=lambda row: row["k"],
     )
     selection = {
-        "rule": "smallest k within one standard error of the best bootstrapped silhouette",
+        "rule": (
+            "smallest k within one resampling standard deviation of the best "
+            "mean silhouette across repeated 80% subsamples"
+        ),
+        "resamples": resamples,
         "candidateMax": max_k,
         "retainedPcaDimensions": retained,
         "retainedVariance": float(cumulative[retained - 1]),
@@ -1076,13 +1099,25 @@ def central_examples(values: np.ndarray, labels: np.ndarray, cluster_id: int, id
 
 def validate_family(values: np.ndarray, outcomes: dict[str, np.ndarray], feature_index: int) -> dict[str, Any]:
     result = {}
-    kfold = KFold(n_splits=5, shuffle=True, random_state=SEED + feature_index)
     alphas = np.logspace(-4, 4, 17)
     for target_key, y in outcomes.items():
         valid = np.isfinite(y)
         x_valid, y_valid = values[valid], y[valid]
         oof = np.full(len(y), np.nan, float)
         valid_indices = np.where(valid)[0]
+        if len(y_valid) < 5:
+            result[target_key] = {
+                "n": int(len(y_valid)),
+                "r2": None,
+                "spearman": None,
+                "mae": None,
+                "auc80": None,
+                "auc85": None,
+                "oof": [None] * len(y),
+                "protocol": "Unavailable: fewer than five finite outcomes.",
+            }
+            continue
+        kfold = KFold(n_splits=5, shuffle=True, random_state=SEED + feature_index)
         for train, test in kfold.split(x_valid):
             model = RidgeCV(alphas=alphas)
             model.fit(x_valid[train], y_valid[train])
@@ -1196,13 +1231,16 @@ def build_interactions(
     families: list[dict[str, Any]],
     outcomes: dict[str, np.ndarray],
 ) -> dict[str, list[dict[str, Any]]]:
-    output: dict[str, list[dict[str, Any]]] = {}
+    all_rows: dict[str, list[dict[str, Any]]] = {}
     cluster_lookup = {
         family["key"]: {cluster["id"]: cluster for cluster in family["clusters"]}
         for family in families
     }
-    for target_index, (target_key, target_values) in enumerate(outcomes.items()):
+    for target_key, target_values in outcomes.items():
         valid = np.isfinite(target_values)
+        if not np.any(valid):
+            all_rows[target_key] = []
+            continue
         base_hits = {
             threshold: float(np.mean(target_values[valid] >= threshold))
             for threshold in (80, 85)
@@ -1223,6 +1261,8 @@ def build_interactions(
                         continue
                     indices = np.asarray(indices_list, int)
                     rest = np.setdiff1d(np.where(valid)[0], indices)
+                    if not len(rest):
+                        continue
                     inside = target_values[indices]
                     outside = target_values[rest]
                     row = {
@@ -1254,12 +1294,24 @@ def build_interactions(
                             rest_misses,
                         )
                     rows.append(row)
-        bh_adjust(rows, key="p80", output_key="q80")
-        bh_adjust(rows, key="p85", output_key="q85")
-        for row in rows:
-            row["p"] = row.get("p80")
-            row["q"] = row.get("q80")
+        all_rows[target_key] = rows
 
+    hypotheses = []
+    for target_key, rows in all_rows.items():
+        for row in rows:
+            for threshold in (80, 85):
+                hypotheses.append({
+                    "p": row[f"p{threshold}"],
+                    "target": target_key,
+                    "row": row,
+                    "outputKey": f"q{threshold}",
+                })
+    bh_adjust(hypotheses)
+    for hypothesis in hypotheses:
+        hypothesis["row"][hypothesis["outputKey"]] = hypothesis["q"]
+
+    output: dict[str, list[dict[str, Any]]] = {}
+    for target_key, rows in all_rows.items():
         retained: dict[tuple[Any, ...], dict[str, Any]] = {}
         ranking_rules = [
             lambda row: (row.get("q80", 1.0), -abs(row.get("difference") or 0), -row["n"]),
@@ -1286,8 +1338,8 @@ def build_interactions(
 
 
 def apply_global_cluster_adjustment(families: list[dict[str, Any]]) -> None:
+    rows = []
     for target_key in TARGETS:
-        rows = []
         for family in families:
             for cluster in family.get("clusters") or []:
                 outcome = (cluster.get("outcomes") or {}).get(target_key)
@@ -1295,7 +1347,7 @@ def apply_global_cluster_adjustment(families: list[dict[str, Any]]) -> None:
                     continue
                 outcome["qWithinFamily"] = outcome.get("q")
                 rows.append(outcome)
-        bh_adjust(rows, key="p", output_key="q")
+    bh_adjust(rows, key="p", output_key="q")
 
 
 def build_artifact(
@@ -1416,8 +1468,9 @@ def build_artifact(
             "descriptorInput": "Montage pixels only; saved text is a separate feature family.",
             "validation": "Five-fold out-of-fold ridge for each feature family and keep estimator.",
             "multipleTesting": (
-                "Cluster q-values use Benjamini-Hochberg across every family-cluster test "
-                "within a target. Interaction q-values are separate global corrections at 80% and 85%."
+                "Cluster q-values use one Benjamini-Hochberg correction across every target, "
+                "family, and cluster test. Interaction q-values use one correction across every "
+                "target, family pair, cluster pair, and both the 80% and 85% thresholds."
             ),
         },
         "targets": TARGETS,

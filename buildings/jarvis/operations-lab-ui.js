@@ -616,7 +616,7 @@
                 ['1', 'Pixels only', 'Five-frame saved montage. No title, channel, keep estimate, views, or outcome is provided.'],
                 ['2', 'Frozen description', `${provenance.visionModel || 'Vision model'}, temperature ${provenance.visionTemperature == null ? '--' : provenance.visionTemperature}, seed ${provenance.visionSeed || '--'}.`],
                 ['3', 'Semantic vectors', `${provenance.embeddingModel || 'Embedding model'} at ${formatCount(provenance.embeddingDimensions)} dimensions for every feature family.`],
-                ['4', 'Outcome-blind geometry', 'PCA retains at least 90% variance. K is the smallest candidate within one standard error of the best bootstrapped silhouette.'],
+                ['4', 'Outcome-blind geometry', 'PCA retains at least 90% variance. K is the smallest candidate within one resampling SD of the best mean silhouette across repeated 80% subsamples.'],
                 ['5', 'Outcome joins last', 'Only after clusters are frozen are existing keep estimates used for OOF ridge validation, cluster diagnostics, and interactions.'],
             ];
             return `
@@ -943,12 +943,12 @@
                 </div>
                 <div class="ops-compact-table-wrap" data-ops-scroll-key="k-diagnostics">
                     <table class="ops-table">
-                        <thead><tr><th>K</th><th>Silhouette</th><th>SE</th><th>Stability</th><th>Smallest cluster</th><th>Largest cluster</th><th>Status</th></tr></thead>
+                        <thead><tr><th>K</th><th>Mean silhouette</th><th>Resample SD</th><th>Stability</th><th>Smallest cluster</th><th>Largest cluster</th><th>Status</th></tr></thead>
                         <tbody>
                             ${candidates.map(row => `<tr class="${Number(row.k) === Number(selection.chosenK) ? 'is-selected-row' : ''}">
                                 <td>${esc(row.k)}</td>
                                 <td>${fixed(row.silhouette, 4)}</td>
-                                <td>${fixed(row.silhouetteSe, 4)}</td>
+                                <td>${fixed(numeric(row.silhouetteSd) == null ? row.silhouetteSe : row.silhouetteSd, 4)}</td>
                                 <td>${fixed(row.stability, 4)}</td>
                                 <td>${formatCount(row.minCluster)}</td>
                                 <td>${formatCount(row.maxCluster)}</td>
