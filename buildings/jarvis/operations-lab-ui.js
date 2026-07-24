@@ -370,9 +370,21 @@
             }
         }
 
-        async function loadArtifact() {
+        function artifactMatchesStatus() {
+            const stage = String((state.status || {}).stage || '').toLowerCase();
+            const expected = String((state.status || {}).artifactHash || '');
+            if (!state.artifact) return false;
+            if (stage !== 'complete' || !expected) return true;
+            return String(state.artifact.artifactHash || '') === expected;
+        }
+
+        async function loadArtifact(expectedHash) {
             try {
-                const result = await readJson(ARTIFACT_API);
+                const expected = String(expectedHash || '');
+                const url = expected
+                    ? `${ARTIFACT_API}?artifactHash=${encodeURIComponent(expected)}&v=${Date.now()}`
+                    : ARTIFACT_API;
+                const result = await readJson(url);
                 if (result.response.status === 202) {
                     state.artifactPending = true;
                     state.artifactError = String(result.value.error || '');
@@ -383,6 +395,11 @@
                 }
                 if (!Array.isArray(result.value.hooks) || !Array.isArray(result.value.families)) {
                     throw new Error('Operations artifact is missing hooks or feature families.');
+                }
+                if (expected && String(result.value.artifactHash || '') !== expected) {
+                    state.artifactPending = true;
+                    state.artifactError = 'The completed analysis is propagating; waiting for its verified artifact hash.';
+                    return null;
                 }
                 state.artifact = result.value;
                 state.artifactPending = false;
@@ -410,8 +427,9 @@
 
         function schedulePoll() {
             window.clearTimeout(state.pollTimer);
-            const stage = state.status && state.status.stage;
-            if (terminalStage(stage) && state.artifact) return;
+            const stage = String(state.status && state.status.stage || '').toLowerCase();
+            if (['error', 'stopped'].includes(stage)) return;
+            if (terminalStage(stage) && artifactMatchesStatus()) return;
             state.pollTimer = window.setTimeout(async () => {
                 await loadStatus();
                 if (
@@ -420,7 +438,7 @@
                         String((state.status || {}).stage || '').toLowerCase(),
                     )
                 ) {
-                    await loadArtifact();
+                    await loadArtifact((state.status || {}).artifactHash);
                 }
                 paint();
                 schedulePoll();
@@ -440,7 +458,8 @@
                 state.artifactError = '';
             }
             paint();
-            await Promise.all([loadStatus(), loadArtifact()]);
+            await loadStatus();
+            await loadArtifact((state.status || {}).artifactHash);
             if (token !== state.requestToken) return;
             state.loading = false;
             state.loadedOnce = true;
@@ -452,36 +471,45 @@
         function progressState() {
             const status = state.status || {};
             const stage = String(status.stage || (state.artifact ? 'complete' : 'idle'));
-            let completed = 0;
-            let total = 100;
+            let fraction = 0;
             let label = stage;
             if (stage === 'complete' || stage === 'test_complete') {
-                completed = total = 100;
-            } else if (stage === 'describing' || stage === 'blocked' || stage === 'degraded') {
-                completed = Number(status.described || 0);
-                total = Math.max(completed, Number(status.total || 0), 1);
+                fraction = 1;
+            } else if (
+                stage === 'describing'
+                || ((stage === 'blocked' || stage === 'degraded') && !status.featureIndex)
+            ) {
+                const completed = Number(status.described || 0);
+                const total = Math.max(completed, Number(status.total || 0), 1);
+                fraction = 0.45 * completed / total;
                 label = `${formatCount(completed)} / ${formatCount(total)} descriptions`;
             } else if (stage === 'embedding') {
-                completed = Number(status.embeddedFeatures || Math.max(0, Number(status.featureIndex || 1) - 1));
-                total = Math.max(completed, Number(status.featureTotal || 18), 1);
+                const completed = Number(status.embeddedFeatures || Math.max(0, Number(status.featureIndex || 1) - 1));
+                const total = Math.max(completed, Number(status.featureTotal || 18), 1);
+                fraction = 0.45 + 0.20 * completed / total;
+                label = `${formatCount(completed)} / ${formatCount(total)} feature embeddings`;
+            } else if ((stage === 'blocked' || stage === 'degraded') && status.featureIndex) {
+                const completed = Number(status.embeddedFeatures || Math.max(0, Number(status.featureIndex || 1) - 1));
+                const total = Math.max(completed, Number(status.featureTotal || 18), 1);
+                fraction = 0.45 + 0.20 * completed / total;
                 label = `${formatCount(completed)} / ${formatCount(total)} feature embeddings`;
             } else if (stage === 'clustering') {
-                completed = Number(status.familyIndex || 0);
-                total = Math.max(completed, Number(status.familyTotal || 18), 1);
+                const completed = Number(status.familyIndex || 0);
+                const total = Math.max(completed, Number(status.familyTotal || 18), 1);
+                fraction = 0.65 + 0.25 * completed / total;
                 label = `${formatCount(completed)} / ${formatCount(total)} families clustered`;
             } else {
                 const stages = {
-                    idle: 0, inventory: 3, descriptions_complete: 42,
-                    interactions: 94, publishing: 98, error: 100, stopped: 100,
+                    idle: 0, inventory: 0.01, descriptions_complete: 0.45,
+                    interactions: 0.94, publishing: 0.98, error: 1, stopped: 1,
                 };
-                completed = stages[stage] == null ? 1 : stages[stage];
-                total = 100;
+                fraction = stages[stage] == null ? 0.01 : stages[stage];
             }
             return {
                 stage,
-                completed,
-                total,
-                fraction: total ? Math.max(0, Math.min(1, completed / total)) : 0,
+                completed: Math.round(fraction * 100),
+                total: 100,
+                fraction: Math.max(0, Math.min(1, fraction)),
                 label,
             };
         }
@@ -522,7 +550,7 @@
                             <span class="ops-status-dot ${statusTone(progress.stage)}"></span>
                             <b>${esc(visibleStage(progress.stage))}</b>
                             <span>${esc(progress.label)}</span>
-                            ${stale ? '<span class="ops-stale">heartbeat stale</span>' : ''}
+                            ${stale ? '<span class="ops-stale">worker heartbeat stale</span>' : ''}
                         </div>
                         <div class="ops-progress-track" aria-label="${esc(progress.label)}">
                             <span style="width:${fixed(progress.fraction * 100, 2)}%"></span>
@@ -539,6 +567,8 @@
                                 ${esc(provider.message)}
                                 ${provider.retrySeconds ? ` Retrying in ${esc(provider.retrySeconds)} seconds.` : ''}
                             </div>` : ''}
+                        ${status.error ? `<div class="ops-provider-error">${esc(status.error)}</div>` : ''}
+                        ${stale ? '<div class="ops-provider-error">No progress heartbeat has arrived for three minutes. The worker may have stopped; refresh checks the persisted status without discarding the last complete artifact.</div>' : ''}
                     </div>
                     <div class="ops-progress-meta">
                         <span>updated ${esc(dateTime(status.updatedAt))}</span>
@@ -886,7 +916,7 @@
                         const muted = selectedCluster != null && Number(selectedCluster) !== cluster;
                         const hook = hooks()[index] || {};
                         return `<circle cx="${fixed(x, 2)}" cy="${fixed(y, 2)}"
-                            r="${isSelected ? 8 : 4.2}" fill="${colorForCluster(cluster)}"
+                            r="${isSelected ? 9 : 5.8}" fill="${colorForCluster(cluster)}"
                             class="ops-plane-point ${isSelected ? 'is-selected' : ''} ${muted ? 'is-muted' : ''}"
                             data-ops-plane-point="${index}" tabindex="0" role="button"
                             aria-label="${esc(hook.title || hook.text || hook.id || `point ${index + 1}`)}">
@@ -924,7 +954,7 @@
                     <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${height - pad.bottom}" class="ops-axis-line"></line>
                     ${points.map(point => {
                         const cluster = Number((family.assignments || [])[point.index]) || 0;
-                        return `<circle cx="${fixed(X(point.x), 2)}" cy="${fixed(Y(point.y), 2)}" r="3.8"
+                        return `<circle cx="${fixed(X(point.x), 2)}" cy="${fixed(Y(point.y), 2)}" r="5.2"
                             fill="${colorForCluster(cluster)}" class="ops-plane-point"
                             data-ops-plane-point="${point.index}" tabindex="0" role="button">
                             <title>Existing estimate ${fixed(point.x, 2)} / surrogate reconstruction ${fixed(point.y, 2)}</title>
@@ -1011,7 +1041,7 @@
                 : null;
             return `
                 <section class="ops-point-inspector">
-                    <img src="${esc(hook.montage || '')}" alt="" loading="lazy">
+                    <img src="${esc(hook.montage || '')}" alt="" loading="lazy" data-ops-montage>
                     <div>
                         <div class="ops-eyebrow">Selected plane point</div>
                         <h4>${esc(hook.title || hook.text || hook.id)}</h4>
@@ -1202,7 +1232,7 @@
             const hook = hooks()[index] || {};
             return `
                 <button type="button" class="ops-mini-hook" data-ops-open-hook="${esc(hook.id)}">
-                    <img src="${esc(hook.montage || '')}" alt="" loading="lazy">
+                    <img src="${esc(hook.montage || '')}" alt="" loading="lazy" data-ops-montage>
                     <span><b>${esc(hook.title || hook.text || hook.id)}</b><small>${percentValue(targetValue(hook))} ${esc(TARGET_SHORT[state.target])}</small></span>
                 </button>`;
         }
@@ -1313,7 +1343,8 @@
                                 </thead>
                                 <tbody>
                                     ${rows.slice(0, state.interactionLimit).map(row => `
-                                        <tr data-ops-interaction="${esc(row.key)}" class="${row.key === state.selectedInteractionKey ? 'is-selected-row' : ''}">
+                                        <tr data-ops-interaction="${esc(row.key)}" tabindex="0" role="button"
+                                            class="${row.key === state.selectedInteractionKey ? 'is-selected-row' : ''}">
                                             <td><b>${esc(row.leftLabel)}</b><small>${esc(row.leftFamily)} / c${esc(row.leftCluster)}</small></td>
                                             <td><b>${esc(row.rightLabel)}</b><small>${esc(row.rightFamily)} / c${esc(row.rightCluster)}</small></td>
                                             <td>${formatCount(row.dynamic.n)}</td>
@@ -1391,7 +1422,7 @@
                         <button type="button" class="ops-icon-button" data-ops-close-hook title="Close hook details" aria-label="Close hook details">x</button>
                     </div>
                     <div class="ops-hook-hero">
-                        <img src="${esc(hook.montage || '')}" alt="Five-frame saved opening montage" loading="eager">
+                        <img src="${esc(hook.montage || '')}" alt="Five-frame saved opening montage" loading="eager" data-ops-montage>
                         <div>
                             <div class="ops-hook-text">${esc(hook.text || '')}</div>
                             <dl class="ops-definition-list ops-definition-list-compact">
@@ -1476,7 +1507,7 @@
             return `
                 <button type="button" class="ops-hook-card ${String(state.selectedHookId) === String(hook.id) ? 'is-active' : ''}"
                     data-ops-open-hook="${esc(hook.id)}">
-                    <img src="${esc(hook.montage || '')}" alt="" loading="lazy">
+                    <img src="${esc(hook.montage || '')}" alt="" loading="lazy" data-ops-montage>
                     <span class="ops-hook-card-body">
                         <span class="ops-hook-card-title">${esc(hook.title || hook.text || hook.id)}</span>
                         <span class="ops-hook-card-text">${esc(hook.text || '')}</span>
@@ -1732,6 +1763,35 @@
             return false;
         }
 
+        function handleKeyDown(event) {
+            if (!['Enter', ' '].includes(event.key)) return false;
+            const target = event.target.closest('[data-ops-plane-point], [data-ops-interaction]');
+            if (!target) return false;
+            event.preventDefault();
+            target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            return true;
+        }
+
+        function handleMediaError(event) {
+            const image = event.target;
+            if (!image || !image.matches || !image.matches('img[data-ops-montage]')) return;
+            const attempts = Number(image.dataset.opsRetry || 0);
+            if (attempts < 1) {
+                image.dataset.opsRetry = String(attempts + 1);
+                const source = String(image.currentSrc || image.src || '');
+                const separator = source.includes('?') ? '&' : '?';
+                window.setTimeout(() => {
+                    if (image.isConnected) image.src = `${source}${separator}opsRetry=${Date.now()}`;
+                }, 500);
+                return;
+            }
+            const fallback = document.createElement('span');
+            fallback.className = 'ops-image-failure';
+            fallback.setAttribute('role', 'status');
+            fallback.textContent = 'Image failed to load';
+            image.replaceWith(fallback);
+        }
+
         function render() {
             ensureStylesheet();
             return renderBody();
@@ -1744,12 +1804,18 @@
             loadAll(false);
         }
 
+        if (typeof document !== 'undefined' && !document.__jarvisOperationsMediaErrorBound) {
+            document.__jarvisOperationsMediaErrorBound = true;
+            document.addEventListener('error', handleMediaError, true);
+        }
+
         return {
             render,
             afterRender,
             handleClick,
             handleInput,
             handleChange,
+            handleKeyDown,
         };
     }
 

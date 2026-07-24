@@ -3692,6 +3692,14 @@ const JarvisRetention = (function () {
         if (e.target.getAttribute && e.target.getAttribute('data-savedmove') != null) { moveHook(e.target.getAttribute('data-savedmove'), e.target.value); return; }
         if (e.target.closest('[data-tracked]')) { st.trackedOnly = e.target.checked; render(); }
     }
+    function onKeyDown(e) {
+        if (
+            e.target.closest('#shorts-operations-panel')
+            && operationsUI()
+            && operationsUI().handleKeyDown
+            && operationsUI().handleKeyDown(e)
+        ) return;
+    }
     // Only the first 5s of a video is ever scored, so for anything but a tiny file we record the
     // first ~6s CLIENT-SIDE into a small webm and upload THAT — a ~1MB clip instead of a 300MB video.
     // This is why big uploads "worked before but not now": they never reached the server (Render's
@@ -5109,7 +5117,7 @@ const JarvisRetention = (function () {
         mountMode = options && options.mode === 'experiment' ? 'experiment' : 'full';
         if (mountMode === 'experiment') st.sec = 'experiment';
         if (!root.__rb) {
-            root.addEventListener('click', onClick); root.addEventListener('input', onInput); root.addEventListener('change', onChange);
+            root.addEventListener('click', onClick); root.addEventListener('input', onInput); root.addEventListener('change', onChange); root.addEventListener('keydown', onKeyDown);
             // clicking into the Generate box pre-warms the idea GPU — the cold boot overlaps typing
             const warmPing = (quiet) => fetch('/api/hooks/warmup', { method: 'POST' }).then(r => r.json()).then(j => { if (j && j.fired) { st.warmFiredAt = Date.now(); if (!quiet) rtgUpdateExp(); } }).catch(() => {});
             root.addEventListener('focusin', e => {

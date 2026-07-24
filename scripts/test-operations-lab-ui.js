@@ -34,11 +34,11 @@ function fixtureStatus(overrides) {
     };
 }
 
-async function mount(page, artifact, status, artifactStatus) {
+async function mount(page, artifact, status, artifactStatus, failImages) {
     await page.route('**/api/raw/saved-montage/*', route => route.fulfill({
-        status: 200,
-        contentType: 'image/svg+xml',
-        body: [
+        status: failImages ? 503 : 200,
+        contentType: failImages ? 'text/plain' : 'image/svg+xml',
+        body: failImages ? 'unavailable' : [
             '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="200">',
             '<rect width="200" height="200" fill="#176b87"/>',
             '<rect x="200" width="200" height="200" fill="#263d63"/>',
@@ -113,6 +113,7 @@ async function mount(page, artifact, status, artifactStatus) {
                 mount.addEventListener('click', function(event) { ui.handleClick(event); });
                 mount.addEventListener('input', function(event) { ui.handleInput(event); });
                 mount.addEventListener('change', function(event) { ui.handleChange(event); });
+                mount.addEventListener('keydown', function(event) { ui.handleKeyDown(event); });
                 repaint();
                 window.__operationsUi = ui;
             }());
@@ -170,7 +171,8 @@ async function verifyDesktop(page, artifact) {
         'The semantic plane must render every persisted hook',
     );
 
-    await page.locator('.ops-plane [data-ops-plane-point]').first().click({ force: true });
+    await page.locator('.ops-plane [data-ops-plane-point]').first().focus();
+    await page.locator('.ops-plane [data-ops-plane-point]').first().press('Enter');
     await page.getByText('Selected plane point', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Inspect hook' }).click();
     await page.getByText('Complete feature ledger', { exact: true }).waitFor();
@@ -211,7 +213,8 @@ async function verifyDesktop(page, artifact) {
     );
     const interactionRows = page.locator('tr[data-ops-interaction]');
     assert(await interactionRows.count() > 0, 'The interaction table must render stored combinations');
-    await interactionRows.first().click();
+    await interactionRows.first().focus();
+    await interactionRows.first().press('Enter');
     await page.getByText('Selected co-occurrence joint cell', { exact: true }).waitFor();
     await page.getByText('Global BY q80', { exact: true }).waitFor();
     await page.getByText('Global BY q85', { exact: true }).waitFor();
@@ -295,6 +298,13 @@ async function verifyBlockedState(page) {
     );
 }
 
+async function verifyImageFailure(page) {
+    await waitForLoaded(page);
+    await page.locator('[data-ops-view="hooks"]').click();
+    await page.locator('.ops-image-failure').first().waitFor({ timeout: 5000 });
+    await page.getByText('Image failed to load', { exact: true }).first().waitFor();
+}
+
 async function expectText(locator, expected) {
     await locator.waitFor();
     assert.strictEqual(
@@ -340,7 +350,9 @@ async function main() {
             if (message.type() === 'error') desktopErrors.push(message.text());
         });
         desktop.on('pageerror', error => desktopErrors.push(error.message));
-        await mount(desktop, richerArtifact, fixtureStatus(), 200);
+        await mount(desktop, richerArtifact, fixtureStatus({
+            artifactHash: richerArtifact.artifactHash,
+        }), 200);
         await verifyDesktop(desktop, richerArtifact);
         assert.deepStrictEqual(desktopErrors, [], `Desktop console errors: ${desktopErrors.join('\n')}`);
 
@@ -350,7 +362,9 @@ async function main() {
             if (message.type() === 'error') mobileErrors.push(message.text());
         });
         mobile.on('pageerror', error => mobileErrors.push(error.message));
-        await mount(mobile, artifact, fixtureStatus(), 200);
+        await mount(mobile, artifact, fixtureStatus({
+            artifactHash: artifact.artifactHash,
+        }), 200);
         await verifyMobile(mobile, artifact);
         assert.deepStrictEqual(mobileErrors, [], `Mobile console errors: ${mobileErrors.join('\n')}`);
 
@@ -370,6 +384,12 @@ async function main() {
         }), 202);
         await verifyBlockedState(blocked);
 
+        const failedImages = await browser.newPage({ viewport: { width: 1000, height: 760 } });
+        await mount(failedImages, artifact, fixtureStatus({
+            artifactHash: artifact.artifactHash,
+        }), 200, true);
+        await verifyImageFailure(failedImages);
+
         console.log(JSON.stringify({
             ok: true,
             hooks: artifact.hooks.length,
@@ -377,6 +397,7 @@ async function main() {
             desktop: 'passed',
             mobile: 'passed',
             blockedCredits: 'passed',
+            imageFailure: 'passed',
         }));
     } finally {
         await browser.close();
