@@ -245,25 +245,48 @@ function gzCacheSet(cacheKey, entry) {
         _gzCache.delete(cacheKey);
     }
 }
-async function serveGzCached(req, res, cacheKey, ttlMs, fill, fallback, fallbackStatus) {
+async function serveGzCached(req, res, cacheKey, ttlMs, fill, fallback, fallbackStatus, options = {}) {
     let e = _gzCache.get(cacheKey);
     const now = Date.now();
+    let sourceError = null;
     if (!e || now - e.t > ttlMs) {
         let p = _gzInflight.get(cacheKey);
         if (!p) {
             p = (async () => {
                 let buf = null;
-                try { buf = await fill(); } catch (err) {}
-                if (!buf) return null;
+                try {
+                    buf = await fill();
+                } catch (error) {
+                    return { entry: null, error };
+                }
+                if (!buf) return { entry: null, error: null };
                 if (typeof buf === 'string') buf = Buffer.from(buf, 'utf8');
                 const gz = await _gzipP(buf);
-                return { t: Date.now(), gz, bytes: gz.length, etag: '"' + require('crypto').createHash('md5').update(buf).digest('hex') + '"' };
+                return {
+                    entry: {
+                        t: Date.now(),
+                        gz,
+                        bytes: gz.length,
+                        etag: '"' + require('crypto').createHash('md5').update(buf).digest('hex') + '"',
+                    },
+                    error: null,
+                };
             })().finally(() => _gzInflight.delete(cacheKey));
             _gzInflight.set(cacheKey, p);
         }
-        const fresh = await p.catch(() => null);
+        const result = await p.catch(error => ({ entry: null, error }));
+        const fresh = result && result.entry;
+        sourceError = result && result.error;
         if (fresh) { e = fresh; gzCacheSet(cacheKey, e); }
         else if (e) { e.t = now; }   // source hiccup → keep serving the stale copy
+    }
+    if (!e && sourceError && options.surfaceSourceErrors) {
+        res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(JSON.stringify({
+            error: options.sourceErrorMessage || 'Backing storage is temporarily unavailable.',
+            kind: 'storage_unavailable',
+        }));
+        return;
     }
     if (!e) { res.writeHead(fallbackStatus || 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); res.end(JSON.stringify(fallback || { error: 'not found' })); return; }
     const hdr = { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'ETag': e.etag, 'Vary': 'Accept-Encoding' };
@@ -271,8 +294,8 @@ async function serveGzCached(req, res, cacheKey, ttlMs, fill, fallback, fallback
     if ((req.headers['accept-encoding'] || '').includes('gzip')) { res.writeHead(200, { ...hdr, 'Content-Encoding': 'gzip' }); res.end(e.gz); }
     else { res.writeHead(200, hdr); res.end(await _gunzipP(e.gz)); }
 }
-const serveR2Gz = (req, res, r2key, ttlMs, fallback, fallbackStatus) =>
-    serveGzCached(req, res, r2key, ttlMs, () => cloud.downloadFromR2(r2key), fallback, fallbackStatus);
+const serveR2Gz = (req, res, r2key, ttlMs, fallback, fallbackStatus, options) =>
+    serveGzCached(req, res, r2key, ttlMs, () => cloud.downloadFromR2(r2key), fallback, fallbackStatus, options);
 const gzCacheInvalidate = key => {
     const e = _gzCache.get(key);
     if (e && e.bytes) _gzCacheBytes -= e.bytes;
@@ -4394,22 +4417,31 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // over the durable Shorts Quant saved-hook bank. The offline worker writes
     // both objects to R2, so Render only serves compact, immutable artifacts.
     if (pathname === '/api/shortsquant/operations-lab/status' && req.method === 'GET') {
-        await serveR2Gz(req, res, 'shorts/operations-lab-v1/status.json', 2500, {
+        const key = 'shorts/operations-lab-v1/status.json';
+        await serveR2Gz(req, res, key, 2500, {
             version: 1,
             productVersion: 'shorts-hook-operations-v1',
             stage: 'idle',
             updatedAt: 0,
             message: 'The Operations corpus has not started yet.',
+        }, 200, {
+            surfaceSourceErrors: true,
+            sourceErrorMessage: 'Operations status storage is temporarily unavailable.',
         });
         return;
     }
     if (pathname === '/api/shortsquant/operations-lab/artifact' && req.method === 'GET') {
-        await serveR2Gz(req, res, 'shorts/operations-lab-v1/artifact.json', 60e3, {
+        const key = 'shorts/operations-lab-v1/artifact.json';
+        if (url.searchParams.get('artifactHash')) gzCacheInvalidate(key);
+        await serveR2Gz(req, res, key, 60e3, {
             version: 1,
             productVersion: 'shorts-hook-operations-v1',
             stage: 'building',
             error: 'The complete Operations artifact is still building.',
-        }, 202);
+        }, 202, {
+            surfaceSourceErrors: true,
+            sourceErrorMessage: 'Operations artifact storage is temporarily unavailable.',
+        });
         return;
     }
 

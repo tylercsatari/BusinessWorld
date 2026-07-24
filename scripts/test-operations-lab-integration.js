@@ -10,6 +10,7 @@ const read = relativePath => fs.readFileSync(path.join(ROOT, relativePath), 'utf
 
 const retention = read('buildings/jarvis/jarvis-retention.js');
 const server = read('server.js');
+const auth = read('auth.js');
 const html = read('index.html');
 const builder = read('buildings/jarvis/operations-lab/build_operations.py');
 const embeddingStore = read('buildings/jarvis/promise-lab/embedding_store.py');
@@ -23,7 +24,7 @@ assert(
     retention.includes('id="shorts-operations-panel"'),
     'Operations must render inside its own delegated event boundary',
 );
-for (const method of ['afterRender', 'handleClick', 'handleInput', 'handleChange']) {
+for (const method of ['afterRender', 'handleClick', 'handleInput', 'handleChange', 'handleKeyDown']) {
     assert(
         retention.includes(`operationsUI().${method}`),
         `JarvisRetention must delegate ${method} to the Operations module`,
@@ -45,6 +46,18 @@ assert(
 assert(
     server.includes("/api/shortsquant/operations-lab/artifact"),
     'The Operations artifact route is missing',
+);
+assert(
+    server.includes('surfaceSourceErrors: true'),
+    'Operations R2 failures must be surfaced instead of masquerading as a build state',
+);
+assert(
+    server.includes("url.searchParams.get('artifactHash')"),
+    'Operations artifact requests must be able to bypass a stale server cache by hash',
+);
+assert(
+    !auth.includes("pathname.startsWith('/api/raw/saved-hook/') || pathname.startsWith('/api/raw-long/saved-hook/')"),
+    'Saved-hook analysis JSON must not bypass authentication',
 );
 assert(
     server.includes('redirectR2Object(res, `raw/saved-hooks/${savedMon[1]}.jpg`'),
@@ -80,6 +93,16 @@ assert(
     'Cluster evidence must receive a target-wide multiple-testing correction',
 );
 assert(
+    builder.includes('validate_artifact(artifact)')
+        && builder.includes('publish_artifact(artifact)'),
+    'The canonical artifact must pass a staged validation contract before publication',
+);
+assert(
+    builder.includes('build_validation_partition(rows)')
+        && builder.includes('by_adjust(hypotheses)'),
+    'Validation must use one shared blocked partition and dependency-safe global correction',
+);
+assert(
     builder.includes('on_retry=report_retry'),
     'Operations must surface embedding transport retries in worker status',
 );
@@ -106,7 +129,7 @@ console.log(JSON.stringify({
     ok: true,
     tab: 'operations',
     routes: 2,
-    delegatedEvents: 4,
+    delegatedEvents: 5,
     proxyWarning: true,
     signedMontages: true,
 }));

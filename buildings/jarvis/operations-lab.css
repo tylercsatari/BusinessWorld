@@ -1115,7 +1115,11 @@
 .ops-point-inspector img,
 .ops-hook-card > img,
 .ops-mini-hook img,
-.ops-hook-hero > img {
+.ops-hook-hero > img,
+.ops-point-inspector .ops-image-failure,
+.ops-hook-card > .ops-image-failure,
+.ops-mini-hook .ops-image-failure,
+.ops-hook-hero > .ops-image-failure {
     display: block;
     width: 100%;
     max-width: 100%;
@@ -1124,6 +1128,17 @@
     border-radius: 4px;
     background: var(--ops-bg);
     object-fit: cover;
+}
+
+.ops-image-failure {
+    display: grid !important;
+    place-items: center;
+    min-height: 54px;
+    padding: 8px;
+    color: var(--ops-red);
+    font-size: 10px;
+    font-weight: 750;
+    text-align: center;
 }
 
 .ops-point-inspector h4 {
@@ -1260,7 +1275,8 @@
     border-color: var(--ops-cyan) !important;
 }
 
-.ops-mini-hook img {
+.ops-mini-hook img,
+.ops-mini-hook .ops-image-failure {
     aspect-ratio: 5 / 1.35;
 }
 
@@ -1312,7 +1328,8 @@
     border-color: var(--ops-cyan) !important;
 }
 
-.ops-hook-card > img {
+.ops-hook-card > img,
+.ops-hook-card > .ops-image-failure {
     border: 0;
     border-bottom: 1px solid var(--ops-border);
     border-radius: 0;
@@ -1391,7 +1408,8 @@
     min-width: 0;
 }
 
-.ops-hook-hero > img {
+.ops-hook-hero > img,
+.ops-hook-hero > .ops-image-failure {
     aspect-ratio: 5 / 1.15;
 }
 
@@ -1787,8 +1805,11 @@
     }
 
     .ops-point-inspector img,
+    .ops-point-inspector .ops-image-failure,
     .ops-hook-card > img,
-    .ops-hook-hero > img {
+    .ops-hook-card > .ops-image-failure,
+    .ops-hook-hero > img,
+    .ops-hook-hero > .ops-image-failure {
         aspect-ratio: 5 / 1.25;
     }
 }

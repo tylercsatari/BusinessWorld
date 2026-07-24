@@ -168,11 +168,24 @@ def main() -> None:
     small_vectors = MODULE.normalize_rows(rng.normal(size=(10, 12)))
     _, small_selection, _ = MODULE.candidate_clusters(small_vectors, 1)
     assert small_selection["chosenK"] >= 2
+    flat_labels, flat_selection, flat_plane = MODULE.candidate_clusters(
+        np.ones((10, 12), dtype=float),
+        2,
+    )
+    assert flat_selection["chosenK"] == 1
+    assert np.array_equal(flat_labels, np.zeros(10, dtype=int))
+    assert flat_plane.shape == (10, 2)
 
     adjusted = [{"p": 0.01}, {"p": 0.04}, {"p": 0.03}]
     MODULE.bh_adjust(adjusted, output_key="globalQ")
     assert all(0 <= row["globalQ"] <= 1 for row in adjusted)
     assert all("q" not in row for row in adjusted)
+    dependent_adjusted = [{"p": 0.01}, {"p": 0.04}, {"p": 0.03}]
+    MODULE.by_adjust(dependent_adjusted, output_key="globalQ")
+    assert np.allclose(
+        [row["globalQ"] for row in dependent_adjusted],
+        [0.055, 0.07333333333333333, 0.07333333333333333],
+    )
 
     family_fixture = [
         {
@@ -219,14 +232,26 @@ def main() -> None:
     assert interactions
     assert all({"p80", "q80", "p85", "q85"}.issubset(row) for row in interactions)
     assert all(0 <= row["q80"] <= 1 and 0 <= row["q85"] <= 1 for row in interactions)
+    assert all(row["analysisType"] == "co_occurrence_enrichment" for row in interactions)
 
     sparse_validation = MODULE.validate_family(
         MODULE.normalize_rows(rng.normal(size=(4, 6))),
         {"target": np.asarray([70.0, 80.0, 90.0, np.nan])},
-        0,
+        [0, 1, 2, 3],
     )["target"]
     assert sparse_validation["n"] == 3
     assert sparse_validation["r2"] is None
+
+    partition_rows = [
+        {"id": f"p{index}", "savedAt": index, "text": "same" if index in {1, 8} else f"hook {index}"}
+        for index in range(10)
+    ]
+    partition_a = MODULE.build_validation_partition(partition_rows)
+    partition_b = MODULE.build_validation_partition(partition_rows)
+    assert partition_a == partition_b
+    assert len(partition_a["assignments"]) == len(partition_rows)
+    assert partition_a["assignments"][1] == partition_a["assignments"][8]
+    assert sum(row["n"] for row in partition_a["folds"]) == len(partition_rows)
 
     gate_client = object.__new__(MODULE.GeminiVisionClient)
     gate_client._gate = threading.Condition()

@@ -35,7 +35,6 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import adjusted_rand_score, r2_score, roc_auc_score, silhouette_score
-from sklearn.model_selection import KFold
 from sklearn.linear_model import RidgeCV
 
 
@@ -47,9 +46,11 @@ from embedding_store import EmbeddingStore  # noqa: E402
 
 
 PRODUCT_VERSION = "shorts-hook-operations-v1"
+ANALYSIS_VERSION = "operations-analysis-v2"
 R2_PREFIX = "shorts/operations-lab-v1"
 STATUS_KEY = f"{R2_PREFIX}/status.json"
 ARTIFACT_KEY = f"{R2_PREFIX}/artifact.json"
+STAGING_PREFIX = f"{R2_PREFIX}/staging/"
 DESCRIPTION_PREFIX = f"{R2_PREFIX}/descriptions/"
 VECTOR_PREFIX = f"{R2_PREFIX}/vectors/"
 SOURCE_INDEX_KEY = "raw/saved-hooks/index.json"
@@ -294,6 +295,14 @@ def stable_hash(value: Any) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def array_hash(value: np.ndarray) -> str:
+    array = np.ascontiguousarray(np.asarray(value, dtype="<f4"))
+    digest = hashlib.sha256()
+    digest.update(json.dumps(list(array.shape), separators=(",", ":")).encode("ascii"))
+    digest.update(array.tobytes(order="C"))
+    return digest.hexdigest()
+
+
 class R2Store:
     def __init__(self):
         self.bucket = ENV.get("R2_BUCKET_NAME") or "business-world-videos"
@@ -381,6 +390,7 @@ STATUS_STATE: dict[str, Any] = {}
 LAST_STATUS_WRITE = 0.0
 STATUS_PENDING: dict[str, Any] | None = None
 STATUS_UPLOAD_THREAD: threading.Thread | None = None
+REMOTE_STATUS_ENABLED = True
 
 
 def _upload_status_loop() -> None:
@@ -429,6 +439,8 @@ def emit_status(stage: str, force: bool = False, **updates) -> None:
         LAST_STATUS_WRITE = now
         snapshot = json_ready(STATUS_STATE)
         LOCAL_STATUS.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+        if not REMOTE_STATUS_ENABLED:
+            return
         STATUS_PENDING = snapshot
         if STATUS_UPLOAD_THREAD is None or not STATUS_UPLOAD_THREAD.is_alive():
             STATUS_UPLOAD_THREAD = threading.Thread(
@@ -748,6 +760,41 @@ def load_local_description_cache(directory: Path = LOCAL_DESCRIPTION_DIR) -> dic
     return cached
 
 
+def validated_description_cache(
+    cached: dict[str, dict[str, Any]],
+    rows: list[dict[str, Any]],
+    image_objects: dict[str, dict[str, Any]],
+    label: str,
+) -> dict[str, dict[str, Any]]:
+    rows_by_id = {str(row["id"]): row for row in rows}
+    valid: dict[str, dict[str, Any]] = {}
+    rejected = 0
+    for hook_id, payload in cached.items():
+        row = rows_by_id.get(str(hook_id))
+        image_obj = image_objects.get(f"{SOURCE_PREFIX}{hook_id}.jpg")
+        if not row or not image_obj or not isinstance(payload, dict):
+            rejected += 1
+            continue
+        expected_hash = source_hash(row, image_obj["etag"])
+        if (
+            payload.get("id") != hook_id
+            or payload.get("sourceHash") != expected_hash
+            or payload.get("promptHash") != PROMPT_HASH
+            or payload.get("visionModel") != VISION_MODEL
+        ):
+            rejected += 1
+            continue
+        try:
+            cleaned = validate_description(payload)
+        except Exception:
+            rejected += 1
+            continue
+        valid[hook_id] = {**payload, **cleaned}
+    if rejected:
+        print(f"ignored {rejected} stale or malformed {label} descriptions", flush=True)
+    return valid
+
+
 def sync_local_descriptions(
     local: dict[str, dict[str, Any]],
     remote: dict[str, dict[str, Any]],
@@ -856,8 +903,13 @@ def describe_all(
 
 
 def feature_texts(rows: list[dict[str, Any]], descriptions: list[dict[str, Any]], feature: str) -> list[str]:
+    if len(rows) != len(descriptions):
+        raise ValueError(
+            f"feature input mismatch: {len(rows)} rows and {len(descriptions)} descriptions"
+        )
     values = []
-    for row, description in zip(rows, descriptions):
+    for index, row in enumerate(rows):
+        description = descriptions[index]
         if feature == "full_visual":
             value = description["visual_description"]
         elif feature == "hook_language":
@@ -897,7 +949,12 @@ def load_vector_bundle(
     with np.load(io.BytesIO(payload), allow_pickle=False) as data:
         stored_ids = [str(item) for item in data["ids"]]
         vectors = np.asarray(data["vectors"], np.float32)
-    if stored_ids != ids or vectors.shape != (len(ids), EMBED_DIMENSIONS):
+    if (
+        stored_ids != ids
+        or vectors.shape != (len(ids), EMBED_DIMENSIONS)
+        or not np.all(np.isfinite(vectors))
+        or np.any(np.linalg.norm(vectors, axis=1) <= 1e-12)
+    ):
         return None
     return vectors
 
@@ -909,11 +966,18 @@ def save_vector_bundle(
     vectors: np.ndarray,
     vector_prefix: str = VECTOR_PREFIX,
 ) -> None:
+    vectors = np.asarray(vectors, np.float32)
+    if (
+        vectors.shape != (len(ids), EMBED_DIMENSIONS)
+        or not np.all(np.isfinite(vectors))
+        or np.any(np.linalg.norm(vectors, axis=1) <= 1e-12)
+    ):
+        raise ValueError(f"refusing to persist an invalid {feature} vector bundle")
     bio = io.BytesIO()
     np.savez_compressed(
         bio,
         ids=np.asarray(ids, dtype=f"<U{max(1, max(map(len, ids)))}"),
-        vectors=np.asarray(vectors, np.float32),
+        vectors=vectors,
     )
     R2.put_bytes(f"{vector_prefix}{feature}.npz", bio.getvalue(), "application/octet-stream")
     R2.put_json(f"{vector_prefix}{feature}.json", {
@@ -1055,21 +1119,75 @@ def scale_plane(values: np.ndarray) -> tuple[list[int], list[int]]:
 
 
 def candidate_clusters(values: np.ndarray, feature_index: int) -> tuple[np.ndarray, dict[str, Any], np.ndarray]:
+    values = np.asarray(values, dtype=np.float64)
+    if values.ndim != 2 or len(values) < 2 or values.shape[1] < 1:
+        raise ValueError("clustering requires at least two rows and one embedding dimension")
+    if not np.all(np.isfinite(values)):
+        raise ValueError("clustering embeddings contain non-finite values")
     n, dimensions = values.shape
+    raw_unique_support = int(np.unique(np.round(values, decimals=12), axis=0).shape[0])
+    if raw_unique_support < 2:
+        return np.zeros(n, dtype=int), {
+            "rule": "one cluster because the embedding family has fewer than two unique vectors",
+            "resamples": 10,
+            "candidateMax": 1,
+            "retainedPcaDimensions": 0,
+            "retainedVariance": 0.0,
+            "uniqueVectors": raw_unique_support,
+            "chosenK": 1,
+            "bestK": 1,
+            "cutoff": None,
+            "candidates": [{
+                "k": 1,
+                "silhouette": None,
+                "silhouetteSd": None,
+                "stability": 1.0,
+                "minCluster": n,
+                "maxCluster": n,
+            }],
+        }, np.zeros((n, 2), dtype=float)
     max_components = min(n - 1, dimensions)
     pca = PCA(n_components=max_components, svd_solver="full")
     reduced_all = pca.fit_transform(values)
-    cumulative = np.cumsum(pca.explained_variance_ratio_)
+    explained = np.nan_to_num(
+        pca.explained_variance_ratio_,
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    cumulative = np.cumsum(explained)
     retained = int(np.searchsorted(cumulative, 0.90) + 1)
-    retained = max(2, min(retained, max_components))
+    retained = max(1, min(retained, max_components))
     reduced = reduced_all[:, :retained]
-    plane = reduced_all[:, :2]
+    plane = np.zeros((n, 2), dtype=float)
+    plane[:, :min(2, max_components)] = reduced_all[:, :2]
 
     max_k = max(2, int(math.ceil(math.log2(max(n, 4)))))
-    max_k = min(max_k, n - 1)
+    unique_support = int(np.unique(np.round(reduced, decimals=12), axis=0).shape[0])
+    max_k = min(max_k, n - 1, unique_support)
     resamples = 10
     candidates = []
     labels_by_k: dict[int, np.ndarray] = {}
+    if max_k < 2:
+        return np.zeros(n, dtype=int), {
+            "rule": "one cluster because the embedding family has fewer than two unique vectors",
+            "resamples": resamples,
+            "candidateMax": int(max_k),
+            "retainedPcaDimensions": retained,
+            "retainedVariance": float(cumulative[retained - 1]) if len(cumulative) else 0.0,
+            "uniqueVectors": unique_support,
+            "chosenK": 1,
+            "bestK": 1,
+            "cutoff": None,
+            "candidates": [{
+                "k": 1,
+                "silhouette": None,
+                "silhouetteSd": None,
+                "stability": 1.0,
+                "minCluster": n,
+                "maxCluster": n,
+            }],
+        }, plane
     for k in range(2, max_k + 1):
         model = KMeans(
             n_clusters=k,
@@ -1092,10 +1210,14 @@ def candidate_clusters(values: np.ndarray, feature_index: int) -> tuple[np.ndarr
                 random_state=SEED + feature_index * 301 + k * 11 + repeat,
             )
             boot_labels = boot_model.fit_predict(reduced[subset])
+            if len(np.unique(boot_labels)) < 2:
+                continue
             bootstrap_scores.append(float(silhouette_score(reduced[subset], boot_labels, metric="euclidean")))
             bootstrap_stability.append(
                 float(adjusted_rand_score(labels, boot_model.predict(reduced)))
             )
+        if not bootstrap_scores:
+            continue
         counts = np.bincount(labels, minlength=k)
         candidates.append({
             "k": k,
@@ -1105,6 +1227,19 @@ def candidate_clusters(values: np.ndarray, feature_index: int) -> tuple[np.ndarr
             "minCluster": int(counts.min()),
             "maxCluster": int(counts.max()),
         })
+    if not candidates:
+        return np.zeros(n, dtype=int), {
+            "rule": "one cluster because no candidate produced a valid resampled partition",
+            "resamples": resamples,
+            "candidateMax": int(max_k),
+            "retainedPcaDimensions": retained,
+            "retainedVariance": float(cumulative[retained - 1]) if len(cumulative) else 0.0,
+            "uniqueVectors": unique_support,
+            "chosenK": 1,
+            "bestK": 1,
+            "cutoff": None,
+            "candidates": [],
+        }, plane
     best = max(candidates, key=lambda row: row["silhouette"])
     cutoff = best["silhouette"] - best["silhouetteSd"]
     chosen = min(
@@ -1120,6 +1255,7 @@ def candidate_clusters(values: np.ndarray, feature_index: int) -> tuple[np.ndarr
         "candidateMax": max_k,
         "retainedPcaDimensions": retained,
         "retainedVariance": float(cumulative[retained - 1]),
+        "uniqueVectors": unique_support,
         "chosenK": int(chosen["k"]),
         "bestK": int(best["k"]),
         "cutoff": float(cutoff),
@@ -1140,6 +1276,22 @@ def bh_adjust(
     for rank in range(total, 0, -1):
         index, p_value = valid[rank - 1]
         running = min(running, p_value * total / rank)
+        rows[index][output_key] = float(min(1.0, running))
+
+
+def by_adjust(
+    rows: list[dict[str, Any]],
+    key: str = "p",
+    output_key: str = "q",
+) -> None:
+    valid = [(index, float(row[key])) for index, row in enumerate(rows) if row.get(key) is not None]
+    valid.sort(key=lambda item: item[1])
+    total = len(valid)
+    harmonic = sum(1.0 / index for index in range(1, total + 1))
+    running = 1.0
+    for rank in range(total, 0, -1):
+        index, p_value = valid[rank - 1]
+        running = min(running, p_value * total * harmonic / rank)
         rows[index][output_key] = float(min(1.0, running))
 
 
@@ -1198,15 +1350,74 @@ def central_examples(values: np.ndarray, labels: np.ndarray, cluster_id: int, id
     return [ids[index] for index in ordered]
 
 
-def validate_family(values: np.ndarray, outcomes: dict[str, np.ndarray], feature_index: int) -> dict[str, Any]:
+def build_validation_partition(rows: list[dict[str, Any]], requested_folds: int = 5) -> dict[str, Any]:
+    if not rows:
+        raise ValueError("validation partition requires at least one row")
+    groups: dict[str, list[int]] = {}
+    for index, row in enumerate(rows):
+        text = canonical_text(row.get("text") or row.get("title") or "").lower()
+        lineage_key = re.sub(r"[^a-z0-9]+", " ", text).strip() or f"id {row['id']}"
+        groups.setdefault(lineage_key, []).append(index)
+    ordered_groups = sorted(
+        groups.values(),
+        key=lambda indices: (
+            min(float(rows[index].get("savedAt") or 0) for index in indices),
+            min(str(rows[index]["id"]) for index in indices),
+        ),
+    )
+    fold_count = max(1, min(int(requested_folds), len(ordered_groups), len(rows)))
+    assignments = np.zeros(len(rows), dtype=int)
+    fold = 0
+    assigned = 0
+    for indices in ordered_groups:
+        while (
+            fold < fold_count - 1
+            and assigned >= math.ceil(len(rows) * (fold + 1) / fold_count)
+        ):
+            fold += 1
+        assignments[indices] = fold
+        assigned += len(indices)
+    fold_rows = []
+    for fold_id in range(fold_count):
+        indices = np.where(assignments == fold_id)[0]
+        saved = [int(rows[index].get("savedAt") or 0) for index in indices]
+        fold_rows.append({
+            "id": fold_id,
+            "n": int(len(indices)),
+            "firstSavedAt": min(saved) if saved else None,
+            "lastSavedAt": max(saved) if saved else None,
+        })
+    return {
+        "count": fold_count,
+        "assignments": assignments.astype(int).tolist(),
+        "folds": fold_rows,
+        "groupCount": len(ordered_groups),
+        "largestExactTextGroup": max(len(indices) for indices in ordered_groups),
+        "grouping": (
+            "Exact normalized hook text/title is kept together; groups are ordered by saved time "
+            "and assigned to five contiguous folds without using an outcome."
+        ),
+    }
+
+
+def validate_family(
+    values: np.ndarray,
+    outcomes: dict[str, np.ndarray],
+    fold_assignments: list[int] | np.ndarray,
+) -> dict[str, Any]:
     result = {}
     alphas = np.logspace(-4, 4, 17)
+    folds = np.asarray(fold_assignments, dtype=int)
+    if len(folds) != len(values):
+        raise ValueError(f"validation fold mismatch: {len(folds)} folds for {len(values)} rows")
     for target_key, y in outcomes.items():
         valid = np.isfinite(y)
         x_valid, y_valid = values[valid], y[valid]
+        folds_valid = folds[valid]
         oof = np.full(len(y), np.nan, float)
         valid_indices = np.where(valid)[0]
-        if len(y_valid) < 5:
+        unique_folds = np.unique(folds_valid)
+        if len(y_valid) < 5 or len(unique_folds) < 2:
             result[target_key] = {
                 "n": int(len(y_valid)),
                 "r2": None,
@@ -1215,15 +1426,30 @@ def validate_family(values: np.ndarray, outcomes: dict[str, np.ndarray], feature
                 "auc80": None,
                 "auc85": None,
                 "oof": [None] * len(y),
-                "protocol": "Unavailable: fewer than five finite outcomes.",
+                "protocol": "Unavailable: fewer than five finite outcomes or two populated folds.",
             }
             continue
-        kfold = KFold(n_splits=5, shuffle=True, random_state=SEED + feature_index)
-        for train, test in kfold.split(x_valid):
+        for fold_id in unique_folds:
+            train = np.where(folds_valid != fold_id)[0]
+            test = np.where(folds_valid == fold_id)[0]
+            if len(train) < 2 or not len(test):
+                continue
             model = RidgeCV(alphas=alphas)
             model.fit(x_valid[train], y_valid[train])
             oof[valid_indices[test]] = model.predict(x_valid[test])
         predicted = oof[valid]
+        if not np.all(np.isfinite(predicted)):
+            result[target_key] = {
+                "n": int(len(y_valid)),
+                "r2": None,
+                "spearman": None,
+                "mae": None,
+                "auc80": None,
+                "auc85": None,
+                "oof": [round(float(value), 3) if math.isfinite(value) else None for value in oof],
+                "protocol": "Unavailable: at least one fixed validation fold could not be predicted.",
+            }
+            continue
         aucs = {}
         for threshold in (80, 85):
             binary = (y_valid >= threshold).astype(int)
@@ -1239,7 +1465,10 @@ def validate_family(values: np.ndarray, outcomes: dict[str, np.ndarray], feature
             "mae": float(np.mean(np.abs(y_valid - predicted))),
             **aucs,
             "oof": [round(float(value), 3) if math.isfinite(value) else None for value in oof],
-            "protocol": "five-fold out-of-fold ridge; alpha selected inside each training fold",
+            "protocol": (
+                "shared outcome-blind save-time-blocked folds; exact duplicate text kept together; "
+                "ridge alpha selected inside each training fold; reconstructs a surrogate estimate"
+            ),
         }
     return result
 
@@ -1251,6 +1480,7 @@ def build_family(
     texts: list[str],
     ids: list[str],
     outcomes: dict[str, np.ndarray],
+    fold_assignments: list[int],
 ) -> dict[str, Any]:
     normalized = normalize_rows(values)
     labels, selection, plane = candidate_clusters(normalized, feature_index)
@@ -1294,13 +1524,16 @@ def build_family(
                 outside,
                 SEED + feature_index * 10000 + cluster_id * 100 + target_index,
             )
+            effect_size = float(diff / pooled) if pooled > 1e-12 else None
             cluster["outcomes"][target_key] = {
                 "n": int(len(inside)),
                 "mean": float(np.mean(inside)),
                 "median": float(np.median(inside)),
                 "difference": diff,
                 "ci95": [low, high],
-                "effectSize": float(diff / pooled) if pooled > 1e-12 else 0.0,
+                "effectSize": effect_size,
+                "effectSizeDefined": effect_size is not None,
+                "perfectSeparation": bool(pooled <= 1e-12 and abs(diff) > 1e-12),
                 "p": float(test.pvalue) if test is not None and math.isfinite(test.pvalue) else None,
             }
         cluster_rows.append(cluster)
@@ -1319,7 +1552,7 @@ def build_family(
         "plane": {"x": x, "y": y},
         "assignments": labels.astype(int).tolist(),
         "clusters": cluster_rows,
-        "validation": validate_family(normalized, outcomes, feature_index),
+        "validation": validate_family(normalized, outcomes, fold_assignments),
     }
 
 
@@ -1367,6 +1600,7 @@ def build_interactions(
                     inside = target_values[indices]
                     outside = target_values[rest]
                     row = {
+                        "analysisType": "co_occurrence_enrichment",
                         "leftFamily": left["key"],
                         "leftCluster": left_cluster,
                         "leftLabel": cluster_lookup[left["key"]][left_cluster]["label"],
@@ -1407,34 +1641,18 @@ def build_interactions(
                     "row": row,
                     "outputKey": f"q{threshold}",
                 })
-    bh_adjust(hypotheses)
+    by_adjust(hypotheses)
     for hypothesis in hypotheses:
         hypothesis["row"][hypothesis["outputKey"]] = hypothesis["q"]
 
     output: dict[str, list[dict[str, Any]]] = {}
     for target_key, rows in all_rows.items():
-        retained: dict[tuple[Any, ...], dict[str, Any]] = {}
-        ranking_rules = [
-            lambda row: (row.get("q80", 1.0), -abs(row.get("difference") or 0), -row["n"]),
-            lambda row: (row.get("q85", 1.0), -abs(row.get("difference") or 0), -row["n"]),
-            lambda row: (-abs(row.get("difference") or 0), -row["n"]),
-        ]
-        for rule in ranking_rules:
-            for row in sorted(rows, key=rule)[:300]:
-                key = (
-                    row["leftFamily"],
-                    row["leftCluster"],
-                    row["rightFamily"],
-                    row["rightCluster"],
-                )
-                retained[key] = row
-        selected = list(retained.values())
-        selected.sort(key=lambda row: (
+        rows.sort(key=lambda row: (
             min(row.get("q80", 1.0), row.get("q85", 1.0)),
             -abs(row.get("difference") or 0),
             -row["n"],
         ))
-        output[target_key] = selected
+        output[target_key] = rows
     return output
 
 
@@ -1448,7 +1666,121 @@ def apply_global_cluster_adjustment(families: list[dict[str, Any]]) -> None:
                     continue
                 outcome["qWithinFamily"] = outcome.get("q")
                 rows.append(outcome)
-    bh_adjust(rows, key="p", output_key="q")
+    by_adjust(rows, key="p", output_key="q")
+
+
+def validate_artifact(artifact: dict[str, Any]) -> None:
+    def require(condition: bool, message: str) -> None:
+        if not condition:
+            raise ValueError(f"artifact contract failed: {message}")
+
+    def finite_tree(value: Any, path: str = "$") -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                finite_tree(item, f"{path}.{key}")
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                finite_tree(item, f"{path}[{index}]")
+        elif isinstance(value, (float, np.floating)):
+            require(math.isfinite(float(value)), f"{path} is non-finite")
+
+    require(isinstance(artifact, dict), "root must be an object")
+    require(artifact.get("productVersion") == PRODUCT_VERSION, "product version mismatch")
+    require(artifact.get("analysisVersion") == ANALYSIS_VERSION, "analysis version mismatch")
+    source = artifact.get("source") or {}
+    hooks = artifact.get("hooks") or []
+    families = artifact.get("families") or []
+    n = int(source.get("n") or 0)
+    require(n > 0, "source n must be positive")
+    require(len(hooks) == n, f"{len(hooks)} hooks for source n={n}")
+    ids = [str(row.get("id") or "") for row in hooks]
+    require(all(ids), "every hook needs an id")
+    require(len(set(ids)) == n, "hook ids must be unique")
+    require(len(source.get("artifactInputHash") or "") == 64, "artifact input hash is missing")
+    require(len(source.get("descriptionCorpusHash") or "") == 64, "description corpus hash is missing")
+    vector_hashes = source.get("vectorHashes") or {}
+    require(set(vector_hashes) == set(FEATURE_BY_KEY), "vector hash keys do not match feature families")
+    require(all(len(str(value)) == 64 for value in vector_hashes.values()), "vector hash is malformed")
+
+    partition = artifact.get("validationPartition") or {}
+    fold_assignments = partition.get("assignments") or []
+    require(len(fold_assignments) == n, "validation fold assignment length mismatch")
+    fold_ids = {int(value) for value in fold_assignments}
+    require(fold_ids == set(range(int(partition.get("count") or 0))), "validation fold ids are not contiguous")
+    require(sum(int(row.get("n") or 0) for row in partition.get("folds") or []) == n, "fold counts do not sum to n")
+    for index, hook in enumerate(hooks):
+        require(int(hook.get("validationFold")) == int(fold_assignments[index]), "hook validation fold mismatch")
+        require(len(hook.get("sequence") or []) == 5, f"hook {hook['id']} needs five frame descriptions")
+        require(isinstance(hook.get("features"), dict), f"hook {hook['id']} features are missing")
+
+    require(len(families) == len(FEATURES), "feature family count mismatch")
+    require({row.get("key") for row in families} == set(FEATURE_BY_KEY), "feature family keys mismatch")
+    family_clusters: dict[str, set[int]] = {}
+    for family in families:
+        key = str(family["key"])
+        assignments = family.get("assignments") or []
+        plane = family.get("plane") or {}
+        clusters = family.get("clusters") or []
+        require(len(assignments) == n, f"{key} assignment length mismatch")
+        require(len(plane.get("x") or []) == n, f"{key} plane x length mismatch")
+        require(len(plane.get("y") or []) == n, f"{key} plane y length mismatch")
+        cluster_ids = {int(row.get("id")) for row in clusters}
+        chosen_k = int((family.get("selection") or {}).get("chosenK") or 0)
+        require(chosen_k >= 1, f"{key} chosenK must be positive")
+        require(cluster_ids == set(range(chosen_k)), f"{key} cluster ids mismatch chosenK")
+        require({int(value) for value in assignments} == cluster_ids, f"{key} assignments reference unknown clusters")
+        require(sum(int(row.get("n") or 0) for row in clusters) == n, f"{key} cluster counts do not sum to n")
+        family_clusters[key] = cluster_ids
+        for cluster in clusters:
+            require(set(cluster.get("medoids") or []).issubset(set(ids)), f"{key} medoid is unknown")
+            for outcome in (cluster.get("outcomes") or {}).values():
+                for field in ("p", "q", "qWithinFamily"):
+                    value = outcome.get(field)
+                    require(value is None or 0 <= float(value) <= 1, f"{key} {field} is outside [0, 1]")
+        validation = family.get("validation") or {}
+        require(set(validation) == set(TARGETS), f"{key} validation targets mismatch")
+        for target_key, result in validation.items():
+            require(len(result.get("oof") or []) == n, f"{key}/{target_key} OOF length mismatch")
+            expected_n = int(((artifact.get("summary") or {}).get("targetSummaries") or {}).get(target_key, {}).get("n") or 0)
+            require(int(result.get("n") or 0) == expected_n, f"{key}/{target_key} validation n mismatch")
+            for field in ("auc80", "auc85"):
+                value = result.get(field)
+                require(value is None or 0 <= float(value) <= 1, f"{key}/{target_key} {field} is outside [0, 1]")
+
+    for target_key, rows in (artifact.get("interactions") or {}).items():
+        require(target_key in TARGETS, f"unknown interaction target {target_key}")
+        for row in rows:
+            left, right = str(row.get("leftFamily")), str(row.get("rightFamily"))
+            require(left in family_clusters and right in family_clusters, "interaction family is unknown")
+            require(int(row.get("leftCluster")) in family_clusters[left], "interaction left cluster is unknown")
+            require(int(row.get("rightCluster")) in family_clusters[right], "interaction right cluster is unknown")
+            require(int(row.get("n") or 0) >= 5, "interaction support is below the declared floor")
+            for field in ("p80", "p85", "q80", "q85"):
+                value = row.get(field)
+                require(value is None or 0 <= float(value) <= 1, f"interaction {field} is outside [0, 1]")
+
+    stored_hash = str(artifact.get("artifactHash") or "")
+    require(len(stored_hash) == 64, "artifact hash is missing")
+    unhashed = dict(artifact)
+    unhashed.pop("artifactHash", None)
+    require(stable_hash(unhashed) == stored_hash, "artifact hash does not match content")
+    finite_tree(artifact)
+
+
+def publish_artifact(artifact: dict[str, Any]) -> str:
+    validate_artifact(artifact)
+    staging_key = f"{STAGING_PREFIX}{artifact['source']['artifactInputHash']}.json"
+    R2.put_json(staging_key, artifact)
+    staged = R2.get_json(staging_key)
+    validate_artifact(staged)
+    if stable_hash(staged) != stable_hash(artifact):
+        raise ValueError("staged Operations artifact did not read back byte-equivalent JSON")
+    R2.put_json(ARTIFACT_KEY, staged)
+    canonical = R2.get_json(ARTIFACT_KEY)
+    validate_artifact(canonical)
+    if canonical.get("artifactHash") != artifact.get("artifactHash"):
+        raise ValueError("canonical Operations artifact hash does not match the staged artifact")
+    return staging_key
 
 
 def build_artifact(
@@ -1456,7 +1788,24 @@ def build_artifact(
     descriptions: list[dict[str, Any]],
     bundles: dict[str, np.ndarray],
 ) -> dict[str, Any]:
+    if len(rows) != len(descriptions):
+        raise ValueError(f"artifact input mismatch: {len(rows)} rows and {len(descriptions)} descriptions")
+    if len({str(row.get("id") or "") for row in rows}) != len(rows):
+        raise ValueError("artifact input hook ids are empty or duplicated")
+    if set(bundles) != set(FEATURE_BY_KEY):
+        raise ValueError("artifact vector bundle keys do not match feature families")
+    for key, matrix in bundles.items():
+        values = np.asarray(matrix)
+        if values.shape != (len(rows), EMBED_DIMENSIONS):
+            raise ValueError(f"{key} vectors have shape {values.shape}, expected {(len(rows), EMBED_DIMENSIONS)}")
+        if not np.all(np.isfinite(values)):
+            raise ValueError(f"{key} vectors contain non-finite values")
+        if np.any(np.linalg.norm(values, axis=1) <= 1e-12):
+            raise ValueError(f"{key} vectors contain an empty embedding")
+
     ids = [row["id"] for row in rows]
+    validation_partition = build_validation_partition(rows)
+    fold_assignments = validation_partition["assignments"]
     outcomes = {
         target_key: np.asarray([
             get_keep(row, target["steer"], "est")
@@ -1466,7 +1815,8 @@ def build_artifact(
         for target_key, target in TARGETS.items()
     }
     hook_rows = []
-    for index, (row, description) in enumerate(zip(rows, descriptions)):
+    for index, row in enumerate(rows):
+        description = descriptions[index]
         targets = {}
         for target_key, target in TARGETS.items():
             targets[target_key] = {
@@ -1480,6 +1830,7 @@ def build_artifact(
             "savedAt": row.get("savedAt"),
             "source": row.get("source"),
             "montage": f"/api/raw/saved-montage/{row['id']}",
+            "validationFold": int(fold_assignments[index]),
             "targets": targets,
             "description": description["visual_description"],
             "sequence": description["sequence"],
@@ -1508,6 +1859,7 @@ def build_artifact(
             texts,
             ids,
             outcomes,
+            fold_assignments,
         ))
         print(f"cluster {index + 1}/{len(FEATURES)} {feature['key']}", flush=True)
 
@@ -1515,34 +1867,87 @@ def build_artifact(
     emit_status(
         "interactions",
         force=True,
-        message="Testing cross-family operation combinations at the 80% and 85% keep thresholds.",
+        message="Testing cross-family co-occurrence enrichment at the 80% and 85% keep thresholds.",
     )
     interactions = build_interactions(families, outcomes)
-    source_hash_value = stable_hash({
+    description_corpus_hash = stable_hash({
         "ids": ids,
         "descriptions": [item["sourceHash"] for item in descriptions],
+    })
+    vector_hashes = {key: array_hash(bundles[key]) for key in sorted(bundles)}
+    artifact_input_hash = stable_hash({
+        "analysisVersion": ANALYSIS_VERSION,
+        "seed": SEED,
+        "features": FEATURES,
+        "targets": TARGETS,
+        "rows": [{
+            "id": row["id"],
+            "savedAt": row.get("savedAt"),
+            "source": row.get("source"),
+            "title": canonical_text(row.get("title") or ""),
+            "text": canonical_text(row.get("text") or ""),
+            "targets": {
+                key: {
+                    "estimate": get_keep(row, target["steer"], "est"),
+                    "percentile": get_keep(row, target["steer"], "pctile"),
+                }
+                for key, target in TARGETS.items()
+            },
+        } for row in rows],
+        "descriptions": [
+            stable_hash({
+                "id": item["id"],
+                "sourceHash": item["sourceHash"],
+                "promptHash": item["promptHash"],
+                "visionModel": item["visionModel"],
+                "visual_description": item["visual_description"],
+                "sequence": item["sequence"],
+                "features": item["features"],
+            })
+            for item in descriptions
+        ],
+        "vectorHashes": vector_hashes,
+        "validationPartition": validation_partition,
     })
     summary_targets = {}
     for target_key, values in outcomes.items():
         valid = values[np.isfinite(values)]
-        summary_targets[target_key] = {
-            "n": int(len(valid)),
-            "mean": float(np.mean(valid)),
-            "median": float(np.median(valid)),
-            "min": float(np.min(valid)),
-            "max": float(np.max(valid)),
-            "over80": int(np.sum(valid >= 80)),
-            "over80Rate": float(np.mean(valid >= 80)),
-            "over85": int(np.sum(valid >= 85)),
-            "over85Rate": float(np.mean(valid >= 85)),
-        }
-    return {
+        summary_targets[target_key] = (
+            {
+                "n": 0,
+                "mean": None,
+                "median": None,
+                "min": None,
+                "max": None,
+                "over80": 0,
+                "over80Rate": None,
+                "over85": 0,
+                "over85Rate": None,
+            }
+            if not len(valid) else
+            {
+                "n": int(len(valid)),
+                "mean": float(np.mean(valid)),
+                "median": float(np.median(valid)),
+                "min": float(np.min(valid)),
+                "max": float(np.max(valid)),
+                "over80": int(np.sum(valid >= 80)),
+                "over80Rate": float(np.mean(valid >= 80)),
+                "over85": int(np.sum(valid >= 85)),
+                "over85Rate": float(np.mean(valid >= 85)),
+            }
+        )
+    artifact = {
         "version": 1,
         "productVersion": PRODUCT_VERSION,
+        "analysisVersion": ANALYSIS_VERSION,
         "generatedAt": int(time.time() * 1000),
         "source": {
             "key": SOURCE_INDEX_KEY,
-            "corpusHash": source_hash_value,
+            "corpusHash": artifact_input_hash,
+            "artifactInputHash": artifact_input_hash,
+            "descriptionCorpusHash": description_corpus_hash,
+            "vectorHashes": vector_hashes,
             "n": len(rows),
             "selection": "Durable Shorts Quant saved-hook bank",
             "warning": (
@@ -1567,14 +1972,28 @@ def build_artifact(
             "outcomeBlindExtraction": True,
             "outcomeBlindClustering": True,
             "descriptorInput": "Montage pixels only; saved text is a separate feature family.",
-            "validation": "Five-fold out-of-fold ridge for each feature family and keep estimator.",
+            "validation": (
+                "One shared outcome-blind save-time-blocked five-fold manifest for every family; "
+                "exact duplicate hook text stays in one fold. Ridge alpha is selected inside each "
+                "training fold. This is surrogate reconstruction of existing keep estimates."
+            ),
+            "validationLimitations": (
+                "The durable records do not include an explicit generation-lineage id, so temporal "
+                "blocking and exact-text grouping reduce but cannot prove elimination of related variants."
+            ),
             "multipleTesting": (
-                "Cluster q-values use one Benjamini-Hochberg correction across every target, "
-                "family, and cluster test. Interaction q-values use one correction across every "
-                "target, family pair, cluster pair, and both the 80% and 85% thresholds."
+                "Exploratory within-family q-values use Benjamini-Hochberg. Global cluster q-values "
+                "and co-occurrence q-values use dependency-safe Benjamini-Yekutieli correction. "
+                "Co-occurrence correction spans every target, family pair, cluster pair, and both "
+                "the 80% and 85% thresholds."
+            ),
+            "interactionAnalysis": (
+                "Joint cluster cells are compared with their complement as co-occurrence enrichment. "
+                "This is not an interaction coefficient, causal effect, or proof of synergy."
             ),
         },
         "targets": TARGETS,
+        "validationPartition": validation_partition,
         "summary": {
             "hooks": len(rows),
             "descriptions": len(descriptions),
@@ -1585,9 +2004,15 @@ def build_artifact(
         "families": families,
         "interactions": interactions,
     }
+    artifact["artifactHash"] = stable_hash(artifact)
+    validate_artifact(artifact)
+    return artifact
 
 
 def run(limit: int | None = None, describe_only: bool = False) -> dict[str, Any] | None:
+    global REMOTE_STATUS_ENABLED
+    if limit:
+        REMOTE_STATUS_ENABLED = False
     emit_status("inventory", force=True, message="Reading the durable saved-hook bank and montage inventory.")
     index = R2.get_json(SOURCE_INDEX_KEY)
     if not index:
@@ -1601,10 +2026,20 @@ def run(limit: int | None = None, describe_only: bool = False) -> dict[str, Any]
         item["key"] for item in R2.list_objects(DESCRIPTION_PREFIX)
         if item["key"].endswith(".json")
     }
-    remote_existing = load_description_cache(description_keys)
-    local_existing = load_local_description_cache()
+    remote_existing = validated_description_cache(
+        load_description_cache(description_keys),
+        rows,
+        image_objects,
+        "remote",
+    )
+    local_existing = validated_description_cache(
+        load_local_description_cache(),
+        rows,
+        image_objects,
+        "local",
+    )
     sync_local_descriptions(local_existing, remote_existing)
-    existing = {**remote_existing, **local_existing}
+    existing = {**local_existing, **remote_existing}
     descriptions = describe_all(rows, image_objects, existing, limit=None)
     if describe_only:
         DESCRIPTIONS_COMPLETE_MARKER.write_text(
@@ -1632,6 +2067,9 @@ def run(limit: int | None = None, describe_only: bool = False) -> dict[str, Any]
     artifact = build_artifact(rows, descriptions, bundles)
     if limit:
         artifact["source"]["testLimit"] = int(limit)
+        artifact.pop("artifactHash", None)
+        artifact["artifactHash"] = stable_hash(artifact)
+        validate_artifact(artifact)
         test_path = CACHE_DIR / f"test-artifact-{limit}.json"
         test_path.write_text(
             json.dumps(json_ready(artifact), ensure_ascii=False, separators=(",", ":"), allow_nan=False),
@@ -1651,8 +2089,12 @@ def run(limit: int | None = None, describe_only: bool = False) -> dict[str, Any]
             ),
         )
         return artifact
-    emit_status("publishing", force=True, message="Publishing the complete Operations artifact to R2.")
-    R2.put_json(ARTIFACT_KEY, artifact)
+    emit_status(
+        "publishing",
+        force=True,
+        message="Validating a staged Operations artifact before canonical publication.",
+    )
+    staging_key = publish_artifact(artifact)
     emit_status(
         "complete",
         force=True,
@@ -1660,6 +2102,9 @@ def run(limit: int | None = None, describe_only: bool = False) -> dict[str, Any]
         described=len(descriptions),
         embeddedFeatures=len(FEATURES),
         artifactKey=ARTIFACT_KEY,
+        stagingKey=staging_key,
+        artifactHash=artifact["artifactHash"],
+        artifactInputHash=artifact["source"]["artifactInputHash"],
         generatedAt=artifact["generatedAt"],
         providerError=None,
         message=(
