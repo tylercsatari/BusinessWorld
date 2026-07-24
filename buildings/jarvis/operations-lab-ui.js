@@ -915,7 +915,7 @@
                         <div><span>Mean estimate</span><b>${percentValue(dynamic.mean)}</b></div>
                         <div><span>Mean delta</span><b class="${Number(dynamic.difference) >= 0 ? 'ops-positive' : 'ops-negative'}">${signed(dynamic.difference, 2)} pp</b></div>
                         <div><span>Effect size</span><b>${fixed(stored.effectSize, 3)}</b></div>
-                        <div><span>BH q</span><b>${fixed(stored.q, 4)}</b></div>
+                        <div><span>Global BH q</span><b>${fixed(stored.q, 4)}</b></div>
                     </div>
                     <details class="ops-inline-details">
                         <summary>Stored evidence</summary>
@@ -924,6 +924,8 @@
                             <div><dt>Median</dt><dd>${percentValue(stored.median)}</dd></div>
                             <div><dt>95% mean-delta interval</dt><dd>${(stored.ci95 || []).length ? `${signed(stored.ci95[0], 2)} to ${signed(stored.ci95[1], 2)} pp` : '--'}</dd></div>
                             <div><dt>Welch p</dt><dd>${fixed(stored.p, 5)}</dd></div>
+                            <div><dt>Within-family BH q</dt><dd>${fixed(stored.qWithinFamily, 5)}</dd></div>
+                            <div><dt>Global BH q</dt><dd>${fixed(stored.q, 5)}</dd></div>
                             <div><dt>Medoid IDs</dt><dd class="ops-mono">${esc((cluster.medoids || []).join(', ') || '--')}</dd></div>
                         </dl>
                     </details>
@@ -1004,7 +1006,8 @@
                                 ${stat('OOF R2', fixed(validation.r2, 3), validation.protocol || '', Number(validation.r2) > 0 ? 'green' : 'red')}
                                 ${stat('OOF Spearman', fixed(validation.spearman, 3), 'rank association', 'cyan')}
                                 ${stat('OOF MAE', `${fixed(validation.mae, 2)} pp`, 'absolute error', 'amber')}
-                                ${stat('AUC at artifact 80', fixed(validation.auc80, 3), 'fixed binary threshold', 'purple')}
+                                ${stat('AUC at 80', fixed(validation.auc80, 3), 'five-fold OOF threshold discrimination', 'purple')}
+                                ${stat('AUC at 85', fixed(validation.auc85, 3), 'five-fold OOF threshold discrimination', 'purple')}
                             </div>
                         </section>
                         <div class="ops-two-column ops-plane-grid">
@@ -1137,8 +1140,11 @@
                 row.leftFamily, row.leftLabel, row.rightFamily, row.rightLabel,
             ].join(' ').toLowerCase().includes(query));
             const sorters = {
-                'q-asc': (left, right) => (numeric(left.q) == null ? Infinity : Number(left.q))
-                    - (numeric(right.q) == null ? Infinity : Number(right.q)),
+                'q-asc': (left, right) => {
+                    const key = state.threshold >= 82.5 ? 'q85' : 'q80';
+                    return (numeric(left[key]) == null ? Infinity : Number(left[key]))
+                        - (numeric(right[key]) == null ? Infinity : Number(right[key]));
+                },
                 'lift-desc': (left, right) => (numeric(right.dynamic.lift) == null ? -Infinity : Number(right.dynamic.lift))
                     - (numeric(left.dynamic.lift) == null ? -Infinity : Number(left.dynamic.lift)),
                 'difference-desc': (left, right) => (numeric(right.dynamic.difference) == null ? -Infinity : Number(right.dynamic.difference))
@@ -1190,7 +1196,8 @@
                         ${stat(`Hit rate at ${state.threshold}%`, percent(row.dynamic.hitRate), `base ${percent(row.dynamic.baseRate)}`, 'green')}
                         ${stat('Dynamic lift', `${fixed(row.dynamic.lift, 2)}x`, 'vs selected-target corpus', 'cyan')}
                         ${stat('Mean delta', `${signed(row.dynamic.difference, 2)} pp`, 'inside pair vs outside', Number(row.dynamic.difference) >= 0 ? 'green' : 'red')}
-                        ${stat('Artifact q at 80', fixed(row.q, 5), 'BH-adjusted Fisher test', 'purple')}
+                        ${stat('Global q at 80', fixed(row.q80, 5), 'BH-adjusted Fisher test', 'purple')}
+                        ${stat('Global q at 85', fixed(row.q85, 5), 'separate BH-adjusted Fisher test', 'purple')}
                     </div>
                     <div class="ops-two-column">
                         <div class="ops-operation-definition">
@@ -1231,7 +1238,8 @@
                         </div>
                         <p class="ops-section-copy">
                             Hit rate and lift recompute at the selected ${state.threshold}% threshold.
-                            Stored p and q values remain the artifact's declared 80% Fisher test.
+                            Stored q values are globally corrected across every tested pair and are reported
+                            separately for the declared 80% and 85% thresholds.
                         </p>
                         <div class="ops-filter-row">
                             <label class="ops-search-field">
@@ -1243,7 +1251,7 @@
                             <label class="ops-select-field">
                                 <span class="ops-control-label">Sort</span>
                                 <select data-ops-interaction-sort data-ops-focus="interaction-sort">
-                                    <option value="q-asc" ${state.interactionSort === 'q-asc' ? 'selected' : ''}>Lowest artifact q</option>
+                                    <option value="q-asc" ${state.interactionSort === 'q-asc' ? 'selected' : ''}>Lowest declared q</option>
                                     <option value="lift-desc" ${state.interactionSort === 'lift-desc' ? 'selected' : ''}>Highest dynamic lift</option>
                                     <option value="difference-desc" ${state.interactionSort === 'difference-desc' ? 'selected' : ''}>Highest mean delta</option>
                                     <option value="hit-desc" ${state.interactionSort === 'hit-desc' ? 'selected' : ''}>Highest hit rate</option>
@@ -1257,7 +1265,7 @@
                         <div class="ops-compact-table-wrap ops-interaction-table-wrap" data-ops-scroll-key="interaction-table">
                             <table class="ops-table ops-interaction-table">
                                 <thead>
-                                    <tr><th>Left operation</th><th>Right operation</th><th>N</th><th>Hit ${state.threshold}%</th><th>Lift</th><th>Mean delta</th><th>q at 80</th></tr>
+                                    <tr><th>Left operation</th><th>Right operation</th><th>N</th><th>Hit ${state.threshold}%</th><th>Lift</th><th>Mean delta</th><th>q80</th><th>q85</th></tr>
                                 </thead>
                                 <tbody>
                                     ${rows.slice(0, state.interactionLimit).map(row => `
@@ -1268,8 +1276,9 @@
                                             <td>${percent(row.dynamic.hitRate)}</td>
                                             <td>${fixed(row.dynamic.lift, 2)}x</td>
                                             <td class="${Number(row.dynamic.difference) >= 0 ? 'ops-positive' : 'ops-negative'}">${signed(row.dynamic.difference, 2)} pp</td>
-                                            <td>${fixed(row.q, 5)}</td>
-                                        </tr>`).join('') || '<tr><td colspan="7"><div class="ops-empty">No matching interactions.</div></td></tr>'}
+                                            <td>${fixed(row.q80, 5)}</td>
+                                            <td>${fixed(row.q85, 5)}</td>
+                                        </tr>`).join('') || '<tr><td colspan="8"><div class="ops-empty">No matching interactions.</div></td></tr>'}
                                 </tbody>
                             </table>
                         </div>

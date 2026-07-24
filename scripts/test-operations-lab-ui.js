@@ -135,6 +135,9 @@ async function verifyDesktop(page, artifact) {
 
     await page.locator('[data-ops-view="families"]').click();
     await page.getByRole('heading', { name: artifact.families[0].label, exact: true }).waitFor();
+    await page.getByText('Global BH q', { exact: true }).first().waitFor();
+    await page.getByText('AUC at 80', { exact: true }).waitFor();
+    await page.getByText('AUC at 85', { exact: true }).waitFor();
     assert.strictEqual(
         await page.locator('.ops-family-list > button').count(),
         artifact.families.length,
@@ -168,6 +171,8 @@ async function verifyDesktop(page, artifact) {
     assert(await interactionRows.count() > 0, 'The interaction table must render stored combinations');
     await interactionRows.first().click();
     await page.getByText('Selected cross-family operation', { exact: true }).waitFor();
+    await page.getByText('Global q at 80', { exact: true }).waitFor();
+    await page.getByText('Global q at 85', { exact: true }).waitFor();
 
     await page.locator('[data-ops-target="visual_keep"]').click();
     await page.locator('[data-ops-threshold-number]').fill('85');

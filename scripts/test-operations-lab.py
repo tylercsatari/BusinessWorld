@@ -7,6 +7,7 @@ import importlib.util
 import inspect
 import json
 import re
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -34,6 +35,8 @@ def main() -> None:
     assert "hook_text" not in describe_source
     assert '"parts": [' in describe_source
     assert '"text": PROMPT' in describe_source
+    assert MODULE.VISION_MAX_OUTPUT_TOKENS >= 8192
+    assert '"output_truncated"' in describe_source
     prompt_flat = re.sub(r"\s+", " ", MODULE.PROMPT).lower()
     assert "keep estimates" in prompt_flat
     assert "you do not receive" in prompt_flat
@@ -59,6 +62,21 @@ def main() -> None:
     )
     assert embedded_error["kind"] == "credits_or_quota_exhausted"
     assert embedded_error["httpStatus"] == 429
+
+    retry_events = []
+    with tempfile.TemporaryDirectory() as temp_dir:
+        store = MODULE.EmbeddingStore(
+            Path(temp_dir) / "vectors.sqlite",
+            on_retry=retry_events.append,
+        )
+        store._notify_retry(429, "quota exhausted", 12.5, 3)
+        store.close()
+    assert retry_events == [{
+        "status": 429,
+        "message": "quota exhausted",
+        "delay": 12.5,
+        "attempt": 3,
+    }]
 
     original_put_json = MODULE.R2.put_json
     original_local_status = MODULE.LOCAL_STATUS
@@ -107,6 +125,57 @@ def main() -> None:
     assert selection_a["chosenK"] >= 2
     assert len(selection_a["candidates"]) >= 2
     assert "one standard error" in selection_a["rule"]
+
+    adjusted = [{"p": 0.01}, {"p": 0.04}, {"p": 0.03}]
+    MODULE.bh_adjust(adjusted, output_key="globalQ")
+    assert all(0 <= row["globalQ"] <= 1 for row in adjusted)
+    assert all("q" not in row for row in adjusted)
+
+    family_fixture = [
+        {
+            "clusters": [
+                {
+                    "outcomes": {
+                        key: {"p": 0.01, "q": 0.02}
+                        for key in MODULE.TARGETS
+                    },
+                },
+            ],
+        },
+        {
+            "clusters": [
+                {
+                    "outcomes": {
+                        key: {"p": 0.04, "q": 0.04}
+                        for key in MODULE.TARGETS
+                    },
+                },
+            ],
+        },
+    ]
+    MODULE.apply_global_cluster_adjustment(family_fixture)
+    for family in family_fixture:
+        for outcome in family["clusters"][0]["outcomes"].values():
+            assert outcome["qWithinFamily"] in {0.02, 0.04}
+            assert 0 <= outcome["q"] <= 1
+
+    interaction_families = [
+        {
+            "key": "left",
+            "assignments": [0] * 5 + [1] * 5,
+            "clusters": [{"id": 0, "label": "left zero"}, {"id": 1, "label": "left one"}],
+        },
+        {
+            "key": "right",
+            "assignments": [0] * 5 + [1] * 5,
+            "clusters": [{"id": 0, "label": "right zero"}, {"id": 1, "label": "right one"}],
+        },
+    ]
+    interaction_outcomes = {"target": np.asarray([90.0] * 5 + [70.0] * 5)}
+    interactions = MODULE.build_interactions(interaction_families, interaction_outcomes)["target"]
+    assert interactions
+    assert all({"p80", "q80", "p85", "q85"}.issubset(row) for row in interactions)
+    assert all(0 <= row["q80"] <= 1 and 0 <= row["q85"] <= 1 for row in interactions)
 
     print(json.dumps({
         "ok": True,

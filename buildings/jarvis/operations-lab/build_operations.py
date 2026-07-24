@@ -56,6 +56,10 @@ SOURCE_INDEX_KEY = "raw/saved-hooks/index.json"
 SOURCE_PREFIX = "raw/saved-hooks/"
 SEED = 20260724
 VISION_MODEL = os.environ.get("OPERATIONS_VISION_MODEL", "gemini-2.5-flash")
+VISION_MAX_OUTPUT_TOKENS = max(
+    8192,
+    int(os.environ.get("OPERATIONS_VISION_MAX_OUTPUT_TOKENS", "8192")),
+)
 EMBED_MODEL = "gemini-embedding-2"
 EMBED_DIMENSIONS = int(os.environ.get("OPERATIONS_EMBED_DIMENSIONS", "1536"))
 VISION_WORKERS = max(1, int(os.environ.get("OPERATIONS_VISION_WORKERS", "4")))
@@ -522,7 +526,7 @@ class GeminiVisionClient:
                 "temperature": 0,
                 "seed": SEED,
                 "responseMimeType": "application/json",
-                "maxOutputTokens": 4096,
+                "maxOutputTokens": VISION_MAX_OUTPUT_TOKENS,
             },
         }
         last_error = ""
@@ -541,18 +545,51 @@ class GeminiVisionClient:
                 )
             except requests.RequestException as exc:
                 last_error = str(exc)
+                emit_status(
+                    "degraded",
+                    providerError={
+                        "provider": "Gemini",
+                        "kind": "network_error",
+                        "httpStatus": 0,
+                        "message": last_error[:500],
+                        "retrySeconds": min(60, 2 ** attempt),
+                    },
+                    message="Gemini could not be reached; retrying the same montage.",
+                )
                 time.sleep(min(60, 2 ** attempt))
                 attempt += 1
                 continue
             if response.status_code == 200:
+                finish_reason = ""
                 try:
                     raw = response.json()
-                    text = raw["candidates"][0]["content"]["parts"][0]["text"]
+                    candidate = raw["candidates"][0]
+                    finish_reason = str(candidate.get("finishReason") or "")
+                    text = candidate["content"]["parts"][0]["text"]
                     result = validate_description(parse_json_text(text))
                     self._clear_error()
                     return result
                 except Exception as exc:
-                    last_error = f"invalid Gemini JSON: {exc}"
+                    truncated = finish_reason == "MAX_TOKENS"
+                    last_error = (
+                        f"Gemini output reached the {VISION_MAX_OUTPUT_TOKENS}-token ceiling"
+                        if truncated else f"invalid Gemini JSON: {exc}"
+                    )
+                    emit_status(
+                        "degraded",
+                        providerError={
+                            "provider": "Gemini",
+                            "kind": "output_truncated" if truncated else "invalid_response",
+                            "httpStatus": 200,
+                            "message": last_error[:500],
+                            "retrySeconds": min(30, 2 ** attempt),
+                        },
+                        message=(
+                            "Gemini truncated a structured description; retrying the same montage."
+                            if truncated else
+                            "Gemini returned an invalid structured description; retrying the same montage."
+                        ),
+                    )
                     time.sleep(min(30, 2 ** attempt))
                     attempt += 1
                     continue
@@ -791,12 +828,34 @@ def embed_all(
     vector_prefix: str = VECTOR_PREFIX,
 ) -> dict[str, np.ndarray]:
     ids = [row["id"] for row in rows]
+
+    def report_retry(event: dict[str, Any]) -> None:
+        error = classify_provider_error(
+            int(event.get("status") or 0),
+            str(event.get("message") or ""),
+        )
+        error["retrySeconds"] = float(event.get("delay") or RETRY_SECONDS)
+        blocked = error["kind"] == "credits_or_quota_exhausted"
+        emit_status(
+            "blocked" if blocked else "degraded",
+            force=blocked,
+            providerError=error,
+            message=(
+                "Gemini credits or quota are blocking semantic embedding; cached batches "
+                "are preserved and retry automatically."
+                if blocked else
+                "Gemini embedding returned a transient error; cached batches are preserved "
+                "and the current batch is retrying."
+            ),
+        )
+
     store = EmbeddingStore(
         CACHE_DIR / "operations-embeddings.sqlite",
         model=EMBED_MODEL,
         dimensions=EMBED_DIMENSIONS,
         batch_size=100,
         workers=max(1, int(os.environ.get("OPERATIONS_EMBED_WORKERS", "2"))),
+        on_retry=report_retry,
     )
     bundles: dict[str, np.ndarray] = {}
     try:
@@ -815,7 +874,8 @@ def embed_all(
                     message=f"Embedding {feature['label']} ({index + 1} of {len(FEATURES)}).",
                     providerError=None,
                 )
-                while True:
+                failures = 0
+                while failures < MAX_RETRIES:
                     try:
                         found = store.embed_many(texts)
                         vectors = np.vstack([found[text] for text in texts]).astype(np.float32)
@@ -834,7 +894,16 @@ def embed_all(
                                 "cached batches are preserved and this feature will retry."
                             ),
                         )
+                        if error["kind"] != "credits_or_quota_exhausted":
+                            failures += 1
+                            if failures >= MAX_RETRIES:
+                                raise RuntimeError(
+                                    f"Gemini embedding failed after {MAX_RETRIES} retries: "
+                                    f"{error['message']}"
+                                ) from exc
                         time.sleep(RETRY_SECONDS)
+                if vectors is None:
+                    raise RuntimeError(f"Gemini embedding did not produce vectors for {key}")
                 save_vector_bundle(key, bundle_hash, ids, vectors, vector_prefix)
             bundles[key] = vectors
             emit_status(
@@ -935,7 +1004,11 @@ def candidate_clusters(values: np.ndarray, feature_index: int) -> tuple[np.ndarr
     return labels_by_k[chosen["k"]], selection, plane
 
 
-def bh_adjust(rows: list[dict[str, Any]], key: str = "p") -> None:
+def bh_adjust(
+    rows: list[dict[str, Any]],
+    key: str = "p",
+    output_key: str = "q",
+) -> None:
     valid = [(index, float(row[key])) for index, row in enumerate(rows) if row.get(key) is not None]
     valid.sort(key=lambda item: item[1])
     total = len(valid)
@@ -943,7 +1016,7 @@ def bh_adjust(rows: list[dict[str, Any]], key: str = "p") -> None:
     for rank in range(total, 0, -1):
         index, p_value = valid[rank - 1]
         running = min(running, p_value * total / rank)
-        rows[index]["q"] = float(min(1.0, running))
+        rows[index][output_key] = float(min(1.0, running))
 
 
 def bootstrap_mean_difference(
@@ -1015,15 +1088,20 @@ def validate_family(values: np.ndarray, outcomes: dict[str, np.ndarray], feature
             model.fit(x_valid[train], y_valid[train])
             oof[valid_indices[test]] = model.predict(x_valid[test])
         predicted = oof[valid]
-        binary = (y_valid >= 80).astype(int)
-        auc = float(roc_auc_score(binary, predicted)) if len(np.unique(binary)) == 2 else None
+        aucs = {}
+        for threshold in (80, 85):
+            binary = (y_valid >= threshold).astype(int)
+            aucs[f"auc{threshold}"] = (
+                float(roc_auc_score(binary, predicted))
+                if len(np.unique(binary)) == 2 else None
+            )
         rho = spearmanr(y_valid, predicted).statistic if len(y_valid) > 2 else float("nan")
         result[target_key] = {
             "n": int(len(y_valid)),
             "r2": float(r2_score(y_valid, predicted)),
             "spearman": float(rho),
             "mae": float(np.mean(np.abs(y_valid - predicted))),
-            "auc80": auc,
+            **aucs,
             "oof": [round(float(value), 3) if math.isfinite(value) else None for value in oof],
             "protocol": "five-fold out-of-fold ridge; alpha selected inside each training fold",
         }
@@ -1125,7 +1203,10 @@ def build_interactions(
     }
     for target_index, (target_key, target_values) in enumerate(outcomes.items()):
         valid = np.isfinite(target_values)
-        base_hit = float(np.mean(target_values[valid] >= 80))
+        base_hits = {
+            threshold: float(np.mean(target_values[valid] >= threshold))
+            for threshold in (80, 85)
+        }
         rows = []
         for left_index in range(len(families)):
             left = families[left_index]
@@ -1144,12 +1225,7 @@ def build_interactions(
                     rest = np.setdiff1d(np.where(valid)[0], indices)
                     inside = target_values[indices]
                     outside = target_values[rest]
-                    hits = int(np.sum(inside >= 80))
-                    misses = int(len(inside) - hits)
-                    rest_hits = int(np.sum(outside >= 80))
-                    rest_misses = int(len(outside) - rest_hits)
-                    hit_rate = float(hits / len(inside))
-                    rows.append({
+                    row = {
                         "leftFamily": left["key"],
                         "leftCluster": left_cluster,
                         "leftLabel": cluster_lookup[left["key"]][left_cluster]["label"],
@@ -1159,18 +1235,67 @@ def build_interactions(
                         "n": int(len(inside)),
                         "mean": float(np.mean(inside)),
                         "difference": float(np.mean(inside) - np.mean(outside)),
-                        "hitRate80": hit_rate,
-                        "lift80": float(hit_rate / base_hit) if base_hit > 0 else None,
-                        "p": fisher_exact_p(hits, misses, rest_hits, rest_misses),
-                    })
-        bh_adjust(rows)
-        rows.sort(key=lambda row: (
-            row.get("q", 1.0),
+                    }
+                    for threshold in (80, 85):
+                        hits = int(np.sum(inside >= threshold))
+                        misses = int(len(inside) - hits)
+                        rest_hits = int(np.sum(outside >= threshold))
+                        rest_misses = int(len(outside) - rest_hits)
+                        hit_rate = float(hits / len(inside))
+                        row[f"hitRate{threshold}"] = hit_rate
+                        row[f"lift{threshold}"] = (
+                            float(hit_rate / base_hits[threshold])
+                            if base_hits[threshold] > 0 else None
+                        )
+                        row[f"p{threshold}"] = fisher_exact_p(
+                            hits,
+                            misses,
+                            rest_hits,
+                            rest_misses,
+                        )
+                    rows.append(row)
+        bh_adjust(rows, key="p80", output_key="q80")
+        bh_adjust(rows, key="p85", output_key="q85")
+        for row in rows:
+            row["p"] = row.get("p80")
+            row["q"] = row.get("q80")
+
+        retained: dict[tuple[Any, ...], dict[str, Any]] = {}
+        ranking_rules = [
+            lambda row: (row.get("q80", 1.0), -abs(row.get("difference") or 0), -row["n"]),
+            lambda row: (row.get("q85", 1.0), -abs(row.get("difference") or 0), -row["n"]),
+            lambda row: (-abs(row.get("difference") or 0), -row["n"]),
+        ]
+        for rule in ranking_rules:
+            for row in sorted(rows, key=rule)[:300]:
+                key = (
+                    row["leftFamily"],
+                    row["leftCluster"],
+                    row["rightFamily"],
+                    row["rightCluster"],
+                )
+                retained[key] = row
+        selected = list(retained.values())
+        selected.sort(key=lambda row: (
+            min(row.get("q80", 1.0), row.get("q85", 1.0)),
             -abs(row.get("difference") or 0),
             -row["n"],
         ))
-        output[target_key] = rows[:300]
+        output[target_key] = selected
     return output
+
+
+def apply_global_cluster_adjustment(families: list[dict[str, Any]]) -> None:
+    for target_key in TARGETS:
+        rows = []
+        for family in families:
+            for cluster in family.get("clusters") or []:
+                outcome = (cluster.get("outcomes") or {}).get(target_key)
+                if not outcome:
+                    continue
+                outcome["qWithinFamily"] = outcome.get("q")
+                rows.append(outcome)
+        bh_adjust(rows, key="p", output_key="q")
 
 
 def build_artifact(
@@ -1233,10 +1358,11 @@ def build_artifact(
         ))
         print(f"cluster {index + 1}/{len(FEATURES)} {feature['key']}", flush=True)
 
+    apply_global_cluster_adjustment(families)
     emit_status(
         "interactions",
         force=True,
-        message="Testing cross-family operation combinations against each keep estimator.",
+        message="Testing cross-family operation combinations at the 80% and 85% keep thresholds.",
     )
     interactions = build_interactions(families, outcomes)
     source_hash_value = stable_hash({
@@ -1275,6 +1401,12 @@ def build_artifact(
             "visionModel": VISION_MODEL,
             "visionTemperature": 0,
             "visionSeed": SEED,
+            "visionMaxOutputTokens": VISION_MAX_OUTPUT_TOKENS,
+            "visionOutputPolicy": (
+                "The ceiling was raised from 4096 to 8192 after finishReason=MAX_TOKENS "
+                "showed hidden thinking tokens truncating otherwise valid JSON. Cached complete "
+                "descriptions retain the same model, prompt, and seed."
+            ),
             "promptHash": PROMPT_HASH,
             "embeddingModel": EMBED_MODEL,
             "embeddingDimensions": EMBED_DIMENSIONS,
@@ -1283,6 +1415,10 @@ def build_artifact(
             "outcomeBlindClustering": True,
             "descriptorInput": "Montage pixels only; saved text is a separate feature family.",
             "validation": "Five-fold out-of-fold ridge for each feature family and keep estimator.",
+            "multipleTesting": (
+                "Cluster q-values use Benjamini-Hochberg across every family-cluster test "
+                "within a target. Interaction q-values are separate global corrections at 80% and 85%."
+            ),
         },
         "targets": TARGETS,
         "summary": {

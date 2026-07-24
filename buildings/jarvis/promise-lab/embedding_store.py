@@ -121,13 +121,14 @@ def vector_key(text: str, model: str = MODEL, dimensions: int = DIMENSIONS) -> s
 
 class EmbeddingStore:
     def __init__(self, path: str | Path, model: str = MODEL, dimensions: int = DIMENSIONS,
-                 batch_size: int | None = None, workers: int | None = None):
+                 batch_size: int | None = None, workers: int | None = None, on_retry=None):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.model = model
         self.dimensions = int(dimensions)
         self.batch_size = int(batch_size or os.environ.get("PROMISE_LAB_BATCH_SIZE", "100"))
         self.workers = int(workers or os.environ.get("PROMISE_LAB_EMBED_WORKERS", "8"))
+        self.on_retry = on_retry
         self.env = load_env()
         self.api_key = self.env.get("GEMINI_API_KEY", "")
         self._lock = threading.Lock()
@@ -145,6 +146,19 @@ class EmbeddingStore:
             )
         """)
         self.db.commit()
+
+    def _notify_retry(self, status: int, message: str, delay: float, attempt: int) -> None:
+        if not self.on_retry:
+            return
+        try:
+            self.on_retry({
+                "status": int(status or 0),
+                "message": str(message or "")[:500],
+                "delay": float(delay),
+                "attempt": int(attempt),
+            })
+        except Exception:
+            pass
 
     def close(self) -> None:
         self.db.close()
@@ -207,6 +221,7 @@ class EmbeddingStore:
         attempts = max(8, int(os.environ.get("PROMISE_LAB_EMBED_RETRIES", "48")))
         for attempt in range(attempts):
             _wait_for_embedding_quota(len(texts))
+            response_status = 0
             try:
                 response = requests.post(
                     url,
@@ -214,6 +229,7 @@ class EmbeddingStore:
                     json=body,
                     timeout=120,
                 )
+                response_status = int(response.status_code)
                 if response.status_code == 200:
                     payload = response.json().get("embeddings") or []
                     vectors = [np.asarray(item.get("values") or [], np.float32) for item in payload]
@@ -224,12 +240,14 @@ class EmbeddingStore:
                 if response.status_code not in (408, 429, 500, 502, 503, 504):
                     break
                 delay = _retry_delay_seconds(response, attempt)
+                self._notify_retry(response.status_code, response.text, delay, attempt + 1)
                 if response.status_code == 429:
                     _defer_embedding_quota(delay + 1.0)
                     continue
             except Exception as exc:
                 last_error = str(exc)
                 delay = min(60.0, 1.5 * (2 ** attempt))
+                self._notify_retry(response_status, last_error, delay, attempt + 1)
             time.sleep(delay)
         raise RuntimeError(f"Gemini batch embedding failed: {last_error}")
 
