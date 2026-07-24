@@ -10,7 +10,7 @@ each point's RAW INPUT is inspectable. Per channel: raw/<chan>/embeddings.npz + 
 Usage: RAW_MAX=5000 python3 raw_embed.py
 """
 import os, sys, json, base64, subprocess, tempfile, shutil, time, io, threading, re
-import numpy as np, boto3, urllib.request
+import numpy as np, boto3, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.linear_model import LogisticRegression, Ridge
@@ -58,6 +58,7 @@ CHECKPOINT_EVERY = max(100, int(os.environ.get('RAW_CHECKPOINT_EVERY', '5000' if
 MAP_EVERY = max(0, int(os.environ.get('RAW_MAP_EVERY', '0' if BACKFILL_MODE else '500')))
 STATUS_EVERY = max(10, int(os.environ.get('RAW_STATUS_EVERY', '50')))
 STREAM_R2 = os.environ.get('RAW_STREAM_R2', '1') != '0'
+CREDIT_RETRY_SECONDS = max(15, int(os.environ.get('RAW_CREDIT_RETRY_SECONDS', '60')))
 EMB_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent'
 CHANS = ['visual', 'text', 'together']
 
@@ -85,25 +86,116 @@ def r2_get(key):
     try: return s3.get_object(Bucket=BUCKET, Key=key)['Body'].read()
     except Exception: return None
 def r2_put(key, data, ct): s3.put_object(Bucket=BUCKET, Key=key, Body=data, ContentType=ct)
+_status_lock = threading.Lock()
+_status_payload = {}
 def emit_status(stage, **extra):
-    payload = {
-        'version': 1, 'stage': stage, 'heartbeat': int(time.time() * 1000),
-        'workerPid': os.getpid(), 'workers': WORKERS, 'checkpointEvery': CHECKPOINT_EVERY,
-        'streamingFirstFiveSeconds': STREAM_R2, **extra,
-    }
+    global _status_payload
+    with _status_lock:
+        payload = {
+            **_status_payload,
+            'version': 1, 'stage': stage, 'heartbeat': int(time.time() * 1000),
+            'workerPid': os.getpid(), 'workers': WORKERS, 'checkpointEvery': CHECKPOINT_EVERY,
+            'streamingFirstFiveSeconds': STREAM_R2, **extra,
+        }
+        _status_payload = payload
     try: r2_put('raw/predictor-lab/embed-status.json', json.dumps(payload).encode(), 'application/json')
     except Exception: pass
 
 
+_provider_lock = threading.Lock()
+_provider_error = [None]
+_provider_notice_at = [0.0]
+
+
+def provider_error():
+    with _provider_lock:
+        return dict(_provider_error[0]) if _provider_error[0] else None
+
+
+def classify_embed_error(exc):
+    status = int(getattr(exc, 'code', 0) or 0)
+    detail = ''
+    if isinstance(exc, urllib.error.HTTPError):
+        try:
+            raw = exc.read().decode('utf-8', 'replace')
+            parsed = json.loads(raw)
+            detail = str((parsed.get('error') or {}).get('message') or raw)
+        except Exception:
+            detail = str(exc)
+    else:
+        detail = str(exc)
+    if KEY:
+        detail = detail.replace(KEY, '[redacted]')
+    detail = re.sub(r'key=[^&\s]+', 'key=[redacted]', detail, flags=re.I)[:280]
+    low = detail.lower()
+    quota_markers = ('quota', 'billing', 'credit', 'resource_exhausted', 'resource exhausted')
+    if status in (402, 429) or (status == 403 and any(marker in low for marker in quota_markers)):
+        return {
+            'provider': 'Gemini',
+            'kind': 'credits_or_quota_exhausted',
+            'httpStatus': status or None,
+            'message': 'Gemini embedding credits or project quota are exhausted. Top up the account or raise the quota; this worker is paused and will resume automatically.',
+            'diagnostic': detail,
+            'retrySeconds': CREDIT_RETRY_SECONDS,
+            'at': int(time.time() * 1000),
+        }
+    if status == 429:
+        kind, message = 'rate_limited', 'Gemini is rate-limiting embedding requests. The worker will retry automatically.'
+    elif status >= 500:
+        kind, message = 'provider_unavailable', 'Gemini is temporarily unavailable. The worker will retry automatically.'
+    else:
+        kind, message = 'embedding_request_failed', 'A Gemini embedding request failed after retries. The video remains unresolved and will be retried.'
+    return {
+        'provider': 'Gemini', 'kind': kind, 'httpStatus': status or None,
+        'message': message, 'diagnostic': detail, 'at': int(time.time() * 1000),
+    }
+
+
+def record_provider_failure(error):
+    now = time.time()
+    with _provider_lock:
+        previous_kind = (_provider_error[0] or {}).get('kind')
+        _provider_error[0] = error
+        should_publish = previous_kind != error.get('kind') or now - _provider_notice_at[0] >= 60
+        if should_publish:
+            _provider_notice_at[0] = now
+    if should_publish:
+        blocked = error.get('kind') == 'credits_or_quota_exhausted'
+        emit_status('blocked' if blocked else 'degraded', providerError=error, message=error.get('message'))
+
+
+def record_provider_success():
+    with _provider_lock:
+        recovered = _provider_error[0] is not None
+        _provider_error[0] = None
+    if recovered:
+        emit_status('running', providerError=None, message='Gemini embedding access restored; resuming automatically from the durable checkpoint.')
+
+
 def embed(parts, tries=6):
     body = json.dumps({'content': {'parts': parts}, 'outputDimensionality': DIM}).encode()
-    for a in range(tries):
+    attempt = 0
+    while attempt < tries:
         try:
             req = urllib.request.Request(EMB_URL, data=body, method='POST', headers={'Content-Type': 'application/json', 'x-goog-api-key': KEY})
             with urllib.request.urlopen(req, timeout=60) as r:
-                return np.array(json.loads(r.read())['embedding']['values'], np.float32)
-        except Exception:
-            if a < tries - 1: time.sleep(1.5 * (a + 1)); continue
+                vector = np.array(json.loads(r.read())['embedding']['values'], np.float32)
+            record_provider_success()
+            return vector
+        except Exception as exc:
+            error = classify_embed_error(exc)
+            if error.get('kind') == 'credits_or_quota_exhausted':
+                # Do not consume the queue while billing is blocked. Hold this
+                # exact video, expose the reason in the UI, and probe until the
+                # account accepts requests again.
+                record_provider_failure(error)
+                time.sleep(CREDIT_RETRY_SECONDS)
+                continue
+            attempt += 1
+            if attempt < tries:
+                time.sleep(1.5 * attempt)
+                continue
+            record_provider_failure(error)
             return None
 def img_part(b64): return {'inlineData': {'mimeType': 'image/jpeg', 'data': b64}}
 
@@ -314,7 +406,7 @@ def science_complete():
 emit_status('running' if todo else 'complete', discovered=len(stored), eligible=len(stored), queued=len(todo),
             processed=0, failed=0, complete={c: len(done[c]) for c in CHANS},
             scienceEligible=len(scienceids), scienceComplete=science_complete(),
-            message='Embedding canonical first-five-second inputs')
+            providerError=provider_error(), message='Embedding canonical first-five-second inputs')
 
 
 def heldout(X, views):
@@ -446,6 +538,7 @@ def work(v):
             emit_status('running', discovered=len(stored), eligible=len(stored), queued=max(0, unresolved),
                         attempted=cnt[0], processed=completed[0], failed=fails[0], complete={c: len(done[c]) for c in CHANS},
                         scienceEligible=len(scienceids), scienceComplete=science_complete(),
+                        providerError=provider_error(),
                         ratePerMinute=round(rate * 60, 2), etaSeconds=round(unresolved / rate) if rate > 0 else None,
                         message=f'Attempted {cnt[0]:,}; stored {completed[0]:,}; {unresolved:,} unresolved')
         if cnt[0] % CHECKPOINT_EVERY == 0:
@@ -464,6 +557,7 @@ if remaining:
                 attempted=cnt[0], processed=completed[0], failed=fails[0],
                 complete={c: len(done[c]) for c in CHANS},
                 scienceEligible=len(scienceids), scienceComplete=science_complete(),
+                providerError=provider_error(),
                 message=f'{len(remaining):,} unresolved Shorts will retry from the durable checkpoint')
     print(f"retry required: {len(remaining)} videos still lack a required visual/together vector", flush=True)
     sys.exit(2)
@@ -477,6 +571,6 @@ emit_status('complete', discovered=len(stored), eligible=len(stored), queued=0,
             attempted=cnt[0], processed=completed[0], failed=fails[0],
             complete={c: len(done[c]) for c in CHANS}, ratePerMinute=round(cnt[0] / max(time.time() - t0, 1) * 60, 2),
             scienceEligible=len(scienceids), scienceComplete=science_complete(),
-            etaSeconds=0, message='Canonical Science Center embedding pass complete')
+            providerError=None, etaSeconds=0, message='Canonical Science Center embedding pass complete')
 print('done', {c: len(store[c]['ids']) for c in CHANS}, 'fails', fails[0], flush=True)
 print('(re-run to retry any fails — they stay in `todo` until embedded + montaged)', flush=True)

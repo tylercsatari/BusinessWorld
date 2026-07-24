@@ -127,11 +127,24 @@ async function installRoutes(page, origin, artifact) {
         } else if (url.pathname === '/api/raw/predictor-lab/status') {
             payload = {
                 version: 1,
-                stage: 'complete',
-                updatedAt: artifact.generatedAt || Date.now(),
-                message: 'Persisted predictor artifact is ready.',
-                analysis: { stage: 'complete', updatedAt: artifact.generatedAt || Date.now() },
-                embedding: { stage: 'idle', updatedAt: artifact.generatedAt || Date.now() },
+                stage: 'embedding',
+                updatedAt: Date.now(),
+                message: 'Gemini embedding credits or project quota are exhausted.',
+                analysis: { stage: 'partial', updatedAt: artifact.generatedAt || Date.now() },
+                embedding: {
+                    stage: 'blocked',
+                    heartbeat: Date.now(),
+                    queued: 100,
+                    processed: 25,
+                    scienceComplete: { visual: 25, text: 10, together: 25 },
+                    providerError: {
+                        provider: 'Gemini',
+                        kind: 'credits_or_quota_exhausted',
+                        httpStatus: 429,
+                        retrySeconds: 60,
+                        message: 'Gemini embedding credits or project quota are exhausted. Top up the account or raise the quota; this worker is paused and will resume automatically.',
+                    },
+                },
             };
         } else if (url.pathname === '/api/retention/channels') {
             payload = { channels: [], active: 'tyler' };
@@ -418,6 +431,8 @@ async function main() {
         assert.strictEqual(await page.locator('#rtg-rawpanel [data-rawview="predictor"]').count(), 1, 'Predictor Lab subview is missing');
 
         await waitForTarget(page, 'keep');
+        await page.getByText('Gemini credits or quota exhausted', { exact: true }).waitFor({ state: 'visible' });
+        await page.getByText('probing every 60s', { exact: false }).waitFor({ state: 'visible' });
         await page.getByText('mean absolute keep-rate error', { exact: true }).waitFor({ state: 'visible' });
         const keepSections = await verifyFormulaAndCalibration(page, artifact, 'keep');
         await page.screenshot({ path: path.join(QA_DIR, 'desktop-keep-overview.png'), fullPage: false });

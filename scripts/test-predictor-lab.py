@@ -3,14 +3,19 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
 import inspect
+import io
 import itertools
 import json
 import os
+import re
 import sys
 import tempfile
+import time
+import urllib.error
 from collections import Counter
 from pathlib import Path
 from unittest import mock
@@ -19,12 +24,46 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER_PATH = ROOT / "buildings" / "jarvis" / "predictor-lab" / "run_predictor_lab.py"
 RESULT_PATH = ROOT / "buildings" / "jarvis" / "predictor-lab" / "results.json"
+RAW_EMBED_PATH = ROOT / "raw_embed.py"
 
 os.environ.setdefault("AWS_EC2_METADATA_DISABLED", "true")
 spec = importlib.util.spec_from_file_location("predictor_lab_under_test", RUNNER_PATH)
 assert spec and spec.loader, f"could not load {RUNNER_PATH}"
 predictor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(predictor)
+
+
+# Execute only the pure Gemini-error classifier from raw_embed.py. Importing the
+# whole worker would start network and R2 work, so the AST keeps this unit test
+# deterministic and side-effect free.
+raw_tree = ast.parse(RAW_EMBED_PATH.read_text(encoding="utf-8"))
+classifier_node = next(
+    node for node in raw_tree.body
+    if isinstance(node, ast.FunctionDef) and node.name == "classify_embed_error"
+)
+classifier_namespace = {
+    "json": json,
+    "re": re,
+    "time": time,
+    "urllib": __import__("urllib"),
+    "KEY": "test-secret-key",
+    "CREDIT_RETRY_SECONDS": 60,
+}
+exec(compile(ast.Module(body=[classifier_node], type_ignores=[]), str(RAW_EMBED_PATH), "exec"), classifier_namespace)
+quota_body = io.BytesIO(json.dumps({
+    "error": {
+        "code": 429,
+        "status": "RESOURCE_EXHAUSTED",
+        "message": "Quota exhausted for key=test-secret-key; check billing.",
+    }
+}).encode())
+quota_error = urllib.error.HTTPError("https://example.invalid", 429, "quota", {}, quota_body)
+quota_classification = classifier_namespace["classify_embed_error"](quota_error)
+assert quota_classification["kind"] == "credits_or_quota_exhausted"
+assert quota_classification["httpStatus"] == 429
+assert quota_classification["retrySeconds"] == 60
+assert "test-secret-key" not in quota_classification["diagnostic"]
+assert "[redacted]" in quota_classification["diagnostic"]
 
 
 def assert_formula(formula: dict) -> None:
