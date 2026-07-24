@@ -69,6 +69,8 @@ LOCAL_STATUS = HERE / "status.json"
 LOCAL_LOG = HERE / "operations.log"
 CACHE_DIR = HERE / ".cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+LOCAL_DESCRIPTION_DIR = CACHE_DIR / "descriptions"
+LOCAL_DESCRIPTION_DIR.mkdir(parents=True, exist_ok=True)
 DESCRIPTIONS_COMPLETE_MARKER = CACHE_DIR / "descriptions-complete.json"
 
 
@@ -299,7 +301,28 @@ class R2Store:
         return json.loads(payload) if payload else default
 
     def put_bytes(self, key: str, payload: bytes, content_type: str) -> None:
-        self.client.put_object(Bucket=self.bucket, Key=key, Body=payload, ContentType=content_type)
+        last_error = None
+        for attempt in range(12):
+            try:
+                self.client.put_object(
+                    Bucket=self.bucket,
+                    Key=key,
+                    Body=payload,
+                    ContentType=content_type,
+                )
+                return
+            except ClientError as exc:
+                status = (exc.response.get("ResponseMetadata") or {}).get("HTTPStatusCode") or 0
+                if int(status) not in {408, 429} and int(status) < 500:
+                    raise
+                last_error = exc
+            except Exception as exc:
+                last_error = exc
+            if attempt < 11:
+                delay = min(30, 2 ** attempt)
+                print(f"R2 write retry {attempt + 1}/12 for {key}: {last_error}", flush=True)
+                time.sleep(delay)
+        raise RuntimeError(f"R2 write failed after retries for {key}: {last_error}") from last_error
 
     def put_json(self, key: str, value: Any) -> None:
         payload = json.dumps(
@@ -672,6 +695,57 @@ def load_description_cache(keys: set[str]) -> dict[str, dict[str, Any]]:
     return cached
 
 
+def save_local_description(payload: dict[str, Any], directory: Path = LOCAL_DESCRIPTION_DIR) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    hook_id = re.sub(r"[^a-zA-Z0-9_-]", "", str(payload.get("id") or ""))
+    if not hook_id:
+        raise ValueError("description payload has no safe id")
+    destination = directory / f"{hook_id}.json"
+    temporary = directory / f".{hook_id}.{os.getpid()}.{threading.get_ident()}.tmp"
+    temporary.write_text(
+        json.dumps(json_ready(payload), ensure_ascii=False, separators=(",", ":"), allow_nan=False),
+        encoding="utf-8",
+    )
+    temporary.replace(destination)
+
+
+def load_local_description_cache(directory: Path = LOCAL_DESCRIPTION_DIR) -> dict[str, dict[str, Any]]:
+    cached = {}
+    if not directory.exists():
+        return cached
+    for path in sorted(directory.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if payload.get("id"):
+                cached[str(payload["id"])] = payload
+        except Exception as exc:
+            print(f"ignoring invalid local description {path.name}: {exc}", flush=True)
+    return cached
+
+
+def sync_local_descriptions(
+    local: dict[str, dict[str, Any]],
+    remote: dict[str, dict[str, Any]],
+) -> None:
+    pending = [
+        payload for hook_id, payload in local.items()
+        if hook_id not in remote
+    ]
+    if not pending:
+        return
+
+    def upload(payload):
+        R2.put_json(f"{DESCRIPTION_PREFIX}{payload['id']}.json", payload)
+        return str(payload["id"])
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(upload, payload) for payload in pending]
+        for future in as_completed(futures):
+            hook_id = future.result()
+            remote[hook_id] = local[hook_id]
+    print(f"synced {len(pending)} locally cached descriptions to R2", flush=True)
+
+
 def describe_all(
     rows: list[dict[str, Any]],
     image_objects: dict[str, dict[str, Any]],
@@ -729,6 +803,7 @@ def describe_all(
             "createdAt": int(time.time() * 1000),
             **result,
         }
+        save_local_description(payload)
         R2.put_json(f"{DESCRIPTION_PREFIX}{hook_id}.json", payload)
         return hook_id, payload
 
@@ -1501,7 +1576,10 @@ def run(limit: int | None = None, describe_only: bool = False) -> dict[str, Any]
         item["key"] for item in R2.list_objects(DESCRIPTION_PREFIX)
         if item["key"].endswith(".json")
     }
-    existing = load_description_cache(description_keys)
+    remote_existing = load_description_cache(description_keys)
+    local_existing = load_local_description_cache()
+    sync_local_descriptions(local_existing, remote_existing)
+    existing = {**remote_existing, **local_existing}
     descriptions = describe_all(rows, image_objects, existing, limit=None)
     if describe_only:
         DESCRIPTIONS_COMPLETE_MARKER.write_text(
