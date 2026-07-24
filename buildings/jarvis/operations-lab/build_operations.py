@@ -46,7 +46,7 @@ from embedding_store import EmbeddingStore  # noqa: E402
 
 
 PRODUCT_VERSION = "shorts-hook-operations-v1"
-ANALYSIS_VERSION = "operations-analysis-v2"
+ANALYSIS_VERSION = "operations-analysis-v3"
 R2_PREFIX = "shorts/operations-lab-v1"
 STATUS_KEY = f"{R2_PREFIX}/status.json"
 ARTIFACT_KEY = f"{R2_PREFIX}/artifact.json"
