@@ -91,6 +91,11 @@ assert(
     followup.includes('while true') && followup.includes('"stage": "complete"'),
     'The canonical artifact handoff must retry until the full build completes',
 );
+assert(
+    builder.includes('DESCRIPTIONS_COMPLETE_MARKER.write_text')
+        && followup.includes('descriptions-complete.json'),
+    'Description completion must use a durable marker that survives launchd restarts',
+);
 
 console.log(JSON.stringify({
     ok: true,
