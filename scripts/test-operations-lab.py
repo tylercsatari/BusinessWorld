@@ -53,6 +53,18 @@ def main() -> None:
     assert len(clean["sequence"]) == 5
     assert set(clean["features"]) == set(MODULE.EXTRACTED_FEATURE_KEYS)
 
+    with tempfile.TemporaryDirectory() as temp_dir:
+        local_payload = {
+            "id": "local-cache-contract",
+            "visual_description": fixture["visual_description"],
+            "sequence": fixture["sequence"],
+            "features": fixture["features"],
+        }
+        local_directory = Path(temp_dir)
+        MODULE.save_local_description(local_payload, local_directory)
+        local_loaded = MODULE.load_local_description_cache(local_directory)
+        assert local_loaded["local-cache-contract"]["id"] == "local-cache-contract"
+
     error = MODULE.classify_provider_error(429, "quota exhausted key=secret-value")
     assert error["kind"] == "credits_or_quota_exhausted"
     assert "secret-value" not in error["message"]

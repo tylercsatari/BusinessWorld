@@ -96,6 +96,11 @@ assert(
         && followup.includes('descriptions-complete.json'),
     'Description completion must use a durable marker that survives launchd restarts',
 );
+assert(
+    builder.indexOf('save_local_description(payload)')
+        < builder.indexOf('R2.put_json(f"{DESCRIPTION_PREFIX}{hook_id}.json", payload)'),
+    'Paid vision results must be durably cached locally before their R2 upload',
+);
 
 console.log(JSON.stringify({
     ok: true,
