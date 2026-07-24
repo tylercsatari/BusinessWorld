@@ -1519,6 +1519,584 @@
     text-align: center;
 }
 
+.ops-fixed-threshold {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 7px;
+    min-height: 31px;
+    border-left: 1px solid var(--ops-border);
+    padding: 0 4px 0 12px;
+}
+
+.ops-fixed-threshold b {
+    color: var(--ops-amber);
+    font-size: 10px;
+    white-space: nowrap;
+}
+
+.ops-principles-answer h3 {
+    max-width: 980px;
+    margin: 5px 0 9px;
+    color: var(--ops-text);
+    font-size: 17px;
+    font-weight: 750;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.ops-principles-boundary {
+    border-left: 3px solid var(--ops-amber);
+    padding: 7px 9px;
+    color: var(--ops-dim);
+    background: color-mix(in srgb, var(--ops-amber) 7%, transparent);
+    font-size: 9px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+
+.ops-principles-boundary b {
+    margin-right: 4px;
+    color: var(--ops-amber);
+}
+
+.ops-principle-columns {
+    align-items: start;
+}
+
+.ops-principle-group {
+    display: grid;
+    align-content: start;
+}
+
+.ops-principle-list {
+    display: grid;
+    gap: 6px;
+    margin-top: 9px;
+}
+
+.ops-principle-card {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--ops-border) !important;
+    border-left: 3px solid var(--ops-green) !important;
+    border-radius: 5px;
+    padding: 9px;
+    color: var(--ops-dim);
+    background: var(--ops-bg);
+    text-align: left;
+    cursor: pointer;
+}
+
+.ops-principle-card.is-negative {
+    border-left-color: var(--ops-red) !important;
+}
+
+.ops-principle-card:hover,
+.ops-principle-card.is-active {
+    border-color: color-mix(in srgb, var(--ops-cyan) 65%, var(--ops-border)) !important;
+    background: color-mix(in srgb, var(--ops-cyan) 5%, var(--ops-bg));
+}
+
+.ops-principle-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+}
+
+.ops-principle-card-head > span:first-child {
+    min-width: 0;
+}
+
+.ops-principle-card-head small,
+.ops-principle-card-head b {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+.ops-principle-card-head small {
+    color: var(--ops-mute);
+    font-size: 7px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.ops-principle-card-head b {
+    margin-top: 2px;
+    color: var(--ops-text);
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.ops-principle-comparison {
+    display: block;
+    margin-top: 3px;
+    color: var(--ops-mute);
+    font-size: 8px;
+    font-style: normal;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+}
+
+.ops-label-comparison {
+    display: grid;
+    gap: 12px;
+}
+
+.ops-label-comparison h5 {
+    margin: 0 0 6px;
+    color: var(--ops-text);
+    font-size: 9px;
+    font-weight: 750;
+}
+
+.ops-model-validation-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(250px, .8fr);
+    gap: 14px;
+    align-items: start;
+}
+
+.ops-model-bars {
+    display: grid;
+    gap: 11px;
+}
+
+.ops-model-bar {
+    display: grid;
+    gap: 5px;
+}
+
+.ops-model-bar > span:first-child {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--ops-text);
+    font-size: 9px;
+}
+
+.ops-model-bar small {
+    color: var(--ops-mute);
+    font-weight: 650;
+}
+
+.ops-model-bar-track {
+    position: relative;
+    display: block;
+    height: 10px;
+    overflow: hidden;
+    border: 1px solid var(--ops-border);
+    border-radius: 3px;
+    background: var(--ops-card-2);
+}
+
+.ops-model-bar-track i {
+    position: absolute;
+    inset: 0 auto 0 0;
+    display: block;
+}
+
+.ops-model-bar-track .is-baseline {
+    background: color-mix(in srgb, var(--ops-mute) 42%, transparent);
+}
+
+.ops-model-bar-track .is-model {
+    top: 2px;
+    bottom: 2px;
+    background: var(--ops-cyan);
+}
+
+.ops-model-losses {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    margin: 0;
+}
+
+.ops-model-losses > div {
+    min-width: 0;
+    border: 1px solid var(--ops-border);
+    border-radius: 4px;
+    padding: 7px;
+    background: var(--ops-card-2);
+}
+
+.ops-model-losses dt,
+.ops-model-losses dd,
+.ops-model-losses small {
+    display: block;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.ops-model-losses dt {
+    color: var(--ops-mute);
+    font-size: 7px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.ops-model-losses dd {
+    margin-top: 3px;
+    color: var(--ops-text);
+    font-size: 10px;
+    font-weight: 760;
+}
+
+.ops-model-losses small {
+    margin-top: 2px;
+    color: var(--ops-mute);
+    font-size: 7px;
+    font-weight: 650;
+}
+
+.ops-principle-direction {
+    flex: 0 0 auto;
+    border-radius: 3px;
+    padding: 2px 5px;
+    color: var(--ops-green);
+    background: color-mix(in srgb, var(--ops-green) 10%, transparent);
+    font-size: 7px;
+    font-weight: 760;
+    white-space: nowrap;
+}
+
+.ops-principle-card.is-negative .ops-principle-direction {
+    color: var(--ops-red);
+    background: color-mix(in srgb, var(--ops-red) 10%, transparent);
+}
+
+.ops-principle-dumbbell {
+    display: block;
+    width: 100%;
+    margin-top: 9px;
+}
+
+.ops-principle-dumbbell.is-empty {
+    color: var(--ops-faint);
+    font-size: 8px;
+}
+
+.ops-dumbbell-track {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 16px;
+}
+
+.ops-dumbbell-track::before {
+    position: absolute;
+    top: 7px;
+    right: 0;
+    left: 0;
+    height: 2px;
+    background: var(--ops-border-2);
+    content: "";
+}
+
+.ops-dumbbell-range {
+    position: absolute;
+    top: 6px;
+    min-width: 2px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--ops-cyan);
+}
+
+.ops-dumbbell-dot {
+    position: absolute;
+    top: 3px;
+    width: 9px;
+    height: 9px;
+    transform: translateX(-50%);
+    border: 2px solid var(--ops-bg);
+    border-radius: 50%;
+    background: var(--ops-mute);
+    box-shadow: 0 0 0 1px var(--ops-border-2);
+}
+
+.ops-dumbbell-dot.is-hit {
+    background: var(--ops-cyan);
+}
+
+.ops-dumbbell-labels {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--ops-faint);
+    font-size: 7px;
+}
+
+.ops-dumbbell-labels i {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 3px;
+    border-radius: 50%;
+    background: var(--ops-mute);
+}
+
+.ops-dumbbell-labels i.is-hit {
+    background: var(--ops-cyan);
+}
+
+.ops-principle-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    min-width: 0;
+    margin-top: 9px;
+}
+
+.ops-principle-metrics > span {
+    min-width: 0;
+    border-top: 1px solid var(--ops-border);
+    padding-top: 5px;
+}
+
+.ops-principle-metrics small,
+.ops-principle-metrics b,
+.ops-principle-metrics em {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+.ops-principle-metrics small {
+    color: var(--ops-faint);
+    font-size: 7px;
+    text-transform: uppercase;
+}
+
+.ops-principle-metrics b {
+    margin-top: 1px;
+    color: var(--ops-text);
+    font-size: 9px;
+}
+
+.ops-principle-metrics em {
+    margin-top: 1px;
+    color: var(--ops-mute);
+    font-size: 7px;
+    font-style: normal;
+}
+
+.ops-principle-detail-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
+    gap: 10px;
+    min-width: 0;
+}
+
+.ops-principle-detail-grid > section,
+.ops-principle-ledger-stack,
+.ops-principle-ledger-stack > div {
+    min-width: 0;
+}
+
+.ops-principle-ledger-stack {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+}
+
+.ops-plane-point.is-principle-member {
+    stroke: var(--ops-text);
+    stroke-width: 2.4;
+    opacity: 1;
+}
+
+.ops-plane-point.is-principle-member.is-selected {
+    stroke: var(--ops-cyan);
+    stroke-width: 3.5;
+}
+
+.ops-principle-table {
+    min-width: 360px;
+}
+
+.ops-principles-stale {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid color-mix(in srgb, var(--ops-amber) 58%, var(--ops-border));
+    border-left: 3px solid var(--ops-amber);
+    border-radius: 4px;
+    padding: 9px 10px;
+    color: var(--ops-dim);
+    background: color-mix(in srgb, var(--ops-amber) 7%, var(--ops-card));
+}
+
+.ops-principles-stale b {
+    color: var(--ops-text);
+}
+
+.ops-diagnostic-effects {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    margin: 8px 0;
+}
+
+.ops-diagnostic-effects > div {
+    min-width: 0;
+    border: 1px solid var(--ops-border);
+    border-radius: 3px;
+    padding: 6px;
+    background: var(--ops-bg);
+}
+
+.ops-diagnostic-effects dt,
+.ops-diagnostic-effects dd,
+.ops-diagnostic-effects small {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+.ops-diagnostic-effects dt {
+    color: var(--ops-faint);
+    font-size: 7px;
+    text-transform: uppercase;
+}
+
+.ops-diagnostic-effects dd {
+    margin: 2px 0 0;
+    color: var(--ops-text);
+    font-size: 10px;
+}
+
+.ops-diagnostic-effects small {
+    margin-top: 2px;
+    color: var(--ops-mute);
+    font-size: 8px;
+}
+
+.ops-principle-representatives,
+.ops-principle-method {
+    margin-top: 12px;
+    border-top: 1px solid var(--ops-border);
+    padding-top: 10px;
+}
+
+.ops-principle-montages {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 7px;
+}
+
+.ops-principle-montage {
+    display: grid;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--ops-border) !important;
+    border-radius: 4px;
+    padding: 0;
+    color: var(--ops-dim);
+    background: var(--ops-bg);
+    text-align: left;
+}
+
+button.ops-principle-montage {
+    cursor: pointer;
+}
+
+button.ops-principle-montage:hover {
+    border-color: var(--ops-cyan) !important;
+}
+
+.ops-principle-montage img,
+.ops-principle-montage > .ops-image-failure {
+    display: block;
+    width: 100%;
+    aspect-ratio: 5 / 1;
+    object-fit: cover;
+    background: var(--ops-card-2);
+}
+
+.ops-principle-montage > span:last-child {
+    display: block;
+    min-width: 0;
+    padding: 6px;
+}
+
+.ops-principle-montage b,
+.ops-principle-montage small {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+.ops-principle-montage b {
+    color: var(--ops-text);
+    font-size: 8px;
+}
+
+.ops-principle-montage small {
+    margin-top: 2px;
+    color: var(--ops-faint);
+    font-size: 7px;
+    line-height: 1.35;
+}
+
+.ops-principle-diagnostics {
+    margin-top: 12px;
+}
+
+.ops-principle-diagnostic {
+    min-width: 0;
+    border: 1px solid var(--ops-border);
+    border-radius: 4px;
+    padding: 8px;
+    background: var(--ops-bg);
+}
+
+.ops-principle-diagnostic p,
+.ops-principle-method p,
+.ops-principle-method li {
+    color: var(--ops-dim);
+    font-size: 8px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.ops-principle-diagnostic p,
+.ops-principle-method p {
+    margin: 5px 0 0;
+}
+
+.ops-principle-method b {
+    color: var(--ops-text);
+}
+
+.ops-principle-method ul {
+    margin: 7px 0 0;
+    padding-left: 18px;
+}
+
+.ops-principles-state {
+    display: grid;
+    min-height: 220px;
+    align-content: center;
+    justify-items: start;
+    padding: 24px;
+}
+
+.ops-principles-state h3 {
+    margin: 3px 0 5px;
+    color: var(--ops-text);
+    font-size: 15px;
+}
+
+.ops-principles-state p {
+    max-width: 720px;
+    margin: 0 0 10px;
+    color: var(--ops-dim);
+    font-size: 9px;
+}
+
 @media (max-width: 1100px) {
     .ops-control-bar {
         flex-wrap: wrap;
@@ -1546,6 +2124,11 @@
 
     .ops-plane-grid,
     .ops-overview-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .ops-principle-columns,
+    .ops-principle-detail-grid {
         grid-template-columns: minmax(0, 1fr);
     }
 }
@@ -1605,6 +2188,10 @@
     .ops-point-inspector img {
         max-width: 430px;
     }
+
+    .ops-principle-montages {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 600px) {
@@ -1663,6 +2250,67 @@
         white-space: normal;
     }
 
+    .ops-model-validation-grid,
+    .ops-model-losses {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .ops-model-bar > span:first-child {
+        display: grid;
+    }
+
+    .ops-principles-stale {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .ops-principle-detail .ops-compact-table-wrap {
+        overflow-x: visible;
+    }
+
+    .ops-principle-detail .ops-principle-table {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        table-layout: fixed;
+    }
+
+    .ops-principle-detail .ops-principle-table th,
+    .ops-principle-detail .ops-principle-table td {
+        padding-right: 3px;
+        padding-left: 3px;
+        font-size: 8px;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .ops-label-comparison .ops-compact-table-wrap {
+        overflow-x: visible;
+    }
+
+    .ops-label-comparison .ops-table {
+        width: 100%;
+        min-width: 0;
+        table-layout: fixed;
+    }
+
+    .ops-label-comparison .ops-table th:first-child,
+    .ops-label-comparison .ops-table td:first-child {
+        width: 52%;
+    }
+
+    .ops-label-comparison .ops-table th,
+    .ops-label-comparison .ops-table td {
+        padding-right: 4px;
+        padding-left: 4px;
+        overflow-wrap: anywhere;
+    }
+
+    .ops-diagnostic-effects {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
     .ops-control-group {
         display: grid;
         grid-template-columns: 58px minmax(0, 1fr);
@@ -1687,6 +2335,14 @@
         width: 100%;
         min-width: 0;
         margin: 0;
+    }
+
+    .ops-fixed-threshold {
+        justify-content: space-between;
+        width: 100%;
+        border-top: 1px solid var(--ops-border);
+        border-left: 0;
+        padding: 7px 3px 0;
     }
 
     .ops-panel {
@@ -1743,6 +2399,19 @@
         grid-template-columns: minmax(0, 1fr);
     }
 
+    .ops-principle-card-head {
+        display: grid;
+        gap: 5px;
+    }
+
+    .ops-principle-direction {
+        justify-self: start;
+    }
+
+    .ops-principle-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .ops-interaction-equation {
         grid-template-columns: minmax(0, 1fr);
     }
@@ -1761,6 +2430,19 @@
     }
 
     .ops-pending {
+        min-height: 190px;
+        padding: 18px 12px;
+    }
+
+    .ops-principles-answer h3 {
+        font-size: 14px;
+    }
+
+    .ops-principle-montages {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .ops-principles-state {
         min-height: 190px;
         padding: 18px 12px;
     }
