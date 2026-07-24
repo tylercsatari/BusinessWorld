@@ -12,6 +12,8 @@ const retention = read('buildings/jarvis/jarvis-retention.js');
 const server = read('server.js');
 const html = read('index.html');
 const builder = read('buildings/jarvis/operations-lab/build_operations.py');
+const embeddingStore = read('buildings/jarvis/promise-lab/embedding_store.py');
+const followup = read('buildings/jarvis/operations-lab/finish_operations.sh');
 
 assert(
     retention.includes("['operations', 'Operations']"),
@@ -64,6 +66,30 @@ assert(
 assert(
     builder.includes('if error["kind"] == "credits_or_quota_exhausted"'),
     'Credit exhaustion must have a distinct retry path',
+);
+assert(
+    builder.includes('while failures < MAX_RETRIES'),
+    'Ordinary embedding failures must remain bounded',
+);
+assert(
+    builder.includes('output_key="q85"'),
+    'Interaction evidence must be corrected separately at the 85% threshold',
+);
+assert(
+    builder.includes('apply_global_cluster_adjustment(families)'),
+    'Cluster evidence must receive a target-wide multiple-testing correction',
+);
+assert(
+    builder.includes('on_retry=report_retry'),
+    'Operations must surface embedding transport retries in worker status',
+);
+assert(
+    embeddingStore.includes('self._notify_retry(response.status_code'),
+    'The embedding transport must report provider retries as they happen',
+);
+assert(
+    followup.includes('while true') && followup.includes('"stage": "complete"'),
+    'The canonical artifact handoff must retry until the full build completes',
 );
 
 console.log(JSON.stringify({
