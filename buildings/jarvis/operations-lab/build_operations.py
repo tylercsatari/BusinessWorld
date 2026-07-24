@@ -264,6 +264,25 @@ def canonical_text(value: Any) -> str:
     return text
 
 
+def canonical_feature_text(value: Any) -> str:
+    text = canonical_text(value)
+    compact = re.sub(r"[^a-z0-9 ]+", "", text.lower()).strip()
+    explicit_absence = {
+        "absent",
+        "n a",
+        "na",
+        "none",
+        "none visible",
+        "not applicable",
+        "not established",
+        "not visible",
+        "not visibly established",
+    }
+    if compact in explicit_absence or compact.startswith(("no visible ", "no on screen ")):
+        return "not visibly established"
+    return text
+
+
 def stable_hash(value: Any) -> str:
     payload = json.dumps(json_ready(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -478,7 +497,7 @@ def validate_description(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("sequence must contain five factual frame descriptions")
     clean_features = {}
     for key in EXTRACTED_FEATURE_KEYS:
-        text = canonical_text(features.get(key))
+        text = canonical_feature_text(features.get(key))
         if len(text.split()) < 3:
             raise ValueError(f"feature {key} was missing or too short")
         clean_features[key] = text

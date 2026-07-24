@@ -52,6 +52,12 @@ def main() -> None:
     clean = MODULE.validate_description(fixture)
     assert len(clean["sequence"]) == 5
     assert set(clean["features"]) == set(MODULE.EXTRACTED_FEATURE_KEYS)
+    absence_fixture = {
+        **fixture,
+        "features": {**fixture["features"], "on_screen_text": "None."},
+    }
+    absence_clean = MODULE.validate_description(absence_fixture)
+    assert absence_clean["features"]["on_screen_text"] == "not visibly established"
 
     with tempfile.TemporaryDirectory() as temp_dir:
         local_payload = {
