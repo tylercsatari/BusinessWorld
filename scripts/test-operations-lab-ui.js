@@ -131,13 +131,34 @@ async function waitForLoaded(page) {
 async function verifyDesktop(page, artifact) {
     await waitForLoaded(page);
     await page.getByText(`${artifact.hooks.length} hooks`, { exact: true }).waitFor();
-    await page.getByRole('heading', { name: 'Out-of-fold predictive evidence' }).waitFor();
+    await page.getByRole('heading', {
+        name: 'Surrogate reconstruction against existing keep estimates',
+    }).waitFor();
+    await page.getByText('Source contract', { exact: true }).waitFor();
+    const provenanceValues = page.locator('.ops-definition-list dd');
+    await provenanceValues.filter({
+        hasText: 'Durable saved-hook corpus with explicit selection provenance.',
+    }).waitFor();
+    await provenanceValues.filter({
+        hasText: 'Surrogate reconstruction of existing keep estimates, not observed swipe:',
+    }).waitFor();
+    await provenanceValues.filter({
+        hasText: 'targetNature: Existing keep estimates; not observed swipe.',
+    }).waitFor();
 
     await page.locator('[data-ops-view="families"]').click();
     await page.getByRole('heading', { name: artifact.families[0].label, exact: true }).waitFor();
-    await page.getByText('Global BH q', { exact: true }).first().waitFor();
+    await page.getByText('Global BY q', { exact: true }).first().waitFor();
+    assert.strictEqual(
+        await page.getByText('Global BH q', { exact: true }).count(),
+        0,
+        'Global correction must be labeled BY, not BH',
+    );
     await page.getByText('AUC at 80', { exact: true }).waitFor();
     await page.getByText('AUC at 85', { exact: true }).waitFor();
+    await page.getByRole('heading', {
+        name: 'Surrogate reconstruction vs existing estimate',
+    }).waitFor();
     assert.strictEqual(
         await page.locator('.ops-family-list > button').count(),
         artifact.families.length,
@@ -165,14 +186,35 @@ async function verifyDesktop(page, artifact) {
         await detailImage.elementHandle(),
     );
 
-    await page.locator('[data-ops-view="interactions"]').click();
-    await page.getByRole('heading', { name: 'Operations that co-occur in the same hook' }).waitFor();
+    const coOccurrenceTab = page.locator('[data-ops-view="interactions"]');
+    await expectText(coOccurrenceTab, 'Co-occurrence');
+    await coOccurrenceTab.click();
+    await page.getByRole('heading', {
+        name: 'Co-occurrence across feature-family clusters',
+    }).waitFor();
+    const coOccurrenceCopy = page.locator('.ops-section-copy').filter({
+        hasText: 'descriptive enrichment patterns within this saved-hook bank',
+    });
+    await coOccurrenceCopy.waitFor();
+    const normalizedCoOccurrenceCopy = String(await coOccurrenceCopy.textContent())
+        .replace(/\s+/g, ' ')
+        .trim();
+    assert(
+        normalizedCoOccurrenceCopy.includes('not causal effects or statistical synergy'),
+        'Co-occurrence copy must reject causal or statistical-synergy interpretation',
+    );
+    assert(
+        normalizedCoOccurrenceCopy.includes(
+            'one dependency-safe global family across all targets',
+        ),
+        'Co-occurrence copy must define the shared BY correction family',
+    );
     const interactionRows = page.locator('tr[data-ops-interaction]');
     assert(await interactionRows.count() > 0, 'The interaction table must render stored combinations');
     await interactionRows.first().click();
-    await page.getByText('Selected cross-family operation', { exact: true }).waitFor();
-    await page.getByText('Global q at 80', { exact: true }).waitFor();
-    await page.getByText('Global q at 85', { exact: true }).waitFor();
+    await page.getByText('Selected co-occurrence joint cell', { exact: true }).waitFor();
+    await page.getByText('Global BY q80', { exact: true }).waitFor();
+    await page.getByText('Global BY q85', { exact: true }).waitFor();
 
     await page.locator('[data-ops-target="visual_keep"]').click();
     await page.locator('[data-ops-threshold-number]').fill('85');
@@ -253,9 +295,43 @@ async function verifyBlockedState(page) {
     );
 }
 
+async function expectText(locator, expected) {
+    await locator.waitFor();
+    assert.strictEqual(
+        String(await locator.textContent()).trim(),
+        expected,
+        `Expected "${expected}" but found "${await locator.textContent()}"`,
+    );
+}
+
 async function main() {
     assert(fs.existsSync(ARTIFACT_PATH), `Missing test artifact: ${ARTIFACT_PATH}`);
+    const uiSource = fs.readFileSync(UI_PATH, 'utf8');
+    assert(
+        uiSource.includes("const STATUS_API = '/api/shortsquant/operations-lab/status'"),
+        'The existing Operations status route must remain unchanged',
+    );
+    assert(
+        uiSource.includes("const ARTIFACT_API = '/api/shortsquant/operations-lab/artifact'"),
+        'The existing Operations artifact route must remain unchanged',
+    );
+    assert(
+        uiSource.includes("['interactions', 'Co-occurrence']"),
+        'The compatibility view key must retain the new visible Co-occurrence label',
+    );
+    assert(
+        uiSource.includes('(artifact().interactions || {})'),
+        'The persisted interactions artifact key must remain unchanged',
+    );
     const artifact = JSON.parse(fs.readFileSync(ARTIFACT_PATH, 'utf8'));
+    const richerArtifact = JSON.parse(JSON.stringify(artifact));
+    richerArtifact.source.description = 'Durable saved-hook corpus with explicit selection provenance.';
+    richerArtifact.source.observationUnit = 'saved hook';
+    richerArtifact.provenance.validation = {
+        summary: 'Five-fold cross-fitted ridge by feature family.',
+        targetNature: 'Existing keep estimates; not observed swipe.',
+        folds: 5,
+    };
     const browser = await chromium.launch({ headless: true });
     try {
         const desktop = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -264,8 +340,8 @@ async function main() {
             if (message.type() === 'error') desktopErrors.push(message.text());
         });
         desktop.on('pageerror', error => desktopErrors.push(error.message));
-        await mount(desktop, artifact, fixtureStatus(), 200);
-        await verifyDesktop(desktop, artifact);
+        await mount(desktop, richerArtifact, fixtureStatus(), 200);
+        await verifyDesktop(desktop, richerArtifact);
         assert.deepStrictEqual(desktopErrors, [], `Desktop console errors: ${desktopErrors.join('\n')}`);
 
         const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });

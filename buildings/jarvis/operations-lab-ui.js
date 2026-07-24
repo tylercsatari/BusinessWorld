@@ -137,6 +137,46 @@
                 return '--';
             }
         };
+        const summarizeRecord = (value, fallback) => {
+            if (value === null || value === undefined || value === '') return fallback || '--';
+            if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                return String(value);
+            }
+            if (Array.isArray(value)) {
+                const parts = value.map(item => summarizeRecord(item, '')).filter(Boolean);
+                return parts.length ? parts.join(' / ') : (fallback || '--');
+            }
+            if (typeof value === 'object') {
+                const preferred = [
+                    'summary', 'description', 'protocol', 'method', 'targetNature',
+                    'targets', 'folds', 'selection', 'dataset', 'label', 'name', 'key',
+                ];
+                const parts = preferred
+                    .filter(key => value[key] !== null && value[key] !== undefined && value[key] !== '')
+                    .map(key => `${key}: ${summarizeRecord(value[key], '')}`)
+                    .filter(part => !part.endsWith(': '));
+                if (parts.length) return parts.join(' / ');
+                const primitives = Object.entries(value)
+                    .filter(([, item]) => ['string', 'number', 'boolean'].includes(typeof item))
+                    .slice(0, 8)
+                    .map(([key, item]) => `${key}: ${item}`);
+                return primitives.length ? primitives.join(' / ') : (fallback || '--');
+            }
+            return fallback || '--';
+        };
+        const sourceSummary = source => summarizeRecord(source, 'No source details declared.');
+        const validationSummary = provenance => {
+            const detail = summarizeRecord(
+                (provenance || {}).validation,
+                'Five-fold cross-fitted ridge by feature family.',
+            );
+            return `Surrogate reconstruction of existing keep estimates, not observed swipe: ${detail}`;
+        };
+        const visibleStage = stage => (
+            String(stage || '').toLowerCase() === 'interactions'
+                ? 'co-occurrence'
+                : String(stage || '').replace(/_/g, ' ')
+        );
         const colorForCluster = id => CLUSTER_COLORS[
             Math.abs(Number(id) || 0) % CLUSTER_COLORS.length
         ];
@@ -462,7 +502,8 @@
                     <div class="ops-warning-label">Measurement boundary</div>
                     <div>
                         <b>Keep is an existing embedding estimate, not an observed YouTube swipe ratio.</b>
-                        ${esc(source.warning || 'Associations describe the saved-hook bank and are not causal proof.')}
+                        ${esc(summarizeRecord(source.warning, 'Associations describe the saved-hook bank and are not causal proof.'))}
+                        Co-occurrence results are joint-cell enrichment patterns, not causal effects or statistical synergy.
                     </div>
                 </div>`;
         }
@@ -479,7 +520,7 @@
                     <div class="ops-progress-main">
                         <div class="ops-progress-heading">
                             <span class="ops-status-dot ${statusTone(progress.stage)}"></span>
-                            <b>${esc(progress.stage.replace(/_/g, ' '))}</b>
+                            <b>${esc(visibleStage(progress.stage))}</b>
                             <span>${esc(progress.label)}</span>
                             ${stale ? '<span class="ops-stale">heartbeat stale</span>' : ''}
                         </div>
@@ -510,7 +551,7 @@
             const tabs = [
                 ['overview', 'Overview'],
                 ['families', 'Feature families'],
-                ['interactions', 'Interactions'],
+                ['interactions', 'Co-occurrence'],
                 ['hooks', 'Hook library'],
             ];
             return `
@@ -617,7 +658,7 @@
                 ['2', 'Frozen description', `${provenance.visionModel || 'Vision model'}, temperature ${provenance.visionTemperature == null ? '--' : provenance.visionTemperature}, seed ${provenance.visionSeed || '--'}.`],
                 ['3', 'Semantic vectors', `${provenance.embeddingModel || 'Embedding model'} at ${formatCount(provenance.embeddingDimensions)} dimensions for every feature family.`],
                 ['4', 'Outcome-blind geometry', 'PCA retains at least 90% variance. K is the smallest candidate within one resampling SD of the best mean silhouette across repeated 80% subsamples.'],
-                ['5', 'Outcome joins last', 'Only after clusters are frozen are existing keep estimates used for OOF ridge validation, cluster diagnostics, and interactions.'],
+                ['5', 'Outcome joins last', 'Only after clusters are frozen are existing keep estimates used for out-of-fold surrogate reconstruction, cluster diagnostics, and co-occurrence enrichment.'],
             ];
             return `
                 <div class="ops-process" aria-label="Outcome-blind analysis process">
@@ -707,7 +748,7 @@
                             <div class="ops-section-heading">
                                 <div>
                                     <div class="ops-eyebrow">Family diagnostics</div>
-                                    <h3>Out-of-fold predictive evidence</h3>
+                                    <h3>Surrogate reconstruction against existing keep estimates</h3>
                                 </div>
                                 <span class="ops-chip">5 folds</span>
                             </div>
@@ -775,12 +816,13 @@
                             <dl class="ops-definition-list">
                                 <div><dt>Generated</dt><dd>${esc(dateTime(artifact().generatedAt))}</dd></div>
                                 <div><dt>Corpus</dt><dd>${formatCount(source.n)} hooks / ${esc(String(source.corpusHash || '').slice(0, 16) || '--')}</dd></div>
+                                <div><dt>Source contract</dt><dd>${esc(sourceSummary(source))}</dd></div>
                                 <div><dt>Vision</dt><dd>${esc(provenance.visionModel || '--')} / T=${esc(provenance.visionTemperature == null ? '--' : provenance.visionTemperature)}</dd></div>
                                 <div><dt>Prompt hash</dt><dd class="ops-mono">${esc(String(provenance.promptHash || '--'))}</dd></div>
                                 <div><dt>Embeddings</dt><dd>${esc(provenance.embeddingModel || '--')} / ${formatCount(provenance.embeddingDimensions)}D</dd></div>
                                 <div><dt>Random seed</dt><dd>${esc(provenance.randomSeed || '--')}</dd></div>
                                 <div><dt>Descriptor input</dt><dd>${esc(provenance.descriptorInput || '--')}</dd></div>
-                                <div><dt>Validation</dt><dd>${esc(provenance.validation || '--')}</dd></div>
+                                <div><dt>Validation</dt><dd>${esc(validationSummary(provenance))}</dd></div>
                             </dl>
                             <details class="ops-raw-details">
                                 <summary>Inspect complete provenance record</summary>
@@ -812,7 +854,7 @@
                             return `<button type="button" data-ops-family="${esc(family.key)}"
                                 class="${family.key === (selectedFamily() || {}).key ? 'is-active' : ''}">
                                 <span><b>${esc(family.label)}</b><small>${esc(family.key)}</small></span>
-                                <span><b>${fixed(validation.r2, 2)}</b><small>OOF R2</small></span>
+                                <span><b>${fixed(validation.r2, 2)}</b><small>Reconstruction R2</small></span>
                             </button>`;
                         }).join('') || '<div class="ops-empty">No matching feature family.</div>'}
                     </div>
@@ -864,7 +906,7 @@
                 const y = numeric(prediction);
                 if (x != null && y != null) points.push({ x, y, index });
             });
-            if (!points.length) return '<div class="ops-empty">No OOF prediction points for this target.</div>';
+            if (!points.length) return '<div class="ops-empty">No surrogate reconstruction points for this target.</div>';
             const values = points.flatMap(point => [point.x, point.y]);
             const minimum = Math.max(0, Math.floor(Math.min.apply(null, values) / 5) * 5);
             const maximum = Math.min(100, Math.max(minimum + 5, Math.ceil(Math.max.apply(null, values) / 5) * 5));
@@ -875,7 +917,7 @@
             const Y = value => height - pad.bottom - (height - pad.top - pad.bottom) * (value - minimum) / (maximum - minimum);
             return `
                 <svg class="ops-chart ops-scatter" viewBox="0 0 ${width} ${height}" role="img"
-                    aria-label="Out-of-fold predicted versus existing keep estimate">
+                    aria-label="Surrogate reconstruction versus existing keep estimate">
                     <line x1="${X(minimum)}" y1="${Y(minimum)}" x2="${X(maximum)}" y2="${Y(maximum)}"
                         class="ops-perfect-line"></line>
                     <line x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}" class="ops-axis-line"></line>
@@ -885,11 +927,11 @@
                         return `<circle cx="${fixed(X(point.x), 2)}" cy="${fixed(Y(point.y), 2)}" r="3.8"
                             fill="${colorForCluster(cluster)}" class="ops-plane-point"
                             data-ops-plane-point="${point.index}" tabindex="0" role="button">
-                            <title>Actual ${fixed(point.x, 2)} / OOF ${fixed(point.y, 2)}</title>
+                            <title>Existing estimate ${fixed(point.x, 2)} / surrogate reconstruction ${fixed(point.y, 2)}</title>
                         </circle>`;
                     }).join('')}
                     <text x="${width - 150}" y="${height - 9}" class="ops-chart-label">existing estimate %</text>
-                    <text x="7" y="12" class="ops-chart-label">OOF prediction %</text>
+                    <text x="7" y="12" class="ops-chart-label">surrogate reconstruction %</text>
                 </svg>`;
         }
 
@@ -915,7 +957,7 @@
                         <div><span>Mean estimate</span><b>${percentValue(dynamic.mean)}</b></div>
                         <div><span>Mean delta</span><b class="${Number(dynamic.difference) >= 0 ? 'ops-positive' : 'ops-negative'}">${signed(dynamic.difference, 2)} pp</b></div>
                         <div><span>Effect size</span><b>${fixed(stored.effectSize, 3)}</b></div>
-                        <div><span>Global BH q</span><b>${fixed(stored.q, 4)}</b></div>
+                        <div><span>Global BY q</span><b>${fixed(stored.q, 4)}</b></div>
                     </div>
                     <details class="ops-inline-details">
                         <summary>Stored evidence</summary>
@@ -925,7 +967,7 @@
                             <div><dt>95% mean-delta interval</dt><dd>${(stored.ci95 || []).length ? `${signed(stored.ci95[0], 2)} to ${signed(stored.ci95[1], 2)} pp` : '--'}</dd></div>
                             <div><dt>Welch p</dt><dd>${fixed(stored.p, 5)}</dd></div>
                             <div><dt>Within-family BH q</dt><dd>${fixed(stored.qWithinFamily, 5)}</dd></div>
-                            <div><dt>Global BH q</dt><dd>${fixed(stored.q, 5)}</dd></div>
+                            <div><dt>Global BY q</dt><dd>${fixed(stored.q, 5)}</dd></div>
                             <div><dt>Medoid IDs</dt><dd class="ops-mono">${esc((cluster.medoids || []).join(', ') || '--')}</dd></div>
                         </dl>
                     </details>
@@ -1003,11 +1045,11 @@
                             </div>
                             <p class="ops-section-copy">${esc(family.definition || '')}</p>
                             <div class="ops-stat-grid ops-stat-grid-compact">
-                                ${stat('OOF R2', fixed(validation.r2, 3), validation.protocol || '', Number(validation.r2) > 0 ? 'green' : 'red')}
-                                ${stat('OOF Spearman', fixed(validation.spearman, 3), 'rank association', 'cyan')}
-                                ${stat('OOF MAE', `${fixed(validation.mae, 2)} pp`, 'absolute error', 'amber')}
-                                ${stat('AUC at 80', fixed(validation.auc80, 3), 'five-fold OOF threshold discrimination', 'purple')}
-                                ${stat('AUC at 85', fixed(validation.auc85, 3), 'five-fold OOF threshold discrimination', 'purple')}
+                                ${stat('Reconstruction R2', fixed(validation.r2, 3), `${summarizeRecord(validation.protocol, 'five-fold out-of-fold')} / existing keep estimate`, Number(validation.r2) > 0 ? 'green' : 'red')}
+                                ${stat('Reconstruction Spearman', fixed(validation.spearman, 3), 'rank association against existing estimate', 'cyan')}
+                                ${stat('Reconstruction MAE', `${fixed(validation.mae, 2)} pp`, 'absolute error against existing estimate', 'amber')}
+                                ${stat('AUC at 80', fixed(validation.auc80, 3), 'surrogate reconstruction threshold discrimination', 'purple')}
+                                ${stat('AUC at 85', fixed(validation.auc85, 3), 'surrogate reconstruction threshold discrimination', 'purple')}
                             </div>
                         </section>
                         <div class="ops-two-column ops-plane-grid">
@@ -1033,7 +1075,7 @@
                                 <div class="ops-section-heading">
                                     <div>
                                         <div class="ops-eyebrow">Validation geometry</div>
-                                        <h3>OOF prediction vs estimate</h3>
+                                        <h3>Surrogate reconstruction vs existing estimate</h3>
                                     </div>
                                     <span class="ops-chip">each hook held out</span>
                                 </div>
@@ -1175,10 +1217,10 @@
                 <section class="ops-panel ops-interaction-inspector">
                     <div class="ops-section-heading">
                         <div>
-                            <div class="ops-eyebrow">Selected cross-family operation</div>
+                            <div class="ops-eyebrow">Selected co-occurrence joint cell</div>
                             <h3>${esc(row.leftLabel)} + ${esc(row.rightLabel)}</h3>
                         </div>
-                        <button type="button" class="ops-icon-button" data-ops-close-interaction title="Close interaction details" aria-label="Close interaction details">x</button>
+                        <button type="button" class="ops-icon-button" data-ops-close-interaction title="Close co-occurrence details" aria-label="Close co-occurrence details">x</button>
                     </div>
                     <div class="ops-interaction-equation">
                         <button type="button" data-ops-family="${esc(row.leftFamily)}" data-ops-cluster="${esc(row.leftCluster)}">
@@ -1192,12 +1234,12 @@
                         </button>
                     </div>
                     <div class="ops-stat-grid ops-stat-grid-compact">
-                        ${stat('Matched hooks', formatCount(row.dynamic.n), 'intersection support')}
+                        ${stat('Matched hooks', formatCount(row.dynamic.n), 'joint-cell support')}
                         ${stat(`Hit rate at ${state.threshold}%`, percent(row.dynamic.hitRate), `base ${percent(row.dynamic.baseRate)}`, 'green')}
                         ${stat('Dynamic lift', `${fixed(row.dynamic.lift, 2)}x`, 'vs selected-target corpus', 'cyan')}
                         ${stat('Mean delta', `${signed(row.dynamic.difference, 2)} pp`, 'inside pair vs outside', Number(row.dynamic.difference) >= 0 ? 'green' : 'red')}
-                        ${stat('Global q at 80', fixed(row.q80, 5), 'BH-adjusted Fisher test', 'purple')}
-                        ${stat('Global q at 85', fixed(row.q85, 5), 'separate BH-adjusted Fisher test', 'purple')}
+                        ${stat('Global BY q80', fixed(row.q80, 5), 'one dependency-safe global family', 'purple')}
+                        ${stat('Global BY q85', fixed(row.q85, 5), 'same dependency-safe global family', 'purple')}
                     </div>
                     <div class="ops-two-column">
                         <div class="ops-operation-definition">
@@ -1211,12 +1253,12 @@
                             <p>${esc(rightCluster.definition || rightFamily.definition || '')}</p>
                         </div>
                     </div>
-                    <div class="ops-eyebrow ops-list-heading">Every matched hook in this stored interaction</div>
+                    <div class="ops-eyebrow ops-list-heading">Every matched hook in this stored joint cell</div>
                     <div class="ops-mini-hook-grid">
                         ${row.dynamic.indices.map(renderMiniHook).join('')}
                     </div>
                     <details class="ops-raw-details">
-                        <summary>Inspect complete interaction record</summary>
+                        <summary>Inspect complete co-occurrence record</summary>
                         <pre>${esc(JSON.stringify(row, null, 2))}</pre>
                     </details>
                 </section>`;
@@ -1231,19 +1273,21 @@
                     <section class="ops-panel">
                         <div class="ops-section-heading">
                             <div>
-                                <div class="ops-eyebrow">Cross-family combinations</div>
-                                <h3>Operations that co-occur in the same hook</h3>
+                                <div class="ops-eyebrow">Cross-family joint cells</div>
+                                <h3>Co-occurrence across feature-family clusters</h3>
                             </div>
                             <span class="ops-chip">${formatCount(((artifact().interactions || {})[state.target] || []).length)} retained tests</span>
                         </div>
                         <p class="ops-section-copy">
-                            Hit rate and lift recompute at the selected ${state.threshold}% threshold.
-                            Stored q values are globally corrected across every tested pair and are reported
-                            separately for the declared 80% and 85% thresholds.
+                            Each row is a joint cell: hooks assigned to both listed clusters. Hit rate and lift
+                            are descriptive enrichment patterns within this saved-hook bank, not causal effects
+                            or statistical synergy. q80 and q85 are Benjamini-Yekutieli values from one
+                            dependency-safe global family across all targets, feature-family pairs, joint cells,
+                            and both thresholds.
                         </p>
                         <div class="ops-filter-row">
                             <label class="ops-search-field">
-                                <span class="ops-control-label">Search interactions</span>
+                                <span class="ops-control-label">Search co-occurrence</span>
                                 <input type="search" value="${esc(state.interactionQuery)}"
                                     placeholder="Stakes + action, proof + language..."
                                     data-ops-interaction-search data-ops-focus="interaction-search">
@@ -1251,7 +1295,7 @@
                             <label class="ops-select-field">
                                 <span class="ops-control-label">Sort</span>
                                 <select data-ops-interaction-sort data-ops-focus="interaction-sort">
-                                    <option value="q-asc" ${state.interactionSort === 'q-asc' ? 'selected' : ''}>Lowest declared q</option>
+                                    <option value="q-asc" ${state.interactionSort === 'q-asc' ? 'selected' : ''}>Lowest global BY q</option>
                                     <option value="lift-desc" ${state.interactionSort === 'lift-desc' ? 'selected' : ''}>Highest dynamic lift</option>
                                     <option value="difference-desc" ${state.interactionSort === 'difference-desc' ? 'selected' : ''}>Highest mean delta</option>
                                     <option value="hit-desc" ${state.interactionSort === 'hit-desc' ? 'selected' : ''}>Highest hit rate</option>
@@ -1265,7 +1309,7 @@
                         <div class="ops-compact-table-wrap ops-interaction-table-wrap" data-ops-scroll-key="interaction-table">
                             <table class="ops-table ops-interaction-table">
                                 <thead>
-                                    <tr><th>Left operation</th><th>Right operation</th><th>N</th><th>Hit ${state.threshold}%</th><th>Lift</th><th>Mean delta</th><th>q80</th><th>q85</th></tr>
+                                    <tr><th>Left operation</th><th>Right operation</th><th>N</th><th>Hit ${state.threshold}%</th><th>Lift</th><th>Mean delta</th><th>BY q80</th><th>BY q85</th></tr>
                                 </thead>
                                 <tbody>
                                     ${rows.slice(0, state.interactionLimit).map(row => `
@@ -1278,7 +1322,7 @@
                                             <td class="${Number(row.dynamic.difference) >= 0 ? 'ops-positive' : 'ops-negative'}">${signed(row.dynamic.difference, 2)} pp</td>
                                             <td>${fixed(row.q80, 5)}</td>
                                             <td>${fixed(row.q85, 5)}</td>
-                                        </tr>`).join('') || '<tr><td colspan="8"><div class="ops-empty">No matching interactions.</div></td></tr>'}
+                                        </tr>`).join('') || '<tr><td colspan="8"><div class="ops-empty">No matching co-occurrence cells.</div></td></tr>'}
                                 </tbody>
                             </table>
                         </div>
@@ -1375,7 +1419,7 @@
                     <div class="ops-section-heading ops-membership-heading">
                         <div>
                             <div class="ops-eyebrow">Complete feature ledger</div>
-                            <h3>Every feature, cluster membership, coordinate, and OOF estimate</h3>
+                            <h3>Every feature, cluster membership, coordinate, and surrogate reconstruction</h3>
                         </div>
                         <span class="ops-chip">${formatCount(memberships.length)} families</span>
                     </div>
@@ -1390,9 +1434,9 @@
                                 <p>${esc(row.text || 'Not supplied.')}</p>
                                 <dl>
                                     <div><dt>Plane</dt><dd>${fixed(row.x, 0)}, ${fixed(row.y, 0)}</dd></div>
-                                    <div><dt>OOF prediction</dt><dd>${percentValue(row.oof)}</dd></div>
+                                    <div><dt>Surrogate reconstruction</dt><dd>${percentValue(row.oof)}</dd></div>
                                     <div><dt>Actual estimate</dt><dd>${percentValue(row.actual)}</dd></div>
-                                    <div><dt>OOF error</dt><dd class="${Number(row.error) >= 0 ? 'ops-positive' : 'ops-negative'}">${signed(row.error, 2)} pp</dd></div>
+                                    <div><dt>Reconstruction error</dt><dd class="${Number(row.error) >= 0 ? 'ops-positive' : 'ops-negative'}">${signed(row.error, 2)} pp</dd></div>
                                 </dl>
                             </article>`).join('')}
                     </div>
@@ -1498,7 +1542,7 @@
                     <div class="ops-eyebrow">Operations artifact pending</div>
                     <h3>${esc((state.status || {}).message || 'The complete outcome-blind corpus is still building.')}</h3>
                     <p>
-                        Stage: ${esc(progress.stage.replace(/_/g, ' '))}.
+                        Stage: ${esc(visibleStage(progress.stage))}.
                         Cached descriptions and embedding bundles survive worker restarts.
                     </p>
                     ${state.artifactError ? `<div class="ops-error-text">${esc(state.artifactError)}</div>` : ''}
@@ -1529,7 +1573,7 @@
                             <h2>Opening Operations Atlas</h2>
                             <p>
                                 Outcome-blind visual and language feature families, frozen semantic clusters,
-                                and transparent validation against existing keep estimates.
+                                and transparent surrogate reconstruction against existing keep estimates.
                             </p>
                         </div>
                         <div class="ops-header-meta">
