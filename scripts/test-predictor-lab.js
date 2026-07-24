@@ -9,8 +9,10 @@ const vm = require('vm');
 const root = path.resolve(__dirname, '..');
 const serverPath = path.join(root, 'server.js');
 const uiPath = path.join(root, 'buildings', 'jarvis', 'jarvis-retention.js');
+const rawEmbedPath = path.join(root, 'raw_embed.py');
 const server = fs.readFileSync(serverPath, 'utf8');
 const ui = fs.readFileSync(uiPath, 'utf8');
+const rawEmbed = fs.readFileSync(rawEmbedPath, 'utf8');
 
 new vm.Script(server, { filename: serverPath });
 new vm.Script(ui, { filename: uiPath });
@@ -79,6 +81,30 @@ includes(
     server,
     "'Cache-Control': 'no-store'",
     'live Predictor Lab status must not be cached'
+);
+
+// A spent or throttled embedding request must remain in the resumable queue.
+// Progress reports successful durable vectors separately from attempted videos,
+// and analysis cannot run while a required visual/together vector is missing.
+includes(
+    rawEmbed,
+    "required_ok = vid in done['visual'] and vid in done['together'] and vid in have_montage",
+    'embedding backfill must verify both required vectors before marking a video complete'
+);
+includes(
+    rawEmbed,
+    "emit_status('retrying'",
+    'embedding backfill must expose unresolved videos as retrying'
+);
+includes(
+    rawEmbed,
+    'sys.exit(2)',
+    'embedding backfill must return a retryable failure instead of false completion'
+);
+matches(
+    rawEmbed,
+    /attempted=cnt\[0\],\s*processed=completed\[0\],\s*failed=fails\[0\]/,
+    'embedding status must separate attempts, durable completions, and failures'
 );
 
 // Raw Data starts on the existing embedding map and keeps Predictor Lab target
