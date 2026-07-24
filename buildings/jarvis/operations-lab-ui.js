@@ -117,6 +117,10 @@
             }
             return Math.round(number).toLocaleString();
         };
+        const exactCount = value => {
+            const number = numeric(value);
+            return number == null ? '--' : Math.round(number).toLocaleString();
+        };
         const shortNumber = value => {
             const number = numeric(value);
             if (number == null) return '--';
@@ -686,7 +690,7 @@
             const steps = [
                 ['1', 'Pixels only', 'Five-frame saved montage. No title, channel, keep estimate, views, or outcome is provided.'],
                 ['2', 'Frozen description', `${provenance.visionModel || 'Vision model'}, temperature ${provenance.visionTemperature == null ? '--' : provenance.visionTemperature}, seed ${provenance.visionSeed || '--'}.`],
-                ['3', 'Semantic vectors', `${provenance.embeddingModel || 'Embedding model'} at ${formatCount(provenance.embeddingDimensions)} dimensions for every feature family.`],
+                ['3', 'Semantic vectors', `${provenance.embeddingModel || 'Embedding model'} at ${exactCount(provenance.embeddingDimensions)} dimensions for every feature family.`],
                 ['4', 'Outcome-blind geometry', 'PCA retains at least 90% variance. K is the smallest candidate within one resampling SD of the best mean silhouette across repeated 80% subsamples.'],
                 ['5', 'Outcome joins last', 'Only after clusters are frozen are existing keep estimates used for out-of-fold surrogate reconstruction, cluster diagnostics, and co-occurrence enrichment.'],
             ];
@@ -849,7 +853,7 @@
                                 <div><dt>Source contract</dt><dd>${esc(sourceSummary(source))}</dd></div>
                                 <div><dt>Vision</dt><dd>${esc(provenance.visionModel || '--')} / T=${esc(provenance.visionTemperature == null ? '--' : provenance.visionTemperature)}</dd></div>
                                 <div><dt>Prompt hash</dt><dd class="ops-mono">${esc(String(provenance.promptHash || '--'))}</dd></div>
-                                <div><dt>Embeddings</dt><dd>${esc(provenance.embeddingModel || '--')} / ${formatCount(provenance.embeddingDimensions)}D</dd></div>
+                                <div><dt>Embeddings</dt><dd>${esc(provenance.embeddingModel || '--')} / ${exactCount(provenance.embeddingDimensions)}D</dd></div>
                                 <div><dt>Random seed</dt><dd>${esc(provenance.randomSeed || '--')}</dd></div>
                                 <div><dt>Descriptor input</dt><dd>${esc(provenance.descriptorInput || '--')}</dd></div>
                                 <div><dt>Validation</dt><dd>${esc(validationSummary(provenance))}</dd></div>
@@ -1306,7 +1310,7 @@
                                 <div class="ops-eyebrow">Cross-family joint cells</div>
                                 <h3>Co-occurrence across feature-family clusters</h3>
                             </div>
-                            <span class="ops-chip">${formatCount(((artifact().interactions || {})[state.target] || []).length)} retained tests</span>
+                            <span class="ops-chip">${exactCount(((artifact().interactions || {})[state.target] || []).length)} retained tests</span>
                         </div>
                         <p class="ops-section-copy">
                             Each row is a joint cell: hooks assigned to both listed clusters. Hit rate and lift
