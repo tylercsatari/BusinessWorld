@@ -1,0 +1,5 @@
+.cache/
+__pycache__/
+operations.log
+operations.pid
+status.json
