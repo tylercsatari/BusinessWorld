@@ -30,6 +30,13 @@ _EMBED_NEXT_SLOT = 0.0
 _EMBED_BLOCKED_UNTIL = 0.0
 
 
+class EmbeddingTransportError(RuntimeError):
+    def __init__(self, message: str, status: int = 0, retryable: bool = True):
+        super().__init__(message)
+        self.status = int(status or 0)
+        self.retryable = bool(retryable)
+
+
 def _duration_seconds(value) -> float | None:
     match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*([sm]?)", str(value or ""), re.I)
     if not match:
@@ -205,7 +212,10 @@ class EmbeddingStore:
 
     def _post_batch(self, texts: list[str]) -> list[np.ndarray]:
         if not self.api_key:
-            raise RuntimeError("GEMINI_API_KEY is not configured")
+            raise EmbeddingTransportError(
+                "GEMINI_API_KEY is not configured",
+                retryable=False,
+            )
         url = f"{API_ROOT}/{self.model}:batchEmbedContents"
         body = {
             "requests": [
@@ -218,6 +228,8 @@ class EmbeddingStore:
             ]
         }
         last_error = ""
+        last_status = 0
+        retryable = True
         attempts = max(8, int(os.environ.get("PROMISE_LAB_EMBED_RETRIES", "48")))
         for attempt in range(attempts):
             _wait_for_embedding_quota(len(texts))
@@ -230,6 +242,7 @@ class EmbeddingStore:
                     timeout=120,
                 )
                 response_status = int(response.status_code)
+                last_status = response_status
                 if response.status_code == 200:
                     payload = response.json().get("embeddings") or []
                     vectors = [np.asarray(item.get("values") or [], np.float32) for item in payload]
@@ -238,6 +251,7 @@ class EmbeddingStore:
                     return vectors
                 last_error = f"HTTP {response.status_code}: {response.text[:300]}"
                 if response.status_code not in (408, 429, 500, 502, 503, 504):
+                    retryable = False
                     break
                 delay = _retry_delay_seconds(response, attempt)
                 self._notify_retry(response.status_code, response.text, delay, attempt + 1)
@@ -249,7 +263,11 @@ class EmbeddingStore:
                 delay = min(60.0, 1.5 * (2 ** attempt))
                 self._notify_retry(response_status, last_error, delay, attempt + 1)
             time.sleep(delay)
-        raise RuntimeError(f"Gemini batch embedding failed: {last_error}")
+        raise EmbeddingTransportError(
+            f"Gemini batch embedding failed: {last_error}",
+            status=last_status,
+            retryable=retryable,
+        )
 
     def _save(self, texts: list[str], vectors: list[np.ndarray]) -> None:
         now = time.time()

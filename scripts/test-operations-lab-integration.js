@@ -72,8 +72,8 @@ assert(
     'Ordinary embedding failures must remain bounded',
 );
 assert(
-    builder.includes('output_key="q85"'),
-    'Interaction evidence must be corrected separately at the 85% threshold',
+    builder.includes('for hypothesis in hypotheses'),
+    'Interaction evidence must receive one correction across both declared thresholds',
 );
 assert(
     builder.includes('apply_global_cluster_adjustment(families)'),

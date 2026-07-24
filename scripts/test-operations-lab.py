@@ -70,6 +70,12 @@ def main() -> None:
             on_retry=retry_events.append,
         )
         store._notify_retry(429, "quota exhausted", 12.5, 3)
+        store.api_key = ""
+        try:
+            store._post_batch(["configuration contract"])
+            raise AssertionError("missing Gemini configuration did not fail")
+        except Exception as exc:
+            assert getattr(exc, "retryable", True) is False
         store.close()
     assert retry_events == [{
         "status": 429,
@@ -124,7 +130,13 @@ def main() -> None:
     assert np.allclose(plane_a, plane_b)
     assert selection_a["chosenK"] >= 2
     assert len(selection_a["candidates"]) >= 2
-    assert "one standard error" in selection_a["rule"]
+    assert "one resampling standard deviation" in selection_a["rule"]
+    assert selection_a["resamples"] == 10
+    assert all("silhouetteSd" in row for row in selection_a["candidates"])
+
+    small_vectors = MODULE.normalize_rows(rng.normal(size=(10, 12)))
+    _, small_selection, _ = MODULE.candidate_clusters(small_vectors, 1)
+    assert small_selection["chosenK"] >= 2
 
     adjusted = [{"p": 0.01}, {"p": 0.04}, {"p": 0.03}]
     MODULE.bh_adjust(adjusted, output_key="globalQ")
@@ -176,6 +188,22 @@ def main() -> None:
     assert interactions
     assert all({"p80", "q80", "p85", "q85"}.issubset(row) for row in interactions)
     assert all(0 <= row["q80"] <= 1 and 0 <= row["q85"] <= 1 for row in interactions)
+
+    sparse_validation = MODULE.validate_family(
+        MODULE.normalize_rows(rng.normal(size=(4, 6))),
+        {"target": np.asarray([70.0, 80.0, 90.0, np.nan])},
+        0,
+    )["target"]
+    assert sparse_validation["n"] == 3
+    assert sparse_validation["r2"] is None
+
+    gate_client = object.__new__(MODULE.GeminiVisionClient)
+    gate_client._gate = threading.Condition()
+    gate_client._active_error = {"kind": "credits_or_quota_exhausted"}
+    gate_client._blocked_until = time.monotonic() + 60
+    gate_client._clear_error()
+    assert gate_client._active_error is not None
+    assert gate_client._blocked_until > time.monotonic()
 
     print(json.dumps({
         "ok": True,
