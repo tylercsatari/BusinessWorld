@@ -4444,6 +4444,50 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         });
         return;
     }
+    if (pathname === '/api/shortsquant/operations-lab/principles-status' && req.method === 'GET') {
+        const key = 'shorts/operations-lab-v1/principles85-status.json';
+        await serveR2Gz(req, res, key, 2500, {
+            version: 1,
+            productVersion: 'shorts-hook-principles-v1',
+            analysisVersion: 'operations-principles-85-v2',
+            stage: 'idle',
+            updatedAt: 0,
+            message: 'The 85% principles analysis has not started yet.',
+        }, 200, {
+            surfaceSourceErrors: true,
+            sourceErrorMessage: 'Principles status storage is temporarily unavailable.',
+        });
+        return;
+    }
+    if (pathname === '/api/shortsquant/operations-lab/principles' && req.method === 'GET') {
+        const key = 'shorts/operations-lab-v1/principles85.json';
+        if (url.searchParams.get('artifactHash')) gzCacheInvalidate(key);
+        await serveR2Gz(req, res, key, 60e3, {
+            version: 1,
+            productVersion: 'shorts-hook-principles-v1',
+            analysisVersion: 'operations-principles-85-v2',
+            stage: 'building',
+            error: 'The complete 85% principles artifact is still building.',
+        }, 202, {
+            surfaceSourceErrors: true,
+            sourceErrorMessage: 'Principles artifact storage is temporarily unavailable.',
+        });
+        return;
+    }
+    if (pathname === '/api/shortsquant/operations-lab/principles-ledger' && req.method === 'GET') {
+        const key = 'shorts/operations-lab-v1/principles85-ledger.json';
+        if (url.searchParams.get('ledgerHash')) gzCacheInvalidate(key);
+        await serveR2Gz(req, res, key, 300e3, {
+            version: 1,
+            productVersion: 'shorts-hook-principles-v1',
+            stage: 'building',
+            error: 'The complete principles audit ledger is still building.',
+        }, 202, {
+            surfaceSourceErrors: true,
+            sourceErrorMessage: 'Principles audit storage is temporarily unavailable.',
+        });
+        return;
+    }
 
     // Promise Lab is a Shorts Quant product. There is one route namespace and
     // one implementation for both the saved library and typed scorer.

@@ -3,6 +3,9 @@
 
     const STATUS_API = '/api/shortsquant/operations-lab/status';
     const ARTIFACT_API = '/api/shortsquant/operations-lab/artifact';
+    const PRINCIPLES_STATUS_API = '/api/shortsquant/operations-lab/principles-status';
+    const PRINCIPLES_API = '/api/shortsquant/operations-lab/principles';
+    const PRINCIPLES_THRESHOLD = 85;
     const STYLE_ID = 'jarvis-operations-lab-styles';
     const ROOT_ID = 'operations-lab-root';
     const CLUSTER_COLORS = [
@@ -49,11 +52,18 @@
         const parentRender = typeof options.onRender === 'function' ? options.onRender : null;
 
         const state = {
-            view: 'overview',
+            view: 'principles',
             target: 'together_keep',
             threshold: 80,
             status: null,
             artifact: null,
+            principlesArtifact: null,
+            principlesStatus: null,
+            principlesStatusError: '',
+            principlesError: '',
+            principlesLoading: false,
+            principlesLoadedOnce: false,
+            selectedPrincipleId: '',
             statusError: '',
             artifactError: '',
             artifactPending: false,
@@ -218,6 +228,173 @@
                 hitRate: values.length ? hits / values.length : null,
             };
         };
+        const principlesArtifact = () => state.principlesArtifact || {};
+        const principleRows = () => (
+            Array.isArray(principlesArtifact().principles)
+                ? principlesArtifact().principles
+                : []
+        );
+        const asArray = value => {
+            if (Array.isArray(value)) return value;
+            if (value === null || value === undefined || value === '') return [];
+            return [value];
+        };
+        const targetAliases = key => ({
+            together_keep: ['together_keep', 'combined_keep', 'combined', 'together'],
+            visual_keep: ['visual_keep', 'visual'],
+            text_keep: ['text_keep', 'text'],
+        }[key] || [key]);
+        const firstPresent = (record, keys) => {
+            const source = record && typeof record === 'object' ? record : {};
+            for (const key of keys || []) {
+                if (source[key] !== null && source[key] !== undefined && source[key] !== '') {
+                    return source[key];
+                }
+            }
+            return null;
+        };
+        const targetScoped = value => {
+            if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+            for (const key of targetAliases(state.target)) {
+                if (value[key] !== null && value[key] !== undefined) return value[key];
+            }
+            return value;
+        };
+        const principleEffect = principle => {
+            const effects = (principle || {}).effects || (principle || {}).effect || {};
+            const scoped = targetScoped(effects);
+            return scoped && typeof scoped === 'object' && !Array.isArray(scoped) ? scoped : {};
+        };
+        const principleFamilyKey = principle => {
+            const source = (principle || {}).source;
+            return String(
+                (principle || {}).familyKey
+                || firstPresent(source || {}, ['familyKey', 'key', 'family'])
+                || '',
+            );
+        };
+        const principleFamilyLabel = principle => {
+            const source = (principle || {}).source;
+            const key = principleFamilyKey(principle);
+            return String(
+                (principle || {}).familyLabel
+                || firstPresent(source || {}, ['familyLabel', 'label', 'name'])
+                || (typeof source === 'string' ? source : '')
+                || (families().find(family => family.key === key.replace(/^residual__/, '')) || {}).label
+                || key
+                || 'Feature family',
+            );
+        };
+        const probability = value => {
+            const number = numeric(value);
+            if (number == null) return null;
+            return Math.max(0, Math.min(1, Math.abs(number) > 1 ? number / 100 : number));
+        };
+        const percentagePoints = value => {
+            const number = numeric(value);
+            if (number == null) return null;
+            return Math.abs(number) <= 1 ? number * 100 : number;
+        };
+        const range = value => {
+            if (Array.isArray(value) && value.length >= 2) {
+                const low = numeric(value[0]);
+                const high = numeric(value[1]);
+                return low == null || high == null ? null : [low, high];
+            }
+            if (!value || typeof value !== 'object') return null;
+            const low = numeric(firstPresent(value, ['low', 'lower', 'lo', 'lcl', 'min', '0']));
+            const high = numeric(firstPresent(value, ['high', 'upper', 'hi', 'ucl', 'max', '1']));
+            return low == null || high == null ? null : [low, high];
+        };
+        const effectRange = (effect, metric) => {
+            const record = effect || {};
+            const direct = firstPresent(record, [
+                `${metric}Ci95`, `${metric}CI95`, `${metric}Ci`, `${metric}CI`,
+            ]);
+            const nested = record.ci95 && typeof record.ci95 === 'object'
+                && !Array.isArray(record.ci95)
+                ? firstPresent(record.ci95, [metric, metric.replace(/[A-Z]/g, match => `_${match.toLowerCase()}`)])
+                : null;
+            return range(direct) || range(nested) || range(record.ci95);
+        };
+        const correctedQ = effect => numeric(firstPresent(effect || {}, [
+            'qBy', 'byQ', 'qBY', 'q', 'qValue', 'adjustedQ',
+        ]));
+        const metricNumber = (value, keys) => {
+            const direct = numeric(value);
+            if (direct != null) return direct;
+            return numeric(firstPresent(value || {}, keys || ['score', 'mean', 'value']));
+        };
+        const principleDirection = principle => {
+            const scopedDirection = targetScoped((principle || {}).directions);
+            const declared = String(
+                scopedDirection
+                || ((state.target === 'together_keep') ? (principle || {}).direction : '')
+                || '',
+            ).toLowerCase();
+            if (declared.includes('neg') || declared.includes('lower') || declared.includes('down')) {
+                return 'negative';
+            }
+            if (declared.includes('pos') || declared.includes('higher') || declared.includes('up')) {
+                return 'positive';
+            }
+            const effect = principleEffect(principle);
+            const difference = numeric(firstPresent(effect, ['riskDifference', 'keepDelta']));
+            return difference != null && difference < 0 ? 'negative' : 'positive';
+        };
+        const principleSupport = principle => {
+            const effect = principleEffect(principle);
+            return metricNumber((principle || {}).support, ['n', 'count', 'members', 'value'])
+                || numeric((principle || {}).n)
+                || numeric(effect.n)
+                || asArray((principle || {}).memberIndices).length;
+        };
+        const principleStability = principle => (
+            metricNumber((principle || {}).stability, [
+                'score', 'mean', 'value', 'representative', 'median', 'minimum',
+                'jaccard', 'consensus',
+            ])
+        );
+        const principleEvidenceTier = principle => {
+            const scopedEvidence = targetScoped((principle || {}).evidenceLevels);
+            const declared = scopedEvidence || (
+                state.target === 'together_keep'
+                    ? firstPresent(principle || {}, ['evidenceTier', 'tier', 'evidenceLevel'])
+                    : null
+            );
+            if (declared) return String(declared).replace(/[_-]+/g, ' ');
+            const q = correctedQ(principleEffect(principle));
+            return q != null && q <= 0.05
+                ? 'Corrected projected association'
+                : 'Exploratory projected association';
+        };
+        const conservativeEffect = principle => {
+            const effect = principleEffect(principle);
+            const direction = principleDirection(principle);
+            const ci = effectRange(effect, 'riskDifference') || effectRange(effect, 'keepDelta');
+            if (ci) {
+                const points = ci.map(percentagePoints);
+                return direction === 'negative'
+                    ? Math.max(0, -Number(points[1] || 0))
+                    : Math.max(0, Number(points[0] || 0));
+            }
+            const raw = firstPresent(effect, ['riskDifference', 'keepDelta']);
+            return Math.abs(Number(percentagePoints(raw) || 0));
+        };
+        const rankedPrinciples = direction => principleRows()
+            .filter(principle => principleDirection(principle) === direction)
+            .sort((left, right) => {
+                const leftQ = correctedQ(principleEffect(left));
+                const rightQ = correctedQ(principleEffect(right));
+                const leftBand = leftQ == null ? 2 : (leftQ <= 0.05 ? 0 : 1);
+                const rightBand = rightQ == null ? 2 : (rightQ <= 0.05 ? 0 : 1);
+                return leftBand - rightBand
+                    || Number(leftQ == null ? Infinity : leftQ) - Number(rightQ == null ? Infinity : rightQ)
+                    || conservativeEffect(right) - conservativeEffect(left)
+                    || principleSupport(right) - principleSupport(left)
+                    || String((left || {}).label || (left || {}).id || '')
+                        .localeCompare(String((right || {}).label || (right || {}).id || ''));
+            });
         const cssEscape = value => {
             const text = String(value == null ? '' : value);
             if (
@@ -417,6 +594,97 @@
             }
         }
 
+        async function loadPrinciplesStatus() {
+            try {
+                const result = await readJson(PRINCIPLES_STATUS_API);
+                if (!result.response.ok) {
+                    throw new Error(result.value.error || `HTTP ${result.response.status}`);
+                }
+                state.principlesStatus = result.value;
+                state.principlesStatusError = '';
+                return result.value;
+            } catch (error) {
+                state.principlesStatusError = String(error && error.message || error);
+                return null;
+            }
+        }
+
+        function principlesMatchStatus() {
+            if (!state.principlesArtifact) return false;
+            const status = state.principlesStatus || {};
+            const expected = String(status.artifactHash || '');
+            const stage = String(status.stage || '').toLowerCase();
+            if (['error', 'stopped'].includes(stage)) return true;
+            if (stage && stage !== 'complete') return false;
+            if (!expected) return true;
+            return String(state.principlesArtifact.artifactHash || '') === expected;
+        }
+
+        async function loadPrinciples(force) {
+            if (state.principlesLoading) return null;
+            await loadPrinciplesStatus();
+            if (
+                state.principlesLoadedOnce
+                && !force
+                && principlesMatchStatus()
+            ) {
+                return state.principlesArtifact;
+            }
+            state.principlesLoading = true;
+            if (force) state.principlesError = '';
+            paint();
+            try {
+                const expected = String(
+                    (state.principlesStatus || {}).artifactHash || '',
+                );
+                const query = expected
+                    ? `?artifactHash=${encodeURIComponent(expected)}&v=${Date.now()}`
+                    : (force ? `?artifactHash=refresh-${Date.now()}` : '');
+                const result = await readJson(
+                    `${PRINCIPLES_API}${query}`,
+                );
+                if (result.response.status === 202) {
+                    throw new Error(
+                        result.value.error
+                        || 'The 85% principles artifact is still being prepared.',
+                    );
+                }
+                if (!result.response.ok || result.value.error) {
+                    throw new Error(result.value.error || `HTTP ${result.response.status}`);
+                }
+                if (!result.value || typeof result.value !== 'object') {
+                    throw new Error('The 85% principles endpoint returned no artifact.');
+                }
+                if (
+                    expected
+                    && String(result.value.artifactHash || '') !== expected
+                ) {
+                    throw new Error(
+                        'The rebuilt principles artifact is still propagating to this server.',
+                    );
+                }
+                state.principlesArtifact = result.value;
+                state.principlesError = '';
+                state.principlesLoadedOnce = true;
+                if (
+                    state.selectedPrincipleId
+                    && !principleRows().some(
+                        row => String(row.id) === String(state.selectedPrincipleId),
+                    )
+                ) {
+                    state.selectedPrincipleId = '';
+                }
+                return result.value;
+            } catch (error) {
+                state.principlesError = String(error && error.message || error);
+                state.principlesLoadedOnce = true;
+                return state.principlesArtifact;
+            } finally {
+                state.principlesLoading = false;
+                paint();
+            }
+        }
+
         function terminalStage(stage) {
             return ['complete', 'test_complete', 'error', 'stopped']
                 .includes(String(stage || '').toLowerCase());
@@ -433,7 +701,11 @@
             window.clearTimeout(state.pollTimer);
             const stage = String(state.status && state.status.stage || '').toLowerCase();
             if (['error', 'stopped'].includes(stage)) return;
-            if (terminalStage(stage) && artifactMatchesStatus()) return;
+            if (
+                terminalStage(stage)
+                && artifactMatchesStatus()
+                && (state.view !== 'principles' || principlesMatchStatus())
+            ) return;
             state.pollTimer = window.setTimeout(async () => {
                 await loadStatus();
                 if (
@@ -443,6 +715,9 @@
                     )
                 ) {
                     await loadArtifact((state.status || {}).artifactHash);
+                }
+                if (state.view === 'principles' && state.artifact) {
+                    await loadPrinciples(false);
                 }
                 paint();
                 schedulePoll();
@@ -464,6 +739,9 @@
             paint();
             await loadStatus();
             await loadArtifact((state.status || {}).artifactHash);
+            if (state.view === 'principles' && state.artifact) {
+                await loadPrinciples(Boolean(force));
+            }
             if (token !== state.requestToken) return;
             state.loading = false;
             state.loadedOnce = true;
@@ -583,6 +861,7 @@
 
         function renderTabs() {
             const tabs = [
+                ['principles', '85% principles'],
                 ['overview', 'Overview'],
                 ['families', 'Feature families'],
                 ['interactions', 'Co-occurrence'],
@@ -610,7 +889,11 @@
                                 </button>`).join('')}
                         </div>
                     </div>
-                    <label class="ops-threshold-control">
+                    ${state.view === 'principles' ? `
+                        <div class="ops-fixed-threshold" aria-label="Fixed hit threshold">
+                            <span class="ops-control-label">Threshold</span>
+                            <b>${PRINCIPLES_THRESHOLD}% fixed</b>
+                        </div>` : `<label class="ops-threshold-control">
                         <span class="ops-control-label">Hit threshold</span>
                         <input type="range" min="0" max="100" step="1" value="${esc(state.threshold)}"
                             data-ops-threshold data-ops-focus="threshold-range">
@@ -618,7 +901,7 @@
                             data-ops-threshold-number data-ops-focus="threshold-number"
                             aria-label="Hit threshold percentage">
                         <span>%</span>
-                    </label>
+                    </label>`}
                 </div>`;
         }
 
@@ -758,6 +1041,723 @@
             ));
         }
 
+        function plainRecord(value, fallback) {
+            const scoped = targetScoped(value);
+            if (typeof scoped === 'string' || typeof scoped === 'number') return String(scoped);
+            if (scoped && typeof scoped === 'object') {
+                const preferred = firstPresent(scoped, [
+                    'answer', 'oneSentence', 'sentence', 'headline', 'operationalDefinition',
+                    'summary', 'description', 'claim', 'message', 'text',
+                ]);
+                if (preferred !== null) return plainRecord(preferred, fallback);
+            }
+            return summarizeRecord(scoped, fallback);
+        }
+
+        function sourceForTarget() {
+            const source = principlesArtifact().source || {};
+            const targetSource = targetScoped(
+                source.targets || source.byTarget || source.targetSummaries || {},
+            );
+            return targetSource && typeof targetSource === 'object' && !Array.isArray(targetSource)
+                ? Object.assign({}, source, targetSource)
+                : source;
+        }
+
+        function sourceBaseRate() {
+            const source = sourceForTarget();
+            const supplied = targetScoped(firstPresent(source, [
+                'baseRate', 'baseRate85', 'positiveRate', 'hitRate', 'positivesRate',
+            ]));
+            return probability(supplied);
+        }
+
+        function principlesSentence() {
+            const supplied = plainRecord(principlesArtifact().summary, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            if (supplied && supplied !== '--') return supplied;
+            const positive = rankedPrinciples('positive').length;
+            const negative = rankedPrinciples('negative').length;
+            return `${formatCount(positive)} positive and ${formatCount(negative)} negative patterns are associated with projected ${TARGET_SHORT[state.target]} keep at or above ${PRINCIPLES_THRESHOLD}%; each effect remains descriptive until observed or experimental replication.`;
+        }
+
+        function principlesBoundary() {
+            const boundary = targetScoped(
+                principlesArtifact().measurementBoundary || principlesArtifact().boundary,
+            );
+            if (boundary && typeof boundary === 'object' && !Array.isArray(boundary)) {
+                const parts = [
+                    boundary.headline,
+                    boundary.projected,
+                    boundary.observed,
+                    boundary.grouping,
+                ].filter(Boolean);
+                if (parts.length) return parts.join(' ');
+            }
+            return plainRecord(boundary, 'These are associations with an embedding-derived projected keep target, not observed YouTube swipe behavior and not causal effects.');
+        }
+
+        function renderPrinciplesModelValidation() {
+            const targetValidation = (
+                (principlesArtifact().validation || {})[state.target] || {}
+            );
+            const model = targetValidation.conditionalModel || {};
+            const metrics = model.metrics || {};
+            const baseline = model.baselineMetrics || {};
+            const discrimination = model.withinFoldDiscrimination || {};
+            const incremental = model.incremental || {};
+            if (model.status !== 'ok' || numeric(metrics.n) == null) return '';
+            const bar = (label, value, baselineValue) => {
+                const score = Math.max(0, Math.min(1, numeric(value) || 0));
+                const baselineScore = Math.max(
+                    0,
+                    Math.min(1, numeric(baselineValue) || 0),
+                );
+                return `
+                    <div class="ops-model-bar">
+                        <span><b>${esc(label)}</b><small>Model ${fixed(score, 3)} / reference ${fixed(baselineScore, 3)}</small></span>
+                        <span class="ops-model-bar-track" aria-label="${esc(label)} model ${fixed(score, 3)}, baseline ${fixed(baselineScore, 3)}">
+                            <i class="is-baseline" style="width:${fixed(baselineScore * 100, 2)}%"></i>
+                            <i class="is-model" style="width:${fixed(score * 100, 2)}%"></i>
+                        </span>
+                    </div>`;
+            };
+            const brierImprovement = numeric(incremental.brierImprovement);
+            const logLossImprovement = numeric(incremental.logLossImprovement);
+            const aucChange = numeric(incremental.auc);
+            const prAucChange = numeric(incremental.prAuc);
+            const auc = numeric(discrimination.auc) ?? numeric(metrics.auc);
+            const aucBaseline = numeric(discrimination.aucBaseline)
+                ?? numeric(baseline.auc);
+            const prAuc = numeric(discrimination.prAuc) ?? numeric(metrics.prAuc);
+            const prAucBaseline = numeric(discrimination.prAucBaseline)
+                ?? numeric(baseline.prAuc);
+            return `
+                <section class="ops-panel ops-model-validation">
+                    <div class="ops-section-heading">
+                        <div>
+                            <div class="ops-eyebrow">Grouped out-of-fold diagnostic</div>
+                            <h3>Do the discovered components predict the 85% surrogate?</h3>
+                        </div>
+                        <span class="ops-chip">${formatCount(metrics.n)} hooks</span>
+                    </div>
+                    <p class="ops-section-copy">Within held-out folds: ROC AUC versus chance ${aucChange == null ? '--' : signed(aucChange, 3)} and precision-recall AUC versus each fold's event rate ${prAucChange == null ? '--' : signed(prAucChange, 3)}. Across all held-out rows, Brier ${brierImprovement == null ? '--' : `${brierImprovement >= 0 ? 'improves' : 'worsens'} by ${fixed(Math.abs(brierImprovement), 4)}`} and log loss ${logLossImprovement == null ? '--' : `${logLossImprovement >= 0 ? 'improves' : 'worsens'} by ${fixed(Math.abs(logLossImprovement), 4)}`} versus the fold-prior probability.</p>
+                    <div class="ops-model-validation-grid">
+                        <div class="ops-model-bars">
+                            ${bar('Within-fold ROC AUC', auc, aucBaseline)}
+                            ${bar('Within-fold precision-recall AUC', prAuc, prAucBaseline)}
+                        </div>
+                        <dl class="ops-model-losses">
+                            <div><dt>Event rate</dt><dd>${percent(probability(metrics.eventRate))}</dd></div>
+                            <div><dt>Brier</dt><dd>${fixed(metrics.brier, 4)} <small>baseline ${fixed(baseline.brier, 4)}</small></dd></div>
+                            <div><dt>Log loss</dt><dd>${fixed(metrics.logLoss, 4)} <small>baseline ${fixed(baseline.logLoss, 4)}</small></dd></div>
+                            <div><dt>Calibration change</dt><dd class="${brierImprovement != null && brierImprovement >= 0 && logLossImprovement != null && logLossImprovement >= 0 ? 'ops-positive' : 'ops-negative'}">${brierImprovement == null ? '--' : signed(brierImprovement, 4)} Brier / ${logLossImprovement == null ? '--' : signed(logLossImprovement, 4)} log loss</dd></div>
+                        </dl>
+                    </div>
+                    <p class="ops-fine-print">${esc(discrimination.protocol || model.protocol || 'Grouped out-of-fold outcome fitting; geometry was frozen before target access.')} Higher AUC is better; lower Brier and log loss are better. This remains transductive projected-target validation, not measured prospective performance.</p>
+                </section>`;
+        }
+
+        function sourceCounts() {
+            const source = sourceForTarget();
+            const n = numeric(firstPresent(source, ['n', 'eligible', 'samples', 'sampleSize']));
+            const positivesValue = firstPresent(source, [
+                'positives', 'positives85', 'hits', 'positiveCount', 'hitCount',
+            ]);
+            const positives = numeric(
+                positivesValue && typeof positivesValue === 'object'
+                    ? firstPresent(targetScoped(positivesValue), ['n', 'count', 'hits', 'value'])
+                    : positivesValue,
+            );
+            return { n, positives, baseRate: sourceBaseRate() };
+        }
+
+        function formatPointDifference(value) {
+            const points = percentagePoints(value);
+            return points == null ? '--' : `${signed(points, 1)} pp`;
+        }
+
+        function formatKeepDelta(value) {
+            const number = numeric(value);
+            return number == null ? '--' : `${signed(number, 2)} pts`;
+        }
+
+        function formatEffectCi(effect, metric) {
+            const ci = effectRange(effect, metric);
+            if (!ci) return 'CI not supplied';
+            const values = metric === 'riskDifference'
+                ? ci.map(percentagePoints)
+                : ci.map(numeric);
+            if (values.some(value => value == null)) return 'CI not supplied';
+            const suffix = metric === 'riskDifference' ? ' pp' : ' pts';
+            return `95% CI ${signed(values[0], 2)} to ${signed(values[1], 2)}${suffix}`;
+        }
+
+        function renderEffectDumbbell(effect) {
+            const outside = probability(firstPresent(effect, [
+                'outsideHitRate', 'outsideRate', 'complementRate',
+            ]));
+            const hit = probability(firstPresent(effect, ['hitRate', 'positiveRate', 'rate']));
+            if (outside == null || hit == null) {
+                return '<span class="ops-principle-dumbbell is-empty">Hit-rate comparison not supplied.</span>';
+            }
+            const outsidePosition = Math.max(0, Math.min(100, outside * 100));
+            const hitPosition = Math.max(0, Math.min(100, hit * 100));
+            const left = Math.min(outsidePosition, hitPosition);
+            const width = Math.abs(hitPosition - outsidePosition);
+            return `
+                <span class="ops-principle-dumbbell" role="img"
+                    aria-label="Member hit rate ${percent(hit)} versus complement hit rate ${percent(outside)}">
+                    <span class="ops-dumbbell-track">
+                        <span class="ops-dumbbell-range" style="left:${fixed(left, 2)}%;width:${fixed(width, 2)}%"></span>
+                        <span class="ops-dumbbell-dot is-base" style="left:${fixed(outsidePosition, 2)}%"></span>
+                        <span class="ops-dumbbell-dot is-hit" style="left:${fixed(hitPosition, 2)}%"></span>
+                    </span>
+                    <span class="ops-dumbbell-labels">
+                        <span><i class="is-base"></i>Complement ${percent(outside)}</span>
+                        <span><i class="is-hit"></i>Members ${percent(hit)}</span>
+                    </span>
+                </span>`;
+        }
+
+        function renderThresholdSensitivity(principle) {
+            const rows = asArray(principleEffect(principle).thresholdSensitivity);
+            if (!rows.length) {
+                return '<div class="ops-empty">No nearby-threshold sensitivity rows were supplied.</div>';
+            }
+            return `
+                <div class="ops-compact-table-wrap">
+                    <table class="ops-table ops-principle-table">
+                        <thead><tr><th>Projected cutoff</th><th>Members</th><th>Outside</th><th>Difference</th><th>Fold sign</th></tr></thead>
+                        <tbody>
+                            ${rows.map(row => {
+                                const fold = (row || {}).foldValidation || {};
+                                return `<tr>
+                                    <td><b>${fixed(row.threshold, 1)}%</b></td>
+                                    <td>${percent(probability(row.insideRisk))}</td>
+                                    <td>${percent(probability(row.outsideRisk))}</td>
+                                    <td>${formatPointDifference(row.riskDifference)}</td>
+                                    <td>${percent(probability(fold.signConsistency))}</td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                    <p class="ops-fine-print">These nearby cutoffs are descriptive robustness checks; the predeclared decision threshold remains 85%.</p>
+                </div>`;
+        }
+
+        function renderPrincipleCard(principle) {
+            const effect = principleEffect(principle);
+            const direction = principleDirection(principle);
+            const n = numeric(effect.n) ?? principleSupport(principle);
+            const hits = numeric(firstPresent(effect, ['hits', 'positives', 'hitCount']));
+            const hitRate = probability(firstPresent(effect, ['hitRate', 'positiveRate', 'rate']));
+            const outsideRate = probability(firstPresent(effect, [
+                'outsideHitRate', 'outsideRate', 'complementRate',
+            ]));
+            const riskRatio = numeric(effect.riskRatio)
+                ?? (hitRate != null && outsideRate ? hitRate / outsideRate : null);
+            const riskDifference = firstPresent(effect, ['riskDifference', 'absoluteRiskDifference']);
+            const keepDelta = firstPresent(effect, ['keepDelta', 'meanKeepDelta', 'deltaKeep']);
+            const q = correctedQ(effect);
+            const stability = principleStability(principle);
+            const active = String(state.selectedPrincipleId) === String(principle.id);
+            const familyLabel = principleFamilyLabel(principle);
+            return `
+                <button type="button"
+                    class="ops-principle-card is-${direction} ${active ? 'is-active' : ''}"
+                    data-ops-principle="${esc(principle.id)}"
+                    aria-expanded="${active ? 'true' : 'false'}">
+                    <span class="ops-principle-card-head">
+                        <span>
+                            <small>${esc(familyLabel)} / ${esc(principleEvidenceTier(principle))}</small>
+                            <b>${esc(principle.label || principle.id || 'Unlabeled principle')}</b>
+                            ${principle.complementLabel
+                                ? `<em class="ops-principle-comparison">Compared with ${esc(principle.complementLabel)}</em>`
+                                : ''}
+                        </span>
+                        <span class="ops-principle-direction">${direction === 'negative' ? 'Lower' : 'Higher'} 85% association</span>
+                    </span>
+                    ${renderEffectDumbbell(effect)}
+                    <span class="ops-principle-metrics">
+                        <span><small>Hits / N</small><b>${hits == null ? '--' : formatCount(hits)} / ${formatCount(n)}</b></span>
+                        <span><small>Members vs complement</small><b>${percent(hitRate)} vs ${percent(outsideRate)}</b></span>
+                        <span><small>Risk ratio</small><b>${riskRatio == null ? '--' : `${fixed(riskRatio, 2)}x`}</b></span>
+                        <span><small>Absolute difference</small><b>${formatPointDifference(riskDifference)}</b></span>
+                        <span><small>Mean keep delta</small><b>${formatKeepDelta(keepDelta)}</b><em>${esc(formatEffectCi(effect, 'keepDelta'))}</em></span>
+                        <span><small>Global BY q</small><b>${q == null ? '--' : fixed(q, 5)}</b></span>
+                        <span><small>Stability</small><b>${stability == null ? '--' : fixed(stability, 3)}</b></span>
+                        <span><small>Evidence tier</small><b>${esc(principleEvidenceTier(principle))}</b></span>
+                    </span>
+                </button>`;
+        }
+
+        function renderPrincipleGroup(direction, rows) {
+            const positive = direction === 'positive';
+            return `
+                <section class="ops-panel ops-principle-group">
+                    <div class="ops-section-heading">
+                        <div>
+                            <div class="ops-eyebrow">${positive ? 'Positive association' : 'Negative association'}</div>
+                            <h3>${positive ? 'Patterns seen more often above 85%' : 'Patterns seen less often above 85%'}</h3>
+                        </div>
+                        <span class="ops-chip ${positive ? 'ops-chip-green' : ''}">${formatCount(rows.length)} principles</span>
+                    </div>
+                    <p class="ops-section-copy">
+                        Ranked first by globally corrected evidence, then by conservative effect and support.
+                    </p>
+                    <div class="ops-principle-list">
+                        ${rows.map(renderPrincipleCard).join('') || `
+                            <div class="ops-empty">No ${positive ? 'positive' : 'negative'} principles were supplied for ${esc(TARGET_SHORT[state.target])}.</div>`}
+                    </div>
+                </section>`;
+        }
+
+        function normalizeMemberIndices(principle) {
+            return Array.from(new Set(
+                asArray((principle || {}).memberIndices)
+                    .map(value => Number(
+                        value && typeof value === 'object'
+                            ? firstPresent(value, ['index', 'hookIndex', 'memberIndex'])
+                            : value,
+                    ))
+                    .filter(index => Number.isInteger(index) && index >= 0 && index < hooks().length),
+            ));
+        }
+
+        function resolveRepresentative(item) {
+            if (item === null || item === undefined) return null;
+            let index = null;
+            let supplied = {};
+            if (typeof item === 'number' || /^\d+$/.test(String(item))) {
+                index = Number(item);
+            } else if (typeof item === 'string') {
+                index = hookIndex(item);
+            } else if (typeof item === 'object') {
+                supplied = item;
+                index = numeric(firstPresent(item, ['index', 'hookIndex', 'memberIndex']));
+                if (index == null && item.id) index = hookIndex(item.id);
+            }
+            const stored = Number.isInteger(index) && hooks()[index] ? hooks()[index] : {};
+            const merged = Object.assign({}, stored, supplied);
+            if (!Object.keys(merged).length) return null;
+            return { hook: merged, index: Number.isInteger(index) ? index : null };
+        }
+
+        function representativeRows(principle) {
+            const supplied = targetScoped((principle || {}).representativeHooks);
+            const rows = asArray(supplied).map(resolveRepresentative).filter(Boolean);
+            if (rows.length) return rows.slice(0, 8);
+            return normalizeMemberIndices(principle)
+                .slice(0, 8)
+                .map(resolveRepresentative)
+                .filter(Boolean);
+        }
+
+        function renderRepresentativeHooks(principle) {
+            const rows = representativeRows(principle);
+            if (!rows.length) return '<div class="ops-empty">No representative hooks were supplied.</div>';
+            return `
+                <div class="ops-principle-montages">
+                    ${rows.map(record => {
+                        const hook = record.hook || {};
+                        const content = `
+                            <img src="${esc(hook.montage || hook.image || hook.thumbnail || '')}" alt="" loading="lazy" data-ops-montage>
+                            <span>
+                                <b>${esc(hook.title || hook.text || hook.id || 'Representative hook')}</b>
+                                <small>${esc(hook.text || hook.description || '')}</small>
+                            </span>`;
+                        return record.index == null
+                            ? `<div class="ops-principle-montage">${content}</div>`
+                            : `<button type="button" class="ops-principle-montage"
+                                data-ops-plane-point="${record.index}">${content}</button>`;
+                    }).join('')}
+                </div>`;
+        }
+
+        function labelCandidates(principle, side = 'member') {
+            const evidence = (principle || {}).labelEvidence || {};
+            const supplied = side === 'complement'
+                ? evidence.complementCandidates
+                    || (principle || {}).complementCandidates
+                    || []
+                : evidence.candidates
+                    || (principle || {}).candidates
+                    || (principle || {}).labelCandidates
+                    || evidence.nearestNeighbors
+                    || [];
+            return asArray(supplied).map(candidate => {
+                if (typeof candidate === 'string') return { label: candidate, cosine: null };
+                const signedContrast = numeric(firstPresent(candidate || {}, [
+                    'contrastiveCosine', 'contrastive', 'contrast', 'deltaCosine',
+                ]));
+                return {
+                    label: firstPresent(candidate || {}, ['label', 'text', 'phrase', 'name'])
+                        || 'Candidate',
+                    cosine: numeric(firstPresent(candidate || {}, side === 'complement'
+                        ? ['complementCosine', 'cosine', 'similarity', 'score']
+                        : ['cosine', 'similarity', 'score'])),
+                    contrastiveCosine: (
+                        side === 'complement' && signedContrast != null
+                            ? -signedContrast
+                            : signedContrast
+                    ),
+                };
+            });
+        }
+
+        function renderLabelEvidence(principle) {
+            const memberCandidates = labelCandidates(principle, 'member');
+            const complementCandidates = labelCandidates(principle, 'complement');
+            if (!memberCandidates.length && !complementCandidates.length) {
+                return '<div class="ops-empty">No text-embedding label neighbors were supplied.</div>';
+            }
+            const table = (title, candidates) => candidates.length ? `
+                <div>
+                    <h5>${esc(title)}</h5>
+                    <div class="ops-compact-table-wrap">
+                        <table class="ops-table ops-principle-table">
+                            <thead><tr><th>Embedding-derived descriptor</th><th>Side cosine</th><th>Side contrast</th></tr></thead>
+                            <tbody>
+                                ${candidates.map(candidate => `
+                                    <tr><td><b>${esc(candidate.label)}</b></td><td>${fixed(candidate.cosine, 4)}</td><td>${fixed(candidate.contrastiveCosine, 4)}</td></tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>` : '';
+            return `
+                <div class="ops-label-comparison">
+                    ${table(`Member side: ${principle.label || 'component'}`, memberCandidates)}
+                    ${table(`Complement side: ${principle.complementLabel || 'outside region'}`, complementCandidates)}
+                    <p class="ops-fine-print">Every binary effect is a comparison. Side contrast is that side's descriptor cosine minus the opposite side's cosine; neither label is a causal ingredient.</p>
+                </div>`;
+        }
+
+        function renderAlgorithmLedger(principle) {
+            const stability = (principle || {}).stability || {};
+            const algorithms = asArray(
+                (principle || {}).algorithms || stability.algorithms || stability.algorithm,
+            );
+            const resolutions = asArray(
+                (principle || {}).resolutions || stability.resolutions || stability.resolution,
+            );
+            const ledger = asArray(
+                (principle || {}).algorithmResolutionLedger
+                || (principle || {}).ledger
+                || (principle || {}).supportingPartitions
+                || stability.ledger,
+            );
+            const rows = ledger.length ? ledger : algorithms.map((algorithm, index) => ({
+                algorithm: typeof algorithm === 'object'
+                    ? firstPresent(algorithm, ['algorithm', 'name', 'label', 'key'])
+                    : algorithm,
+                resolution: resolutions[index] || (resolutions.length === 1 ? resolutions[0] : null),
+                support: typeof algorithm === 'object'
+                    ? firstPresent(algorithm, ['support', 'n', 'members'])
+                    : null,
+                stability: typeof algorithm === 'object'
+                    ? firstPresent(algorithm, ['stability', 'score', 'jaccard'])
+                    : null,
+            }));
+            if (!rows.length && !resolutions.length) {
+                return '<div class="ops-empty">No algorithm or resolution ledger was supplied.</div>';
+            }
+            return `
+                <div class="ops-compact-table-wrap">
+                    <table class="ops-table ops-principle-table">
+                        <thead><tr><th>Algorithm</th><th>Resolution</th><th>Support</th><th>Stability</th></tr></thead>
+                        <tbody>
+                            ${(rows.length ? rows : resolutions.map(resolution => ({ resolution }))).map(row => `
+                                <tr>
+                                    <td>${esc(firstPresent(row || {}, ['algorithm', 'name', 'label', 'key']) || '--')}</td>
+                                    <td>${esc(summarizeRecord(firstPresent(row || {}, ['resolution', 'k', 'scale']), '--'))}</td>
+                                    <td>${esc(summarizeRecord(firstPresent(row || {}, ['support', 'n', 'members']), '--'))}</td>
+                                    <td>${esc(summarizeRecord(firstPresent(row || {}, ['stability', 'score', 'jaccard']), '--'))}</td>
+                                </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+        }
+
+        function renderDiagnostic(title, value, fallback) {
+            const record = targetScoped(value);
+            const continuous = record && typeof record === 'object'
+                ? (record.continuous || {})
+                : {};
+            const threshold = record && typeof record === 'object'
+                ? (record.keepAtLeast85 || {})
+                : {};
+            const continuousCi = asArray(
+                continuous.ci95GroupedBootstrap || continuous.ci95,
+            );
+            const thresholdCi = asArray(
+                threshold.ci95RiskDifferenceGroupedBootstrap || threshold.ci95,
+            );
+            const continuousFold = continuous.foldSignConsistency || {};
+            const thresholdFold = threshold.foldSignConsistency || {};
+            const hasEffects = (
+                continuous.status === 'ok'
+                || threshold.status === 'ok'
+            );
+            const interval = (values, formatter) => (
+                values.length === 2
+                    ? `${formatter(values[0])} to ${formatter(values[1])}`
+                    : '--'
+            );
+            return `
+                <section class="ops-principle-diagnostic">
+                    <div class="ops-eyebrow">${esc(title)}</div>
+                    <p>${esc(plainRecord(record, fallback))}</p>
+                    ${hasEffects ? `
+                        <dl class="ops-diagnostic-effects">
+                            <div><dt>Rows inside / outside</dt><dd>${formatCount(record.nInside)} / ${formatCount(record.nOutside)}</dd></div>
+                            <div><dt>Mean keep inside / outside</dt><dd>${percentValue(continuous.meanInside)} / ${percentValue(continuous.meanOutside)}</dd></div>
+                            <div><dt>Mean keep difference</dt><dd>${formatKeepDelta(continuous.meanDifference)} <small>${interval(continuousCi, value => formatKeepDelta(value))}</small></dd></div>
+                            <div><dt>Mean-difference fold sign</dt><dd>${percent(probability(continuousFold.consistentFraction))} <small>${formatCount(continuousFold.foldsUsable)} usable folds</small></dd></div>
+                            <div><dt>85% hit rate inside / outside</dt><dd>${percent(probability(threshold.rateInside))} / ${percent(probability(threshold.rateOutside))}</dd></div>
+                            <div><dt>85% absolute difference</dt><dd>${formatPointDifference(threshold.riskDifference)} <small>${interval(thresholdCi, value => formatPointDifference(value))}</small></dd></div>
+                            <div><dt>85% fold sign</dt><dd>${percent(probability(thresholdFold.consistentFraction))} <small>${formatCount(thresholdFold.foldsUsable)} usable folds</small></dd></div>
+                            <div><dt>Grouped bootstraps</dt><dd>${formatCount(continuous.bootstrapValidRepeats)} / ${formatCount(continuous.bootstrapRequiredRepeats || continuous.bootstrapValidRepeats)}</dd></div>
+                        </dl>` : ''}
+                    ${record && typeof record === 'object' ? `
+                        <details class="ops-raw-details">
+                            <summary>Exact diagnostic record</summary>
+                            <pre>${esc(JSON.stringify(record, null, 2))}</pre>
+                        </details>` : ''}
+                </section>`;
+        }
+
+        function renderTransportGeometry(principle) {
+            const transport = (principle || {}).transport || {};
+            const match = transport.selectedMatch || {};
+            const robustness = transport.matchRobustness || {};
+            if (!Object.keys(match).length) {
+                return '<div class="ops-empty">No shared-space transport match was supplied.</div>';
+            }
+            const eligible = Boolean(match.transportEligible);
+            return `
+                <div class="ops-compact-table-wrap">
+                    <table class="ops-table ops-principle-table">
+                        <thead><tr><th>Status</th><th>Jaccard</th><th>Precision</th><th>Recall</th><th>Saved overlap</th><th>Robust partitions</th></tr></thead>
+                        <tbody><tr>
+                            <td><b>${eligible ? 'Eligible' : 'Ineligible'}</b></td>
+                            <td>${fixed(match.jaccard, 3)}</td>
+                            <td>${percent(probability(match.precisionOnSaved))}</td>
+                            <td>${percent(probability(match.recallOnSaved))}</td>
+                            <td>${formatCount(match.intersectionSaved)} / ${formatCount(match.principleSavedSupport)}</td>
+                            <td>${formatCount(robustness.partitionsMeetingFullMatchContract)} / ${formatCount(robustness.partitionsMatched)}</td>
+                        </tr></tbody>
+                    </table>
+                    <p class="ops-fine-print">${eligible
+                        ? 'Broad and observed diagnostics may be computed, but projected outcomes remain circular and observed evidence remains non-causal.'
+                        : 'Broad and observed outcome diagnostics are blocked because this semantic component did not transport reliably into the shared visual preview space.'}</p>
+                </div>`;
+        }
+
+        function selectedPrinciple() {
+            return principleRows().find(
+                row => String(row.id) === String(state.selectedPrincipleId),
+            ) || null;
+        }
+
+        function principlePlaneFamily(principle, fallbackFamily) {
+            const key = principleFamilyKey(principle);
+            const plane = ((principlesArtifact().planes || {})[key]) || null;
+            if (
+                plane
+                && Array.isArray(plane.x)
+                && Array.isArray(plane.y)
+                && plane.x.length === hooks().length
+                && plane.y.length === hooks().length
+            ) {
+                return {
+                    key,
+                    label: principleFamilyLabel(principle),
+                    plane,
+                    assignments: new Array(hooks().length).fill(0),
+                };
+            }
+            return fallbackFamily;
+        }
+
+        function renderPrincipleDetail(principle) {
+            if (!principle) return '';
+            const familyKey = principleFamilyKey(principle);
+            const baseFamilyKey = familyKey.replace(/^residual__/, '');
+            const familyLabel = principleFamilyLabel(principle);
+            const family = families().find(row => row.key === familyKey)
+                || families().find(row => row.key === baseFamilyKey)
+                || families().find(row => row.label === familyLabel)
+                || null;
+            const planeFamily = principlePlaneFamily(principle, family);
+            const memberIndices = normalizeMemberIndices(principle);
+            const selected = selectedHook();
+            const broadCorpus = (principle || {}).broadCorpus
+                || (principlesArtifact().source || {}).broadCorpus;
+            const observed = (principle || {}).observedDiagnostic
+                || (principle || {}).observedReplication;
+            const method = principlesArtifact().method || {};
+            const validation = targetScoped(principlesArtifact().validation || {}) || {};
+            const boundaryRecord = principlesArtifact().measurementBoundary
+                || principlesArtifact().boundary
+                || {};
+            const caveats = [
+                ...asArray(method.caveats),
+                ...asArray(validation.caveats),
+                ...asArray((principle || {}).caveats),
+            ].filter(Boolean);
+            return `
+                <section class="ops-panel ops-principle-detail" id="ops-principle-detail"
+                    tabindex="-1" aria-live="polite">
+                    <div class="ops-section-heading">
+                        <div>
+                            <div class="ops-eyebrow">In-place evidence detail</div>
+                            <h3>${esc(principle.comparisonLabel || principle.label || principle.id || 'Selected principle')}</h3>
+                        </div>
+                        <button type="button" class="ops-icon-button" data-ops-close-principle
+                            title="Close principle detail" aria-label="Close principle detail">&times;</button>
+                    </div>
+                    <div class="ops-principle-detail-grid">
+                        <section>
+                            <div class="ops-section-heading">
+                                <div>
+                                    <div class="ops-eyebrow">Outcome-blind geometry</div>
+                                    <h4>${esc(planeFamily ? planeFamily.label : familyLabel)}</h4>
+                                </div>
+                                <span class="ops-chip">${formatCount(memberIndices.length)} highlighted</span>
+                            </div>
+                            ${planeFamily ? renderClusterPlane(planeFamily, {
+                                memberIndices,
+                                ignoreSelectedCluster: true,
+                                ariaLabel: `${planeFamily.label} semantic plane with ${memberIndices.length} principle members highlighted`,
+                            }) : '<div class="ops-empty">The matching persisted feature-family plane is unavailable.</div>'}
+                            ${selected ? renderHookPeek(selected) : ''}
+                        </section>
+                        <section class="ops-principle-ledger-stack">
+                            <div>
+                                <div class="ops-eyebrow">Algorithm / resolution ledger</div>
+                                ${renderAlgorithmLedger(principle)}
+                            </div>
+                            <div>
+                                <div class="ops-eyebrow">Embedding-derived visual descriptors</div>
+                                ${renderLabelEvidence(principle)}
+                            </div>
+                            <div>
+                                <div class="ops-eyebrow">Threshold sensitivity</div>
+                                ${renderThresholdSensitivity(principle)}
+                            </div>
+                        </section>
+                    </div>
+                    <section class="ops-principle-representatives">
+                        <div class="ops-eyebrow">Representative source montages</div>
+                        ${renderRepresentativeHooks(principle)}
+                    </section>
+                    <section class="ops-principle-representatives">
+                        <div class="ops-eyebrow">Shared-space transport gate</div>
+                        ${renderTransportGeometry(principle)}
+                    </section>
+                    <div class="ops-two-column ops-principle-diagnostics">
+                        ${renderDiagnostic(
+                            'Broad-corpus diagnostic',
+                            broadCorpus,
+                            'No broad-corpus diagnostic was supplied for this principle.',
+                        )}
+                        ${renderDiagnostic(
+                            'Observed keep diagnostic',
+                            observed,
+                            'No eligible observed keep diagnostic was supplied; this remains projected evidence.',
+                        )}
+                    </div>
+                    <section class="ops-principle-method">
+                        <div class="ops-eyebrow">Exact method boundary and caveats</div>
+                        <p><b>Measurement boundary:</b> ${esc(principlesBoundary())}</p>
+                        <p><b>Method:</b> ${esc(plainRecord(method, 'No method summary supplied.'))}</p>
+                        <p><b>Validation:</b> ${esc(plainRecord(validation, 'No validation summary supplied.'))}</p>
+                        ${caveats.length ? `<ul>${caveats.map(caveat => `<li>${esc(plainRecord(caveat, ''))}</li>`).join('')}</ul>` : ''}
+                        <details class="ops-raw-details">
+                            <summary>Exact method and validation records</summary>
+                            <pre>${esc(JSON.stringify({
+                                measurementBoundary: boundaryRecord,
+                                method,
+                                validation,
+                            }, null, 2))}</pre>
+                        </details>
+                    </section>
+                </section>`;
+        }
+
+        function renderPrinciplesPending() {
+            if (state.principlesLoading) {
+                return `
+                    <section class="ops-panel ops-principles-state" aria-live="polite">
+                        <div class="ops-pending-mark"></div>
+                        <div class="ops-eyebrow">85% principles</div>
+                        <h3>Loading the persisted principles artifact</h3>
+                        <p>The semantic atlas remains available while this evidence summary loads separately.</p>
+                    </section>`;
+            }
+            return `
+                <section class="ops-panel ops-principles-state" aria-live="polite">
+                    <div class="ops-eyebrow">85% principles unavailable</div>
+                    <h3>No principles artifact is available yet</h3>
+                    <p>${esc(state.principlesError || 'The endpoint returned an empty artifact.')}</p>
+                    <button type="button" class="ops-command-button" data-ops-retry-principles>
+                        Retry principles
+                    </button>
+                </section>`;
+        }
+
+        function renderPrinciplesView() {
+            if (!state.principlesArtifact || !principleRows().length) {
+                return renderPrinciplesPending();
+            }
+            const counts = sourceCounts();
+            const positives = rankedPrinciples('positive');
+            const negatives = rankedPrinciples('negative');
+            const broad = (principlesArtifact().source || {}).broadCorpus || {};
+            return `
+                <div class="ops-view-stack ops-principles-view">
+                    ${state.principlesError ? `
+                        <section class="ops-principles-stale" role="status">
+                            <span><b>Showing the last verified principles artifact.</b> ${esc(state.principlesError)}</span>
+                            <button type="button" class="ops-command-button" data-ops-retry-principles>Retry refresh</button>
+                        </section>` : ''}
+                    <section class="ops-panel ops-principles-answer">
+                        <div class="ops-eyebrow">Operational answer / fixed ${PRINCIPLES_THRESHOLD}% threshold</div>
+                        <h3>${esc(principlesSentence())}</h3>
+                        <div class="ops-principles-boundary" role="note">
+                            <b>Projected is not observed.</b>
+                            <span>${esc(principlesBoundary())}</span>
+                        </div>
+                        <div class="ops-stat-grid ops-stat-grid-compact">
+                            ${stat('Eligible source hooks', formatCount(counts.n), 'artifact source')}
+                            ${stat('Projected 85%+ hooks', formatCount(counts.positives), 'fixed threshold', 'green')}
+                            ${stat('Corpus hit rate', percent(counts.baseRate), 'global context; cards compare their complements', 'cyan')}
+                            ${stat('Evidence target', TARGET_SHORT[state.target], 'Combined, Visual, or Text', 'purple')}
+                            ${stat(
+                                'Broad exact-ID diagnostic',
+                                formatCount(firstPresent(broad, ['projectedExactIdOverlap', 'broadRows'])),
+                                `${formatCount(broad.canonicalStoredShorts)} canonical Shorts; projected, not observed`,
+                                'cyan',
+                            )}
+                            ${stat(
+                                'Actual keep overlap',
+                                formatCount(broad.observedRows),
+                                `${formatCount(broad.observedTailHits85)} observed at or above 85%`,
+                                'green',
+                            )}
+                        </div>
+                    </section>
+                    ${renderPrinciplesModelValidation()}
+                    ${renderPrincipleDetail(selectedPrinciple())}
+                    <div class="ops-two-column ops-principle-columns">
+                        ${renderPrincipleGroup('positive', positives)}
+                        ${renderPrincipleGroup('negative', negatives)}
+                    </div>
+                </div>`;
+        }
+
         function renderOverview() {
             const topFamilies = sortedFamilies();
             const topClusters = topClusterRows().slice(0, 12);
@@ -895,7 +1895,8 @@
                 </aside>`;
         }
 
-        function renderClusterPlane(family) {
+        function renderClusterPlane(family, options) {
+            const config = options || {};
             const plane = family.plane || {};
             const xs = plane.x || [];
             const ys = plane.y || [];
@@ -903,11 +1904,23 @@
             const width = 1000;
             const height = 640;
             const pad = 42;
-            const selectedIndex = state.selectedPointIndex;
-            const selectedCluster = state.clusterId;
+            const selectedIndex = config.selectedIndex == null
+                ? state.selectedPointIndex
+                : config.selectedIndex;
+            const selectedCluster = config.ignoreSelectedCluster ? null : state.clusterId;
+            const memberIndices = new Set(
+                asArray(config.memberIndices)
+                    .map(value => Number(value))
+                    .filter(Number.isInteger),
+            );
+            const highlightsMembers = Object.prototype.hasOwnProperty.call(
+                config,
+                'memberIndices',
+            );
             return `
-                <svg class="ops-plane" viewBox="0 0 ${width} ${height}" role="img"
-                    aria-label="${esc(family.label)} two-dimensional PCA plane">
+                <svg class="ops-plane" viewBox="0 0 ${width} ${height}" role="group"
+                    data-ops-plane-family="${esc(family.key || '')}"
+                    aria-label="${esc(config.ariaLabel || `${family.label} two-dimensional PCA plane`)}">
                     <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" class="ops-axis-line"></line>
                     <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" class="ops-axis-line"></line>
                     <text x="${width - 86}" y="${height - 12}" class="ops-chart-label">PCA 1</text>
@@ -917,14 +1930,18 @@
                         const x = pad + (width - pad * 2) * Number(rawX || 0) / 1000;
                         const y = height - pad - (height - pad * 2) * Number(ys[index] || 0) / 1000;
                         const isSelected = Number(selectedIndex) === index;
-                        const muted = selectedCluster != null && Number(selectedCluster) !== cluster;
+                        const isMember = memberIndices.has(index);
+                        const muted = highlightsMembers
+                            ? !isMember
+                            : selectedCluster != null && Number(selectedCluster) !== cluster;
                         const hook = hooks()[index] || {};
                         return `<circle cx="${fixed(x, 2)}" cy="${fixed(y, 2)}"
-                            r="${isSelected ? 9 : 5.8}" fill="${colorForCluster(cluster)}"
-                            class="ops-plane-point ${isSelected ? 'is-selected' : ''} ${muted ? 'is-muted' : ''}"
+                            r="${isSelected ? 9 : (isMember ? 7.6 : 5.8)}" fill="${colorForCluster(cluster)}"
+                            class="ops-plane-point ${isSelected ? 'is-selected' : ''} ${isMember ? 'is-principle-member' : ''} ${muted ? 'is-muted' : ''}"
+                            ${isMember ? 'data-ops-principle-member="true"' : ''}
                             data-ops-plane-point="${index}" tabindex="0" role="button"
-                            aria-label="${esc(hook.title || hook.text || hook.id || `point ${index + 1}`)}">
-                            <title>${esc(hook.title || hook.text || hook.id || `Point ${index + 1}`)} / cluster ${cluster}</title>
+                            aria-label="${esc(hook.title || hook.text || hook.id || `point ${index + 1}`)}${isMember ? ', principle member' : ''}">
+                            <title>${esc(hook.title || hook.text || hook.id || `Point ${index + 1}`)} / cluster ${cluster}${isMember ? ' / principle member' : ''}</title>
                         </circle>`;
                     }).join('')}
                 </svg>`;
@@ -950,7 +1967,7 @@
             const X = value => pad.left + (width - pad.left - pad.right) * (value - minimum) / (maximum - minimum);
             const Y = value => height - pad.bottom - (height - pad.top - pad.bottom) * (value - minimum) / (maximum - minimum);
             return `
-                <svg class="ops-chart ops-scatter" viewBox="0 0 ${width} ${height}" role="img"
+                <svg class="ops-chart ops-scatter" viewBox="0 0 ${width} ${height}" role="group"
                     aria-label="Surrogate reconstruction versus existing keep estimate">
                     <line x1="${X(minimum)}" y1="${Y(minimum)}" x2="${X(maximum)}" y2="${Y(maximum)}"
                         class="ops-perfect-line"></line>
@@ -1591,6 +2608,8 @@
             let content = '';
             if (!state.artifact) {
                 content = renderPending();
+            } else if (view === 'principles') {
+                content = renderPrinciplesView();
             } else if (view === 'families') {
                 content = renderFamiliesView();
             } else if (view === 'interactions') {
@@ -1640,6 +2659,17 @@
             paint();
         }
 
+        function focusPrincipleDetail() {
+            window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(() => {
+                    const detail = document.getElementById('ops-principle-detail');
+                    if (!detail) return;
+                    detail.focus({ preventScroll: true });
+                    detail.scrollIntoView({ behavior: 'auto', block: 'start' });
+                });
+            });
+        }
+
         function handleClick(event) {
             const target = event.target;
             const refresh = target.closest('[data-ops-refresh]');
@@ -1652,6 +2682,7 @@
             if (view) {
                 state.view = view.dataset.opsView;
                 paint();
+                if (state.view === 'principles') loadPrinciples(false);
                 return true;
             }
             const targetButton = target.closest('[data-ops-target]');
@@ -1659,6 +2690,37 @@
                 state.target = targetButton.dataset.opsTarget;
                 interactionCache = null;
                 paint();
+                return true;
+            }
+            const principle = target.closest('[data-ops-principle]');
+            if (principle) {
+                const id = principle.dataset.opsPrinciple;
+                state.selectedPrincipleId = String(state.selectedPrincipleId) === String(id)
+                    ? ''
+                    : String(id || '');
+                const selected = selectedPrinciple();
+                if (selected) {
+                    const familyKey = principleFamilyKey(selected).replace(/^residual__/, '');
+                    if (families().some(family => family.key === familyKey)) {
+                        state.familyKey = familyKey;
+                    }
+                }
+                state.selectedHookId = '';
+                state.selectedPointIndex = null;
+                paint();
+                if (state.selectedPrincipleId) focusPrincipleDetail();
+                return true;
+            }
+            if (target.closest('[data-ops-close-principle]')) {
+                state.selectedPrincipleId = '';
+                state.selectedHookId = '';
+                state.selectedPointIndex = null;
+                paint();
+                return true;
+            }
+            if (target.closest('[data-ops-retry-principles]')) {
+                state.principlesLoadedOnce = false;
+                loadPrinciples(true);
                 return true;
             }
             const point = target.closest('[data-ops-plane-point]');

@@ -13,6 +13,8 @@ const server = read('server.js');
 const auth = read('auth.js');
 const html = read('index.html');
 const builder = read('buildings/jarvis/operations-lab/build_operations.py');
+const principlesBuilder = read('buildings/jarvis/operations-lab/build_principles.py');
+const principlesAnalysis = read('buildings/jarvis/operations-lab/principles_analysis.py');
 const embeddingStore = read('buildings/jarvis/promise-lab/embedding_store.py');
 const followup = read('buildings/jarvis/operations-lab/finish_operations.sh');
 
@@ -46,6 +48,17 @@ assert(
 assert(
     server.includes("/api/shortsquant/operations-lab/artifact"),
     'The Operations artifact route is missing',
+);
+for (const route of ['principles-status', 'principles', 'principles-ledger']) {
+    const routeLiteral = `pathname === '/api/shortsquant/operations-lab/${route}'`;
+    assert(
+        server.includes(routeLiteral),
+        `The Operations ${route} route is missing`,
+    );
+}
+assert(
+    server.includes("url.searchParams.get('artifactHash')"),
+    'Principles requests must be able to invalidate stale R2 cache entries by hash',
 );
 assert(
     server.includes('surfaceSourceErrors: true'),
@@ -124,11 +137,42 @@ assert(
         < builder.indexOf('R2.put_json(f"{DESCRIPTION_PREFIX}{hook_id}.json", payload)'),
     'Paid vision results must be durably cached locally before their R2 upload',
 );
+assert(
+    principlesAnalysis.includes('def discover_components(')
+        && principlesAnalysis.includes('def analyze_component_outcomes('),
+    'Principles discovery and outcome inference must remain separate public functions',
+);
+assert(
+    principlesAnalysis.includes('HDBSCAN')
+        && principlesAnalysis.includes('GaussianMixture')
+        && principlesAnalysis.includes('AgglomerativeClustering'),
+    'Principles must test independent clustering algorithms',
+);
+assert(
+    principlesBuilder.includes('residualize_operations(')
+        && principlesBuilder.includes('TOPIC_FAMILIES = ("subjects", "objects", "setting")'),
+    'Visual operation discovery must expose its outcome-blind topic adjustment',
+);
+assert(
+    principlesBuilder.includes('No manual or LLM-assigned cluster labels')
+        && principlesBuilder.includes('ranked on both the member and')
+        && principlesBuilder.includes('contrastive centroid cosine'),
+    'Both sides of each principle must be labeled from embedding geometry',
+);
+assert(
+    principlesBuilder.indexOf('discover_components(')
+        < principlesBuilder.indexOf('analyze_component_outcomes('),
+    'The builder must freeze discovery before it opens projected keep outcomes',
+);
+assert(
+    principlesBuilder.includes('Projected keep, not observed YouTube swipe ratio'),
+    'The compact principles artifact must preserve its measurement boundary',
+);
 
 console.log(JSON.stringify({
     ok: true,
     tab: 'operations',
-    routes: 2,
+    routes: 5,
     delegatedEvents: 5,
     proxyWarning: true,
     signedMontages: true,
