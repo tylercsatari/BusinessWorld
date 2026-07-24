@@ -4210,9 +4210,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
     const savedMon = pathname.match(/^\/api\/raw(?:-long)?\/saved-montage\/([a-z0-9]{1,32})$/);
-    if (savedMon && req.method === 'GET') {
+    if (savedMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
-            if (await serveR2Object(res, `raw/saved-hooks/${savedMon[1]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=3600' }).catch(() => false)) return;
+            if (await redirectR2Object(res, `raw/saved-hooks/${savedMon[1]}.jpg`, {
+                cacheControl: 'public, max-age=3600',
+                expiresIn: 3600,
+            }).catch(() => false)) return;
             res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
         return;
@@ -4387,6 +4390,29 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    // Operations Lab: outcome-blind English descriptions and semantic clusters
+    // over the durable Shorts Quant saved-hook bank. The offline worker writes
+    // both objects to R2, so Render only serves compact, immutable artifacts.
+    if (pathname === '/api/shortsquant/operations-lab/status' && req.method === 'GET') {
+        await serveR2Gz(req, res, 'shorts/operations-lab-v1/status.json', 2500, {
+            version: 1,
+            productVersion: 'shorts-hook-operations-v1',
+            stage: 'idle',
+            updatedAt: 0,
+            message: 'The Operations corpus has not started yet.',
+        });
+        return;
+    }
+    if (pathname === '/api/shortsquant/operations-lab/artifact' && req.method === 'GET') {
+        await serveR2Gz(req, res, 'shorts/operations-lab-v1/artifact.json', 60e3, {
+            version: 1,
+            productVersion: 'shorts-hook-operations-v1',
+            stage: 'building',
+            error: 'The complete Operations artifact is still building.',
+        }, 202);
+        return;
+    }
+
     // Promise Lab is a Shorts Quant product. There is one route namespace and
     // one implementation for both the saved library and typed scorer.
     const promisePathname = pathname;
