@@ -303,7 +303,7 @@ if os.environ.get('RAW_OWNED_ONLY') == '1':
     todo = [v for v in todo if v.get('mine')]   # gentle account-only grind (skip the big library backlog)
 todo.sort(key=lambda v: not v.get('mine'))      # OWNED (account) videos FIRST — the priority; the library backlog embeds after
 todo = todo[:RAW_MAX]
-lock = threading.Lock(); cnt = [0]; fails = [0]; t0 = time.time()
+lock = threading.Lock(); cnt = [0]; completed = [0]; fails = [0]; t0 = time.time()
 print(f"todo: {len(todo)} of {len(stored)} stored need embedding and/or a montage", flush=True)
 
 
@@ -428,17 +428,26 @@ def work(v):
             s['txt'].append(txt if good else '')   # '' when no real voiceover → silent is derivable from txt
             s['mine'].append(mine); s['silent'].append(False if c == 'text' else (not good))
             done[c].add(vid)
+        required_ok = vid in done['visual'] and vid in done['together'] and vid in have_montage
+        if required_ok:
+            completed[0] += 1
+        else:
+            # A quota or transient API failure can return no vector after all
+            # retries. Keep the video unresolved so the next resumable pass
+            # retries it instead of reporting a false completion.
+            fails[0] += 1
         cnt[0] += 1
         if cnt[0] % STATUS_EVERY == 0:
             el = time.time() - t0
             nm = sum(store['visual']['mine'])
-            print(f"  {cnt[0]}/{len(todo)} · {el/60:.0f}m · visual {len(store['visual']['ids'])} text {len(store['text']['ids'])} together {len(store['together']['ids'])} · mine {nm} · fails {fails[0]}", flush=True)
+            unresolved = len(todo) - completed[0]
+            print(f"  attempted {cnt[0]}/{len(todo)} · stored {completed[0]} · unresolved {unresolved} · {el/60:.0f}m · visual {len(store['visual']['ids'])} text {len(store['text']['ids'])} together {len(store['together']['ids'])} · mine {nm} · failed attempts {fails[0]}", flush=True)
             rate = cnt[0] / max(el, 1)
-            emit_status('running', discovered=len(stored), eligible=len(stored), queued=max(0, len(todo) - cnt[0]),
-                        processed=cnt[0], failed=fails[0], complete={c: len(done[c]) for c in CHANS},
+            emit_status('running', discovered=len(stored), eligible=len(stored), queued=max(0, unresolved),
+                        attempted=cnt[0], processed=completed[0], failed=fails[0], complete={c: len(done[c]) for c in CHANS},
                         scienceEligible=len(scienceids), scienceComplete=science_complete(),
-                        ratePerMinute=round(rate * 60, 2), etaSeconds=round((len(todo) - cnt[0]) / rate) if rate > 0 else None,
-                        message=f'Embedding {cnt[0]:,} of {len(todo):,} queued Shorts')
+                        ratePerMinute=round(rate * 60, 2), etaSeconds=round(unresolved / rate) if rate > 0 else None,
+                        message=f'Attempted {cnt[0]:,}; stored {completed[0]:,}; {unresolved:,} unresolved')
         if cnt[0] % CHECKPOINT_EVERY == 0:
             for c in CHANS: save_npz(c)
             if MAP_EVERY and cnt[0] % MAP_EVERY == 0:
@@ -449,13 +458,23 @@ with ThreadPoolExecutor(WORKERS) as ex:
     list(ex.map(work, todo))
 for c in CHANS:
     save_npz(c)
+remaining = [v for v in stored if needs(v)]
+if remaining:
+    emit_status('retrying', discovered=len(stored), eligible=len(stored), queued=len(remaining),
+                attempted=cnt[0], processed=completed[0], failed=fails[0],
+                complete={c: len(done[c]) for c in CHANS},
+                scienceEligible=len(scienceids), scienceComplete=science_complete(),
+                message=f'{len(remaining):,} unresolved Shorts will retry from the durable checkpoint')
+    print(f"retry required: {len(remaining)} videos still lack a required visual/together vector", flush=True)
+    sys.exit(2)
 if not BACKFILL_MODE:
     # A full 60K-point SVD/UMAP map is both memory-heavy and unusable in the
     # browser. The backfill updates the canonical vectors; the existing map stays
     # live until the dedicated sampled-map builder refreshes it.
     for c in CHANS:
         build_map(c)
-emit_status('complete', discovered=len(stored), eligible=len(stored), queued=0, processed=cnt[0], failed=fails[0],
+emit_status('complete', discovered=len(stored), eligible=len(stored), queued=0,
+            attempted=cnt[0], processed=completed[0], failed=fails[0],
             complete={c: len(done[c]) for c in CHANS}, ratePerMinute=round(cnt[0] / max(time.time() - t0, 1) * 60, 2),
             scienceEligible=len(scienceids), scienceComplete=science_complete(),
             etaSeconds=0, message='Canonical Science Center embedding pass complete')
