@@ -4,10 +4,11 @@ set -u
 ROOT="/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld"
 HERE="$ROOT/buildings/jarvis/operations-lab"
 STATUS_FILE="$HERE/status.json"
+COMPLETE_MARKER="$HERE/.cache/descriptions-complete.json"
 DESCRIBE_LABEL="com.businessworld.operations-describe"
 FOLLOWUP_LABEL="com.businessworld.operations-build-followup"
 
-while ! /usr/bin/grep -q '"stage": "descriptions_complete"' "$STATUS_FILE" 2>/dev/null; do
+while [[ ! -f "$COMPLETE_MARKER" ]]; do
   /bin/sleep 2
 done
 

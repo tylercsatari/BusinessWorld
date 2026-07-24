@@ -69,6 +69,7 @@ LOCAL_STATUS = HERE / "status.json"
 LOCAL_LOG = HERE / "operations.log"
 CACHE_DIR = HERE / ".cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+DESCRIPTIONS_COMPLETE_MARKER = CACHE_DIR / "descriptions-complete.json"
 
 
 FEATURES = [
@@ -1503,6 +1504,17 @@ def run(limit: int | None = None, describe_only: bool = False) -> dict[str, Any]
     existing = load_description_cache(description_keys)
     descriptions = describe_all(rows, image_objects, existing, limit=None)
     if describe_only:
+        DESCRIPTIONS_COMPLETE_MARKER.write_text(
+            json.dumps({
+                "version": 1,
+                "productVersion": PRODUCT_VERSION,
+                "promptHash": PROMPT_HASH,
+                "visionModel": VISION_MODEL,
+                "total": len(rows),
+                "completedAt": int(time.time() * 1000),
+            }, indent=2),
+            encoding="utf-8",
+        )
         emit_status(
             "descriptions_complete",
             force=True,
