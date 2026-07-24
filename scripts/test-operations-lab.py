@@ -58,6 +58,19 @@ def main() -> None:
     }
     absence_clean = MODULE.validate_description(absence_fixture)
     assert absence_clean["features"]["on_screen_text"] == "not visibly established"
+    for terse_absence in ("", "No", "No text", "Text absent", "No on-screen text"):
+        terse_fixture = {
+            **fixture,
+            "features": {**fixture["features"], "on_screen_text": terse_absence},
+        }
+        terse_clean = MODULE.validate_description(terse_fixture)
+        assert terse_clean["features"]["on_screen_text"] == "not visibly established"
+    terse_visible_fixture = {
+        **fixture,
+        "features": {**fixture["features"], "on_screen_text": "LEVEL 1"},
+    }
+    terse_visible_clean = MODULE.validate_description(terse_visible_fixture)
+    assert terse_visible_clean["features"]["on_screen_text"] == "visible text: LEVEL 1"
 
     with tempfile.TemporaryDirectory() as temp_dir:
         local_payload = {
