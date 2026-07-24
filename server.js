@@ -3846,7 +3846,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (embeddingBuffer) embedding = JSON.parse(embeddingBuffer.toString('utf8'));
             if (metadataBuffer) metadata = JSON.parse(metadataBuffer.toString('utf8'));
         } catch (e) {}
-        const embeddingActive = embedding.stage === 'running';
+        const embeddingActive = ['running', 'blocked', 'degraded', 'retrying'].includes(embedding.stage);
         const metadataActive = metadata.stage === 'running';
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
         res.end(JSON.stringify({

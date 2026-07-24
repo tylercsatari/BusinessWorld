@@ -59,8 +59,8 @@ includes(
 );
 includes(
     server,
-    "const embeddingActive = embedding.stage === 'running'",
-    'status route must distinguish an active embedding job'
+    "const embeddingActive = ['running', 'blocked', 'degraded', 'retrying'].includes(embedding.stage)",
+    'status route must distinguish active, blocked, degraded, and retrying embedding jobs'
 );
 includes(
     server,
@@ -105,6 +105,26 @@ matches(
     rawEmbed,
     /attempted=cnt\[0\],\s*processed=completed\[0\],\s*failed=fails\[0\]/,
     'embedding status must separate attempts, durable completions, and failures'
+);
+includes(
+    rawEmbed,
+    "'credits_or_quota_exhausted'",
+    'Gemini quota failures must have a stable machine-readable classification'
+);
+includes(
+    rawEmbed,
+    "emit_status('blocked' if blocked else 'degraded'",
+    'Gemini provider failures must be published immediately'
+);
+includes(
+    rawEmbed,
+    'time.sleep(CREDIT_RETRY_SECONDS)',
+    'credit exhaustion must pause the current video instead of consuming the queue'
+);
+includes(
+    rawEmbed,
+    'Gemini embedding access restored; resuming automatically from the durable checkpoint.',
+    'Gemini recovery must clear the provider warning and announce automatic resume'
 );
 
 // Raw Data starts on the existing embedding map and keeps Predictor Lab target
@@ -219,6 +239,7 @@ for (const marker of [
     'Science Center geometry benchmark',
     'Indicator relationship atlas · every candidate input',
     'Artifact provenance · what is actually frozen?',
+    'Gemini credits or quota exhausted',
 ]) {
     includes(ui, marker, `Predictor Lab UI is missing visible contract: ${marker}`);
 }
