@@ -107,6 +107,7 @@ const JarvisUI = (() => {
     const TABS = [
         { id: 'retention', label: '📊 Shorts Quant' },
         { id: 'longquant', label: '🎬 Long Quant' },
+        { id: 'principlesLab', label: 'Principles' },
         { id: 'analytical', label: 'Analytical' },
         { id: 'tactical', label: 'Tactical' },
         { id: 'experiments', label: 'Experiments' },
@@ -206,6 +207,7 @@ const JarvisUI = (() => {
         switch (activeTab) {
             case 'retention': return '<div id="retention-root"></div>';
             case 'longquant': return '<div id="longquant-root"></div>';
+            case 'principlesLab': return '<div id="principles-lab-root"></div>';
             case 'analytical': return renderAnalytical();
             case 'tactical': return renderTactical();
             case 'experiments': return renderExperiments();
@@ -11156,6 +11158,10 @@ const JarvisUI = (() => {
         if (activeTab === 'longquant' && window.JarvisLongQuant) {
             const lqRoot = container.querySelector('#longquant-root');
             if (lqRoot) window.JarvisLongQuant.mount(lqRoot);
+        }
+        if (activeTab === 'principlesLab' && window.JarvisPrinciplesLab) {
+            const principlesRoot = container.querySelector('#principles-lab-root');
+            if (principlesRoot) window.JarvisPrinciplesLab.mount(principlesRoot);
         }
     }
 
