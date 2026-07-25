@@ -1,0 +1,4620 @@
+{
+  "schema": "predictive-abstraction-lab-v1",
+  "version": 1,
+  "generatedAt": "2026-07-25T14:30:12.143Z",
+  "title": "Predictive Abstraction Lab",
+  "thesis": "An abstraction is justified only to the extent that it compresses observations and continues to predict after the mechanism, source, time, and domain change.",
+  "operationalContract": {
+    "prerequisites": [
+      {
+        "id": "distinguishability",
+        "label": "Distinguishability",
+        "question": "Is the proposed pattern measurably different from alternatives?",
+        "gate": "A candidate needs a reproducible contrast, geometry, or outcome difference."
+      },
+      {
+        "id": "similarity",
+        "label": "Similarity",
+        "question": "Do related observations remain close under a declared metric?",
+        "gate": "Similarity must survive resampling or an alternative representation."
+      },
+      {
+        "id": "persistence",
+        "label": "Persistence",
+        "question": "Does the structure recur when samples, thresholds, or time change?",
+        "gate": "A one-split effect is a mechanism candidate, not an invariant."
+      },
+      {
+        "id": "predictability",
+        "label": "Predictability",
+        "question": "Does the compressed representation improve prediction on data that could not select it?",
+        "gate": "The candidate must beat an appropriate baseline out of fold or out of distribution."
+      }
+    ],
+    "ranking": {
+      "scalarScore": false,
+      "method": "Pareto fronts within comparable target families",
+      "reason": "Description length, stability, source diversity, and predictive error are not commensurable enough for an honest universal weighted sum.",
+      "weakestLinkRule": "A failed prerequisite caps promotion regardless of sample size or strength on the other dimensions."
+    },
+    "hierarchy": [
+      {
+        "id": "mechanism",
+        "label": "Mechanism",
+        "definition": "A stable pattern or model inside one observed setting."
+      },
+      {
+        "id": "local_invariant",
+        "label": "Local invariant",
+        "definition": "Survives grouped resampling and perturbations inside one bounded corpus."
+      },
+      {
+        "id": "regional_invariant",
+        "label": "Regional invariant",
+        "definition": "Predicts in independently held-out sources inside one content domain."
+      },
+      {
+        "id": "domain_invariant",
+        "label": "Domain invariant",
+        "definition": "Survives multiple independently sampled corpora, sources, and formats."
+      },
+      {
+        "id": "universal_invariant",
+        "label": "Universal invariant",
+        "definition": "Keeps predicting across every tested domain and transformation. Current data cannot justify this tier."
+      }
+    ],
+    "predictionLoop": [
+      "Observations",
+      "Mechanisms",
+      "Candidate invariants",
+      "Predictions on unseen mechanisms",
+      "New observations"
+    ],
+    "diversityRule": "Independent mechanism and source families matter more than repeated rows from the same family.",
+    "mdlBoundary": "A valid minimum-description-length score must encode the model, abstraction, and residuals. Display-label length is shown only as an audit field and never promotes a candidate."
+  },
+  "transformations": [
+    {
+      "id": "outcome_blind",
+      "label": "Outcome-blind discovery",
+      "family": "selection"
+    },
+    {
+      "id": "algorithm",
+      "label": "Algorithm change",
+      "family": "geometry"
+    },
+    {
+      "id": "resolution",
+      "label": "Semantic resolution",
+      "family": "geometry"
+    },
+    {
+      "id": "resample",
+      "label": "Grouped resampling",
+      "family": "stability"
+    },
+    {
+      "id": "threshold",
+      "label": "Threshold shift",
+      "family": "measurement"
+    },
+    {
+      "id": "topic",
+      "label": "Topic adjustment",
+      "family": "confounding"
+    },
+    {
+      "id": "time",
+      "label": "Forward time",
+      "family": "distribution"
+    },
+    {
+      "id": "source",
+      "label": "Unseen source",
+      "family": "distribution"
+    },
+    {
+      "id": "format",
+      "label": "Cross-format transfer",
+      "family": "distribution"
+    },
+    {
+      "id": "observed",
+      "label": "Observed outcome",
+      "family": "measurement"
+    },
+    {
+      "id": "prospective",
+      "label": "Prospective lockbox",
+      "family": "prediction"
+    }
+  ],
+  "sources": [
+    {
+      "id": "operations_saved_hooks",
+      "label": "Operations saved-hook discovery bank",
+      "domain": "Shorts visual openings",
+      "outcome": "Projected keep",
+      "observations": 984,
+      "independentSources": null,
+      "grouping": "662 semantic lineages",
+      "validation": "Outcome-blind multi-algorithm discovery plus grouped internal inference",
+      "eligibility": "local_only",
+      "claimBoundary": "Saved-hook records do not contain creator IDs. Discovery inference and fold stability are grouped by exact and near-duplicate semantic lineage, not held-out creator, and therefore apply only to this saved bank.",
+      "fingerprint": {
+        "path": "buildings/jarvis/operations-lab/.cache/principles85.json",
+        "sha256": "3f8623ff3165cab625d14cd8565fe56c2e3d319475e68afdabb0de4e54ff8ffc",
+        "bytes": 1436198,
+        "modifiedAt": "2026-07-25T00:33:08.254Z"
+      }
+    },
+    {
+      "id": "operations_observed_diagnostic",
+      "label": "Exact-ID-disjoint private keep diagnostic",
+      "domain": "Shorts visual openings",
+      "outcome": "Observed keep",
+      "observations": 632,
+      "independentSources": 4,
+      "grouping": "Private account groups",
+      "validation": "Directional diagnostic; no multiplicity-corrected replication",
+      "eligibility": "diagnostic_only",
+      "claimBoundary": "The observed diagnostic contains 632 private videos that are exact-ID disjoint from the saved-hook discovery bank; only 16 are at least 85%, across 4 groups. It is separately labeled, low power, and not corrected replication.",
+      "fingerprint": {
+        "path": "buildings/jarvis/operations-lab/.cache/principles85.json",
+        "sha256": "3f8623ff3165cab625d14cd8565fe56c2e3d319475e68afdabb0de4e54ff8ffc",
+        "bytes": 1436198,
+        "modifiedAt": "2026-07-25T00:33:08.254Z"
+      }
+    },
+    {
+      "id": "predictor_private",
+      "label": "Private pooled retention outcomes",
+      "domain": "Shorts",
+      "outcome": "Observed keep",
+      "observations": 636,
+      "independentSources": 4,
+      "grouping": "Account",
+      "validation": "Known-account folds, forward-time backtest, unseen-account stress test",
+      "eligibility": "regional_test",
+      "claimBoundary": "The known-account interpolation score is not a pre-upload forecast. The forward-time test uses current frozen public reference axes and historical private labels, while the unseen-account test remains negative; do not claim a universal keep-rate model.",
+      "fingerprint": {
+        "path": "buildings/jarvis/predictor-lab/results.json",
+        "sha256": "1f326c6ae8bcfa381f0f8bc2996706cb25d8bec6daab6d95eb1d83517dcbb406",
+        "bytes": 3101779,
+        "modifiedAt": "2026-07-23T21:32:34.455Z"
+      }
+    },
+    {
+      "id": "predictor_saved_channels",
+      "label": "Saved-channel public views",
+      "domain": "Shorts",
+      "outcome": "Current public views",
+      "observations": 1418,
+      "independentSources": 3,
+      "grouping": "Channel",
+      "validation": "Known-channel folds, forward-time backtest, unseen-channel stress test",
+      "eligibility": "regional_test",
+      "claimBoundary": "The operational score calibrates to a known channel's historical scale. Publication dates are present for 1,418 of 1,418 eligible Shorts, but outcomes are still current-view snapshots rather than fixed 30-day views. The forward-time ordering is retrospective and cannot reconstruct as-of view labels; unseen-channel transfer is also reported separately.",
+      "fingerprint": {
+        "path": "buildings/jarvis/predictor-lab/results.json",
+        "sha256": "1f326c6ae8bcfa381f0f8bc2996706cb25d8bec6daab6d95eb1d83517dcbb406",
+        "bytes": 3101779,
+        "modifiedAt": "2026-07-23T21:32:34.455Z"
+      }
+    },
+    {
+      "id": "predictor_corpus",
+      "label": "Science Center raw embedding corpus",
+      "domain": "Shorts",
+      "outcome": "Current public views",
+      "observations": 16077,
+      "independentSources": 121,
+      "grouping": "Creator-group folds",
+      "validation": "Raw 1,536D geometry refit inside creator-group folds",
+      "eligibility": "regional_test",
+      "claimBoundary": "Raw 1,536D Gemini geometry refit inside five creator-group folds; no saved steered views score is reused. Labels are current public-view snapshots, so age-cohort and creator-macro diagnostics are reported separately",
+      "fingerprint": {
+        "path": "buildings/jarvis/predictor-lab/results.json",
+        "sha256": "1f326c6ae8bcfa381f0f8bc2996706cb25d8bec6daab6d95eb1d83517dcbb406",
+        "bytes": 3101779,
+        "modifiedAt": "2026-07-23T21:32:34.455Z"
+      }
+    },
+    {
+      "id": "long_to_short_transfer",
+      "label": "Long Quant to Shorts frozen transfer",
+      "domain": "Long-form to Shorts",
+      "outcome": "Current public views",
+      "observations": 16077,
+      "independentSources": 121,
+      "grouping": "Cross-format plus creator",
+      "validation": "Long-form-only fit transferred without Shorts labels",
+      "eligibility": "domain_test",
+      "claimBoundary": "A frozen long-form title/thumbnail views axis is trained only on Long Quant, then transferred directly into the matching Shorts modality without seeing a Short outcome.",
+      "fingerprint": {
+        "path": "buildings/jarvis/predictor-lab/results.json",
+        "sha256": "1f326c6ae8bcfa381f0f8bc2996706cb25d8bec6daab6d95eb1d83517dcbb406",
+        "bytes": 3101779,
+        "modifiedAt": "2026-07-23T21:32:34.455Z"
+      }
+    },
+    {
+      "id": "promise_blind_openings",
+      "label": "Sealed pooled opening-retention evaluation",
+      "domain": "Shorts openings",
+      "outcome": "Observed retention curves",
+      "observations": 636,
+      "independentSources": 4,
+      "grouping": "356 strict-blind content components",
+      "validation": "Prediction-only manifest sealed before outcomes and near-duplicate isolation",
+      "eligibility": "regional_test",
+      "claimBoundary": "The 208 saved cohort rows are source-level out of fold. Other Main rows use the unchanged full fit. Other accounts are account-external frozen-model evaluations. Primary blind metrics exclude exact and conservative near training-content overlap. Exact or near external repost members remain inspectable but share one sealed content-component statistical vote. Near-duplicate sensitivity is outcome-free and reported at multiple thresholds. Outcomes are opened only after the prediction manifest is sealed; no pooled outcome refits, recalibrates, or promotes the scorer.",
+      "fingerprint": {
+        "path": "buildings/jarvis/promise-lab/.cache/pooled-opening-predictions.json",
+        "sha256": "7737084764bb751cd4c91f50df4a130de3aab36cbc2e0a41cd12c78d4374443b",
+        "bytes": 13960392,
+        "modifiedAt": "2026-07-15T23:49:21.518Z"
+      }
+    },
+    {
+      "id": "promise_context",
+      "label": "Four-cluster opening context study",
+      "domain": "Shorts opening semantics",
+      "outcome": "Observed forward retention response",
+      "observations": 208,
+      "independentSources": 4,
+      "grouping": "Source-grouped folds",
+      "validation": "Observed ordering association plus synthetic sensitivity controls",
+      "eligibility": "diagnostic_only",
+      "claimBoundary": "Observed source-grouped prediction can support an ordering association. Synthetic swaps and shuffled-history controls are model sensitivity tests, not randomized causal evidence.",
+      "fingerprint": {
+        "path": "buildings/jarvis/promise-lab/.cache/opening-context-study.json",
+        "sha256": "85787a4febec2683af3f6ec9719a8c68d6bc58f4f7f1d56e1d0da9e6806532da",
+        "bytes": 50800179,
+        "modifiedAt": "2026-07-15T14:39:17.352Z"
+      }
+    },
+    {
+      "id": "retention_private",
+      "label": "Private Shorts retention study",
+      "domain": "Shorts",
+      "outcome": "Observed keep, retention, duration, and views",
+      "observations": 211,
+      "independentSources": 1,
+      "grouping": "Video folds inside one creator cohort",
+      "validation": "Retrospective cross-validation",
+      "eligibility": "local_only",
+      "claimBoundary": "Post-upload observational inputs; one creator cohort.",
+      "fingerprint": {
+        "path": "buildings/jarvis/retention-study/retention_study.json",
+        "sha256": "8ad741540794979a06da5c633928f1983cdb5599959c749845cd504fcaf1e648",
+        "bytes": 77840,
+        "modifiedAt": "2026-06-21T17:18:57.397Z"
+      }
+    }
+  ],
+  "quarantinedSources": [
+    {
+      "id": "legacy_bridge",
+      "label": "Legacy mechanism-to-indicator bridge",
+      "reason": "Retrospective chain-strength ranking without the current discovery, correction, and transport contract.",
+      "fingerprint": {
+        "path": "buildings/jarvis/bridge_top_principles.json",
+        "sha256": "7325a6394b53ba6b76d2a2e1b157fb6f757aec2b2ec0fb3e45b7c56c8fbae8ee",
+        "bytes": 15404,
+        "modifiedAt": "2026-05-14T21:52:02.974Z"
+      }
+    },
+    {
+      "id": "legacy_retention_patterns",
+      "label": "Legacy retention pattern waves",
+      "reason": "Exploratory findings and design-language interpretations are not an independent validation artifact.",
+      "fingerprint": {
+        "path": "buildings/jarvis/retention-patterns.json",
+        "sha256": "42838eef6167877b376cfa9cbf7e3548b162f1e3646147217a5be1056c1533bd",
+        "bytes": 35991,
+        "modifiedAt": "2026-04-23T18:47:09.099Z"
+      }
+    },
+    {
+      "id": "legacy_prediction_model",
+      "label": "Legacy v27 prediction model",
+      "reason": "Contains a documented history of circular-feature removal; retained for audit, not principle promotion.",
+      "fingerprint": {
+        "path": "buildings/jarvis/prediction-model.json",
+        "sha256": "cddfee4225540a2624f9584c22be86444f91edd3a0e8a3118a61cdfe07021b3f",
+        "bytes": 4918,
+        "modifiedAt": "2026-04-07T22:26:59.366Z"
+      }
+    },
+    {
+      "id": "legacy_forward_response",
+      "label": "Promise Lab forward-response diagnostic",
+      "reason": "Artifact explicitly marks itself deconfounded but unvalidated and conditional on a post-hoc category map.",
+      "fingerprint": {
+        "path": "buildings/jarvis/promise-lab/.cache/forward-response.json",
+        "sha256": "841861452a6a34510c8e306b3a2808bbca90699cb4623ea50e3ff5feea5c7d19",
+        "bytes": 1583710,
+        "modifiedAt": "2026-07-14T08:13:57.996Z"
+      }
+    },
+    {
+      "id": "legacy_hook_quality",
+      "label": "Promise Lab hook-quality diagnostic",
+      "reason": "Useful component diagnostics, but not promoted over the sealed strict-blind candidate-versus-baseline result.",
+      "fingerprint": {
+        "path": "buildings/jarvis/promise-lab/.cache/hook-quality.json",
+        "sha256": "e95a3c674026749a6eb7bd0cc607a22ff4ef417963cc950f3e4b4f2be7bec302",
+        "bytes": 2462665,
+        "modifiedAt": "2026-07-14T08:13:58.098Z"
+      }
+    }
+  ],
+  "candidates": [
+    {
+      "id": "operations:cmp-bbfb2fe724d01a57",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "hands versus female",
+      "statement": "Novelty and incongruity: hands versus female",
+      "level": "local_invariant",
+      "ceiling": "local_invariant",
+      "status": "supported_locally",
+      "direction": "positive",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 817,
+        "discoveryPopulation": 984,
+        "prevalence": 0.8302845528455285,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 4,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "2 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 2
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 0.859",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 0.8594747524412149
+        },
+        "persistence": {
+          "state": "pass",
+          "measure": "100% fold direction",
+          "detail": "The projected association survived global BY correction, grouped intervals, and lineage folds.",
+          "value": 1
+        },
+        "predictability": {
+          "state": "diagnostic",
+          "measure": "observed keep Δ 3.42 pts",
+          "detail": "Exact-ID-disjoint observed keep agrees directionally, but this diagnostic is not multiplicity-corrected replication.",
+          "value": 3.4221093297276326
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": 1.9555508322400206,
+          "confidence95": [
+            1.2217422462562961,
+            2.8270947653382152
+          ],
+          "q": 0.0010149044130869918,
+          "foldSignConsistency": 1,
+          "riskDifference85": 0.05044745270780341,
+          "riskRatio85": 5.212362301101591,
+          "projected": true
+        },
+        "observedKeepDiagnostic": {
+          "n": 632,
+          "sources": 4,
+          "meanDifferencePoints": 3.4221093297276326,
+          "confidence95": [
+            1.1988250319284646,
+            7.177862501537312
+          ],
+          "directionallyConsistent": true,
+          "multiplicityCorrected": false,
+          "replicationClaim": false
+        }
+      },
+      "geometry": {
+        "algorithms": [
+          "gaussian_mixture",
+          "spherical_kmeans"
+        ],
+        "resolutions": [
+          "action",
+          "composition",
+          "curiosity_gap",
+          "full_visual",
+          "motion_progression",
+          "novelty_incongruity"
+        ],
+        "algorithmSupport": 2,
+        "resolutionSupport": 6,
+        "stability": {
+          "representative": 0.9885598510608627,
+          "minimum": 0.622582694602673,
+          "median": 0.8594747524412149,
+          "maximum": 0.9885598510608627
+        },
+        "transportTier": "observed_directional_consistency"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "2 supporting algorithms.",
+          "value": 2
+        },
+        {
+          "id": "resolution",
+          "state": "pass",
+          "detail": "6 supporting semantic resolutions.",
+          "value": 6
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 0.859.",
+          "value": 0.8594747524412149
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "not_tested",
+          "detail": "No topic-adjusted residual resolution supports this retained region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "diagnostic",
+          "detail": "Observed private groups agree directionally, without corrected independent replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "diagnostic",
+          "detail": "Observed keep direction agrees in an exact-ID-disjoint diagnostic.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 6,
+        "bytes": 44,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A person's morning routine unfolds in reverse, revealing the chaos behind the calm.",
+        "A man struggles to open a jam jar, but the camera reveals the lid is stuck—only for the jar to shatter, revealing a tiny person inside, also",
+        "A person tries to open a jar, but the lid is stuck. They twist, pull, bang it—then the camera pans to reveal the jar is empty, and the perso",
+        "A person's coffee cup never empties, no matter how much they drink, but the reflection in the cup shows a different reality."
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 1,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-75fd04173ae95c3c",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "man versus not visibly established",
+      "statement": "Topic-adjusted Stakes and risk: man versus not visibly established",
+      "level": "mechanism",
+      "ceiling": "local_invariant",
+      "status": "exploratory",
+      "direction": "positive",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 647,
+        "discoveryPopulation": 984,
+        "prevalence": 0.657520325203252,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 4,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "4 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 4
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 0.984",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 0.9835242653105529
+        },
+        "persistence": {
+          "state": "diagnostic",
+          "measure": "100% fold direction",
+          "detail": "The geometry persisted, but the projected outcome association did not clear the complete corrected contract.",
+          "value": 1
+        },
+        "predictability": {
+          "state": "diagnostic",
+          "measure": "observed keep Δ 3.42 pts",
+          "detail": "Exact-ID-disjoint observed keep agrees directionally, but this diagnostic is not multiplicity-corrected replication.",
+          "value": 3.4221093297276326
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": 1.4055843220707747,
+          "confidence95": [
+            0.7777011758711716,
+            2.0469389995913696
+          ],
+          "q": 0.13013623516075143,
+          "foldSignConsistency": 1,
+          "riskDifference85": 0.0367869968216695,
+          "riskRatio85": 2.239721792890263,
+          "projected": true
+        },
+        "observedKeepDiagnostic": {
+          "n": 632,
+          "sources": 4,
+          "meanDifferencePoints": 3.4221093297276326,
+          "confidence95": [
+            1.2435939086294212,
+            7.177862501537312
+          ],
+          "directionallyConsistent": true,
+          "multiplicityCorrected": false,
+          "replicationClaim": false
+        }
+      },
+      "geometry": {
+        "algorithms": [
+          "agglomerative_cosine",
+          "agglomerative_ward",
+          "gaussian_mixture",
+          "spherical_kmeans"
+        ],
+        "resolutions": [
+          "residual__stakes_risk",
+          "stakes_risk"
+        ],
+        "algorithmSupport": 4,
+        "resolutionSupport": 2,
+        "stability": {
+          "representative": 1,
+          "minimum": 0.612350971810367,
+          "median": 0.9835242653105529,
+          "maximum": 1
+        },
+        "transportTier": "observed_directional_consistency"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "4 supporting algorithms.",
+          "value": 4
+        },
+        {
+          "id": "resolution",
+          "state": "pass",
+          "detail": "2 supporting semantic resolutions.",
+          "value": 2
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 0.984.",
+          "value": 0.9835242653105529
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "pass",
+          "detail": "A topic-adjusted residual resolution supports this region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "diagnostic",
+          "detail": "Observed private groups agree directionally, without corrected independent replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "diagnostic",
+          "detail": "Observed keep direction agrees in an exact-ID-disjoint diagnostic.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 9,
+        "bytes": 66,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A person in a room, smiling at their reflection... but the mirror shows a different version of themselves, aging rapidly.",
+        "A woman opens her fridge, but instead of food, it's filled with mirrors reflecting different versions of herself.",
+        "A man stands motionless in a park, disguised as a statue, but his eyes slowly begin to move.",
+        "A man opens his fridge to reveal a miniature cityscape inside, but when he reaches in, the city collapses into a pile of groceries."
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 1,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-b29a5f4946e15d9f",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "of the five versus not visibly established",
+      "statement": "On-screen text: of the five versus not visibly established",
+      "level": "mechanism",
+      "ceiling": "local_invariant",
+      "status": "exploratory",
+      "direction": "positive",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 528,
+        "discoveryPopulation": 984,
+        "prevalence": 0.5365853658536586,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 4,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "2 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 2
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 0.904",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 0.9043534316385613
+        },
+        "persistence": {
+          "state": "diagnostic",
+          "measure": "80% fold direction",
+          "detail": "The geometry persisted, but the projected outcome association did not clear the complete corrected contract.",
+          "value": 0.8
+        },
+        "predictability": {
+          "state": "not_tested",
+          "measure": "projected keep Δ 0.04 pts",
+          "detail": "Projected keep is produced by the same scorer family and cannot independently validate prediction.",
+          "value": 0.03791866028708224
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": 0.03791866028708224,
+          "confidence95": [
+            -0.48492456052901106,
+            0.5099893715934822
+          ],
+          "q": 1,
+          "foldSignConsistency": 0.8,
+          "riskDifference85": 0.01046650717703349,
+          "riskRatio85": 1.2169421487603307,
+          "projected": true
+        },
+        "observedKeepDiagnostic": {
+          "n": 632,
+          "sources": 4,
+          "meanDifferencePoints": 2.12118893920416,
+          "confidence95": [
+            -1.9265588499550717,
+            7.47066791845495
+          ],
+          "directionallyConsistent": false,
+          "multiplicityCorrected": false,
+          "replicationClaim": false
+        }
+      },
+      "geometry": {
+        "algorithms": [
+          "gaussian_mixture",
+          "hdbscan"
+        ],
+        "resolutions": [
+          "on_screen_text"
+        ],
+        "algorithmSupport": 2,
+        "resolutionSupport": 1,
+        "stability": {
+          "representative": 0.9959490740740741,
+          "minimum": 0.8017127439983921,
+          "median": 0.9043534316385613,
+          "maximum": 0.9959490740740741
+        },
+        "transportTier": "observed_diagnostic_available"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "2 supporting algorithms.",
+          "value": 2
+        },
+        {
+          "id": "resolution",
+          "state": "tested",
+          "detail": "1 supporting semantic resolutions.",
+          "value": 1
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 0.904.",
+          "value": 0.9043534316385613
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "not_tested",
+          "detail": "No topic-adjusted residual resolution supports this retained region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "not_tested",
+          "detail": "No corrected unseen-source replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "not_tested",
+          "detail": "Only scorer-projected keep association is available.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 9,
+        "bytes": 58,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A man's reflection in a mirror ages rapidly, but when he touches it, the mirror shatters to reveal a younger version of himself.",
+        "A person's reflection in a mirror slowly ages into an elderly version of themselves, then smiles and winks.",
+        "A person aggressively tries to open a jar, but it's actually a transparent cube containing a tiny tornado.",
+        "This mysterious liquid doesn't spill no matter what you do"
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 3,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-0cc164362b9d66b3",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "not visibly established versus five",
+      "statement": "On-screen text: not visibly established versus five",
+      "level": "mechanism",
+      "ceiling": "local_invariant",
+      "status": "exploratory",
+      "direction": "positive",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 130,
+        "discoveryPopulation": 984,
+        "prevalence": 0.13211382113821138,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 0,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "3 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 3
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 1.000",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 1
+        },
+        "persistence": {
+          "state": "diagnostic",
+          "measure": "40% fold direction",
+          "detail": "The geometry persisted, but the projected outcome association did not clear the complete corrected contract.",
+          "value": 0.4
+        },
+        "predictability": {
+          "state": "not_tested",
+          "measure": "projected keep Δ 0.88 pts",
+          "detail": "Projected keep is produced by the same scorer family and cannot independently validate prediction.",
+          "value": 0.8838515582777857
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": 0.8838515582777857,
+          "confidence95": [
+            0.16270644278568194,
+            1.6402815196268767
+          ],
+          "q": 1,
+          "foldSignConsistency": 0.4,
+          "riskDifference85": 0.008845253107548186,
+          "riskRatio85": 1.1678632478632478,
+          "projected": true
+        },
+        "observedKeepDiagnostic": null
+      },
+      "geometry": {
+        "algorithms": [
+          "agglomerative_ward",
+          "gaussian_mixture",
+          "hdbscan"
+        ],
+        "resolutions": [
+          "on_screen_text"
+        ],
+        "algorithmSupport": 3,
+        "resolutionSupport": 1,
+        "stability": {
+          "representative": 1,
+          "minimum": 0.6937249331550802,
+          "median": 1,
+          "maximum": 1
+        },
+        "transportTier": "geometry_only"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "3 supporting algorithms.",
+          "value": 3
+        },
+        {
+          "id": "resolution",
+          "state": "tested",
+          "detail": "1 supporting semantic resolutions.",
+          "value": 1
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 1.000.",
+          "value": 1
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "not_tested",
+          "detail": "No topic-adjusted residual resolution supports this retained region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "not_tested",
+          "detail": "No corrected unseen-source replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "not_tested",
+          "detail": "Only scorer-projected keep association is available.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 7,
+        "bytes": 51,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "Holding a dangerous-appearing item wearing safety glasses and putting it into a beaker",
+        "Pulling a random thing out of a jar/bin",
+        "Having a massive thing falling over as if it's about to land on top of me",
+        "A baker meticulously creates a cake, only for it to transform into a golden key."
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 1,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-7c685b36ce99c65f",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "jar versus room",
+      "statement": "Transformation and causality: jar versus room",
+      "level": "mechanism",
+      "ceiling": "local_invariant",
+      "status": "exploratory",
+      "direction": "positive",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 70,
+        "discoveryPopulation": 984,
+        "prevalence": 0.07113821138211382,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 0,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "2 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 2
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 0.948",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 0.9477288412071021
+        },
+        "persistence": {
+          "state": "diagnostic",
+          "measure": "20% fold direction",
+          "detail": "The geometry persisted, but the projected outcome association did not clear the complete corrected contract.",
+          "value": 0.2
+        },
+        "predictability": {
+          "state": "not_tested",
+          "measure": "projected keep Δ 2.02 pts",
+          "detail": "Projected keep is produced by the same scorer family and cannot independently validate prediction.",
+          "value": 2.024864020006273
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": 2.024864020006273,
+          "confidence95": [
+            1.3855433463979236,
+            2.762607074879995
+          ],
+          "q": 1,
+          "foldSignConsistency": 0.2,
+          "riskDifference85": 0.003532353860581445,
+          "riskRatio85": 1.0658892128279882,
+          "projected": true
+        },
+        "observedKeepDiagnostic": null
+      },
+      "geometry": {
+        "algorithms": [
+          "agglomerative_ward",
+          "gaussian_mixture"
+        ],
+        "resolutions": [
+          "full_visual",
+          "transformation"
+        ],
+        "algorithmSupport": 2,
+        "resolutionSupport": 2,
+        "stability": {
+          "representative": 0.986247723132969,
+          "minimum": 0.7436592119365228,
+          "median": 0.9477288412071021,
+          "maximum": 0.986247723132969
+        },
+        "transportTier": "geometry_only"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "2 supporting algorithms.",
+          "value": 2
+        },
+        {
+          "id": "resolution",
+          "state": "pass",
+          "detail": "2 supporting semantic resolutions.",
+          "value": 2
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 0.948.",
+          "value": 0.9477288412071021
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "not_tested",
+          "detail": "No topic-adjusted residual resolution supports this retained region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "not_tested",
+          "detail": "No corrected unseen-source replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "not_tested",
+          "detail": "Only scorer-projected keep association is available.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 6,
+        "bytes": 45,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A person's pickle jar suddenly opens to reveal a tiny person inside holding a 'Finally!' sign.",
+        "A person's determined struggle to open a jar ends with the lid spinning off, revealing a hidden message inside.",
+        "A man struggles to open a jar, only to reveal a tiny version of himself inside, waving.",
+        "A man tries to open a jar, each attempt more ridiculous, until he accidentally unlocks a secret room behind it."
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 1,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-3814d3955fbd95c2",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "not visibly established versus glowing",
+      "statement": "Topic-adjusted Proof and result: not visibly established versus glowing",
+      "level": "mechanism",
+      "ceiling": "local_invariant",
+      "status": "exploratory",
+      "direction": "positive",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 25,
+        "discoveryPopulation": 984,
+        "prevalence": 0.02540650406504065,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 0,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "2 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 2
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 1.000",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 1
+        },
+        "persistence": {
+          "state": "diagnostic",
+          "measure": "40% fold direction",
+          "detail": "The geometry persisted, but the projected outcome association did not clear the complete corrected contract.",
+          "value": 0.4
+        },
+        "predictability": {
+          "state": "not_tested",
+          "measure": "projected keep Δ -1.23 pts",
+          "detail": "Projected keep is produced by the same scorer family and cannot independently validate prediction.",
+          "value": -1.2339603753910442
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": -1.2339603753910442,
+          "confidence95": [
+            -3.2336569906023676,
+            0.5026020211065102
+          ],
+          "q": 1,
+          "foldSignConsistency": 0.4,
+          "riskDifference85": 0.026819603753910307,
+          "riskRatio85": 1.5043137254901962,
+          "projected": true
+        },
+        "observedKeepDiagnostic": null
+      },
+      "geometry": {
+        "algorithms": [
+          "agglomerative_ward",
+          "gaussian_mixture"
+        ],
+        "resolutions": [
+          "proof_result",
+          "residual__proof_result"
+        ],
+        "algorithmSupport": 2,
+        "resolutionSupport": 2,
+        "stability": {
+          "representative": 1,
+          "minimum": 0.5520326226847966,
+          "median": 1,
+          "maximum": 1
+        },
+        "transportTier": "geometry_only"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "2 supporting algorithms.",
+          "value": 2
+        },
+        {
+          "id": "resolution",
+          "state": "pass",
+          "detail": "2 supporting semantic resolutions.",
+          "value": 2
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 1.000.",
+          "value": 1
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "pass",
+          "detail": "A topic-adjusted residual resolution supports this region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "not_tested",
+          "detail": "No corrected unseen-source replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "not_tested",
+          "detail": "Only scorer-projected keep association is available.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 9,
+        "bytes": 71,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A woman folds laundry—then the dryer explodes into a field of glowing fireflies.",
+        "A person appears to be folding laundry, but each item reveals a different decade's fashion trend.",
+        "A woman's shadow starts moving independently, leading her on a mysterious journey.",
+        "A person walks into a room, and each step they take causes the walls to shift, leading to a final reveal of a hidden room."
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 2,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-496c33d27799fc2a",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "refrigerator versus tightly on",
+      "statement": "Novelty and incongruity: refrigerator versus tightly on",
+      "level": "local_invariant",
+      "ceiling": "local_invariant",
+      "status": "supported_locally",
+      "direction": "negative",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 63,
+        "discoveryPopulation": 984,
+        "prevalence": 0.06402439024390244,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 4,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "2 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 2
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 0.822",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 0.8221662878486931
+        },
+        "persistence": {
+          "state": "pass",
+          "measure": "100% fold direction",
+          "detail": "The projected association survived global BY correction, grouped intervals, and lineage folds.",
+          "value": 1
+        },
+        "predictability": {
+          "state": "diagnostic",
+          "measure": "projected keep Δ -1.48 pts",
+          "detail": "Projected keep is produced by the same scorer family and cannot independently validate prediction.",
+          "value": -1.4803060855178047
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": -1.4803060855178047,
+          "confidence95": [
+            -2.9048590767826274,
+            -0.13884444091772888
+          ],
+          "q": 7.268600984430027e-10,
+          "foldSignConsistency": 1,
+          "riskDifference85": -0.0575461454940282,
+          "riskRatio85": 0,
+          "projected": true
+        },
+        "observedKeepDiagnostic": {
+          "n": 632,
+          "sources": 4,
+          "meanDifferencePoints": 7.600102474015529,
+          "confidence95": null,
+          "directionallyConsistent": false,
+          "multiplicityCorrected": false,
+          "replicationClaim": false
+        }
+      },
+      "geometry": {
+        "algorithms": [
+          "agglomerative_ward",
+          "gaussian_mixture"
+        ],
+        "resolutions": [
+          "composition",
+          "novelty_incongruity"
+        ],
+        "algorithmSupport": 2,
+        "resolutionSupport": 2,
+        "stability": {
+          "representative": 0.899629870007713,
+          "minimum": 0.5916917014977359,
+          "median": 0.8221662878486931,
+          "maximum": 0.899629870007713
+        },
+        "transportTier": "observed_diagnostic_available"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "2 supporting algorithms.",
+          "value": 2
+        },
+        {
+          "id": "resolution",
+          "state": "pass",
+          "detail": "2 supporting semantic resolutions.",
+          "value": 2
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 0.822.",
+          "value": 0.8221662878486931
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "not_tested",
+          "detail": "No topic-adjusted residual resolution supports this retained region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "not_tested",
+          "detail": "No corrected unseen-source replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "not_tested",
+          "detail": "Only scorer-projected keep association is available.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 7,
+        "bytes": 55,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A man opens a refrigerator, but the inside is a spaceship.",
+        "A man opens his fridge to grab a snack, but instead of food, he finds a small, glowing portal to another dimension.",
+        "A woman opens her fridge to find a portal to a neon-lit city.",
+        "A person opens their fridge, but instead of food, there's a tiny portal to a surreal landscape."
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 2,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-5c07bb9f03c3053e",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "not visibly established versus man",
+      "statement": "Topic-adjusted Emotion and reaction: not visibly established versus man",
+      "level": "local_invariant",
+      "ceiling": "local_invariant",
+      "status": "supported_locally",
+      "direction": "negative",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 19,
+        "discoveryPopulation": 984,
+        "prevalence": 0.019308943089430895,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 0,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "2 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 2
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 1.000",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 1
+        },
+        "persistence": {
+          "state": "pass",
+          "measure": "100% fold direction",
+          "detail": "The projected association survived global BY correction, grouped intervals, and lineage folds.",
+          "value": 1
+        },
+        "predictability": {
+          "state": "diagnostic",
+          "measure": "projected keep Δ -2.94 pts",
+          "detail": "Projected keep is produced by the same scorer family and cannot independently validate prediction.",
+          "value": -2.9443032451595395
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": -2.9443032451595395,
+          "confidence95": [
+            -5.90928387395035,
+            -0.18632598635398384
+          ],
+          "q": 7.924419341948983e-10,
+          "foldSignConsistency": 1,
+          "riskDifference85": -0.054922279792746095,
+          "riskRatio85": 0,
+          "projected": true
+        },
+        "observedKeepDiagnostic": null
+      },
+      "geometry": {
+        "algorithms": [
+          "agglomerative_ward",
+          "gaussian_mixture"
+        ],
+        "resolutions": [
+          "emotion_reaction",
+          "residual__emotion_reaction"
+        ],
+        "algorithmSupport": 2,
+        "resolutionSupport": 2,
+        "stability": {
+          "representative": 1,
+          "minimum": 0.5560486393493901,
+          "median": 1,
+          "maximum": 1
+        },
+        "transportTier": "geometry_only"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "2 supporting algorithms.",
+          "value": 2
+        },
+        {
+          "id": "resolution",
+          "state": "pass",
+          "detail": "2 supporting semantic resolutions.",
+          "value": 2
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 1.000.",
+          "value": 1
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "pass",
+          "detail": "A topic-adjusted residual resolution supports this region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "not_tested",
+          "detail": "No corrected unseen-source replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "not_tested",
+          "detail": "Only scorer-projected keep association is available.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 9,
+        "bytes": 71,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A man opens his fridge to discover each item is an animal in disguise.",
+        "A woman opens her fridge to find it filled with tiny, perfectly arranged origami animals that rearrange themselves into a message when she b",
+        "Can this $1,000 Rover find a real dinosaur bone if left alone for 7 days?",
+        "A woman opens her fridge to find a tiny orchestra playing inside."
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 1,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-28601001a4475630",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "mirror versus awe",
+      "statement": "Emotion and reaction: mirror versus awe",
+      "level": "local_invariant",
+      "ceiling": "local_invariant",
+      "status": "supported_locally",
+      "direction": "negative",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 83,
+        "discoveryPopulation": 984,
+        "prevalence": 0.08434959349593496,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 0,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "2 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 2
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 0.864",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 0.8637190104581409
+        },
+        "persistence": {
+          "state": "pass",
+          "measure": "100% fold direction",
+          "detail": "The projected association survived global BY correction, grouped intervals, and lineage folds.",
+          "value": 1
+        },
+        "predictability": {
+          "state": "diagnostic",
+          "measure": "projected keep Δ -1.90 pts",
+          "detail": "Projected keep is produced by the same scorer family and cannot independently validate prediction.",
+          "value": -1.9000334300576216
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": -1.9000334300576216,
+          "confidence95": [
+            -3.1246895832427386,
+            -0.7709298667396841
+          ],
+          "q": 0.027522624390605193,
+          "foldSignConsistency": 1,
+          "riskDifference85": -0.04566545872725084,
+          "riskRatio85": 0.208758109360519,
+          "projected": true
+        },
+        "observedKeepDiagnostic": null
+      },
+      "geometry": {
+        "algorithms": [
+          "agglomerative_ward",
+          "gaussian_mixture"
+        ],
+        "resolutions": [
+          "emotion_reaction"
+        ],
+        "algorithmSupport": 2,
+        "resolutionSupport": 1,
+        "stability": {
+          "representative": 0.8854834638622899,
+          "minimum": 0.6533731294072278,
+          "median": 0.8637190104581409,
+          "maximum": 0.8854834638622899
+        },
+        "transportTier": "geometry_only"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "2 supporting algorithms.",
+          "value": 2
+        },
+        {
+          "id": "resolution",
+          "state": "tested",
+          "detail": "1 supporting semantic resolutions.",
+          "value": 1
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 0.864.",
+          "value": 0.8637190104581409
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "not_tested",
+          "detail": "No topic-adjusted residual resolution supports this retained region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "not_tested",
+          "detail": "No corrected unseen-source replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "not_tested",
+          "detail": "Only scorer-projected keep association is available.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 6,
+        "bytes": 39,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A woman opens a door to find her own face staring back from the other side.",
+        "A woman's reflection starts acting independently, revealing a hidden doppelgänger.",
+        "A person checks their reflection in a mirror, but their reflection is doing the opposite.",
+        "A person checks their reflection in a mirror, only to see their reflection smiling back at them when they're not."
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 1,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-0bf43af279c47f39",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "mirror versus dog",
+      "statement": "Information gap: mirror versus dog",
+      "level": "mechanism",
+      "ceiling": "local_invariant",
+      "status": "exploratory",
+      "direction": "negative",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 69,
+        "discoveryPopulation": 984,
+        "prevalence": 0.0701219512195122,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 0,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "2 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 2
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 0.656",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 0.6563419183500129
+        },
+        "persistence": {
+          "state": "diagnostic",
+          "measure": "100% fold direction",
+          "detail": "The geometry persisted, but the projected outcome association did not clear the complete corrected contract.",
+          "value": 1
+        },
+        "predictability": {
+          "state": "not_tested",
+          "measure": "projected keep Δ -1.05 pts",
+          "detail": "Projected keep is produced by the same scorer family and cannot independently validate prediction.",
+          "value": -1.0487906866238839
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": -1.0487906866238839,
+          "confidence95": [
+            -2.173611771055623,
+            0.05953812229155157
+          ],
+          "q": 0.13013623516075143,
+          "foldSignConsistency": 1,
+          "riskDifference85": -0.04233784746970776,
+          "riskRatio85": 0.25501672240802675,
+          "projected": true
+        },
+        "observedKeepDiagnostic": null
+      },
+      "geometry": {
+        "algorithms": [
+          "agglomerative_ward",
+          "gaussian_mixture"
+        ],
+        "resolutions": [
+          "curiosity_gap"
+        ],
+        "algorithmSupport": 2,
+        "resolutionSupport": 1,
+        "stability": {
+          "representative": 0.7497323760236191,
+          "minimum": 0.591504959121745,
+          "median": 0.6563419183500129,
+          "maximum": 0.7497323760236191
+        },
+        "transportTier": "geometry_only"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "2 supporting algorithms.",
+          "value": 2
+        },
+        {
+          "id": "resolution",
+          "state": "tested",
+          "detail": "1 supporting semantic resolutions.",
+          "value": 1
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 0.656.",
+          "value": 0.6563419183500129
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "not_tested",
+          "detail": "No topic-adjusted residual resolution supports this retained region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "not_tested",
+          "detail": "No corrected unseen-source replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "not_tested",
+          "detail": "Only scorer-projected keep association is available.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 5,
+        "bytes": 34,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A person checks their reflection in a mirror, but their reflection refuses to follow their movements.",
+        "A woman smiles at her reflection—then notices her eyes are completely black.",
+        "A woman opens a door to find her own face staring back from the other side.",
+        "A woman's reflection in a mirror ages rapidly while she remains young, culminating in a chilling twist."
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 1,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-b4f8a8a719a0c318",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "not visibly established versus glass shards",
+      "statement": "Topic-adjusted Stakes and risk: not visibly established versus glass shards",
+      "level": "mechanism",
+      "ceiling": "local_invariant",
+      "status": "exploratory",
+      "direction": "negative",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 343,
+        "discoveryPopulation": 984,
+        "prevalence": 0.3485772357723577,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 0,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "5 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 5
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 0.999",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 0.9990636704119851
+        },
+        "persistence": {
+          "state": "diagnostic",
+          "measure": "80% fold direction",
+          "detail": "The geometry persisted, but the projected outcome association did not clear the complete corrected contract.",
+          "value": 0.8
+        },
+        "predictability": {
+          "state": "not_tested",
+          "measure": "projected keep Δ -1.30 pts",
+          "detail": "Projected keep is produced by the same scorer family and cannot independently validate prediction.",
+          "value": -1.3012967165916338
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": -1.3012967165916338,
+          "confidence95": [
+            -1.9075526966431482,
+            -0.679221785802413
+          ],
+          "q": 0.25200047239763956,
+          "foldSignConsistency": 0.8,
+          "riskDifference85": -0.03345265005935509,
+          "riskRatio85": 0.4894488407607941,
+          "projected": true
+        },
+        "observedKeepDiagnostic": null
+      },
+      "geometry": {
+        "algorithms": [
+          "agglomerative_cosine",
+          "agglomerative_ward",
+          "gaussian_mixture",
+          "hdbscan",
+          "spherical_kmeans"
+        ],
+        "resolutions": [
+          "residual__stakes_risk",
+          "stakes_risk"
+        ],
+        "algorithmSupport": 5,
+        "resolutionSupport": 2,
+        "stability": {
+          "representative": 1,
+          "minimum": 0.8386571056062582,
+          "median": 0.9990636704119851,
+          "maximum": 1
+        },
+        "transportTier": "geometry_only"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "5 supporting algorithms.",
+          "value": 5
+        },
+        {
+          "id": "resolution",
+          "state": "pass",
+          "detail": "2 supporting semantic resolutions.",
+          "value": 2
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 0.999.",
+          "value": 0.9990636704119851
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "pass",
+          "detail": "A topic-adjusted residual resolution supports this region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "not_tested",
+          "detail": "No corrected unseen-source replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "not_tested",
+          "detail": "Only scorer-projected keep association is available.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 10,
+        "bytes": 75,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A person appears to be folding laundry, but each item reveals a different decade's fashion trend.",
+        "A person opens their fridge to find it miraculously restocked with random, surreal items.",
+        "A woman folds laundry—then the dryer explodes into a field of glowing fireflies.",
+        "A man's face slowly transforms into a giant pizza over 5 seconds"
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 1,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-f7566f24175edab9",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "convey its versus not visibly established",
+      "statement": "On-screen text: convey its versus not visibly established",
+      "level": "mechanism",
+      "ceiling": "local_invariant",
+      "status": "exploratory",
+      "direction": "negative",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 250,
+        "discoveryPopulation": 984,
+        "prevalence": 0.2540650406504065,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 0,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "2 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 2
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 0.850",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 0.8495167980264818
+        },
+        "persistence": {
+          "state": "diagnostic",
+          "measure": "60% fold direction",
+          "detail": "The geometry persisted, but the projected outcome association did not clear the complete corrected contract.",
+          "value": 0.6
+        },
+        "predictability": {
+          "state": "not_tested",
+          "measure": "projected keep Δ -0.41 pts",
+          "detail": "Projected keep is produced by the same scorer family and cannot independently validate prediction.",
+          "value": -0.41211335149866857
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": -0.41211335149866857,
+          "confidence95": [
+            -1.0974100392960202,
+            0.15276322439561008
+          ],
+          "q": 1,
+          "foldSignConsistency": 0.6,
+          "riskDifference85": -0.013220708446866514,
+          "riskRatio85": 0.7689523809523809,
+          "projected": true
+        },
+        "observedKeepDiagnostic": null
+      },
+      "geometry": {
+        "algorithms": [
+          "gaussian_mixture",
+          "spherical_kmeans"
+        ],
+        "resolutions": [
+          "on_screen_text"
+        ],
+        "algorithmSupport": 2,
+        "resolutionSupport": 1,
+        "stability": {
+          "representative": 0.9912545319178081,
+          "minimum": 0.6921780982355614,
+          "median": 0.8495167980264818,
+          "maximum": 0.9912545319178081
+        },
+        "transportTier": "geometry_only"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "2 supporting algorithms.",
+          "value": 2
+        },
+        {
+          "id": "resolution",
+          "state": "tested",
+          "detail": "1 supporting semantic resolutions.",
+          "value": 1
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 0.850.",
+          "value": 0.8495167980264818
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "not_tested",
+          "detail": "No topic-adjusted residual resolution supports this retained region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "not_tested",
+          "detail": "No corrected unseen-source replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "not_tested",
+          "detail": "Only scorer-projected keep association is available.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 8,
+        "bytes": 57,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A person opens a door to find a giant cake inside, but it's actually a trap leading to a hilarious mishap.",
+        "A person's morning routine, but every action is mirrored by a shadowy figure in the background, revealing at the end that they're actually p",
+        "A man meticulously arranges a bouquet of flowers, only to have a toddler sprint in and knock it over, revealing a hidden message in the peta",
+        "A woman opens her fridge, and each item is replaced by a different object every time she looks away."
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 2,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-000497e949aca64d",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "mirror versus not visibly established",
+      "statement": "Stakes and risk: mirror versus not visibly established",
+      "level": "mechanism",
+      "ceiling": "local_invariant",
+      "status": "exploratory",
+      "direction": "negative",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 45,
+        "discoveryPopulation": 984,
+        "prevalence": 0.04573170731707317,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 0,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "2 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 2
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 0.706",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 0.7055008080244098
+        },
+        "persistence": {
+          "state": "diagnostic",
+          "measure": "80% fold direction",
+          "detail": "The geometry persisted, but the projected outcome association did not clear the complete corrected contract.",
+          "value": 0.8
+        },
+        "predictability": {
+          "state": "not_tested",
+          "measure": "projected keep Δ -0.68 pts",
+          "detail": "Projected keep is produced by the same scorer family and cannot independently validate prediction.",
+          "value": -0.6817891373801732
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": -0.6817891373801732,
+          "confidence95": [
+            -1.8754485863249677,
+            0.3160231403300199
+          ],
+          "q": 1,
+          "foldSignConsistency": 0.8,
+          "riskDifference85": -0.03315583954561589,
+          "riskRatio85": 0.4012820512820513,
+          "projected": true
+        },
+        "observedKeepDiagnostic": null
+      },
+      "geometry": {
+        "algorithms": [
+          "agglomerative_ward",
+          "gaussian_mixture"
+        ],
+        "resolutions": [
+          "stakes_risk"
+        ],
+        "algorithmSupport": 2,
+        "resolutionSupport": 1,
+        "stability": {
+          "representative": 0.9250964829992429,
+          "minimum": 0.6788377115239176,
+          "median": 0.7055008080244098,
+          "maximum": 0.9250964829992429
+        },
+        "transportTier": "geometry_only"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "2 supporting algorithms.",
+          "value": 2
+        },
+        {
+          "id": "resolution",
+          "state": "tested",
+          "detail": "1 supporting semantic resolutions.",
+          "value": 1
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 0.706.",
+          "value": 0.7055008080244098
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "not_tested",
+          "detail": "No topic-adjusted residual resolution supports this retained region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "not_tested",
+          "detail": "No corrected unseen-source replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "not_tested",
+          "detail": "Only scorer-projected keep association is available.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 8,
+        "bytes": 54,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A person's reflection in a mirror starts doing the opposite of their movements, then the mirror shatters to reveal another person behind it.",
+        "A person in a room, smiling at their reflection... but the mirror shows a different version of themselves, aging rapidly.",
+        "A man steps into a mirror, but his reflection refuses to move.",
+        "A woman's reflection in the mirror starts aging rapidly, but when she touches it, her real face ages too"
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 3,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-96391a4904553539",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "visible reaction to versus the montage visually",
+      "statement": "Topic-adjusted Proof and result: visible reaction to versus the montage visually",
+      "level": "mechanism",
+      "ceiling": "local_invariant",
+      "status": "exploratory",
+      "direction": "negative",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 286,
+        "discoveryPopulation": 984,
+        "prevalence": 0.29065040650406504,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 0,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "2 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 2
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 0.686",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 0.6860768625473643
+        },
+        "persistence": {
+          "state": "diagnostic",
+          "measure": "80% fold direction",
+          "detail": "The geometry persisted, but the projected outcome association did not clear the complete corrected contract.",
+          "value": 0.8
+        },
+        "predictability": {
+          "state": "not_tested",
+          "measure": "projected keep Δ 0.80 pts",
+          "detail": "Projected keep is produced by the same scorer family and cannot independently validate prediction.",
+          "value": 0.8021019095517585
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": 0.8021019095517585,
+          "confidence95": [
+            0.22284352927804463,
+            1.3382684033113696
+          ],
+          "q": 1,
+          "foldSignConsistency": 0.8,
+          "riskDifference85": -0.0019937082974332363,
+          "riskRatio85": 0.9633787265366213,
+          "projected": true
+        },
+        "observedKeepDiagnostic": null
+      },
+      "geometry": {
+        "algorithms": [
+          "gaussian_mixture",
+          "spherical_kmeans"
+        ],
+        "resolutions": [
+          "residual__proof_result"
+        ],
+        "algorithmSupport": 2,
+        "resolutionSupport": 1,
+        "stability": {
+          "representative": 0.8172953079032698,
+          "minimum": 0.554858417191459,
+          "median": 0.6860768625473643,
+          "maximum": 0.8172953079032698
+        },
+        "transportTier": "geometry_only"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "2 supporting algorithms.",
+          "value": 2
+        },
+        {
+          "id": "resolution",
+          "state": "tested",
+          "detail": "1 supporting semantic resolutions.",
+          "value": 1
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 0.686.",
+          "value": 0.6860768625473643
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "pass",
+          "detail": "A topic-adjusted residual resolution supports this region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "not_tested",
+          "detail": "No corrected unseen-source replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "not_tested",
+          "detail": "Only scorer-projected keep association is available.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 11,
+        "bytes": 80,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A woman steps into a rain puddle, only to emerge in a glowing forest filled with bioluminescent trees.",
+        "A person's reflection in a mirror shows a different version of themselves, culminating in a shocking transformation.",
+        "A person opens their fridge to find a bustling restaurant inside, but when they close it, it's back to normal.",
+        "A person meticulously arranging LEGO bricks, only to have a giant LEGO robot suddenly come to life and start dancing."
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 4,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-c7cdd8247c9643fb",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "banana versus substantial",
+      "statement": "Composition and camera: banana versus substantial",
+      "level": "mechanism",
+      "ceiling": "local_invariant",
+      "status": "exploratory",
+      "direction": "negative",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 39,
+        "discoveryPopulation": 984,
+        "prevalence": 0.039634146341463415,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 0,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "2 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 2
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 0.716",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 0.7164523465022802
+        },
+        "persistence": {
+          "state": "diagnostic",
+          "measure": "80% fold direction",
+          "detail": "The geometry persisted, but the projected outcome association did not clear the complete corrected contract.",
+          "value": 0.8
+        },
+        "predictability": {
+          "state": "not_tested",
+          "measure": "projected keep Δ 1.10 pts",
+          "detail": "Projected keep is produced by the same scorer family and cannot independently validate prediction.",
+          "value": 1.0953683353683275
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": 1.0953683353683275,
+          "confidence95": [
+            0.3381650519963742,
+            1.8498682613247053
+          ],
+          "q": 1,
+          "foldSignConsistency": 0.8,
+          "riskDifference85": -0.02938542938542938,
+          "riskRatio85": 0.46597633136094674,
+          "projected": true
+        },
+        "observedKeepDiagnostic": null
+      },
+      "geometry": {
+        "algorithms": [
+          "agglomerative_ward",
+          "gaussian_mixture"
+        ],
+        "resolutions": [
+          "composition",
+          "novelty_incongruity",
+          "quantity_scale",
+          "transformation"
+        ],
+        "algorithmSupport": 2,
+        "resolutionSupport": 4,
+        "stability": {
+          "representative": 0.9590742057847321,
+          "minimum": 0.5943783068783068,
+          "median": 0.7164523465022802,
+          "maximum": 0.9590742057847321
+        },
+        "transportTier": "geometry_only"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "2 supporting algorithms.",
+          "value": 2
+        },
+        {
+          "id": "resolution",
+          "state": "pass",
+          "detail": "4 supporting semantic resolutions.",
+          "value": 4
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 0.716.",
+          "value": 0.7164523465022802
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "not_tested",
+          "detail": "No topic-adjusted residual resolution supports this retained region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "not_tested",
+          "detail": "No corrected unseen-source replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "not_tested",
+          "detail": "Only scorer-projected keep association is available.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 6,
+        "bytes": 49,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A man eats a banana, then the peel transforms into a bridge to a surreal world.",
+        "A banana peel mysteriously opens a portal to a tropical beach.",
+        "A man eats a banana, but the peel transforms into a spider.",
+        "A deceptive banana peel that explodes into confetti when stepped on."
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 2,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "operations:cmp-0bbc09aff0558c88",
+      "family": "visual_operations",
+      "familyLabel": "Outcome-blind visual operations",
+      "label": "transformation versus pancake",
+      "statement": "Topic-adjusted Information gap: transformation versus pancake",
+      "level": "mechanism",
+      "ceiling": "local_invariant",
+      "status": "exploratory",
+      "direction": "negative",
+      "sourceIds": [
+        "operations_saved_hooks",
+        "operations_observed_diagnostic"
+      ],
+      "sample": {
+        "observations": 822,
+        "discoveryPopulation": 984,
+        "prevalence": 0.8353658536585366,
+        "independentSources": 0,
+        "groupedUnits": 662,
+        "observedDiagnosticSources": 4,
+        "boundary": "Discovery rows do not persist creator identity. Semantic lineages are not independent creators."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "2 algorithms",
+          "detail": "The semantic region had to recur under at least two outcome-blind clustering algorithms.",
+          "value": 2
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "median stability 0.913",
+          "detail": "Member similarity was tested by lineage-group resampling before outcomes were attached.",
+          "value": 0.9133682416836195
+        },
+        "persistence": {
+          "state": "diagnostic",
+          "measure": "20% fold direction",
+          "detail": "The geometry persisted, but the projected outcome association did not clear the complete corrected contract.",
+          "value": 0.2
+        },
+        "predictability": {
+          "state": "diagnostic",
+          "measure": "observed keep Δ 3.42 pts",
+          "detail": "Exact-ID-disjoint observed keep agrees directionally, but this diagnostic is not multiplicity-corrected replication.",
+          "value": 3.4221093297276326
+        }
+      },
+      "outcomes": {
+        "projectedTogetherKeep": {
+          "meanDifferencePoints": 0.1433450482112073,
+          "confidence95": [
+            -0.6471878456563451,
+            0.8370983313477669
+          ],
+          "q": 1,
+          "foldSignConsistency": 0.2,
+          "riskDifference85": -0.0020275750202757683,
+          "riskRatio85": 0.9635036496350365,
+          "projected": true
+        },
+        "observedKeepDiagnostic": {
+          "n": 632,
+          "sources": 4,
+          "meanDifferencePoints": 3.4221093297276326,
+          "confidence95": [
+            1.243593908629435,
+            7.177862501537312
+          ],
+          "directionallyConsistent": true,
+          "multiplicityCorrected": false,
+          "replicationClaim": false
+        }
+      },
+      "geometry": {
+        "algorithms": [
+          "agglomerative_cosine",
+          "gaussian_mixture"
+        ],
+        "resolutions": [
+          "residual__curiosity_gap"
+        ],
+        "algorithmSupport": 2,
+        "resolutionSupport": 1,
+        "stability": {
+          "representative": 0.9198474082085065,
+          "minimum": 0.9068890751587324,
+          "median": 0.9133682416836195,
+          "maximum": 0.9198474082085065
+        },
+        "transportTier": "observed_directional_consistency"
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Cluster membership was frozen before keep outcomes were attached.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "2 supporting algorithms.",
+          "value": 2
+        },
+        {
+          "id": "resolution",
+          "state": "tested",
+          "detail": "1 supporting semantic resolutions.",
+          "value": 1
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Median stability 0.913.",
+          "value": 0.9133682416836195
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Projected 82.5, 85, and 87.5 thresholds were reported descriptively.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "pass",
+          "detail": "A topic-adjusted residual resolution supports this region.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time creator-aware discovery split is available.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "diagnostic",
+          "detail": "Observed private groups agree directionally, without corrected independent replication.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "The region has not been transported to an independent content format.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "diagnostic",
+          "detail": "Observed keep direction agrees in an exact-ID-disjoint diagnostic.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No prospectively sealed publication test.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 6,
+        "bytes": 61,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Associations do not establish causality. Projected keep reuses the source scoring system and is circular surrogate transport; observed keep is exact-ID disjoint diagnostic evidence, but no replication claim is made without corrected independent confirmation.",
+      "nextTest": "Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.",
+      "examples": [
+        "A woman meticulously arranges a table for a romantic dinner... then her mischievous cat knocks over the centerpiece in a single leap.",
+        "A chef calmly plating a dish, but the camera slowly reveals the 'ingredients' are all everyday objects",
+        "A man opens a jar labeled 'Peanut Butter,' but it's filled with tiny, dancing chefs.",
+        "A banana peel tricks a professional gymnast into a comedic slip, revealing it's part of her choreographed routine."
+      ],
+      "pareto": {
+        "comparableFamily": "visual_operations",
+        "front": 1,
+        "dimensions": [
+          "algorithm support",
+          "resolution support",
+          "median resample stability",
+          "corrected projected persistence",
+          "observed diagnostic availability",
+          "shorter display description"
+        ],
+        "boundary": "Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score."
+      }
+    },
+    {
+      "id": "system:shorts-opening-decay-baseline",
+      "family": "opening_retention",
+      "familyLabel": "Opening retention",
+      "label": "Pooled Shorts opening-decay baseline",
+      "statement": "A duration-conditioned pooled decay curve predicts the average shape of unseen Shorts openings within the observed account family.",
+      "level": "regional_invariant",
+      "ceiling": "regional_invariant",
+      "status": "supported_regionally",
+      "direction": "neutral",
+      "sourceIds": [
+        "promise_blind_openings"
+      ],
+      "sample": {
+        "observations": 361,
+        "independentSources": 3,
+        "groupedUnits": 356,
+        "boundary": "Three external accounts in one platform and format; this is not broad domain diversity."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "second-indexed retention curve",
+          "detail": "Observed curves contain repeatable temporal structure rather than identical outcomes.",
+          "value": null
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "356 content components",
+          "detail": "Exact and near reposts share one statistical vote.",
+          "value": 356
+        },
+        "persistence": {
+          "state": "pass",
+          "measure": "sealed external cohort",
+          "detail": "Predictions and content-isolation policy were sealed before outcomes were joined.",
+          "value": null
+        },
+        "predictability": {
+          "state": "pass",
+          "measure": "4.43-point curve MAE",
+          "detail": "This validates the pooled baseline only, not semantic component skill.",
+          "value": 4.4309252737636795
+        }
+      },
+      "outcomes": {
+        "strictBlindExternal": {
+          "videos": 361,
+          "contentComponents": 356,
+          "curveMaePoints": 4.4309252737636795,
+          "curveRmsePoints": 6.459150696844015,
+          "endpointMaePoints": 7.227816049867915,
+          "residualBandCoverage": 0.731080728032744
+        }
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Prediction manifest and isolation policy were sealed before outcome join.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "tested",
+          "detail": "The promoted stage is the pooled baseline; semantic variants were compared separately.",
+          "value": null
+        },
+        {
+          "id": "resolution",
+          "state": "tested",
+          "detail": "Retention is evaluated second by second on duration-conditioned risk sets.",
+          "value": null
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "External repost groups are collapsed to content components.",
+          "value": null
+        },
+        {
+          "id": "threshold",
+          "state": "not_applicable",
+          "detail": "This candidate predicts a continuous curve, not a threshold event.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "pass",
+          "detail": "The baseline does not condition on topic.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "diagnostic",
+          "detail": "Development chronology was evaluated, but the external claim is a sealed present-day holdout.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "pass",
+          "detail": "361 strict-blind videos from three external accounts.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "Only YouTube Shorts retention curves.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "pass",
+          "detail": "Measured retention curves were opened after predictions were sealed.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "The cohort is blind but retrospective, not a future publication lockbox.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 4,
+        "bytes": 36,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "This is a stable baseline for average retention decay. It does not show that semantic hook components explain individual differences.",
+      "nextTest": "Seal the baseline on future uploads from at least ten unseen accounts and compare both calibration and per-video rank skill.",
+      "examples": [],
+      "pareto": {
+        "comparableFamily": null,
+        "front": null,
+        "dimensions": [],
+        "boundary": "Heterogeneous targets are not collapsed into a cross-study scalar."
+      }
+    },
+    {
+      "id": "system:opening-semantic-increment",
+      "family": "opening_retention",
+      "familyLabel": "Opening retention",
+      "label": "Semantic components add retention prediction",
+      "statement": "The four-cluster semantic component and relationship model improves individual retention-curve prediction beyond the pooled opening baseline.",
+      "level": "mechanism",
+      "ceiling": "regional_invariant",
+      "status": "falsified_currently",
+      "direction": "positive",
+      "sourceIds": [
+        "promise_blind_openings",
+        "promise_context"
+      ],
+      "sample": {
+        "observations": 361,
+        "independentSources": 3,
+        "groupedUnits": 356,
+        "boundary": "Strict-blind external comparison across three accounts."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "4 frozen clusters",
+          "detail": "A repeatable four-cluster semantic partition exists.",
+          "value": 4
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "content-isolated groups",
+          "detail": "Near-duplicate policies were frozen without outcomes.",
+          "value": null
+        },
+        "persistence": {
+          "state": "fail",
+          "measure": "external candidate lost",
+          "detail": "The semantic candidate did not preserve its development advantage on the strict-blind external cohort.",
+          "value": null
+        },
+        "predictability": {
+          "state": "fail",
+          "measure": "-0.087 points vs baseline",
+          "detail": "Negative improvement means the candidate was worse than the simpler pooled baseline.",
+          "value": -0.08721976754817763
+        }
+      },
+      "outcomes": {
+        "strictBlindCandidateVsBaseline": {
+          "candidateStage": "relationships",
+          "videos": 361,
+          "baselineCurveMaePoints": 4.4309252737636795,
+          "candidateCurveMaePoints": 4.518145041311857,
+          "improvementPoints": -0.08721976754817763,
+          "confidence95": {
+            "lower": -0.16912003905488684,
+            "upper": -0.012078836881146714,
+            "repetitions": 2000
+          },
+          "winFraction": 0.4143258426966292
+        }
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "External inference and isolation were sealed before outcomes.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "tested",
+          "detail": "Baseline and semantic relationship stages were compared.",
+          "value": null
+        },
+        {
+          "id": "resolution",
+          "state": "pass",
+          "detail": "Variable-length component lattice and four frozen categories.",
+          "value": null
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Content-component statistical units collapse reposts.",
+          "value": null
+        },
+        {
+          "id": "threshold",
+          "state": "not_applicable",
+          "detail": "Continuous curve error comparison.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "tested",
+          "detail": "External accounts provide different content mixtures.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "diagnostic",
+          "detail": "Chronological development folds exist but did not promote the semantic stage.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "fail",
+          "detail": "Strict-blind external candidate was worse than baseline.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "No cross-format retention test.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "fail",
+          "detail": "Observed external retention did not support incremental semantic skill.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No future publication lockbox.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 5,
+        "bytes": 44,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "The 208 saved cohort rows are source-level out of fold. Other Main rows use the unchanged full fit. Other accounts are account-external frozen-model evaluations. Primary blind metrics exclude exact and conservative near training-content overlap. Exact or near external repost members remain inspectable but share one sealed content-component statistical vote. Near-duplicate sensitivity is outcome-free and reported at multiple thresholds. Outcomes are opened only after the prediction manifest is sealed; no pooled outcome refits, recalibrates, or promotes the scorer.",
+      "nextTest": "Keep the four categories frozen, redesign only the incremental model, and require positive paired improvement on a new sealed cohort.",
+      "examples": [],
+      "pareto": {
+        "comparableFamily": null,
+        "front": null,
+        "dimensions": [],
+        "boundary": "Heterogeneous targets are not collapsed into a cross-study scalar."
+      }
+    },
+    {
+      "id": "system:known-account-keep",
+      "family": "embedding_predictors",
+      "familyLabel": "Embedding predictors",
+      "label": "Known-account keep-rate model",
+      "statement": "The 45 stored embedding indicators predict observed keep rate across videos from already-known accounts.",
+      "level": "mechanism",
+      "ceiling": "regional_invariant",
+      "status": "falsified_currently",
+      "direction": "positive",
+      "sourceIds": [
+        "predictor_private"
+      ],
+      "sample": {
+        "observations": 636,
+        "independentSources": 4,
+        "groupedUnits": 636,
+        "boundary": "Descriptive source bootstrap only; fewer than ten heterogeneous sources cannot support a population-level 95% inference."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "45 candidate inputs",
+          "detail": "Stored embedding indicators vary across videos.",
+          "value": null
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "known-source R² 0.499",
+          "detail": "Retrospective held-out videos inside known sources.",
+          "value": 0.49914
+        },
+        "persistence": {
+          "state": "fail",
+          "measure": "forward R² -0.739",
+          "detail": "Forward-time performance is the stronger temporal test.",
+          "value": -0.73875
+        },
+        "predictability": {
+          "state": "fail",
+          "measure": "unseen-source R² -0.494",
+          "detail": "A principle-like predictor must survive an entirely unseen source.",
+          "value": -0.49365
+        }
+      },
+      "outcomes": {
+        "knownSource": {
+          "n": 636,
+          "r2": 0.49914,
+          "pearson": 0.7146,
+          "spearman": 0.56873,
+          "mae": 7.25975,
+          "rmse": 9.63387,
+          "calibrationSlope": 0.87034
+        },
+        "contentOnly": {
+          "n": 636,
+          "r2": 0.47963,
+          "pearson": 0.69256,
+          "spearman": 0.56951,
+          "mae": 7.39507,
+          "rmse": 9.81976,
+          "calibrationSlope": 1.00414
+        },
+        "withinSource": {
+          "n": 636,
+          "r2": 0.16918,
+          "pearson": 0.45431,
+          "spearman": 0.41051,
+          "mae": 7.19802,
+          "rmse": 9.5736,
+          "calibrationSlope": 0.70194
+        },
+        "forwardTime": {
+          "n": 255,
+          "r2": -0.73875,
+          "pearson": 0.16331,
+          "spearman": 0.10435,
+          "mae": 6.03087,
+          "rmse": 7.8052,
+          "calibrationSlope": 0.17854
+        },
+        "stressTests": [
+          {
+            "label": "Unseen-account transfer",
+            "metrics": {
+              "n": 636,
+              "r2": -0.49365,
+              "pearson": -0.00332,
+              "spearman": 0.11106,
+              "mae": 12.66402,
+              "rmse": 16.63674,
+              "calibrationSlope": -0.0048
+            }
+          },
+          {
+            "label": "Forward-time keep-rate transfer",
+            "metrics": {
+              "n": 255,
+              "r2": -0.73875,
+              "pearson": 0.16331,
+              "spearman": 0.10435,
+              "mae": 6.03087,
+              "rmse": 7.8052,
+              "calibrationSlope": 0.17854
+            }
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "not_applicable",
+          "detail": "This is a supervised predictor.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "50,000 deterministic feature subsets were compared inside training partitions.",
+          "value": null
+        },
+        {
+          "id": "resolution",
+          "state": "pass",
+          "detail": "Visual, text, together, novelty, and metadata inputs were evaluated.",
+          "value": null
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Known-source R² 0.499.",
+          "value": null
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Continuous outcomes and tail thresholds are separately evaluated.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "not_tested",
+          "detail": "No complete topic intervention.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "fail",
+          "detail": "Forward-time R² -0.739.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "fail",
+          "detail": "Unseen-source R² -0.494.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "No independent platform format test for this fitted model.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "pass",
+          "detail": "The target is observed percentage points.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "Forward-time backtests are retrospective and upstream embeddings use current axes.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 3,
+        "bytes": 29,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "The known-account interpolation score is not a pre-upload forecast. The forward-time test uses current frozen public reference axes and historical private labels, while the unseen-account test remains negative; do not claim a universal keep-rate model.",
+      "nextTest": "Add creator-diverse accounts, freeze the scorer and formula, then require positive R² on entirely unseen accounts and forward uploads.",
+      "examples": [],
+      "pareto": {
+        "comparableFamily": null,
+        "front": null,
+        "dimensions": [],
+        "boundary": "Heterogeneous targets are not collapsed into a cross-study scalar."
+      }
+    },
+    {
+      "id": "system:known-channel-views",
+      "family": "embedding_predictors",
+      "familyLabel": "Embedding predictors",
+      "label": "Known-channel public-views model",
+      "statement": "The 45 stored embedding indicators predict current public views for videos from already-known channels.",
+      "level": "mechanism",
+      "ceiling": "regional_invariant",
+      "status": "falsified_currently",
+      "direction": "positive",
+      "sourceIds": [
+        "predictor_saved_channels"
+      ],
+      "sample": {
+        "observations": 1418,
+        "independentSources": 3,
+        "groupedUnits": 1418,
+        "boundary": "Descriptive source bootstrap only; fewer than ten heterogeneous sources cannot support a population-level 95% inference."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "45 candidate inputs",
+          "detail": "Stored embedding indicators vary across videos.",
+          "value": null
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "known-source R² 0.275",
+          "detail": "Retrospective held-out videos inside known sources.",
+          "value": 0.27492
+        },
+        "persistence": {
+          "state": "fail",
+          "measure": "forward R² -0.144",
+          "detail": "Forward-time performance is the stronger temporal test.",
+          "value": -0.14395
+        },
+        "predictability": {
+          "state": "fail",
+          "measure": "unseen-source R² -2.341",
+          "detail": "A principle-like predictor must survive an entirely unseen source.",
+          "value": -2.34137
+        }
+      },
+      "outcomes": {
+        "knownSource": {
+          "n": 1418,
+          "r2": 0.27492,
+          "pearson": 0.52959,
+          "spearman": 0.47646,
+          "mae": 0.69949,
+          "rmse": 0.85069,
+          "medianFactorError": 4.31794,
+          "calibrationSlope": 0.87681
+        },
+        "contentOnly": {
+          "n": 1418,
+          "r2": 0.17951,
+          "pearson": 0.42407,
+          "spearman": 0.38939,
+          "mae": 0.7449,
+          "rmse": 0.90493,
+          "medianFactorError": 4.61369,
+          "calibrationSlope": 1.04365
+        },
+        "withinSource": {
+          "n": 1418,
+          "r2": 0.03177,
+          "pearson": 0.23316,
+          "spearman": 0.2322,
+          "mae": 0.69927,
+          "rmse": 0.85018,
+          "medianFactorError": 4.26088,
+          "calibrationSlope": 0.608
+        },
+        "forwardTime": {
+          "n": 506,
+          "r2": -0.14395,
+          "pearson": 0.36477,
+          "spearman": 0.34408,
+          "mae": 0.58555,
+          "rmse": 0.73545,
+          "medianFactorError": 3.15798,
+          "calibrationSlope": 0.42096
+        },
+        "stressTests": [
+          {
+            "label": "Unseen-channel transfer",
+            "metrics": {
+              "n": 1418,
+              "r2": -2.34137,
+              "pearson": -0.44917,
+              "spearman": -0.37369,
+              "mae": 1.53647,
+              "rmse": 1.82618,
+              "medianFactorError": 28.33387,
+              "calibrationSlope": -0.54025
+            }
+          },
+          {
+            "label": "Forward-time public-views transfer",
+            "metrics": {
+              "n": 506,
+              "r2": -0.14395,
+              "pearson": 0.36477,
+              "spearman": 0.34408,
+              "mae": 0.58555,
+              "rmse": 0.73545,
+              "medianFactorError": 3.15798,
+              "calibrationSlope": 0.42096
+            }
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "not_applicable",
+          "detail": "This is a supervised predictor.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "pass",
+          "detail": "50,000 deterministic feature subsets were compared inside training partitions.",
+          "value": null
+        },
+        {
+          "id": "resolution",
+          "state": "pass",
+          "detail": "Visual, text, together, novelty, and metadata inputs were evaluated.",
+          "value": null
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Known-source R² 0.275.",
+          "value": null
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Continuous outcomes and tail thresholds are separately evaluated.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "not_tested",
+          "detail": "No complete topic intervention.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "fail",
+          "detail": "Forward-time R² -0.144.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "fail",
+          "detail": "Unseen-source R² -2.341.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "No independent platform format test for this fitted model.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "pass",
+          "detail": "The target is observed log10 views.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "Forward-time backtests are retrospective and upstream embeddings use current axes.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 3,
+        "bytes": 32,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "The operational score calibrates to a known channel's historical scale. Publication dates are present for 1,418 of 1,418 eligible Shorts, but outcomes are still current-view snapshots rather than fixed 30-day views. The forward-time ordering is retrospective and cannot reconstruct as-of view labels; unseen-channel transfer is also reported separately.",
+      "nextTest": "Freeze age-normalized outcomes and test on future videos from at least ten entirely unseen channels.",
+      "examples": [],
+      "pareto": {
+        "comparableFamily": null,
+        "front": null,
+        "dimensions": [],
+        "boundary": "Heterogeneous targets are not collapsed into a cross-study scalar."
+      }
+    },
+    {
+      "id": "system:raw-geometry-views",
+      "family": "embedding_geometry",
+      "familyLabel": "Embedding geometry",
+      "label": "Raw multimodal geometry predicts public views",
+      "statement": "Raw multimodal Gemini geometry contains a stable video-level views direction that transports across creators.",
+      "level": "mechanism",
+      "ceiling": "domain_invariant",
+      "status": "falsified_currently",
+      "direction": "positive",
+      "sourceIds": [
+        "predictor_corpus"
+      ],
+      "sample": {
+        "observations": 16077,
+        "independentSources": 121,
+        "groupedUnits": 16077,
+        "boundary": "Large video count but creator-macro performance is the relevant diversity test."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "1,536D raw geometry",
+          "detail": "The embedding space separates observations.",
+          "value": null
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "video-level ρ 0.370",
+          "detail": "Held-out video ranks show modest within-corpus structure.",
+          "value": 0.36992
+        },
+        "persistence": {
+          "state": "fail",
+          "measure": "creator-macro R² -4.09",
+          "detail": "The apparent video-level relationship does not preserve calibrated performance across creators.",
+          "value": -4.08652
+        },
+        "predictability": {
+          "state": "diagnostic",
+          "measure": "video-level R² 0.130",
+          "detail": "Positive pooled video skill is real inside this sample but does not justify creator-general prediction.",
+          "value": 0.13048
+        }
+      },
+      "outcomes": {
+        "groupedVideoFolds": {
+          "n": 16077,
+          "r2": 0.13048,
+          "pearson": 0.36632,
+          "spearman": 0.36992,
+          "mae": 0.86821,
+          "rmse": 1.03907,
+          "medianFactorError": 6.13653,
+          "calibrationSlope": 1.19918
+        },
+        "creatorMacro": {
+          "independentSources": 121,
+          "r2": -4.08652,
+          "spearman": 0.08856
+        }
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "Raw embeddings exist before view labels are fit.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "tested",
+          "detail": "Ridge refits occur inside creator-group folds.",
+          "value": null
+        },
+        {
+          "id": "resolution",
+          "state": "tested",
+          "detail": "Visual, text, and together modalities are reported separately.",
+          "value": null
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Creator-group folds hold out videos.",
+          "value": null
+        },
+        {
+          "id": "threshold",
+          "state": "tested",
+          "detail": "Continuous views and tail-risk outcomes are both reported.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "not_tested",
+          "detail": "No complete topic intervention.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "diagnostic",
+          "detail": "Age cohorts are reported; labels remain current snapshots.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "fail",
+          "detail": "Creator-macro calibration is strongly negative.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "diagnostic",
+          "detail": "Long-to-Short transfer is a separate weak rank signal.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "pass",
+          "detail": "Public views are observed outcomes.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No sealed future views cohort.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 6,
+        "bytes": 45,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "Pooled rank signal is not a creator-general law. Large n does not substitute for heterogeneous source survival.",
+      "nextTest": "Use source-balanced training and a sealed set of unseen creators with fixed-age outcomes.",
+      "examples": [],
+      "pareto": {
+        "comparableFamily": null,
+        "front": null,
+        "dimensions": [],
+        "boundary": "Heterogeneous targets are not collapsed into a cross-study scalar."
+      }
+    },
+    {
+      "id": "system:long-to-short-views",
+      "family": "cross_format_transfer",
+      "familyLabel": "Cross-format transfer",
+      "label": "Long-form views axis transfers to Shorts",
+      "statement": "A frozen Long Quant title-and-thumbnail views axis predicts Shorts views without seeing a Shorts outcome.",
+      "level": "mechanism",
+      "ceiling": "domain_invariant",
+      "status": "partial_signal",
+      "direction": "positive",
+      "sourceIds": [
+        "long_to_short_transfer"
+      ],
+      "sample": {
+        "observations": 16077,
+        "independentSources": 121,
+        "groupedUnits": 16077,
+        "boundary": "Cross-format rank association is positive, but absolute calibration and error remain poor."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "frozen Long Quant axis",
+          "detail": "The direction is learned entirely in the long-form corpus.",
+          "value": null
+        },
+        "similarity": {
+          "state": "diagnostic",
+          "measure": "Shorts ρ 0.195",
+          "detail": "A small rank signal survives the format change.",
+          "value": 0.19521
+        },
+        "persistence": {
+          "state": "diagnostic",
+          "measure": "three modalities agree weakly",
+          "detail": "Visual, text, and together transfer correlations are all positive.",
+          "value": null
+        },
+        "predictability": {
+          "state": "fail",
+          "measure": "Shorts R² -0.085",
+          "detail": "Negative R² means the transferred absolute prediction is worse than a Shorts mean baseline.",
+          "value": -0.0845
+        }
+      },
+      "outcomes": {
+        "visual": {
+          "n": 16078,
+          "r2": -0.17973,
+          "pearson": 0.20834,
+          "spearman": 0.21474,
+          "mae": 1.04899,
+          "rmse": 1.21027,
+          "medianFactorError": 10.474,
+          "calibrationSlope": 0.58012
+        },
+        "text": {
+          "n": 6966,
+          "r2": -0.02487,
+          "pearson": 0.14689,
+          "spearman": 0.14844,
+          "mae": 0.93127,
+          "rmse": 1.10642,
+          "medianFactorError": 7.18351,
+          "calibrationSlope": 0.45387
+        },
+        "together": {
+          "n": 16077,
+          "r2": -0.0845,
+          "pearson": 0.19228,
+          "spearman": 0.19521,
+          "mae": 0.99851,
+          "rmse": 1.16043,
+          "medianFactorError": 9.21102,
+          "calibrationSlope": 0.54616
+        },
+        "longFormTrainN": 9200
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "pass",
+          "detail": "No Shorts outcome fits the transferred Long Quant direction.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "tested",
+          "detail": "Regularization is selected on Long Quant only.",
+          "value": null
+        },
+        {
+          "id": "resolution",
+          "state": "pass",
+          "detail": "Visual, text, and together modalities are tested.",
+          "value": null
+        },
+        {
+          "id": "resample",
+          "state": "tested",
+          "detail": "Long-form training sensitivity is reported.",
+          "value": null
+        },
+        {
+          "id": "threshold",
+          "state": "not_tested",
+          "detail": "The transfer is evaluated as continuous views.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "diagnostic",
+          "detail": "Cross-format content mix changes substantially.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No fixed-age forward cohort.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "diagnostic",
+          "detail": "Many Shorts creators are present, but source-level calibration is not promoted.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "diagnostic",
+          "detail": "Positive rank signal, negative absolute R².",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "pass",
+          "detail": "Shorts views are observed.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "No future lockbox.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 6,
+        "bytes": 40,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "This is evidence of weak shared geometry, not a usable cross-format views predictor.",
+      "nextTest": "Pre-register a monotonic rank-only transfer metric and evaluate it on fixed-age future Shorts from unseen creators.",
+      "examples": [],
+      "pareto": {
+        "comparableFamily": null,
+        "front": null,
+        "dimensions": [],
+        "boundary": "Heterogeneous targets are not collapsed into a cross-study scalar."
+      }
+    },
+    {
+      "id": "system:keep-retention-duration",
+      "family": "retention_views",
+      "familyLabel": "Retention to views",
+      "label": "Keep, retention, and duration jointly predict views",
+      "statement": "Observed keep rate, average retention, and duration jointly preserve useful views information within the private Shorts cohort.",
+      "level": "local_invariant",
+      "ceiling": "local_invariant",
+      "status": "supported_locally",
+      "direction": "positive",
+      "sourceIds": [
+        "retention_private"
+      ],
+      "sample": {
+        "observations": 211,
+        "independentSources": 1,
+        "groupedUnits": 211,
+        "boundary": "One private creator cohort; all inputs are post-upload observations."
+      },
+      "prerequisites": {
+        "distinguishability": {
+          "state": "pass",
+          "measure": "three measured variables",
+          "detail": "Keep, retention, and duration vary across videos.",
+          "value": null
+        },
+        "similarity": {
+          "state": "pass",
+          "measure": "CV R² 0.303",
+          "detail": "Cross-validation preserves a moderate within-cohort relationship.",
+          "value": 0.303
+        },
+        "persistence": {
+          "state": "diagnostic",
+          "measure": "one creator cohort",
+          "detail": "The relationship repeats across folds but not independent creators.",
+          "value": null
+        },
+        "predictability": {
+          "state": "pass",
+          "measure": "CV R² 0.303",
+          "detail": "The combination improves within-cohort views prediction over single metrics.",
+          "value": 0.303
+        }
+      },
+      "outcomes": {
+        "model": {
+          "features": [
+            "keep",
+            "retention",
+            "log_dur"
+          ],
+          "coefficients": [
+            0.02243,
+            0.042135,
+            1.000541
+          ],
+          "intercept": -2.7231,
+          "cvR2": 0.303,
+          "residualSdLog10": 0.6062
+        }
+      },
+      "transformations": [
+        {
+          "id": "outcome_blind",
+          "state": "not_applicable",
+          "detail": "This is a supervised post-upload relationship.",
+          "value": null
+        },
+        {
+          "id": "algorithm",
+          "state": "tested",
+          "detail": "Feature subsets were compared by cross-validation.",
+          "value": null
+        },
+        {
+          "id": "resolution",
+          "state": "tested",
+          "detail": "Keep, average retention, 5-second retention, and duration subsets were compared.",
+          "value": null
+        },
+        {
+          "id": "resample",
+          "state": "pass",
+          "detail": "Cross-validation inside the private cohort.",
+          "value": null
+        },
+        {
+          "id": "threshold",
+          "state": "not_applicable",
+          "detail": "Continuous log views.",
+          "value": null
+        },
+        {
+          "id": "topic",
+          "state": "not_tested",
+          "detail": "No complete topic adjustment.",
+          "value": null
+        },
+        {
+          "id": "time",
+          "state": "not_tested",
+          "detail": "No forward-time lockbox.",
+          "value": null
+        },
+        {
+          "id": "source",
+          "state": "not_tested",
+          "detail": "Single creator cohort.",
+          "value": null
+        },
+        {
+          "id": "format",
+          "state": "not_tested",
+          "detail": "Shorts only.",
+          "value": null
+        },
+        {
+          "id": "observed",
+          "state": "pass",
+          "detail": "All inputs and views are observed.",
+          "value": null
+        },
+        {
+          "id": "prospective",
+          "state": "not_tested",
+          "detail": "Post-upload variables cannot validate pre-upload prediction.",
+          "value": null
+        }
+      ],
+      "description": {
+        "tokens": 7,
+        "bytes": 51,
+        "mdlEligible": false,
+        "boundary": "This is display-description length, not total model description length or a valid MDL score."
+      },
+      "claimBoundary": "This is a local post-upload relationship, not a pre-upload virality principle.",
+      "nextTest": "Freeze the formula and test creator-balanced, fixed-age views outcomes in unseen channels.",
+      "examples": [],
+      "pareto": {
+        "comparableFamily": null,
+        "front": null,
+        "dimensions": [],
+        "boundary": "Heterogeneous targets are not collapsed into a cross-study scalar."
+      }
+    }
+  ],
+  "summary": {
+    "candidateCount": 23,
+    "sourceCount": 9,
+    "levelCounts": {
+      "mechanism": 17,
+      "local_invariant": 5,
+      "regional_invariant": 1,
+      "domain_invariant": 0,
+      "universal_invariant": 0
+    },
+    "statusCounts": {
+      "supported_locally": 5,
+      "exploratory": 12,
+      "supported_regionally": 1,
+      "falsified_currently": 4,
+      "partial_signal": 1
+    },
+    "transformationCounts": {
+      "outcome_blind": {
+        "pass": 20,
+        "fail": 0,
+        "diagnostic": 0,
+        "tested": 0,
+        "notTested": 3
+      },
+      "algorithm": {
+        "pass": 18,
+        "fail": 0,
+        "diagnostic": 0,
+        "tested": 5,
+        "notTested": 0
+      },
+      "resolution": {
+        "pass": 12,
+        "fail": 0,
+        "diagnostic": 0,
+        "tested": 11,
+        "notTested": 0
+      },
+      "resample": {
+        "pass": 22,
+        "fail": 0,
+        "diagnostic": 0,
+        "tested": 1,
+        "notTested": 0
+      },
+      "threshold": {
+        "pass": 0,
+        "fail": 0,
+        "diagnostic": 0,
+        "tested": 19,
+        "notTested": 4
+      },
+      "topic": {
+        "pass": 7,
+        "fail": 0,
+        "diagnostic": 1,
+        "tested": 1,
+        "notTested": 14
+      },
+      "time": {
+        "pass": 0,
+        "fail": 2,
+        "diagnostic": 3,
+        "tested": 0,
+        "notTested": 18
+      },
+      "source": {
+        "pass": 1,
+        "fail": 4,
+        "diagnostic": 4,
+        "tested": 0,
+        "notTested": 14
+      },
+      "format": {
+        "pass": 0,
+        "fail": 0,
+        "diagnostic": 2,
+        "tested": 0,
+        "notTested": 21
+      },
+      "observed": {
+        "pass": 6,
+        "fail": 1,
+        "diagnostic": 3,
+        "tested": 0,
+        "notTested": 13
+      },
+      "prospective": {
+        "pass": 0,
+        "fail": 0,
+        "diagnostic": 0,
+        "tested": 0,
+        "notTested": 23
+      }
+    },
+    "universalClaims": 0,
+    "domainClaims": 0,
+    "headline": "Current evidence supports bounded local and regional invariants, not universal principles.",
+    "strongestSupported": [
+      "operations:cmp-bbfb2fe724d01a57",
+      "operations:cmp-496c33d27799fc2a",
+      "operations:cmp-5c07bb9f03c3053e",
+      "operations:cmp-28601001a4475630",
+      "system:shorts-opening-decay-baseline",
+      "system:keep-retention-duration"
+    ],
+    "strongestFalsifications": [
+      "system:opening-semantic-increment",
+      "system:known-account-keep",
+      "system:known-channel-views",
+      "system:raw-geometry-views"
+    ]
+  },
+  "flow": {
+    "nodes": [
+      {
+        "id": "observations",
+        "label": "Source rows",
+        "count": 36879,
+        "level": 0
+      },
+      {
+        "id": "mechanisms",
+        "label": "Mechanisms",
+        "count": 17,
+        "level": 1
+      },
+      {
+        "id": "local",
+        "label": "Local invariants",
+        "count": 5,
+        "level": 2
+      },
+      {
+        "id": "regional",
+        "label": "Regional invariants",
+        "count": 1,
+        "level": 3
+      },
+      {
+        "id": "domain",
+        "label": "Domain invariants",
+        "count": 0,
+        "level": 4
+      },
+      {
+        "id": "universal",
+        "label": "Universal invariants",
+        "count": 0,
+        "level": 5
+      },
+      {
+        "id": "prediction",
+        "label": "Unseen predictions",
+        "count": 5,
+        "level": 6
+      },
+      {
+        "id": "new_observations",
+        "label": "New observations",
+        "count": 0,
+        "level": 7
+      }
+    ],
+    "edges": [
+      [
+        "observations",
+        "mechanisms"
+      ],
+      [
+        "mechanisms",
+        "local"
+      ],
+      [
+        "local",
+        "regional"
+      ],
+      [
+        "regional",
+        "domain"
+      ],
+      [
+        "domain",
+        "universal"
+      ],
+      [
+        "universal",
+        "prediction"
+      ],
+      [
+        "domain",
+        "prediction"
+      ],
+      [
+        "regional",
+        "prediction"
+      ],
+      [
+        "local",
+        "prediction"
+      ],
+      [
+        "prediction",
+        "new_observations"
+      ],
+      [
+        "new_observations",
+        "observations"
+      ]
+    ]
+  },
+  "artifactHash": "321b72cb790a68191b61eed86db017bf6f2925d02c9d1cd38577b457bfb6c5c2"
+}
