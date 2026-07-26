@@ -1,0 +1,59 @@
+{
+  "schema": "outcome-free-semantic-family-summary-v1",
+  "generatedAt": "2026-07-26T17:30:43.007206+00:00",
+  "snapshotRunId": "efaa82b96450e04275a4c457",
+  "familyArtifact": ".cache/semantic-families.json.gz",
+  "familyContentHash": "466eb56407364b07de9c8cc9dc2c5e1d9c918e1f3ea2d8caea417e1da935b357",
+  "formats": [
+    {
+      "format": "shorts",
+      "strictPanelRows": 53681,
+      "rowsWithPrimaryTogetherEmbedding": 53509,
+      "threshold": 0.9,
+      "thresholdRule": "max(0.90, random-pair q0.9999)",
+      "randomPairs": 250000,
+      "randomPairQuantile": 0.819785,
+      "empiricalRandomPairExceedance": 0.0,
+      "exactDuplicatePairComparisons": 10181,
+      "exactDuplicateRecallAtThreshold": 0.251252,
+      "nearestNeighbors": 20,
+      "semanticEdgeRule": "mutual top-20 neighbor and cosine at or above threshold",
+      "exactEdges": 1937,
+      "semanticEdges": 9767,
+      "componentsAmongEmbeddedRows": 49066,
+      "multirowComponents": 1631,
+      "rowsInMultirowComponents": 6074,
+      "largestComponent": 438,
+      "componentSizeP99": 3.0
+    },
+    {
+      "format": "long",
+      "strictPanelRows": 93671,
+      "rowsWithPrimaryTogetherEmbedding": 35217,
+      "threshold": 0.9,
+      "thresholdRule": "max(0.90, random-pair q0.9999)",
+      "randomPairs": 250000,
+      "randomPairQuantile": 0.85123,
+      "empiricalRandomPairExceedance": 1.6e-05,
+      "exactDuplicatePairComparisons": 199,
+      "exactDuplicateRecallAtThreshold": 0.974874,
+      "nearestNeighbors": 20,
+      "semanticEdgeRule": "mutual top-20 neighbor and cosine at or above threshold",
+      "exactEdges": 43,
+      "semanticEdges": 14793,
+      "componentsAmongEmbeddedRows": 28585,
+      "multirowComponents": 2400,
+      "rowsInMultirowComponents": 9032,
+      "largestComponent": 161,
+      "componentSizeP99": 5.0
+    }
+  ],
+  "outcomesUsed": false,
+  "claimBoundary": [
+    "Families are leakage blocks, not semantic truth labels.",
+    "Exact normalized input families are always joined.",
+    "Near-copy edges require mutual nearest-neighbor support and an outcome-free cosine threshold.",
+    "Videos without the primary together embedding retain their exact input family."
+  ],
+  "contentHash": "70cfac61e7752ed1ed754c9a443009c26ca8e71427a620ece2017639dcdab334"
+}

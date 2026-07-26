@@ -1,0 +1,1062 @@
+{
+  "schema": "shorts-content-baseline-sensitivity-v1",
+  "generatedAt": "2026-07-26T18:04:12.516620+00:00",
+  "estimand": "Creator-relative log-view lift under six predeclared combinations of age maturity and historically observable creator baselines.",
+  "selectionRule": "No specification is selected. Robustness requires the direction to survive the entire grid.",
+  "sourceLineage": {
+    "snapshotRunId": "efaa82b96450e04275a4c457",
+    "snapshotIdentityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7",
+    "panelArtifactSha256": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+    "semanticFamilyArtifactSha256": "470f8a28146e91bcc6838f43877bf956d342523c5253dbc45013f27b44debd65"
+  },
+  "grid": {
+    "ageSpecifications": [
+      "log_linear",
+      "log_quadratic",
+      "hinge_spline"
+    ],
+    "historySpecifications": [
+      "empirical_bayes",
+      "unshrunk_prior_mean"
+    ],
+    "modalities": [
+      "visual",
+      "together"
+    ],
+    "validationSplits": [
+      "unseenCreator",
+      "laterVideo"
+    ],
+    "minimumHistoryGrid": [
+      1,
+      2,
+      5,
+      10
+    ],
+    "hypotheses": 36
+  },
+  "specifications": [
+    {
+      "id": "log_linear:empirical_bayes",
+      "ageSpecification": "log_linear",
+      "historySpecification": "empirical_bayes",
+      "results": {
+        "visual": {
+          "unseenCreator": {
+            "n": 9952,
+            "r2": 0.077144,
+            "spearman": 0.263661,
+            "gaussianBitsPerObservation": 0.058015,
+            "pairwiseMicroAccuracy": 0.523121,
+            "pairwiseEqualSourceAccuracy": 0.529891,
+            "sourceMacroMeanSpearman": 0.059349,
+            "sourceMacroPositiveFraction": 0.55157,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          },
+          "laterVideo": {
+            "n": 6882,
+            "r2": 0.053885,
+            "spearman": 0.261512,
+            "gaussianBitsPerObservation": 0.066713,
+            "pairwiseMicroAccuracy": 0.529278,
+            "pairwiseEqualSourceAccuracy": 0.52348,
+            "sourceMacroMeanSpearman": 0.067093,
+            "sourceMacroPositiveFraction": 0.529915,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          }
+        },
+        "together": {
+          "unseenCreator": {
+            "n": 9951,
+            "r2": 0.07623,
+            "spearman": 0.261075,
+            "gaussianBitsPerObservation": 0.057305,
+            "pairwiseMicroAccuracy": 0.524731,
+            "pairwiseEqualSourceAccuracy": 0.526602,
+            "sourceMacroMeanSpearman": 0.04128,
+            "sourceMacroPositiveFraction": 0.508221,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          },
+          "laterVideo": {
+            "n": 6881,
+            "r2": 0.049013,
+            "spearman": 0.253367,
+            "gaussianBitsPerObservation": 0.06293,
+            "pairwiseMicroAccuracy": 0.51346,
+            "pairwiseEqualSourceAccuracy": 0.511943,
+            "sourceMacroMeanSpearman": 0.048556,
+            "sourceMacroPositiveFraction": 0.504274,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "log_linear:unshrunk_prior_mean",
+      "ageSpecification": "log_linear",
+      "historySpecification": "unshrunk_prior_mean",
+      "results": {
+        "visual": {
+          "unseenCreator": {
+            "n": 9952,
+            "r2": 0.006528,
+            "spearman": 0.091446,
+            "gaussianBitsPerObservation": 0.004876,
+            "pairwiseMicroAccuracy": 0.511081,
+            "pairwiseEqualSourceAccuracy": 0.519604,
+            "sourceMacroMeanSpearman": 0.001247,
+            "sourceMacroPositiveFraction": 0.490284,
+            "withinSourcePermutationP": 0.126,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.197217
+            }
+          },
+          "laterVideo": {
+            "n": 6882,
+            "r2": -0.005766,
+            "spearman": 0.077341,
+            "gaussianBitsPerObservation": 0.001834,
+            "pairwiseMicroAccuracy": 0.485323,
+            "pairwiseEqualSourceAccuracy": 0.486938,
+            "sourceMacroMeanSpearman": -0.021937,
+            "sourceMacroPositiveFraction": 0.42735,
+            "withinSourcePermutationP": 0.822,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.870353
+            }
+          }
+        },
+        "together": {
+          "unseenCreator": {
+            "n": 9951,
+            "r2": 0.006485,
+            "spearman": 0.089177,
+            "gaussianBitsPerObservation": 0.004847,
+            "pairwiseMicroAccuracy": 0.509184,
+            "pairwiseEqualSourceAccuracy": 0.516274,
+            "sourceMacroMeanSpearman": 0.009639,
+            "sourceMacroPositiveFraction": 0.488789,
+            "withinSourcePermutationP": 0.146,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.21888
+            }
+          },
+          "laterVideo": {
+            "n": 6881,
+            "r2": -0.007095,
+            "spearman": 0.031422,
+            "gaussianBitsPerObservation": 0.000854,
+            "pairwiseMicroAccuracy": 0.476806,
+            "pairwiseEqualSourceAccuracy": 0.472239,
+            "sourceMacroMeanSpearman": -0.008141,
+            "sourceMacroPositiveFraction": 0.470085,
+            "withinSourcePermutationP": 0.478,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.56671
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "log_quadratic:empirical_bayes",
+      "ageSpecification": "log_quadratic",
+      "historySpecification": "empirical_bayes",
+      "results": {
+        "visual": {
+          "unseenCreator": {
+            "n": 9952,
+            "r2": 0.058399,
+            "spearman": 0.235256,
+            "gaussianBitsPerObservation": 0.043476,
+            "pairwiseMicroAccuracy": 0.528219,
+            "pairwiseEqualSourceAccuracy": 0.53899,
+            "sourceMacroMeanSpearman": 0.04679,
+            "sourceMacroPositiveFraction": 0.533632,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          },
+          "laterVideo": {
+            "n": 6882,
+            "r2": 0.03966,
+            "spearman": 0.236262,
+            "gaussianBitsPerObservation": 0.03873,
+            "pairwiseMicroAccuracy": 0.528213,
+            "pairwiseEqualSourceAccuracy": 0.545466,
+            "sourceMacroMeanSpearman": 0.039326,
+            "sourceMacroPositiveFraction": 0.482906,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          }
+        },
+        "together": {
+          "unseenCreator": {
+            "n": 9951,
+            "r2": 0.058607,
+            "spearman": 0.233786,
+            "gaussianBitsPerObservation": 0.043642,
+            "pairwiseMicroAccuracy": 0.525092,
+            "pairwiseEqualSourceAccuracy": 0.534196,
+            "sourceMacroMeanSpearman": 0.038541,
+            "sourceMacroPositiveFraction": 0.521674,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          },
+          "laterVideo": {
+            "n": 6881,
+            "r2": 0.037866,
+            "spearman": 0.230134,
+            "gaussianBitsPerObservation": 0.037336,
+            "pairwiseMicroAccuracy": 0.527757,
+            "pairwiseEqualSourceAccuracy": 0.533259,
+            "sourceMacroMeanSpearman": 0.093045,
+            "sourceMacroPositiveFraction": 0.538462,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "log_quadratic:unshrunk_prior_mean",
+      "ageSpecification": "log_quadratic",
+      "historySpecification": "unshrunk_prior_mean",
+      "results": {
+        "visual": {
+          "unseenCreator": {
+            "n": 9952,
+            "r2": 0.005249,
+            "spearman": 0.080947,
+            "gaussianBitsPerObservation": 0.003969,
+            "pairwiseMicroAccuracy": 0.506237,
+            "pairwiseEqualSourceAccuracy": 0.514626,
+            "sourceMacroMeanSpearman": -0.007961,
+            "sourceMacroPositiveFraction": 0.473842,
+            "withinSourcePermutationP": 0.08,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.144
+            }
+          },
+          "laterVideo": {
+            "n": 6882,
+            "r2": -0.002755,
+            "spearman": 0.088796,
+            "gaussianBitsPerObservation": 0.002012,
+            "pairwiseMicroAccuracy": 0.500684,
+            "pairwiseEqualSourceAccuracy": 0.509639,
+            "sourceMacroMeanSpearman": 0.006596,
+            "sourceMacroPositiveFraction": 0.495726,
+            "withinSourcePermutationP": 0.212,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.293333
+            }
+          }
+        },
+        "together": {
+          "unseenCreator": {
+            "n": 9951,
+            "r2": 0.007926,
+            "spearman": 0.092196,
+            "gaussianBitsPerObservation": 0.005916,
+            "pairwiseMicroAccuracy": 0.505821,
+            "pairwiseEqualSourceAccuracy": 0.519914,
+            "sourceMacroMeanSpearman": -0.001028,
+            "sourceMacroPositiveFraction": 0.475336,
+            "withinSourcePermutationP": 0.02,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.72,
+              "holmP": 0.4,
+              "benjaminiHochbergQ": 0.042353
+            }
+          },
+          "laterVideo": {
+            "n": 6881,
+            "r2": -0.003844,
+            "spearman": 0.049569,
+            "gaussianBitsPerObservation": 0.001204,
+            "pairwiseMicroAccuracy": 0.501901,
+            "pairwiseEqualSourceAccuracy": 0.503984,
+            "sourceMacroMeanSpearman": 0.016935,
+            "sourceMacroPositiveFraction": 0.470085,
+            "withinSourcePermutationP": 0.086,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.147429
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "hinge_spline:empirical_bayes",
+      "ageSpecification": "hinge_spline",
+      "historySpecification": "empirical_bayes",
+      "results": {
+        "visual": {
+          "unseenCreator": {
+            "n": 9952,
+            "r2": 0.055402,
+            "spearman": 0.225829,
+            "gaussianBitsPerObservation": 0.041171,
+            "pairwiseMicroAccuracy": 0.528833,
+            "pairwiseEqualSourceAccuracy": 0.526896,
+            "sourceMacroMeanSpearman": 0.027214,
+            "sourceMacroPositiveFraction": 0.506726,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          },
+          "laterVideo": {
+            "n": 6882,
+            "r2": 0.028179,
+            "spearman": 0.224794,
+            "gaussianBitsPerObservation": 0.03654,
+            "pairwiseMicroAccuracy": 0.526996,
+            "pairwiseEqualSourceAccuracy": 0.534925,
+            "sourceMacroMeanSpearman": 0.032381,
+            "sourceMacroPositiveFraction": 0.482906,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          }
+        },
+        "together": {
+          "unseenCreator": {
+            "n": 9951,
+            "r2": 0.055066,
+            "spearman": 0.222805,
+            "gaussianBitsPerObservation": 0.04092,
+            "pairwiseMicroAccuracy": 0.524803,
+            "pairwiseEqualSourceAccuracy": 0.518026,
+            "sourceMacroMeanSpearman": 0.027624,
+            "sourceMacroPositiveFraction": 0.509716,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          },
+          "laterVideo": {
+            "n": 6881,
+            "r2": 0.02532,
+            "spearman": 0.21428,
+            "gaussianBitsPerObservation": 0.034362,
+            "pairwiseMicroAccuracy": 0.523498,
+            "pairwiseEqualSourceAccuracy": 0.517958,
+            "sourceMacroMeanSpearman": 0.068727,
+            "sourceMacroPositiveFraction": 0.487179,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "hinge_spline:unshrunk_prior_mean",
+      "ageSpecification": "hinge_spline",
+      "historySpecification": "unshrunk_prior_mean",
+      "results": {
+        "visual": {
+          "unseenCreator": {
+            "n": 9952,
+            "r2": 0.005171,
+            "spearman": 0.081301,
+            "gaussianBitsPerObservation": 0.003913,
+            "pairwiseMicroAccuracy": 0.506273,
+            "pairwiseEqualSourceAccuracy": 0.511155,
+            "sourceMacroMeanSpearman": -0.02116,
+            "sourceMacroPositiveFraction": 0.461883,
+            "withinSourcePermutationP": 0.22,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.293333
+            }
+          },
+          "laterVideo": {
+            "n": 6882,
+            "r2": -0.004763,
+            "spearman": 0.092925,
+            "gaussianBitsPerObservation": 0.002149,
+            "pairwiseMicroAccuracy": 0.500684,
+            "pairwiseEqualSourceAccuracy": 0.500453,
+            "sourceMacroMeanSpearman": 0.021059,
+            "sourceMacroPositiveFraction": 0.512821,
+            "withinSourcePermutationP": 0.554,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.62325
+            }
+          }
+        },
+        "together": {
+          "unseenCreator": {
+            "n": 9951,
+            "r2": 0.007967,
+            "spearman": 0.091539,
+            "gaussianBitsPerObservation": 0.005948,
+            "pairwiseMicroAccuracy": 0.503652,
+            "pairwiseEqualSourceAccuracy": 0.523222,
+            "sourceMacroMeanSpearman": -0.016513,
+            "sourceMacroPositiveFraction": 0.484305,
+            "withinSourcePermutationP": 0.116,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.189818
+            }
+          },
+          "laterVideo": {
+            "n": 6881,
+            "r2": -0.005938,
+            "spearman": 0.050141,
+            "gaussianBitsPerObservation": 0.001275,
+            "pairwiseMicroAccuracy": 0.495817,
+            "pairwiseEqualSourceAccuracy": 0.491533,
+            "sourceMacroMeanSpearman": -0.001045,
+            "sourceMacroPositiveFraction": 0.452991,
+            "withinSourcePermutationP": 0.308,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.382345
+            }
+          }
+        }
+      }
+    }
+  ],
+  "historySupportSpecifications": [
+    {
+      "minimumHistory": 1,
+      "results": {
+        "visual": {
+          "unseenCreator": {
+            "n": 9952,
+            "r2": 0.055402,
+            "spearman": 0.225829,
+            "gaussianBitsPerObservation": 0.041171,
+            "pairwiseMicroAccuracy": 0.528833,
+            "pairwiseEqualSourceAccuracy": 0.526896,
+            "sourceMacroMeanSpearman": 0.027214,
+            "sourceMacroPositiveFraction": 0.506726,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          },
+          "laterVideo": {
+            "n": 6882,
+            "r2": 0.028179,
+            "spearman": 0.224794,
+            "gaussianBitsPerObservation": 0.03654,
+            "pairwiseMicroAccuracy": 0.526996,
+            "pairwiseEqualSourceAccuracy": 0.534925,
+            "sourceMacroMeanSpearman": 0.032381,
+            "sourceMacroPositiveFraction": 0.482906,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          }
+        },
+        "together": {
+          "unseenCreator": {
+            "n": 9951,
+            "r2": 0.055066,
+            "spearman": 0.222805,
+            "gaussianBitsPerObservation": 0.04092,
+            "pairwiseMicroAccuracy": 0.524803,
+            "pairwiseEqualSourceAccuracy": 0.518026,
+            "sourceMacroMeanSpearman": 0.027624,
+            "sourceMacroPositiveFraction": 0.509716,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          },
+          "laterVideo": {
+            "n": 6881,
+            "r2": 0.02532,
+            "spearman": 0.21428,
+            "gaussianBitsPerObservation": 0.034362,
+            "pairwiseMicroAccuracy": 0.523498,
+            "pairwiseEqualSourceAccuracy": 0.517958,
+            "sourceMacroMeanSpearman": 0.068727,
+            "sourceMacroPositiveFraction": 0.487179,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          }
+        }
+      },
+      "reusedPrimarySpecification": true
+    },
+    {
+      "minimumHistory": 2,
+      "results": {
+        "visual": {
+          "unseenCreator": {
+            "n": 6434,
+            "r2": 0.043127,
+            "spearman": 0.204198,
+            "gaussianBitsPerObservation": 0.031838,
+            "pairwiseMicroAccuracy": 0.523778,
+            "pairwiseEqualSourceAccuracy": 0.543197,
+            "sourceMacroMeanSpearman": 0.033997,
+            "sourceMacroPositiveFraction": 0.515021,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          },
+          "laterVideo": {
+            "n": 4486,
+            "r2": 0.005605,
+            "spearman": 0.218889,
+            "gaussianBitsPerObservation": 0.026238,
+            "pairwiseMicroAccuracy": 0.522137,
+            "pairwiseEqualSourceAccuracy": 0.528153,
+            "sourceMacroMeanSpearman": 0.05671,
+            "sourceMacroPositiveFraction": 0.497717,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          }
+        },
+        "together": {
+          "unseenCreator": {
+            "n": 6434,
+            "r2": 0.04073,
+            "spearman": 0.193632,
+            "gaussianBitsPerObservation": 0.030033,
+            "pairwiseMicroAccuracy": 0.526154,
+            "pairwiseEqualSourceAccuracy": 0.53378,
+            "sourceMacroMeanSpearman": 0.04925,
+            "sourceMacroPositiveFraction": 0.519313,
+            "withinSourcePermutationP": 0.006,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.216,
+              "holmP": 0.126,
+              "benjaminiHochbergQ": 0.0135
+            }
+          },
+          "laterVideo": {
+            "n": 4486,
+            "r2": 0.001752,
+            "spearman": 0.196788,
+            "gaussianBitsPerObservation": 0.023449,
+            "pairwiseMicroAccuracy": 0.521471,
+            "pairwiseEqualSourceAccuracy": 0.526875,
+            "sourceMacroMeanSpearman": 0.067156,
+            "sourceMacroPositiveFraction": 0.52968,
+            "withinSourcePermutationP": 0.002,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 0.072,
+              "holmP": 0.072,
+              "benjaminiHochbergQ": 0.0048
+            }
+          }
+        }
+      },
+      "reusedPrimarySpecification": false
+    },
+    {
+      "minimumHistory": 5,
+      "results": {
+        "visual": {
+          "unseenCreator": {
+            "n": 2795,
+            "r2": 0.036323,
+            "spearman": 0.202085,
+            "gaussianBitsPerObservation": 0.027268,
+            "pairwiseMicroAccuracy": 0.519597,
+            "pairwiseEqualSourceAccuracy": 0.524189,
+            "sourceMacroMeanSpearman": -0.012984,
+            "sourceMacroPositiveFraction": 0.481818,
+            "withinSourcePermutationP": 0.068,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.128842
+            }
+          },
+          "laterVideo": {
+            "n": 1735,
+            "r2": -0.023621,
+            "spearman": 0.175042,
+            "gaussianBitsPerObservation": 0.013173,
+            "pairwiseMicroAccuracy": 0.53085,
+            "pairwiseEqualSourceAccuracy": 0.514146,
+            "sourceMacroMeanSpearman": 0.047548,
+            "sourceMacroPositiveFraction": 0.543353,
+            "withinSourcePermutationP": 0.028,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 0.532,
+              "benjaminiHochbergQ": 0.056
+            }
+          }
+        },
+        "together": {
+          "unseenCreator": {
+            "n": 2795,
+            "r2": 0.030607,
+            "spearman": 0.179725,
+            "gaussianBitsPerObservation": 0.023002,
+            "pairwiseMicroAccuracy": 0.521391,
+            "pairwiseEqualSourceAccuracy": 0.517174,
+            "sourceMacroMeanSpearman": 0.002373,
+            "sourceMacroPositiveFraction": 0.509091,
+            "withinSourcePermutationP": 0.262,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.336857
+            }
+          },
+          "laterVideo": {
+            "n": 1735,
+            "r2": -0.027753,
+            "spearman": 0.139965,
+            "gaussianBitsPerObservation": 0.010267,
+            "pairwiseMicroAccuracy": 0.524331,
+            "pairwiseEqualSourceAccuracy": 0.507521,
+            "sourceMacroMeanSpearman": -0.005137,
+            "sourceMacroPositiveFraction": 0.479769,
+            "withinSourcePermutationP": 0.152,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.21888
+            }
+          }
+        }
+      },
+      "reusedPrimarySpecification": false
+    },
+    {
+      "minimumHistory": 10,
+      "results": {
+        "visual": {
+          "unseenCreator": {
+            "n": 1196,
+            "r2": 0.022723,
+            "spearman": 0.180228,
+            "gaussianBitsPerObservation": 0.017198,
+            "pairwiseMicroAccuracy": 0.491877,
+            "pairwiseEqualSourceAccuracy": 0.457909,
+            "sourceMacroMeanSpearman": -0.058258,
+            "sourceMacroPositiveFraction": 0.431818,
+            "withinSourcePermutationP": 0.916,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.942171
+            }
+          },
+          "laterVideo": {
+            "n": 723,
+            "r2": -0.00756,
+            "spearman": 0.149452,
+            "gaussianBitsPerObservation": 0.008352,
+            "pairwiseMicroAccuracy": 0.502908,
+            "pairwiseEqualSourceAccuracy": 0.504465,
+            "sourceMacroMeanSpearman": -0.031781,
+            "sourceMacroPositiveFraction": 0.466667,
+            "withinSourcePermutationP": 0.69,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.752727
+            }
+          }
+        },
+        "together": {
+          "unseenCreator": {
+            "n": 1196,
+            "r2": 0.011351,
+            "spearman": 0.140076,
+            "gaussianBitsPerObservation": 0.008853,
+            "pairwiseMicroAccuracy": 0.490464,
+            "pairwiseEqualSourceAccuracy": 0.46025,
+            "sourceMacroMeanSpearman": -0.068037,
+            "sourceMacroPositiveFraction": 0.477273,
+            "withinSourcePermutationP": 0.982,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.982
+            }
+          },
+          "laterVideo": {
+            "n": 723,
+            "r2": -0.010444,
+            "spearman": 0.092515,
+            "gaussianBitsPerObservation": 0.00629,
+            "pairwiseMicroAccuracy": 0.510092,
+            "pairwiseEqualSourceAccuracy": 0.533987,
+            "sourceMacroMeanSpearman": -0.006465,
+            "sourceMacroPositiveFraction": 0.453333,
+            "withinSourcePermutationP": 0.488,
+            "multiplicity": {
+              "family": "all predeclared baseline/history-support-by-modality-by-split checks",
+              "hypotheses": 36,
+              "bonferroniP": 1.0,
+              "holmP": 1.0,
+              "benjaminiHochbergQ": 0.56671
+            }
+          }
+        }
+      },
+      "reusedPrimarySpecification": false
+    }
+  ],
+  "stability": {
+    "visual": {
+      "unseenCreator": {
+        "specifications": 6,
+        "spearmanRange": [
+          0.080947,
+          0.263661
+        ],
+        "bitsRange": [
+          0.003913,
+          0.058015
+        ],
+        "pairwiseMicroAccuracyRange": [
+          0.506237,
+          0.528833
+        ],
+        "sourceMacroMeanSpearmanRange": [
+          -0.02116,
+          0.059349
+        ],
+        "positiveSpearmanSpecifications": 6,
+        "positiveBitsSpecifications": 6,
+        "aboveChancePairwiseSpecifications": 6
+      },
+      "laterVideo": {
+        "specifications": 6,
+        "spearmanRange": [
+          0.077341,
+          0.261512
+        ],
+        "bitsRange": [
+          0.001834,
+          0.066713
+        ],
+        "pairwiseMicroAccuracyRange": [
+          0.485323,
+          0.529278
+        ],
+        "sourceMacroMeanSpearmanRange": [
+          -0.021937,
+          0.067093
+        ],
+        "positiveSpearmanSpecifications": 6,
+        "positiveBitsSpecifications": 6,
+        "aboveChancePairwiseSpecifications": 5
+      }
+    },
+    "together": {
+      "unseenCreator": {
+        "specifications": 6,
+        "spearmanRange": [
+          0.089177,
+          0.261075
+        ],
+        "bitsRange": [
+          0.004847,
+          0.057305
+        ],
+        "pairwiseMicroAccuracyRange": [
+          0.503652,
+          0.525092
+        ],
+        "sourceMacroMeanSpearmanRange": [
+          -0.016513,
+          0.04128
+        ],
+        "positiveSpearmanSpecifications": 6,
+        "positiveBitsSpecifications": 6,
+        "aboveChancePairwiseSpecifications": 6
+      },
+      "laterVideo": {
+        "specifications": 6,
+        "spearmanRange": [
+          0.031422,
+          0.253367
+        ],
+        "bitsRange": [
+          0.000854,
+          0.06293
+        ],
+        "pairwiseMicroAccuracyRange": [
+          0.476806,
+          0.527757
+        ],
+        "sourceMacroMeanSpearmanRange": [
+          -0.008141,
+          0.093045
+        ],
+        "positiveSpearmanSpecifications": 6,
+        "positiveBitsSpecifications": 6,
+        "aboveChancePairwiseSpecifications": 4
+      }
+    }
+  },
+  "historySupportStability": {
+    "visual": {
+      "unseenCreator": {
+        "specifications": 4,
+        "spearmanRange": [
+          0.180228,
+          0.225829
+        ],
+        "bitsRange": [
+          0.017198,
+          0.041171
+        ],
+        "pairwiseMicroAccuracyRange": [
+          0.491877,
+          0.528833
+        ],
+        "sourceMacroMeanSpearmanRange": [
+          -0.058258,
+          0.033997
+        ],
+        "positiveSpearmanSpecifications": 4,
+        "positiveBitsSpecifications": 4,
+        "aboveChancePairwiseSpecifications": 3
+      },
+      "laterVideo": {
+        "specifications": 4,
+        "spearmanRange": [
+          0.149452,
+          0.224794
+        ],
+        "bitsRange": [
+          0.008352,
+          0.03654
+        ],
+        "pairwiseMicroAccuracyRange": [
+          0.502908,
+          0.53085
+        ],
+        "sourceMacroMeanSpearmanRange": [
+          -0.031781,
+          0.05671
+        ],
+        "positiveSpearmanSpecifications": 4,
+        "positiveBitsSpecifications": 4,
+        "aboveChancePairwiseSpecifications": 4
+      }
+    },
+    "together": {
+      "unseenCreator": {
+        "specifications": 4,
+        "spearmanRange": [
+          0.140076,
+          0.222805
+        ],
+        "bitsRange": [
+          0.008853,
+          0.04092
+        ],
+        "pairwiseMicroAccuracyRange": [
+          0.490464,
+          0.526154
+        ],
+        "sourceMacroMeanSpearmanRange": [
+          -0.068037,
+          0.04925
+        ],
+        "positiveSpearmanSpecifications": 4,
+        "positiveBitsSpecifications": 4,
+        "aboveChancePairwiseSpecifications": 3
+      },
+      "laterVideo": {
+        "specifications": 4,
+        "spearmanRange": [
+          0.092515,
+          0.21428
+        ],
+        "bitsRange": [
+          0.00629,
+          0.034362
+        ],
+        "pairwiseMicroAccuracyRange": [
+          0.510092,
+          0.524331
+        ],
+        "sourceMacroMeanSpearmanRange": [
+          -0.006465,
+          0.068727
+        ],
+        "positiveSpearmanSpecifications": 4,
+        "positiveBitsSpecifications": 4,
+        "aboveChancePairwiseSpecifications": 4
+      }
+    }
+  },
+  "claimBoundary": [
+    "This is a nuisance-model sensitivity grid, not six independent replications.",
+    "The current corpus has one historically timed public view observation per video.",
+    "A stable association remains observational until a prospective publishing intervention."
+  ],
+  "contentHash": "fc5739de2b0c6310ff3bee19fcce36f9b31b785dcd59d0110a734239b0739310"
+}

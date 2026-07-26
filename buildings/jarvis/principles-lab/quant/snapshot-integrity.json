@@ -1,0 +1,149 @@
+{
+  "schema": "quant-frozen-snapshot-integrity-v1",
+  "generatedAt": "2026-07-26T18:24:14.994896+00:00",
+  "snapshotRunId": "efaa82b96450e04275a4c457",
+  "snapshotIdentityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7",
+  "channels": [
+    {
+      "id": "shorts:visual",
+      "mapRows": 66157,
+      "vectorRows": 66157,
+      "dimensions": 1536,
+      "mapAndVectorRowCountMatch": true,
+      "mapAndVectorIdOrderMatch": true,
+      "duplicateMapIds": 0,
+      "duplicateVectorIds": 0,
+      "sampledVectors": 10000,
+      "sampleAllFinite": true,
+      "sampleNorm": {
+        "minimum": 0.999999,
+        "p10": 1.0,
+        "median": 1.0,
+        "p90": 1.0,
+        "maximum": 1.000001
+      },
+      "mapHash": "c42d6525c3553e3a02683f285f3b5bfc33b2f2db4d5c336b05f1f71cbf877a12",
+      "vectorHash": "b9046e54858a2852816c6262d28497fc7e6d4ac05939c3fb7ff7214c3b2c8795"
+    },
+    {
+      "id": "shorts:text",
+      "mapRows": 23183,
+      "vectorRows": 23183,
+      "dimensions": 1536,
+      "mapAndVectorRowCountMatch": true,
+      "mapAndVectorIdOrderMatch": true,
+      "duplicateMapIds": 0,
+      "duplicateVectorIds": 0,
+      "sampledVectors": 10000,
+      "sampleAllFinite": true,
+      "sampleNorm": {
+        "minimum": 0.999999,
+        "p10": 1.0,
+        "median": 1.0,
+        "p90": 1.0,
+        "maximum": 1.000001
+      },
+      "mapHash": "7c01ff360e493edc8d0dc4afa3530fd3a674da8720fdfde0924bc7959b42c13e",
+      "vectorHash": "61c86be8e028e707b13dd4cb8598c1f20ea133637094cb3aeddc301b64ec20a2"
+    },
+    {
+      "id": "shorts:together",
+      "mapRows": 66142,
+      "vectorRows": 66142,
+      "dimensions": 1536,
+      "mapAndVectorRowCountMatch": true,
+      "mapAndVectorIdOrderMatch": true,
+      "duplicateMapIds": 0,
+      "duplicateVectorIds": 0,
+      "sampledVectors": 10000,
+      "sampleAllFinite": true,
+      "sampleNorm": {
+        "minimum": 0.999999,
+        "p10": 1.0,
+        "median": 1.0,
+        "p90": 1.0,
+        "maximum": 1.000001
+      },
+      "mapHash": "4ea467284368820a951ed5b8aaa68f463adff1b282d5269212723d509710330d",
+      "vectorHash": "883f1098e23c1f283159fba6440e4039fa691c5ce269d34872339e0bb00b7e03"
+    },
+    {
+      "id": "long:visual",
+      "mapRows": 41584,
+      "vectorRows": 41684,
+      "dimensions": 1536,
+      "mapAndVectorRowCountMatch": false,
+      "mapAndVectorIdOrderMatch": false,
+      "duplicateMapIds": 0,
+      "duplicateVectorIds": 0,
+      "sampledVectors": 10000,
+      "sampleAllFinite": true,
+      "sampleNorm": {
+        "minimum": 0.999999,
+        "p10": 1.0,
+        "median": 1.0,
+        "p90": 1.0,
+        "maximum": 1.000001
+      },
+      "mapHash": "ce69711dd7a71b6fc49704aa43ac4e030693d44ca2dbd3e1b8c37cecc5b61cac",
+      "vectorHash": "dbdc7800c3663d4816944d5d3a97f3a4b00c99090c08a768578adcc33c74a419"
+    },
+    {
+      "id": "long:text",
+      "mapRows": 41587,
+      "vectorRows": 41687,
+      "dimensions": 1536,
+      "mapAndVectorRowCountMatch": false,
+      "mapAndVectorIdOrderMatch": false,
+      "duplicateMapIds": 0,
+      "duplicateVectorIds": 0,
+      "sampledVectors": 10000,
+      "sampleAllFinite": true,
+      "sampleNorm": {
+        "minimum": 0.999999,
+        "p10": 1.0,
+        "median": 1.0,
+        "p90": 1.0,
+        "maximum": 1.000001
+      },
+      "mapHash": "65966decf029070384ffc7391b05e8b8596c1876b3ad371112a39b9b7ffbf77e",
+      "vectorHash": "415ae2da7208719d8f7de40306952c246ad97fa1edcf78de5b08003015fcf351"
+    },
+    {
+      "id": "long:together",
+      "mapRows": 41587,
+      "vectorRows": 41587,
+      "dimensions": 1536,
+      "mapAndVectorRowCountMatch": true,
+      "mapAndVectorIdOrderMatch": true,
+      "duplicateMapIds": 0,
+      "duplicateVectorIds": 0,
+      "sampledVectors": 10000,
+      "sampleAllFinite": true,
+      "sampleNorm": {
+        "minimum": 0.999999,
+        "p10": 1.0,
+        "median": 1.0,
+        "p90": 1.0,
+        "maximum": 1.000001
+      },
+      "mapHash": "406b56cb27e92922b3eb14165762f2a8d1377d325dd1fda7a2b77f2b5e4898da",
+      "vectorHash": "3796c4f689f4016bcda01e483e7fe76c181ddbd97d024da85a714381bea61c67"
+    }
+  ],
+  "failures": [
+    "long:visual: row count mismatch",
+    "long:visual: ID order mismatch",
+    "long:text: row count mismatch",
+    "long:text: ID order mismatch"
+  ],
+  "accepted": false,
+  "checks": [
+    "map and raw-vector row counts match",
+    "map and raw-vector IDs match in exact order",
+    "IDs are unique",
+    "raw vectors have 1536 dimensions",
+    "a deterministic 10,000-row vector sample is finite"
+  ],
+  "contentHash": "cbea72693a18abc20f516befc0a4d94ea0327b09bcd617bb22ae58c2686ecb88"
+}

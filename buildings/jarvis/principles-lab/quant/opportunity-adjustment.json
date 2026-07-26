@@ -1,0 +1,129 @@
+{
+  "schema": "creator-relative-opportunity-adjustment-v2",
+  "generatedAt": "2026-07-26T17:51:26.715Z",
+  "estimand": "Historically timed log views minus a source-held-out age expectation and an empirical-Bayes creator effect built only from non-duplicate outcomes observed before the target was published.",
+  "targetAvailability": "Selected-corpus observational target with historically observable creator context. It is not impression-normalized or causal package lift.",
+  "leakageBoundary": [
+    "The target video outcome is never used in its opportunity baseline.",
+    "The age curve excludes the target source entirely.",
+    "Only same-source outcomes observed before the target publication contribute to source opportunity.",
+    "Outcome-free exact and semantic near-copy families are excluded from source history.",
+    "Current subscribers, likes, comments, projected scores, and future same-source videos are excluded."
+  ],
+  "formats": [
+    {
+      "format": "shorts",
+      "candidateRows": 53681,
+      "eligibleRows": 9973,
+      "eligibleSources": 4199,
+      "eligibilityFraction": 0.185783,
+      "foldPolicy": "The global age spline is fit on four source folds and applied to the fifth. Creator opportunity uses only historically observable videos from the same source, excludes outcome-free semantic near-copy families, and never includes the target outcome in its baseline.",
+      "historyObservabilityRule": "A prior video is usable only when its outcome observation time is no later than the target publication time.",
+      "sourceShrinkage": {
+        "model": "normal-normal empirical Bayes",
+        "residualVariance": 0.520414,
+        "sourcePriorVariance": 0.140058,
+        "minimumHistory": 1,
+        "maximumHistory": null
+      },
+      "ageModel": {
+        "features": [
+          "log1p(ageDays)",
+          "polynomial degree 3",
+          "hinge@7d",
+          "hinge@30d",
+          "hinge@90d",
+          "hinge@180d",
+          "hinge@365d",
+          "hinge@730d"
+        ],
+        "sourceHeldOutR2": 0.458805,
+        "sourceHeldOutSpearman": 0.657552,
+        "maeLog10": 0.51083
+      },
+      "opportunityModel": {
+        "strictlyPriorHistoryR2": 0.609533,
+        "strictlyPriorHistorySpearman": 0.761505,
+        "maeLog10": 0.434142,
+        "incrementalR2OverAge": 0.150728
+      },
+      "adjustedTarget": {
+        "meanLift": 0.085297,
+        "standardDeviationLift": 0.55059,
+        "p10Lift": -0.544053,
+        "p50Lift": 0.018774,
+        "p90Lift": 0.838183,
+        "meanZ": 0.111937,
+        "ageCorrelation": 0.029178,
+        "sourceMacro": {
+          "sources": 4199,
+          "mean": 0.066317,
+          "standardDeviation": 0.519415,
+          "p10": -0.534591,
+          "p90": 0.750962
+        }
+      }
+    },
+    {
+      "format": "long",
+      "candidateRows": 93671,
+      "eligibleRows": 9792,
+      "eligibleSources": 5001,
+      "eligibilityFraction": 0.104536,
+      "foldPolicy": "The global age spline is fit on four source folds and applied to the fifth. Creator opportunity uses only historically observable videos from the same source, excludes outcome-free semantic near-copy families, and never includes the target outcome in its baseline.",
+      "historyObservabilityRule": "A prior video is usable only when its outcome observation time is no later than the target publication time.",
+      "sourceShrinkage": {
+        "model": "normal-normal empirical Bayes",
+        "residualVariance": 0.706383,
+        "sourcePriorVariance": 0.302371,
+        "minimumHistory": 1,
+        "maximumHistory": null
+      },
+      "ageModel": {
+        "features": [
+          "log1p(ageDays)",
+          "polynomial degree 3",
+          "hinge@7d",
+          "hinge@30d",
+          "hinge@90d",
+          "hinge@180d",
+          "hinge@365d",
+          "hinge@730d"
+        ],
+        "sourceHeldOutR2": 0.004057,
+        "sourceHeldOutSpearman": 0.210113,
+        "maeLog10": 0.577623
+      },
+      "opportunityModel": {
+        "strictlyPriorHistoryR2": 0.512646,
+        "strictlyPriorHistorySpearman": 0.709313,
+        "maeLog10": 0.409637,
+        "incrementalR2OverAge": 0.508589
+      },
+      "adjustedTarget": {
+        "meanLift": 0.048261,
+        "standardDeviationLift": 0.510614,
+        "p10Lift": -0.612142,
+        "p50Lift": 0.05338,
+        "p90Lift": 0.700243,
+        "meanZ": 0.0557,
+        "ageCorrelation": 0.015993,
+        "sourceMacro": {
+          "sources": 5001,
+          "mean": 0.020041,
+          "standardDeviation": 0.491618,
+          "p10": -0.612971,
+          "p90": 0.654942
+        }
+      }
+    }
+  ],
+  "targetRows": 19765,
+  "targetPath": "buildings/jarvis/principles-lab/quant/.cache/opportunity-targets.json.gz",
+  "strictClusterPanelPath": "buildings/jarvis/principles-lab/quant/.cache/strict-cluster-panel.json",
+  "sourcePanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+  "targetHash": "def1540026c4fef5032bc23183f3fde1673eea15dbcc91b59afda721bb479484",
+  "semanticFamilyHash": "466eb56407364b07de9c8cc9dc2c5e1d9c918e1f3ea2d8caea417e1da935b357",
+  "falsificationRule": "A content abstraction must add positive source-macro predictive value for creator-relative lift in fold-local rolling-origin, unseen-creator, and family-OOD tests. Pooled raw-view association is insufficient.",
+  "contentHash": "1afdf11ef8c7c10fb2fd7b86531fd27afba7b4d984455f0d22f326cd5200512e"
+}

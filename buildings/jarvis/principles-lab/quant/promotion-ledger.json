@@ -1,0 +1,2440 @@
+{
+  "schema": "jarvis-multiplicity-aware-promotion-ledger-v2",
+  "generatedAt": "2026-07-26T18:21:31.978Z",
+  "alpha": 0.05,
+  "governingContract": "principles-lab/DISCOVERY_CONTRACT.md",
+  "observationIdentity": "platform + format + video_id + outcome_snapshot + representation_contract",
+  "evidenceEvents": [
+    {
+      "id": "unified_public_panel_current_generation",
+      "rows": 147352,
+      "class": "format-gated_retrospective_panel",
+      "independentOutcomeEvent": false,
+      "promotionEligibleRows": 53681,
+      "promotionEligibleRowsByFormat": {
+        "shorts": 53681,
+        "long": 0
+      },
+      "hardGatePass": false,
+      "invalidatedArtifacts": [
+        "opportunity-targets",
+        "opportunity-adjustment",
+        "cluster-outcomes-adjusted",
+        "nested-outcome-validation",
+        "raw-embedding-validation",
+        "within-creator-delta-validation",
+        "baseline-sensitivity-validation"
+      ],
+      "reason": "The current panel is bound to the two-read immutable snapshot and passes storedAt, stored-only, unrechecked, reconstructed-geometry, and S_j <= T_i gates. Shorts descendants with matching lineage are admissible for retrospective validation. Long remains blocked by strict all-modality support."
+    },
+    {
+      "id": "operations_saved_projected_keep",
+      "rows": 984,
+      "class": "projected_target",
+      "independentOutcomeEvent": false,
+      "transformedBy": [
+        "23 resolutions",
+        "782 partitions",
+        "2,590 raw candidates"
+      ]
+    },
+    {
+      "id": "operations_private_observed_transport",
+      "rows": 632,
+      "groups": 4,
+      "class": "observed_outcome",
+      "identityStatus": "IDs are not persisted in the transport artifact; conservatively assume overlap with the private Retention/Tribe corpus."
+    },
+    {
+      "id": "promise_retention_owned_private_analytics",
+      "rows": 211,
+      "class": "observed_outcome",
+      "nestedViews": {
+        "promise": 208,
+        "retention": 211,
+        "tribe": 130,
+        "exactIdOverlap": {
+          "promiseRetention": 208,
+          "promiseTribe": 130,
+          "retentionTribe": 130
+        }
+      },
+      "independentOutcomeEventsCounted": 1
+    },
+    {
+      "id": "market_hold_external_public_text",
+      "rows": 5353,
+      "groups": 3818,
+      "class": "observed_input_plus_public_views",
+      "promiseIdsInTraining": 0,
+      "independentFromOwnedPromiseOutcomes": true
+    },
+    {
+      "id": "legacy_mixed_video_snapshots",
+      "rowsRange": [
+        50,
+        370
+      ],
+      "class": "mixed_pre_and_post_outcome",
+      "identityStatus": "Compact artifacts omit video IDs and outcome-snapshot identity; assume overlap with every compatible owned/public corpus until proven otherwise."
+    }
+  ],
+  "adaptiveSearchUniverse": {
+    "knownOutcomeOrientedSearchExecutionsLowerBound": 485121,
+    "exactVisibleBonferroniThreshold": 1.0306706986504398e-7,
+    "note": "This is a count of artifact-visible search executions, not independent evidence. It excludes unlogged analyst choices and does not add duplicate registry views.",
+    "outcomeBlindGeometry": {
+      "operationsPartitionConfigurations": 782,
+      "operationsRawCandidates": 2590,
+      "promiseRows": 50052
+    },
+    "outcomeOrientedExecutions": {
+      "operations": 138,
+      "promise": 6942,
+      "retention": 74,
+      "tribe": 31020,
+      "legacyExperimentLog": 446947
+    },
+    "transformedOutputsNotAddedAsNewEvidence": {
+      "legacyRegistryEntries": 445978,
+      "legacyDerivedCompactRows": 443514,
+      "legacyGraphDerivedEdges": 438444,
+      "archivedResearchSnapshots": 1332
+    }
+  },
+  "multiplicityPolicy": {
+    "dataIntegrityPrecondition": "Panel integrity gates are logically prior to multiplicity. A maxT p-value or FDR q-value computed from an inadmissible panel remains inadmissible; correction cannot repair source timing, recheck leakage, or mixed generations.",
+    "preferredSharedEventNull": "For overlapping Promise, Retention, and Tribe claims, permute one shared video-level outcome assignment inside predeclared account x chronological blocks. Rerun every boundary, cluster, lag, feature, model, and endpoint choice. Save the maximum studentized statistic from each permutation.",
+    "familyHierarchy": [
+      "Gate each evidence event with a max-stat permutation p-value.",
+      "Apply BY across event/family gates because arbitrary dependence is expected.",
+      "Inside a passed family, apply maxT or BY across every candidate and endpoint.",
+      "Require an untouched source/time or prospective lockbox for promotion."
+    ],
+    "currentFallback": "Where replayable row-level statistics exist, this ledger reports global BY and a Bonferroni-min-p family gate followed by BY across families. Missing search history is a blocker, never permission to use an unadjusted p-value.",
+    "evidenceClassRule": "Multiplicity correction controls false discoveries; it cannot turn a projected score, post-outcome descendant, generated candidate, or manual probe into observed validation.",
+    "promotionRule": "ceiling = minimum(family accounting, valid null, out-of-fold, source/time transfer, format transfer, prospective seal)"
+  },
+  "audits": {
+    "unifiedPanel": {
+      "schema": null,
+      "summarySchema": "principles-unified-observation-panel-v2",
+      "rows": 147352,
+      "formats": {
+        "shorts": {
+          "rows": 53681,
+          "uniqueObservationIds": 53681,
+          "duplicateObservationIds": 0,
+          "currentAllModalityRows": 16879,
+          "storedFieldPresent": 0,
+          "recheckedFieldPresent": 0,
+          "storedAtFieldPresent": 0,
+          "observationSecondsPresent": 53681,
+          "observationTimeSourceStoredAt": 53681,
+          "snapshotSecondsPresent": 53681,
+          "uniqueSnapshotSeconds": 43061,
+          "sourceCrosscheck": {
+            "sameGenerationAsPanel": true,
+            "sourceRowsFound": 53681,
+            "storedTrue": 53681,
+            "storedFalse": 0,
+            "removedFalse": 53681,
+            "removedTrue": 0,
+            "recheckedFalse": 53681,
+            "recheckedTrue": 0,
+            "finiteStoredAt": 53681,
+            "observationTimeMatchesStoredAt": 53681,
+            "strictRows": 53681
+          },
+          "historicallyObservableSupport": {
+            "targetsWithPrior": 10942,
+            "allModalityTargetsWithPrior": 3071,
+            "priorComparisonsUsed": 57621,
+            "observabilityViolationsInComputedHistory": 0,
+            "unobservablePublishedPriorsExcluded": 76633
+          }
+        },
+        "long": {
+          "rows": 93671,
+          "uniqueObservationIds": 93671,
+          "duplicateObservationIds": 0,
+          "currentAllModalityRows": 35214,
+          "storedFieldPresent": 0,
+          "recheckedFieldPresent": 0,
+          "storedAtFieldPresent": 0,
+          "observationSecondsPresent": 93671,
+          "observationTimeSourceStoredAt": 93671,
+          "snapshotSecondsPresent": 93671,
+          "uniqueSnapshotSeconds": 28644,
+          "sourceCrosscheck": {
+            "sameGenerationAsPanel": true,
+            "sourceRowsFound": 93671,
+            "storedTrue": 93671,
+            "storedFalse": 0,
+            "removedFalse": 93671,
+            "removedTrue": 0,
+            "recheckedFalse": 93671,
+            "recheckedTrue": 0,
+            "finiteStoredAt": 93671,
+            "observationTimeMatchesStoredAt": 93671,
+            "strictRows": 93671
+          },
+          "historicallyObservableSupport": {
+            "targetsWithPrior": 9818,
+            "allModalityTargetsWithPrior": 171,
+            "priorComparisonsUsed": 80998,
+            "observabilityViolationsInComputedHistory": 0,
+            "unobservablePublishedPriorsExcluded": 276320
+          }
+        }
+      },
+      "currentPanelHash": {
+        "compressedBytesSha256": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+        "builderCompatibilityStringHash": "b10a11a7b901c51494da26f4442d67085f03e3a24fd0b35e76af59d3a23a94a1"
+      },
+      "panelProvenance": {
+        "entries": 14,
+        "sourceKeys": 14,
+        "readsPerMutableKey": {
+          "library/db.json": 1,
+          "longform/db.json": 1,
+          "raw/visual/map.json": 1,
+          "raw/text/map.json": 1,
+          "raw/together/map.json": 1,
+          "raw-long/visual/map.json": 1,
+          "raw-long/text/map.json": 1,
+          "raw-long/together/map.json": 1,
+          "raw/visual/embeddings.npz": 1,
+          "raw/text/embeddings.npz": 1,
+          "raw/together/embeddings.npz": 1,
+          "raw-long/visual/embeddings.npz": 1,
+          "raw-long/text/embeddings.npz": 1,
+          "raw-long/together/embeddings.npz": 1
+        },
+        "entriesWithCompleteReadCount": 14,
+        "entriesWithEtag": 0,
+        "entriesWithLastModified": 14,
+        "snapshotRunId": "efaa82b96450e04275a4c457",
+        "snapshotIdentityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7"
+      },
+      "panelGenerationBinding": {
+        "panelSnapshotRunId": "efaa82b96450e04275a4c457",
+        "frozenSnapshotRunId": "efaa82b96450e04275a4c457",
+        "runIdMatches": true,
+        "panelSnapshotIdentityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7",
+        "frozenSnapshotIdentityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7",
+        "identityHashMatches": true,
+        "directSourceComparisons": [
+          {
+            "role": "shorts:database",
+            "key": "library/db.json",
+            "panelSha256": "7a9c11342606dc4afb182e627019c5f6868490e56aa39d4db996efe99853bb40",
+            "frozenSha256": "7a9c11342606dc4afb182e627019c5f6868490e56aa39d4db996efe99853bb40",
+            "matches": true
+          },
+          {
+            "role": "long:database",
+            "key": "longform/db.json",
+            "panelSha256": "9f1dc521cffcc36e7273e22d8755bdedad8d7d9091f371dbf83d51e034b5cc2c",
+            "frozenSha256": "9f1dc521cffcc36e7273e22d8755bdedad8d7d9091f371dbf83d51e034b5cc2c",
+            "matches": true
+          },
+          {
+            "role": "shorts:visual:map",
+            "key": "raw/visual/map.json",
+            "panelSha256": "c42d6525c3553e3a02683f285f3b5bfc33b2f2db4d5c336b05f1f71cbf877a12",
+            "frozenSha256": "c42d6525c3553e3a02683f285f3b5bfc33b2f2db4d5c336b05f1f71cbf877a12",
+            "matches": true
+          },
+          {
+            "role": "shorts:text:map",
+            "key": "raw/text/map.json",
+            "panelSha256": "7c01ff360e493edc8d0dc4afa3530fd3a674da8720fdfde0924bc7959b42c13e",
+            "frozenSha256": "7c01ff360e493edc8d0dc4afa3530fd3a674da8720fdfde0924bc7959b42c13e",
+            "matches": true
+          },
+          {
+            "role": "shorts:together:map",
+            "key": "raw/together/map.json",
+            "panelSha256": "4ea467284368820a951ed5b8aaa68f463adff1b282d5269212723d509710330d",
+            "frozenSha256": "4ea467284368820a951ed5b8aaa68f463adff1b282d5269212723d509710330d",
+            "matches": true
+          },
+          {
+            "role": "long:visual:map",
+            "key": "raw-long/visual/map.json",
+            "panelSha256": "ce69711dd7a71b6fc49704aa43ac4e030693d44ca2dbd3e1b8c37cecc5b61cac",
+            "frozenSha256": "ce69711dd7a71b6fc49704aa43ac4e030693d44ca2dbd3e1b8c37cecc5b61cac",
+            "matches": true
+          },
+          {
+            "role": "long:text:map",
+            "key": "raw-long/text/map.json",
+            "panelSha256": "65966decf029070384ffc7391b05e8b8596c1876b3ad371112a39b9b7ffbf77e",
+            "frozenSha256": "65966decf029070384ffc7391b05e8b8596c1876b3ad371112a39b9b7ffbf77e",
+            "matches": true
+          },
+          {
+            "role": "long:together:map",
+            "key": "raw-long/together/map.json",
+            "panelSha256": "406b56cb27e92922b3eb14165762f2a8d1377d325dd1fda7a2b77f2b5e4898da",
+            "frozenSha256": "406b56cb27e92922b3eb14165762f2a8d1377d325dd1fda7a2b77f2b5e4898da",
+            "matches": true
+          }
+        ],
+        "matchingDirectSources": 8,
+        "requiredDirectSources": 8,
+        "pass": true
+      },
+      "strictContract": {
+        "source": "principles-lab/quant/ESTIMAND_SPEC.md",
+        "exactStrictHistoricalTargets": {
+          "shorts": {
+            "targets": 11175,
+            "channels": 4469,
+            "medianPriorCount": 3
+          },
+          "long": {
+            "targets": 9818,
+            "channels": 5008,
+            "medianPriorCount": 3
+          }
+        },
+        "exactStrictHistoricalAllModalitySupport": {
+          "shorts": {
+            "visual": 11158,
+            "text": 3087,
+            "together": 11157,
+            "allThree": 3087
+          },
+          "long": {
+            "visual": 159,
+            "text": 152,
+            "together": 152,
+            "allThree": 152
+          }
+        },
+        "minimumIndependentRowsBeforeDesignEffect": 3140,
+        "historicalRule": "prior j may enter target i only when S_j = storedAt_j / 1000 <= T_i"
+      },
+      "gates": {
+        "twoReadImmutableSourceSnapshot": {
+          "pass": true,
+          "required": "Two complete byte reads per DB, map, and vector object; stable metadata across the collection; content-addressed local copies; one snapshot identity; the panel must bind to that exact run and every direct source hash.",
+          "evidence": {
+            "frozenSnapshot": {
+              "exists": true,
+              "pass": true,
+              "freezePass": true,
+              "allSnapshotIntegrityPass": false,
+              "schema": "quant-frozen-source-snapshot-v1",
+              "runId": "efaa82b96450e04275a4c457",
+              "identityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7",
+              "requiredRoles": 14,
+              "objectCount": 14,
+              "verifiedLocalObjects": 14,
+              "verifiedBytes": 1847412872,
+              "completeReadsPerObject": 2,
+              "metadataStableAcrossWholeCollection": true,
+              "contentAddressedLocalObjects": true,
+              "serverSideConditionalCopy": true,
+              "immutableR2Prefix": "quant/snapshots/20260726171723/",
+              "mutableSourcesChangedAfterConditionalCopy": [
+                "library/db.json",
+                "longform/db.json"
+              ],
+              "representationIntegrity": {
+                "exists": true,
+                "accepted": false,
+                "snapshotRunIdMatches": true,
+                "snapshotIdentityHashMatches": true,
+                "acceptedChannels": 4,
+                "rejectedChannels": 2,
+                "failures": [
+                  "long:visual: row count mismatch",
+                  "long:visual: ID order mismatch",
+                  "long:text: row count mismatch",
+                  "long:text: ID order mismatch"
+                ],
+                "channels": [
+                  {
+                    "id": "shorts:visual",
+                    "mapRows": 66157,
+                    "vectorRows": 66157,
+                    "dimensions": 1536,
+                    "rowCountMatch": true,
+                    "idOrderMatch": true,
+                    "duplicateMapIds": 0,
+                    "duplicateVectorIds": 0,
+                    "sampledVectors": 10000,
+                    "sampleAllFinite": true
+                  },
+                  {
+                    "id": "shorts:text",
+                    "mapRows": 23183,
+                    "vectorRows": 23183,
+                    "dimensions": 1536,
+                    "rowCountMatch": true,
+                    "idOrderMatch": true,
+                    "duplicateMapIds": 0,
+                    "duplicateVectorIds": 0,
+                    "sampledVectors": 10000,
+                    "sampleAllFinite": true
+                  },
+                  {
+                    "id": "shorts:together",
+                    "mapRows": 66142,
+                    "vectorRows": 66142,
+                    "dimensions": 1536,
+                    "rowCountMatch": true,
+                    "idOrderMatch": true,
+                    "duplicateMapIds": 0,
+                    "duplicateVectorIds": 0,
+                    "sampledVectors": 10000,
+                    "sampleAllFinite": true
+                  },
+                  {
+                    "id": "long:visual",
+                    "mapRows": 41584,
+                    "vectorRows": 41684,
+                    "dimensions": 1536,
+                    "rowCountMatch": false,
+                    "idOrderMatch": false,
+                    "duplicateMapIds": 0,
+                    "duplicateVectorIds": 0,
+                    "sampledVectors": 10000,
+                    "sampleAllFinite": true
+                  },
+                  {
+                    "id": "long:text",
+                    "mapRows": 41587,
+                    "vectorRows": 41687,
+                    "dimensions": 1536,
+                    "rowCountMatch": false,
+                    "idOrderMatch": false,
+                    "duplicateMapIds": 0,
+                    "duplicateVectorIds": 0,
+                    "sampledVectors": 10000,
+                    "sampleAllFinite": true
+                  },
+                  {
+                    "id": "long:together",
+                    "mapRows": 41587,
+                    "vectorRows": 41587,
+                    "dimensions": 1536,
+                    "rowCountMatch": true,
+                    "idOrderMatch": true,
+                    "duplicateMapIds": 0,
+                    "duplicateVectorIds": 0,
+                    "sampledVectors": 10000,
+                    "sampleAllFinite": true
+                  }
+                ]
+              },
+              "missingRoles": [],
+              "freezeFailures": [],
+              "allFailures": [
+                "snapshot representation integrity rejected: long:visual: row count mismatch; long:visual: ID order mismatch; long:text: row count mismatch; long:text: ID order mismatch"
+              ]
+            },
+            "panelGenerationBinding": {
+              "panelSnapshotRunId": "efaa82b96450e04275a4c457",
+              "frozenSnapshotRunId": "efaa82b96450e04275a4c457",
+              "runIdMatches": true,
+              "panelSnapshotIdentityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7",
+              "frozenSnapshotIdentityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7",
+              "identityHashMatches": true,
+              "directSourceComparisons": [
+                {
+                  "role": "shorts:database",
+                  "key": "library/db.json",
+                  "panelSha256": "7a9c11342606dc4afb182e627019c5f6868490e56aa39d4db996efe99853bb40",
+                  "frozenSha256": "7a9c11342606dc4afb182e627019c5f6868490e56aa39d4db996efe99853bb40",
+                  "matches": true
+                },
+                {
+                  "role": "long:database",
+                  "key": "longform/db.json",
+                  "panelSha256": "9f1dc521cffcc36e7273e22d8755bdedad8d7d9091f371dbf83d51e034b5cc2c",
+                  "frozenSha256": "9f1dc521cffcc36e7273e22d8755bdedad8d7d9091f371dbf83d51e034b5cc2c",
+                  "matches": true
+                },
+                {
+                  "role": "shorts:visual:map",
+                  "key": "raw/visual/map.json",
+                  "panelSha256": "c42d6525c3553e3a02683f285f3b5bfc33b2f2db4d5c336b05f1f71cbf877a12",
+                  "frozenSha256": "c42d6525c3553e3a02683f285f3b5bfc33b2f2db4d5c336b05f1f71cbf877a12",
+                  "matches": true
+                },
+                {
+                  "role": "shorts:text:map",
+                  "key": "raw/text/map.json",
+                  "panelSha256": "7c01ff360e493edc8d0dc4afa3530fd3a674da8720fdfde0924bc7959b42c13e",
+                  "frozenSha256": "7c01ff360e493edc8d0dc4afa3530fd3a674da8720fdfde0924bc7959b42c13e",
+                  "matches": true
+                },
+                {
+                  "role": "shorts:together:map",
+                  "key": "raw/together/map.json",
+                  "panelSha256": "4ea467284368820a951ed5b8aaa68f463adff1b282d5269212723d509710330d",
+                  "frozenSha256": "4ea467284368820a951ed5b8aaa68f463adff1b282d5269212723d509710330d",
+                  "matches": true
+                },
+                {
+                  "role": "long:visual:map",
+                  "key": "raw-long/visual/map.json",
+                  "panelSha256": "ce69711dd7a71b6fc49704aa43ac4e030693d44ca2dbd3e1b8c37cecc5b61cac",
+                  "frozenSha256": "ce69711dd7a71b6fc49704aa43ac4e030693d44ca2dbd3e1b8c37cecc5b61cac",
+                  "matches": true
+                },
+                {
+                  "role": "long:text:map",
+                  "key": "raw-long/text/map.json",
+                  "panelSha256": "65966decf029070384ffc7391b05e8b8596c1876b3ad371112a39b9b7ffbf77e",
+                  "frozenSha256": "65966decf029070384ffc7391b05e8b8596c1876b3ad371112a39b9b7ffbf77e",
+                  "matches": true
+                },
+                {
+                  "role": "long:together:map",
+                  "key": "raw-long/together/map.json",
+                  "panelSha256": "406b56cb27e92922b3eb14165762f2a8d1377d325dd1fda7a2b77f2b5e4898da",
+                  "frozenSha256": "406b56cb27e92922b3eb14165762f2a8d1377d325dd1fda7a2b77f2b5e4898da",
+                  "matches": true
+                }
+              ],
+              "matchingDirectSources": 8,
+              "requiredDirectSources": 8,
+              "pass": true
+            }
+          }
+        },
+        "mapVectorGenerationCoherence": {
+          "pass": true,
+          "required": "Every analysis channel must be rebuilt outcome-blind from the exact frozen raw vector archive. Native maps with mismatched row order must remain rejected.",
+          "evidence": {
+            "nativeMapVectorIntegrity": {
+              "exists": true,
+              "accepted": false,
+              "snapshotRunIdMatches": true,
+              "snapshotIdentityHashMatches": true,
+              "acceptedChannels": 4,
+              "rejectedChannels": 2,
+              "failures": [
+                "long:visual: row count mismatch",
+                "long:visual: ID order mismatch",
+                "long:text: row count mismatch",
+                "long:text: ID order mismatch"
+              ],
+              "channels": [
+                {
+                  "id": "shorts:visual",
+                  "mapRows": 66157,
+                  "vectorRows": 66157,
+                  "dimensions": 1536,
+                  "rowCountMatch": true,
+                  "idOrderMatch": true,
+                  "duplicateMapIds": 0,
+                  "duplicateVectorIds": 0,
+                  "sampledVectors": 10000,
+                  "sampleAllFinite": true
+                },
+                {
+                  "id": "shorts:text",
+                  "mapRows": 23183,
+                  "vectorRows": 23183,
+                  "dimensions": 1536,
+                  "rowCountMatch": true,
+                  "idOrderMatch": true,
+                  "duplicateMapIds": 0,
+                  "duplicateVectorIds": 0,
+                  "sampledVectors": 10000,
+                  "sampleAllFinite": true
+                },
+                {
+                  "id": "shorts:together",
+                  "mapRows": 66142,
+                  "vectorRows": 66142,
+                  "dimensions": 1536,
+                  "rowCountMatch": true,
+                  "idOrderMatch": true,
+                  "duplicateMapIds": 0,
+                  "duplicateVectorIds": 0,
+                  "sampledVectors": 10000,
+                  "sampleAllFinite": true
+                },
+                {
+                  "id": "long:visual",
+                  "mapRows": 41584,
+                  "vectorRows": 41684,
+                  "dimensions": 1536,
+                  "rowCountMatch": false,
+                  "idOrderMatch": false,
+                  "duplicateMapIds": 0,
+                  "duplicateVectorIds": 0,
+                  "sampledVectors": 10000,
+                  "sampleAllFinite": true
+                },
+                {
+                  "id": "long:text",
+                  "mapRows": 41587,
+                  "vectorRows": 41687,
+                  "dimensions": 1536,
+                  "rowCountMatch": false,
+                  "idOrderMatch": false,
+                  "duplicateMapIds": 0,
+                  "duplicateVectorIds": 0,
+                  "sampledVectors": 10000,
+                  "sampleAllFinite": true
+                },
+                {
+                  "id": "long:together",
+                  "mapRows": 41587,
+                  "vectorRows": 41587,
+                  "dimensions": 1536,
+                  "rowCountMatch": true,
+                  "idOrderMatch": true,
+                  "duplicateMapIds": 0,
+                  "duplicateVectorIds": 0,
+                  "sampledVectors": 10000,
+                  "sampleAllFinite": true
+                }
+              ]
+            },
+            "reconstructedOutcomeBlindGeometry": {
+              "pass": true,
+              "schema": "outcome-blind-reconstructed-geometry-summary-v1",
+              "snapshotRunId": "efaa82b96450e04275a4c457",
+              "outcomesUsed": false,
+              "expectedChannels": 6,
+              "verifiedChannels": 6,
+              "nativeRejectedChannels": 2,
+              "remediation": "All analysis geometry is rebuilt from frozen raw vectors. Native maps remain rejected where their ID order does not match, and are not used as analytic coordinates.",
+              "failures": []
+            }
+          }
+        },
+        "storedRowsOnly": {
+          "pass": true,
+          "required": "Every panel row must resolve to stored === true in the frozen source DB.",
+          "evidence": {
+            "shorts": {
+              "sameGenerationAsPanel": true,
+              "sourceRowsFound": 53681,
+              "storedTrue": 53681,
+              "storedFalse": 0,
+              "removedFalse": 53681,
+              "removedTrue": 0,
+              "recheckedFalse": 53681,
+              "recheckedTrue": 0,
+              "finiteStoredAt": 53681,
+              "observationTimeMatchesStoredAt": 53681,
+              "strictRows": 53681
+            },
+            "long": {
+              "sameGenerationAsPanel": true,
+              "sourceRowsFound": 93671,
+              "storedTrue": 93671,
+              "storedFalse": 0,
+              "removedFalse": 93671,
+              "removedTrue": 0,
+              "recheckedFalse": 93671,
+              "recheckedTrue": 0,
+              "finiteStoredAt": 93671,
+              "observationTimeMatchesStoredAt": 93671,
+              "strictRows": 93671
+            }
+          }
+        },
+        "storedAtObservationTime": {
+          "pass": true,
+          "required": "observationSeconds must equal floor(source.storedAt / 1000); db.updated and one format-wide snapshot timestamp are forbidden.",
+          "evidence": {
+            "shorts": {
+              "rows": 53681,
+              "observationSecondsPresent": 53681,
+              "observationTimeSourceStoredAt": 53681,
+              "snapshotSecondsPresent": 53681,
+              "uniqueSnapshotSeconds": 43061
+            },
+            "long": {
+              "rows": 93671,
+              "observationSecondsPresent": 93671,
+              "observationTimeSourceStoredAt": 93671,
+              "snapshotSecondsPresent": 93671,
+              "uniqueSnapshotSeconds": 28644
+            }
+          }
+        },
+        "recheckedExcluded": {
+          "pass": true,
+          "required": "Every panel row must resolve to rechecked !== true in the same frozen source DB.",
+          "evidence": {
+            "shorts": 53681,
+            "long": 93671
+          }
+        },
+        "historicalObservability": {
+          "pass": true,
+          "required": "Each prior outcome j used for target i must have S_j = storedAt_j / 1000 <= T_i.",
+          "evidence": {
+            "shorts": {
+              "targetsWithPrior": 10942,
+              "allModalityTargetsWithPrior": 3071,
+              "priorComparisonsUsed": 57621,
+              "observabilityViolationsInComputedHistory": 0,
+              "unobservablePublishedPriorsExcluded": 76633
+            },
+            "long": {
+              "targetsWithPrior": 9818,
+              "allModalityTargetsWithPrior": 171,
+              "priorComparisonsUsed": 80998,
+              "observabilityViolationsInComputedHistory": 0,
+              "unobservablePublishedPriorsExcluded": 276320
+            }
+          }
+        },
+        "longStrictAllModalitySupport": {
+          "pass": false,
+          "required": "Long promotion requires strict historical support in visual, text, and together modalities and must meet the uninflated power floor before creator design effects.",
+          "evidence": {
+            "exactCurrentStrictCountFromEstimandSpec": 152,
+            "auditableCountFromCurrentPanel": 171,
+            "currentFrozenPanelCountUsedForPromotion": 171,
+            "countDifference": 19,
+            "minimumIndependentRowsBeforeDesignEffect": 3140,
+            "deficitBeforeDesignEffect": 2969,
+            "supportFractionOfUninflatedMinimum": 0.054459
+          }
+        }
+      },
+      "baseIntegrityGatesPass": true,
+      "allHardGatesPass": false,
+      "failedHardGates": [
+        "longStrictAllModalitySupport"
+      ],
+      "integrityEligibleRows": 147352,
+      "promotionEligibleRowsByFormat": {
+        "shorts": 53681,
+        "long": 0
+      },
+      "promotionEligibleRows": 53681,
+      "confirmatoryVerdict": "Shorts pass the frozen-source and representation-lineage gates. Long is blocked by insufficient strict all-modality support. Statistical promotion still requires complete family accounting, valid null replay, and independent prospective validation.",
+      "invalidatedConfirmatoryArtifacts": [
+        {
+          "id": "opportunity-targets",
+          "path": "principles-lab/quant/.cache/opportunity-targets.json.gz",
+          "dependency": "direct outcome transform from the governed panel",
+          "declaredPanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+          "declaredHashMatchesCurrentPanel": true,
+          "formatDataGate": {
+            "shorts": true,
+            "long": false
+          },
+          "confirmatoryUseValid": false,
+          "shortsConfirmatoryDataUseValid": true,
+          "longConfirmatoryDataUseValid": false,
+          "status": "shorts_data_gate_pass_long_blocked"
+        },
+        {
+          "id": "opportunity-adjustment",
+          "path": "principles-lab/quant/opportunity-adjustment.json",
+          "dependency": "direct outcome transform from the governed panel",
+          "declaredPanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+          "declaredHashMatchesCurrentPanel": true,
+          "formatDataGate": {
+            "shorts": true,
+            "long": false
+          },
+          "confirmatoryUseValid": false,
+          "shortsConfirmatoryDataUseValid": true,
+          "longConfirmatoryDataUseValid": false,
+          "status": "shorts_data_gate_pass_long_blocked"
+        },
+        {
+          "id": "cluster-outcomes-adjusted",
+          "path": "principles-lab/quant/cluster-outcomes-adjusted.json",
+          "dependency": "direct panel and opportunity-target analysis",
+          "declaredPanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+          "declaredHashMatchesCurrentPanel": true,
+          "formatDataGate": {
+            "shorts": true,
+            "long": false
+          },
+          "confirmatoryUseValid": false,
+          "shortsConfirmatoryDataUseValid": true,
+          "longConfirmatoryDataUseValid": false,
+          "status": "shorts_data_gate_pass_long_blocked"
+        },
+        {
+          "id": "nested-outcome-validation",
+          "path": "principles-lab/quant/nested-outcome-validation.json",
+          "dependency": "loads unified-panel.json.gz directly with immutable panel lineage",
+          "declaredPanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+          "declaredHashMatchesCurrentPanel": true,
+          "formatDataGate": {
+            "shorts": true,
+            "long": false
+          },
+          "confirmatoryUseValid": false,
+          "shortsConfirmatoryDataUseValid": true,
+          "longConfirmatoryDataUseValid": false,
+          "status": "shorts_data_gate_pass_long_blocked"
+        },
+        {
+          "id": "raw-embedding-validation",
+          "path": "principles-lab/quant/raw-embedding-validation.json",
+          "dependency": "loads opportunity-targets.json.gz with immutable panel and target lineage",
+          "declaredPanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+          "declaredHashMatchesCurrentPanel": true,
+          "formatDataGate": {
+            "shorts": true,
+            "long": false
+          },
+          "confirmatoryUseValid": false,
+          "shortsConfirmatoryDataUseValid": true,
+          "longConfirmatoryDataUseValid": false,
+          "status": "shorts_data_gate_pass_long_blocked"
+        },
+        {
+          "id": "within-creator-delta-validation",
+          "path": "principles-lab/quant/within-creator-delta-validation.json",
+          "dependency": "loads unified-panel.json.gz and frozen vectors with immutable lineage",
+          "declaredPanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+          "declaredHashMatchesCurrentPanel": true,
+          "formatDataGate": {
+            "shorts": true,
+            "long": false
+          },
+          "confirmatoryUseValid": false,
+          "shortsConfirmatoryDataUseValid": true,
+          "longConfirmatoryDataUseValid": false,
+          "status": "shorts_data_gate_pass_long_blocked"
+        },
+        {
+          "id": "baseline-sensitivity-validation",
+          "path": "principles-lab/quant/baseline-sensitivity-validation.json",
+          "dependency": "rebuilds fold-local targets across the predeclared nuisance-baseline grid",
+          "declaredPanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+          "declaredHashMatchesCurrentPanel": true,
+          "formatDataGate": {
+            "shorts": true,
+            "long": false
+          },
+          "confirmatoryUseValid": false,
+          "shortsConfirmatoryDataUseValid": true,
+          "longConfirmatoryDataUseValid": false,
+          "status": "shorts_data_gate_pass_long_blocked"
+        }
+      ],
+      "clusterInvariance": {
+        "schema": "business-world-cluster-invariance-v1",
+        "generatedAt": "2026-07-26T17:42:31.911Z",
+        "snapshotRunId": "efaa82b96450e04275a4c457",
+        "atomicSnapshot": true,
+        "representationIntegrityAccepted": false,
+        "acceptedRepresentationChannels": 4,
+        "rejectedRepresentationChannels": 2,
+        "outcomeAuditExecuted": true,
+        "outcomeAuditValidity": "strict_panel_eligible_for_holdout_testing",
+        "mechanismTests": 4,
+        "validatedPairRelationships": 0,
+        "claimStatus": {
+          "partial_local_support": 1,
+          "not_testable_from_fixed_k_grid": 1,
+          "rejected": 1,
+          "unresolved_together_only": 1,
+          "not_supported": 1
+        },
+        "promotionCeiling": "outcome_blind_geometry_only"
+      },
+      "explicitlyNotInvalidatedByThisPanelGate": [
+        "Operations projected-score analysis",
+        "Promise owned-retention analysis",
+        "Retention private analytics",
+        "Tribe private analytics",
+        "Market Hold external-transfer analysis",
+        "legacy registry diagnostics",
+        "factorized-validation branches that do not consume unified-panel or opportunity-targets"
+      ]
+    },
+    "operations": {
+      "evidenceRows": 984,
+      "semanticLineages": 662,
+      "creatorGroupingAvailable": false,
+      "outcomeBlindResolutions": 23,
+      "partitionConfigurations": 782,
+      "partitionStatus": {
+        "tested": 742,
+        "invalid": 40
+      },
+      "partitionAlgorithms": {
+        "spherical_kmeans": 276,
+        "gaussian_mixture": 276,
+        "agglomerative_cosine": 92,
+        "agglomerative_ward": 92,
+        "hdbscan": 46
+      },
+      "rawCandidates": 2590,
+      "candidateStatus": {
+        "rejected": 2019,
+        "deduplicated": 548,
+        "accepted": 23
+      },
+      "consensusComponents": 527,
+      "acceptedComponents": 23,
+      "outcomeHypotheses": 138,
+      "nativeCorrection": "Benjamini-Yekutieli across every component, target, and effect test",
+      "targetReports": {
+        "text_keep": {
+          "testedComponents": 23,
+          "continuousBySurvivors": 7,
+          "thresholdBySurvivors": 5,
+          "withinFoldAuc": 0.609082448,
+          "outcomeClass": "projected_target"
+        },
+        "together_keep": {
+          "testedComponents": 23,
+          "continuousBySurvivors": 10,
+          "thresholdBySurvivors": 4,
+          "withinFoldAuc": 0.601057878,
+          "outcomeClass": "projected_target"
+        },
+        "visual_keep": {
+          "testedComponents": 23,
+          "continuousBySurvivors": 6,
+          "thresholdBySurvivors": 14,
+          "withinFoldAuc": 0.734537422,
+          "outcomeClass": "projected_target"
+        }
+      },
+      "transport": {
+        "frozenPrinciples": 16,
+        "savedProjectedRows": 982,
+        "broadProjectedRows": 9579,
+        "observedRows": 632,
+        "observedGroups": 4,
+        "observedHitsAt85": 16,
+        "savedObservedExactIdOverlap": 0,
+        "projectedExactIdOverlap": 9579,
+        "recordLevelEmbeddingVersionPersisted": false
+      },
+      "correctionVerdict": "The 138-test BY correction is dependency-safe for the reported supplied-score effects. Every target is projected keep, so survivors measure agreement with another model, not observed audience keep.",
+      "promotionCeiling": "surrogate_association"
+    },
+    "promise": {
+      "hooks": 208,
+      "candidateSpanInstances": 15686,
+      "geometry": {
+        "clusterRows": 10692,
+        "boundaryRows": 13440,
+        "allSpanRows": 25920,
+        "totalOutcomeBlindRows": 50052,
+        "allRowsDeclareOutcomeBlind": true
+      },
+      "clusterOutcomeSearch": {
+        "rows": 6000,
+        "artifactExperimentCount": 6000,
+        "selectedFamilies": 100,
+        "randomFoldSupportedFamilies": 40,
+        "chronologicallyValidatedFamilies": 0,
+        "withinFamilyCorrection": "1024 source-video sign flips; maximum across representation, PCA dimensions, and ridge alpha",
+        "acrossFamilyCorrection": "Benjamini-Hochberg across every selected cluster-target family",
+        "claimBoundary": "all category-conditioned axes are random-fold-only diagnostics because the k=4 map was selected post hoc and no chronological component replication was run"
+      },
+      "timingSearch": {
+        "specificationRows": 816,
+        "maxStatisticNullRepeats": 2048,
+        "primaryFamilyMaxP": 1,
+        "exploratoryLagFamilyMaxP": 0.7432894094680332,
+        "processingLagSupported": false,
+        "fixedMetricP": 0.3558701488894313,
+        "chronologicalP": 0.17402977788625823,
+        "wholeHookP": 0.25628508664876737
+      },
+      "hookQuality": {
+        "randomFoldSpearman": 0.217651105,
+        "randomFoldPermutationP": 0.001952648279228704,
+        "chronologicalSpearman": 0.051572902,
+        "chronologicalPermutationP": 0.5179399560654138,
+        "temporalRobust": false,
+        "latencyRows": 115,
+        "latencySupported": false
+      },
+      "marketHold": {
+        "externalRows": 5353,
+        "externalGroups": 3818,
+        "alphaCandidates": 5,
+        "ownedRowsUsedToFitAxis": false,
+        "ownedTransferRows": 208,
+        "tests": [
+          {
+            "target": "viewed_percent",
+            "n": 208,
+            "spearman": 0.298890337,
+            "parametricP": 0.000011580238434723667,
+            "rankPermutationP": 0.000244081034903588,
+            "recomputedDependencySafeQ": 0.000678003,
+            "chronologicalPositiveBlockFraction": 0.8,
+            "recentHalfSpearman": 0.287774236,
+            "survivesNativeFourEndpointBy": true
+          },
+          {
+            "target": "retention_5s",
+            "n": 208,
+            "spearman": 0.260421501,
+            "parametricP": 0.00014529366033026248,
+            "rankPermutationP": 0.000244081034903588,
+            "recomputedDependencySafeQ": 0.000678003,
+            "chronologicalPositiveBlockFraction": 0.8,
+            "recentHalfSpearman": 0.190750027,
+            "survivesNativeFourEndpointBy": true
+          },
+          {
+            "target": "average_retention",
+            "n": 208,
+            "spearman": 0.344345056,
+            "parametricP": 3.52623795327548e-7,
+            "rankPermutationP": 0.000244081034903588,
+            "recomputedDependencySafeQ": 0.000678003,
+            "chronologicalPositiveBlockFraction": 1,
+            "recentHalfSpearman": 0.484532618,
+            "survivesNativeFourEndpointBy": true
+          },
+          {
+            "target": "log_views",
+            "n": 208,
+            "spearman": 0.076030948,
+            "parametricP": 0.2750500268454587,
+            "rankPermutationP": 0.28166951427874054,
+            "recomputedDependencySafeQ": 0.586811488,
+            "chronologicalPositiveBlockFraction": 0.6,
+            "recentHalfSpearman": -0.022532807,
+            "survivesNativeFourEndpointBy": false
+          }
+        ],
+        "nativeBySurvivorCount": 3
+      },
+      "outcomeSearchExecutionsVisible": 6942,
+      "correctionVerdict": "Cluster and lag searches have internal max-stat controls, but the four-category map was selected post hoc and no cluster-outcome family validated chronologically. Market Hold is the one frozen external direction with an outcome-independent owned transfer.",
+      "promotionCeiling": "regional_retrospective_candidate"
+    },
+    "retention": {
+      "evidenceRows": 211,
+      "cohortCaveat": "observational + winners-only (all 60K-285M views); associations not proven causal; account size/impressions not in data",
+      "target": "log10(views)",
+      "reportedIndicators": 13,
+      "usableCandidatePool": 10,
+      "outcomeSideIndicators": 3,
+      "adaptiveSelection": {
+        "fullGreedyEvaluations": 45,
+        "interpretableGreedyEvaluations": 14,
+        "subsetEvaluations": 15,
+        "visibleSelectionEvaluations": 74,
+        "lowerBoundOnly": true,
+        "reason": "Q1-Q4, PCA construction, interaction design, and prior iterations are not represented as a complete candidate-execution ledger."
+      },
+      "selectedResults": {
+        "baselineKeepRetentionCvR2": 0.228,
+        "adaptivelySelectedFullCvR2": 0.328,
+        "interpretableCvR2": 0.303,
+        "keepFromRetentionCvR2": 0.316
+      },
+      "correctionVerdict": "The same cross-validation scores chose and described the feature path. There is no nested outer test, source holdout, chronological lockbox, or family p-value.",
+      "promotionCeiling": "retrospective_mechanism"
+    },
+    "tribe": {
+      "evidenceRows": 130,
+      "account": "tyler",
+      "indicatorCount": 282,
+      "indicatorFamilies": {
+        "global": 8,
+        "regions": 10,
+        "networks": 8,
+        "destrieux": 75,
+        "hcp": 181
+      },
+      "features": 5,
+      "targets": 11,
+      "modes": 2,
+      "exactBrowsableTests": 31020,
+      "currentUiFamilyCount": 110,
+      "currentUiCorrection": "BH separately inside each target x feature x mode family of 282 indicators",
+      "exactStudentTReanalysis": {
+        "rawPAt05": 3331,
+        "globalBhSurvivors": 460,
+        "globalBySurvivors": 171,
+        "globalByByMode": {
+          "duration_partial_spearman": 32,
+          "raw": 139
+        },
+        "globalByByTarget": {
+          "shares": 15,
+          "avgRetention": 116,
+          "ret5_surv": 27,
+          "realviews": 5,
+          "keep": 3,
+          "swiped": 3,
+          "ret5": 1,
+          "logviews": 1
+        },
+        "dependencySafeHierarchicalSurvivors": 440,
+        "coreDeconfoundedGlobalBySurvivors": 8,
+        "topCore": [
+          {
+            "indicator": "hcp.PeEc",
+            "feature": "mean",
+            "target": "avgRetention",
+            "n": 130,
+            "partialSpearman": 0.421300305,
+            "p": 6.629913339385299e-7,
+            "globalBy": 0.0032175156589188854,
+            "hierarchicalPass": true
+          },
+          {
+            "indicator": "hcp.TE1m",
+            "feature": "peak",
+            "target": "avgRetention",
+            "n": 130,
+            "partialSpearman": -0.389018012,
+            "p": 0.000005209258083827206,
+            "globalBy": 0.015478194893331979,
+            "hierarchicalPass": false
+          },
+          {
+            "indicator": "hcp.TE1m",
+            "feature": "mean",
+            "target": "avgRetention",
+            "n": 130,
+            "partialSpearman": -0.386841807,
+            "p": 0.000005940384060394691,
+            "globalBy": 0.01747861826194345,
+            "hierarchicalPass": true
+          },
+          {
+            "indicator": "hcp.TE1m",
+            "feature": "mean",
+            "target": "keep",
+            "n": 130,
+            "partialSpearman": -0.386380768,
+            "p": 0.000006107259745195355,
+            "globalBy": 0.01753128183730456,
+            "hierarchicalPass": false
+          },
+          {
+            "indicator": "hcp.PeEc",
+            "feature": "mean",
+            "target": "keep",
+            "n": 130,
+            "partialSpearman": 0.384124301,
+            "p": 0.000006989930505721162,
+            "globalBy": 0.01940717468875015,
+            "hierarchicalPass": false
+          },
+          {
+            "indicator": "hcp.TE1m",
+            "feature": "peak",
+            "target": "keep",
+            "n": 130,
+            "partialSpearman": -0.37869475,
+            "p": 0.000009633312544911876,
+            "globalBy": 0.02435118724998527,
+            "hierarchicalPass": false
+          },
+          {
+            "indicator": "hcp.TE1m",
+            "feature": "peak",
+            "target": "logviews",
+            "n": 130,
+            "partialSpearman": -0.372620137,
+            "p": 0.000013699597240447317,
+            "globalBy": 0.03135417454802058,
+            "hierarchicalPass": false
+          },
+          {
+            "indicator": "hcp.PH",
+            "feature": "mean",
+            "target": "avgRetention",
+            "n": 130,
+            "partialSpearman": 0.365262396,
+            "p": 0.000020791206096438385,
+            "globalBy": 0.0440158394113519,
+            "hierarchicalPass": true
+          }
+        ]
+      },
+      "invalidReplicationSignals": {
+        "foldStability": "The UI uses five overlapping 80% hold-ins; these are sensitivity checks, not replications.",
+        "targetDuplicates": [
+          "swiped is the deterministic inverse of keep",
+          "views and logviews are monotone views transforms",
+          "realviews is derived from keep and ret5"
+        ],
+        "postOutcomeTargets": [
+          "likes",
+          "comments",
+          "shares"
+        ],
+        "loopInflatedTarget": "ret5"
+      },
+      "maxStatisticRequirement": "For promotion, permute outcomes in synchronized account x time blocks and rerun all 31,020 indicator/feature/target/mode choices, retaining the maximum absolute statistic per permutation. This artifact has one account and no sealed time blocks, so exchangeable maxT promotion is unavailable.",
+      "correctionVerdict": "Some associations remain numerically small after global BY, but all 130 rows are one Tyler cohort and no source/time lockbox exists. They remain same-account diagnostics.",
+      "promotionCeiling": "local_diagnostic"
+    },
+    "legacy": {
+      "registry": {
+        "entries": 445978,
+        "uniqueKeys": 445978,
+        "kind": {
+          "atomic": 2989,
+          "derived": 442989
+        },
+        "layer": {
+          "post": 52300,
+          "pre": 393093,
+          "unknown": 585
+        },
+        "target": {
+          "views": 445978
+        }
+      },
+      "compactIndicators": {
+        "rows": 2989,
+        "kind": {
+          "atomic": 2619,
+          "interaction_to_views": 370
+        },
+        "layer": {
+          "post": 385,
+          "pre": 2604
+        },
+        "pValueTests": 5970,
+        "rawPAt05": 1246,
+        "bhSurvivors": 712,
+        "bySurvivors": 494,
+        "byPreUploadSurvivors": 80,
+        "byPostOutcomeSurvivors": 414
+      },
+      "experimentLog": {
+        "rows": 446947,
+        "uniqueExperimentIds": 446947,
+        "uniqueIndicatorKeys": 439368,
+        "status": {
+          "discovery": 446947
+        },
+        "kind": {
+          "missing": 863,
+          "atomic": 2252,
+          "interaction": 443832
+        },
+        "sampleSizeMin": 50,
+        "sampleSizeMax": 370
+      },
+      "derivedCompact": {
+        "rows": 443514,
+        "layer": {
+          "post": 52144,
+          "pre": 390745,
+          "missing": 625
+        },
+        "status": {
+          "discovery": 442453,
+          "missing": 1061
+        },
+        "kind": {
+          "interaction_to_views": 12558,
+          "pair_correlation": 120,
+          "conditional_delta_to_views": 80,
+          "rank_pair_correlation": 115,
+          "bucketed_curve_to_views": 63,
+          "piecewise_to_views": 54,
+          "depth3_interaction_to_views": 80,
+          "threshold_delta_to_views": 63,
+          "quantile_gap_to_views": 63,
+          "residual_pair_to_views": 100,
+          "monotonic_bucket_consistency": 63,
+          "regime_gap_to_views": 130,
+          "bridge_strength_pre_to_post": 130,
+          "interaction": 429895
+        },
+        "target": {
+          "views": 443279,
+          "missing": 235
+        },
+        "matchedSampleSize": 436674,
+        "uniqueKeys": 443358,
+        "duplicateRows": 156,
+        "reconstructedParametricTests": 436674,
+        "reconstructedBySurvivors": 807,
+        "reconstructedByPreUploadSurvivors": 19,
+        "reconstructedByPostOutcomeSurvivors": 788,
+        "topReconstructed": [
+          {
+            "key": "retention_entropy_x_non_sub_view_share",
+            "layer": "post",
+            "kind": "interaction_to_views",
+            "n": 370,
+            "r": 0.762929212,
+            "p": 1.0475504640543313e-71,
+            "by": 3.1023812328451873e-65
+          },
+          {
+            "key": "retention_entropy_x_non_sub_view_share",
+            "layer": "post",
+            "kind": "interaction_to_views",
+            "n": 370,
+            "r": 0.762929212,
+            "p": 1.0475504640544803e-71,
+            "by": 3.1023812328451873e-65
+          },
+          {
+            "key": "expectation_subversion_front_load_ratio_x_non_sub_view_share",
+            "layer": "post",
+            "kind": "interaction",
+            "n": 370,
+            "r": 0.755321511,
+            "p": 1.595745599316711e-69,
+            "by": 5.907366004777493e-64
+          },
+          {
+            "key": "non_sub_view_share_x_expectation_subversion_front_load_ratio",
+            "layer": "post",
+            "kind": "interaction",
+            "n": 370,
+            "r": 0.755321511,
+            "p": 1.595745599316711e-69,
+            "by": 5.907366004777493e-64
+          },
+          {
+            "key": "knowledge_gap_front_load_ratio_x_non_sub_view_share",
+            "layer": "post",
+            "kind": "interaction",
+            "n": 370,
+            "r": 0.755321511,
+            "p": 1.595745599316711e-69,
+            "by": 5.907366004777493e-64
+          },
+          {
+            "key": "non_sub_view_share_x_knowledge_gap_front_load_ratio",
+            "layer": "post",
+            "kind": "interaction",
+            "n": 370,
+            "r": 0.755321511,
+            "p": 1.595745599316711e-69,
+            "by": 5.907366004777493e-64
+          },
+          {
+            "key": "suspense_bridge_front_load_ratio_x_non_sub_view_share",
+            "layer": "post",
+            "kind": "interaction",
+            "n": 370,
+            "r": 0.755321511,
+            "p": 1.595745599316711e-69,
+            "by": 5.907366004777493e-64
+          },
+          {
+            "key": "non_sub_view_share_x_suspense_bridge_front_load_ratio",
+            "layer": "post",
+            "kind": "interaction",
+            "n": 370,
+            "r": 0.755321511,
+            "p": 1.595745599316711e-69,
+            "by": 5.907366004777493e-64
+          },
+          {
+            "key": "identity_challenge_front_load_ratio_x_non_sub_view_share",
+            "layer": "post",
+            "kind": "interaction",
+            "n": 370,
+            "r": 0.755321511,
+            "p": 1.595745599316711e-69,
+            "by": 5.907366004777493e-64
+          },
+          {
+            "key": "non_sub_view_share_x_identity_challenge_front_load_ratio",
+            "layer": "post",
+            "kind": "interaction",
+            "n": 370,
+            "r": 0.755321511,
+            "p": 1.595745599316711e-69,
+            "by": 5.907366004777493e-64
+          },
+          {
+            "key": "fomo_signal_front_load_ratio_x_non_sub_view_share",
+            "layer": "post",
+            "kind": "interaction",
+            "n": 370,
+            "r": 0.755321511,
+            "p": 1.595745599316711e-69,
+            "by": 5.907366004777493e-64
+          },
+          {
+            "key": "non_sub_view_share_x_fomo_signal_front_load_ratio",
+            "layer": "post",
+            "kind": "interaction",
+            "n": 370,
+            "r": 0.755321511,
+            "p": 1.595745599316711e-69,
+            "by": 5.907366004777493e-64
+          }
+        ]
+      },
+      "graph": {
+        "nodes": 2619,
+        "baseEdges": 2618,
+        "returnedDerivedEdges": 10000,
+        "declaredTotalDerivedEdges": 438444
+      },
+      "archivedResearchSnapshots": 1332,
+      "generationMismatches": {
+        "registryDerivedMinusDerivedCompactRows": -525,
+        "registryDerivedMinusDerivedCompactUnique": -369,
+        "registryDerivedMinusGraphDeclaredEdges": 4545,
+        "registryEntriesMinusExperimentRows": -969
+      },
+      "correctionVerdict": "The compact p-values and reconstructed Pearson tails can be corrected numerically, but the registry is one adaptively generated search with generation mismatches, mixed post-outcome descendants, no complete null replay, and no source/time lockbox. Archived snapshots are not replications.",
+      "promotionCeiling": "discovery_only"
+    }
+  },
+  "promotionCeilings": {
+    "unifiedPanelDerivedClaims": "discovery_only_invalid_panel",
+    "operations": "surrogate_association",
+    "promiseClusters": "random_fold_conditional_diagnostic",
+    "promiseTiming": "falsified_processing_lag",
+    "promiseMarketHold": "regional_retrospective_candidate",
+    "retention": "retrospective_mechanism",
+    "tribe": "local_diagnostic",
+    "legacy": "discovery_only",
+    "wholeProgram": "no_promoted_invariant"
+  },
+  "flatKnownUniverseSensitivity": {
+    "threshold": 1.0306706986504398e-7,
+    "operationsProjectedScoreTestsBelowThreshold": 17,
+    "promiseReportedTestsBelowThreshold": 0,
+    "tribeTestsBelowThreshold": 40,
+    "tribeCoreDeconfoundedTestsBelowThreshold": 0,
+    "legacyCompactTestsBelowThreshold": 317,
+    "legacyReconstructedDerivedTestsBelowThreshold": 486,
+    "interpretation": "This Bonferroni screen is a sensitivity bound over visible search executions, not a substitute for replaying each adaptive algorithm under a synchronized null."
+  },
+  "findings": {
+    "nativeFamilyStatisticalSurvivors": {
+      "operationsProjectedTargets": [
+        {
+          "target": "text_keep",
+          "continuousBySurvivors": 7,
+          "thresholdBySurvivors": 5,
+          "evidenceClass": "projected_target",
+          "promotable": false
+        },
+        {
+          "target": "together_keep",
+          "continuousBySurvivors": 10,
+          "thresholdBySurvivors": 4,
+          "evidenceClass": "projected_target",
+          "promotable": false
+        },
+        {
+          "target": "visual_keep",
+          "continuousBySurvivors": 6,
+          "thresholdBySurvivors": 14,
+          "evidenceClass": "projected_target",
+          "promotable": false
+        }
+      ],
+      "promiseMarketHold": [
+        {
+          "finding": "Frozen external Market Hold score associates with viewed_percent",
+          "n": 208,
+          "spearman": 0.298890337,
+          "permutationP": 0.000244081034903588,
+          "nativeFourEndpointBy": 0.000678003,
+          "evidenceClass": "observed_outcome_cross_source_transfer",
+          "ceiling": "regional_retrospective_candidate",
+          "promotableNow": false,
+          "blocker": "No program-wide sealed family or prospective same-topic intervention; one owned account."
+        },
+        {
+          "finding": "Frozen external Market Hold score associates with retention_5s",
+          "n": 208,
+          "spearman": 0.260421501,
+          "permutationP": 0.000244081034903588,
+          "nativeFourEndpointBy": 0.000678003,
+          "evidenceClass": "observed_outcome_cross_source_transfer",
+          "ceiling": "regional_retrospective_candidate",
+          "promotableNow": false,
+          "blocker": "No program-wide sealed family or prospective same-topic intervention; one owned account."
+        },
+        {
+          "finding": "Frozen external Market Hold score associates with average_retention",
+          "n": 208,
+          "spearman": 0.344345056,
+          "permutationP": 0.000244081034903588,
+          "nativeFourEndpointBy": 0.000678003,
+          "evidenceClass": "observed_outcome_cross_source_transfer",
+          "ceiling": "regional_retrospective_candidate",
+          "promotableNow": false,
+          "blocker": "No program-wide sealed family or prospective same-topic intervention; one owned account."
+        }
+      ],
+      "tribeCoreDeconfounded": [
+        {
+          "finding": "hcp.PeEc.mean associates with avgRetention",
+          "n": 130,
+          "partialSpearman": 0.421300305,
+          "globalBy": 0.0032175156589188854,
+          "evidenceClass": "same_account_observed_association",
+          "ceiling": "local_diagnostic",
+          "promotableNow": false,
+          "blocker": "No independent account/time lockbox or synchronized maxT replay."
+        },
+        {
+          "finding": "hcp.TE1m.peak associates with avgRetention",
+          "n": 130,
+          "partialSpearman": -0.389018012,
+          "globalBy": 0.015478194893331979,
+          "evidenceClass": "same_account_observed_association",
+          "ceiling": "local_diagnostic",
+          "promotableNow": false,
+          "blocker": "No independent account/time lockbox or synchronized maxT replay."
+        },
+        {
+          "finding": "hcp.TE1m.mean associates with avgRetention",
+          "n": 130,
+          "partialSpearman": -0.386841807,
+          "globalBy": 0.01747861826194345,
+          "evidenceClass": "same_account_observed_association",
+          "ceiling": "local_diagnostic",
+          "promotableNow": false,
+          "blocker": "No independent account/time lockbox or synchronized maxT replay."
+        },
+        {
+          "finding": "hcp.TE1m.mean associates with keep",
+          "n": 130,
+          "partialSpearman": -0.386380768,
+          "globalBy": 0.01753128183730456,
+          "evidenceClass": "same_account_observed_association",
+          "ceiling": "local_diagnostic",
+          "promotableNow": false,
+          "blocker": "No independent account/time lockbox or synchronized maxT replay."
+        },
+        {
+          "finding": "hcp.PeEc.mean associates with keep",
+          "n": 130,
+          "partialSpearman": 0.384124301,
+          "globalBy": 0.01940717468875015,
+          "evidenceClass": "same_account_observed_association",
+          "ceiling": "local_diagnostic",
+          "promotableNow": false,
+          "blocker": "No independent account/time lockbox or synchronized maxT replay."
+        },
+        {
+          "finding": "hcp.TE1m.peak associates with keep",
+          "n": 130,
+          "partialSpearman": -0.37869475,
+          "globalBy": 0.02435118724998527,
+          "evidenceClass": "same_account_observed_association",
+          "ceiling": "local_diagnostic",
+          "promotableNow": false,
+          "blocker": "No independent account/time lockbox or synchronized maxT replay."
+        },
+        {
+          "finding": "hcp.TE1m.peak associates with logviews",
+          "n": 130,
+          "partialSpearman": -0.372620137,
+          "globalBy": 0.03135417454802058,
+          "evidenceClass": "same_account_observed_association",
+          "ceiling": "local_diagnostic",
+          "promotableNow": false,
+          "blocker": "No independent account/time lockbox or synchronized maxT replay."
+        },
+        {
+          "finding": "hcp.PH.mean associates with avgRetention",
+          "n": 130,
+          "partialSpearman": 0.365262396,
+          "globalBy": 0.0440158394113519,
+          "evidenceClass": "same_account_observed_association",
+          "ceiling": "local_diagnostic",
+          "promotableNow": false,
+          "blocker": "No independent account/time lockbox or synchronized maxT replay."
+        }
+      ],
+      "legacyCompactByCount": 494,
+      "legacyReconstructedDerivedByCount": 807
+    },
+    "falsificationsThatCurrentlyHold": [
+      {
+        "finding": "No Promise cluster-outcome family validates chronologically.",
+        "count": 0
+      },
+      {
+        "finding": "No positive processing delay survives the 816-specification max-stat null.",
+        "supported": false
+      },
+      {
+        "finding": "Hook-quality random-fold signal fails chronological replication.",
+        "randomP": 0.001952648279228704,
+        "chronologicalP": 0.5179399560654138
+      }
+    ],
+    "promotedFindings": [],
+    "wholeProgramVerdict": "At alpha 0.05, several numbers survive their native retrospective families, but no candidate survives multiplicity, evidence-class, independent-source/time, and prospective gates simultaneously. Shorts pass the frozen-source and reconstructed-geometry lineage gates; Long remains underpowered. The two incoherent native Long maps remain rejected and are not used by the rebuilt geometry. There is currently no promoted principle.",
+    "strictQuantAudit": {
+      "clusterOutcomeFamily": {
+        "tests": 24,
+        "familyWiseSignificant": 0,
+        "bestLaterVideo": {
+          "id": "shorts:visual:k24",
+          "format": "shorts",
+          "modality": "visual",
+          "clusterCount": 24,
+          "observations": 9952,
+          "sources": 4190,
+          "etaSquared": 0.038728,
+          "sourceMacro": {
+            "sources": 321,
+            "meanEtaSquared": 0.314988
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 9952,
+              "meanTrainingRowsAfterFamilyExclusion": 7775.4,
+              "r2": 0.029625,
+              "pearson": 0.173934,
+              "spearman": 0.149986,
+              "maeLog10Lift": 0.428923
+            },
+            "laterVideo": {
+              "n": 3046,
+              "trainingRowsBeforeFamilyExclusion": 6906,
+              "trainingRowsAfterFamilyExclusion": 6349,
+              "r2": 0.037561,
+              "pearson": 0.199589,
+              "spearman": 0.1696,
+              "maeLog10Lift": 0.400354,
+              "zeroBaselineMae": 0.409549,
+              "maeImprovement": 0.009195
+            }
+          },
+          "familyWiseP": 0.266932,
+          "familyWiseSignificant": false
+        }
+      },
+      "nuisanceBaselineFamily": {
+        "hypotheses": 36,
+        "holm05Survivors": 0,
+        "fdr05Survivors": 17,
+        "interpretation": "No nuisance-baseline result survives family-wise Holm control. Several survive FDR, but within-creator pairwise accuracy crosses chance across reasonable baselines and history support thresholds."
+      },
+      "creatorRelativeDecisionSignal": {
+        "visual": {
+          "unseenCreator": {
+            "spearman": 0.039989,
+            "bitsPerObservation": 0.001169,
+            "pairwiseAccuracy": 0.527749
+          },
+          "laterVideo": {
+            "spearman": 0.038705,
+            "bitsPerObservation": 0.000105,
+            "pairwiseAccuracy": 0.515437
+          }
+        },
+        "text": {
+          "unseenCreator": {
+            "spearman": 0.032431,
+            "bitsPerObservation": -0.00118,
+            "pairwiseAccuracy": 0.51941
+          },
+          "laterVideo": {
+            "spearman": -0.019438,
+            "bitsPerObservation": -0.000026,
+            "pairwiseAccuracy": 0.499329
+          }
+        },
+        "together": {
+          "unseenCreator": {
+            "spearman": 0.046193,
+            "bitsPerObservation": 0.000994,
+            "pairwiseAccuracy": 0.523212
+          },
+          "laterVideo": {
+            "spearman": 0.043712,
+            "bitsPerObservation": 0.000929,
+            "pairwiseAccuracy": 0.518631
+          }
+        }
+      }
+    },
+    "invalidatedUnifiedPanelArtifacts": [
+      {
+        "id": "opportunity-targets",
+        "path": "principles-lab/quant/.cache/opportunity-targets.json.gz",
+        "dependency": "direct outcome transform from the governed panel",
+        "declaredPanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+        "declaredHashMatchesCurrentPanel": true,
+        "formatDataGate": {
+          "shorts": true,
+          "long": false
+        },
+        "confirmatoryUseValid": false,
+        "shortsConfirmatoryDataUseValid": true,
+        "longConfirmatoryDataUseValid": false,
+        "status": "shorts_data_gate_pass_long_blocked"
+      },
+      {
+        "id": "opportunity-adjustment",
+        "path": "principles-lab/quant/opportunity-adjustment.json",
+        "dependency": "direct outcome transform from the governed panel",
+        "declaredPanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+        "declaredHashMatchesCurrentPanel": true,
+        "formatDataGate": {
+          "shorts": true,
+          "long": false
+        },
+        "confirmatoryUseValid": false,
+        "shortsConfirmatoryDataUseValid": true,
+        "longConfirmatoryDataUseValid": false,
+        "status": "shorts_data_gate_pass_long_blocked"
+      },
+      {
+        "id": "cluster-outcomes-adjusted",
+        "path": "principles-lab/quant/cluster-outcomes-adjusted.json",
+        "dependency": "direct panel and opportunity-target analysis",
+        "declaredPanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+        "declaredHashMatchesCurrentPanel": true,
+        "formatDataGate": {
+          "shorts": true,
+          "long": false
+        },
+        "confirmatoryUseValid": false,
+        "shortsConfirmatoryDataUseValid": true,
+        "longConfirmatoryDataUseValid": false,
+        "status": "shorts_data_gate_pass_long_blocked"
+      },
+      {
+        "id": "nested-outcome-validation",
+        "path": "principles-lab/quant/nested-outcome-validation.json",
+        "dependency": "loads unified-panel.json.gz directly with immutable panel lineage",
+        "declaredPanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+        "declaredHashMatchesCurrentPanel": true,
+        "formatDataGate": {
+          "shorts": true,
+          "long": false
+        },
+        "confirmatoryUseValid": false,
+        "shortsConfirmatoryDataUseValid": true,
+        "longConfirmatoryDataUseValid": false,
+        "status": "shorts_data_gate_pass_long_blocked"
+      },
+      {
+        "id": "raw-embedding-validation",
+        "path": "principles-lab/quant/raw-embedding-validation.json",
+        "dependency": "loads opportunity-targets.json.gz with immutable panel and target lineage",
+        "declaredPanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+        "declaredHashMatchesCurrentPanel": true,
+        "formatDataGate": {
+          "shorts": true,
+          "long": false
+        },
+        "confirmatoryUseValid": false,
+        "shortsConfirmatoryDataUseValid": true,
+        "longConfirmatoryDataUseValid": false,
+        "status": "shorts_data_gate_pass_long_blocked"
+      },
+      {
+        "id": "within-creator-delta-validation",
+        "path": "principles-lab/quant/within-creator-delta-validation.json",
+        "dependency": "loads unified-panel.json.gz and frozen vectors with immutable lineage",
+        "declaredPanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+        "declaredHashMatchesCurrentPanel": true,
+        "formatDataGate": {
+          "shorts": true,
+          "long": false
+        },
+        "confirmatoryUseValid": false,
+        "shortsConfirmatoryDataUseValid": true,
+        "longConfirmatoryDataUseValid": false,
+        "status": "shorts_data_gate_pass_long_blocked"
+      },
+      {
+        "id": "baseline-sensitivity-validation",
+        "path": "principles-lab/quant/baseline-sensitivity-validation.json",
+        "dependency": "rebuilds fold-local targets across the predeclared nuisance-baseline grid",
+        "declaredPanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+        "declaredHashMatchesCurrentPanel": true,
+        "formatDataGate": {
+          "shorts": true,
+          "long": false
+        },
+        "confirmatoryUseValid": false,
+        "shortsConfirmatoryDataUseValid": true,
+        "longConfirmatoryDataUseValid": false,
+        "status": "shorts_data_gate_pass_long_blocked"
+      }
+    ]
+  },
+  "integrityFindings": [
+    {
+      "severity": "critical",
+      "finding": "Unified-panel promotion is blocked by: longStrictAllModalitySupport.",
+      "gates": {
+        "twoReadImmutableSourceSnapshot": {
+          "pass": true,
+          "required": "Two complete byte reads per DB, map, and vector object; stable metadata across the collection; content-addressed local copies; one snapshot identity; the panel must bind to that exact run and every direct source hash.",
+          "evidence": {
+            "frozenSnapshot": {
+              "exists": true,
+              "pass": true,
+              "freezePass": true,
+              "allSnapshotIntegrityPass": false,
+              "schema": "quant-frozen-source-snapshot-v1",
+              "runId": "efaa82b96450e04275a4c457",
+              "identityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7",
+              "requiredRoles": 14,
+              "objectCount": 14,
+              "verifiedLocalObjects": 14,
+              "verifiedBytes": 1847412872,
+              "completeReadsPerObject": 2,
+              "metadataStableAcrossWholeCollection": true,
+              "contentAddressedLocalObjects": true,
+              "serverSideConditionalCopy": true,
+              "immutableR2Prefix": "quant/snapshots/20260726171723/",
+              "mutableSourcesChangedAfterConditionalCopy": [
+                "library/db.json",
+                "longform/db.json"
+              ],
+              "representationIntegrity": {
+                "exists": true,
+                "accepted": false,
+                "snapshotRunIdMatches": true,
+                "snapshotIdentityHashMatches": true,
+                "acceptedChannels": 4,
+                "rejectedChannels": 2,
+                "failures": [
+                  "long:visual: row count mismatch",
+                  "long:visual: ID order mismatch",
+                  "long:text: row count mismatch",
+                  "long:text: ID order mismatch"
+                ],
+                "channels": [
+                  {
+                    "id": "shorts:visual",
+                    "mapRows": 66157,
+                    "vectorRows": 66157,
+                    "dimensions": 1536,
+                    "rowCountMatch": true,
+                    "idOrderMatch": true,
+                    "duplicateMapIds": 0,
+                    "duplicateVectorIds": 0,
+                    "sampledVectors": 10000,
+                    "sampleAllFinite": true
+                  },
+                  {
+                    "id": "shorts:text",
+                    "mapRows": 23183,
+                    "vectorRows": 23183,
+                    "dimensions": 1536,
+                    "rowCountMatch": true,
+                    "idOrderMatch": true,
+                    "duplicateMapIds": 0,
+                    "duplicateVectorIds": 0,
+                    "sampledVectors": 10000,
+                    "sampleAllFinite": true
+                  },
+                  {
+                    "id": "shorts:together",
+                    "mapRows": 66142,
+                    "vectorRows": 66142,
+                    "dimensions": 1536,
+                    "rowCountMatch": true,
+                    "idOrderMatch": true,
+                    "duplicateMapIds": 0,
+                    "duplicateVectorIds": 0,
+                    "sampledVectors": 10000,
+                    "sampleAllFinite": true
+                  },
+                  {
+                    "id": "long:visual",
+                    "mapRows": 41584,
+                    "vectorRows": 41684,
+                    "dimensions": 1536,
+                    "rowCountMatch": false,
+                    "idOrderMatch": false,
+                    "duplicateMapIds": 0,
+                    "duplicateVectorIds": 0,
+                    "sampledVectors": 10000,
+                    "sampleAllFinite": true
+                  },
+                  {
+                    "id": "long:text",
+                    "mapRows": 41587,
+                    "vectorRows": 41687,
+                    "dimensions": 1536,
+                    "rowCountMatch": false,
+                    "idOrderMatch": false,
+                    "duplicateMapIds": 0,
+                    "duplicateVectorIds": 0,
+                    "sampledVectors": 10000,
+                    "sampleAllFinite": true
+                  },
+                  {
+                    "id": "long:together",
+                    "mapRows": 41587,
+                    "vectorRows": 41587,
+                    "dimensions": 1536,
+                    "rowCountMatch": true,
+                    "idOrderMatch": true,
+                    "duplicateMapIds": 0,
+                    "duplicateVectorIds": 0,
+                    "sampledVectors": 10000,
+                    "sampleAllFinite": true
+                  }
+                ]
+              },
+              "missingRoles": [],
+              "freezeFailures": [],
+              "allFailures": [
+                "snapshot representation integrity rejected: long:visual: row count mismatch; long:visual: ID order mismatch; long:text: row count mismatch; long:text: ID order mismatch"
+              ]
+            },
+            "panelGenerationBinding": {
+              "panelSnapshotRunId": "efaa82b96450e04275a4c457",
+              "frozenSnapshotRunId": "efaa82b96450e04275a4c457",
+              "runIdMatches": true,
+              "panelSnapshotIdentityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7",
+              "frozenSnapshotIdentityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7",
+              "identityHashMatches": true,
+              "directSourceComparisons": [
+                {
+                  "role": "shorts:database",
+                  "key": "library/db.json",
+                  "panelSha256": "7a9c11342606dc4afb182e627019c5f6868490e56aa39d4db996efe99853bb40",
+                  "frozenSha256": "7a9c11342606dc4afb182e627019c5f6868490e56aa39d4db996efe99853bb40",
+                  "matches": true
+                },
+                {
+                  "role": "long:database",
+                  "key": "longform/db.json",
+                  "panelSha256": "9f1dc521cffcc36e7273e22d8755bdedad8d7d9091f371dbf83d51e034b5cc2c",
+                  "frozenSha256": "9f1dc521cffcc36e7273e22d8755bdedad8d7d9091f371dbf83d51e034b5cc2c",
+                  "matches": true
+                },
+                {
+                  "role": "shorts:visual:map",
+                  "key": "raw/visual/map.json",
+                  "panelSha256": "c42d6525c3553e3a02683f285f3b5bfc33b2f2db4d5c336b05f1f71cbf877a12",
+                  "frozenSha256": "c42d6525c3553e3a02683f285f3b5bfc33b2f2db4d5c336b05f1f71cbf877a12",
+                  "matches": true
+                },
+                {
+                  "role": "shorts:text:map",
+                  "key": "raw/text/map.json",
+                  "panelSha256": "7c01ff360e493edc8d0dc4afa3530fd3a674da8720fdfde0924bc7959b42c13e",
+                  "frozenSha256": "7c01ff360e493edc8d0dc4afa3530fd3a674da8720fdfde0924bc7959b42c13e",
+                  "matches": true
+                },
+                {
+                  "role": "shorts:together:map",
+                  "key": "raw/together/map.json",
+                  "panelSha256": "4ea467284368820a951ed5b8aaa68f463adff1b282d5269212723d509710330d",
+                  "frozenSha256": "4ea467284368820a951ed5b8aaa68f463adff1b282d5269212723d509710330d",
+                  "matches": true
+                },
+                {
+                  "role": "long:visual:map",
+                  "key": "raw-long/visual/map.json",
+                  "panelSha256": "ce69711dd7a71b6fc49704aa43ac4e030693d44ca2dbd3e1b8c37cecc5b61cac",
+                  "frozenSha256": "ce69711dd7a71b6fc49704aa43ac4e030693d44ca2dbd3e1b8c37cecc5b61cac",
+                  "matches": true
+                },
+                {
+                  "role": "long:text:map",
+                  "key": "raw-long/text/map.json",
+                  "panelSha256": "65966decf029070384ffc7391b05e8b8596c1876b3ad371112a39b9b7ffbf77e",
+                  "frozenSha256": "65966decf029070384ffc7391b05e8b8596c1876b3ad371112a39b9b7ffbf77e",
+                  "matches": true
+                },
+                {
+                  "role": "long:together:map",
+                  "key": "raw-long/together/map.json",
+                  "panelSha256": "406b56cb27e92922b3eb14165762f2a8d1377d325dd1fda7a2b77f2b5e4898da",
+                  "frozenSha256": "406b56cb27e92922b3eb14165762f2a8d1377d325dd1fda7a2b77f2b5e4898da",
+                  "matches": true
+                }
+              ],
+              "matchingDirectSources": 8,
+              "requiredDirectSources": 8,
+              "pass": true
+            }
+          }
+        },
+        "mapVectorGenerationCoherence": {
+          "pass": true,
+          "required": "Every analysis channel must be rebuilt outcome-blind from the exact frozen raw vector archive. Native maps with mismatched row order must remain rejected.",
+          "evidence": {
+            "nativeMapVectorIntegrity": {
+              "exists": true,
+              "accepted": false,
+              "snapshotRunIdMatches": true,
+              "snapshotIdentityHashMatches": true,
+              "acceptedChannels": 4,
+              "rejectedChannels": 2,
+              "failures": [
+                "long:visual: row count mismatch",
+                "long:visual: ID order mismatch",
+                "long:text: row count mismatch",
+                "long:text: ID order mismatch"
+              ],
+              "channels": [
+                {
+                  "id": "shorts:visual",
+                  "mapRows": 66157,
+                  "vectorRows": 66157,
+                  "dimensions": 1536,
+                  "rowCountMatch": true,
+                  "idOrderMatch": true,
+                  "duplicateMapIds": 0,
+                  "duplicateVectorIds": 0,
+                  "sampledVectors": 10000,
+                  "sampleAllFinite": true
+                },
+                {
+                  "id": "shorts:text",
+                  "mapRows": 23183,
+                  "vectorRows": 23183,
+                  "dimensions": 1536,
+                  "rowCountMatch": true,
+                  "idOrderMatch": true,
+                  "duplicateMapIds": 0,
+                  "duplicateVectorIds": 0,
+                  "sampledVectors": 10000,
+                  "sampleAllFinite": true
+                },
+                {
+                  "id": "shorts:together",
+                  "mapRows": 66142,
+                  "vectorRows": 66142,
+                  "dimensions": 1536,
+                  "rowCountMatch": true,
+                  "idOrderMatch": true,
+                  "duplicateMapIds": 0,
+                  "duplicateVectorIds": 0,
+                  "sampledVectors": 10000,
+                  "sampleAllFinite": true
+                },
+                {
+                  "id": "long:visual",
+                  "mapRows": 41584,
+                  "vectorRows": 41684,
+                  "dimensions": 1536,
+                  "rowCountMatch": false,
+                  "idOrderMatch": false,
+                  "duplicateMapIds": 0,
+                  "duplicateVectorIds": 0,
+                  "sampledVectors": 10000,
+                  "sampleAllFinite": true
+                },
+                {
+                  "id": "long:text",
+                  "mapRows": 41587,
+                  "vectorRows": 41687,
+                  "dimensions": 1536,
+                  "rowCountMatch": false,
+                  "idOrderMatch": false,
+                  "duplicateMapIds": 0,
+                  "duplicateVectorIds": 0,
+                  "sampledVectors": 10000,
+                  "sampleAllFinite": true
+                },
+                {
+                  "id": "long:together",
+                  "mapRows": 41587,
+                  "vectorRows": 41587,
+                  "dimensions": 1536,
+                  "rowCountMatch": true,
+                  "idOrderMatch": true,
+                  "duplicateMapIds": 0,
+                  "duplicateVectorIds": 0,
+                  "sampledVectors": 10000,
+                  "sampleAllFinite": true
+                }
+              ]
+            },
+            "reconstructedOutcomeBlindGeometry": {
+              "pass": true,
+              "schema": "outcome-blind-reconstructed-geometry-summary-v1",
+              "snapshotRunId": "efaa82b96450e04275a4c457",
+              "outcomesUsed": false,
+              "expectedChannels": 6,
+              "verifiedChannels": 6,
+              "nativeRejectedChannels": 2,
+              "remediation": "All analysis geometry is rebuilt from frozen raw vectors. Native maps remain rejected where their ID order does not match, and are not used as analytic coordinates.",
+              "failures": []
+            }
+          }
+        },
+        "storedRowsOnly": {
+          "pass": true,
+          "required": "Every panel row must resolve to stored === true in the frozen source DB.",
+          "evidence": {
+            "shorts": {
+              "sameGenerationAsPanel": true,
+              "sourceRowsFound": 53681,
+              "storedTrue": 53681,
+              "storedFalse": 0,
+              "removedFalse": 53681,
+              "removedTrue": 0,
+              "recheckedFalse": 53681,
+              "recheckedTrue": 0,
+              "finiteStoredAt": 53681,
+              "observationTimeMatchesStoredAt": 53681,
+              "strictRows": 53681
+            },
+            "long": {
+              "sameGenerationAsPanel": true,
+              "sourceRowsFound": 93671,
+              "storedTrue": 93671,
+              "storedFalse": 0,
+              "removedFalse": 93671,
+              "removedTrue": 0,
+              "recheckedFalse": 93671,
+              "recheckedTrue": 0,
+              "finiteStoredAt": 93671,
+              "observationTimeMatchesStoredAt": 93671,
+              "strictRows": 93671
+            }
+          }
+        },
+        "storedAtObservationTime": {
+          "pass": true,
+          "required": "observationSeconds must equal floor(source.storedAt / 1000); db.updated and one format-wide snapshot timestamp are forbidden.",
+          "evidence": {
+            "shorts": {
+              "rows": 53681,
+              "observationSecondsPresent": 53681,
+              "observationTimeSourceStoredAt": 53681,
+              "snapshotSecondsPresent": 53681,
+              "uniqueSnapshotSeconds": 43061
+            },
+            "long": {
+              "rows": 93671,
+              "observationSecondsPresent": 93671,
+              "observationTimeSourceStoredAt": 93671,
+              "snapshotSecondsPresent": 93671,
+              "uniqueSnapshotSeconds": 28644
+            }
+          }
+        },
+        "recheckedExcluded": {
+          "pass": true,
+          "required": "Every panel row must resolve to rechecked !== true in the same frozen source DB.",
+          "evidence": {
+            "shorts": 53681,
+            "long": 93671
+          }
+        },
+        "historicalObservability": {
+          "pass": true,
+          "required": "Each prior outcome j used for target i must have S_j = storedAt_j / 1000 <= T_i.",
+          "evidence": {
+            "shorts": {
+              "targetsWithPrior": 10942,
+              "allModalityTargetsWithPrior": 3071,
+              "priorComparisonsUsed": 57621,
+              "observabilityViolationsInComputedHistory": 0,
+              "unobservablePublishedPriorsExcluded": 76633
+            },
+            "long": {
+              "targetsWithPrior": 9818,
+              "allModalityTargetsWithPrior": 171,
+              "priorComparisonsUsed": 80998,
+              "observabilityViolationsInComputedHistory": 0,
+              "unobservablePublishedPriorsExcluded": 276320
+            }
+          }
+        },
+        "longStrictAllModalitySupport": {
+          "pass": false,
+          "required": "Long promotion requires strict historical support in visual, text, and together modalities and must meet the uninflated power floor before creator design effects.",
+          "evidence": {
+            "exactCurrentStrictCountFromEstimandSpec": 152,
+            "auditableCountFromCurrentPanel": 171,
+            "currentFrozenPanelCountUsedForPromotion": 171,
+            "countDifference": 19,
+            "minimumIndependentRowsBeforeDesignEffect": 3140,
+            "deficitBeforeDesignEffect": 2969,
+            "supportFractionOfUninflatedMinimum": 0.054459
+          }
+        }
+      },
+      "invalidatedArtifacts": [
+        "opportunity-targets",
+        "opportunity-adjustment",
+        "cluster-outcomes-adjusted",
+        "nested-outcome-validation",
+        "raw-embedding-validation",
+        "within-creator-delta-validation",
+        "baseline-sensitivity-validation"
+      ]
+    },
+    {
+      "severity": "high",
+      "finding": "Promise (208), Retention (211), and Tribe (130) are nested views of one owned cohort.",
+      "exactOverlap": {
+        "promiseRetention": 208,
+        "promiseTribe": 130,
+        "retentionTribe": 130
+      }
+    },
+    {
+      "severity": "high",
+      "finding": "Legacy generations disagree, so no single immutable candidate universe can be replayed.",
+      "counts": {
+        "registryDerivedMinusDerivedCompactRows": -525,
+        "registryDerivedMinusDerivedCompactUnique": -369,
+        "registryDerivedMinusGraphDeclaredEdges": 4545,
+        "registryEntriesMinusExperimentRows": -969
+      }
+    },
+    {
+      "severity": "high",
+      "finding": "Retention feature selection quotes the same CV surface used to choose its path.",
+      "visibleSelectionEvaluations": 74
+    },
+    {
+      "severity": "medium",
+      "finding": "Tribe uses one account, 31,020 browsable tests, and overlapping hold-in stability checks."
+    },
+    {
+      "severity": "medium",
+      "finding": "Operations saved rows lack creator identity and immutable per-record embedding versions."
+    }
+  ],
+  "candidateRecordSchema": {
+    "required": [
+      "candidateId",
+      "familyId",
+      "evidenceEventIds",
+      "selectionFrozenAt",
+      "sourceSnapshotRunId",
+      "sourceSnapshotIdentityHash",
+      "sourceObjectHashes",
+      "representationHash",
+      "outcomeSnapshotHash",
+      "observationTimeSource",
+      "storedRowVerified",
+      "recheckedExcluded",
+      "historicalObservabilityRule",
+      "strictSupportCount",
+      "rawStatistic",
+      "familyAdjustedP",
+      "acrossFamilyQ",
+      "effectSize",
+      "confidenceInterval",
+      "sourceHoldout",
+      "timeHoldout",
+      "prospectiveSeal",
+      "promotionCeiling"
+    ],
+    "prohibition": "A transformed output may point to its parent evidence event but may not create a new event ID."
+  },
+  "artifacts": [
+    {
+      "path": "operations-lab/.cache/principles85-ledger.json",
+      "bytes": 7504058,
+      "modifiedAt": "2026-07-25T00:33:08.343Z",
+      "sha256": "f2671cf65517db919926f226b7342abbb51be2dec1bbcfeb94ae45618b4495b6"
+    },
+    {
+      "path": "promise-lab/.cache/discovery-summary.json",
+      "bytes": 13917444,
+      "modifiedAt": "2026-07-13T03:34:30.497Z",
+      "sha256": "b25f7a792f2e9186764b11c0cfab47e494152424c0d393f2e9f86085fd533e8f"
+    },
+    {
+      "path": "promise-lab/.cache/cluster-experiments.jsonl.gz",
+      "bytes": 1055249,
+      "modifiedAt": "2026-07-13T14:16:45.196Z",
+      "sha256": "ce25f0cea4546294628c37591f4610ba5520bf229337cdb4ecedd499ad9d5797"
+    },
+    {
+      "path": "promise-lab/.cache/boundary-experiments.jsonl.gz",
+      "bytes": 977170,
+      "modifiedAt": "2026-07-13T03:34:30.640Z",
+      "sha256": "8ccc1be930f274a2e3b005be61be630888791fa0a3d0e29e8a8c6761405b4ce1"
+    },
+    {
+      "path": "promise-lab/.cache/all-span-cluster-experiments.jsonl.gz",
+      "bytes": 2820478,
+      "modifiedAt": "2026-07-13T14:37:43.595Z",
+      "sha256": "6bac8c752e52a94a7289f2e4c8c8c77d4e243df8099cdfaa5358f42abc6146ba"
+    },
+    {
+      "path": "promise-lab/.cache/cluster-outcomes-experiments.jsonl.gz",
+      "bytes": 408420,
+      "modifiedAt": "2026-07-14T07:57:38.143Z",
+      "sha256": "9c84d6c4b4113c3d20a693a1eaa1795b6b728eabe5c4aa32b7e749c3a29ef9e7"
+    },
+    {
+      "path": "promise-lab/.cache/cluster-outcomes.json",
+      "bytes": 201620,
+      "modifiedAt": "2026-07-14T07:57:38.149Z",
+      "sha256": "b41bafdab04fe359b148e2b7167821e902265647fd3b58167b0f9e4b0c621d7b"
+    },
+    {
+      "path": "promise-lab/.cache/forward-response.json",
+      "bytes": 1583710,
+      "modifiedAt": "2026-07-14T08:13:57.996Z",
+      "sha256": "841861452a6a34510c8e306b3a2808bbca90699cb4623ea50e3ff5feea5c7d19"
+    },
+    {
+      "path": "promise-lab/.cache/hook-quality.json",
+      "bytes": 2462665,
+      "modifiedAt": "2026-07-14T08:13:58.098Z",
+      "sha256": "e95a3c674026749a6eb7bd0cc607a22ff4ef417963cc950f3e4b4f2be7bec302"
+    },
+    {
+      "path": "promise-lab/.cache/market-reward.json",
+      "bytes": 679803,
+      "modifiedAt": "2026-07-14T08:17:00.979Z",
+      "sha256": "a3d5f69e2a4a4e04349726fe6b6f83296423a60364b84dfbb3903fa43476dc38"
+    },
+    {
+      "path": "retention-study/retention_study.json",
+      "bytes": 77840,
+      "modifiedAt": "2026-06-21T17:18:57.397Z",
+      "sha256": "8ad741540794979a06da5c633928f1983cdb5599959c749845cd504fcaf1e648"
+    },
+    {
+      "path": "retention-study/tribe-corr.json",
+      "bytes": 3934450,
+      "modifiedAt": "2026-07-04T21:57:36.096Z",
+      "sha256": "3e9a35cb36342b781f6bc0ddee887d6cc31776c0c40be1774cbf388769b38190"
+    },
+    {
+      "path": "indicator-registry.json",
+      "bytes": 96034965,
+      "modifiedAt": "2026-05-14T21:52:00.160Z",
+      "sha256": "46afd3342106dc9de4d3683105c692dc98d4e0c78d546387f46e4a492e236e39"
+    },
+    {
+      "path": "indicators_compact.json",
+      "bytes": 4887185,
+      "modifiedAt": "2026-05-14T15:56:00.653Z",
+      "sha256": "3f14867b6e4a2bb23f792a650bdb4242db03ba18e96364c552a351394352f005"
+    },
+    {
+      "path": "experiments_log_compact.json",
+      "bytes": 136818561,
+      "modifiedAt": "2026-05-14T15:56:00.308Z",
+      "sha256": "6d705132bb901ed0709451a68e30695ef726a4eb385416fce1d898b970c1c7f0"
+    },
+    {
+      "path": "derived_experiments_compact.json",
+      "bytes": 85532845,
+      "modifiedAt": "2026-05-14T15:56:01.190Z",
+      "sha256": "190f1444e6eb15d8505ad4d08383120242e3114148031c48ce101090028941ee"
+    },
+    {
+      "path": "graph_compact.json",
+      "bytes": 6813975,
+      "modifiedAt": "2026-04-27T16:07:27.991Z",
+      "sha256": "0d67bb16a56fe31b2f0931a63e7d317af05d0cf4242bf8ee4e3b56071824d6ee"
+    },
+    {
+      "path": "research_questions.json",
+      "bytes": 536158459,
+      "modifiedAt": "2026-07-09T20:22:36.152Z",
+      "sha256": "59e40872240b0f4d2fbf1f5c018e91be1c2ac1f96d2b18392618b4d8fb93d3ac"
+    },
+    {
+      "path": "principles-lab/quant/.cache/unified-panel.json.gz",
+      "bytes": 28730635,
+      "modifiedAt": "2026-07-26T17:51:17.301Z",
+      "sha256": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0"
+    },
+    {
+      "path": "principles-lab/quant/.cache/opportunity-targets.json.gz",
+      "bytes": 2412206,
+      "modifiedAt": "2026-07-26T17:51:26.693Z",
+      "sha256": "d8cb385c904c9187700ccb5a2afb96dfe2fb64224d83f406a2cea9dfc89afb67"
+    },
+    {
+      "path": "principles-lab/quant/panel-summary.json",
+      "bytes": 12606,
+      "modifiedAt": "2026-07-26T17:51:17.599Z",
+      "sha256": "8df576975277792d08292696e8abb6e29727756a85a6b5f2658e8e1e26c373e7"
+    },
+    {
+      "path": "principles-lab/quant/snapshot-manifest.json",
+      "bytes": 9129,
+      "modifiedAt": "2026-07-26T17:22:28.738Z",
+      "sha256": "9d91cc8b79c7dc050120b55b25676fced7fedb31609e60265ea8b0b4d02bd7c2"
+    },
+    {
+      "path": "principles-lab/quant/snapshot-integrity.json",
+      "bytes": 4637,
+      "modifiedAt": "2026-07-26T17:22:44.003Z",
+      "sha256": "889ee3522057482db52a7da611d1e8edf55d78aa0260ad43c7bc175ce0596ecd"
+    },
+    {
+      "path": "principles-lab/quant/reconstructed-geometry-summary.json",
+      "bytes": 6402,
+      "modifiedAt": "2026-07-26T17:49:44.555Z",
+      "sha256": "b4a14b5a9f39f6c90e9a116ecd0ccedde17b8d3a9ace4af5ea7772b62f44a618"
+    },
+    {
+      "path": "principles-lab/quant/semantic-family-summary.json",
+      "bytes": 2281,
+      "modifiedAt": "2026-07-26T17:30:43.008Z",
+      "sha256": "9699d1755a72e6a2b22c942c9e6d601eae20027d305125368f65de9b1cb5372f"
+    },
+    {
+      "path": "principles-lab/quant/cluster-invariance.json",
+      "bytes": 520806,
+      "modifiedAt": "2026-07-26T17:42:31.916Z",
+      "sha256": "3ad8df3f651b64d48decbafd4ab96b02a96a4231accddfb8853663b65b2e4637"
+    },
+    {
+      "path": "principles-lab/quant/ESTIMAND_SPEC.md",
+      "bytes": 44253,
+      "modifiedAt": "2026-07-26T17:08:03.952Z",
+      "sha256": "6b726376c20507de7b917d86540abc41ba5237844cd9f7929a61768733dad566"
+    },
+    {
+      "path": "principles-lab/quant/opportunity-adjustment.json",
+      "bytes": 5440,
+      "modifiedAt": "2026-07-26T17:51:26.729Z",
+      "sha256": "c97e7f9a1ad7e86f57d8f213704eb2b9ed2b6d0fed05b9d10586ed3b692b33bc"
+    },
+    {
+      "path": "principles-lab/quant/cluster-outcomes-adjusted.json",
+      "bytes": 36964,
+      "modifiedAt": "2026-07-26T17:51:41.330Z",
+      "sha256": "5b9ccf542c97c9f5bd7d738b65553f445dbde6043875af36fe845816f114251f"
+    },
+    {
+      "path": "principles-lab/quant/nested-outcome-validation.json",
+      "bytes": 85021,
+      "modifiedAt": "2026-07-26T17:53:18.615Z",
+      "sha256": "39a153e1e546c0b44b0ad3790f5ae2a0baa68bfbf05b919c7a714840e2cffb42"
+    },
+    {
+      "path": "principles-lab/quant/raw-embedding-validation.json",
+      "bytes": 77279,
+      "modifiedAt": "2026-07-26T17:52:13.194Z",
+      "sha256": "28a5bfdf536c8c805d419cb711eed26b22c44e7eef832fb26518a820c2416699"
+    },
+    {
+      "path": "principles-lab/quant/within-creator-delta-validation.json",
+      "bytes": 184459,
+      "modifiedAt": "2026-07-26T18:06:28.910Z",
+      "sha256": "959789e7118cc59c8f8257bf3810d76d2b860cf64fe41c66cc8ab8306db67942"
+    },
+    {
+      "path": "principles-lab/quant/baseline-sensitivity-validation.json",
+      "bytes": 36330,
+      "modifiedAt": "2026-07-26T18:04:12.536Z",
+      "sha256": "0618fbe522c6044d15365fccc70918b8492188c2630ece40624e8c761ed107c0"
+    }
+  ]
+}

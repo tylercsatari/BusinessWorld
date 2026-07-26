@@ -1,0 +1,184 @@
+{
+  "schema": "outcome-blind-reconstructed-geometry-summary-v1",
+  "generatedAt": "2026-07-26T17:49:44.554442+00:00",
+  "snapshotRunId": "efaa82b96450e04275a4c457",
+  "snapshotIdentityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7",
+  "method": {
+    "input": "frozen unit-normalized 1536-D Gemini vectors",
+    "display": "deterministic PCA; coordinates clipped at input-only p01/p99",
+    "clustering": "MiniBatchKMeans on PCA64 at k=6,10,16,24",
+    "outcomesUsed": false,
+    "canonicalPurpose": "discovery and visualization only"
+  },
+  "channels": [
+    {
+      "id": "shorts:visual",
+      "vectorRole": "shorts:visual:vectors",
+      "vectorSha256": "b9046e54858a2852816c6262d28497fc7e6d4ac05939c3fb7ff7214c3b2c8795",
+      "rows": 66157,
+      "dimensions": 1536,
+      "pcaComponents": 64,
+      "pcaVarianceExplained": 0.395047,
+      "firstTwoVarianceExplained": 0.058569,
+      "resolutions": [
+        6,
+        10,
+        16,
+        24
+      ],
+      "inertia": {
+        "6": 8708.696289,
+        "10": 8261.963867,
+        "16": 7830.18457,
+        "24": 7441.639648
+      },
+      "nativeMapVectorCoherent": true,
+      "geometryPath": ".cache/reconstructed-geometry/shorts-visual.json.gz",
+      "geometryBytesGzip": 977397,
+      "geometrySha256": "4659c55d7cc8558eb0b8741c94d3165b6329c5a2a96e281713c0a1ebb5bb4c83",
+      "geometryContentHash": "f8a1293ae4420ee1e2e0c21b77a5823f2e685a1548892f4f968a469087d74e66"
+    },
+    {
+      "id": "shorts:text",
+      "vectorRole": "shorts:text:vectors",
+      "vectorSha256": "61c86be8e028e707b13dd4cb8598c1f20ea133637094cb3aeddc301b64ec20a2",
+      "rows": 23183,
+      "dimensions": 1536,
+      "pcaComponents": 64,
+      "pcaVarianceExplained": 0.385377,
+      "firstTwoVarianceExplained": 0.048733,
+      "resolutions": [
+        6,
+        10,
+        16,
+        24
+      ],
+      "inertia": {
+        "6": 3525.682129,
+        "10": 3403.381348,
+        "16": 3258.782227,
+        "24": 3102.135742
+      },
+      "nativeMapVectorCoherent": true,
+      "geometryPath": ".cache/reconstructed-geometry/shorts-text.json.gz",
+      "geometryBytesGzip": 348665,
+      "geometrySha256": "b0918305de6c4222c35191f69ead9e46635f2211e586abaee77a5f91ae68f9cc",
+      "geometryContentHash": "d78ca2e0288bd7a8fa84b9d66423b26facfee559349d51e21460dd090c52d4d1"
+    },
+    {
+      "id": "shorts:together",
+      "vectorRole": "shorts:together:vectors",
+      "vectorSha256": "883f1098e23c1f283159fba6440e4039fa691c5ce269d34872339e0bb00b7e03",
+      "rows": 66142,
+      "dimensions": 1536,
+      "pcaComponents": 64,
+      "pcaVarianceExplained": 0.399808,
+      "firstTwoVarianceExplained": 0.068964,
+      "resolutions": [
+        6,
+        10,
+        16,
+        24
+      ],
+      "inertia": {
+        "6": 8755.892578,
+        "10": 8294.804688,
+        "16": 7833.795898,
+        "24": 7528.78125
+      },
+      "nativeMapVectorCoherent": true,
+      "geometryPath": ".cache/reconstructed-geometry/shorts-together.json.gz",
+      "geometryBytesGzip": 979076,
+      "geometrySha256": "446309f8a8a0ae0a3d0c0ed902465f3cf9694de22d335ced9d64215768247ca1",
+      "geometryContentHash": "2d53981100f148e8a650a622fdd5ec017a077a79b97a69b120602c5fa72e4d31"
+    },
+    {
+      "id": "long:visual",
+      "vectorRole": "long:visual:vectors",
+      "vectorSha256": "dbdc7800c3663d4816944d5d3a97f3a4b00c99090c08a768578adcc33c74a419",
+      "rows": 41684,
+      "dimensions": 1536,
+      "pcaComponents": 64,
+      "pcaVarianceExplained": 0.402495,
+      "firstTwoVarianceExplained": 0.04887,
+      "resolutions": [
+        6,
+        10,
+        16,
+        24
+      ],
+      "inertia": {
+        "6": 5825.926758,
+        "10": 5448.398438,
+        "16": 5099.885254,
+        "24": 4897.061035
+      },
+      "nativeMapVectorCoherent": false,
+      "geometryPath": ".cache/reconstructed-geometry/long-visual.json.gz",
+      "geometryBytesGzip": 602508,
+      "geometrySha256": "dc98f5074096b633d8767c28d6d0119faa4a1d88bcd2ba9ac759aaa42f16df13",
+      "geometryContentHash": "7ac039c2e3594d8ee9f37926901a172a9eb1555ce4ef64cfdd749885e2496afb"
+    },
+    {
+      "id": "long:text",
+      "vectorRole": "long:text:vectors",
+      "vectorSha256": "415ae2da7208719d8f7de40306952c246ad97fa1edcf78de5b08003015fcf351",
+      "rows": 41687,
+      "dimensions": 1536,
+      "pcaComponents": 64,
+      "pcaVarianceExplained": 0.491925,
+      "firstTwoVarianceExplained": 0.071066,
+      "resolutions": [
+        6,
+        10,
+        16,
+        24
+      ],
+      "inertia": {
+        "6": 9229.49707,
+        "10": 8661.322266,
+        "16": 8169.094727,
+        "24": 7656.044922
+      },
+      "nativeMapVectorCoherent": false,
+      "geometryPath": ".cache/reconstructed-geometry/long-text.json.gz",
+      "geometryBytesGzip": 593518,
+      "geometrySha256": "5cbe0b5c024cb1823270f3b802fc1d7f9ffb19300e1d46ca5ec1a227b4d3dfde",
+      "geometryContentHash": "82dbb614c8c7984703d18da8652e99086fb3277d786e9d4d8db40944eb9fa599"
+    },
+    {
+      "id": "long:together",
+      "vectorRole": "long:together:vectors",
+      "vectorSha256": "3796c4f689f4016bcda01e483e7fe76c181ddbd97d024da85a714381bea61c67",
+      "rows": 41587,
+      "dimensions": 1536,
+      "pcaComponents": 64,
+      "pcaVarianceExplained": 0.442359,
+      "firstTwoVarianceExplained": 0.061131,
+      "resolutions": [
+        6,
+        10,
+        16,
+        24
+      ],
+      "inertia": {
+        "6": 5873.180664,
+        "10": 5435.391602,
+        "16": 5071.612793,
+        "24": 4765.773926
+      },
+      "nativeMapVectorCoherent": true,
+      "geometryPath": ".cache/reconstructed-geometry/long-together.json.gz",
+      "geometryBytesGzip": 592424,
+      "geometrySha256": "753efb3aec9ae671caeb68ea7a42932e92f90635af28330f73f0f8febd526466",
+      "geometryContentHash": "3db1c25f567d268b3b1262eb23adbbad04c9b62be3c9cf8023574a66912d8ac8"
+    }
+  ],
+  "claimBoundary": [
+    "These clusters organize representation geometry; they are not performance classes.",
+    "PCA and KMeans are refit from the immutable vectors and do not use views, subscribers, outlier, retention, likes, or comments.",
+    "Predictive directions must be fit inside downstream training folds.",
+    "Algorithm, seed, resolution, modality, source, time, and format stability remain separate tests."
+  ],
+  "contentHash": "0b418055ee664bec577e49d315490b9d5ba99eb86eb476539819cfdefbd8e485"
+}

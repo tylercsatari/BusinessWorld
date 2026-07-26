@@ -91,3 +91,6 @@ buildings/jarvis/hook-rl/cog-idea/merged/
 
 # Long-form Raw embedding run log
 raw_embed_long.log
+
+# Principles Atlas quantitative rebuild caches (canonical sources remain on R2)
+buildings/jarvis/principles-lab/quant/.cache/

@@ -33,6 +33,31 @@ const PATHS = {
     legacyRetention: 'buildings/jarvis/retention-patterns.json',
     legacyPredictor: 'buildings/jarvis/prediction-model.json',
     bridge: 'buildings/jarvis/bridge_top_principles.json',
+    quantSnapshot: 'buildings/jarvis/principles-lab/quant/snapshot-manifest.json',
+    quantIntegrity: 'buildings/jarvis/principles-lab/quant/snapshot-integrity.json',
+    quantReconstructed:
+        'buildings/jarvis/principles-lab/quant/reconstructed-geometry-summary.json',
+    quantSemanticFamilies:
+        'buildings/jarvis/principles-lab/quant/semantic-family-summary.json',
+    quantPanel: 'buildings/jarvis/principles-lab/quant/panel-summary.json',
+    quantOpportunity:
+        'buildings/jarvis/principles-lab/quant/opportunity-adjustment.json',
+    quantRawValidation:
+        'buildings/jarvis/principles-lab/quant/raw-embedding-validation.json',
+    quantNestedValidation:
+        'buildings/jarvis/principles-lab/quant/nested-outcome-validation.json',
+    quantCreatorDelta:
+        'buildings/jarvis/principles-lab/quant/within-creator-delta-validation.json',
+    quantSensitivity:
+        'buildings/jarvis/principles-lab/quant/baseline-sensitivity-validation.json',
+    quantClusterOutcomes:
+        'buildings/jarvis/principles-lab/quant/cluster-outcomes-adjusted.json',
+    quantClusterInvariance:
+        'buildings/jarvis/principles-lab/quant/cluster-invariance.json',
+    quantFactorized:
+        'buildings/jarvis/principles-lab/quant/factorized-validation.json',
+    quantPromotion:
+        'buildings/jarvis/principles-lab/quant/promotion-ledger.json',
 };
 
 const EVIDENCE_KINDS = [
@@ -1406,6 +1431,343 @@ function buildTransformationMatrix(invariants) {
     }));
 }
 
+function compactValidationSplit(row) {
+    if (!row) return null;
+    return {
+        n: finite(row.n),
+        r2: finite(row.r2),
+        pearson: finite(row.pearson),
+        spearman: finite(row.spearman),
+        bitsPerObservation: finite(row.gaussianBitsPerObservation),
+        maeLog10Lift: finite(row.maeLog10Lift),
+        nullMaeLog10Lift: finite(row.nullMaeLog10Lift),
+        topDecileAuc: finite(row.topDecileAuc),
+        predictionStandardDeviation: finite(row.predictionStandardDeviation),
+        actualStandardDeviation: finite(row.actualStandardDeviation),
+        sourceMacro: row.sourceMacro || null,
+        pairwise: row.withinSourcePairwise || null,
+        calibration: row.calibration || null,
+        bootstrap: row.sourceBlockBootstrap || null,
+        permutation: row.withinSourcePermutation || null,
+        multiplicity: row.multiplicity || null,
+    };
+}
+
+function compactValidationChannels(artifact) {
+    return (artifact.channels || []).map(channel => ({
+        id: channel.id,
+        format: channel.format,
+        modality: channel.modality,
+        dimensions: finite(channel.dimensions),
+        observations: finite(channel.observations, finite(channel.support?.rows)),
+        unseenCreator: compactValidationSplit(channel.unseenCreator),
+        laterVideo: compactValidationSplit(channel.laterVideo),
+    }));
+}
+
+function buildQuantAudit(inputs) {
+    const {
+        snapshot,
+        integrity,
+        reconstructed,
+        semanticFamilies,
+        panel,
+        opportunity,
+        rawValidation,
+        nestedValidation,
+        creatorDelta,
+        sensitivity,
+        clusterOutcomeAudit,
+        clusterInvarianceAudit,
+        factorized,
+        promotion,
+    } = inputs;
+    const panelAudit = promotion.audits?.unifiedPanel || {};
+    const promoted = promotion.findings?.promotedFindings || [];
+    const nestedChannels = compactValidationChannels(nestedValidation);
+    const rawChannels = compactValidationChannels(rawValidation);
+    const deltaChannels = (creatorDelta.channels || []).map(channel => ({
+        id: channel.id,
+        format: channel.format,
+        modality: channel.modality,
+        support: channel.support,
+        absoluteHistoryMatched: {
+            unseenCreator: compactValidationSplit(
+                channel.absoluteHistoryMatched?.unseenCreator
+            ),
+            laterVideo: compactValidationSplit(
+                channel.absoluteHistoryMatched?.laterVideo
+            ),
+        },
+        creatorDelta: {
+            unseenCreator: compactValidationSplit(
+                channel.creatorDelta?.unseenCreator
+            ),
+            laterVideo: compactValidationSplit(
+                channel.creatorDelta?.laterVideo
+            ),
+        },
+        incremental: channel.incremental,
+    }));
+    const factorLedger = factorized.outOfDistributionPredictiveBits?.ledger || [];
+    const supportedFactors = factorLedger.filter(
+        row => row.status === 'supported_ood_bits'
+    );
+    const shortsVisual = nestedChannels.find(row => row.id === 'shorts:visual');
+    const shortsTogether = nestedChannels.find(row => row.id === 'shorts:together');
+    const deltaVisual = deltaChannels.find(row => row.id === 'shorts:visual');
+    const deltaTogether = deltaChannels.find(row => row.id === 'shorts:together');
+    const snapshotBytes = (snapshot.objects || []).reduce(
+        (sum, row) => sum + finite(row.bytes, 0),
+        0
+    );
+    const opportunityFormats = Object.fromEntries(
+        (opportunity.formats || []).map(row => [row.format, row])
+    );
+    const strictFormats = Object.fromEntries(
+        (panel.formats || []).map(row => [row.format, row])
+    );
+    const nativeFailures = integrity.failures || [];
+    const clusterClaims = clusterInvarianceAudit.conclusions?.claims || [];
+
+    return {
+        schema: 'principles-quant-audit-v1',
+        generatedAt: promotion.generatedAt,
+        verdict: {
+            status: promoted.length ? 'promoted' : 'no_promoted_principle',
+            headline: promoted.length
+                ? `${promoted.length} claim${promoted.length === 1 ? '' : 's'} cleared every gate`
+                : 'No virality principle has cleared every gate yet.',
+            summary:
+                'Two semantic factors carry repeatable out-of-distribution information for viewed '
+                + 'percentage and five-second retention. Absolute Shorts geometry also ranks broad '
+                + 'content styles, but creator-relative next-video alpha is only a few points above '
+                + 'chance and is sensitive to the nuisance baseline. Long-form confirmation is '
+                + 'underpowered. These are useful research results, not a solved universal predictor.',
+            promotedPrinciples: promoted.length,
+            supportedRegionalFactors: supportedFactors.length,
+            clusterOutcomeSurvivors:
+                finite(clusterOutcomeAudit.familyWiseSignificantTests, 0),
+            validatedClusterRelationships:
+                finite(
+                    clusterInvarianceAudit.conclusions?.mechanisms
+                        ?.validatedPairRelationships,
+                    0
+                ),
+        },
+        decisionSummary: [
+            {
+                id: 'market_hold_entry',
+                label: 'Semantic Market Hold -> viewed percentage',
+                status: 'supported_regional',
+                primary:
+                    supportedFactors.find(row => row.id === 'market-hold-viewed_percent')
+                    || null,
+                interpretation:
+                    'A text direction trained outside the owned channels adds predictive bits in '
+                    + 'both grouped and forward tests. Calibration still uses prior owned outcomes.',
+            },
+            {
+                id: 'market_hold_ret5',
+                label: 'Semantic Market Hold -> five-second retention',
+                status: 'supported_regional',
+                primary:
+                    supportedFactors.find(row => row.id === 'market-hold-retention_5s')
+                    || null,
+                interpretation:
+                    'The same external semantic direction contains repeatable attention-survival '
+                    + 'information, but it is not yet a prospective intervention.',
+            },
+            {
+                id: 'absolute_short_geometry',
+                label: 'Absolute Shorts visual/together geometry',
+                status: 'broad_style_signal',
+                primary: {
+                    visualUnseen: shortsVisual?.unseenCreator,
+                    visualLater: shortsVisual?.laterVideo,
+                    togetherUnseen: shortsTogether?.unseenCreator,
+                    togetherLater: shortsTogether?.laterVideo,
+                },
+                interpretation:
+                    'The full embedding ranks broad corpus styles after source-held-out target '
+                    + 'construction. Most of the pooled rank correlation is not a within-creator '
+                    + 'decision edge.',
+            },
+            {
+                id: 'creator_delta',
+                label: 'Creator-relative next-video content delta',
+                status: 'detectable_not_decision_grade',
+                primary: {
+                    visualUnseen: deltaVisual?.creatorDelta?.unseenCreator,
+                    visualLater: deltaVisual?.creatorDelta?.laterVideo,
+                    togetherUnseen: deltaTogether?.creatorDelta?.unseenCreator,
+                    togetherLater: deltaTogether?.creatorDelta?.laterVideo,
+                },
+                interpretation:
+                    'The incremental content edge is statistically detectable in the large Shorts '
+                    + 'panel, but later pairwise accuracy is roughly 51-52% and net information is '
+                    + 'around one-thousandth of a bit per video.',
+            },
+            {
+                id: 'clusters',
+                label: 'Discrete cluster membership',
+                status: 'not_supported_as_alpha',
+                primary: {
+                    familyWiseSignificant:
+                        finite(clusterOutcomeAudit.familyWiseSignificantTests, 0),
+                    bestLater: clusterOutcomeAudit.bestLaterVideo,
+                    geometry: clusterInvarianceAudit.conclusions?.geometry,
+                },
+                interpretation:
+                    'Clusters reveal partial local geometry. No cluster outcome test or cross-modal '
+                    + 'relationship survives the complete correction and transfer contract.',
+            },
+            {
+                id: 'long',
+                label: 'Long-form portable validation',
+                status: 'blocked_for_power',
+                primary: {
+                    strictAllModalityRows:
+                        strictFormats.long?.historicallyObservableSupport
+                            ?.targetsWithAllModalities,
+                    requiredBeforeDesignEffect:
+                        panelAudit.gates?.longStrictAllModalitySupport?.evidence
+                            ?.minimumIndependentRowsBeforeDesignEffect,
+                },
+                interpretation:
+                    'Long visual and text geometry can be rebuilt from raw vectors, but the strict '
+                    + 'historical all-modality outcome panel is far below the confirmatory power floor.',
+            },
+        ],
+        lineage: {
+            snapshot: {
+                runId: snapshot.runId,
+                identityHash: snapshot.identityHash,
+                objects: (snapshot.objects || []).length,
+                bytes: snapshotBytes,
+                completeReadsPerObject: snapshot.protocol?.completeReadsPerObject,
+                serverSideConditionalCopy:
+                    snapshot.protocol?.serverSideConditionalCopy,
+                mutableSourcesChangedAfterFreeze:
+                    snapshot.protocol?.sourceObjectsChangedDuringFreeze || [],
+            },
+            nativeIntegrity: {
+                accepted: integrity.accepted,
+                acceptedChannels: integrity.acceptedChannels,
+                rejectedChannels: integrity.rejectedChannels,
+                failures: nativeFailures,
+            },
+            reconstructedGeometry: {
+                pass:
+                    panelAudit.gates?.mapVectorGenerationCoherence?.pass === true,
+                outcomesUsed: reconstructed.method?.outcomesUsed,
+                channels: reconstructed.channels,
+                remediation:
+                    panelAudit.gates?.mapVectorGenerationCoherence?.evidence
+                        ?.reconstructedOutcomeBlindGeometry?.remediation,
+            },
+            semanticFamilies: {
+                outcomesUsed: semanticFamilies.outcomesUsed,
+                formats: semanticFamilies.formats,
+                boundary: semanticFamilies.claimBoundary,
+            },
+            hardGates: Object.entries(panelAudit.gates || {}).map(
+                ([id, row]) => ({
+                    id,
+                    pass: row.pass,
+                    required: row.required,
+                    evidence: row.evidence,
+                })
+            ),
+            governedArtifacts:
+                panelAudit.invalidatedConfirmatoryArtifacts || [],
+        },
+        support: {
+            formats: panel.formats,
+            strictOutcomeRows: finite(opportunity.targetRows),
+            strictOpportunityByFormat: opportunity.formats,
+            note: panel.primaryLimitation,
+        },
+        opportunity: {
+            shorts: opportunityFormats.shorts,
+            long: opportunityFormats.long,
+            estimand: opportunity.estimand,
+            boundary: opportunity.leakageBoundary,
+        },
+        signals: {
+            rawFoldLocal: rawChannels,
+            nestedFoldLocal: nestedChannels,
+            creatorDelta: deltaChannels,
+            baselineSensitivity: {
+                grid: sensitivity.grid,
+                stability: sensitivity.stability,
+                historySupportStability:
+                    sensitivity.historySupportStability,
+                specifications: sensitivity.specifications,
+                historySupportSpecifications:
+                    sensitivity.historySupportSpecifications,
+                claimBoundary: sensitivity.claimBoundary,
+            },
+            factorized: {
+                objective: factorized.objective,
+                contract: factorized.factorContract,
+                validation: factorized.validationContract,
+                leakageAudit: factorized.leakageAudit,
+                inventory: factorized.artifactInventory,
+                summary:
+                    factorized.outOfDistributionPredictiveBits?.summary,
+                ledger: factorLedger,
+            },
+        },
+        clusters: {
+            outcomeAudit: {
+                tests: clusterOutcomeAudit.tests,
+                familyWiseSignificantTests:
+                    clusterOutcomeAudit.familyWiseSignificantTests,
+                bestLaterVideo: clusterOutcomeAudit.bestLaterVideo,
+                bestUnseenCreator: clusterOutcomeAudit.bestUnseenCreator,
+                formats: clusterOutcomeAudit.formats,
+                boundary: clusterOutcomeAudit.evidenceBoundary,
+            },
+            invariance: {
+                geometry: clusterInvarianceAudit.conclusions?.geometry,
+                transport: clusterInvarianceAudit.conclusions?.transport,
+                mechanisms: clusterInvarianceAudit.conclusions?.mechanisms,
+                claims: clusterClaims,
+                strictPanel: clusterInvarianceAudit.outcomeAudit?.strictPanel,
+            },
+        },
+        promotion: {
+            alpha: promotion.alpha,
+            searchUniverse: promotion.adaptiveSearchUniverse,
+            findings: promotion.findings,
+            ceilings: promotion.promotionCeilings,
+            multiplicityPolicy: promotion.multiplicityPolicy,
+            auditRisks: promotion.auditRisks,
+        },
+        definitions: {
+            pooledRank:
+                'How well scores order all eligible videos together. It can be driven by stable '
+                + 'creator or style differences.',
+            sourceMacro:
+                'Compute rank correlation separately inside each creator, then give each creator '
+                + 'equal weight.',
+            pairwise:
+                'Among two videos from the same creator, how often the model orders their relative '
+                + 'performance correctly. 50% is chance.',
+            predictiveBits:
+                'Out-of-sample Gaussian log-score gain over the null. Zero means no information; '
+                + 'negative values are worse than the null.',
+            familyWiseP:
+                'Permutation probability after taking the best result across the complete declared '
+                + 'cluster family. It protects against choosing whichever map happened to look best.',
+            opportunityLift:
+                'Observed log views minus age maturity and a creator baseline built only from '
+                + 'different prior videos whose outcomes were already observable.',
+        },
+    };
+}
+
 function main() {
     const system = readJson(PATHS.system);
     const operations = readJson(PATHS.operations);
@@ -1431,6 +1793,23 @@ function main() {
         : Object.values(indicatorsObject || {});
     const legacyExperimentCount = countToken(PATHS.legacyExperiments, '"id":') || 0;
     const legacyDerivedCount = countToken(PATHS.legacyDerived, '"key":') || 0;
+    const quantInputs = {
+        snapshot: readJson(PATHS.quantSnapshot),
+        integrity: readJson(PATHS.quantIntegrity),
+        reconstructed: readJson(PATHS.quantReconstructed),
+        semanticFamilies: readJson(PATHS.quantSemanticFamilies),
+        panel: readJson(PATHS.quantPanel),
+        opportunity: readJson(PATHS.quantOpportunity),
+        rawValidation: readJson(PATHS.quantRawValidation),
+        nestedValidation: readJson(PATHS.quantNestedValidation),
+        creatorDelta: readJson(PATHS.quantCreatorDelta),
+        sensitivity: readJson(PATHS.quantSensitivity),
+        clusterOutcomeAudit: readJson(PATHS.quantClusterOutcomes),
+        clusterInvarianceAudit: readJson(PATHS.quantClusterInvariance),
+        factorized: readJson(PATHS.quantFactorized),
+        promotion: readJson(PATHS.quantPromotion),
+    };
+    const quantAudit = buildQuantAudit(quantInputs);
 
     const inputs = {
         system,
@@ -1462,13 +1841,13 @@ function main() {
 
     const artifact = {
         schema: 'business-world-principles-atlas-v2',
-        generatedAt: new Date().toISOString(),
+        generatedAt: quantAudit.generatedAt,
         title: 'Principles Atlas',
         mission: 'Discover the smallest abstractions that preserve predictive information across the widest transformations in every quantitative Jarvis surface.',
         verdict: {
-            headline: 'The first whole-system result is a correction to the target: predict creator-relative lift, not pooled virality.',
-            summary: 'Across Shorts, Long, every raw modality, private retention, saved channels, Promise, Operations, Tribe, and the legacy registry, pooled semantic structure is abundant. Portable outcome structure is scarce. The strongest repeated finding is that source opportunity, format, time, and modality must be modeled explicitly before content mechanisms can become principles.',
-            promoted: invariants.filter(row => ['supported', 'supported_negative'].includes(row.status)).length,
+            headline: quantAudit.verdict.headline,
+            summary: quantAudit.verdict.summary,
+            promoted: quantAudit.verdict.promotedPrinciples,
             mixed: invariants.filter(row => ['mixed', 'taxonomy_only', 'synthesis_hypothesis'].includes(row.status)).length,
             universal: 0,
         },
@@ -1495,6 +1874,7 @@ function main() {
         evidenceKinds: EVIDENCE_KINDS,
         transformations: TRANSFORMATIONS,
         levels: LEVELS,
+        quantAudit,
         corpus: {
             databases: system.databases,
             privateKeep: {
