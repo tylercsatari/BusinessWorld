@@ -1913,51 +1913,60 @@ const server = http.createServer(async (req, res) => {
 
     // Diagnostic (public): reports the interpreter the raw-upload uses and whether
     // its deps import — so the upload pipeline can be debugged without auth.
+    // The probes (python import test, live YouTube fetch, live Gemini embed) take seconds and
+    // used to run with BLOCKING execSync on every hit — anything polling this endpoint stalled
+    // the single-threaded server, so every other request on the site hung ("failed to fetch").
+    // Now the probes run asynchronously, one at a time, and are cached for 5 minutes; box stats
+    // (cheap, always fresh) ride along. ?fresh=1 forces a re-probe.
     if (pathname === '/api/raw/upload-health' && req.method === 'GET') {
-        const { execSync } = require('child_process');
-        let deps = 'unknown', detail = '';
-        try {
-            detail = execSync(`"${RAW_PYTHON}" -c "import sys,numpy,boto3,scipy,sklearn;print(sys.executable+' | py'+sys.version.split()[0]+' | numpy'+numpy.__version__+' | scipy'+scipy.__version__+' | sklearn'+sklearn.__version__+' | boto3'+boto3.__version__)"`, { env: RAW_PY_ENV, timeout: 20000 }).toString().trim();
-            deps = 'ok';
-        } catch (e) { deps = 'FAIL'; detail = String((e.stderr && e.stderr.toString()) || e.message || e).slice(-300); }
-        let ffmpeg = '', ytdlp = '';
-        try { ffmpeg = execSync('command -v ffmpeg', { env: RAW_PY_ENV }).toString().trim(); } catch (e) { ffmpeg = '(missing)'; }
-        try { ytdlp = execSync('command -v yt-dlp', { env: RAW_PY_ENV }).toString().trim(); } catch (e) { ytdlp = '(missing binary — module may still import)'; }
-        // LIVE YouTube reachability: import yt_dlp and fetch metadata for a known public video —
-        // reveals datacenter-IP bot-blocking directly on this box.
-        let youtube = '';
-        try {
-            youtube = execSync(`"${RAW_PYTHON}" -c "
-import yt_dlp
-opts = {'quiet': True, 'no_warnings': True, 'skip_download': True, 'socket_timeout': 15}
-with yt_dlp.YoutubeDL(opts) as y:
-    i = y.extract_info('https://www.youtube.com/watch?v=aE9jKLck_cI', download=False)
-print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 }).toString().trim().split('\n').pop();
-        } catch (e) { youtube = 'FAIL: ' + String((e.stderr && e.stderr.toString()) || e.message || e).slice(-260); }
-        // LIVE Gemini check — a key can be present but dead (e.g. billing suspended on the Google
-        // project → 403 on every embed, which silently breaks ALL hook scoring). Test it for real.
-        let gemini = 'no key';
-        if (process.env.GEMINI_API_KEY) {
-            try {
-                const gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-                    body: JSON.stringify({ content: { parts: [{ text: 'ok' }] }, outputDimensionality: 8 }), signal: AbortSignal.timeout(15000) });
-                const gj = await gr.json().catch(() => null);
-                gemini = (gj && gj.embedding) ? 'ok' : `FAIL http ${gr.status}: ${String((gj && gj.error && gj.error.message) || '').slice(0, 140)}`;
-            } catch (e) { gemini = 'FAIL: ' + String(e.message || e).slice(0, 120); }
+        const probe = async () => {
+            const { execFile } = require('child_process');
+            const run = (cmd, args, timeout) => new Promise(resolve => execFile(cmd, args, { env: RAW_PY_ENV, timeout }, (e, so, se) => resolve({ e, so: String(so || '').trim(), se: String(se || '').trim() })));
+            const out = {};
+            const dp = await run(RAW_PYTHON, ['-c', "import sys,numpy,boto3,scipy,sklearn;print(sys.executable+' | py'+sys.version.split()[0]+' | numpy'+numpy.__version__+' | scipy'+scipy.__version__+' | sklearn'+sklearn.__version__+' | boto3'+boto3.__version__)"], 20000);
+            out.deps = dp.e ? 'FAIL' : 'ok'; out.detail = dp.e ? (dp.se || dp.e.message || '').slice(-300) : dp.so;
+            const ff = await run('/bin/sh', ['-c', 'command -v ffmpeg'], 8000);
+            out.ffmpeg = ff.e ? '(missing)' : ff.so;
+            const yd = await run('/bin/sh', ['-c', 'command -v yt-dlp'], 8000);
+            out.ytdlp = yd.e ? '(missing binary — module may still import)' : yd.so;
+            // LIVE YouTube reachability: import yt_dlp and fetch metadata for a known public
+            // video — reveals datacenter-IP bot-blocking directly on this box.
+            const yt = await run(RAW_PYTHON, ['-c', "import yt_dlp\nopts = {'quiet': True, 'no_warnings': True, 'skip_download': True, 'socket_timeout': 15}\nwith yt_dlp.YoutubeDL(opts) as y:\n    i = y.extract_info('https://www.youtube.com/watch?v=aE9jKLck_cI', download=False)\nprint('ok: ' + str(i.get('title'))[:40])"], 45000);
+            out.youtube = yt.e ? ('FAIL: ' + (yt.se || yt.e.message || '').slice(-260)) : yt.so.split('\n').pop();
+            // LIVE Gemini check — a key can be present but dead (e.g. billing suspended on the
+            // Google project → 403 on every embed, which silently breaks ALL hook scoring).
+            out.gemini = 'no key';
+            if (process.env.GEMINI_API_KEY) {
+                try {
+                    const gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+                        body: JSON.stringify({ content: { parts: [{ text: 'ok' }] }, outputDimensionality: 8 }), signal: AbortSignal.timeout(15000) });
+                    const gj = await gr.json().catch(() => null);
+                    out.gemini = (gj && gj.embedding) ? 'ok' : `FAIL http ${gr.status}: ${String((gj && gj.error && gj.error.message) || '').slice(0, 140)}`;
+                } catch (e) { out.gemini = 'FAIL: ' + String(e.message || e).slice(0, 120); }
+            }
+            return out;
+        };
+        const now = Date.now();
+        if ((!global._rawHealthCache || now - global._rawHealthCache.at > 300000 || url.searchParams.get('fresh') === '1') && !global._rawHealthProbing) {
+            global._rawHealthProbing = probe().then(out => { global._rawHealthCache = { at: Date.now(), data: out }; })
+                .catch(() => {}).finally(() => { global._rawHealthProbing = null; });
         }
+        if (!global._rawHealthCache && global._rawHealthProbing) { try { await global._rawHealthProbing; } catch (e) {} }   // first hit: wait for the initial probe
+        const cached = (global._rawHealthCache && global._rawHealthCache.data) || {};
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
             rawPython: RAW_PYTHON,
-            deps,
-            detail,
-            ffmpeg,
-            ytdlp,
-            youtube,
+            deps: cached.deps || 'probing',
+            detail: cached.detail || '',
+            ffmpeg: cached.ffmpeg || '',
+            ytdlp: cached.ytdlp || '',
+            youtube: cached.youtube || '',
             hasGeminiKey: !!process.env.GEMINI_API_KEY,
-            gemini,
+            gemini: cached.gemini || 'probing',
             hasR2: !!process.env.R2_ACCESS_KEY_ID,
             gitCommit: process.env.RENDER_GIT_COMMIT || null,
+            probedAgoSec: global._rawHealthCache ? Math.round((Date.now() - global._rawHealthCache.at) / 1000) : null,
             box: rawBoxStats(),
             promiseScorerServingContract: 'numpy-variable-horizon-four-cluster-v3',
         }));

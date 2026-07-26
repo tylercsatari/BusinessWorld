@@ -1455,7 +1455,7 @@ const JarvisRetention = (function () {
     function renderExperiment() {
         const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds visual, text, and together when text exists; displayed embedding scores use together first, then text, then visual. Keep-rate can therefore include voiceover words when a coherent first-5-second transcript exists.') + pipelineProgress() + expGenPanel() + grindPanel();
         if (EXPREG === null) { EXPREG = { loading: 1 }; fetch('/api/indicators/registry').then(r => r.json()).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(() => { EXPREG = { error: 1 }; rtgUpdateExp(); }); }
-        if (SAVED === null) { SAVED = { loading: 1 }; fetch('/api/raw/saved-hooks').then(r => r.json()).then(j => { SAVED = j; rtgUpdateExp(); }).catch(() => { SAVED = { hooks: [] }; rtgUpdateExp(); }); }
+        if (SAVED === null) { SAVED = { loading: 1 }; fetch('/api/raw/saved-hooks').then(r => r.json()).then(j => { SAVED = (j && !j.error) ? j : { hooks: [], error: (j && j.error) || 'server error' }; rtgUpdateExp(); }).catch(e => { SAVED = { hooks: [], error: fetchFail(e) }; rtgUpdateExp(); }); }
         if (SAVEDCHANNELS === null) { SAVEDCHANNELS = { loading: 1, channels: [] }; refreshSavedChannels(true); }
         const CY = '#22d3ee';
         const fr = st.rawFrames || [null, null, null, null, null], nFrames = fr.filter(Boolean).length;
@@ -3447,6 +3447,14 @@ const JarvisRetention = (function () {
             st.rawUpErr = note; st.rawUpShow = true;
         } catch (e) {}
     })();
+    // "Failed to fetch" is a network-level failure (server asleep, restarting, or mid-deploy)
+    // — translate it for humans instead of leaking the raw TypeError, and never hide it.
+    function fetchFail(e) {
+        const m = String((e && (e.message || e)) || 'unknown error');
+        return /Failed to fetch|NetworkError|Load failed/i.test(m)
+            ? 'could not reach the server (it may be waking up or mid-deploy) — wait ~30s and retry'
+            : m;
+    }
     async function rtJob(url, opts, resubmits) {
         const r = await fetch(url, opts);
         rawTrace('rtjob-response', { status: r.status });
@@ -3531,6 +3539,7 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-savedchanneladd]')) { startSavedChannel(); return; }
         if (e.target.closest('[data-savedchannelsreload]')) { refreshSavedChannels(false); return; }
         const scopen = e.target.closest('[data-savedchannelopen]'); if (scopen) { openSavedChannel(scopen.getAttribute('data-savedchannelopen')); return; }
+        if (e.target.closest('[data-savedretry]')) { SAVED = null; rtgUpdateExp(); return; }
         const screfresh = e.target.closest('[data-savedchannelrefresh]'); if (screfresh) { loadSavedChannelDetail(screfresh.getAttribute('data-savedchannelrefresh'), true).then(() => rtgUpdateExp()); return; }
         const scstop = e.target.closest('[data-savedchannelstop]'); if (scstop) { savedChannelAction(scstop.getAttribute('data-savedchannelstop'), 'stop'); return; }
         const scresume = e.target.closest('[data-savedchannelresume]'); if (scresume) { savedChannelAction(scresume.getAttribute('data-savedchannelresume'), 'resume'); return; }
@@ -3979,7 +3988,7 @@ const JarvisRetention = (function () {
             if (analysisChanged || (oldFingerprint && oldFingerprint !== nextFingerprint)) delete SAVEDCHANNELANALYSIS[id];
             return j;
         } catch (e) {
-            SAVEDCHANNELDETAIL[id] = { id, error: e.message || String(e) };
+            SAVEDCHANNELDETAIL[id] = { id, error: fetchFail(e) };
             return SAVEDCHANNELDETAIL[id];
         }
     }
@@ -3991,7 +4000,7 @@ const JarvisRetention = (function () {
             SAVEDCHANNELS = j;
             if (st.savedChannelSel) await loadSavedChannelDetail(st.savedChannelSel, true);
         } catch (e) {
-            SAVEDCHANNELS = { channels: [], error: e.message || String(e) };
+            SAVEDCHANNELS = { channels: [], error: fetchFail(e) };
         }
         scheduleSavedChannelPoll();
         if (root && st.sec === 'experiment') rtgUpdateExp();
@@ -4010,7 +4019,7 @@ const JarvisRetention = (function () {
             st.savedChannelSel = j.channel && j.channel.id;
             st.savedChannelTab = 'library';
             await refreshSavedChannels(true);
-        } catch (e) { st.savedChannelErr = e.message || String(e); }
+        } catch (e) { st.savedChannelErr = fetchFail(e); }
         st.savedChannelBusy = false; rtgUpdateExp();
     }
     async function savedChannelAction(id, action) {
@@ -4026,7 +4035,7 @@ const JarvisRetention = (function () {
                 if (st.savedChannelSel === id) st.savedChannelSel = null;
             }
             await refreshSavedChannels(true);
-        } catch (e) { st.savedChannelErr = e.message || String(e); }
+        } catch (e) { st.savedChannelErr = fetchFail(e); }
         st.savedChannelActionBusy = null; rtgUpdateExp();
     }
     async function openSavedChannel(id) {
@@ -4042,7 +4051,7 @@ const JarvisRetention = (function () {
             const j = await r.json();
             if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
             SAVEDCHANNELANALYSIS[id] = j;
-        } catch (e) { SAVEDCHANNELANALYSIS[id] = { error: e.message || String(e) }; }
+        } catch (e) { SAVEDCHANNELANALYSIS[id] = { error: fetchFail(e) }; }
         rtgUpdateExp();
     }
     async function openSavedChannelVideo(channelId, videoId) {
@@ -5094,6 +5103,7 @@ const JarvisRetention = (function () {
     }
     function savedStrip() {
         if (!SAVED || SAVED.loading) return cardc(`<div style="padding:18px;text-align:center;color:${C.dim}">Loading saved hooks…</div>`, 10);
+        if (SAVED.error) return cardc(`<div style="padding:14px;font-size:11px;color:#f87171">⚠️ Saved hooks failed to load: ${SAVED.error} <button data-savedretry style="margin-left:8px;padding:3px 10px;border-radius:6px;border:1px solid #f87171;background:none;color:#f87171;cursor:pointer">Retry</button></div>`, 10);
         if (!(SAVED.hooks || []).length) return cardc(`<div style="padding:14px;color:${C.dim};font-size:10px">No hooks saved yet. Score or generate a hook, then use “Save this hook.”</div>`, 10);
         const all = SAVED.hooks;
         const F = st.savedFilt || (st.savedFilt = {});
