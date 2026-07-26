@@ -96,7 +96,7 @@ assert(context.graphApi.lqxGraphGrid(score, 'fixture-thumb') === html, 'ready gr
 assert(!source.includes('function lqxMetricHtml('), 'legacy mixed-channel renderer still exists');
 const compactCalls = (source.match(/lqxChannelMetricHtml\([^\n]+, true\)/g) || []).length;
 assert(compactCalls >= 7, `expected shared compact 12-output renderer across thumbnail surfaces, got ${compactCalls}`);
-assert(source.includes('data-lqxscoretitle') && source.includes('JSON.stringify({ image: st.lqxScoreImg, title, idea: title })'), 'manual scoring does not send the together-channel input');
+assert(source.includes('data-lqxscoretitle') && source.includes("lqxJob('/api/longquant/exp/score-upload', { image: st.lqxScoreImg, title, idea: title })"), 'manual scoring does not send the together-channel input through the durable job path');
 
 console.log(JSON.stringify({
     ok: true,

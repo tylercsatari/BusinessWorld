@@ -302,19 +302,6 @@ const gzCacheInvalidate = key => {
     _gzCache.delete(key);
 };
 
-async function redirectR2Object(res, key, opts = {}) {
-    if (opts.checkExists !== false) {
-        const ok = await cloud.existsInR2(key).catch(() => false);
-        if (!ok) return false;
-    }
-    const signed = await cloud.getR2SignedUrl(key, opts.expiresIn || 3600);
-    res.writeHead(302, {
-        'Location': signed,
-        'Cache-Control': opts.cacheControl || 'public, max-age=3600',
-    });
-    res.end();
-    return true;
-}
 async function serveR2GzipJsonStream(res, key, cacheControl = 'private, max-age=300') {
     const stream = await cloud.getR2Stream(key).catch(() => null);
     if (!stream) return false;
@@ -328,17 +315,6 @@ async function serveR2GzipJsonStream(res, key, cacheControl = 'private, max-age=
     stream.pipe(res);
     return true;
 }
-async function serveR2Object(res, key, contentType, opts = {}) {
-    const buf = await cloud.downloadFromR2(key).catch(() => null);
-    if (!buf) return false;
-    res.writeHead(200, {
-        'Content-Type': contentType || 'application/octet-stream',
-        'Content-Length': buf.length,
-        'Cache-Control': opts.cacheControl || 'public, max-age=3600',
-    });
-    res.end(buf);
-    return true;
-}
 async function serveR2ObjectForRequest(req, res, key, contentType, opts = {}) {
     if (req.method === 'HEAD') {
         const ok = await cloud.existsInR2(key).catch(() => false);
@@ -350,7 +326,15 @@ async function serveR2ObjectForRequest(req, res, key, contentType, opts = {}) {
         res.end();
         return true;
     }
-    return serveR2Object(res, key, contentType, opts);
+    const stream = await cloud.getR2Stream(key).catch(() => null);
+    if (!stream) return false;
+    res.writeHead(200, {
+        'Content-Type': contentType || 'application/octet-stream',
+        'Cache-Control': opts.cacheControl || 'public, max-age=3600',
+    });
+    stream.on('error', () => { try { res.destroy(); } catch (e) {} });
+    stream.pipe(res);
+    return true;
 }
 
 const _limiters = new Map();
@@ -379,24 +363,48 @@ const runHeavyScoreInteractive = fn => runLimited('heavy-score', HEAVY_SCORE_LIM
 // ── async scoring jobs: POST returns a job id instantly (no Render 100s proxy ceiling),
 //    the scorer runs in-process, results persist to R2 so a redeploy can't lose them silently ──
 const _quantJobs = new Map();
+const _quantJobRequests = new Map();
+const QUANT_JOB_INSTANCE = `${process.pid}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
+const QUANT_JOB_RESTART_GRACE_MS = Math.max(15000, parseInt(process.env.QUANT_JOB_RESTART_GRACE_MS || '45000', 10));
 function quantJobNamespace(namespace) {
     return namespace === 'shorts' ? 'shorts' : 'longform';
 }
-function quantJobSubmit(kind, runner, namespace = 'longform') {
+function quantRequestId(req) {
+    return String((req && req.headers && req.headers['x-quant-request-id']) || '')
+        .replace(/[^a-z0-9_-]/gi, '')
+        .slice(0, 96);
+}
+function quantJobSubmit(kind, runner, namespace = 'longform', requestId = '') {
     namespace = quantJobNamespace(namespace);
+    requestId = String(requestId || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 96);
+    const requestKey = requestId ? `${namespace}:${kind}:${requestId}` : '';
+    const prior = requestKey && _quantJobRequests.get(requestKey);
+    if (prior && Date.now() - prior.ts < 20 * 60e3) return prior.jid;
     const jid = 'j' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-    const rec = { jid, kind, namespace, status: 'queued', ts: Date.now() };
+    const rec = { jid, kind, namespace, requestId: requestId || null, instance: QUANT_JOB_INSTANCE, status: 'queued', ts: Date.now() };
     _quantJobs.set(`${namespace}:${jid}`, rec);
-    const persist = () => cloud.uploadToR2(`${namespace}/jobs/${jid}.json`, Buffer.from(JSON.stringify(rec)), 'application/json').catch(() => {});
-    persist();   // visible from R2 from the FIRST moment — hung or deploy-killed jobs are never invisible
+    if (requestKey) _quantJobRequests.set(requestKey, { jid, ts: Date.now() });
+    const persist = async () => {
+        try {
+            await cloud.uploadToR2(`${namespace}/jobs/${jid}.json`, Buffer.from(JSON.stringify(rec)), 'application/json');
+        } catch (error) {
+            console.warn(`[quant-job ${jid}] status persistence failed:`, error.message || error);
+        }
+    };
     (async () => {
+        // Serialize status writes so a slower queued write cannot overwrite
+        // the newer running state.
+        await persist();
         rec.status = 'running'; rec.ts = Date.now();
-        persist();
+        await persist();
         try { rec.result = await runner(rec); rec.status = 'done'; }
         catch (e) { rec.status = 'error'; rec.error = String((e && e.message) || e).slice(0, 300); }
         rec.ts = Date.now();
-        await cloud.uploadToR2(`${namespace}/jobs/${jid}.json`, Buffer.from(JSON.stringify(rec)), 'application/json').catch(() => {});
-        setTimeout(() => _quantJobs.delete(`${namespace}:${jid}`), 20 * 60e3);
+        await persist();
+        setTimeout(() => {
+            _quantJobs.delete(`${namespace}:${jid}`);
+            if (requestKey) _quantJobRequests.delete(requestKey);
+        }, 20 * 60e3);
     })();
     return jid;
 }
@@ -405,7 +413,15 @@ async function quantJobGet(jid, namespace = 'longform') {
     const m = _quantJobs.get(`${namespace}:${jid}`);
     if (m) return m;
     const b = await cloud.downloadFromR2(`${namespace}/jobs/${jid}.json`).catch(() => null);
-    if (b) { try { return JSON.parse(b.toString('utf8')); } catch (e) {} }
+    if (b) {
+        try {
+            const rec = JSON.parse(b.toString('utf8'));
+            if (['queued', 'running'].includes(rec.status)
+                && rec.instance !== QUANT_JOB_INSTANCE
+                && Date.now() - Number(rec.ts || 0) > QUANT_JOB_RESTART_GRACE_MS) return null;
+            return rec;
+        } catch (e) {}
+    }
     return null;   // lost (deploy killed it before any write) — client resubmits
 }
 
@@ -675,15 +691,24 @@ function rawBoxStats() {
 // Pre-warm the scorer's neighbour-library disk cache in the background shortly after boot.
 // A deploy wipes /tmp, and a cold warm streams ~900MB from R2 (~4MB/s on the deploy box →
 // minutes) — pre-warming means the first upload after a deploy scores at normal speed
-// instead of eating that wait. Runs outside the heavy-score queue; cache writes are atomic.
-if (process.env.R2_ACCESS_KEY_ID) setTimeout(() => {
-    try {
-        const pw = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--prewarm'], { env: RAW_PY_ENV, stdio: ['ignore', 'ignore', 'pipe'] });
-        let perr = '';
-        pw.stderr.on('data', d => { perr += d; if (perr.length > 8192) perr = perr.slice(-4096); });
-        pw.on('close', code => console.log('[raw-prewarm] exit', code, '—', String(perr).trim().split('\n').slice(-3).join(' | ')));
-        pw.on('error', e => console.log('[raw-prewarm] spawn failed:', e.message));
-    } catch (e) { console.log('[raw-prewarm] failed:', e.message); }
+// instead of eating that wait. It shares the heavy-score queue so only one process can
+// touch the full neighbour library at a time on the memory-limited Render service.
+if (process.env.R2_ACCESS_KEY_ID && process.env.RAW_PREWARM !== '0') setTimeout(() => {
+    // Prewarming and an interactive scorer both mmap/touch the ~900MB neighbour
+    // library. They must share the same limiter or a request during boot can run a
+    // second copy concurrently and push the Render service over its memory limit.
+    runHeavyScore(() => new Promise(resolve => {
+        try {
+            const pw = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--prewarm'], { env: RAW_PY_ENV, stdio: ['ignore', 'ignore', 'pipe'] });
+            let perr = '';
+            pw.stderr.on('data', d => { perr += d; if (perr.length > 8192) perr = perr.slice(-4096); });
+            pw.on('close', code => {
+                console.log('[raw-prewarm] exit', code, '—', String(perr).trim().split('\n').slice(-3).join(' | '));
+                resolve();
+            });
+            pw.on('error', e => { console.log('[raw-prewarm] spawn failed:', e.message); resolve(); });
+        } catch (e) { console.log('[raw-prewarm] failed:', e.message); resolve(); }
+    })).catch(e => console.log('[raw-prewarm] queue failed:', e.message));
 }, 15000);
 const LONGQUANT_IDEA_MODEL = process.env.LONGQUANT_IDEA_MODEL || 'idea_long_r26';
 const LONGQUANT_THUMB_MODEL = process.env.LONGQUANT_THUMB_MODEL || 'thumb_b10';
@@ -911,19 +936,20 @@ function compactSavedChannel(manifest) {
 }
 
 async function readSavedChannelManifest(id) {
-    const buffer = await cloud.downloadFromR2(`${SAVED_CHANNEL_ROOT}${id}/manifest.json`).catch(() => null);
+    const buffer = await cloud.downloadFromR2(`${SAVED_CHANNEL_ROOT}${id}/manifest.json`);
     if (!buffer) return null;
-    try { return JSON.parse(buffer.toString('utf8')); } catch (e) { return null; }
+    try { return JSON.parse(buffer.toString('utf8')); }
+    catch (e) { throw new Error(`Saved-channel manifest ${id} is invalid JSON`); }
 }
 
 async function readSavedChannelIndex() {
-    const buffer = await cloud.downloadFromR2(SAVED_CHANNEL_INDEX_KEY).catch(() => null);
+    const buffer = await cloud.downloadFromR2(SAVED_CHANNEL_INDEX_KEY);
     if (!buffer) return { version: 1, channels: [] };
     try {
         const index = JSON.parse(buffer.toString('utf8'));
         if (!Array.isArray(index.channels)) index.channels = [];
         return index;
-    } catch (e) { return { version: 1, channels: [] }; }
+    } catch (e) { throw new Error('Saved-channel index is invalid JSON'); }
 }
 
 async function writeSavedChannelIndex(index) {
@@ -1036,7 +1062,7 @@ async function handlePromiseHookScore(req, res) {
             });
         };
         if (body.async) {
-            const jobId = quantJobSubmit('promise-hook-score', scoreRunner, 'shorts');
+            const jobId = quantJobSubmit('promise-hook-score', scoreRunner, 'shorts', quantRequestId(req));
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
             res.end(JSON.stringify({ ok: true, jobId }));
             return;
@@ -1794,7 +1820,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/api/')) {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-Quant-Request-Id');
         if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
     }
 
@@ -2166,7 +2192,7 @@ const server = http.createServer(async (req, res) => {
                     throw new Error('YouTube blocks this server and the Mac relay did not answer in 8 min — is the relay watcher running? (launchctl list | grep ytrelay)');
                 }
             };
-            if (body.async) { const jobId = quantJobSubmit('raw-embed-youtube', relayRunner); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) { const jobId = quantJobSubmit('raw-embed-youtube', relayRunner, 'shorts', quantRequestId(req)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
             const out = await relayRunner();
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(out));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -2214,9 +2240,13 @@ const server = http.createServer(async (req, res) => {
                     }));
                 if (String(req.headers['x-raw-async'] || '') === '1') {
                     const jobId = quantJobSubmit('raw-embed-upload', async () => {
-                        try { return JSON.parse(await upRunner()); }
+                        try {
+                            const result = JSON.parse(await upRunner());
+                            if (result && result.error) throw new Error(result.error);
+                            return result;
+                        }
                         finally { try { fs.unlinkSync(tmp); } catch (_) {} }
-                    });
+                    }, 'shorts', quantRequestId(req));
                     res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return;
                 }
                 try {
@@ -2248,9 +2278,30 @@ const server = http.createServer(async (req, res) => {
             let j; try { j = JSON.parse(body); } catch (e) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'bad json' })); return; }
             const m = (j.montage || '').toString().replace(/^data:image\/\w+;base64,/, '');
             if (!m) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'no montage' })); return; }
+            const imageBuffer = Buffer.from(m, 'base64');
+            if (pathname === '/api/raw-long/embed-montage') {
+                const title = String(j.title || j.text || 'Candidate thumbnail').slice(0, 500);
+                const idea = String(j.text || j.title || title).slice(0, 500);
+                const scoreRunner = () => longQuantScoreThumbnail(imageBuffer, title, idea, true);
+                try {
+                    if (j.async) {
+                        const jobId = quantJobSubmit('raw-long-embed-image', scoreRunner, 'longform', quantRequestId(req));
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ ok: true, jobId }));
+                        return;
+                    }
+                    const result = await scoreRunner();
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(result));
+                } catch (e) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: e.message }));
+                }
+                return;
+            }
             const os = require('os');
             const tmp = path.join(os.tmpdir(), `rawmon_${Date.now()}_${Math.round(Math.random() * 1e6)}.jpg`);
-            try { fs.writeFileSync(tmp, Buffer.from(m, 'base64')); }
+            try { fs.writeFileSync(tmp, imageBuffer); }
             catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write failed: ' + e.message })); return; }
             const script = path.join(__dirname, 'raw_upload.py');
             const monArgs = [script, '--image', tmp, '--text', (j.text || '').toString().slice(0, 2000), '--title', (j.title || 'Built hook').toString().slice(0, 80)];
@@ -2271,9 +2322,13 @@ const server = http.createServer(async (req, res) => {
                 }));
             if (j.async) {
                 const jobId = quantJobSubmit('raw-embed-montage', async () => {
-                    try { return JSON.parse(await monRunner()); }
+                    try {
+                        const result = JSON.parse(await monRunner());
+                        if (result && result.error) throw new Error(result.error);
+                        return result;
+                    }
                     finally { try { fs.unlinkSync(tmp); } catch (_) {} }
-                });
+                }, 'shorts', quantRequestId(req));
                 res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return;
             }
             try {
@@ -3918,7 +3973,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if (pathname === '/api/raw/map' && req.method === 'GET') {
         // 6.6MB per channel — was an R2 download + UNCOMPRESSED send per request; now cached+gzipped (~700KB wire)
         const ch = (url.searchParams.get('channel') || 'visual').replace(/[^a-z]/g, '');
-        await serveR2Gz(req, res, `raw/${ch}/map.json`, 300e3, { n: 0, channel: ch });
+        await serveR2Gz(req, res, `raw/${ch}/map.json`, 300e3, { n: 0, channel: ch }, 200, {
+            surfaceSourceErrors: true,
+            sourceErrorMessage: 'Shorts embedding map storage is temporarily unavailable.',
+        });
         return;
     }
     if (pathname === '/api/raw/predictor-lab' && req.method === 'GET') {
@@ -3984,15 +4042,19 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // Long Quant raw embeddings (title+thumbnail), namespaced raw-long/. Built later by raw_embed_long.py.
     if (pathname === '/api/raw-long/map' && req.method === 'GET') {
         const ch = (url.searchParams.get('channel') || 'visual').replace(/[^a-z]/g, '');
-        await serveR2Gz(req, res, `raw-long/${ch}/map.json`, 300e3, { n: 0, channel: ch });
+        await serveR2Gz(req, res, `raw-long/${ch}/map.json`, 300e3, { n: 0, channel: ch }, 200, {
+            surfaceSourceErrors: true,
+            sourceErrorMessage: 'Long Quant embedding map storage is temporarily unavailable.',
+        });
         return;
     }
     // For long-form the "montage" input IS the thumbnail we already stored.
     const rawLongThumb = pathname.match(/^\/api\/raw-long\/montage\/([\w-]{6,16})$/);
-    if (rawLongThumb && req.method === 'GET') {
+    if (rawLongThumb && (req.method === 'GET' || req.method === 'HEAD')) {
         const vid = rawLongThumb[1];
         try {
-            if (await redirectR2Object(res, `longform/thumbs/${vid}.jpg`, { cacheControl: 'public, max-age=86400' })) return;
+            if (await serveR2ObjectForRequest(req, res, `longform/thumbs/${vid}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=86400' })) return;
+            if (req.method === 'HEAD') { res.writeHead(404); res.end(); return; }
             let buf = null;
             {
                 // owned account videos aren't in the corpus store — serve the exact input we embedded
@@ -4016,7 +4078,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         try {
             let index = await readSavedChannelIndex();
             if (!index.channels.length) {
-                const keys = ((await cloud.listR2Keys(SAVED_CHANNEL_ROOT).catch(() => [])) || []).filter(key => /\/manifest\.json$/.test(key));
+                const keys = ((await cloud.listR2Keys(SAVED_CHANNEL_ROOT)) || []).filter(key => /\/manifest\.json$/.test(key));
                 const manifests = [];
                 for (const key of keys.slice(0, 100)) {
                     const id = key.split('/').slice(-2, -1)[0];
@@ -4093,7 +4155,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const savedChannelVideo = pathname.match(/^\/api\/raw\/saved-channel\/(ch[a-f0-9]{16})\/video\/([\w-]{11})$/);
     if (savedChannelVideo && req.method === 'GET') {
         try {
-            const buffer = await cloud.downloadFromR2(`${SAVED_CHANNEL_ROOT}${savedChannelVideo[1]}/videos/${savedChannelVideo[2]}.json`).catch(() => null);
+            const buffer = await cloud.downloadFromR2(`${SAVED_CHANNEL_ROOT}${savedChannelVideo[1]}/videos/${savedChannelVideo[2]}.json`);
             res.writeHead(buffer ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=86400' });
             res.end(buffer ? buffer.toString('utf8') : JSON.stringify({ error: 'Scored video record not found.' }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -4216,7 +4278,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             // montage (base64 data-URL) is stored as a separate jpeg so the list stays light
             let hasMontage = false;
             if (typeof body.montage === 'string' && body.montage.indexOf('base64,') >= 0) {
-                try { await cloud.uploadToR2(`raw/saved-hooks/${id}.jpg`, Buffer.from(body.montage.split('base64,').pop(), 'base64'), 'image/jpeg'); hasMontage = true; } catch (e) {}
+                const jpg = Buffer.from(body.montage.split('base64,').pop(), 'base64');
+                if (jpg.length < 100) throw new Error('saved hook montage was empty');
+                await cloud.uploadToR2(`raw/saved-hooks/${id}.jpg`, jpg, 'image/jpeg');
+                hasMontage = true;
             }
             const rec = {
                 id, savedAt: Date.now(),
@@ -4261,8 +4326,25 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             for (const field of ['indicators', 'steer', 'channels', 'emb_preview', 'input_manifest']) {
                 if (body[field] && typeof body[field] === 'object') rec[field] = body[field];
             }
+            if (typeof body.montage === 'string' && body.montage.indexOf('base64,') >= 0) {
+                const jpg = Buffer.from(body.montage.split('base64,').pop(), 'base64');
+                if (jpg.length < 100) throw new Error('saved hook montage was empty');
+                await cloud.uploadToR2(`raw/saved-hooks/${id}.jpg`, jpg, 'image/jpeg');
+                rec.hasMontage = true;
+            }
             rec.enrichedAt = Date.now();
             await cloud.uploadToR2(key, Buffer.from(JSON.stringify(rec)), 'application/json');
+            if (rec.hasMontage) {
+                const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json').catch(() => null);
+                if (ib) {
+                    const idx = JSON.parse(ib.toString('utf8'));
+                    const row = Array.isArray(idx.hooks) && idx.hooks.find(h => h.id === id);
+                    if (row) {
+                        row.hasMontage = true;
+                        await cloud.uploadToR2('raw/saved-hooks/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
+                    }
+                }
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}');
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
@@ -4271,7 +4353,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         try {
             // Fast path: a prebuilt compact index (one object) — scales to thousands of saved hooks.
             let idx = null;
-            try { const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
+            const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json');
+            if (ib) idx = JSON.parse(ib.toString('utf8'));
             if (idx && Array.isArray(idx.hooks)) {
                 idx.hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
                 res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
@@ -4279,10 +4362,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 return;
             }
             // Fallback (no index yet): only the most-recent ~80 records so we never time out on a big bank.
-            let keys = []; try { keys = (await cloud.listR2Keys('raw/saved-hooks/')) || []; } catch (e) {}
+            let keys = (await cloud.listR2Keys('raw/saved-hooks/')) || [];
             keys = keys.filter(k => k.endsWith('.json')).sort().reverse().slice(0, 80);
             const hooks = [];
-            for (const k of keys) { try { const b = await cloud.downloadFromR2(k); if (b) hooks.push(JSON.parse(b.toString('utf8'))); } catch (e) {} }
+            for (const k of keys) {
+                const b = await cloud.downloadFromR2(k);
+                if (b) hooks.push(JSON.parse(b.toString('utf8')));
+            }
             hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify({ hooks, folders: [], indexed: false }));
@@ -4329,9 +4415,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     const savedMon = pathname.match(/^\/api\/raw(?:-long)?\/saved-montage\/([a-z0-9]{1,32})$/);
     if (savedMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
-            if (await redirectR2Object(res, `raw/saved-hooks/${savedMon[1]}.jpg`, {
+            // The UI fetches this image as bytes before opening the stored
+            // embedding graph. A signed R2 redirect renders in <img>, but R2 has
+            // no browser CORS header, so fetch() fails. Keep the bytes on this
+            // origin and stream them with bounded memory.
+            if (await serveR2ObjectForRequest(req, res, `raw/saved-hooks/${savedMon[1]}.jpg`, 'image/jpeg', {
                 cacheControl: 'public, max-age=3600',
-                expiresIn: 3600,
             }).catch(() => false)) return;
             res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
@@ -4413,9 +4502,19 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
     const lgReqStatus = pathname.match(/^\/api\/longquant\/guesses\/status\/([a-z0-9]+)$/i);
     if (lgReqStatus && req.method === 'GET') {
-        const buf = await cloud.downloadFromR2(`longform/guesses/demo/status/${lgReqStatus[1]}.json`).catch(() => null);
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(buf ? buf.toString('utf8') : '{"stage":"queued"}'); return;
+        await serveR2Gz(
+            req,
+            res,
+            `longform/guesses/demo/status/${lgReqStatus[1]}.json`,
+            1000,
+            { stage: 'queued' },
+            404,
+            {
+                surfaceSourceErrors: true,
+                sourceErrorMessage: 'Long Quant generation status storage is temporarily unavailable.',
+            }
+        );
+        return;
     }
     if (pathname === '/api/longquant/guesses/runs' && req.method === 'GET') {
         const cands = Array.from({ length: 30 }, (_, i) => 'thumb' + (i + 1));
@@ -4443,44 +4542,54 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{}'); return;
     }
     if (pathname === '/api/longquant/guesses/request' && req.method === 'POST') {
-        const body = await readBody(req); const title = String(body.title || '').slice(0, 200).trim();
-        if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no title"}'); return; }
-        const rid = 'd' + Date.now().toString(36);
-        await cloud.uploadToR2(`${LONGQUANT_DEMO_REQUEST_PREFIX}${rid}.json`, Buffer.from(JSON.stringify({ title, forceTitle: title, count: 5, ts: Date.now() })), 'application/json');
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid })); return;
+        try {
+            const body = await readBody(req); const title = String(body.title || '').slice(0, 200).trim();
+            if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no title"}'); return; }
+            const rid = 'd' + Date.now().toString(36);
+            await lqDemoStatus(rid, { stage: 'queued', title, n: 5, done: 0, note: 'queued for the trained Long Quant models' });
+            await cloud.uploadToR2(`${LONGQUANT_DEMO_REQUEST_PREFIX}${rid}.json`, Buffer.from(JSON.stringify({ title, forceTitle: title, count: 5, ts: Date.now() })), 'application/json');
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid })); return;
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message || String(e) }));
+            return;
+        }
     }
     // ── Long Quant 🧪 Experiment: generate thumbnails with the trained model + score uploads ──
     if (pathname === '/api/longquant/exp/generate' && req.method === 'POST') {
-        const body = await readBody(req);
-        const renderExact = !!body.renderExact;
-        // exact-prompt mode carries a full image prompt (1500+ chars); idea mode stays short
-        const title = String(body.title || '').slice(0, renderExact ? 2500 : 300).trim();
-        if (renderExact && title.length < 12) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"exact-prompt mode needs the full image prompt in the text box"}'); return; }
-        const count = Math.max(1, Math.min(8, parseInt(body.count, 10) || 5));
-        const rid = 'd' + Date.now().toString(36);
-        const invent = !title;
-        const payload = {
-            title, premise: title, idea: title, forceTitle: title, count, invent, renderExact,
-            mode: renderExact ? 'render_exact_prompt' : invent ? 'idea_plus_thumbnail' : 'thumbnail_only',
-            instruction: invent
-                ? 'Blank request: run idea_long_r26 first, then run thumb_b10.'
-                : 'Typed request: DO NOT invent or rewrite the video idea. Use this exact title/idea as the thumbnail model input.',
-            ts: Date.now(),
-            ideaModel: LONGQUANT_IDEA_MODEL,
-            thumbModel: longQuantThumbPromptModelLabel(),
-            renderModel: LONGQUANT_RENDER_MODEL,
-            modelProvider: LONGQUANT_MODEL_PROVIDER,
-            workerVersion: LONGQUANT_WORKER_VERSION,
-            scoring: ['ctr', 'ret30', 'views', 'scaled_views', 'realviews', 'gt10m', 'ctrviews'],
-        };
         try {
+            const body = await readBody(req);
+            const renderExact = !!body.renderExact;
+            // exact-prompt mode carries a full image prompt (1500+ chars); idea mode stays short
+            const title = String(body.title || '').slice(0, renderExact ? 2500 : 300).trim();
+            if (renderExact && title.length < 12) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"exact-prompt mode needs the full image prompt in the text box"}'); return; }
+            const count = Math.max(1, Math.min(8, parseInt(body.count, 10) || 5));
+            const rid = 'd' + Date.now().toString(36);
+            const invent = !title;
+            const payload = {
+                title, premise: title, idea: title, forceTitle: title, count, invent, renderExact,
+                mode: renderExact ? 'render_exact_prompt' : invent ? 'idea_plus_thumbnail' : 'thumbnail_only',
+                instruction: invent
+                    ? 'Blank request: run idea_long_r26 first, then run thumb_b10.'
+                    : 'Typed request: DO NOT invent or rewrite the video idea. Use this exact title/idea as the thumbnail model input.',
+                ts: Date.now(),
+                ideaModel: LONGQUANT_IDEA_MODEL,
+                thumbModel: longQuantThumbPromptModelLabel(),
+                renderModel: LONGQUANT_RENDER_MODEL,
+                modelProvider: LONGQUANT_MODEL_PROVIDER,
+                workerVersion: LONGQUANT_WORKER_VERSION,
+                scoring: ['ctr', 'ret30', 'views', 'scaled_views', 'realviews', 'gt10m', 'ctrviews'],
+            };
             const pend = ((await cloud.listR2Keys(LONGQUANT_DEMO_REQUEST_PREFIX)) || []).filter(k => k.endsWith('.json'));
             if (pend.length >= 4) { res.writeHead(429, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'busy — Long Quant has a few generations queued, try again in a moment' })); return; }
-        } catch (e) {}
-        await lqDemoStatus(rid, { stage: 'queued', title: title || '', n: count, done: 0, note: 'queued for the trained Long Quant models' });
-        await cloud.uploadToR2(`${LONGQUANT_DEMO_REQUEST_PREFIX}${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, rid, invent, mode: payload.mode, title, model: payload }));
+            await lqDemoStatus(rid, { stage: 'queued', title: title || '', n: count, done: 0, note: 'queued for the trained Long Quant models' });
+            await cloud.uploadToR2(`${LONGQUANT_DEMO_REQUEST_PREFIX}${rid}.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, rid, invent, mode: payload.mode, title, model: payload }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message || String(e) }));
+        }
         return;
     }
     if (pathname === '/api/longquant/exp/scorer' && req.method === 'GET') {
@@ -4500,7 +4609,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (!b64 || b64.length < 100) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no image"}'); return; }
             if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"Enter the video title or idea so visual and together embeddings can both be scored"}'); return; }
             if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
-            if (body.async) { const jobId = quantJobSubmit('score-upload', () => longQuantScoreThumbnail(Buffer.from(b64, 'base64'), title, idea, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) { const jobId = quantJobSubmit('score-upload', () => longQuantScoreThumbnail(Buffer.from(b64, 'base64'), title, idea, true), 'longform', quantRequestId(req)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
             const score = await longQuantScoreThumbnail(Buffer.from(b64, 'base64'), title, idea, true);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(score));
@@ -4735,7 +4844,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             } catch (e) { console.warn('hook edit index patch:', e.message); }
             return { ok: true, rec };
             };
-            if (body.async) { const jobId = quantJobSubmit('hook-edit', editRunner); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) { const jobId = quantJobSubmit('hook-edit', editRunner, 'longform', quantRequestId(req)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(await editRunner()));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -4766,7 +4875,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const title = String(body.title || body.idea || '').slice(0, 500).trim();
             if (!title) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"type a title to embed"}'); return; }
             if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"GEMINI_API_KEY not set"}'); return; }
-            if (body.async) { const jobId = quantJobSubmit('score-title', () => longQuantScoreTitleText(title, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) { const jobId = quantJobSubmit('score-title', () => longQuantScoreTitleText(title, true), 'longform', quantRequestId(req)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
             const score = await longQuantScoreTitleText(title, true);
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify(score));
@@ -4783,7 +4892,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (!jpg) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"image not found"}'); return; }
             const title = String(body.title || '').slice(0, 500).trim();
             const idea = String(body.idea || title).slice(0, 500).trim();
-            if (body.async) { const jobId = quantJobSubmit('score-key', () => longQuantScoreThumbnail(jpg, title, idea, true)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) { const jobId = quantJobSubmit('score-key', () => longQuantScoreThumbnail(jpg, title, idea, true), 'longform', quantRequestId(req)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
             const score = await longQuantScoreThumbnail(jpg, title, idea, true);
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
             res.end(JSON.stringify(score));
@@ -4791,9 +4900,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
     if (pathname === '/api/longquant/grind/start' && req.method === 'POST') {
-        const body = await readBody(req);
-        const out = await longQuantCreateGrind(body);
-        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid: out.rid }));
+        try {
+            const body = await readBody(req);
+            const out = await longQuantCreateGrind(body);
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rid: out.rid }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message || String(e) }));
+        }
         return;
     }
     if (pathname === '/api/longquant/grind/status' && req.method === 'GET') {
@@ -5002,25 +5116,35 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if (pathname === '/api/longquant/thumbs/save' && req.method === 'POST') {
         try {
             const body = await readBody(req);
-            let jpg = null;
-            if (typeof body.image === 'string' && body.image.indexOf('base64,') >= 0) jpg = Buffer.from(body.image.split('base64,').pop(), 'base64');
-            else if (typeof body.montageKey === 'string' && /^longform\/(guesses\/[\w-]+\/montages|grind\/montages|ideas\/[\w-]+\/montages|saved-thumbs)\/[\w-]+\.jpg$/i.test(body.montageKey)) jpg = await cloud.downloadFromR2(body.montageKey).catch(() => null);
-            if (!jpg) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no image"}'); return; }
-            const out = await longQuantSaveThumbRecord({ ...body, jpg });
-            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, id: out.id, rec: out.rec }));
+            const saveRunner = async () => {
+                let jpg = null;
+                if (typeof body.image === 'string' && body.image.indexOf('base64,') >= 0) jpg = Buffer.from(body.image.split('base64,').pop(), 'base64');
+                else if (typeof body.montageKey === 'string' && /^longform\/(guesses\/[\w-]+\/montages|grind\/montages|ideas\/[\w-]+\/montages|saved-thumbs)\/[\w-]+\.jpg$/i.test(body.montageKey)) jpg = await cloud.downloadFromR2(body.montageKey);
+                if (!jpg || jpg.length < 100) throw new Error('no image');
+                const out = await longQuantSaveThumbRecord({ ...body, jpg });
+                return { ok: true, id: out.id, rec: out.rec };
+            };
+            if (body.async) {
+                const jobId = quantJobSubmit('thumb-save', saveRunner, 'longform', quantRequestId(req));
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: true, jobId }));
+                return;
+            }
+            const out = await saveRunner();
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(out));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
     if (pathname === '/api/longquant/thumbs/list' && req.method === 'GET') {
-        let b = await cloud.downloadFromR2('longform/saved-thumbs/index.json').catch(() => null);
-        if (b) {
-            try {
+        try {
+            let b = await cloud.downloadFromR2('longform/saved-thumbs/index.json');
+            if (b) {
                 const idx = JSON.parse(b.toString('utf8'));
                 if (Array.isArray(idx.thumbs)) {
                     const recent = idx.thumbs.slice(-120);
                     await Promise.all(recent.map(async t => {
                         if (t && t.id && (!(t.channels && t.emb_preview) || !t.input_manifest)) {
-                            const rb = await cloud.downloadFromR2(`longform/saved-thumbs/${t.id}.json`).catch(() => null);
+                            const rb = await cloud.downloadFromR2(`longform/saved-thumbs/${t.id}.json`);
                             if (rb) {
                                 const rec = JSON.parse(rb.toString('utf8'));
                                 t.score = t.score || rec.score || null;
@@ -5042,16 +5166,20 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     }));
                     b = Buffer.from(JSON.stringify(idx));
                 }
-            } catch (e) {}
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(b ? b.toString('utf8') : '{"thumbs":[]}');
+        } catch (e) {
+            res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify({ error: `Saved Long Quant thumbnails are temporarily unavailable: ${e.message || e}` }));
         }
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(b ? b.toString('utf8') : '{"thumbs":[]}'); return;
+        return;
     }
     const ltDetail = pathname.match(/^\/api\/longquant\/thumbs\/detail\/([a-z0-9]{1,32})$/i);
     if (ltDetail && req.method === 'GET') {
-        let b = await cloud.downloadFromR2(`longform/saved-thumbs/${ltDetail[1]}.json`).catch(() => null);
-        if (b) {
-            try {
+        try {
+            let b = await cloud.downloadFromR2(`longform/saved-thumbs/${ltDetail[1]}.json`);
+            if (b) {
                 const rec = JSON.parse(b.toString('utf8'));
                 if (rec.score && !rec.score.error) {
                     rec.score = longQuantPublicScore(rec.score);
@@ -5063,10 +5191,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     rec.input_manifest = rec.score.input_manifest;
                 }
                 b = Buffer.from(JSON.stringify(rec));
-            } catch (e) {}
+            }
+            res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(b ? b.toString('utf8') : '{"error":"saved thumbnail not found"}');
+        } catch (e) {
+            res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+            res.end(JSON.stringify({ error: `Saved Long Quant thumbnail is temporarily unavailable: ${e.message || e}` }));
         }
-        res.writeHead(b ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-        res.end(b ? b.toString('utf8') : '{}'); return;
+        return;
     }
     if (pathname === '/api/longquant/thumbs/delete' && req.method === 'POST') {
         try {
@@ -5113,9 +5245,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         await serveR2Gz(req, res, `longform/ideas/${run}/index.jsonl`, 8e6, { error: 'no run' }, 404); return;
     }
     const rawMon = pathname.match(/^\/api\/raw\/montage\/([\w-]{6,16})$/);
-    if (rawMon && req.method === 'GET') {
+    if (rawMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
-            if (await redirectR2Object(res, `raw/montage/${rawMon[1]}.jpg`, { cacheControl: 'public, max-age=86400' })) return;
+            if (await serveR2ObjectForRequest(req, res, `raw/montage/${rawMon[1]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=86400' })) return;
             res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
         return;
@@ -5147,10 +5279,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
     const hookMon = pathname.match(/^\/api\/hooks\/montage\/([a-z0-9_]{1,24})\/([\w-]{1,40})$/);
-    if (hookMon && req.method === 'GET') {
+    if (hookMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
             const base = (hookMon[1].indexOf('grpo') === 0 || hookMon[1].indexOf('discover') === 0) ? `hooks/grpo/${hookMon[1]}/montages` : `hooks/runs/${hookMon[1]}/montages`;
-            if (await redirectR2Object(res, `${base}/${hookMon[2]}.jpg`, { cacheControl: 'public, max-age=3600' })) return;
+            if (await serveR2ObjectForRequest(req, res, `${base}/${hookMon[2]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=3600' })) return;
             res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
         return;
@@ -5206,9 +5338,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
     const grindMon = pathname.match(/^\/api\/hooks\/grind\/montage\/([\w-]{1,48})$/);
-    if (grindMon && req.method === 'GET') {
+    if (grindMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
-            if (await redirectR2Object(res, `hooks/grind/montages/${grindMon[1]}.jpg`, { cacheControl: 'public, max-age=86400' })) return;
+            if (await serveR2ObjectForRequest(req, res, `hooks/grind/montages/${grindMon[1]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=86400' })) return;
             res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
         return;
@@ -5343,9 +5475,9 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
         return;
     }
     const grpoMon = pathname.match(/^\/api\/hooks\/grpo\/montage\/([a-z0-9_]{1,24})\/([\w-]{1,40})$/);
-    if (grpoMon && req.method === 'GET') {
+    if (grpoMon && (req.method === 'GET' || req.method === 'HEAD')) {
         try {
-            if (await redirectR2Object(res, `hooks/grpo/${grpoMon[1]}/montages/${grpoMon[2]}.jpg`, { cacheControl: 'public, max-age=3600' })) return;
+            if (await serveR2ObjectForRequest(req, res, `hooks/grpo/${grpoMon[1]}/montages/${grpoMon[2]}.jpg`, 'image/jpeg', { cacheControl: 'public, max-age=3600' })) return;
             res.writeHead(404); res.end();
         } catch (e) { res.writeHead(500); res.end(); }
         return;
@@ -11919,8 +12051,8 @@ async function longQuantRenderThumb(prompt) {
     const out = await replicateRun(model, input, 240000);
     return Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
 }
-const lqDemoStatus = (rid, o) => cloud.uploadToR2(`longform/guesses/demo/status/${rid}.json`, Buffer.from(JSON.stringify({ ...o, ts: Date.now() })), 'application/json').catch(() => {});
-const lqDemoGroupWrite = (rid, group) => cloud.uploadToR2(`longform/guesses/demo/groups/${rid}.json`, Buffer.from(JSON.stringify(group)), 'application/json').catch(() => {});
+const lqDemoStatus = (rid, o) => cloud.uploadToR2(`longform/guesses/demo/status/${rid}.json`, Buffer.from(JSON.stringify({ ...o, ts: Date.now() })), 'application/json');
+const lqDemoGroupWrite = (rid, group) => cloud.uploadToR2(`longform/guesses/demo/groups/${rid}.json`, Buffer.from(JSON.stringify(group)), 'application/json');
 const longQuantGrindStopped = rid => rid ? cloud.existsInR2(`longform/grind/stop/${rid}`).catch(() => false) : Promise.resolve(false);
 function longQuantStaleMs() {
     return Math.max(10 * 60e3, parseInt(process.env.LONGQUANT_GRIND_STALE_MS || String(20 * 60e3), 10));
@@ -11988,7 +12120,7 @@ function longQuantGrindEnvelope(body = {}, opts = {}) {
 }
 async function longQuantCreateGrind(body = {}, opts = {}) {
     const out = longQuantGrindEnvelope(body, opts);
-    await cloud.uploadToR2(`longform/grind/runs/${out.rid}.json`, Buffer.from(JSON.stringify(out.run)), 'application/json').catch(() => {});
+    await cloud.uploadToR2(`longform/grind/runs/${out.rid}.json`, Buffer.from(JSON.stringify(out.run)), 'application/json');
     await cloud.uploadToR2(`longform/grind/requests/${out.rid}.json`, Buffer.from(JSON.stringify(out.payload)), 'application/json');
     return out;
 }
@@ -12603,19 +12735,49 @@ async function longQuantDemoThumbGroup(idea, count, parentRid, attemptK, onStatu
 let _lqDemoBusy = false;
 async function longQuantDemoQueue() {
     if (_lqDemoBusy || !cloud.isR2Ready()) return;
-    let keys; try { keys = ((await cloud.listR2Keys(LONGQUANT_DEMO_REQUEST_PREFIX)) || []).filter(k => k.endsWith('.json')); } catch (e) { return; }
+    const keys = ((await cloud.listR2Keys(LONGQUANT_DEMO_REQUEST_PREFIX)) || []).filter(k => k.endsWith('.json'));
     if (!keys.length) return;
     _lqDemoBusy = true;
     try {
         for (const key of keys) {
             const rid = key.split('/').pop().replace('.json', '');
-            let req = {}; try { req = JSON.parse((await cloud.downloadFromR2(key)).toString('utf8')); } catch (e) {}
-            await cloud.deleteFromR2(key).catch(() => {});
+            const existingGroup = await cloud.downloadFromR2(`longform/guesses/demo/groups/${rid}.json`);
+            if (existingGroup) {
+                const existing = JSON.parse(existingGroup.toString('utf8'));
+                if (existing && existing.done) {
+                    await cloud.deleteFromR2(key);
+                    continue;
+                }
+            }
+            const requestBuffer = await cloud.downloadFromR2(key);
+            if (!requestBuffer) continue;
+            let req;
+            try {
+                req = JSON.parse(requestBuffer.toString('utf8'));
+            } catch (e) {
+                const message = `invalid queued request: ${e.message || e}`;
+                await lqDemoGroupWrite(rid, {
+                    input_id: rid,
+                    title: '',
+                    idea: '',
+                    attempts: [],
+                    n: 0,
+                    done: true,
+                    streaming: false,
+                    error: message,
+                });
+                await lqDemoStatus(rid, { stage: 'done', title: '', n: 0, done: 0, error: message });
+                await cloud.deleteFromR2(key);
+                continue;
+            }
             await longQuantProcessRequest(rid, req);
+            await cloud.deleteFromR2(key);
         }
     } finally { _lqDemoBusy = false; }
 }
-setInterval(() => { longQuantDemoQueue().catch(() => {}); }, 4000);
+setInterval(() => {
+    longQuantDemoQueue().catch(e => console.warn('longquant generation queue:', e.message || e));
+}, 4000);
 function lqScorePct(score) {
     const visualMetric = score && score.channels && score.channels.visual && score.channels.visual.metrics && score.channels.visual.metrics.ctrviews;
     const p = score && (score.visual_pctile != null ? score.visual_pctile

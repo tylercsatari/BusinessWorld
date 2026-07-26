@@ -309,7 +309,24 @@ const JarvisRetention = (function () {
         const [a, b, u] = t < 0.5 ? [cool, mid, t * 2] : [mid, warm, (t - 0.5) * 2];
         return `rgb(${a.map((c, k) => Math.round(c + (b[k] - c) * u)).join(',')})`;
     }
-    function rawEnsure(ch) { if (RAW[ch]) return; RAW[ch] = { loading: 1 }; fetch('/api/raw/map?channel=' + ch).then(r => r.json()).then(j => { RAW[ch] = j; rtgUpdateRaw(); }).catch(() => { RAW[ch] = { n: 0 }; rtgUpdateRaw(); }); }
+    function rawEnsure(ch, force) {
+        const current = RAW[ch];
+        if (!force && current && (current.loading || !current.error)) return;
+        RAW[ch] = { loading: 1 };
+        rtFetchJson('/api/raw/map?channel=' + ch, { cache: 'no-store' }, 4)
+            .then(j => {
+                if (!j || j.error) throw new Error((j && j.error) || 'empty embedding map');
+                RAW[ch] = j;
+                rtgUpdateRaw(); rtgUpdateExp();
+            })
+            .catch(e => {
+                RAW[ch] = { n: 0, error: fetchFail(e), at: Date.now() };
+                rtgUpdateRaw(); rtgUpdateExp();
+                window.setTimeout(() => {
+                    if (RAW[ch] && RAW[ch].error) { delete RAW[ch]; rawEnsure(ch, true); }
+                }, 5000);
+            });
+    }
     // ── ONE global hook-scoring source: an upload's number on the map IS out.steer (computed
     //    server-side, identical to how the map scores every video). The graph marker AND the
     //    Experiment grid both read it through these — change the maths once, both follow. ──
@@ -1454,8 +1471,8 @@ const JarvisRetention = (function () {
     }
     function renderExperiment() {
         const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds visual, text, and together when text exists; displayed embedding scores use together first, then text, then visual. Keep-rate can therefore include voiceover words when a coherent first-5-second transcript exists.') + pipelineProgress() + expGenPanel() + grindPanel();
-        if (EXPREG === null) { EXPREG = { loading: 1 }; fetch('/api/indicators/registry').then(r => r.json()).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(() => { EXPREG = { error: 1 }; rtgUpdateExp(); }); }
-        if (SAVED === null) { SAVED = { loading: 1 }; fetch('/api/raw/saved-hooks').then(r => r.json()).then(j => { SAVED = (j && !j.error) ? j : { hooks: [], error: (j && j.error) || 'server error' }; rtgUpdateExp(); }).catch(e => { SAVED = { hooks: [], error: fetchFail(e) }; rtgUpdateExp(); }); }
+        if (EXPREG === null) { EXPREG = { loading: 1 }; rtFetchJson('/api/indicators/registry', { cache: 'no-store' }, 4).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(e => { EXPREG = { error: fetchFail(e) }; rtgUpdateExp(); }); }
+        if (SAVED === null) { SAVED = { loading: 1 }; rtFetchJson('/api/raw/saved-hooks', { cache: 'no-store' }, 4).then(j => { SAVED = j; rtgUpdateExp(); }).catch(e => { SAVED = { hooks: [], error: fetchFail(e) }; rtgUpdateExp(); }); }
         if (SAVEDCHANNELS === null) { SAVEDCHANNELS = { loading: 1, channels: [] }; refreshSavedChannels(true); }
         const CY = '#22d3ee';
         const fr = st.rawFrames || [null, null, null, null, null], nFrames = fr.filter(Boolean).length;
@@ -1520,7 +1537,7 @@ const JarvisRetention = (function () {
         // ── 3. per-indicator: the SAME Raw cluster (channel × projection), coloured by
         //    the target, with YOUR hook placed via its neighbours. Click → opens it in Raw. ──
         const chMap = { visual: 'visual', text: 'text', together: 'together', vis: 'visual', txt: 'text', tog: 'together' };
-        ['visual', 'text', 'together'].forEach(c => { if (!RAW[c]) { RAW[c] = { loading: 1 }; fetch('/api/raw/map?channel=' + c).then(r => r.json()).then(j => { RAW[c] = j; rtgUpdateExp(); }).catch(() => { RAW[c] = { n: 0 }; rtgUpdateExp(); }); } });
+        ['visual', 'text', 'together'].forEach(c => rawEnsure(c));
         const Nmod = { visual: 'visual', text: 'text', together: 'whole' };
         const idNovCache = {};
         const idNov = ch => { if (idNovCache[ch]) return idNovCache[ch]; const m = {}; try { const g = N && N.hook && N.hook.global && N.hook.global[Nmod[ch]]; if (g) N.videos.forEach((v, i) => { m[v.id] = g.nov[i]; }); } catch (e) {} return (idNovCache[ch] = m); };
@@ -3455,25 +3472,69 @@ const JarvisRetention = (function () {
             ? 'could not reach the server (it may be waking up or mid-deploy) — wait ~30s and retry'
             : m;
     }
-    async function rtJob(url, opts, resubmits) {
-        const r = await fetch(url, opts);
-        rawTrace('rtjob-response', { status: r.status });
-        const raw = await r.text();
-        let j = null; try { j = JSON.parse(raw); } catch (e) { }
-        if (!j) throw new Error('server returned ' + r.status + (raw.trim().startsWith('<') ? ' — redeploying; retry in ~30s' : ' (non-JSON)'));
-        if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+    async function rtFetchJson(url, opts, attempts) {
+        let last = null;
+        const method = String((opts && opts.method) || 'GET').toUpperCase();
+        const headers = (opts && opts.headers) || {};
+        const idempotent = method === 'GET' || method === 'HEAD'
+            || Object.keys(headers).some(k => k.toLowerCase() === 'x-quant-request-id');
+        const total = idempotent ? Math.max(1, attempts || 1) : 1;
+        for (let attempt = 0; attempt < total; attempt++) {
+            if (attempt) await new Promise(resolve => window.setTimeout(resolve, [1200, 3000, 6000][attempt - 1] || 6000));
+            let r, raw;
+            try {
+                r = await fetch(url, opts || {});
+                raw = await r.text();
+            } catch (e) {
+                last = new Error(fetchFail(e));
+                continue;
+            }
+            let j = null;
+            try { j = raw ? JSON.parse(raw) : null; } catch (e) {}
+            const transient = [502, 503, 504].includes(r.status) || /^\s*</.test(raw || '');
+            if (transient) {
+                last = new Error('server temporarily unavailable (HTTP ' + r.status + ')');
+                continue;
+            }
+            if (!j) throw new Error('server returned ' + r.status + ' (non-JSON)');
+            if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+            return j;
+        }
+        throw last || new Error('server unavailable');
+    }
+    function rtRequestId() {
+        try { if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID(); } catch (e) {}
+        return 'qr' + Date.now().toString(36) + Math.floor(Math.random() * 1e9).toString(36);
+    }
+    async function rtJob(url, opts, resubmits, requestId) {
+        requestId = requestId || rtRequestId();
+        const jobOpts = { ...(opts || {}), headers: { ...((opts && opts.headers) || {}), 'X-Quant-Request-Id': requestId } };
+        const j = await rtFetchJson(url, jobOpts, 2);
+        rawTrace('rtjob-response', { status: 200 });
         if (!j.jobId) return j;   // sync result
         for (let i = 0; i < 240; i++) {
             await new Promise(res2 => window.setTimeout(res2, i < 8 ? 2500 : 5000));
-            const pr = await fetch('/api/longquant/jobs/' + j.jobId);
-            const pj = await pr.json().catch(() => null);
-            rawTrace('rtjob-poll', { i, status: pr.status, job: pj && pj.status });
-            if (pr.status === 404) {
+            let pj;
+            try {
+                pj = await rtFetchJson('/api/shortsquant/jobs/' + j.jobId, { cache: 'no-store' }, 4);
+            } catch (e) {
+                if (/job lost|404/i.test(String(e.message || e))) {
+                    rawTrace('rtjob-resubmit');
+                    if ((resubmits || 0) < 2) return rtJob(url, opts, (resubmits || 0) + 1, requestId);
+                    throw new Error('scoring job lost across a redeploy — try again');
+                }
+                throw e;
+            }
+            rawTrace('rtjob-poll', { i, status: 200, job: pj && pj.status });
+            if (!pj) {
                 rawTrace('rtjob-resubmit');
-                if ((resubmits || 0) < 2) return rtJob(url, opts, (resubmits || 0) + 1);
+                if ((resubmits || 0) < 2) return rtJob(url, opts, (resubmits || 0) + 1, requestId);
                 throw new Error('scoring job lost across a redeploy — try again');
             }
-            if (pj && pj.status === 'done') return pj.result;
+            if (pj && pj.status === 'done') {
+                if (pj.result && pj.result.error) throw new Error(pj.result.error);
+                return pj.result;
+            }
             if (pj && pj.status === 'error') throw new Error(pj.error || 'scoring job failed');
         }
         throw new Error('scoring job still running after 15 minutes');
@@ -3856,10 +3917,8 @@ const JarvisRetention = (function () {
         try {
             const montage = await composeFrames(st.rawFrames);
             const title = (st.rawText && st.rawText.trim() ? st.rawText.trim().slice(0, 40) : 'Built hook ' + (st.rawUploads.length + 1));
-            const r = await fetch('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: st.rawText || '', title }) });
-            const j = await r.json();
-            if (!r.ok || j.error) { st.rawUpErr = j.error || ('HTTP ' + r.status); }
-            else { st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; }
+            const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: st.rawText || '', title, async: true }) });
+            st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
         } catch (e) { st.rawUpErr = e.message; }
         window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0;
         rtgUpdateRaw();
@@ -3869,6 +3928,13 @@ const JarvisRetention = (function () {
         const r = await fetch(u); if (!r.ok) throw new Error('frame ' + r.status);
         const b = await r.blob();
         return await new Promise((res, rej) => { const fr = new window.FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(b); });
+    }
+    async function montageFromFrameIds(frameIds) {
+        const ids = (frameIds || []).filter(Boolean).slice(0, 5);
+        if (!ids.length) throw new Error('this saved hook has no stored montage or generated frames');
+        const frames = [];
+        for (const id of ids) frames.push(await urlToDataUrl('/api/hooks/grpo/montage/demo/' + encodeURIComponent(id)));
+        return composeFrames(frames);
     }
     function savedChannelMontageKey(channelId, videoId) { return `${channelId}:${videoId}`; }
     function wireSavedChannelImages() {
@@ -3893,39 +3959,37 @@ const JarvisRetention = (function () {
             const dataUrls = [];
             for (const f of (fids || [])) dataUrls.push(f ? await urlToDataUrl('/api/hooks/grpo/montage/demo/' + f) : null);
             const montage = await composeFrames(dataUrls);
-            const r = await fetch('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: text || '', title: (text || 'Generated hook').slice(0, 40) }) });
-            const j = await r.json();
-            if (!r.ok || j.error) { st.rawUpErr = j.error || ('HTTP ' + r.status); }
-            else {
-                const g = EXPDEMO[st.expGenRid], a = g && g.attempts && g.attempts.find(x => x.k === k);
-                j.source = 'generated'; j.genFrameImgs = fids; j.genFrames = (a && a.frames) || []; j.montageDataUrl = montage;
-                st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-            }
+            const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: text || '', title: (text || 'Generated hook').slice(0, 40), async: true }) });
+            const g = EXPDEMO[st.expGenRid], a = g && g.attempts && g.attempts.find(x => x.k === k);
+            j.source = 'generated'; j.genFrameImgs = fids; j.genFrames = (a && a.frames) || []; j.montageDataUrl = montage;
+            st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
         } catch (e) { st.rawUpErr = e.message; }
         window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0; st.genScoringK = null; rtgUpdateExp();
     }
     async function saveHook(payload) {
         try {
             const cf = st.savedFolder; if (cf && cf !== 'all' && cf !== 'none') payload = Object.assign({}, payload, { folder: cf });
-            const r = await fetch('/api/raw/hook-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            const j = await r.json();
+            if (!payload.montage && payload.frame_imgs && payload.frame_imgs.length) {
+                payload = Object.assign({}, payload, { montage: await montageFromFrameIds(payload.frame_imgs) });
+            }
+            const j = await rtFetchJson('/api/raw/hook-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 1);
             if (j.ok) { st.savedFlash = j.id; SAVED = null; rtgUpdateExp(); window.setTimeout(() => { if (st.savedFlash === j.id) { st.savedFlash = null; rtgUpdateExp(); } }, 3500); }
             else { st.rawUpErr = j.error || 'save failed'; rtgUpdateExp(); }
-        } catch (e) { st.rawUpErr = e.message; rtgUpdateExp(); }
+        } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
     async function deleteSaved(id) {
-        try { await fetch('/api/raw/hook-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); SAVED = null; rtgUpdateExp(); } catch (e) {}
+        try { await rtFetchJson('/api/raw/hook-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }, 1); SAVED = null; rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
     async function createFolder() {
         const name = window.prompt('New folder name:'); if (!name || !name.trim()) return;
-        try { const r = await fetch('/api/raw/folder-create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) }); const j = await r.json(); if (j && j.id) st.savedFolder = j.id; SAVED = null; rtgUpdateExp(); } catch (e) {}
+        try { const j = await rtFetchJson('/api/raw/folder-create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) }, 1); if (j && j.id) st.savedFolder = j.id; SAVED = null; rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
     async function moveHook(id, folder) {
-        try { await fetch('/api/raw/hook-move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, folder: folder || null }) }); SAVED = null; rtgUpdateExp(); } catch (e) {}
+        try { await rtFetchJson('/api/raw/hook-move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, folder: folder || null }) }, 1); SAVED = null; rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
     async function deleteFolder(fid) {
         if (!window.confirm('Delete this folder? Hooks inside become Unfiled.')) return;
-        try { await fetch('/api/raw/folder-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: fid }) }); if (st.savedFolder === fid) st.savedFolder = 'all'; SAVED = null; rtgUpdateExp(); } catch (e) {}
+        try { await rtFetchJson('/api/raw/folder-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: fid }) }, 1); if (st.savedFolder === fid) st.savedFolder = 'all'; SAVED = null; rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
     // Saved hooks open from their durable score artifact. A legacy hook without a complete artifact is
     // scored once, enriched in place, and then uses this same instant path on every later open.
@@ -3934,9 +3998,23 @@ const JarvisRetention = (function () {
         try {
             let stored = SAVEDDETAIL[id];
             if (!stored) {
-                const rec = await fetch('/api/raw/saved-hook/' + id).then(r => r.json()).catch(() => ({}));
-                const montage = await urlToDataUrl('/api/raw/saved-montage/' + id);
-                stored = SAVEDDETAIL[id] = { rec, montage };
+                const rec = await rtFetchJson('/api/raw/saved-hook/' + id, { cache: 'no-store' }, 4);
+                let montage = null, reconstructed = false;
+                if (rec.hasMontage) {
+                    try { montage = await urlToDataUrl('/api/raw/saved-montage/' + id); } catch (e) {}
+                }
+                if (!montage) {
+                    montage = await montageFromFrameIds(rec.frame_imgs || []);
+                    reconstructed = true;
+                }
+                stored = SAVEDDETAIL[id] = { rec, montage, reconstructed };
+                if (reconstructed) {
+                    fetch('/api/raw/hook-enrich', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id, montage }),
+                    }).catch(() => {});
+                }
             }
             const rec = stored.rec || {}, montage = stored.montage;
             if (rec && rec.emb_preview && rec.channels) {
@@ -3946,18 +4024,19 @@ const JarvisRetention = (function () {
             } else {
                 // fallback while the storage pass is still running: re-score once
                 const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1200);
-                const r = await fetch('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: rec.text || rec.title || '', title: (rec.title || 'Saved hook').slice(0, 40) }) });
-                const j = await r.json(); window.clearInterval(tick);
-                if (!r.ok || j.error) st.rawUpErr = j.error || ('HTTP ' + r.status);
-                else {
-                    j.source = 'saved'; j.savedId = id; j.genFrames = rec.frames || []; j.montageDataUrl = montage;
-                    st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-                    Object.assign(rec, { indicators: j.indicators, steer: j.steer, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest });
-                    SAVEDDETAIL[id] = { rec, montage };
-                    fetch('/api/raw/hook-enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, indicators: j.indicators, steer: j.steer, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest }) }).catch(() => {});
+                let j;
+                try {
+                    j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: rec.text || rec.title || '', title: (rec.title || 'Saved hook').slice(0, 40), async: true }) });
+                } finally {
+                    window.clearInterval(tick);
                 }
+                j.source = 'saved'; j.savedId = id; j.genFrames = rec.frames || []; j.montageDataUrl = montage;
+                st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+                Object.assign(rec, { indicators: j.indicators, steer: j.steer, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest });
+                SAVEDDETAIL[id] = { rec, montage };
+                fetch('/api/raw/hook-enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, montage, indicators: j.indicators, steer: j.steer, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest }) }).catch(() => {});
             }
-        } catch (e) { st.rawUpErr = e.message; }
+        } catch (e) { st.rawUpErr = fetchFail(e); }
         st.rawUploading = false; st.rawUpStage = 0; rtgUpdateExp();
         window.setTimeout(() => { const el = window.document.getElementById('exp-scoreout'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
     }
@@ -3970,7 +4049,8 @@ const JarvisRetention = (function () {
     function scheduleSavedChannelPoll() {
         window.clearTimeout(st._savedChannelPoll);
         const active = (SAVEDCHANNELS && SAVEDCHANNELS.channels || []).some(channel => ['queued', 'running', 'stopping'].includes(channel.status));
-        if (active && st.sec === 'experiment') st._savedChannelPoll = window.setTimeout(() => refreshSavedChannels(true), 5000);
+        const retrying = !!(SAVEDCHANNELS && SAVEDCHANNELS.error);
+        if ((active || retrying) && st.sec === 'experiment') st._savedChannelPoll = window.setTimeout(() => refreshSavedChannels(true), 5000);
     }
     async function loadSavedChannelDetail(id, force) {
         if (!id) return null;
@@ -3978,9 +4058,7 @@ const JarvisRetention = (function () {
         const previous = SAVEDCHANNELDETAIL[id];
         SAVEDCHANNELDETAIL[id] = { loading: 1, id };
         try {
-            const r = await fetch('/api/raw/saved-channel/' + id);
-            const j = await r.json();
-            if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+            const j = await rtFetchJson('/api/raw/saved-channel/' + id, { cache: 'no-store' }, 4);
             SAVEDCHANNELDETAIL[id] = j;
             const oldFingerprint = previous && [previous.completed, previous.failed, previous.discovered].join(':');
             const nextFingerprint = [j.completed, j.failed, j.discovered].join(':');
@@ -3988,19 +4066,23 @@ const JarvisRetention = (function () {
             if (analysisChanged || (oldFingerprint && oldFingerprint !== nextFingerprint)) delete SAVEDCHANNELANALYSIS[id];
             return j;
         } catch (e) {
-            SAVEDCHANNELDETAIL[id] = { id, error: fetchFail(e) };
+            SAVEDCHANNELDETAIL[id] = { ...(previous || {}), id, loading: false, error: fetchFail(e) };
             return SAVEDCHANNELDETAIL[id];
         }
     }
     async function refreshSavedChannels(quiet) {
+        const previous = SAVEDCHANNELS;
         try {
-            const r = await fetch('/api/raw/saved-channels', { cache: 'no-store' });
-            const j = await r.json();
-            if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+            const j = await rtFetchJson('/api/raw/saved-channels', { cache: 'no-store' }, 4);
             SAVEDCHANNELS = j;
             if (st.savedChannelSel) await loadSavedChannelDetail(st.savedChannelSel, true);
         } catch (e) {
-            SAVEDCHANNELS = { channels: [], error: fetchFail(e) };
+            SAVEDCHANNELS = {
+                ...(previous && typeof previous === 'object' ? previous : {}),
+                channels: (previous && previous.channels) || [],
+                loading: false,
+                error: fetchFail(e),
+            };
         }
         scheduleSavedChannelPoll();
         if (root && st.sec === 'experiment') rtgUpdateExp();
@@ -4012,9 +4094,7 @@ const JarvisRetention = (function () {
         if (!url || st.savedChannelBusy) return;
         st.savedChannelBusy = true; st.savedChannelErr = null; rtgUpdateExp();
         try {
-            const r = await fetch('/api/raw/saved-channel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
-            const j = await r.json();
-            if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+            const j = await rtFetchJson('/api/raw/saved-channel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) }, 1);
             st.savedChannelUrl = '';
             st.savedChannelSel = j.channel && j.channel.id;
             st.savedChannelTab = 'library';
@@ -4027,9 +4107,7 @@ const JarvisRetention = (function () {
         if (action === 'delete' && !window.confirm('Delete this saved channel and all of its scored Shorts?')) return;
         st.savedChannelActionBusy = action; st.savedChannelErr = null; rtgUpdateExp();
         try {
-            const r = await fetch(`/api/raw/saved-channel/${id}/${action}`, { method: 'POST' });
-            const j = await r.json();
-            if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+            const j = await rtFetchJson(`/api/raw/saved-channel/${id}/${action}`, { method: 'POST' }, 1);
             if (action === 'delete') {
                 delete SAVEDCHANNELDETAIL[id]; delete SAVEDCHANNELANALYSIS[id];
                 if (st.savedChannelSel === id) st.savedChannelSel = null;
@@ -4047,9 +4125,7 @@ const JarvisRetention = (function () {
         if (!id || (SAVEDCHANNELANALYSIS[id] && !force)) return;
         SAVEDCHANNELANALYSIS[id] = { loading: 1 }; rtgUpdateExp();
         try {
-            const r = await fetch(`/api/raw/saved-channel/${id}/analysis`, { cache: force ? 'reload' : 'default' });
-            const j = await r.json();
-            if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+            const j = await rtFetchJson(`/api/raw/saved-channel/${id}/analysis`, { cache: force ? 'reload' : 'default' }, 4);
             SAVEDCHANNELANALYSIS[id] = j;
         } catch (e) { SAVEDCHANNELANALYSIS[id] = { error: fetchFail(e) }; }
         rtgUpdateExp();
@@ -4067,9 +4143,7 @@ const JarvisRetention = (function () {
             const cacheKey = savedChannelMontageKey(channelId, videoId);
             let record = SAVEDCHANNELVIDEOCACHE[cacheKey];
             if (!record) {
-                const recordResponse = await fetch(`/api/raw/saved-channel/${channelId}/video/${videoId}`);
-                record = await recordResponse.json();
-                if (!recordResponse.ok || record.error) throw new Error(record.error || ('HTTP ' + recordResponse.status));
+                record = await rtFetchJson(`/api/raw/saved-channel/${channelId}/video/${videoId}`, { cache: 'no-store' }, 4);
                 record.montageDataUrl = `/api/raw/saved-channel/${channelId}/montage/${videoId}`;
                 record.source = 'saved-channel'; record.savedChannelId = channelId; record.savedChannelVideoId = videoId;
                 SAVEDCHANNELVIDEOCACHE[cacheKey] = record;
@@ -5213,7 +5287,10 @@ const JarvisRetention = (function () {
                         loadJSON(base + 'principles/rtg_field.json').then(x => RTGF = x).catch(() => RTGF = null),
                         loadJSON(base + 'principles/rtg_embedmap.json').then(x => RTGE = x).catch(() => RTGE = null),
                         loadJSON(base + 'principles/rtg_hazard.json').then(x => RTGH = x).catch(() => RTGH = null),
-                        fetch('/api/raw/map?channel=visual').then(r => r.json()).then(x => RAW.visual = x).catch(() => {}),
+                        rtFetchJson('/api/raw/map?channel=visual', { cache: 'no-store' }, 4).then(x => RAW.visual = x).catch(e => {
+                            RAW.visual = { n: 0, error: fetchFail(e), at: Date.now() };
+                            window.setTimeout(() => rawEnsure('visual', true), 5000);
+                        }),
                         fetch('/api/rtg/labels').then(r => r.json()).then(x => RTGLABELS = x || {}).catch(() => RTGLABELS = {}),
                     ];
                     BGPEND = bg.length;

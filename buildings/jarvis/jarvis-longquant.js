@@ -306,7 +306,24 @@ const JarvisLongQuant = (function () {
         const [a, b, u] = t < 0.5 ? [cool, mid, t * 2] : [mid, warm, (t - 0.5) * 2];
         return `rgb(${a.map((c, k) => Math.round(c + (b[k] - c) * u)).join(',')})`;
     }
-    function rawEnsure(ch) { if (RAW[ch]) return; RAW[ch] = { loading: 1 }; fetch('/api/raw-long/map?channel=' + ch).then(r => r.json()).then(j => { RAW[ch] = j; rtgUpdateRaw(); rtgUpdateGuessesL(); rtgUpdateLqIdeas(); rtgUpdateLqExp(); }).catch(() => { RAW[ch] = { n: 0 }; rtgUpdateRaw(); rtgUpdateGuessesL(); rtgUpdateLqIdeas(); rtgUpdateLqExp(); }); }
+    function rawEnsure(ch, force) {
+        const current = RAW[ch];
+        if (!force && current && (current.loading || !current.error)) return;
+        RAW[ch] = { loading: 1 };
+        lqxJson('/api/raw-long/map?channel=' + ch, { cache: 'no-store' })
+            .then(j => {
+                if (!j || j.error) throw new Error((j && j.error) || 'empty embedding map');
+                RAW[ch] = j;
+                rtgUpdateRaw(); rtgUpdateGuessesL(); rtgUpdateLqIdeas(); rtgUpdateLqExp();
+            })
+            .catch(e => {
+                RAW[ch] = { n: 0, error: String(e.message || e), at: Date.now() };
+                rtgUpdateRaw(); rtgUpdateGuessesL(); rtgUpdateLqIdeas(); rtgUpdateLqExp();
+                window.setTimeout(() => {
+                    if (RAW[ch] && RAW[ch].error) { delete RAW[ch]; rawEnsure(ch, true); }
+                }, 5000);
+            });
+    }
     // ── ONE global hook-scoring source: an upload's number on the map IS out.steer (computed
     //    server-side, identical to how the map scores every video). The graph marker AND the
     //    Experiment grid both read it through these — change the maths once, both follow. ──
@@ -577,11 +594,11 @@ const JarvisLongQuant = (function () {
         const nmine = R.nmine != null ? R.nmine : MINE.filter(Boolean).length;
         const nsilent = R.nsilent != null ? R.nsilent : SILENT.filter(Boolean).length;
         const mineBtn = `<span data-rawmine="1" style="cursor:pointer;border:1px solid ${hiMine ? GOLD : C.border};background:${hiMine ? GOLD + '22' : 'transparent'};color:${hiMine ? GOLD : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">★ My videos${nmine ? ' (' + nmine + ')' : ''}</span>`;
-        const UPSTAGES = ['Uploading…', 'Extracting the 5 hook frames…', 'Transcribing the audio…', 'Embedding visual · text · together…', 'Placing among similar hooks…'];
+        const UPSTAGES = ['Reading thumbnail…', 'Normalizing image…', 'Embedding thumbnail…', 'Embedding thumbnail + title…', 'Placing among similar thumbnails…'];
         const upStage = Math.min(st.rawUpStage || 0, UPSTAGES.length - 1);
         const upPct = Math.min(93, Math.round((upStage + 1) / UPSTAGES.length * 100));
         const q = st.rawUpQueue;
-        const uploadBtn = `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};background:transparent;color:${C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">⬆ Upload video${ups.length ? 's — add more' : '(s)'}</span>`;
+        const uploadBtn = `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};background:transparent;color:${C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">⬆ Upload thumbnail${ups.length ? 's — add more' : '(s)'}</span>`;
         const showBtn = ups.length ? `<span data-rawupshow="1" style="cursor:pointer;border:1px solid ${st.rawUpShow ? CYAN : C.border};background:${st.rawUpShow ? CYAN + '22' : 'transparent'};color:${st.rawUpShow ? CYAN : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">⬆ My uploads (${ups.length})</span><span data-rawupclear="1" style="cursor:pointer;color:${C.mute};font-size:10px;margin-left:3px">clear all</span>` : '';
         const upBtn = st.rawUploading
             ? `<span style="display:inline-flex;flex-direction:column;gap:3px;min-width:250px;vertical-align:middle">
@@ -590,16 +607,16 @@ const JarvisLongQuant = (function () {
                </span>`
             : `${uploadBtn} ${showBtn}`;
         const upErr = st.rawUpErr ? `<span style="font-size:10px;color:${C.red}">upload failed: ${esc(String(st.rawUpErr).slice(0, 80))}</span>` : '';
-        const modeToggle = `<span data-rawbuildmode="0" style="cursor:pointer;border:1px solid ${!st.rawBuildMode ? CYAN : C.border};background:${!st.rawBuildMode ? CYAN + '22' : 'transparent'};color:${!st.rawBuildMode ? CYAN : C.dim};border-radius:6px 0 0 6px;padding:3px 9px;font-size:10px;font-weight:700">🎬 Video</span><span data-rawbuildmode="1" style="cursor:pointer;border:1px solid ${st.rawBuildMode ? CYAN : C.border};border-left:none;background:${st.rawBuildMode ? CYAN + '22' : 'transparent'};color:${st.rawBuildMode ? CYAN : C.dim};border-radius:0 6px 6px 0;padding:3px 9px;font-size:10px;font-weight:700">🖼 5 frames + text</span>`;
+        const modeToggle = `<span data-rawbuildmode="0" style="cursor:pointer;border:1px solid ${!st.rawBuildMode ? CYAN : C.border};background:${!st.rawBuildMode ? CYAN + '22' : 'transparent'};color:${!st.rawBuildMode ? CYAN : C.dim};border-radius:6px 0 0 6px;padding:3px 9px;font-size:10px;font-weight:700">🖼 Thumbnail</span><span data-rawbuildmode="1" style="cursor:pointer;border:1px solid ${st.rawBuildMode ? CYAN : C.border};border-left:none;background:${st.rawBuildMode ? CYAN + '22' : 'transparent'};color:${st.rawBuildMode ? CYAN : C.dim};border-radius:0 6px 6px 0;padding:3px 9px;font-size:10px;font-weight:700">▦ Compose + title</span>`;
         const fr = st.rawFrames || [null, null, null, null, null];
         const nFrames = fr.filter(Boolean).length;
         const builder = st.rawBuildMode ? `<div style="border:1px solid ${C.border};border-radius:10px;padding:10px;margin-bottom:8px;background:${C.card2}">
-              <div style="font-size:10px;color:${C.mute};margin-bottom:6px">Build a hook from photos — drop in up to 5 frames (any image type, auto-fit to 9:16) and set the spoken text. It's embedded the same way and added as a marker to compare.</div>
+              <div style="font-size:10px;color:${C.mute};margin-bottom:6px">Compose one 16:9 candidate thumbnail from up to 5 source images and a title. The exact composite is scored with the Long Quant image-only and image-plus-title models.</div>
               <div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:8px">${[0, 1, 2, 3, 4].map(i => fr[i]
             ? `<div style="position:relative"><img src="${fr[i]}" style="width:48px;height:85px;object-fit:cover;border-radius:5px;border:1px solid ${C.border}"/><span data-rawframedel="${i}" style="position:absolute;top:-7px;right:-7px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:10px;cursor:pointer">✕</span><div style="text-align:center;font-size:8px;color:${C.mute}">${i + 1}</div></div>`
             : `<div data-rawframe="${i}" style="width:48px;height:85px;border:1px dashed ${C.border};border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋<span>frame ${i + 1}</span></div>`).join('')}</div>
-              <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="optional — type the hook's spoken text (drives Text + Together)…" style="width:100%;box-sizing:border-box;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:12px;margin-bottom:8px"/>
-              <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CYAN : C.border};background:${nFrames ? CYAN + '22' : 'transparent'};color:${nFrames ? CYAN : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Place this hook${nFrames ? ` (${nFrames}/5 frames)` : ''}</span>
+              <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="video title or idea (drives the image + title embedding)…" style="width:100%;box-sizing:border-box;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:12px;margin-bottom:8px"/>
+              <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CYAN : C.border};background:${nFrames ? CYAN + '22' : 'transparent'};color:${nFrames ? CYAN : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Score this thumbnail${nFrames ? ` (${nFrames}/5 images)` : ''}</span>
             </div>` : '';
         const upLegend = ups.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">my uploads</span>${ups.map((u, i) => `<span data-rawupmark="${i}" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;border:1px solid ${st.rawUpSel === i ? upColor(i) : C.border};background:${upColor(i)}1e;border-radius:6px;padding:2px 7px;font-size:10px;color:${C.text}"><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:${upColor(i)};color:#0f172a;font-size:9px;font-weight:700;text-align:center;line-height:13px">${i + 1}</span>${esc((u.title || 'upload').replace(/\.[^.]+$/, '').slice(0, 22))}${u.silent ? ' 🔇' : ''}<span data-rawupdel="${i}" style="color:${C.mute};margin-left:2px">✕</span></span>`).join('')}</div>` : '';
         const upDetail = (st.rawUpSel != null && ups[st.rawUpSel]) ? (() => {
@@ -658,7 +675,7 @@ const JarvisLongQuant = (function () {
     // ═══ 🎰 Guesses — long-form thumbnail RL attempts (R2 longform/guesses/<run>/) ═══
     const LGRUNS = [null], LGIDX = {}, LGGRP = {}, LGMANI = {};
     function rtgUpdateGuessesL() { try { const el = window.document.getElementById('rtg-guesspanel'); if (el) el.innerHTML = renderLongGuesses(); } catch (e) { } }
-    function lgMani(run) { if (!run || LGMANI[run]) return; LGMANI[run] = { loading: 1 }; fetch('/api/longquant/guesses/manifest?run=' + run).then(r => r.text()).then(t => { LGMANI[run] = { rows: t.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean) }; rtgUpdateGuessesL(); }).catch(() => { LGMANI[run] = { rows: [] }; rtgUpdateGuessesL(); }); }
+    function lgMani(run) { if (!run || LGMANI[run]) return; LGMANI[run] = { loading: 1 }; lqxText('/api/longquant/guesses/manifest?run=' + run).then(t => { LGMANI[run] = { rows: t.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean) }; rtgUpdateGuessesL(); }).catch(e => { LGMANI[run] = { rows: [], error: e.message || String(e) }; rtgUpdateGuessesL(); }); }
     function lgHeat(p) { p = Math.max(0, Math.min(1, p || 0)); return `rgb(${Math.round(239 * (1 - p) + 34 * p)},${Math.round(68 * (1 - p) + 197 * p)},${Math.round(68 * (1 - p) + 94 * p)})`; }
     const _LGID2I = [null, null];   // cache id->row-index for the raw-long visual map (to place guesses in any projection)
     function lgId2i(RV) { if (_LGID2I[0] !== RV) { const m = {}; (RV.id || []).forEach((id, i) => { m[String(id)] = i; }); _LGID2I[0] = RV; _LGID2I[1] = m; } return _LGID2I[1]; }
@@ -695,19 +712,19 @@ const JarvisLongQuant = (function () {
         if (key === 'realviews' && P.est) return { vals: P.est.map(x => Math.log10((+x || 0) + 1)), fmt: v => fv(Math.pow(10, v)), label: 'realistic views' };
         return { vals: V.map(x => Math.log10((+x || 0) + 1)), fmt: v => fv(Math.pow(10, v)), label: 'views' };   // ctrviews + default = views (same as Raw)
     }
-    function lgIdx(run) { if (!run || LGIDX[run]) return; LGIDX[run] = { loading: 1 }; fetch('/api/longquant/guesses/index?run=' + run).then(r => r.text()).then(t => { LGIDX[run] = { rows: t.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean) }; rtgUpdateGuessesL(); }).catch(() => { LGIDX[run] = { rows: [] }; rtgUpdateGuessesL(); }); }
-    function lgGrp(run, iid) { const key = run + '/' + iid; if (LGGRP[key]) return; LGGRP[key] = { loading: 1 }; fetch('/api/longquant/guesses/group/' + run + '/' + iid).then(r => r.json()).then(j => { LGGRP[key] = j; rtgUpdateGuessesL(); }).catch(() => { LGGRP[key] = { error: 1 }; rtgUpdateGuessesL(); }); }
+    function lgIdx(run) { if (!run || LGIDX[run]) return; LGIDX[run] = { loading: 1 }; lqxText('/api/longquant/guesses/index?run=' + run).then(t => { LGIDX[run] = { rows: t.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean) }; rtgUpdateGuessesL(); }).catch(e => { LGIDX[run] = { rows: [], error: e.message || String(e) }; rtgUpdateGuessesL(); }); }
+    function lgGrp(run, iid) { const key = run + '/' + iid; if (LGGRP[key]) return; LGGRP[key] = { loading: 1 }; lqxJson('/api/longquant/guesses/group/' + run + '/' + iid).then(j => { LGGRP[key] = j; rtgUpdateGuessesL(); }).catch(e => { LGGRP[key] = { error: e.message || String(e), at: Date.now() }; rtgUpdateGuessesL(); }); }
     async function lgDemo() {
         const t = (st.lgDemoTitle || '').trim(); if (!t) return;
         st.lgDemoStatus = 'generating 5 thumbnails…'; st.lgDemoRid = null; rtgUpdateGuessesL();
-        try { const r = await fetch('/api/longquant/guesses/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: t }) }); const j = await r.json(); st.lgDemoRid = j.rid; setTimeout(lgDemoPoll, 4000); } catch (e) { st.lgDemoStatus = 'error: ' + e.message; rtgUpdateGuessesL(); }
+        try { const j = await lqxJson('/api/longquant/guesses/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: t }) }); st.lgDemoRid = j.rid; setTimeout(lgDemoPoll, 4000); } catch (e) { st.lgDemoStatus = 'error: ' + e.message; rtgUpdateGuessesL(); }
     }
     function lgDemoPoll() {
         if (!st.lgDemoRid) return; const rid = st.lgDemoRid;
-        fetch('/api/longquant/guesses/group/demo/' + rid).then(r => r.ok ? r.json() : null).then(j => {
+        lqxJson('/api/longquant/guesses/group/demo/' + rid).then(j => {
             if (j && j.attempts) { st.lgDemoStatus = null; LGGRP['demo/' + rid] = j; st.lgSel = 'demo:' + rid; rtgUpdateGuessesL(); }
             else { st.lgDemoStatus = 'generating on the GPU — ~1–2 min…'; rtgUpdateGuessesL(); setTimeout(lgDemoPoll, 5000); }
-        }).catch(() => setTimeout(lgDemoPoll, 5000));
+        }).catch(e => { st.lgDemoStatus = 'connection issue: ' + (e.message || e) + ' — retrying'; rtgUpdateGuessesL(); setTimeout(lgDemoPoll, 5000); });
     }
     const LGSTATUS = [null, 0], LGIDEASTATUS = [null, 0];   // [json, lastFetchTs] per trainer
     // one strip per trainer: stage + note + freshness, green/amber/red. A 'done' whose note mentions a
@@ -725,8 +742,8 @@ const JarvisLongQuant = (function () {
         return `<div style="background:${col}14;border:1px solid ${col};border-radius:8px;padding:7px 12px;margin-bottom:9px;font-size:11px;color:${col};font-weight:700;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><span>${head}</span>${noteHtml}${age != null ? `<span style="color:${C.mute};font-weight:400">updated ${age < 1 ? '<1' : age} min ago${age > 20 ? ' — ⚠️ stale, trainer may be between stages' : ''}</span>` : ''}</div>`;
     }
     function renderLongGuesses() {
-        if (!LGRUNS[0]) { LGRUNS[0] = { loading: 1 }; fetch('/api/longquant/guesses/runs').then(r => r.json()).then(j => { const rr = j.runs || []; LGRUNS[0] = rr; if (!st.lgRun && rr.length) st.lgRun = rr[rr.length - 1]; rtgUpdateGuessesL(); }).catch(() => { LGRUNS[0] = []; rtgUpdateGuessesL(); }); }
-        if (Date.now() - LGSTATUS[1] > 60e3) { LGSTATUS[1] = Date.now(); fetch('/api/longquant/guesses/status').then(r => r.json()).then(j => { LGSTATUS[0] = j; rtgUpdateGuessesL(); }).catch(() => { }); }
+        if (!LGRUNS[0]) { LGRUNS[0] = { loading: 1 }; lqxJson('/api/longquant/guesses/runs').then(j => { const rr = j.runs || []; LGRUNS[0] = rr; if (!st.lgRun && rr.length) st.lgRun = rr[rr.length - 1]; rtgUpdateGuessesL(); }).catch(e => { LGRUNS[0] = { error: e.message || String(e), rows: [] }; rtgUpdateGuessesL(); }); }
+        if (Date.now() - LGSTATUS[1] > 60e3) { LGSTATUS[1] = Date.now(); lqxJson('/api/longquant/guesses/status').then(j => { LGSTATUS[0] = j; rtgUpdateGuessesL(); }).catch(e => { LGSTATUS[0] = { state: 'unavailable', note: e.message || String(e) }; rtgUpdateGuessesL(); }); }
         // LIVE: while the Guesses panel is open, refresh status+runs+active-round every 40s (manifest every 3rd tick)
         // so the banner/rounds can never go stale — no interaction needed.
         if (!st._lgLive) {
@@ -773,7 +790,7 @@ const JarvisLongQuant = (function () {
         const selectorsRow = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">phase</span>${phaseSel}<span style="font-size:9px;color:${C.mute};text-transform:uppercase">round</span>${runSel}</div>`;
         if (phase !== 'thumb') {
             // idea phases get the IDEA trainer's live strip too (same cadence: the 40s tick zeroes the cache)
-            if (Date.now() - LGIDEASTATUS[1] > 60e3) { LGIDEASTATUS[1] = Date.now(); fetch('/api/longquant/ideas/status').then(r => r.json()).then(j => { LGIDEASTATUS[0] = j; rtgUpdateGuessesL(); }).catch(() => { }); }
+            if (Date.now() - LGIDEASTATUS[1] > 60e3) { LGIDEASTATUS[1] = Date.now(); lqxJson('/api/longquant/ideas/status').then(j => { LGIDEASTATUS[0] = j; rtgUpdateGuessesL(); }).catch(e => { LGIDEASTATUS[0] = { state: 'unavailable', note: e.message || String(e) }; rtgUpdateGuessesL(); }); }
             const ideaStrip = trainerStrip(LGIDEASTATUS[0], 'idea trainer');
             return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — what the models generate</div><div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every video idea the idea model generated, scored on that phase's validation axis. Pick a run, click an idea to see its details${phase === 'ideachain' ? ' and its rendered thumbnails' : ''}.</div>${statStrip}${ideaStrip}${selectorsRow}${renderIdeaPhase(phase === 'ideachain' ? 'visual' : 'text')}`, 14);
         }
@@ -882,11 +899,16 @@ const JarvisLongQuant = (function () {
     // Ideas are CONSOLIDATED into the 🎰 Guesses section — idea data refreshes repaint the guesses panel.
     function rtgUpdateLqIdeas() { rtgUpdateGuessesL(); }
     async function lqxJson(url, opts) {
-        // A proxy-level 502/503/504 (or an HTML error page) means the app NEVER processed the
-        // request — Render is restarting mid-deploy. That makes retrying safe for every request,
-        // including POSTs. Ride the deploy window out instead of surfacing raw HTML to the user.
+        // Reads and explicitly idempotent scoring jobs ride through a deploy window.
+        // Other mutations are attempted once: a lost response does not prove the server
+        // missed the request, and blindly replaying it can duplicate a grind or generation.
         let lastErr = null;
-        for (let attempt = 0; attempt < 4; attempt++) {
+        const method = String((opts && opts.method) || 'GET').toUpperCase();
+        const headers = (opts && opts.headers) || {};
+        const retryable = method === 'GET' || method === 'HEAD'
+            || Object.keys(headers).some(k => k.toLowerCase() === 'x-quant-request-id');
+        const attempts = retryable ? 4 : 1;
+        for (let attempt = 0; attempt < attempts; attempt++) {
             if (attempt) await new Promise(res => window.setTimeout(res, [3000, 8000, 15000][attempt - 1] || 15000));
             let r, txt;
             try { r = await fetch(url, opts || {}); txt = await r.text(); }
@@ -904,6 +926,27 @@ const JarvisLongQuant = (function () {
             return j;
         }
         throw new Error((lastErr && lastErr.message ? lastErr.message : 'server unavailable') + ' — likely a redeploy; try again in a minute');
+    }
+    async function lqxText(url, opts) {
+        let lastErr = null;
+        for (let attempt = 0; attempt < 4; attempt++) {
+            if (attempt) await new Promise(resolve => window.setTimeout(resolve, [1500, 4000, 8000][attempt - 1] || 8000));
+            let response;
+            try { response = await fetch(url, opts || {}); }
+            catch (e) { lastErr = new Error('network: ' + (e.message || e)); continue; }
+            const text = await response.text();
+            if ([502, 503, 504].includes(response.status) || /^\s*</.test(text)) {
+                lastErr = new Error('server is restarting (HTTP ' + response.status + ')');
+                continue;
+            }
+            if (!response.ok) {
+                let message = `HTTP ${response.status}`;
+                try { message = JSON.parse(text).error || message; } catch (e) {}
+                throw new Error(message);
+            }
+            return text;
+        }
+        throw lastErr || new Error('server unavailable');
     }
     function lqxFormatBytes(bytes) {
         const n = Number(bytes) || 0;
@@ -1007,23 +1050,31 @@ const JarvisLongQuant = (function () {
         } catch (e) {}
     }
     if (typeof window !== 'undefined' && !window.__lqGrindLivePoll) window.__lqGrindLivePoll = window.setInterval(lqGrindLiveTick, LQ_LIVE_REFRESH_MS);
-    function lqIdeaRunsEnsure(force) { if (LQIDEARUNS[0] && !force) return; LQIDEARUNS[0] = LQIDEARUNS[0] || { loading: 1 }; lqxJson('/api/longquant/ideas/runs').then(j => { LQIDEARUNS[0] = j.runs || []; if (!st.ideaRun && LQIDEARUNS[0].length) st.ideaRun = LQIDEARUNS[0][LQIDEARUNS[0].length - 1]; rtgUpdateLqIdeas(); rtgUpdateLqExp(); }).catch(() => { LQIDEARUNS[0] = []; rtgUpdateLqIdeas(); }); }
-    function lqIdeaIdx(run) { if (!run || LQIDEAIDX[run]) return; LQIDEAIDX[run] = { loading: 1 }; fetch('/api/longquant/ideas/index?run=' + run).then(r => r.text()).then(t => { LQIDEAIDX[run] = { rows: t.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean) }; rtgUpdateLqIdeas(); rtgUpdateLqExp(); }).catch(() => { LQIDEAIDX[run] = { rows: [] }; rtgUpdateLqIdeas(); }); }
+    function lqIdeaRunsEnsure(force) { if (LQIDEARUNS[0] && !force) return; LQIDEARUNS[0] = LQIDEARUNS[0] || { loading: 1 }; lqxJson('/api/longquant/ideas/runs').then(j => { LQIDEARUNS[0] = j.runs || []; if (!st.ideaRun && LQIDEARUNS[0].length) st.ideaRun = LQIDEARUNS[0][LQIDEARUNS[0].length - 1]; rtgUpdateLqIdeas(); rtgUpdateLqExp(); }).catch(e => { LQIDEARUNS[0] = { error: e.message || String(e), rows: [] }; rtgUpdateLqIdeas(); }); }
+    function lqIdeaIdx(run) { if (!run || LQIDEAIDX[run]) return; LQIDEAIDX[run] = { loading: 1 }; lqxText('/api/longquant/ideas/index?run=' + run).then(t => { LQIDEAIDX[run] = { rows: t.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean) }; rtgUpdateLqIdeas(); rtgUpdateLqExp(); }).catch(e => { LQIDEAIDX[run] = { rows: [], error: e.message || String(e) }; rtgUpdateLqIdeas(); rtgUpdateLqExp(); }); }
     // submit a scoring job and poll it: the POST returns instantly with a job id, so no request
     // ever sits open long enough to hit Render's ~100s proxy ceiling (the "hit or miss" scoring
     // failures were interactive scores queued behind grind batch scoring past that ceiling).
-    async function lqxJob(url, bodyObj, resubmits) {
-        const sub = await lqxJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...bodyObj, async: true }) });
+    function lqxRequestId() {
+        try { if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID(); } catch (e) {}
+        return 'ql' + Date.now().toString(36) + Math.floor(Math.random() * 1e9).toString(36);
+    }
+    async function lqxJob(url, bodyObj, resubmits, requestId) {
+        requestId = requestId || lqxRequestId();
+        const sub = await lqxJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Quant-Request-Id': requestId }, body: JSON.stringify({ ...bodyObj, async: true }) });
         if (!sub || !sub.jobId) return sub;   // server predates jobs — sync result
         for (let i = 0; i < 240; i++) {
             await new Promise(r => window.setTimeout(r, i < 8 ? 2500 : 5000));
             let j;
             try { j = await lqxJson('/api/longquant/jobs/' + sub.jobId); }
             catch (e) {
-                if (/job lost|resubmit/i.test(String(e.message)) && (resubmits || 0) < 2) return lqxJob(url, bodyObj, (resubmits || 0) + 1);
+                if (/job lost|resubmit/i.test(String(e.message)) && (resubmits || 0) < 2) return lqxJob(url, bodyObj, (resubmits || 0) + 1, requestId);
                 throw e;
             }
-            if (j && j.status === 'done') return j.result;
+            if (j && j.status === 'done') {
+                if (j.result && j.result.error) throw new Error(j.result.error);
+                return j.result;
+            }
             if (j && j.status === 'error') throw new Error(j.error || 'scoring job failed');
         }
         throw new Error('scoring job still running after 15 minutes — give up and retry');
@@ -1035,16 +1086,20 @@ const JarvisLongQuant = (function () {
             .then(j => { LQSCORES[id] = j; rtgUpdateLqExp(); rtgUpdateGuessesL(); })
             .catch(e => { LQSCORES[id] = { error: e.message, at: Date.now(), key, title: title || '', idea: idea || title || '' }; rtgUpdateLqExp(); rtgUpdateGuessesL(); });
     }
-    function lqxSavedDetail(id) {
-        if (!id || LQDETAILS[id]) return;
-        LQDETAILS[id] = { loading: 1 };
+    function lqxSavedDetail(id, force) {
+        if (!id) return;
+        const current = LQDETAILS[id];
+        if (current && current.loading) return;
+        if (!force && current && !current.error) return;
+        if (!force && current && current.error && Date.now() - (current.at || 0) < 2500) return;
+        LQDETAILS[id] = { ...(current || {}), loading: 1, error: null };
         lqxJson('/api/longquant/thumbs/detail/' + id).then(j => {
             const score = j && (j.score || ((j.channels && j.emb_preview) ? { metrics: j.metrics, channels: j.channels, emb_preview: j.emb_preview, input_manifest: j.input_manifest, pctile: j.pctile, relevance: j.relevance } : null));
             if (score && score.channels && score.emb_preview) LQSCORES['saved:' + id] = score;
             LQDETAILS[id] = j;
             rtgUpdateLqExp();
         })
-            .catch(e => { LQDETAILS[id] = { error: e.message }; rtgUpdateLqExp(); });
+            .catch(e => { LQDETAILS[id] = { error: e.message, at: Date.now() }; rtgUpdateLqExp(); });
     }
     function lqxImgData(url, id) {
         if (!url) return '';
@@ -1104,9 +1159,15 @@ const JarvisLongQuant = (function () {
                 rtgUpdateLqExp();
             }
         }).catch(() => {});
-        lqxJson('/api/longquant/guesses/group/demo/' + rid).catch(() => null).then(j => {
+        lqxJson('/api/longquant/guesses/group/demo/' + rid).catch(e => ({ _loadError: e.message || String(e) })).then(j => {
             if (st.lqxRid !== rid) return;
             const live = st.lqxLastDemoStatus && st.lqxLastDemoStatus.rid === rid ? st.lqxLastDemoStatus : null;
+            if (j && j._loadError) {
+                st.lqxStatus = 'connection issue while loading generated thumbnails: ' + j._loadError + ' — retrying';
+                rtgUpdateLqExp();
+                window.setTimeout(lqxPoll, 6000);
+                return;
+            }
             if (j && Array.isArray(j.attempts)) {
                 st.lqxResult = j;
                 const liveDone = live && live.stage === 'done';
@@ -1130,7 +1191,7 @@ const JarvisLongQuant = (function () {
     async function lqxSave(payload, flashKey) {
         try {
             if (payload && payload.score && !payload.input_manifest) payload = Object.assign({}, payload, { input_manifest: lqxInputManifest(payload.score, payload.title || payload.idea || '', payload.image || payload.montageKey || '') });
-            const j = await lqxJson('/api/longquant/thumbs/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const j = await lqxJob('/api/longquant/thumbs/save', payload);
             if (j.ok) { st.lqxSaveFlash = flashKey; lqThumbsEnsure(true); window.setTimeout(() => { if (st.lqxSaveFlash === flashKey) { st.lqxSaveFlash = null; rtgUpdateLqExp(); } }, 3000); }
             else { st.lqxStatus = 'save error: ' + (j.error || ''); }
         } catch (e) { st.lqxStatus = 'save error: ' + e.message; }
@@ -1551,16 +1612,19 @@ const JarvisLongQuant = (function () {
     }
     function lqxGrindPoll() {
         if (!st.lqxGrindRid) return; const rid = st.lqxGrindRid;
-        lqxJson('/api/longquant/grind/run/' + rid).catch(() => null).then(j => {
+        lqxJson('/api/longquant/grind/run/' + rid).then(j => {
             if (st.lqxGrindRid !== rid) return;
-            if (j) {
-                st.lqxGrindRun = j;
-                if (j.status === 'stopped') st.lqxGrindStopping = null;
-                st.lqxGrindStatus = st.lqxGrindStopping === rid ? 'stopped — cancel signal sent' : (j.note || j.status || 'running');
-                rtgUpdateLqExp();
-                if (!st.lqxGrindStopping && ['queued', 'running'].includes(j.status)) window.setTimeout(lqxGrindPoll, 5000);
-            }
-        }).catch(() => { if (st.lqxGrindRid === rid) window.setTimeout(lqxGrindPoll, 6000); });
+            st.lqxGrindRun = j;
+            if (j.status === 'stopped') st.lqxGrindStopping = null;
+            st.lqxGrindStatus = st.lqxGrindStopping === rid ? 'stopped — cancel signal sent' : (j.note || j.status || 'running');
+            rtgUpdateLqExp();
+            if (!st.lqxGrindStopping && ['queued', 'running', 'recovering'].includes(j.status)) window.setTimeout(lqxGrindPoll, 5000);
+        }).catch(e => {
+            if (st.lqxGrindRid !== rid) return;
+            st.lqxGrindStatus = 'connection issue while checking this grind: ' + e.message + ' — retrying';
+            rtgUpdateLqExp();
+            if (!st.lqxGrindStopping) window.setTimeout(lqxGrindPoll, 6000);
+        });
     }
     async function lqxGrindStop() {
         const rid = st.lqxGrindRid;
@@ -1740,7 +1804,7 @@ const JarvisLongQuant = (function () {
             const R = st.lqxResult, rid = st.lqxRid;
             gen += `<div style="font-size:10px;color:${C.mute};margin:9px 0 6px">${R.error ? `<span style=\"color:${C.red};font-weight:800\">⚠ ${esc(String(R.error).slice(0, 180))} · </span>` : ''}${R.attempts.length} thumbnails for <b style="color:${C.text}">${esc(R.title || '')}</b> — ranked by trained reward; headline = thumbnail-only potential</div>
               <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${R.attempts.map(a => {
-                  const fk = rid + '_' + a.k, mk = `longform/guesses/demo/montages/${fk}.jpg`, sc2 = lqxScoreFor('gen:' + fk, mk, R.title || st.lqxTitle || '', R.title || st.lqxTitle || '', a.score, true);
+                  const fk = rid + '_' + a.k, mk = `longform/guesses/demo/montages/${fk}.jpg`, sc2 = lqxScoreFor('gen:' + fk, mk, R.title || st.lqxTitle || '', R.title || st.lqxTitle || '', a.score, false);
                   return `<div data-lqxopen="gen:${fk}" style="cursor:pointer;border:1px solid ${a.pctile >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/guesses/montage/demo/${fk}`, `genimg:${fk}`, `width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}`)}<div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;align-items:center;font-size:10px"><span style="font-weight:800;color:${a.pctile >= 0.8 ? C.green : a.pctile >= 0.7 ? C.amber : C.text}">${((a.pctile || 0) * 100).toFixed(0)}th thumbnail</span><span data-lqxsave="${a.k}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === fk ? C.green : C.accent};color:${st.lqxSaveFlash === fk ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-weight:700">${st.lqxSaveFlash === fk ? '✅ Saved' : '💾 Save'}</span></div>${a.status === 'error' || a.error ? `<div style="font-size:9px;color:${C.red};margin-top:4px;border:1px solid ${C.red}44;border-radius:5px;padding:3px 6px">⚠ ${esc(String(a.error || 'render failed').slice(0, 160))}</div>` : ''}${lqxChannelMetricHtml(sc2 || a, true)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">scoring 12 embeddings…</div>` : ''}<div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:40px;overflow:hidden">${esc((a.prompt || '').slice(0, 130))}</div>${lqxRawButton(sc2 || a.score, 'gen:' + fk, R.title || st.lqxTitle || '', `/api/longquant/guesses/montage/demo/${fk}`)}</div></div>`;
               }).join('')}</div>`;
             if (st.lqxOpen && String(st.lqxOpen).indexOf('gen:') === 0) {
@@ -1769,7 +1833,7 @@ const JarvisLongQuant = (function () {
         if (grAttempts.length) {
             grind += `<div style="font-size:10px;color:${C.mute};margin:9px 0 6px">best thumbnail-only <b style="color:${gr.best >= gr.threshold ? C.green : C.text}">${gr.best == null ? '—' : gr.best + 'th'}</b> · visual target ${gr.threshold || st.lqxGrindThreshold || 85}th · next min distance ≥ ${gr.gate || '—'}</div>`;
             grind += grAttempts.slice().reverse().map(a => `<div style="border:1px solid ${a.pct >= (gr.threshold || 85) ? C.green : C.border};border-radius:8px;padding:8px;background:${C.card2};margin-top:8px"><div style="display:flex;justify-content:space-between;gap:10px"><div style="font-size:12px;color:${C.text};font-weight:800">${esc((a.idea || '').slice(0, 140))}</div><div style="font-size:12px;color:${a.pct >= (gr.threshold || 85) ? C.green : C.dim};font-weight:900;white-space:nowrap">${a.pct == null ? '—' : a.pct + 'th'}</div></div><div style="font-size:9px;color:${C.mute};margin:3px 0 6px">seed dist ${a.distSeed == null ? '—' : a.distSeed} · prior dist ${a.distPrior == null ? '—' : a.distPrior} · topical ${a.topic == null ? '—' : a.topic}${a.topicFloor == null ? '' : ' / floor ' + a.topicFloor} · ${esc(a.status || '')}</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">${(a.thumbs || []).map(t => {
-                const cid = t.image || `${a.k}_${t.i}`, key = t.image ? `longform/grind/montages/${t.image}.jpg` : '', sc2 = t.image ? lqxScoreFor('grind:' + cid, key, a.idea || gr.idea || '', a.idea || gr.idea || '', t.score, true) : (t.score || t);
+                const cid = t.image || `${a.k}_${t.i}`, key = t.image ? `longform/grind/montages/${t.image}.jpg` : '', sc2 = t.image ? lqxScoreFor('grind:' + cid, key, a.idea || gr.idea || '', a.idea || gr.idea || '', t.score, false) : (t.score || t);
                 return `<div data-lqxopen="grind:${cid}" style="cursor:${t.image ? 'pointer' : 'default'};border:1px solid ${t.pct >= (gr.threshold || 85) ? C.green : C.border};border-radius:7px;overflow:hidden;background:${C.card}">${t.image ? lqxImg(`/api/longquant/grind/img/${t.image}`, `grindimg:${t.image}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000') : `<div style="aspect-ratio:16/9;background:${C.card};display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px">${esc(t.status || 'queued')}</div>`}<div style="padding:5px 6px"><div style="display:flex;justify-content:space-between;gap:4px;align-items:center"><div style="font-size:10px;font-weight:800;color:${t.pct >= (gr.threshold || 85) ? C.green : C.text}">${t.pct == null ? esc(t.status || '') : t.pct + 'th'}</div>${t.image ? `<span data-lqxgrindsave="${cid}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:4px;padding:1px 5px;font-size:8px;font-weight:800">save</span>` : ''}</div>${lqxChannelMetricHtml(sc2 || t, true)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">scoring 12 embeddings…</div>` : ''}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:34px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 110))}</div>${t.image ? lqxRawButton(sc2 || t.score, 'grind:' + cid, a.idea || gr.idea || '', `/api/longquant/grind/img/${t.image}`) : ''}${t.error ? `<div style="font-size:9px;color:${C.red};margin-top:3px">${esc(t.error)}</div>` : ''}</div></div>`;
             }).join('')}</div>${a.error ? `<div style="font-size:10px;color:${C.red};margin-top:5px">${esc(a.error)}</div>` : ''}</div>`).join('');
             if (st.lqxOpen && String(st.lqxOpen).indexOf('grind:') === 0) {
@@ -1970,7 +2034,7 @@ const JarvisLongQuant = (function () {
                 const thumbGrid = thumbs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px">${thumbs.map((h, idx) => {
                     const t = h.t, a = h.a, cid = t.image, idea = h.idea || runTitle;
                     const pct = thumbPct(t), key = `longform/grind/montages/${cid}.jpg`;
-                    const score = lqxScoreFor('grind:' + cid, key, idea, idea, t.score, true);
+                    const score = lqxScoreFor('grind:' + cid, key, idea, idea, t.score, false);
                     const att = a.k != null ? Number(a.k) + 1 : '';
                     return `<div data-lqxopen="history:${esc(cid)}" style="cursor:pointer;border:1px solid ${pct >= (det.threshold || selected.threshold || 90) ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/grind/img/${cid}`, `grindhist:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:7px 8px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="font-size:10px;font-weight:900;color:${pctCol(pct)}">#${idx + 1} · ${pct == null ? '—' : pct + 'th thumbnail'}</div><span data-lqxhistSave="${esc(cid)}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === cid ? C.green : C.accent};color:${st.lqxSaveFlash === cid ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-size:9px;font-weight:800">${st.lqxSaveFlash === cid ? 'saved' : 'save'}</span></div><div style="font-size:9px;color:${C.mute};margin-top:3px">attempt ${att || '—'}${a.distSeed == null ? '' : ' · seed dist ' + a.distSeed}${a.topic == null ? '' : ' · topical ' + a.topic}</div>${lqxChannelMetricHtml(score || t.score || t, true)}${score && score.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">embedding visual · together…</div>` : ''}<div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.3;max-height:38px;overflow:hidden;margin-top:5px">${esc((idea || '').slice(0, 120))}</div><div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:42px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 150))}</div>${lqxRawButton(score || t.score, 'grind:' + cid, idea, `/api/longquant/grind/img/${cid}`)}${t.error ? `<div style="font-size:9px;color:${C.red};margin-top:3px">${esc(t.error)}</div>` : ''}</div></div>`;
                 }).join('')}</div>` : `<div style="font-size:11px;color:${C.dim};padding:16px;background:${C.card2};border:1px solid ${C.border};border-radius:8px">No generated thumbnails are stored for this run yet. If it is still queued or rendering, this fills in as attempts finish.</div>`;
@@ -2012,7 +2076,7 @@ const JarvisLongQuant = (function () {
                     const G = LQIDEAGRP[irun + '/' + sel.id];
                     const thumbs = G && G.thumbs ? G.thumbs.slice().sort((a, b) => (b.pctile || 0) - (a.pctile || 0)) : [];
                     ideaDetail = `<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px"><div style="font-size:13px;color:${C.text};font-weight:800;line-height:1.35">${esc(sel.idea || '')}</div><div style="font-size:10px;color:${C.mute};margin:3px 0 8px">visual ctrviews <b style="color:${C.green}">${((sel.pctile || 0) * 100).toFixed(0)}th</b> · text ${sel.text_pct != null ? (sel.text_pct * 100).toFixed(0) + 'th' : '—'} · novelty ${sel.novelty != null ? sel.novelty.toFixed(2) : '—'}</div>${lqxIdeaMiniGraph(sel, 'bestidea:' + irun + ':' + sel.id)}${G && G.loading ? `<div style="font-size:11px;color:${C.cyan}">loading thumbnails…</div>` : thumbs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px">${thumbs.map(t => {
-                        const cid = `${sel.id}_${t.k}`, key = `longform/ideas/${irun}/montages/${cid}.jpg`, cardId = 'idea:' + irun + ':' + cid, sc2 = lqxScoreFor(cardId, key, sel.idea || '', sel.idea || '', t.score, true);
+                        const cid = `${sel.id}_${t.k}`, key = `longform/ideas/${irun}/montages/${cid}.jpg`, cardId = 'idea:' + irun + ':' + cid, sc2 = lqxScoreFor(cardId, key, sel.idea || '', sel.idea || '', t.score, false);
                         const img = lqxImgData(`/api/longquant/ideas/montage/${irun}/${cid}`, `ideaimg:${irun}:${cid}`) || `/api/longquant/ideas/montage/${irun}/${cid}`;
                         return `<div data-lqxopen="idea:${irun}:${cid}" style="cursor:pointer;border:1px solid ${(t.pctile || 0) >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/ideas/montage/${irun}/${cid}`, `ideaimg:${irun}:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:6px 8px"><div style="font-size:10px;font-weight:800;color:${(t.pctile || 0) >= 0.8 ? C.green : C.text}">${((t.pctile || 0) * 100).toFixed(0)}th · rel ${t.rel != null ? t.rel.toFixed(2) : '—'}</div>${lqxChannelMetricHtml(sc2 || t, true)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">embedding visual · together…</div>` : ''}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:36px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 120))}</div>${lqxRawButton(sc2, cardId, sel.idea || '', img)}</div></div>`;
                     }).join('')}</div>` : `<div style="font-size:11px;color:${C.dim}">no thumbnail group found for this idea yet</div>`}</div>`;
@@ -2029,7 +2093,7 @@ const JarvisLongQuant = (function () {
                     const cid = t ? `${r.id}_${t.k}` : '';
                     const cardId = t ? 'idea:' + irun + ':' + cid : 'idea-row:' + irun + ':' + (r.id || '');
                     const key = t ? `longform/ideas/${irun}/montages/${cid}.jpg` : '';
-                    const sc2 = t ? lqxScoreFor(cardId, key, r.idea || '', r.idea || '', t.score, true) : null;
+                    const sc2 = t ? lqxScoreFor(cardId, key, r.idea || '', r.idea || '', t.score, false) : null;
                     const pct = t && t.pctile != null ? t.pctile : r.pctile;
                     return `<div data-lqxidea="${esc(r.id || '')}" data-lqxidearun="${esc(irun || '')}" style="cursor:pointer;border:1px solid ${st.lqxIdeaSel === r.id ? C.accent : (pct || 0) >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${st.lqxIdeaSel === r.id ? C.accent + '18' : C.card2};width:220px">
                       ${t ? lqxImg(`/api/longquant/ideas/montage/${irun}/${cid}`, `ideabest:${irun}:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000') : `<div style="width:100%;aspect-ratio:16/9;background:${C.card};display:flex;align-items:center;justify-content:center;color:${G && G.error ? C.red : C.cyan};font-size:10px;text-align:center;padding:8px;box-sizing:border-box">${G && G.error ? 'thumbnail group unavailable' : 'loading thumbnails…'}</div>`}
@@ -2047,6 +2111,7 @@ const JarvisLongQuant = (function () {
             lqxSavedDetail(st.lqxSavedSel);
             const d = LQDETAILS[st.lqxSavedSel], row = saved.find(t => t.id === st.lqxSavedSel) || {};
             if (d && d.loading) lqModalHtml = lqxModal(`<div style="font-size:12px;color:${C.cyan};padding:18px">loading saved thumbnail…</div>`);
+            else if (d && d.error) lqModalHtml = lqxModal(`<div style="padding:18px"><div style="font-size:13px;color:${C.red};font-weight:800">Saved thumbnail could not load</div><div style="font-size:11px;color:${C.mute};margin-top:6px">${esc(d.error)}</div><button data-lqxsavedretry="${esc(st.lqxSavedSel)}" style="margin-top:12px;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:6px 12px;font-size:11px;font-weight:800;cursor:pointer">Retry</button></div>`);
             else if (d && !d.error) {
                 const key = `longform/saved-thumbs/${st.lqxSavedSel}.jpg`;
                 const sc2 = lqxScoreFor('saved:' + st.lqxSavedSel, key, d.title || row.title || '', d.title || row.title || '', d.score || (d.metrics ? d : null), true);
@@ -2056,7 +2121,7 @@ const JarvisLongQuant = (function () {
         const savedHtml = saved.length ? cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💾 Saved hooks <span style="font-size:10px;color:${C.mute};font-weight:600">— ${saved.length} Long Quant thumbnails stored with visual/text/together embeddings · click any for the full read-out</span></div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">${saved.slice(0, show).map(t => {
               const baseScore = t.score || (t.metrics || t.channels ? { metrics: t.metrics, channels: t.channels, emb_preview: t.emb_preview, input_manifest: t.input_manifest, pctile: t.pctile, relevance: t.relevance } : null);
-              const score = lqxScoreFor('saved:' + t.id, `longform/saved-thumbs/${t.id}.jpg`, t.title || '', t.title || '', baseScore, true);
+              const score = lqxScoreFor('saved:' + t.id, `longform/saved-thumbs/${t.id}.jpg`, t.title || '', t.title || '', baseScore, false);
               const sp = lqxPct01(t.pctile != null ? t.pctile : (score && score.pctile));
               const src = t.sourceVideo && t.sourceVideo.title ? `<div style="font-size:8px;color:${C.faint};line-height:1.25;max-height:22px;overflow:hidden;margin-top:3px">${esc(String(t.sourceVideo.title).slice(0, 80))}</div>` : '';
               return `<div data-lqxsaved="${t.id}" style="cursor:pointer;border:1px solid ${st.lqxSavedSel === t.id ? C.accent : (sp != null && sp >= 0.8) ? C.green : C.border};border-radius:8px;padding:6px;background:${st.lqxSavedSel === t.id ? C.accent + '18' : C.card2};width:210px;position:relative"><span data-lqxdel="${t.id}" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer;z-index:2">✕</span>${lqxImg(`/api/longquant/thumbs/img/${t.id}`, `savedimg:${t.id}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:5px;background:#000')}<div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;margin-top:5px"><div style="font-size:10px;color:${C.text};font-weight:800;max-height:32px;overflow:hidden;line-height:1.3;flex:1">${esc((t.title || '').slice(0, 78))}</div>${sp != null ? `<div style="font-size:10px;font-weight:900;color:${sp >= 0.8 ? C.green : C.dim};white-space:nowrap">${(sp * 100).toFixed(0)}th</div>` : ''}</div>${src}${lqxChannelMetricHtml(score || t, true)}${score && score.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">embedding visual · together…</div>` : ''}${score && score.channels ? lqxRawButton(score, 'saved:' + t.id, t.title || '', `/api/longquant/thumbs/img/${t.id}`) : ''}</div>`;
@@ -4024,7 +4089,7 @@ const JarvisLongQuant = (function () {
             longRawUploadPickerError('The uploader did not initialize. Reload the page and try again.');
             return;
         }
-        upload.pickFiles({ accept: 'video/*', multiple: true, onSelect: files => rtgRawUpload(files), onError: longRawUploadPickerError });
+        upload.pickFiles({ accept: 'image/jpeg,image/png,image/webp', multiple: true, onSelect: files => rtgRawUpload(files), onError: longRawUploadPickerError });
     }
     function openLongRawFramePicker(slot) {
         const upload = window.JarvisUpload;
@@ -4185,6 +4250,7 @@ const JarvisLongQuant = (function () {
             return;
         }
         if (e.target.closest('[data-lqxmodalclose]')) { st.lqxOpen = null; st.lqxSavedSel = null; rtgUpdateLqExp(); return; }
+        const xsavedretry = e.target.closest('[data-lqxsavedretry]'); if (xsavedretry) { const id = xsavedretry.getAttribute('data-lqxsavedretry'); if (id) lqxSavedDetail(id, true); return; }
         const xo = e.target.closest('[data-lqxopen]'); if (xo) { const id = xo.getAttribute('data-lqxopen'); st.lqxOpen = st.lqxOpen === id ? null : id; st.lqxSavedSel = null; rtgUpdateLqExp(); return; }
         if (e.target.closest('[data-lqxchooseimage]')) { lqxChooseScoreImage(); return; }
         if (e.target.closest('[data-lqxscore]')) { if (!st.lqxScoring) lqxScoreUpload(); return; }
@@ -4234,7 +4300,7 @@ const JarvisLongQuant = (function () {
         if (e.target.closest('[data-lqxhookmore]')) { st.lqxHookShow = (st.lqxHookShow || 30) + 40; rtgUpdateLqExp(); return; }
         if (e.target.closest('[data-lqxgrindstart]')) { lqxGrindStart(); return; }
         if (e.target.closest('[data-lqxgrindstop]')) { lqxGrindStop(); return; }
-        const xd = e.target.closest('[data-lqxdel]'); if (xd) { fetch('/api/longquant/thumbs/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: xd.getAttribute('data-lqxdel') }) }).then(() => lqThumbsEnsure(true)).catch(() => { }); return; }
+        const xd = e.target.closest('[data-lqxdel]'); if (xd) { lqxJson('/api/longquant/thumbs/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: xd.getAttribute('data-lqxdel') }) }).then(() => lqThumbsEnsure(true)).catch(e => { st.lqxStatus = 'delete error: ' + (e.message || e); rtgUpdateLqExp(); }); return; }
         const xsv = e.target.closest('[data-lqxsaved]'); if (xsv) { const id = xsv.getAttribute('data-lqxsaved'); st.lqxSavedSel = st.lqxSavedSel === id ? null : id; st.lqxOpen = null; rtgUpdateLqExp(); return; }
         const xid = e.target.closest('[data-lqxidea]'); if (xid) { st.ideaRun = xid.getAttribute('data-lqxidearun') || st.ideaRun; st.lqxIdeaSel = xid.getAttribute('data-lqxidea'); st.ideaSel = st.lqxIdeaSel; rtgUpdateLqExp(); return; }
         if (e.target.closest('[data-lqxmore]')) { st.lqxShow = (st.lqxShow || 30) + 30; rtgUpdateLqExp(); return; }
@@ -4304,80 +4370,32 @@ const JarvisLongQuant = (function () {
         }
         if (e.target.closest('[data-tracked]')) { st.trackedOnly = e.target.checked; render(); }
     }
-    // Only the first 5s of a video is ever scored, so for anything but a tiny file we record the
-    // first ~6s CLIENT-SIDE into a small webm and upload THAT — a ~1MB clip instead of a 300MB video.
-    // This is why big uploads "worked before but not now": they never reached the server (Render's
-    // edge drops the huge body). Returns a Blob, or null to fall back to uploading the whole file.
-    function extractFirstSeconds(file, seconds) {
-        return new Promise((resolve) => {
-            let settled = false; const done = v => { if (!settled) { settled = true; resolve(v); } };
-            let video; try { video = window.document.createElement('video'); } catch (e) { return done(null); }
-            const url = URL.createObjectURL(file);
-            const cleanup = () => { try { URL.revokeObjectURL(url); } catch (e) {} try { video.pause(); video.src = ''; } catch (e) {} };
-            // captureStream() records the media element's playback stream in some browsers.
-            // Keep audio live here; muting or volume=0 can produce a trimmed upload whose
-            // audio track is literally silent, which then looks like "no voiceover".
-            video.muted = false; video.volume = 1; video.playsInline = true; video.preload = 'auto';
-            video.onerror = () => { cleanup(); done(null); };
-            const guard = window.setTimeout(() => { cleanup(); done(null); }, (seconds + 12) * 1000);   // never hang the UI
-            video.onloadedmetadata = () => {
-                const fullDur = video.duration;   // the REAL video length — passed through so realviews (which uses duration) isn't skewed by the 6s clip
-                if (!fullDur || fullDur <= seconds + 0.6) { window.clearTimeout(guard); cleanup(); return done(null); }  // already short → upload as-is
-                let stream;
-                try { stream = video.captureStream ? video.captureStream() : (video.mozCaptureStream ? video.mozCaptureStream() : null); } catch (e) { stream = null; }
-                if (!stream || !window.MediaRecorder) { window.clearTimeout(guard); cleanup(); return done(null); }
-                const mimes = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm', 'video/mp4'];
-                const mime = mimes.find(m => { try { return window.MediaRecorder.isTypeSupported(m); } catch (e) { return false; } }) || '';
-                let rec; try { rec = new window.MediaRecorder(stream, mime ? { mimeType: mime } : {}); } catch (e) { window.clearTimeout(guard); cleanup(); return done(null); }
-                const chunks = [];
-                rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-                rec.onerror = () => { window.clearTimeout(guard); cleanup(); done(null); };
-                rec.onstop = () => { window.clearTimeout(guard); cleanup(); const b = new Blob(chunks, { type: (mime || 'video/webm').split(';')[0] }); done(b.size > 2000 ? { blob: b, duration: fullDur } : null); };
-                video.play().then(() => { rec.start(); window.setTimeout(() => { try { rec.stop(); } catch (e) {} }, seconds * 1000); })
-                    .catch(() => { window.clearTimeout(guard); cleanup(); done(null); });
-            };
-            video.src = url;
-        });
-    }
     async function rtgRawUpload(files) {
-        const list = Array.from(files || []).slice(0, 12);   // cap a batch at 12
+        const list = Array.from(files || []).slice(0, 12);
         if (!list.length) return;
         st.rawUploading = true; st.rawUpErr = null; st.rawUpShow = true; rtgUpdateRaw();
         for (let n = 0; n < list.length; n++) {
             const file = list[n];
             st.rawUpStage = 0; st.rawUpQueue = { i: n + 1, total: list.length }; rtgUpdateRaw();
-            const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateRaw(); } }, 2400);
+            const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateRaw(); } }, 1800);
             try {
-                let blob = file, ext = (file.name.split('.').pop() || 'mp4').slice(0, 5).toLowerCase(), realDur = 0;
-                // Bigger than ~25MB → trim to the first ~6s in the browser and upload that tiny clip
-                // (only the first 5s is scored). We also send the REAL video duration so realviews (which
-                // uses duration) is computed on the true length, not the 6s clip. Small files upload whole.
-                if (file.size > 25 * 1024 * 1024) {
-                    st.rawUpErr = null; st.rawUpStage = 0; st.rawUpQueue = { i: n + 1, total: list.length, trimming: true }; rtgUpdateRaw();
-                    let clip = null; try { clip = await extractFirstSeconds(file, 6); } catch (e) { clip = null; }
-                    if (clip && clip.blob && clip.blob.size > 2000) { blob = clip.blob; ext = 'webm'; realDur = clip.duration || 0; }
-                    else if (file.size > 200 * 1024 * 1024) { st.rawUpErr = (file.name || '') + ': ' + Math.round(file.size / 1e6) + 'MB is too big to upload whole and your browser couldn\'t auto-trim it — please trim the clip to its first ~10 seconds and re-upload'; window.clearInterval(tick); continue; }
-                }
-                if (blob.size > 1024 * 1024 * 1024) { st.rawUpErr = (file.name || '') + ': too large (' + Math.round(blob.size / 1e6) + 'MB)'; window.clearInterval(tick); continue; }
-                const safeTitle = (file.name || 'My upload').replace(/[^\x20-\x7E]/g, '').slice(0, 80);   // headers must be ASCII
+                const upload = window.JarvisUpload;
+                if (!upload || typeof upload.prepareImage !== 'function') throw new Error('The image uploader did not initialize.');
+                const prepared = await upload.prepareImage(file, { maxWidth: 1600, maxHeight: 900, maxDataUrlChars: 2800000 });
+                const title = String(file.name || 'Candidate thumbnail').replace(/\.[^.]+$/, '').replace(/\s+/g, ' ').trim().slice(0, 220) || 'Candidate thumbnail';
                 st.rawUpStage = 1; st.rawUpQueue = { i: n + 1, total: list.length }; rtgUpdateRaw();
-                const upHeaders = { 'X-Raw-Ext': ext, 'X-Raw-Title': safeTitle };
-                if (realDur > 0) upHeaders['X-Raw-Duration'] = String(Math.round(realDur));   // true full length → correct realviews
-                const r = await fetch('/api/raw-long/embed-upload', { method: 'POST', headers: upHeaders, body: blob });   // tiny clip (or small file) — streams
-                const raw = await r.text();
-                let j = null; try { j = JSON.parse(raw); } catch (e) { }
-                if (!j) { st.rawUpErr = (file.name || '') + ': server returned ' + r.status + ((r.status >= 500 || raw.trim().startsWith('<')) ? ' — the server is redeploying or busy; wait ~30s and try again' : ' (non-JSON)'); }
-                else if (!r.ok || j.error) { st.rawUpErr = (file.name || '') + ': ' + (j.error || ('HTTP ' + r.status)); }
-                else { st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; }
-            } catch (e) { st.rawUpErr = (file.name || '') + ': ' + (String(e.message || e).includes('Failed to fetch') ? 'connection dropped (large upload or redeploy) — retry in a moment' : e.message); }
+                const j = await lqxJob('/api/longquant/exp/score-upload', { image: prepared.dataUrl, title, idea: title });
+                j.title = title; j.source = 'longquant'; j.imgUrl = prepared.dataUrl; j.montageDataUrl = prepared.dataUrl;
+                st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+            } catch (e) { st.rawUpErr = (file.name || '') + ': ' + String(e.message || e); }
             window.clearInterval(tick);
         }
         st.rawUploading = false; st.rawUpStage = 0; st.rawUpQueue = null;
         rtgUpdateRaw();
     }
-    // ── build-a-hook from photos: fit each to a 9:16 cell (any image type → JPEG via
-    //    canvas), tile 5 into one montage, embed with user-set text, place on the map ──
-    const FRAME_W = 320, FRAME_H = 569;
+    // Compose source images into one 16:9 candidate thumbnail, then score that
+    // exact image and title on the Long Quant visual/together embedding spaces.
+    const FRAME_W = 256, FRAME_H = 720;
     function rtgFrameFile(file, slot) {
         const fr = new window.FileReader();
         fr.onload = () => {
@@ -4410,11 +4428,10 @@ const JarvisLongQuant = (function () {
         const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateRaw(); } }, 1600);
         try {
             const montage = await composeFrames(st.rawFrames);
-            const title = (st.rawText && st.rawText.trim() ? st.rawText.trim().slice(0, 40) : 'Built hook ' + (st.rawUploads.length + 1));
-            const r = await fetch('/api/raw-long/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: st.rawText || '', title }) });
-            const j = await r.json();
-            if (!r.ok || j.error) { st.rawUpErr = j.error || ('HTTP ' + r.status); }
-            else { st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; }
+            const title = (st.rawText && st.rawText.trim() ? st.rawText.trim().slice(0, 220) : 'Candidate thumbnail ' + (st.rawUploads.length + 1));
+            const j = await lqxJob('/api/raw-long/embed-montage', { montage, text: st.rawText || '', title });
+            j.title = title; j.source = 'longquant'; j.imgUrl = montage; j.montageDataUrl = montage;
+            st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
         } catch (e) { st.rawUpErr = e.message; }
         window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0;
         rtgUpdateRaw();
@@ -4442,7 +4459,7 @@ const JarvisLongQuant = (function () {
             // tab the moment they land instead of blanking behind the slowest of 12 loads.
             for (let tries = 1; !DATA; tries++) {
                 try {
-                    CHANS = await fetch('/api/longquant/channels').then(r => r.json()).catch(() => null);
+                    CHANS = await lqxJson('/api/longquant/channels');
                     DATA = await loadJSON(base + 'retention_table.json');   // sentinel: throw → retry loop
                     await loadJSON(base + 'retention_study.json').then(x => { S = x; S_MAIN = x; }).catch(() => { S = null; S_MAIN = null; });
                     RAW = {};
@@ -4459,7 +4476,10 @@ const JarvisLongQuant = (function () {
                         loadJSON(base + 'principles/rtg_field.json').then(x => RTGF = x).catch(() => RTGF = null),
                         loadJSON(base + 'principles/rtg_embedmap.json').then(x => RTGE = x).catch(() => RTGE = null),
                         loadJSON(base + 'principles/rtg_hazard.json').then(x => RTGH = x).catch(() => RTGH = null),
-                        fetch('/api/raw-long/map?channel=visual').then(r => r.json()).then(x => RAW.visual = x).catch(() => {}),
+                        lqxJson('/api/raw-long/map?channel=visual', { cache: 'no-store' }).then(x => RAW.visual = x).catch(e => {
+                            RAW.visual = { n: 0, error: String(e.message || e), at: Date.now() };
+                            window.setTimeout(() => rawEnsure('visual', true), 5000);
+                        }),
                         fetch('/api/rtg/labels').then(r => r.json()).then(x => RTGLABELS = x || {}).catch(() => RTGLABELS = {}),
                     ];
                     BGPEND = bg.length;
