@@ -3413,8 +3413,43 @@ const JarvisRetention = (function () {
     }
     // async scoring job: POST returns {jobId} instantly (no Render 100s proxy ceiling),
     // poll until done; if a redeploy loses the job, resubmit up to twice.
+    // ── upload black box ── every upload stage is journaled to localStorage, which survives
+    // BOTH reloads and tab crashes. A normal navigation/reload fires pagehide (journaled);
+    // a killed tab journals nothing after its last stage — so when the page comes back, the
+    // journal itself says WHERE the attempt died and WHETHER it was a clean reload or a kill.
+    const RAWTRACE_KEY = 'bw_raw_upload_trace';
+    function rawTrace(step, extra, create) {
+        try {
+            let t = JSON.parse(window.localStorage.getItem(RAWTRACE_KEY) || 'null');
+            if (!t) { if (!create) return; t = { start: Date.now(), steps: [] }; }
+            t.steps.push(Object.assign({ step, at: Date.now() }, extra || {}));
+            if (t.steps.length > 400) t.steps.splice(0, t.steps.length - 400);
+            window.localStorage.setItem(RAWTRACE_KEY, JSON.stringify(t));
+        } catch (e) {}
+    }
+    function rawTraceEnd() { try { window.localStorage.removeItem(RAWTRACE_KEY); } catch (e) {} }
+    window.addEventListener('pagehide', () => rawTrace('pagehide-clean-unload'));
+    (function rawTraceReport() {
+        try {
+            const t = JSON.parse(window.localStorage.getItem(RAWTRACE_KEY) || 'null');
+            if (!t || !t.steps || !t.steps.length) return;
+            window.localStorage.removeItem(RAWTRACE_KEY);
+            const last = t.steps[t.steps.length - 1];
+            if (Date.now() - last.at > 60 * 60000) return;   // stale journal — ignore
+            const clean = last.step === 'pagehide-clean-unload';
+            const lastReal = clean && t.steps.length > 1 ? t.steps[t.steps.length - 2] : last;
+            const nav = (window.performance && performance.getEntriesByType && performance.getEntriesByType('navigation')[0]) || {};
+            const note = '⚠️ black box: the last upload died at "' + lastReal.step + '" (' + Math.round((Date.now() - lastReal.at) / 1000) + 's ago) — ' +
+                (clean ? 'the page then unloaded NORMALLY (something navigated/reloaded it, not a crash)' : 'the tab was KILLED with no unload event (browser crash or out-of-memory kill)') +
+                ' · nav-type=' + (nav.type || '?') + (window.document.wasDiscarded ? ' · tab DISCARDED by browser memory saver' : '') +
+                ' · trail: ' + t.steps.map(s => s.step + (s.mb != null ? '(' + s.mb + 'MB)' : '') + (s.status != null ? '(' + s.status + ')' : '')).join(' → ');
+            console.warn('[raw-upload black box]', note, t);
+            st.rawUpErr = note; st.rawUpShow = true;
+        } catch (e) {}
+    })();
     async function rtJob(url, opts, resubmits) {
         const r = await fetch(url, opts);
+        rawTrace('rtjob-response', { status: r.status });
         const raw = await r.text();
         let j = null; try { j = JSON.parse(raw); } catch (e) { }
         if (!j) throw new Error('server returned ' + r.status + (raw.trim().startsWith('<') ? ' — redeploying; retry in ~30s' : ' (non-JSON)'));
@@ -3424,7 +3459,9 @@ const JarvisRetention = (function () {
             await new Promise(res2 => window.setTimeout(res2, i < 8 ? 2500 : 5000));
             const pr = await fetch('/api/longquant/jobs/' + j.jobId);
             const pj = await pr.json().catch(() => null);
+            rawTrace('rtjob-poll', { i, status: pr.status, job: pj && pj.status });
             if (pr.status === 404) {
+                rawTrace('rtjob-resubmit');
                 if ((resubmits || 0) < 2) return rtJob(url, opts, (resubmits || 0) + 1);
                 throw new Error('scoring job lost across a redeploy — try again');
             }
@@ -3743,6 +3780,7 @@ const JarvisRetention = (function () {
             const file = list[n];
             st.rawUpStage = 0; st.rawUpQueue = { i: n + 1, total: list.length }; rtgUpdateRaw();
             const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateRaw(); } }, 2400);
+            rawTrace('picked', { name: (file.name || '').slice(0, 60), mb: Math.round(file.size / 1e6), type: file.type }, true);
             try {
                 let blob = file, ext = (file.name.split('.').pop() || 'mp4').slice(0, 5).toLowerCase(), realDur = 0;
                 // Bigger than ~25MB → trim to the first ~6s in the browser and upload that tiny clip
@@ -3750,7 +3788,9 @@ const JarvisRetention = (function () {
                 // uses duration) is computed on the true length, not the 6s clip. Small files upload whole.
                 if (file.size > 25 * 1024 * 1024) {
                     st.rawUpErr = null; st.rawUpStage = 0; st.rawUpQueue = { i: n + 1, total: list.length, trimming: true }; rtgUpdateRaw();
+                    rawTrace('trim-start');
                     let clip = null; try { clip = await extractFirstSeconds(file, 6); } catch (e) { clip = null; }
+                    rawTrace('trim-done', { trimmed: !!(clip && clip.blob) });
                     if (clip && clip.blob && clip.blob.size > 2000) { blob = clip.blob; ext = 'webm'; realDur = clip.duration || 0; }
                     else if (file.size > 200 * 1024 * 1024) { st.rawUpErr = (file.name || '') + ': ' + Math.round(file.size / 1e6) + 'MB is too big to upload whole and your browser couldn\'t auto-trim it — please trim the clip to its first ~10 seconds and re-upload'; window.clearInterval(tick); continue; }
                 }
@@ -3759,12 +3799,15 @@ const JarvisRetention = (function () {
                 st.rawUpStage = 1; st.rawUpQueue = { i: n + 1, total: list.length }; rtgUpdateRaw();
                 const upHeaders = { 'X-Raw-Ext': ext, 'X-Raw-Title': safeTitle };
                 if (realDur > 0) upHeaders['X-Raw-Duration'] = String(Math.round(realDur));   // true full length → correct realviews
+                rawTrace('post-start', { mb: Math.round(blob.size / 1e6) });
                 const j = await rtJob('/api/raw/embed-upload', { method: 'POST', headers: { ...upHeaders, 'x-raw-async': '1' }, body: blob });   // async job — immune to the 100s proxy ceiling
+                rawTrace('scored', { err: (j && j.error) ? String(j.error).slice(0, 80) : null });
                 if (!j || j.error) { st.rawUpErr = (file.name || '') + ': ' + ((j && j.error) || 'embed failed'); }
                 else { st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; }
-            } catch (e) { st.rawUpErr = (file.name || '') + ': ' + (String(e.message || e).includes('Failed to fetch') ? 'connection dropped (large upload or redeploy) — retry in a moment' : e.message); }
+            } catch (e) { rawTrace('js-error', { msg: String(e.message || e).slice(0, 120) }); st.rawUpErr = (file.name || '') + ': ' + (String(e.message || e).includes('Failed to fetch') ? 'connection dropped (large upload or redeploy) — retry in a moment' : e.message); }
             window.clearInterval(tick);
         }
+        rawTraceEnd();   // finished (with or without an error the panel already shows) — journal only unfinished runs
         st.rawUploading = false; st.rawUpStage = 0; st.rawUpQueue = null;
         rtgUpdateRaw();
     }
