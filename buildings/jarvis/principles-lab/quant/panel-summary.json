@@ -1,0 +1,312 @@
+{
+  "schema": "principles-unified-observation-panel-v2",
+  "generatedAt": "2026-07-26T17:51:17.597Z",
+  "panelPath": "buildings/jarvis/principles-lab/quant/.cache/unified-panel.json.gz",
+  "panelBytesGzip": 28730635,
+  "observationIdentity": "format:youtube_video_id",
+  "sourceIdentity": "exact stable channelId; rows without channelId are excluded",
+  "contentFamilyIdentity": "exact normalized opening transcript plus duration; title plus duration when transcript is unavailable",
+  "rowGates": [
+    "stored and not removed",
+    "never rechecked",
+    "exact channelId, timestamp, storedAt, and positive views",
+    "views observation age is positive and no greater than 366 days",
+    "Shorts are vertical and at most 180 seconds; Long videos are horizontal"
+  ],
+  "formats": [
+    {
+      "format": "shorts",
+      "observations": 53681,
+      "sources": 29003,
+      "stableSourceMissing": 0,
+      "sourcesWithAtLeast5Videos": 1836,
+      "sourcesWithAtLeast20Videos": 109,
+      "sourceSize": {
+        "median": 1,
+        "p90": 3,
+        "maximum": 149
+      },
+      "exactContentFamilies": 51739,
+      "duplicateFamilies": 719,
+      "observationsInDuplicateFamilies": 2661,
+      "ageDays": {
+        "median": 7.641840277777778,
+        "p10": 0.5298611111111111,
+        "p90": 313.1510185185185
+      },
+      "modalityCoverage": {
+        "visual": 53523,
+        "text": 16886,
+        "together": 53509
+      },
+      "historicallyObservableSupport": {
+        "targetsWithAtLeastOnePriorObservation": 10942,
+        "targetsWithAllModalities": 3071,
+        "medianPriorObservations": 2,
+        "rule": "same creator, prior publication, prior outcome observed no later than target publication, different exact content family"
+      }
+    },
+    {
+      "format": "long",
+      "observations": 93671,
+      "sources": 43485,
+      "stableSourceMissing": 0,
+      "sourcesWithAtLeast5Videos": 3684,
+      "sourcesWithAtLeast20Videos": 293,
+      "sourceSize": {
+        "median": 1,
+        "p90": 4,
+        "maximum": 195
+      },
+      "exactContentFamilies": 93517,
+      "duplicateFamilies": 94,
+      "observationsInDuplicateFamilies": 248,
+      "ageDays": {
+        "median": 72.61931712962964,
+        "p10": 1.3836805555555556,
+        "p90": 296.4155439814815
+      },
+      "modalityCoverage": {
+        "visual": 35314,
+        "text": 35317,
+        "together": 35217
+      },
+      "historicallyObservableSupport": {
+        "targetsWithAtLeastOnePriorObservation": 9818,
+        "targetsWithAllModalities": 171,
+        "medianPriorObservations": 3,
+        "rule": "same creator, prior publication, prior outcome observed no later than target publication, different exact content family"
+      }
+    }
+  ],
+  "evidenceKinds": {
+    "inputs": [
+      "title",
+      "opening transcript",
+      "thumbnail/opening representations",
+      "duration"
+    ],
+    "outcomes": [
+      "unrechecked public views observed near the per-video storedAt timestamp"
+    ],
+    "postOutcome": [
+      "likes",
+      "comments",
+      "current subscribers"
+    ],
+    "projected": [
+      "outcome-blind reconstructed PCA coordinates",
+      "outcome-blind reconstructed cluster memberships"
+    ]
+  },
+  "primaryLimitation": "The selected corpus contains one historically timed public view observation per eligible video, not impressions or a randomized intervention. Age/opportunity adjustment supports observational relative-performance claims, not causal package lift or YouTube-wide hit probabilities.",
+  "provenance": [
+    {
+      "role": "shorts:database",
+      "key": "library/db.json",
+      "frozenKey": "quant/snapshots/20260726171723/library/db.json",
+      "bytes": 47221800,
+      "sha256": "7a9c11342606dc4afb182e627019c5f6868490e56aa39d4db996efe99853bb40",
+      "sourceEtag": "\"f424cc2b641fc721fd8f960ea2259ec1-3\"",
+      "frozenEtag": "\"430e0be7a52884a51959c5070228765e\"",
+      "lastModified": "2026-07-26T17:17:25.393Z",
+      "completeReads": 2
+    },
+    {
+      "role": "long:database",
+      "key": "longform/db.json",
+      "frozenKey": "quant/snapshots/20260726171723/longform/db.json",
+      "bytes": 68873820,
+      "sha256": "9f1dc521cffcc36e7273e22d8755bdedad8d7d9091f371dbf83d51e034b5cc2c",
+      "sourceEtag": "\"4f76e79a642e36c3fcff6096f3a37a6e-5\"",
+      "frozenEtag": "\"221a710af77730bc3acac9e21e44b81d\"",
+      "lastModified": "2026-07-26T17:17:31.045Z",
+      "completeReads": 2
+    },
+    {
+      "role": "shorts:visual:map",
+      "key": "raw/visual/map.json",
+      "frozenKey": "quant/snapshots/20260726171723/raw/visual/map.json",
+      "bytes": 15364906,
+      "sha256": "c42d6525c3553e3a02683f285f3b5bfc33b2f2db4d5c336b05f1f71cbf877a12",
+      "sourceEtag": "\"bc93d280b8c2b65c0c1a39f78414d993\"",
+      "frozenEtag": "\"bc93d280b8c2b65c0c1a39f78414d993\"",
+      "lastModified": "2026-07-26T17:17:31.921Z",
+      "completeReads": 2
+    },
+    {
+      "role": "shorts:text:map",
+      "key": "raw/text/map.json",
+      "frozenKey": "quant/snapshots/20260726171723/raw/text/map.json",
+      "bytes": 6465704,
+      "sha256": "7c01ff360e493edc8d0dc4afa3530fd3a674da8720fdfde0924bc7959b42c13e",
+      "sourceEtag": "\"f14baf356a89cf6f49c7843f4d6e0a16\"",
+      "frozenEtag": "\"f14baf356a89cf6f49c7843f4d6e0a16\"",
+      "lastModified": "2026-07-26T17:17:32.554Z",
+      "completeReads": 2
+    },
+    {
+      "role": "shorts:together:map",
+      "key": "raw/together/map.json",
+      "frozenKey": "quant/snapshots/20260726171723/raw/together/map.json",
+      "bytes": 15478966,
+      "sha256": "4ea467284368820a951ed5b8aaa68f463adff1b282d5269212723d509710330d",
+      "sourceEtag": "\"0909b37f7a3d7e90727482b8f2c89340\"",
+      "frozenEtag": "\"0909b37f7a3d7e90727482b8f2c89340\"",
+      "lastModified": "2026-07-26T17:17:33.706Z",
+      "completeReads": 2
+    },
+    {
+      "role": "long:visual:map",
+      "key": "raw-long/visual/map.json",
+      "frozenKey": "quant/snapshots/20260726171723/raw-long/visual/map.json",
+      "bytes": 25133770,
+      "sha256": "ce69711dd7a71b6fc49704aa43ac4e030693d44ca2dbd3e1b8c37cecc5b61cac",
+      "sourceEtag": "\"3d0a41636e7e02c7586a7b9e4fb192de\"",
+      "frozenEtag": "\"3d0a41636e7e02c7586a7b9e4fb192de\"",
+      "lastModified": "2026-07-26T17:17:34.971Z",
+      "completeReads": 2
+    },
+    {
+      "role": "long:text:map",
+      "key": "raw-long/text/map.json",
+      "frozenKey": "quant/snapshots/20260726171723/raw-long/text/map.json",
+      "bytes": 25136440,
+      "sha256": "65966decf029070384ffc7391b05e8b8596c1876b3ad371112a39b9b7ffbf77e",
+      "sourceEtag": "\"359508e9b0bc1b8761925e32fd1cee2e\"",
+      "frozenEtag": "\"359508e9b0bc1b8761925e32fd1cee2e\"",
+      "lastModified": "2026-07-26T17:17:36.433Z",
+      "completeReads": 2
+    },
+    {
+      "role": "long:together:map",
+      "key": "raw-long/together/map.json",
+      "frozenKey": "quant/snapshots/20260726171723/raw-long/together/map.json",
+      "bytes": 25132197,
+      "sha256": "406b56cb27e92922b3eb14165762f2a8d1377d325dd1fda7a2b77f2b5e4898da",
+      "sourceEtag": "\"fd80d391ec2d76b7fbd7e6da5bd580a9\"",
+      "frozenEtag": "\"fd80d391ec2d76b7fbd7e6da5bd580a9\"",
+      "lastModified": "2026-07-26T17:17:37.584Z",
+      "completeReads": 2
+    },
+    {
+      "role": "shorts:visual:vectors",
+      "key": "raw/visual/embeddings.npz",
+      "frozenKey": "quant/snapshots/20260726171723/raw/visual/embeddings.npz",
+      "bytes": 381500031,
+      "sha256": "b9046e54858a2852816c6262d28497fc7e6d4ac05939c3fb7ff7214c3b2c8795",
+      "sourceEtag": "\"bae47f2b62878ccacc965cf9a85592f1\"",
+      "frozenEtag": "\"bae47f2b62878ccacc965cf9a85592f1\"",
+      "lastModified": "2026-07-26T17:17:46.832Z",
+      "completeReads": 2
+    },
+    {
+      "role": "shorts:text:vectors",
+      "key": "raw/text/embeddings.npz",
+      "frozenKey": "quant/snapshots/20260726171723/raw/text/embeddings.npz",
+      "bytes": 133625306,
+      "sha256": "61c86be8e028e707b13dd4cb8598c1f20ea133637094cb3aeddc301b64ec20a2",
+      "sourceEtag": "\"5984d627bd8e9f5533485ab942fb6cef\"",
+      "frozenEtag": "\"5984d627bd8e9f5533485ab942fb6cef\"",
+      "lastModified": "2026-07-26T17:17:52.734Z",
+      "completeReads": 2
+    },
+    {
+      "role": "shorts:together:vectors",
+      "key": "raw/together/embeddings.npz",
+      "frozenKey": "quant/snapshots/20260726171723/raw/together/embeddings.npz",
+      "bytes": 381445624,
+      "sha256": "883f1098e23c1f283159fba6440e4039fa691c5ce269d34872339e0bb00b7e03",
+      "sourceEtag": "\"08b003e47cb5b92bd8377cb91649a12b\"",
+      "frozenEtag": "\"08b003e47cb5b92bd8377cb91649a12b\"",
+      "lastModified": "2026-07-26T17:18:03.006Z",
+      "completeReads": 2
+    },
+    {
+      "role": "long:visual:vectors",
+      "key": "raw-long/visual/embeddings.npz",
+      "frozenKey": "quant/snapshots/20260726171723/raw-long/visual/embeddings.npz",
+      "bytes": 240748075,
+      "sha256": "dbdc7800c3663d4816944d5d3a97f3a4b00c99090c08a768578adcc33c74a419",
+      "sourceEtag": "\"8f8c67fbf8909ed432d95f9b08350637\"",
+      "frozenEtag": "\"8f8c67fbf8909ed432d95f9b08350637\"",
+      "lastModified": "2026-07-26T17:18:09.552Z",
+      "completeReads": 2
+    },
+    {
+      "role": "long:text:vectors",
+      "key": "raw-long/text/embeddings.npz",
+      "frozenKey": "quant/snapshots/20260726171723/raw-long/text/embeddings.npz",
+      "bytes": 240814397,
+      "sha256": "415ae2da7208719d8f7de40306952c246ad97fa1edcf78de5b08003015fcf351",
+      "sourceEtag": "\"46c76b2319a422b4c91ce98ff561b10a\"",
+      "frozenEtag": "\"46c76b2319a422b4c91ce98ff561b10a\"",
+      "lastModified": "2026-07-26T17:18:20.109Z",
+      "completeReads": 2
+    },
+    {
+      "role": "long:together:vectors",
+      "key": "raw-long/together/embeddings.npz",
+      "frozenKey": "quant/snapshots/20260726171723/raw-long/together/embeddings.npz",
+      "bytes": 240471836,
+      "sha256": "3796c4f689f4016bcda01e483e7fe76c181ddbd97d024da85a714381bea61c67",
+      "sourceEtag": "\"a6507fdd1b949208a1e3e251a667ad56\"",
+      "frozenEtag": "\"a6507fdd1b949208a1e3e251a667ad56\"",
+      "lastModified": "2026-07-26T17:18:26.835Z",
+      "completeReads": 2
+    }
+  ],
+  "reconstructedGeometry": [
+    {
+      "id": "shorts:visual",
+      "vectorHash": "b9046e54858a2852816c6262d28497fc7e6d4ac05939c3fb7ff7214c3b2c8795",
+      "geometryContentHash": "f8a1293ae4420ee1e2e0c21b77a5823f2e685a1548892f4f968a469087d74e66",
+      "geometrySha256": "4659c55d7cc8558eb0b8741c94d3165b6329c5a2a96e281713c0a1ebb5bb4c83",
+      "rows": 66157,
+      "outcomesUsed": false
+    },
+    {
+      "id": "shorts:text",
+      "vectorHash": "61c86be8e028e707b13dd4cb8598c1f20ea133637094cb3aeddc301b64ec20a2",
+      "geometryContentHash": "d78ca2e0288bd7a8fa84b9d66423b26facfee559349d51e21460dd090c52d4d1",
+      "geometrySha256": "b0918305de6c4222c35191f69ead9e46635f2211e586abaee77a5f91ae68f9cc",
+      "rows": 23183,
+      "outcomesUsed": false
+    },
+    {
+      "id": "shorts:together",
+      "vectorHash": "883f1098e23c1f283159fba6440e4039fa691c5ce269d34872339e0bb00b7e03",
+      "geometryContentHash": "2d53981100f148e8a650a622fdd5ec017a077a79b97a69b120602c5fa72e4d31",
+      "geometrySha256": "446309f8a8a0ae0a3d0c0ed902465f3cf9694de22d335ced9d64215768247ca1",
+      "rows": 66142,
+      "outcomesUsed": false
+    },
+    {
+      "id": "long:visual",
+      "vectorHash": "dbdc7800c3663d4816944d5d3a97f3a4b00c99090c08a768578adcc33c74a419",
+      "geometryContentHash": "7ac039c2e3594d8ee9f37926901a172a9eb1555ce4ef64cfdd749885e2496afb",
+      "geometrySha256": "dc98f5074096b633d8767c28d6d0119faa4a1d88bcd2ba9ac759aaa42f16df13",
+      "rows": 41684,
+      "outcomesUsed": false
+    },
+    {
+      "id": "long:text",
+      "vectorHash": "415ae2da7208719d8f7de40306952c246ad97fa1edcf78de5b08003015fcf351",
+      "geometryContentHash": "82dbb614c8c7984703d18da8652e99086fb3277d786e9d4d8db40944eb9fa599",
+      "geometrySha256": "5cbe0b5c024cb1823270f3b802fc1d7f9ffb19300e1d46ca5ec1a227b4d3dfde",
+      "rows": 41687,
+      "outcomesUsed": false
+    },
+    {
+      "id": "long:together",
+      "vectorHash": "3796c4f689f4016bcda01e483e7fe76c181ddbd97d024da85a714381bea61c67",
+      "geometryContentHash": "3db1c25f567d268b3b1262eb23adbbad04c9b62be3c9cf8023574a66912d8ac8",
+      "geometrySha256": "753efb3aec9ae671caeb68ea7a42932e92f90635af28330f73f0f8febd526466",
+      "rows": 41587,
+      "outcomesUsed": false
+    }
+  ],
+  "snapshotRunId": "efaa82b96450e04275a4c457",
+  "snapshotIdentityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7",
+  "contentHash": "d21c2e0c29c495935a52574d246ad1a01e514629ceb694a10830f5aa1e9e0c19"
+}

@@ -1,0 +1,5220 @@
+{
+  "schema": "within-creator-content-delta-validation-v1",
+  "generatedAt": "2026-07-26T18:06:28.887389+00:00",
+  "feature": "unit-normalized candidate embedding minus the mean embedding of same-creator, non-duplicate outcomes observed before candidate publication",
+  "sourceLineage": {
+    "snapshotRunId": "efaa82b96450e04275a4c457",
+    "snapshotIdentityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7",
+    "panelArtifactSha256": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+    "semanticFamilyArtifactSha256": "470f8a28146e91bcc6838f43877bf956d342523c5253dbc45013f27b44debd65"
+  },
+  "channels": [
+    {
+      "id": "shorts:visual",
+      "format": "shorts",
+      "modality": "visual",
+      "vectorHash": "b9046e54858a2852816c6262d28497fc7e6d4ac05939c3fb7ff7214c3b2c8795",
+      "support": {
+        "rows": 9952,
+        "sources": 4190,
+        "historyCount": {
+          "minimum": 1,
+          "median": 2.0,
+          "p90": 11.0,
+          "maximum": 134
+        }
+      },
+      "absoluteHistoryMatched": {
+        "unseenCreator": {
+          "n": 9952,
+          "r2": 0.055402,
+          "pearson": 0.235557,
+          "spearman": 0.225829,
+          "maeLog10Lift": 0.422595,
+          "nullMaeLog10Lift": 0.437463,
+          "mse": 0.286492,
+          "nullMse": 0.303319,
+          "gaussianBitsPerObservation": 0.041171,
+          "topDecileAuc": 0.663619,
+          "predictionStandardDeviation": 0.12468,
+          "actualStandardDeviation": 0.550722,
+          "sourceMacro": {
+            "sources": 669,
+            "meanSpearman": 0.027214,
+            "medianSpearman": 0.028571,
+            "standardDeviationSpearman": 0.502642,
+            "positiveFraction": 0.506726
+          },
+          "withinSourcePairwise": {
+            "sources": 1872,
+            "pairs": 27659,
+            "microAccuracy": 0.528833,
+            "equalSourceMeanAccuracy": 0.526896,
+            "equalSourceMedianAccuracy": 0.534524,
+            "positiveSourceFraction": 0.515491
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 996,
+                "meanPrediction": -0.116944,
+                "meanActualLift": -0.100412,
+                "medianActualLift": -0.138096,
+                "positiveLiftRate": 0.369478,
+                "actualTopDecileRate": 0.036145
+              },
+              {
+                "decile": 2,
+                "n": 996,
+                "meanPrediction": -0.041262,
+                "meanActualLift": -0.036825,
+                "medianActualLift": -0.09696,
+                "positiveLiftRate": 0.410643,
+                "actualTopDecileRate": 0.054217
+              },
+              {
+                "decile": 3,
+                "n": 995,
+                "meanPrediction": -0.00266,
+                "meanActualLift": -0.017867,
+                "medianActualLift": -0.087068,
+                "positiveLiftRate": 0.437186,
+                "actualTopDecileRate": 0.056281
+              },
+              {
+                "decile": 4,
+                "n": 995,
+                "meanPrediction": 0.029319,
+                "meanActualLift": 0.033019,
+                "medianActualLift": -0.031864,
+                "positiveLiftRate": 0.471357,
+                "actualTopDecileRate": 0.072362
+              },
+              {
+                "decile": 5,
+                "n": 995,
+                "meanPrediction": 0.059783,
+                "meanActualLift": 0.036847,
+                "medianActualLift": -0.007792,
+                "positiveLiftRate": 0.493467,
+                "actualTopDecileRate": 0.077387
+              },
+              {
+                "decile": 6,
+                "n": 995,
+                "meanPrediction": 0.091312,
+                "meanActualLift": 0.066393,
+                "medianActualLift": 0.006272,
+                "positiveLiftRate": 0.505528,
+                "actualTopDecileRate": 0.084422
+              },
+              {
+                "decile": 7,
+                "n": 995,
+                "meanPrediction": 0.124484,
+                "meanActualLift": 0.110501,
+                "medianActualLift": 0.038889,
+                "positiveLiftRate": 0.532663,
+                "actualTopDecileRate": 0.115578
+              },
+              {
+                "decile": 8,
+                "n": 995,
+                "meanPrediction": 0.163707,
+                "meanActualLift": 0.143442,
+                "medianActualLift": 0.102388,
+                "positiveLiftRate": 0.576884,
+                "actualTopDecileRate": 0.116583
+              },
+              {
+                "decile": 9,
+                "n": 995,
+                "meanPrediction": 0.216685,
+                "meanActualLift": 0.259142,
+                "medianActualLift": 0.229854,
+                "positiveLiftRate": 0.644221,
+                "actualTopDecileRate": 0.157789
+              },
+              {
+                "decile": 10,
+                "n": 995,
+                "meanPrediction": 0.32146,
+                "meanActualLift": 0.355767,
+                "medianActualLift": 0.34752,
+                "positiveLiftRate": 0.700503,
+                "actualTopDecileRate": 0.230151
+              }
+            ],
+            "monotonicAdjacentSteps": 9,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.456179,
+            "topPredictedDecilePositiveLiftRate": 0.700503,
+            "topPredictedDecileActualTopDecilePrecision": 0.230151,
+            "actualTopDecileRecall": 0.22992
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 4190,
+            "spearman95": {
+              "low": 0.19912,
+              "median": 0.226044,
+              "high": 0.252636
+            },
+            "gaussianBitsPerObservation95": {
+              "low": 0.032561,
+              "median": 0.041366,
+              "high": 0.050163
+            },
+            "maeImprovementLog10Lift95": {
+              "low": 0.011939,
+              "median": 0.014886,
+              "high": 0.017963
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 1872,
+            "observedSpearman": 0.225829,
+            "spearmanOneSidedP": 0.002,
+            "spearmanTwoSidedP": 0.002,
+            "nullSpearman95": {
+              "low": 0.203022,
+              "median": 0.21015,
+              "high": 0.216629
+            },
+            "observedGaussianBitsPerObservation": 0.041171,
+            "gaussianBitsOneSidedP": 0.002,
+            "nullGaussianBits95": {
+              "low": 0.033738,
+              "median": 0.036062,
+              "high": 0.038242
+            },
+            "excessSpearmanOverNullMedian": 0.015679,
+            "excessGaussianBitsOverNullMedian": 0.005108
+          },
+          "split": "five source-held-out folds; outcome age curve and creator history target rebuilt inside each fold",
+          "folds": [
+            {
+              "fold": 0,
+              "trainSources": 23076,
+              "testSources": 5927,
+              "trainRowsAfterFamilyExclusion": 7671,
+              "testRows": 2113,
+              "alpha": 10.0,
+              "pcaVarianceExplained": 0.416218
+            },
+            {
+              "fold": 1,
+              "trainSources": 23167,
+              "testSources": 5836,
+              "trainRowsAfterFamilyExclusion": 7791,
+              "testRows": 1984,
+              "alpha": 10.0,
+              "pcaVarianceExplained": 0.414339
+            },
+            {
+              "fold": 2,
+              "trainSources": 23254,
+              "testSources": 5749,
+              "trainRowsAfterFamilyExclusion": 7878,
+              "testRows": 1887,
+              "alpha": 1.0,
+              "pcaVarianceExplained": 0.415139
+            },
+            {
+              "fold": 3,
+              "trainSources": 23266,
+              "testSources": 5737,
+              "trainRowsAfterFamilyExclusion": 7724,
+              "testRows": 2011,
+              "alpha": 1.0,
+              "pcaVarianceExplained": 0.415767
+            },
+            {
+              "fold": 4,
+              "trainSources": 23249,
+              "testSources": 5754,
+              "trainRowsAfterFamilyExclusion": 7813,
+              "testRows": 1957,
+              "alpha": 10.0,
+              "pcaVarianceExplained": 0.414825
+            }
+          ]
+        },
+        "laterVideo": {
+          "n": 6882,
+          "r2": 0.028179,
+          "pearson": 0.235445,
+          "spearman": 0.224795,
+          "maeLog10Lift": 0.448297,
+          "nullMaeLog10Lift": 0.459228,
+          "mse": 0.31986,
+          "nullMse": 0.33648,
+          "gaussianBitsPerObservation": 0.03654,
+          "topDecileAuc": 0.657423,
+          "predictionStandardDeviation": 0.077353,
+          "actualStandardDeviation": 0.573703,
+          "sourceMacro": {
+            "sources": 234,
+            "meanSpearman": 0.032381,
+            "medianSpearman": 0.0,
+            "standardDeviationSpearman": 0.522546,
+            "positiveFraction": 0.482906
+          },
+          "withinSourcePairwise": {
+            "sources": 1475,
+            "pairs": 6575,
+            "microAccuracy": 0.526996,
+            "equalSourceMeanAccuracy": 0.534925,
+            "equalSourceMedianAccuracy": 0.611111,
+            "positiveSourceFraction": 0.525424
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 689,
+                "meanPrediction": -0.050297,
+                "meanActualLift": -0.066765,
+                "medianActualLift": -0.120679,
+                "positiveLiftRate": 0.402032,
+                "actualTopDecileRate": 0.027576
+              },
+              {
+                "decile": 2,
+                "n": 689,
+                "meanPrediction": -0.005187,
+                "meanActualLift": 0.011392,
+                "medianActualLift": -0.050616,
+                "positiveLiftRate": 0.448476,
+                "actualTopDecileRate": 0.056604
+              },
+              {
+                "decile": 3,
+                "n": 688,
+                "meanPrediction": 0.020938,
+                "meanActualLift": 0.071501,
+                "medianActualLift": 0.008536,
+                "positiveLiftRate": 0.511628,
+                "actualTopDecileRate": 0.078488
+              },
+              {
+                "decile": 4,
+                "n": 688,
+                "meanPrediction": 0.042383,
+                "meanActualLift": 0.095548,
+                "medianActualLift": 0.040053,
+                "positiveLiftRate": 0.534884,
+                "actualTopDecileRate": 0.059593
+              },
+              {
+                "decile": 5,
+                "n": 688,
+                "meanPrediction": 0.061833,
+                "meanActualLift": 0.110878,
+                "medianActualLift": 0.060298,
+                "positiveLiftRate": 0.540698,
+                "actualTopDecileRate": 0.068314
+              },
+              {
+                "decile": 6,
+                "n": 688,
+                "meanPrediction": 0.082907,
+                "meanActualLift": 0.149753,
+                "medianActualLift": 0.094651,
+                "positiveLiftRate": 0.5625,
+                "actualTopDecileRate": 0.104651
+              },
+              {
+                "decile": 7,
+                "n": 688,
+                "meanPrediction": 0.1052,
+                "meanActualLift": 0.170552,
+                "medianActualLift": 0.104384,
+                "positiveLiftRate": 0.56686,
+                "actualTopDecileRate": 0.104651
+              },
+              {
+                "decile": 8,
+                "n": 688,
+                "meanPrediction": 0.129301,
+                "meanActualLift": 0.275365,
+                "medianActualLift": 0.217978,
+                "positiveLiftRate": 0.646802,
+                "actualTopDecileRate": 0.140988
+              },
+              {
+                "decile": 9,
+                "n": 688,
+                "meanPrediction": 0.161326,
+                "meanActualLift": 0.273517,
+                "medianActualLift": 0.253717,
+                "positiveLiftRate": 0.633721,
+                "actualTopDecileRate": 0.151163
+              },
+              {
+                "decile": 10,
+                "n": 688,
+                "meanPrediction": 0.217387,
+                "meanActualLift": 0.425181,
+                "medianActualLift": 0.433172,
+                "positiveLiftRate": 0.729651,
+                "actualTopDecileRate": 0.209302
+              }
+            ],
+            "monotonicAdjacentSteps": 8,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.491947,
+            "topPredictedDecilePositiveLiftRate": 0.729651,
+            "topPredictedDecileActualTopDecilePrecision": 0.209302,
+            "actualTopDecileRecall": 0.208999
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 4141,
+            "spearman95": {
+              "low": 0.195607,
+              "median": 0.222861,
+              "high": 0.248053
+            },
+            "gaussianBitsPerObservation95": {
+              "low": 0.030455,
+              "median": 0.035806,
+              "high": 0.042381
+            },
+            "maeImprovementLog10Lift95": {
+              "low": 0.008597,
+              "median": 0.010733,
+              "high": 0.012651
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 1475,
+            "observedSpearman": 0.224795,
+            "spearmanOneSidedP": 0.002,
+            "spearmanTwoSidedP": 0.002,
+            "nullSpearman95": {
+              "low": 0.205682,
+              "median": 0.211462,
+              "high": 0.218091
+            },
+            "observedGaussianBitsPerObservation": 0.03654,
+            "gaussianBitsOneSidedP": 0.002,
+            "nullGaussianBits95": {
+              "low": 0.032542,
+              "median": 0.033761,
+              "high": 0.035006
+            },
+            "excessSpearmanOverNullMedian": 0.013332,
+            "excessGaussianBitsOverNullMedian": 0.002779
+          },
+          "selectedAlpha": 10.0,
+          "pcaVarianceExplained": 0.439669,
+          "trainingRowsAfterFamilyExclusion": 2596,
+          "split": "first 70% of each creator chronology trains; age model uses only training rows; creator history is frozen at the split; later 30% tests"
+        }
+      },
+      "creatorDelta": {
+        "unseenCreator": {
+          "n": 9952,
+          "r2": 0.001541,
+          "pearson": 0.039775,
+          "spearman": 0.039989,
+          "maeLog10Lift": 0.437167,
+          "nullMaeLog10Lift": 0.437463,
+          "mse": 0.302828,
+          "nullMse": 0.303319,
+          "gaussianBitsPerObservation": 0.001169,
+          "topDecileAuc": 0.535986,
+          "predictionStandardDeviation": 0.018415,
+          "actualStandardDeviation": 0.550722,
+          "sourceMacro": {
+            "sources": 669,
+            "meanSpearman": 0.044365,
+            "medianSpearman": 0.1,
+            "standardDeviationSpearman": 0.474927,
+            "positiveFraction": 0.54559
+          },
+          "withinSourcePairwise": {
+            "sources": 1872,
+            "pairs": 27659,
+            "microAccuracy": 0.527749,
+            "equalSourceMeanAccuracy": 0.522141,
+            "equalSourceMedianAccuracy": 0.533333,
+            "positiveSourceFraction": 0.517094
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 996,
+                "meanPrediction": 0.053419,
+                "meanActualLift": 0.081692,
+                "medianActualLift": 0.002999,
+                "positiveLiftRate": 0.503012,
+                "actualTopDecileRate": 0.089357
+              },
+              {
+                "decile": 2,
+                "n": 996,
+                "meanPrediction": 0.066372,
+                "meanActualLift": 0.042836,
+                "medianActualLift": -0.027465,
+                "positiveLiftRate": 0.481928,
+                "actualTopDecileRate": 0.086345
+              },
+              {
+                "decile": 3,
+                "n": 995,
+                "meanPrediction": 0.073111,
+                "meanActualLift": 0.047149,
+                "medianActualLift": 0.00043,
+                "positiveLiftRate": 0.500503,
+                "actualTopDecileRate": 0.085427
+              },
+              {
+                "decile": 4,
+                "n": 995,
+                "meanPrediction": 0.078573,
+                "meanActualLift": 0.076391,
+                "medianActualLift": 0.009355,
+                "positiveLiftRate": 0.505528,
+                "actualTopDecileRate": 0.091457
+              },
+              {
+                "decile": 5,
+                "n": 995,
+                "meanPrediction": 0.083343,
+                "meanActualLift": 0.084535,
+                "medianActualLift": 0.014133,
+                "positiveLiftRate": 0.508543,
+                "actualTopDecileRate": 0.112563
+              },
+              {
+                "decile": 6,
+                "n": 995,
+                "meanPrediction": 0.087754,
+                "meanActualLift": 0.060374,
+                "medianActualLift": 0.013714,
+                "positiveLiftRate": 0.512563,
+                "actualTopDecileRate": 0.078392
+              },
+              {
+                "decile": 7,
+                "n": 995,
+                "meanPrediction": 0.092492,
+                "meanActualLift": 0.096438,
+                "medianActualLift": 0.016477,
+                "positiveLiftRate": 0.513568,
+                "actualTopDecileRate": 0.114573
+              },
+              {
+                "decile": 8,
+                "n": 995,
+                "meanPrediction": 0.097718,
+                "meanActualLift": 0.100175,
+                "medianActualLift": 0.032746,
+                "positiveLiftRate": 0.525628,
+                "actualTopDecileRate": 0.105528
+              },
+              {
+                "decile": 9,
+                "n": 995,
+                "meanPrediction": 0.104393,
+                "meanActualLift": 0.128784,
+                "medianActualLift": 0.055246,
+                "positiveLiftRate": 0.544724,
+                "actualTopDecileRate": 0.110553
+              },
+              {
+                "decile": 10,
+                "n": 995,
+                "meanPrediction": 0.118326,
+                "meanActualLift": 0.131368,
+                "medianActualLift": 0.059833,
+                "positiveLiftRate": 0.545729,
+                "actualTopDecileRate": 0.126633
+              }
+            ],
+            "monotonicAdjacentSteps": 7,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.049676,
+            "topPredictedDecilePositiveLiftRate": 0.545729,
+            "topPredictedDecileActualTopDecilePrecision": 0.126633,
+            "actualTopDecileRecall": 0.126506
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 4190,
+            "spearman95": {
+              "low": 0.020231,
+              "median": 0.039727,
+              "high": 0.061935
+            },
+            "gaussianBitsPerObservation95": {
+              "low": 0.000214,
+              "median": 0.001184,
+              "high": 0.002081
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -8.9e-05,
+              "median": 0.000293,
+              "high": 0.000661
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 1872,
+            "observedSpearman": 0.039989,
+            "spearmanOneSidedP": 0.002,
+            "spearmanTwoSidedP": 0.002,
+            "nullSpearman95": {
+              "low": 0.000491,
+              "median": 0.011558,
+              "high": 0.022543
+            },
+            "observedGaussianBitsPerObservation": 0.001169,
+            "gaussianBitsOneSidedP": 0.002,
+            "nullGaussianBits95": {
+              "low": -0.000529,
+              "median": -2.1e-05,
+              "high": 0.000514
+            },
+            "excessSpearmanOverNullMedian": 0.02843,
+            "excessGaussianBitsOverNullMedian": 0.00119
+          },
+          "split": "five source-held-out folds; outcome age curve and creator history target rebuilt inside each fold",
+          "folds": [
+            {
+              "fold": 0,
+              "trainSources": 23076,
+              "testSources": 5927,
+              "trainRowsAfterFamilyExclusion": 7671,
+              "testRows": 2113,
+              "alpha": 100.0,
+              "pcaVarianceExplained": 0.292271
+            },
+            {
+              "fold": 1,
+              "trainSources": 23167,
+              "testSources": 5836,
+              "trainRowsAfterFamilyExclusion": 7791,
+              "testRows": 1984,
+              "alpha": 100.0,
+              "pcaVarianceExplained": 0.291793
+            },
+            {
+              "fold": 2,
+              "trainSources": 23254,
+              "testSources": 5749,
+              "trainRowsAfterFamilyExclusion": 7878,
+              "testRows": 1887,
+              "alpha": 100.0,
+              "pcaVarianceExplained": 0.290948
+            },
+            {
+              "fold": 3,
+              "trainSources": 23266,
+              "testSources": 5737,
+              "trainRowsAfterFamilyExclusion": 7724,
+              "testRows": 2011,
+              "alpha": 100.0,
+              "pcaVarianceExplained": 0.291335
+            },
+            {
+              "fold": 4,
+              "trainSources": 23249,
+              "testSources": 5754,
+              "trainRowsAfterFamilyExclusion": 7813,
+              "testRows": 1957,
+              "alpha": 100.0,
+              "pcaVarianceExplained": 0.290377
+            }
+          ],
+          "multiplicity": {
+            "family": "all creator-delta channels across both validation splits",
+            "hypotheses": 12,
+            "bonferroniP": 0.024,
+            "holmP": 0.024,
+            "benjaminiHochbergQ": 0.008
+          }
+        },
+        "laterVideo": {
+          "n": 6882,
+          "r2": -0.022168,
+          "pearson": 0.038249,
+          "spearman": 0.038705,
+          "maeLog10Lift": 0.459215,
+          "nullMaeLog10Lift": 0.459228,
+          "mse": 0.336431,
+          "nullMse": 0.33648,
+          "gaussianBitsPerObservation": 0.000105,
+          "topDecileAuc": 0.545377,
+          "predictionStandardDeviation": 0.001097,
+          "actualStandardDeviation": 0.573703,
+          "sourceMacro": {
+            "sources": 234,
+            "meanSpearman": 0.063402,
+            "medianSpearman": 0.032143,
+            "standardDeviationSpearman": 0.507281,
+            "positiveFraction": 0.521368
+          },
+          "withinSourcePairwise": {
+            "sources": 1475,
+            "pairs": 6575,
+            "microAccuracy": 0.515437,
+            "equalSourceMeanAccuracy": 0.510039,
+            "equalSourceMedianAccuracy": 0.52381,
+            "positiveSourceFraction": 0.502373
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 689,
+                "meanPrediction": 0.064027,
+                "meanActualLift": 0.149672,
+                "medianActualLift": 0.105581,
+                "positiveLiftRate": 0.570392,
+                "actualTopDecileRate": 0.091437
+              },
+              {
+                "decile": 2,
+                "n": 689,
+                "meanPrediction": 0.064796,
+                "meanActualLift": 0.092696,
+                "medianActualLift": 0.021211,
+                "positiveLiftRate": 0.516691,
+                "actualTopDecileRate": 0.075472
+              },
+              {
+                "decile": 3,
+                "n": 688,
+                "meanPrediction": 0.065222,
+                "meanActualLift": 0.101593,
+                "medianActualLift": 0.060414,
+                "positiveLiftRate": 0.526163,
+                "actualTopDecileRate": 0.082849
+              },
+              {
+                "decile": 4,
+                "n": 688,
+                "meanPrediction": 0.065539,
+                "meanActualLift": 0.14505,
+                "medianActualLift": 0.055335,
+                "positiveLiftRate": 0.546512,
+                "actualTopDecileRate": 0.094477
+              },
+              {
+                "decile": 5,
+                "n": 688,
+                "meanPrediction": 0.065829,
+                "meanActualLift": 0.157397,
+                "medianActualLift": 0.069009,
+                "positiveLiftRate": 0.550872,
+                "actualTopDecileRate": 0.082849
+              },
+              {
+                "decile": 6,
+                "n": 688,
+                "meanPrediction": 0.066086,
+                "meanActualLift": 0.153646,
+                "medianActualLift": 0.086046,
+                "positiveLiftRate": 0.571221,
+                "actualTopDecileRate": 0.100291
+              },
+              {
+                "decile": 7,
+                "n": 688,
+                "meanPrediction": 0.066349,
+                "meanActualLift": 0.193656,
+                "medianActualLift": 0.109624,
+                "positiveLiftRate": 0.577035,
+                "actualTopDecileRate": 0.123547
+              },
+              {
+                "decile": 8,
+                "n": 688,
+                "meanPrediction": 0.06666,
+                "meanActualLift": 0.168006,
+                "medianActualLift": 0.081646,
+                "positiveLiftRate": 0.565407,
+                "actualTopDecileRate": 0.113372
+              },
+              {
+                "decile": 9,
+                "n": 688,
+                "meanPrediction": 0.067063,
+                "meanActualLift": 0.17032,
+                "medianActualLift": 0.084319,
+                "positiveLiftRate": 0.574128,
+                "actualTopDecileRate": 0.125
+              },
+              {
+                "decile": 10,
+                "n": 688,
+                "meanPrediction": 0.06791,
+                "meanActualLift": 0.184455,
+                "medianActualLift": 0.107245,
+                "positiveLiftRate": 0.578488,
+                "actualTopDecileRate": 0.111919
+              }
+            ],
+            "monotonicAdjacentSteps": 6,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.034784,
+            "topPredictedDecilePositiveLiftRate": 0.578488,
+            "topPredictedDecileActualTopDecilePrecision": 0.111919,
+            "actualTopDecileRecall": 0.111756
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 4141,
+            "spearman95": {
+              "low": 0.012366,
+              "median": 0.036806,
+              "high": 0.062848
+            },
+            "gaussianBitsPerObservation95": {
+              "low": 3e-05,
+              "median": 0.000102,
+              "high": 0.000162
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -1.5e-05,
+              "median": 1.1e-05,
+              "high": 3.7e-05
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 1475,
+            "observedSpearman": 0.038705,
+            "spearmanOneSidedP": 0.004,
+            "spearmanTwoSidedP": 0.004,
+            "nullSpearman95": {
+              "low": 0.014012,
+              "median": 0.023675,
+              "high": 0.033806
+            },
+            "observedGaussianBitsPerObservation": 0.000105,
+            "gaussianBitsOneSidedP": 0.004,
+            "nullGaussianBits95": {
+              "low": 3.6e-05,
+              "median": 6.6e-05,
+              "high": 9.4e-05
+            },
+            "excessSpearmanOverNullMedian": 0.01503,
+            "excessGaussianBitsOverNullMedian": 3.9e-05
+          },
+          "selectedAlpha": 1000.0,
+          "pcaVarianceExplained": 0.317505,
+          "trainingRowsAfterFamilyExclusion": 2596,
+          "split": "first 70% of each creator chronology trains; age model uses only training rows; creator history is frozen at the split; later 30% tests",
+          "multiplicity": {
+            "family": "all creator-delta channels across both validation splits",
+            "hypotheses": 12,
+            "bonferroniP": 0.048,
+            "holmP": 0.036,
+            "benjaminiHochbergQ": 0.012
+          }
+        }
+      },
+      "incremental": {
+        "unseenCreator": {
+          "absoluteR2": 0.055402,
+          "creatorDeltaR2": 0.001541,
+          "r2DifferenceDeltaMinusAbsolute": -0.053861,
+          "absoluteSpearman": 0.225829,
+          "creatorDeltaSpearman": 0.039989,
+          "spearmanDifferenceDeltaMinusAbsolute": -0.18584,
+          "absoluteGaussianBitsPerObservation": 0.041171,
+          "creatorDeltaGaussianBitsPerObservation": 0.001169,
+          "gaussianBitsDifferenceDeltaMinusAbsolute": -0.040002,
+          "absoluteMaeLog10Lift": 0.422595,
+          "creatorDeltaMaeLog10Lift": 0.437167,
+          "maeDifferenceDeltaMinusAbsolute": 0.014572,
+          "creatorDeltaPairwiseMicroAccuracy": 0.527749,
+          "creatorDeltaPairwiseEqualSourceAccuracy": 0.522141,
+          "absoluteSourceMacroMeanSpearman": 0.027214,
+          "creatorDeltaSourceMacroMeanSpearman": 0.044365,
+          "absoluteSourceMacroPositiveFraction": 0.506726,
+          "creatorDeltaSourceMacroPositiveFraction": 0.54559
+        },
+        "laterVideo": {
+          "absoluteR2": 0.028179,
+          "creatorDeltaR2": -0.022168,
+          "r2DifferenceDeltaMinusAbsolute": -0.050347,
+          "absoluteSpearman": 0.224795,
+          "creatorDeltaSpearman": 0.038705,
+          "spearmanDifferenceDeltaMinusAbsolute": -0.18609,
+          "absoluteGaussianBitsPerObservation": 0.03654,
+          "creatorDeltaGaussianBitsPerObservation": 0.000105,
+          "gaussianBitsDifferenceDeltaMinusAbsolute": -0.036435,
+          "absoluteMaeLog10Lift": 0.448297,
+          "creatorDeltaMaeLog10Lift": 0.459215,
+          "maeDifferenceDeltaMinusAbsolute": 0.010918,
+          "creatorDeltaPairwiseMicroAccuracy": 0.515437,
+          "creatorDeltaPairwiseEqualSourceAccuracy": 0.510039,
+          "absoluteSourceMacroMeanSpearman": 0.032381,
+          "creatorDeltaSourceMacroMeanSpearman": 0.063402,
+          "absoluteSourceMacroPositiveFraction": 0.482906,
+          "creatorDeltaSourceMacroPositiveFraction": 0.521368
+        }
+      }
+    },
+    {
+      "id": "shorts:text",
+      "format": "shorts",
+      "modality": "text",
+      "vectorHash": "61c86be8e028e707b13dd4cb8598c1f20ea133637094cb3aeddc301b64ec20a2",
+      "support": {
+        "rows": 2380,
+        "sources": 1149,
+        "historyCount": {
+          "minimum": 1,
+          "median": 2.0,
+          "p90": 10.0,
+          "maximum": 133
+        }
+      },
+      "absoluteHistoryMatched": {
+        "unseenCreator": {
+          "n": 2380,
+          "r2": 0.013762,
+          "pearson": 0.119275,
+          "spearman": 0.118663,
+          "maeLog10Lift": 0.44287,
+          "nullMaeLog10Lift": 0.446916,
+          "mse": 0.305472,
+          "nullMse": 0.309978,
+          "gaussianBitsPerObservation": 0.010562,
+          "topDecileAuc": 0.586747,
+          "predictionStandardDeviation": 0.054487,
+          "actualStandardDeviation": 0.556538,
+          "sourceMacro": {
+            "sources": 136,
+            "meanSpearman": 0.085644,
+            "medianSpearman": 0.1,
+            "standardDeviationSpearman": 0.492531,
+            "positiveFraction": 0.544118
+          },
+          "withinSourcePairwise": {
+            "sources": 451,
+            "pairs": 5564,
+            "microAccuracy": 0.529385,
+            "equalSourceMeanAccuracy": 0.476175,
+            "equalSourceMedianAccuracy": 0.5,
+            "positiveSourceFraction": 0.456763
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 238,
+                "meanPrediction": -0.01652,
+                "meanActualLift": 0.003445,
+                "medianActualLift": -0.040234,
+                "positiveLiftRate": 0.457983,
+                "actualTopDecileRate": 0.088235
+              },
+              {
+                "decile": 2,
+                "n": 238,
+                "meanPrediction": 0.021027,
+                "meanActualLift": -0.004887,
+                "medianActualLift": -0.050949,
+                "positiveLiftRate": 0.441176,
+                "actualTopDecileRate": 0.042017
+              },
+              {
+                "decile": 3,
+                "n": 238,
+                "meanPrediction": 0.040126,
+                "meanActualLift": 0.012111,
+                "medianActualLift": -0.048531,
+                "positiveLiftRate": 0.470588,
+                "actualTopDecileRate": 0.071429
+              },
+              {
+                "decile": 4,
+                "n": 238,
+                "meanPrediction": 0.055619,
+                "meanActualLift": 0.008396,
+                "medianActualLift": -0.075368,
+                "positiveLiftRate": 0.453782,
+                "actualTopDecileRate": 0.084034
+              },
+              {
+                "decile": 5,
+                "n": 238,
+                "meanPrediction": 0.070443,
+                "meanActualLift": 0.050154,
+                "medianActualLift": 0.002515,
+                "positiveLiftRate": 0.504202,
+                "actualTopDecileRate": 0.088235
+              },
+              {
+                "decile": 6,
+                "n": 238,
+                "meanPrediction": 0.08404,
+                "meanActualLift": 0.036254,
+                "medianActualLift": -0.062766,
+                "positiveLiftRate": 0.457983,
+                "actualTopDecileRate": 0.109244
+              },
+              {
+                "decile": 7,
+                "n": 238,
+                "meanPrediction": 0.097813,
+                "meanActualLift": 0.186159,
+                "medianActualLift": 0.18221,
+                "positiveLiftRate": 0.617647,
+                "actualTopDecileRate": 0.138655
+              },
+              {
+                "decile": 8,
+                "n": 238,
+                "meanPrediction": 0.114344,
+                "meanActualLift": 0.103437,
+                "medianActualLift": 0.032655,
+                "positiveLiftRate": 0.512605,
+                "actualTopDecileRate": 0.092437
+              },
+              {
+                "decile": 9,
+                "n": 238,
+                "meanPrediction": 0.135514,
+                "meanActualLift": 0.168903,
+                "medianActualLift": 0.187153,
+                "positiveLiftRate": 0.584034,
+                "actualTopDecileRate": 0.12605
+              },
+              {
+                "decile": 10,
+                "n": 238,
+                "meanPrediction": 0.174007,
+                "meanActualLift": 0.196543,
+                "medianActualLift": 0.141772,
+                "positiveLiftRate": 0.579832,
+                "actualTopDecileRate": 0.159664
+              }
+            ],
+            "monotonicAdjacentSteps": 5,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.193098,
+            "topPredictedDecilePositiveLiftRate": 0.579832,
+            "topPredictedDecileActualTopDecilePrecision": 0.159664,
+            "actualTopDecileRecall": 0.159664
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 1149,
+            "spearman95": {
+              "low": 0.066229,
+              "median": 0.117683,
+              "high": 0.172618
+            },
+            "gaussianBitsPerObservation95": {
+              "low": 0.00302,
+              "median": 0.010512,
+              "high": 0.018394
+            },
+            "maeImprovementLog10Lift95": {
+              "low": 0.001203,
+              "median": 0.004019,
+              "high": 0.006908
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 451,
+            "observedSpearman": 0.118663,
+            "spearmanOneSidedP": 0.284,
+            "spearmanTwoSidedP": 0.284,
+            "nullSpearman95": {
+              "low": 0.095189,
+              "median": 0.112783,
+              "high": 0.130705
+            },
+            "observedGaussianBitsPerObservation": 0.010562,
+            "gaussianBitsOneSidedP": 0.328,
+            "nullGaussianBits95": {
+              "low": 0.007426,
+              "median": 0.009987,
+              "high": 0.012481
+            },
+            "excessSpearmanOverNullMedian": 0.00588,
+            "excessGaussianBitsOverNullMedian": 0.000576
+          },
+          "split": "five source-held-out folds; outcome age curve and creator history target rebuilt inside each fold",
+          "folds": [
+            {
+              "fold": 0,
+              "trainSources": 23076,
+              "testSources": 5927,
+              "trainRowsAfterFamilyExclusion": 1862,
+              "testRows": 512,
+              "alpha": 10.0,
+              "pcaVarianceExplained": 0.435557
+            },
+            {
+              "fold": 1,
+              "trainSources": 23167,
+              "testSources": 5836,
+              "trainRowsAfterFamilyExclusion": 1886,
+              "testRows": 482,
+              "alpha": 10.0,
+              "pcaVarianceExplained": 0.436848
+            },
+            {
+              "fold": 2,
+              "trainSources": 23254,
+              "testSources": 5749,
+              "trainRowsAfterFamilyExclusion": 1927,
+              "testRows": 442,
+              "alpha": 10.0,
+              "pcaVarianceExplained": 0.431243
+            },
+            {
+              "fold": 3,
+              "trainSources": 23266,
+              "testSources": 5737,
+              "trainRowsAfterFamilyExclusion": 1901,
+              "testRows": 474,
+              "alpha": 10.0,
+              "pcaVarianceExplained": 0.435784
+            },
+            {
+              "fold": 4,
+              "trainSources": 23249,
+              "testSources": 5754,
+              "trainRowsAfterFamilyExclusion": 1894,
+              "testRows": 470,
+              "alpha": 10.0,
+              "pcaVarianceExplained": 0.435034
+            }
+          ]
+        },
+        "laterVideo": {
+          "n": 1716,
+          "r2": -0.066511,
+          "pearson": 0.10437,
+          "spearman": 0.097854,
+          "maeLog10Lift": 0.486933,
+          "nullMaeLog10Lift": 0.487183,
+          "mse": 0.380773,
+          "nullMse": 0.381359,
+          "gaussianBitsPerObservation": 0.001108,
+          "topDecileAuc": 0.555421,
+          "predictionStandardDeviation": 0.003864,
+          "actualStandardDeviation": 0.597517,
+          "sourceMacro": {
+            "sources": 49,
+            "meanSpearman": 0.040217,
+            "medianSpearman": 0.1,
+            "standardDeviationSpearman": 0.519473,
+            "positiveFraction": 0.510204
+          },
+          "withinSourcePairwise": {
+            "sources": 346,
+            "pairs": 1491,
+            "microAccuracy": 0.509725,
+            "equalSourceMeanAccuracy": 0.495564,
+            "equalSourceMedianAccuracy": 0.5,
+            "positiveSourceFraction": 0.476879
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 172,
+                "meanPrediction": 0.003435,
+                "meanActualLift": 0.044126,
+                "medianActualLift": 0.023758,
+                "positiveLiftRate": 0.517442,
+                "actualTopDecileRate": 0.05814
+              },
+              {
+                "decile": 2,
+                "n": 172,
+                "meanPrediction": 0.006673,
+                "meanActualLift": 0.111847,
+                "medianActualLift": 0.050348,
+                "positiveLiftRate": 0.552326,
+                "actualTopDecileRate": 0.05814
+              },
+              {
+                "decile": 3,
+                "n": 172,
+                "meanPrediction": 0.00813,
+                "meanActualLift": 0.160054,
+                "medianActualLift": 0.142413,
+                "positiveLiftRate": 0.622093,
+                "actualTopDecileRate": 0.110465
+              },
+              {
+                "decile": 4,
+                "n": 172,
+                "meanPrediction": 0.009345,
+                "meanActualLift": 0.136223,
+                "medianActualLift": 0.043643,
+                "positiveLiftRate": 0.511628,
+                "actualTopDecileRate": 0.098837
+              },
+              {
+                "decile": 5,
+                "n": 172,
+                "meanPrediction": 0.010343,
+                "meanActualLift": 0.172953,
+                "medianActualLift": 0.148113,
+                "positiveLiftRate": 0.593023,
+                "actualTopDecileRate": 0.127907
+              },
+              {
+                "decile": 6,
+                "n": 172,
+                "meanPrediction": 0.01122,
+                "meanActualLift": 0.082401,
+                "medianActualLift": -0.029833,
+                "positiveLiftRate": 0.476744,
+                "actualTopDecileRate": 0.110465
+              },
+              {
+                "decile": 7,
+                "n": 171,
+                "meanPrediction": 0.01215,
+                "meanActualLift": 0.188607,
+                "medianActualLift": 0.09648,
+                "positiveLiftRate": 0.567251,
+                "actualTopDecileRate": 0.087719
+              },
+              {
+                "decile": 8,
+                "n": 171,
+                "meanPrediction": 0.01321,
+                "meanActualLift": 0.223724,
+                "medianActualLift": 0.215552,
+                "positiveLiftRate": 0.602339,
+                "actualTopDecileRate": 0.093567
+              },
+              {
+                "decile": 9,
+                "n": 171,
+                "meanPrediction": 0.014531,
+                "meanActualLift": 0.253067,
+                "medianActualLift": 0.212324,
+                "positiveLiftRate": 0.614035,
+                "actualTopDecileRate": 0.134503
+              },
+              {
+                "decile": 10,
+                "n": 171,
+                "meanPrediction": 0.017154,
+                "meanActualLift": 0.290864,
+                "medianActualLift": 0.249085,
+                "positiveLiftRate": 0.654971,
+                "actualTopDecileRate": 0.122807
+              }
+            ],
+            "monotonicAdjacentSteps": 7,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.246738,
+            "topPredictedDecilePositiveLiftRate": 0.654971,
+            "topPredictedDecileActualTopDecilePrecision": 0.122807,
+            "actualTopDecileRecall": 0.122093
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 1097,
+            "spearman95": {
+              "low": 0.046828,
+              "median": 0.100737,
+              "high": 0.146394
+            },
+            "gaussianBitsPerObservation95": {
+              "low": 0.000679,
+              "median": 0.001119,
+              "high": 0.001538
+            },
+            "maeImprovementLog10Lift95": {
+              "low": 8.6e-05,
+              "median": 0.000261,
+              "high": 0.000434
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 346,
+            "observedSpearman": 0.097854,
+            "spearmanOneSidedP": 0.664,
+            "spearmanTwoSidedP": 0.664,
+            "nullSpearman95": {
+              "low": 0.085279,
+              "median": 0.101823,
+              "high": 0.115551
+            },
+            "observedGaussianBitsPerObservation": 0.001108,
+            "gaussianBitsOneSidedP": 0.756,
+            "nullGaussianBits95": {
+              "low": 0.001018,
+              "median": 0.001158,
+              "high": 0.001279
+            },
+            "excessSpearmanOverNullMedian": -0.003969,
+            "excessGaussianBitsOverNullMedian": -5e-05
+          },
+          "selectedAlpha": 100.0,
+          "pcaVarianceExplained": 0.505422,
+          "trainingRowsAfterFamilyExclusion": 625,
+          "split": "first 70% of each creator chronology trains; age model uses only training rows; creator history is frozen at the split; later 30% tests"
+        }
+      },
+      "creatorDelta": {
+        "unseenCreator": {
+          "n": 2380,
+          "r2": -0.002425,
+          "pearson": 0.004877,
+          "spearman": 0.032431,
+          "maeLog10Lift": 0.447763,
+          "nullMaeLog10Lift": 0.446916,
+          "mse": 0.310486,
+          "nullMse": 0.309978,
+          "gaussianBitsPerObservation": -0.00118,
+          "topDecileAuc": 0.543644,
+          "predictionStandardDeviation": 0.030245,
+          "actualStandardDeviation": 0.556538,
+          "sourceMacro": {
+            "sources": 136,
+            "meanSpearman": 0.078362,
+            "medianSpearman": 0.087097,
+            "standardDeviationSpearman": 0.438548,
+            "positiveFraction": 0.529412
+          },
+          "withinSourcePairwise": {
+            "sources": 451,
+            "pairs": 5564,
+            "microAccuracy": 0.51941,
+            "equalSourceMeanAccuracy": 0.472999,
+            "equalSourceMedianAccuracy": 0.5,
+            "positiveSourceFraction": 0.456763
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 238,
+                "meanPrediction": 0.030592,
+                "meanActualLift": 0.000234,
+                "medianActualLift": -0.049335,
+                "positiveLiftRate": 0.453782,
+                "actualTopDecileRate": 0.084034
+              },
+              {
+                "decile": 2,
+                "n": 238,
+                "meanPrediction": 0.059526,
+                "meanActualLift": 0.043711,
+                "medianActualLift": -0.005322,
+                "positiveLiftRate": 0.495798,
+                "actualTopDecileRate": 0.071429
+              },
+              {
+                "decile": 3,
+                "n": 238,
+                "meanPrediction": 0.06515,
+                "meanActualLift": -0.011834,
+                "medianActualLift": -0.07296,
+                "positiveLiftRate": 0.470588,
+                "actualTopDecileRate": 0.063025
+              },
+              {
+                "decile": 4,
+                "n": 238,
+                "meanPrediction": 0.068858,
+                "meanActualLift": 0.104838,
+                "medianActualLift": 0.067404,
+                "positiveLiftRate": 0.546218,
+                "actualTopDecileRate": 0.109244
+              },
+              {
+                "decile": 5,
+                "n": 238,
+                "meanPrediction": 0.072258,
+                "meanActualLift": 0.179933,
+                "medianActualLift": 0.167874,
+                "positiveLiftRate": 0.596639,
+                "actualTopDecileRate": 0.12605
+              },
+              {
+                "decile": 6,
+                "n": 238,
+                "meanPrediction": 0.075913,
+                "meanActualLift": 0.084101,
+                "medianActualLift": 0.012864,
+                "positiveLiftRate": 0.508403,
+                "actualTopDecileRate": 0.10084
+              },
+              {
+                "decile": 7,
+                "n": 238,
+                "meanPrediction": 0.079436,
+                "meanActualLift": 0.109859,
+                "medianActualLift": 0.021906,
+                "positiveLiftRate": 0.521008,
+                "actualTopDecileRate": 0.096639
+              },
+              {
+                "decile": 8,
+                "n": 238,
+                "meanPrediction": 0.083724,
+                "meanActualLift": 0.111646,
+                "medianActualLift": -0.017418,
+                "positiveLiftRate": 0.478992,
+                "actualTopDecileRate": 0.130252
+              },
+              {
+                "decile": 9,
+                "n": 238,
+                "meanPrediction": 0.091085,
+                "meanActualLift": 0.090343,
+                "medianActualLift": 0.107613,
+                "positiveLiftRate": 0.542017,
+                "actualTopDecileRate": 0.10084
+              },
+              {
+                "decile": 10,
+                "n": 238,
+                "meanPrediction": 0.140403,
+                "meanActualLift": 0.047682,
+                "medianActualLift": -0.064699,
+                "positiveLiftRate": 0.466387,
+                "actualTopDecileRate": 0.117647
+              }
+            ],
+            "monotonicAdjacentSteps": 5,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.047447,
+            "topPredictedDecilePositiveLiftRate": 0.466387,
+            "topPredictedDecileActualTopDecilePrecision": 0.117647,
+            "actualTopDecileRecall": 0.117647
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 1149,
+            "spearman95": {
+              "low": -0.015494,
+              "median": 0.034336,
+              "high": 0.081994
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -0.00426,
+              "median": -0.001084,
+              "high": 0.002119
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -0.002057,
+              "median": -0.00082,
+              "high": 0.000392
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 451,
+            "observedSpearman": 0.032431,
+            "spearmanOneSidedP": 0.166,
+            "spearmanTwoSidedP": 0.166,
+            "nullSpearman95": {
+              "low": 0.001135,
+              "median": 0.021858,
+              "high": 0.043172
+            },
+            "observedGaussianBitsPerObservation": -0.00118,
+            "gaussianBitsOneSidedP": 0.496,
+            "nullGaussianBits95": {
+              "low": -0.002829,
+              "median": -0.001197,
+              "high": 0.00053
+            },
+            "excessSpearmanOverNullMedian": 0.010573,
+            "excessGaussianBitsOverNullMedian": 1.6e-05
+          },
+          "split": "five source-held-out folds; outcome age curve and creator history target rebuilt inside each fold",
+          "folds": [
+            {
+              "fold": 0,
+              "trainSources": 23076,
+              "testSources": 5927,
+              "trainRowsAfterFamilyExclusion": 1862,
+              "testRows": 512,
+              "alpha": 100.0,
+              "pcaVarianceExplained": 0.35938
+            },
+            {
+              "fold": 1,
+              "trainSources": 23167,
+              "testSources": 5836,
+              "trainRowsAfterFamilyExclusion": 1886,
+              "testRows": 482,
+              "alpha": 10.0,
+              "pcaVarianceExplained": 0.362372
+            },
+            {
+              "fold": 2,
+              "trainSources": 23254,
+              "testSources": 5749,
+              "trainRowsAfterFamilyExclusion": 1927,
+              "testRows": 442,
+              "alpha": 100.0,
+              "pcaVarianceExplained": 0.360476
+            },
+            {
+              "fold": 3,
+              "trainSources": 23266,
+              "testSources": 5737,
+              "trainRowsAfterFamilyExclusion": 1901,
+              "testRows": 474,
+              "alpha": 100.0,
+              "pcaVarianceExplained": 0.362097
+            },
+            {
+              "fold": 4,
+              "trainSources": 23249,
+              "testSources": 5754,
+              "trainRowsAfterFamilyExclusion": 1894,
+              "testRows": 470,
+              "alpha": 100.0,
+              "pcaVarianceExplained": 0.359547
+            }
+          ],
+          "multiplicity": {
+            "family": "all creator-delta channels across both validation splits",
+            "hypotheses": 12,
+            "bonferroniP": 1.0,
+            "holmP": 1.0,
+            "benjaminiHochbergQ": 0.332
+          }
+        },
+        "laterVideo": {
+          "n": 1716,
+          "r2": -0.068189,
+          "pearson": -0.012868,
+          "spearman": -0.019438,
+          "maeLog10Lift": 0.487196,
+          "nullMaeLog10Lift": 0.487183,
+          "mse": 0.381372,
+          "nullMse": 0.381359,
+          "gaussianBitsPerObservation": -2.6e-05,
+          "topDecileAuc": 0.509523,
+          "predictionStandardDeviation": 0.000563,
+          "actualStandardDeviation": 0.597517,
+          "sourceMacro": {
+            "sources": 49,
+            "meanSpearman": 0.010044,
+            "medianSpearman": -0.007353,
+            "standardDeviationSpearman": 0.463202,
+            "positiveFraction": 0.469388
+          },
+          "withinSourcePairwise": {
+            "sources": 346,
+            "pairs": 1491,
+            "microAccuracy": 0.499329,
+            "equalSourceMeanAccuracy": 0.496536,
+            "equalSourceMedianAccuracy": 0.5,
+            "positiveSourceFraction": 0.471098
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 172,
+                "meanPrediction": 0.009213,
+                "meanActualLift": 0.167309,
+                "medianActualLift": 0.117592,
+                "positiveLiftRate": 0.569767,
+                "actualTopDecileRate": 0.098837
+              },
+              {
+                "decile": 2,
+                "n": 172,
+                "meanPrediction": 0.009625,
+                "meanActualLift": 0.172394,
+                "medianActualLift": 0.144144,
+                "positiveLiftRate": 0.604651,
+                "actualTopDecileRate": 0.110465
+              },
+              {
+                "decile": 3,
+                "n": 172,
+                "meanPrediction": 0.009845,
+                "meanActualLift": 0.134179,
+                "medianActualLift": 0.175776,
+                "positiveLiftRate": 0.581395,
+                "actualTopDecileRate": 0.069767
+              },
+              {
+                "decile": 4,
+                "n": 172,
+                "meanPrediction": 0.010018,
+                "meanActualLift": 0.180744,
+                "medianActualLift": 0.103623,
+                "positiveLiftRate": 0.569767,
+                "actualTopDecileRate": 0.081395
+              },
+              {
+                "decile": 5,
+                "n": 172,
+                "meanPrediction": 0.010169,
+                "meanActualLift": 0.225878,
+                "medianActualLift": 0.181936,
+                "positiveLiftRate": 0.604651,
+                "actualTopDecileRate": 0.122093
+              },
+              {
+                "decile": 6,
+                "n": 172,
+                "meanPrediction": 0.010303,
+                "meanActualLift": 0.158743,
+                "medianActualLift": 0.094881,
+                "positiveLiftRate": 0.546512,
+                "actualTopDecileRate": 0.098837
+              },
+              {
+                "decile": 7,
+                "n": 171,
+                "meanPrediction": 0.010438,
+                "meanActualLift": 0.143348,
+                "medianActualLift": 0.10035,
+                "positiveLiftRate": 0.54386,
+                "actualTopDecileRate": 0.105263
+              },
+              {
+                "decile": 8,
+                "n": 171,
+                "meanPrediction": 0.01059,
+                "meanActualLift": 0.179495,
+                "medianActualLift": 0.107507,
+                "positiveLiftRate": 0.578947,
+                "actualTopDecileRate": 0.111111
+              },
+              {
+                "decile": 9,
+                "n": 171,
+                "meanPrediction": 0.010793,
+                "meanActualLift": 0.183907,
+                "medianActualLift": 0.111285,
+                "positiveLiftRate": 0.561404,
+                "actualTopDecileRate": 0.128655
+              },
+              {
+                "decile": 10,
+                "n": 171,
+                "meanPrediction": 0.01118,
+                "meanActualLift": 0.115929,
+                "medianActualLift": 0.039298,
+                "positiveLiftRate": 0.549708,
+                "actualTopDecileRate": 0.076023
+              }
+            ],
+            "monotonicAdjacentSteps": 5,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": -0.051381,
+            "topPredictedDecilePositiveLiftRate": 0.549708,
+            "topPredictedDecileActualTopDecilePrecision": 0.076023,
+            "actualTopDecileRecall": 0.075581
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 1097,
+            "spearman95": {
+              "low": -0.059413,
+              "median": -0.017749,
+              "high": 0.025739
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -8.2e-05,
+              "median": -2.2e-05,
+              "high": 3.3e-05
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -3.7e-05,
+              "median": -1.2e-05,
+              "high": 1.5e-05
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 346,
+            "observedSpearman": -0.019438,
+            "spearmanOneSidedP": 0.592,
+            "spearmanTwoSidedP": 0.41,
+            "nullSpearman95": {
+              "low": -0.037281,
+              "median": -0.016604,
+              "high": 0.005542
+            },
+            "observedGaussianBitsPerObservation": -2.6e-05,
+            "gaussianBitsOneSidedP": 0.608,
+            "nullGaussianBits95": {
+              "low": -4.9e-05,
+              "median": -2.2e-05,
+              "high": 7e-06
+            },
+            "excessSpearmanOverNullMedian": -0.002833,
+            "excessGaussianBitsOverNullMedian": -4e-06
+          },
+          "selectedAlpha": 1000.0,
+          "pcaVarianceExplained": 0.43452,
+          "trainingRowsAfterFamilyExclusion": 625,
+          "split": "first 70% of each creator chronology trains; age model uses only training rows; creator history is frozen at the split; later 30% tests",
+          "multiplicity": {
+            "family": "all creator-delta channels across both validation splits",
+            "hypotheses": 12,
+            "bonferroniP": 1.0,
+            "holmP": 1.0,
+            "benjaminiHochbergQ": 0.592
+          }
+        }
+      },
+      "incremental": {
+        "unseenCreator": {
+          "absoluteR2": 0.013762,
+          "creatorDeltaR2": -0.002425,
+          "r2DifferenceDeltaMinusAbsolute": -0.016187,
+          "absoluteSpearman": 0.118663,
+          "creatorDeltaSpearman": 0.032431,
+          "spearmanDifferenceDeltaMinusAbsolute": -0.086232,
+          "absoluteGaussianBitsPerObservation": 0.010562,
+          "creatorDeltaGaussianBitsPerObservation": -0.00118,
+          "gaussianBitsDifferenceDeltaMinusAbsolute": -0.011742,
+          "absoluteMaeLog10Lift": 0.44287,
+          "creatorDeltaMaeLog10Lift": 0.447763,
+          "maeDifferenceDeltaMinusAbsolute": 0.004893,
+          "creatorDeltaPairwiseMicroAccuracy": 0.51941,
+          "creatorDeltaPairwiseEqualSourceAccuracy": 0.472999,
+          "absoluteSourceMacroMeanSpearman": 0.085644,
+          "creatorDeltaSourceMacroMeanSpearman": 0.078362,
+          "absoluteSourceMacroPositiveFraction": 0.544118,
+          "creatorDeltaSourceMacroPositiveFraction": 0.529412
+        },
+        "laterVideo": {
+          "absoluteR2": -0.066511,
+          "creatorDeltaR2": -0.068189,
+          "r2DifferenceDeltaMinusAbsolute": -0.001678,
+          "absoluteSpearman": 0.097854,
+          "creatorDeltaSpearman": -0.019438,
+          "spearmanDifferenceDeltaMinusAbsolute": -0.117292,
+          "absoluteGaussianBitsPerObservation": 0.001108,
+          "creatorDeltaGaussianBitsPerObservation": -2.6e-05,
+          "gaussianBitsDifferenceDeltaMinusAbsolute": -0.001134,
+          "absoluteMaeLog10Lift": 0.486933,
+          "creatorDeltaMaeLog10Lift": 0.487196,
+          "maeDifferenceDeltaMinusAbsolute": 0.000263,
+          "creatorDeltaPairwiseMicroAccuracy": 0.499329,
+          "creatorDeltaPairwiseEqualSourceAccuracy": 0.496536,
+          "absoluteSourceMacroMeanSpearman": 0.040217,
+          "creatorDeltaSourceMacroMeanSpearman": 0.010044,
+          "absoluteSourceMacroPositiveFraction": 0.510204,
+          "creatorDeltaSourceMacroPositiveFraction": 0.469388
+        }
+      }
+    },
+    {
+      "id": "shorts:together",
+      "format": "shorts",
+      "modality": "together",
+      "vectorHash": "883f1098e23c1f283159fba6440e4039fa691c5ce269d34872339e0bb00b7e03",
+      "support": {
+        "rows": 9951,
+        "sources": 4190,
+        "historyCount": {
+          "minimum": 1,
+          "median": 2.0,
+          "p90": 11.0,
+          "maximum": 134
+        }
+      },
+      "absoluteHistoryMatched": {
+        "unseenCreator": {
+          "n": 9951,
+          "r2": 0.055066,
+          "pearson": 0.234695,
+          "spearman": 0.222805,
+          "maeLog10Lift": 0.422518,
+          "nullMaeLog10Lift": 0.437368,
+          "mse": 0.286471,
+          "nullMse": 0.303191,
+          "gaussianBitsPerObservation": 0.04092,
+          "topDecileAuc": 0.660622,
+          "predictionStandardDeviation": 0.131416,
+          "actualStandardDeviation": 0.550604,
+          "sourceMacro": {
+            "sources": 669,
+            "meanSpearman": 0.027624,
+            "medianSpearman": 0.028571,
+            "standardDeviationSpearman": 0.501504,
+            "positiveFraction": 0.509716
+          },
+          "withinSourcePairwise": {
+            "sources": 1871,
+            "pairs": 27658,
+            "microAccuracy": 0.524803,
+            "equalSourceMeanAccuracy": 0.518026,
+            "equalSourceMedianAccuracy": 0.52381,
+            "positiveSourceFraction": 0.50775
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 996,
+                "meanPrediction": -0.130253,
+                "meanActualLift": -0.103564,
+                "medianActualLift": -0.126416,
+                "positiveLiftRate": 0.378514,
+                "actualTopDecileRate": 0.035141
+              },
+              {
+                "decile": 2,
+                "n": 995,
+                "meanPrediction": -0.048926,
+                "meanActualLift": -0.029768,
+                "medianActualLift": -0.080111,
+                "positiveLiftRate": 0.422111,
+                "actualTopDecileRate": 0.053266
+              },
+              {
+                "decile": 3,
+                "n": 995,
+                "meanPrediction": -0.006597,
+                "meanActualLift": -0.01964,
+                "medianActualLift": -0.085119,
+                "positiveLiftRate": 0.438191,
+                "actualTopDecileRate": 0.063317
+              },
+              {
+                "decile": 4,
+                "n": 995,
+                "meanPrediction": 0.027762,
+                "meanActualLift": 0.051304,
+                "medianActualLift": -0.01569,
+                "positiveLiftRate": 0.484422,
+                "actualTopDecileRate": 0.079397
+              },
+              {
+                "decile": 5,
+                "n": 995,
+                "meanPrediction": 0.060127,
+                "meanActualLift": 0.025976,
+                "medianActualLift": -0.043764,
+                "positiveLiftRate": 0.461307,
+                "actualTopDecileRate": 0.070352
+              },
+              {
+                "decile": 6,
+                "n": 995,
+                "meanPrediction": 0.092904,
+                "meanActualLift": 0.054963,
+                "medianActualLift": 0.00551,
+                "positiveLiftRate": 0.503518,
+                "actualTopDecileRate": 0.088442
+              },
+              {
+                "decile": 7,
+                "n": 995,
+                "meanPrediction": 0.128113,
+                "meanActualLift": 0.111773,
+                "medianActualLift": 0.039696,
+                "positiveLiftRate": 0.530653,
+                "actualTopDecileRate": 0.100503
+              },
+              {
+                "decile": 8,
+                "n": 995,
+                "meanPrediction": 0.168692,
+                "meanActualLift": 0.145794,
+                "medianActualLift": 0.108374,
+                "positiveLiftRate": 0.576884,
+                "actualTopDecileRate": 0.116583
+              },
+              {
+                "decile": 9,
+                "n": 995,
+                "meanPrediction": 0.224247,
+                "meanActualLift": 0.247546,
+                "medianActualLift": 0.211022,
+                "positiveLiftRate": 0.637186,
+                "actualTopDecileRate": 0.164824
+              },
+              {
+                "decile": 10,
+                "n": 995,
+                "meanPrediction": 0.331783,
+                "meanActualLift": 0.364234,
+                "medianActualLift": 0.361366,
+                "positiveLiftRate": 0.708543,
+                "actualTopDecileRate": 0.229146
+              }
+            ],
+            "monotonicAdjacentSteps": 8,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.467798,
+            "topPredictedDecilePositiveLiftRate": 0.708543,
+            "topPredictedDecileActualTopDecilePrecision": 0.229146,
+            "actualTopDecileRecall": 0.228916
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 4190,
+            "spearman95": {
+              "low": 0.193458,
+              "median": 0.222637,
+              "high": 0.248651
+            },
+            "gaussianBitsPerObservation95": {
+              "low": 0.031315,
+              "median": 0.040839,
+              "high": 0.050033
+            },
+            "maeImprovementLog10Lift95": {
+              "low": 0.011643,
+              "median": 0.014876,
+              "high": 0.018066
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 1871,
+            "observedSpearman": 0.222805,
+            "spearmanOneSidedP": 0.002,
+            "spearmanTwoSidedP": 0.002,
+            "nullSpearman95": {
+              "low": 0.201157,
+              "median": 0.207744,
+              "high": 0.214651
+            },
+            "observedGaussianBitsPerObservation": 0.04092,
+            "gaussianBitsOneSidedP": 0.002,
+            "nullGaussianBits95": {
+              "low": 0.032756,
+              "median": 0.035119,
+              "high": 0.037823
+            },
+            "excessSpearmanOverNullMedian": 0.015061,
+            "excessGaussianBitsOverNullMedian": 0.0058
+          },
+          "split": "five source-held-out folds; outcome age curve and creator history target rebuilt inside each fold",
+          "folds": [
+            {
+              "fold": 0,
+              "trainSources": 23076,
+              "testSources": 5927,
+              "trainRowsAfterFamilyExclusion": 7671,
+              "testRows": 2112,
+              "alpha": 10.0,
+              "pcaVarianceExplained": 0.419637
+            },
+            {
+              "fold": 1,
+              "trainSources": 23167,
+              "testSources": 5836,
+              "trainRowsAfterFamilyExclusion": 7790,
+              "testRows": 1984,
+              "alpha": 10.0,
+              "pcaVarianceExplained": 0.418638
+            },
+            {
+              "fold": 2,
+              "trainSources": 23254,
+              "testSources": 5749,
+              "trainRowsAfterFamilyExclusion": 7877,
+              "testRows": 1887,
+              "alpha": 1.0,
+              "pcaVarianceExplained": 0.41902
+            },
+            {
+              "fold": 3,
+              "trainSources": 23266,
+              "testSources": 5737,
+              "trainRowsAfterFamilyExclusion": 7723,
+              "testRows": 2011,
+              "alpha": 1.0,
+              "pcaVarianceExplained": 0.41974
+            },
+            {
+              "fold": 4,
+              "trainSources": 23249,
+              "testSources": 5754,
+              "trainRowsAfterFamilyExclusion": 7812,
+              "testRows": 1957,
+              "alpha": 1.0,
+              "pcaVarianceExplained": 0.419129
+            }
+          ]
+        },
+        "laterVideo": {
+          "n": 6881,
+          "r2": 0.02532,
+          "pearson": 0.22536,
+          "spearman": 0.21428,
+          "maeLog10Lift": 0.448585,
+          "nullMaeLog10Lift": 0.459098,
+          "mse": 0.32062,
+          "nullMse": 0.336262,
+          "gaussianBitsPerObservation": 0.034362,
+          "topDecileAuc": 0.64367,
+          "predictionStandardDeviation": 0.077834,
+          "actualStandardDeviation": 0.573541,
+          "sourceMacro": {
+            "sources": 234,
+            "meanSpearman": 0.068727,
+            "medianSpearman": 0.0,
+            "standardDeviationSpearman": 0.508436,
+            "positiveFraction": 0.487179
+          },
+          "withinSourcePairwise": {
+            "sources": 1475,
+            "pairs": 6575,
+            "microAccuracy": 0.523498,
+            "equalSourceMeanAccuracy": 0.517958,
+            "equalSourceMedianAccuracy": 0.6,
+            "positiveSourceFraction": 0.512542
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 689,
+                "meanPrediction": -0.055668,
+                "meanActualLift": -0.020014,
+                "medianActualLift": -0.077164,
+                "positiveLiftRate": 0.435414,
+                "actualTopDecileRate": 0.044993
+              },
+              {
+                "decile": 2,
+                "n": 688,
+                "meanPrediction": -0.005876,
+                "meanActualLift": 0.026233,
+                "medianActualLift": -0.04601,
+                "positiveLiftRate": 0.456395,
+                "actualTopDecileRate": 0.06686
+              },
+              {
+                "decile": 3,
+                "n": 688,
+                "meanPrediction": 0.020059,
+                "meanActualLift": 0.041786,
+                "medianActualLift": -0.015724,
+                "positiveLiftRate": 0.485465,
+                "actualTopDecileRate": 0.061047
+              },
+              {
+                "decile": 4,
+                "n": 688,
+                "meanPrediction": 0.042778,
+                "meanActualLift": 0.094339,
+                "medianActualLift": 0.046718,
+                "positiveLiftRate": 0.546512,
+                "actualTopDecileRate": 0.077035
+              },
+              {
+                "decile": 5,
+                "n": 688,
+                "meanPrediction": 0.064138,
+                "meanActualLift": 0.107708,
+                "medianActualLift": 0.046777,
+                "positiveLiftRate": 0.540698,
+                "actualTopDecileRate": 0.0625
+              },
+              {
+                "decile": 6,
+                "n": 688,
+                "meanPrediction": 0.083447,
+                "meanActualLift": 0.120043,
+                "medianActualLift": 0.058205,
+                "positiveLiftRate": 0.539244,
+                "actualTopDecileRate": 0.081395
+              },
+              {
+                "decile": 7,
+                "n": 688,
+                "meanPrediction": 0.10457,
+                "meanActualLift": 0.185784,
+                "medianActualLift": 0.10344,
+                "positiveLiftRate": 0.556686,
+                "actualTopDecileRate": 0.122093
+              },
+              {
+                "decile": 8,
+                "n": 688,
+                "meanPrediction": 0.128868,
+                "meanActualLift": 0.239619,
+                "medianActualLift": 0.202468,
+                "positiveLiftRate": 0.626453,
+                "actualTopDecileRate": 0.132267
+              },
+              {
+                "decile": 9,
+                "n": 688,
+                "meanPrediction": 0.159325,
+                "meanActualLift": 0.289667,
+                "medianActualLift": 0.257121,
+                "positiveLiftRate": 0.65843,
+                "actualTopDecileRate": 0.143895
+              },
+              {
+                "decile": 10,
+                "n": 688,
+                "meanPrediction": 0.215915,
+                "meanActualLift": 0.429643,
+                "medianActualLift": 0.480897,
+                "positiveLiftRate": 0.731105,
+                "actualTopDecileRate": 0.209302
+              }
+            ],
+            "monotonicAdjacentSteps": 9,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.449657,
+            "topPredictedDecilePositiveLiftRate": 0.731105,
+            "topPredictedDecileActualTopDecilePrecision": 0.209302,
+            "actualTopDecileRecall": 0.208999
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 4140,
+            "spearman95": {
+              "low": 0.182445,
+              "median": 0.211059,
+              "high": 0.240486
+            },
+            "gaussianBitsPerObservation95": {
+              "low": 0.027653,
+              "median": 0.033773,
+              "high": 0.039852
+            },
+            "maeImprovementLog10Lift95": {
+              "low": 0.008247,
+              "median": 0.010317,
+              "high": 0.012348
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 1475,
+            "observedSpearman": 0.21428,
+            "spearmanOneSidedP": 0.002,
+            "spearmanTwoSidedP": 0.002,
+            "nullSpearman95": {
+              "low": 0.194661,
+              "median": 0.201439,
+              "high": 0.20837
+            },
+            "observedGaussianBitsPerObservation": 0.034362,
+            "gaussianBitsOneSidedP": 0.002,
+            "nullGaussianBits95": {
+              "low": 0.03034,
+              "median": 0.031638,
+              "high": 0.033083
+            },
+            "excessSpearmanOverNullMedian": 0.012841,
+            "excessGaussianBitsOverNullMedian": 0.002724
+          },
+          "selectedAlpha": 10.0,
+          "pcaVarianceExplained": 0.442768,
+          "trainingRowsAfterFamilyExclusion": 2596,
+          "split": "first 70% of each creator chronology trains; age model uses only training rows; creator history is frozen at the split; later 30% tests"
+        }
+      },
+      "creatorDelta": {
+        "unseenCreator": {
+          "n": 9951,
+          "r2": 0.00129,
+          "pearson": 0.039076,
+          "spearman": 0.046193,
+          "maeLog10Lift": 0.437197,
+          "nullMaeLog10Lift": 0.437368,
+          "mse": 0.302774,
+          "nullMse": 0.303191,
+          "gaussianBitsPerObservation": 0.000994,
+          "topDecileAuc": 0.537717,
+          "predictionStandardDeviation": 0.029962,
+          "actualStandardDeviation": 0.550604,
+          "sourceMacro": {
+            "sources": 669,
+            "meanSpearman": 0.041539,
+            "medianSpearman": 0.047619,
+            "standardDeviationSpearman": 0.483809,
+            "positiveFraction": 0.521674
+          },
+          "withinSourcePairwise": {
+            "sources": 1871,
+            "pairs": 27658,
+            "microAccuracy": 0.523212,
+            "equalSourceMeanAccuracy": 0.526348,
+            "equalSourceMedianAccuracy": 0.541126,
+            "positiveSourceFraction": 0.52325
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 996,
+                "meanPrediction": 0.031757,
+                "meanActualLift": 0.044859,
+                "medianActualLift": -0.015234,
+                "positiveLiftRate": 0.48494,
+                "actualTopDecileRate": 0.080321
+              },
+              {
+                "decile": 2,
+                "n": 995,
+                "meanPrediction": 0.060921,
+                "meanActualLift": 0.023875,
+                "medianActualLift": -0.048215,
+                "positiveLiftRate": 0.464322,
+                "actualTopDecileRate": 0.082412
+              },
+              {
+                "decile": 3,
+                "n": 995,
+                "meanPrediction": 0.070063,
+                "meanActualLift": 0.081606,
+                "medianActualLift": 0.01178,
+                "positiveLiftRate": 0.511558,
+                "actualTopDecileRate": 0.100503
+              },
+              {
+                "decile": 4,
+                "n": 995,
+                "meanPrediction": 0.076825,
+                "meanActualLift": 0.083869,
+                "medianActualLift": 0.025978,
+                "positiveLiftRate": 0.520603,
+                "actualTopDecileRate": 0.093467
+              },
+              {
+                "decile": 5,
+                "n": 995,
+                "meanPrediction": 0.082798,
+                "meanActualLift": 0.087083,
+                "medianActualLift": 0.00443,
+                "positiveLiftRate": 0.503518,
+                "actualTopDecileRate": 0.110553
+              },
+              {
+                "decile": 6,
+                "n": 995,
+                "meanPrediction": 0.088226,
+                "meanActualLift": 0.072965,
+                "medianActualLift": -0.013426,
+                "positiveLiftRate": 0.493467,
+                "actualTopDecileRate": 0.086432
+              },
+              {
+                "decile": 7,
+                "n": 995,
+                "meanPrediction": 0.093941,
+                "meanActualLift": 0.08896,
+                "medianActualLift": 0.023918,
+                "positiveLiftRate": 0.516583,
+                "actualTopDecileRate": 0.093467
+              },
+              {
+                "decile": 8,
+                "n": 995,
+                "meanPrediction": 0.100552,
+                "meanActualLift": 0.141889,
+                "medianActualLift": 0.074488,
+                "positiveLiftRate": 0.573869,
+                "actualTopDecileRate": 0.120603
+              },
+              {
+                "decile": 9,
+                "n": 995,
+                "meanPrediction": 0.11007,
+                "meanActualLift": 0.125406,
+                "medianActualLift": 0.056005,
+                "positiveLiftRate": 0.551759,
+                "actualTopDecileRate": 0.113568
+              },
+              {
+                "decile": 10,
+                "n": 995,
+                "meanPrediction": 0.140358,
+                "meanActualLift": 0.097955,
+                "medianActualLift": 0.022391,
+                "positiveLiftRate": 0.520603,
+                "actualTopDecileRate": 0.119598
+              }
+            ],
+            "monotonicAdjacentSteps": 5,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.053096,
+            "topPredictedDecilePositiveLiftRate": 0.520603,
+            "topPredictedDecileActualTopDecilePrecision": 0.119598,
+            "actualTopDecileRecall": 0.119478
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 4190,
+            "spearman95": {
+              "low": 0.02611,
+              "median": 0.045913,
+              "high": 0.065851
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -0.000616,
+              "median": 0.000924,
+              "high": 0.002781
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -0.000439,
+              "median": 0.000165,
+              "high": 0.000752
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 1871,
+            "observedSpearman": 0.046193,
+            "spearmanOneSidedP": 0.002,
+            "spearmanTwoSidedP": 0.002,
+            "nullSpearman95": {
+              "low": 0.004534,
+              "median": 0.015844,
+              "high": 0.027535
+            },
+            "observedGaussianBitsPerObservation": 0.000994,
+            "gaussianBitsOneSidedP": 0.002,
+            "nullGaussianBits95": {
+              "low": -0.002242,
+              "median": -0.001331,
+              "high": -0.000445
+            },
+            "excessSpearmanOverNullMedian": 0.030349,
+            "excessGaussianBitsOverNullMedian": 0.002324
+          },
+          "split": "five source-held-out folds; outcome age curve and creator history target rebuilt inside each fold",
+          "folds": [
+            {
+              "fold": 0,
+              "trainSources": 23076,
+              "testSources": 5927,
+              "trainRowsAfterFamilyExclusion": 7671,
+              "testRows": 2112,
+              "alpha": 10.0,
+              "pcaVarianceExplained": 0.293698
+            },
+            {
+              "fold": 1,
+              "trainSources": 23167,
+              "testSources": 5836,
+              "trainRowsAfterFamilyExclusion": 7790,
+              "testRows": 1984,
+              "alpha": 100.0,
+              "pcaVarianceExplained": 0.292895
+            },
+            {
+              "fold": 2,
+              "trainSources": 23254,
+              "testSources": 5749,
+              "trainRowsAfterFamilyExclusion": 7877,
+              "testRows": 1887,
+              "alpha": 100.0,
+              "pcaVarianceExplained": 0.292727
+            },
+            {
+              "fold": 3,
+              "trainSources": 23266,
+              "testSources": 5737,
+              "trainRowsAfterFamilyExclusion": 7723,
+              "testRows": 2011,
+              "alpha": 100.0,
+              "pcaVarianceExplained": 0.293508
+            },
+            {
+              "fold": 4,
+              "trainSources": 23249,
+              "testSources": 5754,
+              "trainRowsAfterFamilyExclusion": 7812,
+              "testRows": 1957,
+              "alpha": 100.0,
+              "pcaVarianceExplained": 0.292836
+            }
+          ],
+          "multiplicity": {
+            "family": "all creator-delta channels across both validation splits",
+            "hypotheses": 12,
+            "bonferroniP": 0.024,
+            "holmP": 0.024,
+            "benjaminiHochbergQ": 0.008
+          }
+        },
+        "laterVideo": {
+          "n": 6881,
+          "r2": -0.020918,
+          "pearson": 0.043937,
+          "spearman": 0.043712,
+          "maeLog10Lift": 0.458891,
+          "nullMaeLog10Lift": 0.459098,
+          "mse": 0.33583,
+          "nullMse": 0.336262,
+          "gaussianBitsPerObservation": 0.000929,
+          "topDecileAuc": 0.538192,
+          "predictionStandardDeviation": 0.010928,
+          "actualStandardDeviation": 0.573541,
+          "sourceMacro": {
+            "sources": 234,
+            "meanSpearman": 0.091966,
+            "medianSpearman": 0.130952,
+            "standardDeviationSpearman": 0.483612,
+            "positiveFraction": 0.576923
+          },
+          "withinSourcePairwise": {
+            "sources": 1475,
+            "pairs": 6575,
+            "microAccuracy": 0.518631,
+            "equalSourceMeanAccuracy": 0.517261,
+            "equalSourceMedianAccuracy": 0.571429,
+            "positiveSourceFraction": 0.510508
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 689,
+                "meanPrediction": 0.04645,
+                "meanActualLift": 0.120368,
+                "medianActualLift": 0.046285,
+                "positiveLiftRate": 0.531205,
+                "actualTopDecileRate": 0.091437
+              },
+              {
+                "decile": 2,
+                "n": 688,
+                "meanPrediction": 0.054479,
+                "meanActualLift": 0.1311,
+                "medianActualLift": 0.053117,
+                "positiveLiftRate": 0.539244,
+                "actualTopDecileRate": 0.075581
+              },
+              {
+                "decile": 3,
+                "n": 688,
+                "meanPrediction": 0.058756,
+                "meanActualLift": 0.10722,
+                "medianActualLift": 0.067705,
+                "positiveLiftRate": 0.540698,
+                "actualTopDecileRate": 0.074128
+              },
+              {
+                "decile": 4,
+                "n": 688,
+                "meanPrediction": 0.061963,
+                "meanActualLift": 0.127045,
+                "medianActualLift": 0.067314,
+                "positiveLiftRate": 0.547965,
+                "actualTopDecileRate": 0.090116
+              },
+              {
+                "decile": 5,
+                "n": 688,
+                "meanPrediction": 0.064751,
+                "meanActualLift": 0.165168,
+                "medianActualLift": 0.100574,
+                "positiveLiftRate": 0.569767,
+                "actualTopDecileRate": 0.114826
+              },
+              {
+                "decile": 6,
+                "n": 688,
+                "meanPrediction": 0.067473,
+                "meanActualLift": 0.176908,
+                "medianActualLift": 0.064933,
+                "positiveLiftRate": 0.5625,
+                "actualTopDecileRate": 0.122093
+              },
+              {
+                "decile": 7,
+                "n": 688,
+                "meanPrediction": 0.070188,
+                "meanActualLift": 0.134227,
+                "medianActualLift": 0.060935,
+                "positiveLiftRate": 0.546512,
+                "actualTopDecileRate": 0.100291
+              },
+              {
+                "decile": 8,
+                "n": 688,
+                "meanPrediction": 0.073294,
+                "meanActualLift": 0.145541,
+                "medianActualLift": 0.078002,
+                "positiveLiftRate": 0.556686,
+                "actualTopDecileRate": 0.103198
+              },
+              {
+                "decile": 9,
+                "n": 688,
+                "meanPrediction": 0.077068,
+                "meanActualLift": 0.206676,
+                "medianActualLift": 0.132584,
+                "positiveLiftRate": 0.609012,
+                "actualTopDecileRate": 0.109012
+              },
+              {
+                "decile": 10,
+                "n": 688,
+                "meanPrediction": 0.085051,
+                "meanActualLift": 0.20035,
+                "medianActualLift": 0.118356,
+                "positiveLiftRate": 0.572674,
+                "actualTopDecileRate": 0.12064
+              }
+            ],
+            "monotonicAdjacentSteps": 6,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.079982,
+            "topPredictedDecilePositiveLiftRate": 0.572674,
+            "topPredictedDecileActualTopDecilePrecision": 0.12064,
+            "actualTopDecileRecall": 0.120464
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 4140,
+            "spearman95": {
+              "low": 0.01659,
+              "median": 0.042109,
+              "high": 0.069154
+            },
+            "gaussianBitsPerObservation95": {
+              "low": 0.000142,
+              "median": 0.000883,
+              "high": 0.001561
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -6e-05,
+              "median": 0.000195,
+              "high": 0.000448
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 1475,
+            "observedSpearman": 0.043712,
+            "spearmanOneSidedP": 0.002,
+            "spearmanTwoSidedP": 0.002,
+            "nullSpearman95": {
+              "low": 0.015356,
+              "median": 0.025105,
+              "high": 0.036924
+            },
+            "observedGaussianBitsPerObservation": 0.000929,
+            "gaussianBitsOneSidedP": 0.002,
+            "nullGaussianBits95": {
+              "low": 0.000141,
+              "median": 0.000404,
+              "high": 0.00071
+            },
+            "excessSpearmanOverNullMedian": 0.018607,
+            "excessGaussianBitsOverNullMedian": 0.000525
+          },
+          "selectedAlpha": 100.0,
+          "pcaVarianceExplained": 0.316011,
+          "trainingRowsAfterFamilyExclusion": 2596,
+          "split": "first 70% of each creator chronology trains; age model uses only training rows; creator history is frozen at the split; later 30% tests",
+          "multiplicity": {
+            "family": "all creator-delta channels across both validation splits",
+            "hypotheses": 12,
+            "bonferroniP": 0.024,
+            "holmP": 0.024,
+            "benjaminiHochbergQ": 0.008
+          }
+        }
+      },
+      "incremental": {
+        "unseenCreator": {
+          "absoluteR2": 0.055066,
+          "creatorDeltaR2": 0.00129,
+          "r2DifferenceDeltaMinusAbsolute": -0.053776,
+          "absoluteSpearman": 0.222805,
+          "creatorDeltaSpearman": 0.046193,
+          "spearmanDifferenceDeltaMinusAbsolute": -0.176612,
+          "absoluteGaussianBitsPerObservation": 0.04092,
+          "creatorDeltaGaussianBitsPerObservation": 0.000994,
+          "gaussianBitsDifferenceDeltaMinusAbsolute": -0.039926,
+          "absoluteMaeLog10Lift": 0.422518,
+          "creatorDeltaMaeLog10Lift": 0.437197,
+          "maeDifferenceDeltaMinusAbsolute": 0.014679,
+          "creatorDeltaPairwiseMicroAccuracy": 0.523212,
+          "creatorDeltaPairwiseEqualSourceAccuracy": 0.526348,
+          "absoluteSourceMacroMeanSpearman": 0.027624,
+          "creatorDeltaSourceMacroMeanSpearman": 0.041539,
+          "absoluteSourceMacroPositiveFraction": 0.509716,
+          "creatorDeltaSourceMacroPositiveFraction": 0.521674
+        },
+        "laterVideo": {
+          "absoluteR2": 0.02532,
+          "creatorDeltaR2": -0.020918,
+          "r2DifferenceDeltaMinusAbsolute": -0.046238,
+          "absoluteSpearman": 0.21428,
+          "creatorDeltaSpearman": 0.043712,
+          "spearmanDifferenceDeltaMinusAbsolute": -0.170568,
+          "absoluteGaussianBitsPerObservation": 0.034362,
+          "creatorDeltaGaussianBitsPerObservation": 0.000929,
+          "gaussianBitsDifferenceDeltaMinusAbsolute": -0.033433,
+          "absoluteMaeLog10Lift": 0.448585,
+          "creatorDeltaMaeLog10Lift": 0.458891,
+          "maeDifferenceDeltaMinusAbsolute": 0.010306,
+          "creatorDeltaPairwiseMicroAccuracy": 0.518631,
+          "creatorDeltaPairwiseEqualSourceAccuracy": 0.517261,
+          "absoluteSourceMacroMeanSpearman": 0.068727,
+          "creatorDeltaSourceMacroMeanSpearman": 0.091966,
+          "absoluteSourceMacroPositiveFraction": 0.487179,
+          "creatorDeltaSourceMacroPositiveFraction": 0.576923
+        }
+      }
+    },
+    {
+      "id": "long:visual",
+      "format": "long",
+      "modality": "visual",
+      "vectorHash": "dbdc7800c3663d4816944d5d3a97f3a4b00c99090c08a768578adcc33c74a419",
+      "support": {
+        "rows": 148,
+        "sources": 124,
+        "historyCount": {
+          "minimum": 1,
+          "median": 2.0,
+          "p90": 11.3,
+          "maximum": 55
+        }
+      },
+      "absoluteHistoryMatched": {
+        "unseenCreator": {
+          "n": 148,
+          "r2": -0.096237,
+          "pearson": 0.015923,
+          "spearman": 0.00864,
+          "maeLog10Lift": 0.460739,
+          "nullMaeLog10Lift": 0.444434,
+          "mse": 0.326305,
+          "nullMse": 0.301584,
+          "gaussianBitsPerObservation": -0.056831,
+          "topDecileAuc": 0.516291,
+          "predictionStandardDeviation": 0.178156,
+          "actualStandardDeviation": 0.545582,
+          "sourceMacro": {
+            "sources": 3,
+            "meanSpearman": 0.095238,
+            "medianSpearman": 0.085714,
+            "standardDeviationSpearman": 0.571587,
+            "positiveFraction": 0.666667
+          },
+          "withinSourcePairwise": {
+            "sources": 13,
+            "pairs": 43,
+            "microAccuracy": 0.534884,
+            "equalSourceMeanAccuracy": 0.489744,
+            "equalSourceMedianAccuracy": 0.533333,
+            "positiveSourceFraction": 0.538462
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 15,
+                "meanPrediction": -0.24814,
+                "meanActualLift": 0.027525,
+                "medianActualLift": 0.011533,
+                "positiveLiftRate": 0.533333,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 2,
+                "n": 15,
+                "meanPrediction": -0.110862,
+                "meanActualLift": 0.06349,
+                "medianActualLift": 0.019656,
+                "positiveLiftRate": 0.533333,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 3,
+                "n": 15,
+                "meanPrediction": -0.055507,
+                "meanActualLift": 0.316834,
+                "medianActualLift": 0.322977,
+                "positiveLiftRate": 0.733333,
+                "actualTopDecileRate": 0.266667
+              },
+              {
+                "decile": 4,
+                "n": 15,
+                "meanPrediction": -0.001983,
+                "meanActualLift": -0.145136,
+                "medianActualLift": -0.327977,
+                "positiveLiftRate": 0.466667,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 5,
+                "n": 15,
+                "meanPrediction": 0.058224,
+                "meanActualLift": -0.048597,
+                "medianActualLift": -0.196582,
+                "positiveLiftRate": 0.4,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 6,
+                "n": 15,
+                "meanPrediction": 0.103668,
+                "meanActualLift": -0.004584,
+                "medianActualLift": -0.059556,
+                "positiveLiftRate": 0.466667,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 7,
+                "n": 15,
+                "meanPrediction": 0.144388,
+                "meanActualLift": 0.005499,
+                "medianActualLift": 0.021493,
+                "positiveLiftRate": 0.533333,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 8,
+                "n": 15,
+                "meanPrediction": 0.19632,
+                "meanActualLift": 0.408386,
+                "medianActualLift": 0.337136,
+                "positiveLiftRate": 0.733333,
+                "actualTopDecileRate": 0.2
+              },
+              {
+                "decile": 9,
+                "n": 14,
+                "meanPrediction": 0.250269,
+                "meanActualLift": 0.042126,
+                "medianActualLift": 0.089299,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.071429
+              },
+              {
+                "decile": 10,
+                "n": 14,
+                "meanPrediction": 0.37431,
+                "meanActualLift": -0.005946,
+                "medianActualLift": -0.071533,
+                "positiveLiftRate": 0.428571,
+                "actualTopDecileRate": 0.142857
+              }
+            ],
+            "monotonicAdjacentSteps": 6,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": -0.033471,
+            "topPredictedDecilePositiveLiftRate": 0.428571,
+            "topPredictedDecileActualTopDecilePrecision": 0.142857,
+            "actualTopDecileRecall": 0.133333
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 124,
+            "spearman95": {
+              "low": -0.161461,
+              "median": 0.004112,
+              "high": 0.158265
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -0.141937,
+              "median": -0.054101,
+              "high": 0.008545
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -0.043559,
+              "median": -0.01486,
+              "high": 0.010115
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 13,
+            "observedSpearman": 0.00864,
+            "spearmanOneSidedP": 0.162,
+            "spearmanTwoSidedP": 0.628,
+            "nullSpearman95": {
+              "low": -0.039594,
+              "median": -0.00743,
+              "high": 0.019329
+            },
+            "observedGaussianBitsPerObservation": -0.056831,
+            "gaussianBitsOneSidedP": 0.1,
+            "nullGaussianBits95": {
+              "low": -0.081746,
+              "median": -0.066406,
+              "high": -0.053627
+            },
+            "excessSpearmanOverNullMedian": 0.01607,
+            "excessGaussianBitsOverNullMedian": 0.009575
+          },
+          "split": "five source-held-out folds; outcome age curve and creator history target rebuilt inside each fold",
+          "folds": [
+            {
+              "fold": 0,
+              "trainSources": 34598,
+              "testSources": 8887,
+              "trainRowsAfterFamilyExclusion": 109,
+              "testRows": 35,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.849612
+            },
+            {
+              "fold": 1,
+              "trainSources": 34676,
+              "testSources": 8809,
+              "trainRowsAfterFamilyExclusion": 111,
+              "testRows": 29,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.846155
+            },
+            {
+              "fold": 2,
+              "trainSources": 34956,
+              "testSources": 8529,
+              "trainRowsAfterFamilyExclusion": 106,
+              "testRows": 36,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.851227
+            },
+            {
+              "fold": 3,
+              "trainSources": 34923,
+              "testSources": 8562,
+              "trainRowsAfterFamilyExclusion": 116,
+              "testRows": 24,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.83471
+            },
+            {
+              "fold": 4,
+              "trainSources": 34787,
+              "testSources": 8698,
+              "trainRowsAfterFamilyExclusion": 120,
+              "testRows": 24,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.829864
+            }
+          ]
+        },
+        "laterVideo": {
+          "n": 69,
+          "r2": -0.209382,
+          "pearson": -0.141516,
+          "spearman": -0.122835,
+          "maeLog10Lift": 0.517845,
+          "nullMaeLog10Lift": 0.464756,
+          "mse": 0.389408,
+          "nullMse": 0.32277,
+          "gaussianBitsPerObservation": -0.135388,
+          "topDecileAuc": 0.654378,
+          "predictionStandardDeviation": 0.178013,
+          "actualStandardDeviation": 0.567441,
+          "sourceMacro": {
+            "sources": 0,
+            "meanSpearman": null,
+            "medianSpearman": null,
+            "standardDeviationSpearman": null,
+            "positiveFraction": null
+          },
+          "withinSourcePairwise": {
+            "sources": 2,
+            "pairs": 2,
+            "microAccuracy": 1.0,
+            "equalSourceMeanAccuracy": 1.0,
+            "equalSourceMedianAccuracy": 1.0,
+            "positiveSourceFraction": 1.0
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 7,
+                "meanPrediction": -0.167986,
+                "meanActualLift": 0.378371,
+                "medianActualLift": 0.358492,
+                "positiveLiftRate": 0.714286,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 2,
+                "n": 7,
+                "meanPrediction": -0.041925,
+                "meanActualLift": 0.463078,
+                "medianActualLift": 0.76547,
+                "positiveLiftRate": 0.857143,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 3,
+                "n": 7,
+                "meanPrediction": -0.001602,
+                "meanActualLift": 0.114223,
+                "medianActualLift": 0.119405,
+                "positiveLiftRate": 0.857143,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 4,
+                "n": 7,
+                "meanPrediction": 0.090834,
+                "meanActualLift": 0.283241,
+                "medianActualLift": 0.40167,
+                "positiveLiftRate": 0.714286,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 5,
+                "n": 7,
+                "meanPrediction": 0.151491,
+                "meanActualLift": 0.100609,
+                "medianActualLift": -0.084204,
+                "positiveLiftRate": 0.285714,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 6,
+                "n": 7,
+                "meanPrediction": 0.185725,
+                "meanActualLift": 0.063348,
+                "medianActualLift": 0.175699,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 7,
+                "n": 7,
+                "meanPrediction": 0.217583,
+                "meanActualLift": 0.162276,
+                "medianActualLift": 0.349622,
+                "positiveLiftRate": 0.714286,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 8,
+                "n": 7,
+                "meanPrediction": 0.278493,
+                "meanActualLift": 0.636796,
+                "medianActualLift": 0.621761,
+                "positiveLiftRate": 0.714286,
+                "actualTopDecileRate": 0.285714
+              },
+              {
+                "decile": 9,
+                "n": 7,
+                "meanPrediction": 0.34431,
+                "meanActualLift": -0.029736,
+                "medianActualLift": -0.273007,
+                "positiveLiftRate": 0.428571,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 10,
+                "n": 6,
+                "meanPrediction": 0.451982,
+                "meanActualLift": 0.122595,
+                "medianActualLift": -0.098545,
+                "positiveLiftRate": 0.5,
+                "actualTopDecileRate": 0.166667
+              }
+            ],
+            "monotonicAdjacentSteps": 5,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": -0.255776,
+            "topPredictedDecilePositiveLiftRate": 0.5,
+            "topPredictedDecileActualTopDecilePrecision": 0.166667,
+            "actualTopDecileRecall": 0.142857
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 67,
+            "spearman95": {
+              "low": -0.369767,
+              "median": -0.122824,
+              "high": 0.140834
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -0.243179,
+              "median": -0.127452,
+              "high": -0.037857
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -0.095545,
+              "median": -0.051628,
+              "high": -0.013352
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 2,
+            "observedSpearman": -0.122835,
+            "spearmanOneSidedP": 0.266,
+            "spearmanTwoSidedP": 1.0,
+            "nullSpearman95": {
+              "low": -0.125575,
+              "median": -0.124699,
+              "high": -0.122835
+            },
+            "observedGaussianBitsPerObservation": -0.135388,
+            "gaussianBitsOneSidedP": 0.266,
+            "nullGaussianBits95": {
+              "low": -0.137367,
+              "median": -0.136989,
+              "high": -0.135388
+            },
+            "excessSpearmanOverNullMedian": 0.001863,
+            "excessGaussianBitsOverNullMedian": 0.001601
+          },
+          "selectedAlpha": 0.1,
+          "pcaVarianceExplained": 0.990574,
+          "trainingRowsAfterFamilyExclusion": 69,
+          "split": "first 70% of each creator chronology trains; age model uses only training rows; creator history is frozen at the split; later 30% tests"
+        }
+      },
+      "creatorDelta": {
+        "unseenCreator": {
+          "n": 148,
+          "r2": -0.049038,
+          "pearson": 0.098486,
+          "spearman": 0.114479,
+          "maeLog10Lift": 0.44336,
+          "nullMaeLog10Lift": 0.444434,
+          "mse": 0.312256,
+          "nullMse": 0.301584,
+          "gaussianBitsPerObservation": -0.025084,
+          "topDecileAuc": 0.498747,
+          "predictionStandardDeviation": 0.18581,
+          "actualStandardDeviation": 0.545582,
+          "sourceMacro": {
+            "sources": 3,
+            "meanSpearman": 0.104762,
+            "medianSpearman": 0.2,
+            "standardDeviationSpearman": 0.540765,
+            "positiveFraction": 0.666667
+          },
+          "withinSourcePairwise": {
+            "sources": 13,
+            "pairs": 43,
+            "microAccuracy": 0.511628,
+            "equalSourceMeanAccuracy": 0.325641,
+            "equalSourceMedianAccuracy": 0.333333,
+            "positiveSourceFraction": 0.307692
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 15,
+                "meanPrediction": -0.252255,
+                "meanActualLift": 0.115857,
+                "medianActualLift": 0.130935,
+                "positiveLiftRate": 0.533333,
+                "actualTopDecileRate": 0.266667
+              },
+              {
+                "decile": 2,
+                "n": 15,
+                "meanPrediction": -0.146739,
+                "meanActualLift": 0.080204,
+                "medianActualLift": 0.173632,
+                "positiveLiftRate": 0.533333,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 3,
+                "n": 15,
+                "meanPrediction": -0.07853,
+                "meanActualLift": -0.17413,
+                "medianActualLift": -0.247161,
+                "positiveLiftRate": 0.333333,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 4,
+                "n": 15,
+                "meanPrediction": 0.00148,
+                "meanActualLift": -0.009555,
+                "medianActualLift": -0.056484,
+                "positiveLiftRate": 0.466667,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 5,
+                "n": 15,
+                "meanPrediction": 0.057969,
+                "meanActualLift": -0.05559,
+                "medianActualLift": -0.134134,
+                "positiveLiftRate": 0.4,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 6,
+                "n": 15,
+                "meanPrediction": 0.091699,
+                "meanActualLift": 0.10521,
+                "medianActualLift": 0.219965,
+                "positiveLiftRate": 0.666667,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 7,
+                "n": 15,
+                "meanPrediction": 0.124876,
+                "meanActualLift": 0.035276,
+                "medianActualLift": 0.021493,
+                "positiveLiftRate": 0.533333,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 8,
+                "n": 15,
+                "meanPrediction": 0.191323,
+                "meanActualLift": 0.138448,
+                "medianActualLift": 0.066225,
+                "positiveLiftRate": 0.533333,
+                "actualTopDecileRate": 0.133333
+              },
+              {
+                "decile": 9,
+                "n": 14,
+                "meanPrediction": 0.249086,
+                "meanActualLift": 0.322902,
+                "medianActualLift": 0.36391,
+                "positiveLiftRate": 0.857143,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 10,
+                "n": 14,
+                "meanPrediction": 0.399984,
+                "meanActualLift": 0.128668,
+                "medianActualLift": 0.126641,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.142857
+              }
+            ],
+            "monotonicAdjacentSteps": 4,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.012812,
+            "topPredictedDecilePositiveLiftRate": 0.571429,
+            "topPredictedDecileActualTopDecilePrecision": 0.142857,
+            "actualTopDecileRecall": 0.133333
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 124,
+            "spearman95": {
+              "low": -0.063713,
+              "median": 0.109216,
+              "high": 0.285033
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -0.102197,
+              "median": -0.029098,
+              "high": 0.053392
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -0.024978,
+              "median": 0.000789,
+              "high": 0.028475
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 13,
+            "observedSpearman": 0.114479,
+            "spearmanOneSidedP": 0.548,
+            "spearmanTwoSidedP": 0.548,
+            "nullSpearman95": {
+              "low": 0.074349,
+              "median": 0.117744,
+              "high": 0.162578
+            },
+            "observedGaussianBitsPerObservation": -0.025084,
+            "gaussianBitsOneSidedP": 0.634,
+            "nullGaussianBits95": {
+              "low": -0.039233,
+              "median": -0.021841,
+              "high": -0.003725
+            },
+            "excessSpearmanOverNullMedian": -0.003265,
+            "excessGaussianBitsOverNullMedian": -0.003244
+          },
+          "split": "five source-held-out folds; outcome age curve and creator history target rebuilt inside each fold",
+          "folds": [
+            {
+              "fold": 0,
+              "trainSources": 34598,
+              "testSources": 8887,
+              "trainRowsAfterFamilyExclusion": 109,
+              "testRows": 35,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.796185
+            },
+            {
+              "fold": 1,
+              "trainSources": 34676,
+              "testSources": 8809,
+              "trainRowsAfterFamilyExclusion": 111,
+              "testRows": 29,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.794948
+            },
+            {
+              "fold": 2,
+              "trainSources": 34956,
+              "testSources": 8529,
+              "trainRowsAfterFamilyExclusion": 106,
+              "testRows": 36,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.800997
+            },
+            {
+              "fold": 3,
+              "trainSources": 34923,
+              "testSources": 8562,
+              "trainRowsAfterFamilyExclusion": 116,
+              "testRows": 24,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.775873
+            },
+            {
+              "fold": 4,
+              "trainSources": 34787,
+              "testSources": 8698,
+              "trainRowsAfterFamilyExclusion": 120,
+              "testRows": 24,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.769668
+            }
+          ],
+          "multiplicity": {
+            "family": "all creator-delta channels across both validation splits",
+            "hypotheses": 12,
+            "bonferroniP": 1.0,
+            "holmP": 1.0,
+            "benjaminiHochbergQ": 0.592
+          }
+        },
+        "laterVideo": {
+          "n": 69,
+          "r2": 0.051512,
+          "pearson": 0.240367,
+          "spearman": 0.234344,
+          "maeLog10Lift": 0.451967,
+          "nullMaeLog10Lift": 0.464756,
+          "mse": 0.305403,
+          "nullMse": 0.32277,
+          "gaussianBitsPerObservation": 0.039897,
+          "topDecileAuc": 0.66129,
+          "predictionStandardDeviation": 0.180278,
+          "actualStandardDeviation": 0.567441,
+          "sourceMacro": {
+            "sources": 0,
+            "meanSpearman": null,
+            "medianSpearman": null,
+            "standardDeviationSpearman": null,
+            "positiveFraction": null
+          },
+          "withinSourcePairwise": {
+            "sources": 2,
+            "pairs": 2,
+            "microAccuracy": 0.5,
+            "equalSourceMeanAccuracy": 0.5,
+            "equalSourceMedianAccuracy": 0.5,
+            "positiveSourceFraction": 0.5
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 7,
+                "meanPrediction": -0.073503,
+                "meanActualLift": 0.127291,
+                "medianActualLift": 0.324779,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 2,
+                "n": 7,
+                "meanPrediction": 0.089127,
+                "meanActualLift": 0.065271,
+                "medianActualLift": 0.043039,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 3,
+                "n": 7,
+                "meanPrediction": 0.138184,
+                "meanActualLift": 0.020926,
+                "medianActualLift": 0.170003,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 4,
+                "n": 7,
+                "meanPrediction": 0.174266,
+                "meanActualLift": 0.23773,
+                "medianActualLift": 0.218894,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 5,
+                "n": 7,
+                "meanPrediction": 0.202716,
+                "meanActualLift": 0.107269,
+                "medianActualLift": 0.041781,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 6,
+                "n": 7,
+                "meanPrediction": 0.241078,
+                "meanActualLift": 0.225473,
+                "medianActualLift": 0.274894,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 7,
+                "n": 7,
+                "meanPrediction": 0.281834,
+                "meanActualLift": 0.113547,
+                "medianActualLift": 0.405124,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 8,
+                "n": 7,
+                "meanPrediction": 0.352305,
+                "meanActualLift": 0.396053,
+                "medianActualLift": 0.454184,
+                "positiveLiftRate": 0.714286,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 9,
+                "n": 7,
+                "meanPrediction": 0.450827,
+                "meanActualLift": 0.481587,
+                "medianActualLift": 0.40167,
+                "positiveLiftRate": 0.714286,
+                "actualTopDecileRate": 0.285714
+              },
+              {
+                "decile": 10,
+                "n": 6,
+                "meanPrediction": 0.600426,
+                "meanActualLift": 0.585828,
+                "medianActualLift": 0.505971,
+                "positiveLiftRate": 1.0,
+                "actualTopDecileRate": 0.166667
+              }
+            ],
+            "monotonicAdjacentSteps": 5,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.458537,
+            "topPredictedDecilePositiveLiftRate": 1.0,
+            "topPredictedDecileActualTopDecilePrecision": 0.166667,
+            "actualTopDecileRecall": 0.142857
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 67,
+            "spearman95": {
+              "low": -0.007591,
+              "median": 0.241046,
+              "high": 0.454507
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -0.067902,
+              "median": 0.046591,
+              "high": 0.143761
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -0.020197,
+              "median": 0.013701,
+              "high": 0.053946
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 2,
+            "observedSpearman": 0.234344,
+            "spearmanOneSidedP": 0.496,
+            "spearmanTwoSidedP": 0.496,
+            "nullSpearman95": {
+              "low": 0.223785,
+              "median": 0.227731,
+              "high": 0.23829
+            },
+            "observedGaussianBitsPerObservation": 0.039897,
+            "gaussianBitsOneSidedP": 0.496,
+            "nullGaussianBits95": {
+              "low": 0.023664,
+              "median": 0.029383,
+              "high": 0.045746
+            },
+            "excessSpearmanOverNullMedian": 0.006613,
+            "excessGaussianBitsOverNullMedian": 0.010514
+          },
+          "selectedAlpha": 0.1,
+          "pcaVarianceExplained": 0.985959,
+          "trainingRowsAfterFamilyExclusion": 69,
+          "split": "first 70% of each creator chronology trains; age model uses only training rows; creator history is frozen at the split; later 30% tests",
+          "multiplicity": {
+            "family": "all creator-delta channels across both validation splits",
+            "hypotheses": 12,
+            "bonferroniP": 1.0,
+            "holmP": 1.0,
+            "benjaminiHochbergQ": 0.592
+          }
+        }
+      },
+      "incremental": {
+        "unseenCreator": {
+          "absoluteR2": -0.096237,
+          "creatorDeltaR2": -0.049038,
+          "r2DifferenceDeltaMinusAbsolute": 0.047199,
+          "absoluteSpearman": 0.00864,
+          "creatorDeltaSpearman": 0.114479,
+          "spearmanDifferenceDeltaMinusAbsolute": 0.105839,
+          "absoluteGaussianBitsPerObservation": -0.056831,
+          "creatorDeltaGaussianBitsPerObservation": -0.025084,
+          "gaussianBitsDifferenceDeltaMinusAbsolute": 0.031747,
+          "absoluteMaeLog10Lift": 0.460739,
+          "creatorDeltaMaeLog10Lift": 0.44336,
+          "maeDifferenceDeltaMinusAbsolute": -0.017379,
+          "creatorDeltaPairwiseMicroAccuracy": 0.511628,
+          "creatorDeltaPairwiseEqualSourceAccuracy": 0.325641,
+          "absoluteSourceMacroMeanSpearman": 0.095238,
+          "creatorDeltaSourceMacroMeanSpearman": 0.104762,
+          "absoluteSourceMacroPositiveFraction": 0.666667,
+          "creatorDeltaSourceMacroPositiveFraction": 0.666667
+        },
+        "laterVideo": {
+          "absoluteR2": -0.209382,
+          "creatorDeltaR2": 0.051512,
+          "r2DifferenceDeltaMinusAbsolute": 0.260894,
+          "absoluteSpearman": -0.122835,
+          "creatorDeltaSpearman": 0.234344,
+          "spearmanDifferenceDeltaMinusAbsolute": 0.357179,
+          "absoluteGaussianBitsPerObservation": -0.135388,
+          "creatorDeltaGaussianBitsPerObservation": 0.039897,
+          "gaussianBitsDifferenceDeltaMinusAbsolute": 0.175285,
+          "absoluteMaeLog10Lift": 0.517845,
+          "creatorDeltaMaeLog10Lift": 0.451967,
+          "maeDifferenceDeltaMinusAbsolute": -0.065878,
+          "creatorDeltaPairwiseMicroAccuracy": 0.5,
+          "creatorDeltaPairwiseEqualSourceAccuracy": 0.5,
+          "absoluteSourceMacroMeanSpearman": null,
+          "creatorDeltaSourceMacroMeanSpearman": null,
+          "absoluteSourceMacroPositiveFraction": null,
+          "creatorDeltaSourceMacroPositiveFraction": null
+        }
+      }
+    },
+    {
+      "id": "long:text",
+      "format": "long",
+      "modality": "text",
+      "vectorHash": "415ae2da7208719d8f7de40306952c246ad97fa1edcf78de5b08003015fcf351",
+      "support": {
+        "rows": 148,
+        "sources": 124,
+        "historyCount": {
+          "minimum": 1,
+          "median": 2.0,
+          "p90": 11.3,
+          "maximum": 55
+        }
+      },
+      "absoluteHistoryMatched": {
+        "unseenCreator": {
+          "n": 148,
+          "r2": 0.029473,
+          "pearson": 0.23949,
+          "spearman": 0.24636,
+          "maeLog10Lift": 0.437241,
+          "nullMaeLog10Lift": 0.444434,
+          "mse": 0.288886,
+          "nullMse": 0.301584,
+          "gaussianBitsPerObservation": 0.031029,
+          "topDecileAuc": 0.671679,
+          "predictionStandardDeviation": 0.220006,
+          "actualStandardDeviation": 0.545582,
+          "sourceMacro": {
+            "sources": 3,
+            "meanSpearman": 0.4,
+            "medianSpearman": 0.4,
+            "standardDeviationSpearman": 0.163299,
+            "positiveFraction": 1.0
+          },
+          "withinSourcePairwise": {
+            "sources": 13,
+            "pairs": 43,
+            "microAccuracy": 0.651163,
+            "equalSourceMeanAccuracy": 0.658974,
+            "equalSourceMedianAccuracy": 0.733333,
+            "positiveSourceFraction": 0.615385
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 15,
+                "meanPrediction": -0.315574,
+                "meanActualLift": -0.066582,
+                "medianActualLift": 0.056476,
+                "positiveLiftRate": 0.6,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 2,
+                "n": 15,
+                "meanPrediction": -0.184934,
+                "meanActualLift": -0.186234,
+                "medianActualLift": -0.368482,
+                "positiveLiftRate": 0.333333,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 3,
+                "n": 15,
+                "meanPrediction": -0.098713,
+                "meanActualLift": -0.115798,
+                "medianActualLift": -0.053225,
+                "positiveLiftRate": 0.466667,
+                "actualTopDecileRate": 0.133333
+              },
+              {
+                "decile": 4,
+                "n": 15,
+                "meanPrediction": -0.049317,
+                "meanActualLift": 0.018151,
+                "medianActualLift": -0.033032,
+                "positiveLiftRate": 0.466667,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 5,
+                "n": 15,
+                "meanPrediction": 0.011631,
+                "meanActualLift": 0.028923,
+                "medianActualLift": 0.019656,
+                "positiveLiftRate": 0.533333,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 6,
+                "n": 15,
+                "meanPrediction": 0.082617,
+                "meanActualLift": 0.095995,
+                "medianActualLift": -0.134134,
+                "positiveLiftRate": 0.4,
+                "actualTopDecileRate": 0.133333
+              },
+              {
+                "decile": 7,
+                "n": 15,
+                "meanPrediction": 0.145086,
+                "meanActualLift": 0.240898,
+                "medianActualLift": 0.223424,
+                "positiveLiftRate": 0.6,
+                "actualTopDecileRate": 0.2
+              },
+              {
+                "decile": 8,
+                "n": 15,
+                "meanPrediction": 0.196262,
+                "meanActualLift": 0.219608,
+                "medianActualLift": 0.337136,
+                "positiveLiftRate": 0.6,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 9,
+                "n": 14,
+                "meanPrediction": 0.277505,
+                "meanActualLift": 0.222367,
+                "medianActualLift": 0.323624,
+                "positiveLiftRate": 0.785714,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 10,
+                "n": 14,
+                "meanPrediction": 0.466613,
+                "meanActualLift": 0.230016,
+                "medianActualLift": 0.227961,
+                "positiveLiftRate": 0.642857,
+                "actualTopDecileRate": 0.214286
+              }
+            ],
+            "monotonicAdjacentSteps": 7,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.296598,
+            "topPredictedDecilePositiveLiftRate": 0.642857,
+            "topPredictedDecileActualTopDecilePrecision": 0.214286,
+            "actualTopDecileRecall": 0.2
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 124,
+            "spearman95": {
+              "low": 0.085535,
+              "median": 0.246366,
+              "high": 0.403585
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -0.097046,
+              "median": 0.031907,
+              "high": 0.134054
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -0.026877,
+              "median": 0.007716,
+              "high": 0.04428
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 13,
+            "observedSpearman": 0.24636,
+            "spearmanOneSidedP": 0.09,
+            "spearmanTwoSidedP": 0.09,
+            "nullSpearman95": {
+              "low": 0.213416,
+              "median": 0.23186,
+              "high": 0.251453
+            },
+            "observedGaussianBitsPerObservation": 0.031029,
+            "gaussianBitsOneSidedP": 0.046,
+            "nullGaussianBits95": {
+              "low": 0.009724,
+              "median": 0.020962,
+              "high": 0.033255
+            },
+            "excessSpearmanOverNullMedian": 0.0145,
+            "excessGaussianBitsOverNullMedian": 0.010067
+          },
+          "split": "five source-held-out folds; outcome age curve and creator history target rebuilt inside each fold",
+          "folds": [
+            {
+              "fold": 0,
+              "trainSources": 34598,
+              "testSources": 8887,
+              "trainRowsAfterFamilyExclusion": 109,
+              "testRows": 35,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.891484
+            },
+            {
+              "fold": 1,
+              "trainSources": 34676,
+              "testSources": 8809,
+              "trainRowsAfterFamilyExclusion": 111,
+              "testRows": 29,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.879204
+            },
+            {
+              "fold": 2,
+              "trainSources": 34956,
+              "testSources": 8529,
+              "trainRowsAfterFamilyExclusion": 106,
+              "testRows": 36,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.890519
+            },
+            {
+              "fold": 3,
+              "trainSources": 34923,
+              "testSources": 8562,
+              "trainRowsAfterFamilyExclusion": 116,
+              "testRows": 24,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.870779
+            },
+            {
+              "fold": 4,
+              "trainSources": 34787,
+              "testSources": 8698,
+              "trainRowsAfterFamilyExclusion": 120,
+              "testRows": 24,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.874991
+            }
+          ]
+        },
+        "laterVideo": {
+          "n": 69,
+          "r2": -0.109355,
+          "pearson": 0.070486,
+          "spearman": -0.000402,
+          "maeLog10Lift": 0.489612,
+          "nullMaeLog10Lift": 0.464756,
+          "mse": 0.3572,
+          "nullMse": 0.32277,
+          "gaussianBitsPerObservation": -0.073113,
+          "topDecileAuc": 0.665899,
+          "predictionStandardDeviation": 0.214164,
+          "actualStandardDeviation": 0.567441,
+          "sourceMacro": {
+            "sources": 0,
+            "meanSpearman": null,
+            "medianSpearman": null,
+            "standardDeviationSpearman": null,
+            "positiveFraction": null
+          },
+          "withinSourcePairwise": {
+            "sources": 2,
+            "pairs": 2,
+            "microAccuracy": 1.0,
+            "equalSourceMeanAccuracy": 1.0,
+            "equalSourceMedianAccuracy": 1.0,
+            "positiveSourceFraction": 1.0
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 7,
+                "meanPrediction": -0.222711,
+                "meanActualLift": 0.100539,
+                "medianActualLift": 0.175699,
+                "positiveLiftRate": 0.714286,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 2,
+                "n": 7,
+                "meanPrediction": -0.057195,
+                "meanActualLift": 0.491415,
+                "medianActualLift": 0.740771,
+                "positiveLiftRate": 0.857143,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 3,
+                "n": 7,
+                "meanPrediction": 0.017537,
+                "meanActualLift": 0.172967,
+                "medianActualLift": 0.023856,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 4,
+                "n": 7,
+                "meanPrediction": 0.066951,
+                "meanActualLift": 0.407185,
+                "medianActualLift": 0.324779,
+                "positiveLiftRate": 0.857143,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 5,
+                "n": 7,
+                "meanPrediction": 0.116453,
+                "meanActualLift": 0.148733,
+                "medianActualLift": 0.349622,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 6,
+                "n": 7,
+                "meanPrediction": 0.17154,
+                "meanActualLift": 0.12665,
+                "medianActualLift": -0.083186,
+                "positiveLiftRate": 0.428571,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 7,
+                "n": 7,
+                "meanPrediction": 0.215061,
+                "meanActualLift": 0.019933,
+                "medianActualLift": -0.055562,
+                "positiveLiftRate": 0.428571,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 8,
+                "n": 7,
+                "meanPrediction": 0.33986,
+                "meanActualLift": 0.186426,
+                "medianActualLift": 0.461733,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 9,
+                "n": 7,
+                "meanPrediction": 0.38304,
+                "meanActualLift": 0.335881,
+                "medianActualLift": 0.400788,
+                "positiveLiftRate": 0.857143,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 10,
+                "n": 6,
+                "meanPrediction": 0.529054,
+                "meanActualLift": 0.335485,
+                "medianActualLift": 0.313612,
+                "positiveLiftRate": 0.5,
+                "actualTopDecileRate": 0.5
+              }
+            ],
+            "monotonicAdjacentSteps": 4,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.234946,
+            "topPredictedDecilePositiveLiftRate": 0.5,
+            "topPredictedDecileActualTopDecilePrecision": 0.5,
+            "actualTopDecileRecall": 0.428571
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 67,
+            "spearman95": {
+              "low": -0.24431,
+              "median": 0.00566,
+              "high": 0.272378
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -0.209281,
+              "median": -0.067312,
+              "high": 0.079656
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -0.072136,
+              "median": -0.021605,
+              "high": 0.02712
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 2,
+            "observedSpearman": -0.000402,
+            "spearmanOneSidedP": 0.266,
+            "spearmanTwoSidedP": 1.0,
+            "nullSpearman95": {
+              "low": -0.024845,
+              "median": -0.020899,
+              "high": -0.000402
+            },
+            "observedGaussianBitsPerObservation": -0.073113,
+            "gaussianBitsOneSidedP": 0.266,
+            "nullGaussianBits95": {
+              "low": -0.095326,
+              "median": -0.09371,
+              "high": -0.073113
+            },
+            "excessSpearmanOverNullMedian": 0.020497,
+            "excessGaussianBitsOverNullMedian": 0.020597
+          },
+          "selectedAlpha": 0.1,
+          "pcaVarianceExplained": 0.993337,
+          "trainingRowsAfterFamilyExclusion": 69,
+          "split": "first 70% of each creator chronology trains; age model uses only training rows; creator history is frozen at the split; later 30% tests"
+        }
+      },
+      "creatorDelta": {
+        "unseenCreator": {
+          "n": 148,
+          "r2": -0.075033,
+          "pearson": 0.094298,
+          "spearman": 0.088899,
+          "maeLog10Lift": 0.462937,
+          "nullMaeLog10Lift": 0.444434,
+          "mse": 0.319994,
+          "nullMse": 0.301584,
+          "gaussianBitsPerObservation": -0.042742,
+          "topDecileAuc": 0.578446,
+          "predictionStandardDeviation": 0.20936,
+          "actualStandardDeviation": 0.545582,
+          "sourceMacro": {
+            "sources": 3,
+            "meanSpearman": -0.028571,
+            "medianSpearman": -0.085714,
+            "standardDeviationSpearman": 0.168224,
+            "positiveFraction": 0.333333
+          },
+          "withinSourcePairwise": {
+            "sources": 13,
+            "pairs": 43,
+            "microAccuracy": 0.55814,
+            "equalSourceMeanAccuracy": 0.579487,
+            "equalSourceMedianAccuracy": 0.533333,
+            "positiveSourceFraction": 0.538462
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 15,
+                "meanPrediction": -0.29654,
+                "meanActualLift": 0.195071,
+                "medianActualLift": 0.286316,
+                "positiveLiftRate": 0.666667,
+                "actualTopDecileRate": 0.133333
+              },
+              {
+                "decile": 2,
+                "n": 15,
+                "meanPrediction": -0.150029,
+                "meanActualLift": -0.089592,
+                "medianActualLift": -0.033032,
+                "positiveLiftRate": 0.466667,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 3,
+                "n": 15,
+                "meanPrediction": -0.093775,
+                "meanActualLift": -0.107321,
+                "medianActualLift": -0.3435,
+                "positiveLiftRate": 0.333333,
+                "actualTopDecileRate": 0.133333
+              },
+              {
+                "decile": 4,
+                "n": 15,
+                "meanPrediction": -0.019266,
+                "meanActualLift": -0.023304,
+                "medianActualLift": -0.059556,
+                "positiveLiftRate": 0.466667,
+                "actualTopDecileRate": 0.133333
+              },
+              {
+                "decile": 5,
+                "n": 15,
+                "meanPrediction": 0.021774,
+                "meanActualLift": -0.022244,
+                "medianActualLift": 0.067521,
+                "positiveLiftRate": 0.533333,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 6,
+                "n": 15,
+                "meanPrediction": 0.083831,
+                "meanActualLift": 0.152084,
+                "medianActualLift": 0.315247,
+                "positiveLiftRate": 0.666667,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 7,
+                "n": 15,
+                "meanPrediction": 0.157949,
+                "meanActualLift": 0.197689,
+                "medianActualLift": 0.173632,
+                "positiveLiftRate": 0.733333,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 8,
+                "n": 15,
+                "meanPrediction": 0.2176,
+                "meanActualLift": 0.003508,
+                "medianActualLift": -0.053225,
+                "positiveLiftRate": 0.466667,
+                "actualTopDecileRate": 0.133333
+              },
+              {
+                "decile": 9,
+                "n": 14,
+                "meanPrediction": 0.298368,
+                "meanActualLift": 0.307506,
+                "medianActualLift": 0.198284,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.285714
+              },
+              {
+                "decile": 10,
+                "n": 14,
+                "meanPrediction": 0.419043,
+                "meanActualLift": 0.068878,
+                "medianActualLift": 0.017005,
+                "positiveLiftRate": 0.5,
+                "actualTopDecileRate": 0.071429
+              }
+            ],
+            "monotonicAdjacentSteps": 5,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": -0.126193,
+            "topPredictedDecilePositiveLiftRate": 0.5,
+            "topPredictedDecileActualTopDecilePrecision": 0.071429,
+            "actualTopDecileRecall": 0.066667
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 124,
+            "spearman95": {
+              "low": -0.078056,
+              "median": 0.075439,
+              "high": 0.244439
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -0.126308,
+              "median": -0.047419,
+              "high": 0.035655
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -0.053383,
+              "median": -0.021319,
+              "high": 0.008889
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 13,
+            "observedSpearman": 0.088899,
+            "spearmanOneSidedP": 0.162,
+            "spearmanTwoSidedP": 0.162,
+            "nullSpearman95": {
+              "low": 0.029066,
+              "median": 0.068439,
+              "high": 0.106878
+            },
+            "observedGaussianBitsPerObservation": -0.042742,
+            "gaussianBitsOneSidedP": 0.074,
+            "nullGaussianBits95": {
+              "low": -0.079615,
+              "median": -0.058854,
+              "high": -0.036244
+            },
+            "excessSpearmanOverNullMedian": 0.02046,
+            "excessGaussianBitsOverNullMedian": 0.016112
+          },
+          "split": "five source-held-out folds; outcome age curve and creator history target rebuilt inside each fold",
+          "folds": [
+            {
+              "fold": 0,
+              "trainSources": 34598,
+              "testSources": 8887,
+              "trainRowsAfterFamilyExclusion": 109,
+              "testRows": 35,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.818563
+            },
+            {
+              "fold": 1,
+              "trainSources": 34676,
+              "testSources": 8809,
+              "trainRowsAfterFamilyExclusion": 111,
+              "testRows": 29,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.812788
+            },
+            {
+              "fold": 2,
+              "trainSources": 34956,
+              "testSources": 8529,
+              "trainRowsAfterFamilyExclusion": 106,
+              "testRows": 36,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.821349
+            },
+            {
+              "fold": 3,
+              "trainSources": 34923,
+              "testSources": 8562,
+              "trainRowsAfterFamilyExclusion": 116,
+              "testRows": 24,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.799596
+            },
+            {
+              "fold": 4,
+              "trainSources": 34787,
+              "testSources": 8698,
+              "trainRowsAfterFamilyExclusion": 120,
+              "testRows": 24,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.799262
+            }
+          ],
+          "multiplicity": {
+            "family": "all creator-delta channels across both validation splits",
+            "hypotheses": 12,
+            "bonferroniP": 1.0,
+            "holmP": 1.0,
+            "benjaminiHochbergQ": 0.332
+          }
+        },
+        "laterVideo": {
+          "n": 69,
+          "r2": -0.020382,
+          "pearson": 0.139462,
+          "spearman": 0.136829,
+          "maeLog10Lift": 0.453593,
+          "nullMaeLog10Lift": 0.464756,
+          "mse": 0.328552,
+          "nullMse": 0.32277,
+          "gaussianBitsPerObservation": -0.012808,
+          "topDecileAuc": 0.506912,
+          "predictionStandardDeviation": 0.192251,
+          "actualStandardDeviation": 0.567441,
+          "sourceMacro": {
+            "sources": 0,
+            "meanSpearman": null,
+            "medianSpearman": null,
+            "standardDeviationSpearman": null,
+            "positiveFraction": null
+          },
+          "withinSourcePairwise": {
+            "sources": 2,
+            "pairs": 2,
+            "microAccuracy": 0.5,
+            "equalSourceMeanAccuracy": 0.5,
+            "equalSourceMedianAccuracy": 0.5,
+            "positiveSourceFraction": 0.5
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 7,
+                "meanPrediction": -0.085232,
+                "meanActualLift": 0.153357,
+                "medianActualLift": 0.102092,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 2,
+                "n": 7,
+                "meanPrediction": -0.015845,
+                "meanActualLift": 0.478144,
+                "medianActualLift": 0.274894,
+                "positiveLiftRate": 0.857143,
+                "actualTopDecileRate": 0.285714
+              },
+              {
+                "decile": 3,
+                "n": 7,
+                "meanPrediction": 0.077005,
+                "meanActualLift": -0.020361,
+                "medianActualLift": 0.043039,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 4,
+                "n": 7,
+                "meanPrediction": 0.158408,
+                "meanActualLift": 0.031982,
+                "medianActualLift": -0.084868,
+                "positiveLiftRate": 0.285714,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 5,
+                "n": 7,
+                "meanPrediction": 0.208252,
+                "meanActualLift": 0.231034,
+                "medianActualLift": 0.344134,
+                "positiveLiftRate": 0.714286,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 6,
+                "n": 7,
+                "meanPrediction": 0.270324,
+                "meanActualLift": 0.345336,
+                "medianActualLift": 0.418177,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 7,
+                "n": 7,
+                "meanPrediction": 0.322024,
+                "meanActualLift": 0.322205,
+                "medianActualLift": 0.461733,
+                "positiveLiftRate": 0.714286,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 8,
+                "n": 7,
+                "meanPrediction": 0.386858,
+                "meanActualLift": -0.172339,
+                "medianActualLift": -0.055562,
+                "positiveLiftRate": 0.428571,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 9,
+                "n": 7,
+                "meanPrediction": 0.430249,
+                "meanActualLift": 0.415267,
+                "medianActualLift": 0.400788,
+                "positiveLiftRate": 0.857143,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 10,
+                "n": 6,
+                "meanPrediction": 0.549395,
+                "meanActualLift": 0.574772,
+                "medianActualLift": 0.477666,
+                "positiveLiftRate": 0.833333,
+                "actualTopDecileRate": 0.166667
+              }
+            ],
+            "monotonicAdjacentSteps": 6,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.421415,
+            "topPredictedDecilePositiveLiftRate": 0.833333,
+            "topPredictedDecileActualTopDecilePrecision": 0.166667,
+            "actualTopDecileRecall": 0.142857
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 67,
+            "spearman95": {
+              "low": -0.109084,
+              "median": 0.144237,
+              "high": 0.370867
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -0.126473,
+              "median": -0.009358,
+              "high": 0.142573
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -0.029512,
+              "median": 0.013758,
+              "high": 0.053837
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 2,
+            "observedSpearman": 0.136829,
+            "spearmanOneSidedP": 0.496,
+            "spearmanTwoSidedP": 0.496,
+            "nullSpearman95": {
+              "low": 0.132481,
+              "median": 0.13555,
+              "high": 0.139898
+            },
+            "observedGaussianBitsPerObservation": -0.012808,
+            "gaussianBitsOneSidedP": 0.496,
+            "nullGaussianBits95": {
+              "low": -0.017498,
+              "median": -0.015769,
+              "high": -0.011067
+            },
+            "excessSpearmanOverNullMedian": 0.001279,
+            "excessGaussianBitsOverNullMedian": 0.002961
+          },
+          "selectedAlpha": 0.1,
+          "pcaVarianceExplained": 0.989237,
+          "trainingRowsAfterFamilyExclusion": 69,
+          "split": "first 70% of each creator chronology trains; age model uses only training rows; creator history is frozen at the split; later 30% tests",
+          "multiplicity": {
+            "family": "all creator-delta channels across both validation splits",
+            "hypotheses": 12,
+            "bonferroniP": 1.0,
+            "holmP": 1.0,
+            "benjaminiHochbergQ": 0.592
+          }
+        }
+      },
+      "incremental": {
+        "unseenCreator": {
+          "absoluteR2": 0.029473,
+          "creatorDeltaR2": -0.075033,
+          "r2DifferenceDeltaMinusAbsolute": -0.104506,
+          "absoluteSpearman": 0.24636,
+          "creatorDeltaSpearman": 0.088899,
+          "spearmanDifferenceDeltaMinusAbsolute": -0.157461,
+          "absoluteGaussianBitsPerObservation": 0.031029,
+          "creatorDeltaGaussianBitsPerObservation": -0.042742,
+          "gaussianBitsDifferenceDeltaMinusAbsolute": -0.073771,
+          "absoluteMaeLog10Lift": 0.437241,
+          "creatorDeltaMaeLog10Lift": 0.462937,
+          "maeDifferenceDeltaMinusAbsolute": 0.025696,
+          "creatorDeltaPairwiseMicroAccuracy": 0.55814,
+          "creatorDeltaPairwiseEqualSourceAccuracy": 0.579487,
+          "absoluteSourceMacroMeanSpearman": 0.4,
+          "creatorDeltaSourceMacroMeanSpearman": -0.028571,
+          "absoluteSourceMacroPositiveFraction": 1.0,
+          "creatorDeltaSourceMacroPositiveFraction": 0.333333
+        },
+        "laterVideo": {
+          "absoluteR2": -0.109355,
+          "creatorDeltaR2": -0.020382,
+          "r2DifferenceDeltaMinusAbsolute": 0.088973,
+          "absoluteSpearman": -0.000402,
+          "creatorDeltaSpearman": 0.136829,
+          "spearmanDifferenceDeltaMinusAbsolute": 0.137231,
+          "absoluteGaussianBitsPerObservation": -0.073113,
+          "creatorDeltaGaussianBitsPerObservation": -0.012808,
+          "gaussianBitsDifferenceDeltaMinusAbsolute": 0.060305,
+          "absoluteMaeLog10Lift": 0.489612,
+          "creatorDeltaMaeLog10Lift": 0.453593,
+          "maeDifferenceDeltaMinusAbsolute": -0.036019,
+          "creatorDeltaPairwiseMicroAccuracy": 0.5,
+          "creatorDeltaPairwiseEqualSourceAccuracy": 0.5,
+          "absoluteSourceMacroMeanSpearman": null,
+          "creatorDeltaSourceMacroMeanSpearman": null,
+          "absoluteSourceMacroPositiveFraction": null,
+          "creatorDeltaSourceMacroPositiveFraction": null
+        }
+      }
+    },
+    {
+      "id": "long:together",
+      "format": "long",
+      "modality": "together",
+      "vectorHash": "3796c4f689f4016bcda01e483e7fe76c181ddbd97d024da85a714381bea61c67",
+      "support": {
+        "rows": 145,
+        "sources": 121,
+        "historyCount": {
+          "minimum": 1,
+          "median": 2.0,
+          "p90": 11.0,
+          "maximum": 55
+        }
+      },
+      "absoluteHistoryMatched": {
+        "unseenCreator": {
+          "n": 145,
+          "r2": -0.062655,
+          "pearson": 0.10698,
+          "spearman": 0.119245,
+          "maeLog10Lift": 0.455069,
+          "nullMaeLog10Lift": 0.449423,
+          "mse": 0.321964,
+          "nullMse": 0.307063,
+          "gaussianBitsPerObservation": -0.034182,
+          "topDecileAuc": 0.490769,
+          "predictionStandardDeviation": 0.204205,
+          "actualStandardDeviation": 0.550437,
+          "sourceMacro": {
+            "sources": 3,
+            "meanSpearman": -0.190476,
+            "medianSpearman": -0.371429,
+            "standardDeviationSpearman": 0.42783,
+            "positiveFraction": 0.333333
+          },
+          "withinSourcePairwise": {
+            "sources": 13,
+            "pairs": 43,
+            "microAccuracy": 0.418605,
+            "equalSourceMeanAccuracy": 0.384615,
+            "equalSourceMedianAccuracy": 0.333333,
+            "positiveSourceFraction": 0.384615
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 15,
+                "meanPrediction": -0.302467,
+                "meanActualLift": -0.1259,
+                "medianActualLift": -0.368482,
+                "positiveLiftRate": 0.4,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 2,
+                "n": 15,
+                "meanPrediction": -0.185572,
+                "meanActualLift": -0.030613,
+                "medianActualLift": -0.033032,
+                "positiveLiftRate": 0.466667,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 3,
+                "n": 15,
+                "meanPrediction": -0.116806,
+                "meanActualLift": -0.184285,
+                "medianActualLift": -0.327977,
+                "positiveLiftRate": 0.333333,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 4,
+                "n": 15,
+                "meanPrediction": -0.061845,
+                "meanActualLift": 0.381109,
+                "medianActualLift": 0.353941,
+                "positiveLiftRate": 0.8,
+                "actualTopDecileRate": 0.333333
+              },
+              {
+                "decile": 5,
+                "n": 15,
+                "meanPrediction": 0.004479,
+                "meanActualLift": 0.217531,
+                "medianActualLift": 0.249486,
+                "positiveLiftRate": 0.666667,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 6,
+                "n": 14,
+                "meanPrediction": 0.050797,
+                "meanActualLift": 0.027731,
+                "medianActualLift": -0.020846,
+                "positiveLiftRate": 0.5,
+                "actualTopDecileRate": 0.071429
+              },
+              {
+                "decile": 7,
+                "n": 14,
+                "meanPrediction": 0.096099,
+                "meanActualLift": 0.201632,
+                "medianActualLift": 0.267606,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 8,
+                "n": 14,
+                "meanPrediction": 0.179393,
+                "meanActualLift": 0.133594,
+                "medianActualLift": 0.199977,
+                "positiveLiftRate": 0.642857,
+                "actualTopDecileRate": 0.071429
+              },
+              {
+                "decile": 9,
+                "n": 14,
+                "meanPrediction": 0.256223,
+                "meanActualLift": -0.030752,
+                "medianActualLift": -0.045195,
+                "positiveLiftRate": 0.428571,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 10,
+                "n": 14,
+                "meanPrediction": 0.398482,
+                "meanActualLift": 0.041149,
+                "medianActualLift": 0.107246,
+                "positiveLiftRate": 0.5,
+                "actualTopDecileRate": 0.142857
+              }
+            ],
+            "monotonicAdjacentSteps": 4,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.167048,
+            "topPredictedDecilePositiveLiftRate": 0.5,
+            "topPredictedDecileActualTopDecilePrecision": 0.142857,
+            "actualTopDecileRecall": 0.133333
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 121,
+            "spearman95": {
+              "low": -0.051224,
+              "median": 0.117777,
+              "high": 0.253794
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -0.114569,
+              "median": -0.035298,
+              "high": 0.035303
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -0.036119,
+              "median": -0.005947,
+              "high": 0.018632
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 13,
+            "observedSpearman": 0.119245,
+            "spearmanOneSidedP": 0.284,
+            "spearmanTwoSidedP": 0.284,
+            "nullSpearman95": {
+              "low": 0.069109,
+              "median": 0.106444,
+              "high": 0.143275
+            },
+            "observedGaussianBitsPerObservation": -0.034182,
+            "gaussianBitsOneSidedP": 0.57,
+            "nullGaussianBits95": {
+              "low": -0.052304,
+              "median": -0.031959,
+              "high": -0.011799
+            },
+            "excessSpearmanOverNullMedian": 0.012801,
+            "excessGaussianBitsOverNullMedian": -0.002223
+          },
+          "split": "five source-held-out folds; outcome age curve and creator history target rebuilt inside each fold",
+          "folds": [
+            {
+              "fold": 0,
+              "trainSources": 34598,
+              "testSources": 8887,
+              "trainRowsAfterFamilyExclusion": 106,
+              "testRows": 35,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.875672
+            },
+            {
+              "fold": 1,
+              "trainSources": 34676,
+              "testSources": 8809,
+              "trainRowsAfterFamilyExclusion": 109,
+              "testRows": 28,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.865767
+            },
+            {
+              "fold": 2,
+              "trainSources": 34956,
+              "testSources": 8529,
+              "trainRowsAfterFamilyExclusion": 104,
+              "testRows": 35,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.871858
+            },
+            {
+              "fold": 3,
+              "trainSources": 34923,
+              "testSources": 8562,
+              "trainRowsAfterFamilyExclusion": 114,
+              "testRows": 23,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.85625
+            },
+            {
+              "fold": 4,
+              "trainSources": 34787,
+              "testSources": 8698,
+              "trainRowsAfterFamilyExclusion": 117,
+              "testRows": 24,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.857935
+            }
+          ]
+        },
+        "laterVideo": {
+          "n": 67,
+          "r2": -0.167725,
+          "pearson": -0.051932,
+          "spearman": -0.043539,
+          "maeLog10Lift": 0.513985,
+          "nullMaeLog10Lift": 0.475407,
+          "mse": 0.386894,
+          "nullMse": 0.332172,
+          "gaussianBitsPerObservation": -0.110003,
+          "topDecileAuc": 0.628571,
+          "predictionStandardDeviation": 0.1849,
+          "actualStandardDeviation": 0.575606,
+          "sourceMacro": {
+            "sources": 0,
+            "meanSpearman": null,
+            "medianSpearman": null,
+            "standardDeviationSpearman": null,
+            "positiveFraction": null
+          },
+          "withinSourcePairwise": {
+            "sources": 2,
+            "pairs": 2,
+            "microAccuracy": 1.0,
+            "equalSourceMeanAccuracy": 1.0,
+            "equalSourceMedianAccuracy": 1.0,
+            "positiveSourceFraction": 1.0
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 7,
+                "meanPrediction": -0.14114,
+                "meanActualLift": 0.212421,
+                "medianActualLift": 0.344134,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 2,
+                "n": 7,
+                "meanPrediction": -0.073219,
+                "meanActualLift": 0.286687,
+                "medianActualLift": 0.502248,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 3,
+                "n": 7,
+                "meanPrediction": -0.019344,
+                "meanActualLift": 0.278166,
+                "medianActualLift": 0.218894,
+                "positiveLiftRate": 1.0,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 4,
+                "n": 7,
+                "meanPrediction": 0.029252,
+                "meanActualLift": 0.047108,
+                "medianActualLift": 0.041781,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 5,
+                "n": 7,
+                "meanPrediction": 0.10067,
+                "meanActualLift": 0.353406,
+                "medianActualLift": 0.454184,
+                "positiveLiftRate": 0.714286,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 6,
+                "n": 7,
+                "meanPrediction": 0.16824,
+                "meanActualLift": 0.312642,
+                "medianActualLift": 0.405124,
+                "positiveLiftRate": 0.714286,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 7,
+                "n": 7,
+                "meanPrediction": 0.21658,
+                "meanActualLift": 0.041991,
+                "medianActualLift": -0.083186,
+                "positiveLiftRate": 0.428571,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 8,
+                "n": 6,
+                "meanPrediction": 0.265401,
+                "meanActualLift": 0.321317,
+                "medianActualLift": 0.365688,
+                "positiveLiftRate": 0.5,
+                "actualTopDecileRate": 0.333333
+              },
+              {
+                "decile": 9,
+                "n": 6,
+                "meanPrediction": 0.333591,
+                "meanActualLift": 0.41123,
+                "medianActualLift": 0.387039,
+                "positiveLiftRate": 0.833333,
+                "actualTopDecileRate": 0.166667
+              },
+              {
+                "decile": 10,
+                "n": 6,
+                "meanPrediction": 0.489521,
+                "meanActualLift": 0.0309,
+                "medianActualLift": -0.164029,
+                "positiveLiftRate": 0.333333,
+                "actualTopDecileRate": 0.166667
+              }
+            ],
+            "monotonicAdjacentSteps": 4,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": -0.181521,
+            "topPredictedDecilePositiveLiftRate": 0.333333,
+            "topPredictedDecileActualTopDecilePrecision": 0.166667,
+            "actualTopDecileRecall": 0.142857
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 65,
+            "spearman95": {
+              "low": -0.300871,
+              "median": -0.038008,
+              "high": 0.233445
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -0.231752,
+              "median": -0.111202,
+              "high": 0.007201
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -0.081325,
+              "median": -0.038784,
+              "high": 0.009116
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 2,
+            "observedSpearman": -0.043539,
+            "spearmanOneSidedP": 0.266,
+            "spearmanTwoSidedP": 1.0,
+            "nullSpearman95": {
+              "low": -0.056828,
+              "median": -0.049645,
+              "high": -0.043539
+            },
+            "observedGaussianBitsPerObservation": -0.110003,
+            "gaussianBitsOneSidedP": 0.266,
+            "nullGaussianBits95": {
+              "low": -0.116726,
+              "median": -0.114536,
+              "high": -0.110003
+            },
+            "excessSpearmanOverNullMedian": 0.006106,
+            "excessGaussianBitsOverNullMedian": 0.004533
+          },
+          "selectedAlpha": 0.1,
+          "pcaVarianceExplained": 0.994185,
+          "trainingRowsAfterFamilyExclusion": 68,
+          "split": "first 70% of each creator chronology trains; age model uses only training rows; creator history is frozen at the split; later 30% tests"
+        }
+      },
+      "creatorDelta": {
+        "unseenCreator": {
+          "n": 145,
+          "r2": -0.148721,
+          "pearson": -0.075237,
+          "spearman": -0.087675,
+          "maeLog10Lift": 0.477844,
+          "nullMaeLog10Lift": 0.449423,
+          "mse": 0.34804,
+          "nullMse": 0.307063,
+          "gaussianBitsPerObservation": -0.090359,
+          "topDecileAuc": 0.517436,
+          "predictionStandardDeviation": 0.172021,
+          "actualStandardDeviation": 0.550437,
+          "sourceMacro": {
+            "sources": 3,
+            "meanSpearman": -0.114286,
+            "medianSpearman": 0.0,
+            "standardDeviationSpearman": 0.313853,
+            "positiveFraction": 0.333333
+          },
+          "withinSourcePairwise": {
+            "sources": 13,
+            "pairs": 43,
+            "microAccuracy": 0.44186,
+            "equalSourceMeanAccuracy": 0.461538,
+            "equalSourceMedianAccuracy": 0.333333,
+            "positiveSourceFraction": 0.307692
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 15,
+                "meanPrediction": -0.270606,
+                "meanActualLift": 0.066976,
+                "medianActualLift": 0.021493,
+                "positiveLiftRate": 0.6,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 2,
+                "n": 15,
+                "meanPrediction": -0.14416,
+                "meanActualLift": 0.1133,
+                "medianActualLift": 0.056476,
+                "positiveLiftRate": 0.533333,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 3,
+                "n": 15,
+                "meanPrediction": -0.090495,
+                "meanActualLift": 0.228025,
+                "medianActualLift": 0.067521,
+                "positiveLiftRate": 0.6,
+                "actualTopDecileRate": 0.266667
+              },
+              {
+                "decile": 4,
+                "n": 15,
+                "meanPrediction": -0.037762,
+                "meanActualLift": 0.091151,
+                "medianActualLift": 0.011533,
+                "positiveLiftRate": 0.533333,
+                "actualTopDecileRate": 0.066667
+              },
+              {
+                "decile": 5,
+                "n": 15,
+                "meanPrediction": 0.004708,
+                "meanActualLift": -0.014795,
+                "medianActualLift": -0.134134,
+                "positiveLiftRate": 0.466667,
+                "actualTopDecileRate": 0.2
+              },
+              {
+                "decile": 6,
+                "n": 14,
+                "meanPrediction": 0.054504,
+                "meanActualLift": 0.090326,
+                "medianActualLift": 0.125335,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.071429
+              },
+              {
+                "decile": 7,
+                "n": 14,
+                "meanPrediction": 0.103086,
+                "meanActualLift": 0.051444,
+                "medianActualLift": 0.256346,
+                "positiveLiftRate": 0.714286,
+                "actualTopDecileRate": 0.071429
+              },
+              {
+                "decile": 8,
+                "n": 14,
+                "meanPrediction": 0.16034,
+                "meanActualLift": -0.079223,
+                "medianActualLift": -0.160344,
+                "positiveLiftRate": 0.357143,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 9,
+                "n": 14,
+                "meanPrediction": 0.224256,
+                "meanActualLift": -0.034974,
+                "medianActualLift": 0.045342,
+                "positiveLiftRate": 0.5,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 10,
+                "n": 14,
+                "meanPrediction": 0.322388,
+                "meanActualLift": 0.102765,
+                "medianActualLift": -0.037102,
+                "positiveLiftRate": 0.428571,
+                "actualTopDecileRate": 0.142857
+              }
+            ],
+            "monotonicAdjacentSteps": 5,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.035789,
+            "topPredictedDecilePositiveLiftRate": 0.428571,
+            "topPredictedDecileActualTopDecilePrecision": 0.142857,
+            "actualTopDecileRecall": 0.133333
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 121,
+            "spearman95": {
+              "low": -0.251139,
+              "median": -0.082281,
+              "high": 0.112152
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -0.166782,
+              "median": -0.087056,
+              "high": -0.010497
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -0.057527,
+              "median": -0.027865,
+              "high": 0.004027
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 13,
+            "observedSpearman": -0.087675,
+            "spearmanOneSidedP": 0.58,
+            "spearmanTwoSidedP": 0.422,
+            "nullSpearman95": {
+              "low": -0.140044,
+              "median": -0.081656,
+              "high": -0.025319
+            },
+            "observedGaussianBitsPerObservation": -0.090359,
+            "gaussianBitsOneSidedP": 0.662,
+            "nullGaussianBits95": {
+              "low": -0.110568,
+              "median": -0.085494,
+              "high": -0.064261
+            },
+            "excessSpearmanOverNullMedian": -0.006019,
+            "excessGaussianBitsOverNullMedian": -0.004865
+          },
+          "split": "five source-held-out folds; outcome age curve and creator history target rebuilt inside each fold",
+          "folds": [
+            {
+              "fold": 0,
+              "trainSources": 34598,
+              "testSources": 8887,
+              "trainRowsAfterFamilyExclusion": 106,
+              "testRows": 35,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.808873
+            },
+            {
+              "fold": 1,
+              "trainSources": 34676,
+              "testSources": 8809,
+              "trainRowsAfterFamilyExclusion": 109,
+              "testRows": 28,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.800112
+            },
+            {
+              "fold": 2,
+              "trainSources": 34956,
+              "testSources": 8529,
+              "trainRowsAfterFamilyExclusion": 104,
+              "testRows": 35,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.812139
+            },
+            {
+              "fold": 3,
+              "trainSources": 34923,
+              "testSources": 8562,
+              "trainRowsAfterFamilyExclusion": 114,
+              "testRows": 23,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.784057
+            },
+            {
+              "fold": 4,
+              "trainSources": 34787,
+              "testSources": 8698,
+              "trainRowsAfterFamilyExclusion": 117,
+              "testRows": 24,
+              "alpha": 0.1,
+              "pcaVarianceExplained": 0.787645
+            }
+          ],
+          "multiplicity": {
+            "family": "all creator-delta channels across both validation splits",
+            "hypotheses": 12,
+            "bonferroniP": 1.0,
+            "holmP": 1.0,
+            "benjaminiHochbergQ": 0.592
+          }
+        },
+        "laterVideo": {
+          "n": 67,
+          "r2": -0.030192,
+          "pearson": 0.100038,
+          "spearman": 0.121837,
+          "maeLog10Lift": 0.469474,
+          "nullMaeLog10Lift": 0.475407,
+          "mse": 0.341326,
+          "nullMse": 0.332172,
+          "gaussianBitsPerObservation": -0.01961,
+          "topDecileAuc": 0.614286,
+          "predictionStandardDeviation": 0.172211,
+          "actualStandardDeviation": 0.575606,
+          "sourceMacro": {
+            "sources": 0,
+            "meanSpearman": null,
+            "medianSpearman": null,
+            "standardDeviationSpearman": null,
+            "positiveFraction": null
+          },
+          "withinSourcePairwise": {
+            "sources": 2,
+            "pairs": 2,
+            "microAccuracy": 1.0,
+            "equalSourceMeanAccuracy": 1.0,
+            "equalSourceMedianAccuracy": 1.0,
+            "positiveSourceFraction": 1.0
+          },
+          "calibration": {
+            "bins": [
+              {
+                "decile": 1,
+                "n": 7,
+                "meanPrediction": -0.073067,
+                "meanActualLift": -0.17303,
+                "medianActualLift": -0.29936,
+                "positiveLiftRate": 0.142857,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 2,
+                "n": 7,
+                "meanPrediction": 0.049832,
+                "meanActualLift": 0.226721,
+                "medianActualLift": 0.218894,
+                "positiveLiftRate": 0.857143,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 3,
+                "n": 7,
+                "meanPrediction": 0.095351,
+                "meanActualLift": 0.059197,
+                "medianActualLift": -0.084868,
+                "positiveLiftRate": 0.428571,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 4,
+                "n": 7,
+                "meanPrediction": 0.127794,
+                "meanActualLift": 0.207363,
+                "medianActualLift": 0.342347,
+                "positiveLiftRate": 0.714286,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 5,
+                "n": 7,
+                "meanPrediction": 0.165926,
+                "meanActualLift": 0.614904,
+                "medianActualLift": 0.502248,
+                "positiveLiftRate": 0.857143,
+                "actualTopDecileRate": 0.428571
+              },
+              {
+                "decile": 6,
+                "n": 7,
+                "meanPrediction": 0.25778,
+                "meanActualLift": 0.37538,
+                "medianActualLift": 0.40167,
+                "positiveLiftRate": 0.857143,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 7,
+                "n": 7,
+                "meanPrediction": 0.335762,
+                "meanActualLift": 0.265771,
+                "medianActualLift": 0.454184,
+                "positiveLiftRate": 0.571429,
+                "actualTopDecileRate": 0.142857
+              },
+              {
+                "decile": 8,
+                "n": 6,
+                "meanPrediction": 0.371901,
+                "meanActualLift": 0.197735,
+                "medianActualLift": 0.320309,
+                "positiveLiftRate": 0.666667,
+                "actualTopDecileRate": 0.0
+              },
+              {
+                "decile": 9,
+                "n": 6,
+                "meanPrediction": 0.394069,
+                "meanActualLift": 0.507885,
+                "medianActualLift": 0.386598,
+                "positiveLiftRate": 0.833333,
+                "actualTopDecileRate": 0.166667
+              },
+              {
+                "decile": 10,
+                "n": 6,
+                "meanPrediction": 0.516444,
+                "meanActualLift": 0.006628,
+                "medianActualLift": -0.121833,
+                "positiveLiftRate": 0.333333,
+                "actualTopDecileRate": 0.166667
+              }
+            ],
+            "monotonicAdjacentSteps": 4,
+            "possibleAdjacentSteps": 9,
+            "topMinusBottomMeanLift": 0.179658,
+            "topPredictedDecilePositiveLiftRate": 0.333333,
+            "topPredictedDecileActualTopDecilePrecision": 0.166667,
+            "actualTopDecileRecall": 0.142857
+          },
+          "sourceBlockBootstrap": {
+            "unit": "creator/source",
+            "replicates": 300,
+            "sources": 65,
+            "spearman95": {
+              "low": -0.114647,
+              "median": 0.136424,
+              "high": 0.317875
+            },
+            "gaussianBitsPerObservation95": {
+              "low": -0.125497,
+              "median": -0.017067,
+              "high": 0.071427
+            },
+            "maeImprovementLog10Lift95": {
+              "low": -0.032354,
+              "median": 0.006744,
+              "high": 0.041408
+            }
+          },
+          "withinSourcePermutation": {
+            "scheme": "shuffle outcomes only within each creator/source; predictions remain fixed",
+            "replicates": 499,
+            "mutableSources": 2,
+            "observedSpearman": 0.121837,
+            "spearmanOneSidedP": 0.266,
+            "spearmanTwoSidedP": 0.266,
+            "nullSpearman95": {
+              "low": 0.115372,
+              "median": 0.117767,
+              "high": 0.121837
+            },
+            "observedGaussianBitsPerObservation": -0.01961,
+            "gaussianBitsOneSidedP": 0.266,
+            "nullGaussianBits95": {
+              "low": -0.024233,
+              "median": -0.022571,
+              "high": -0.01961
+            },
+            "excessSpearmanOverNullMedian": 0.004071,
+            "excessGaussianBitsOverNullMedian": 0.002961
+          },
+          "selectedAlpha": 0.1,
+          "pcaVarianceExplained": 0.991149,
+          "trainingRowsAfterFamilyExclusion": 68,
+          "split": "first 70% of each creator chronology trains; age model uses only training rows; creator history is frozen at the split; later 30% tests",
+          "multiplicity": {
+            "family": "all creator-delta channels across both validation splits",
+            "hypotheses": 12,
+            "bonferroniP": 1.0,
+            "holmP": 1.0,
+            "benjaminiHochbergQ": 0.456
+          }
+        }
+      },
+      "incremental": {
+        "unseenCreator": {
+          "absoluteR2": -0.062655,
+          "creatorDeltaR2": -0.148721,
+          "r2DifferenceDeltaMinusAbsolute": -0.086066,
+          "absoluteSpearman": 0.119245,
+          "creatorDeltaSpearman": -0.087675,
+          "spearmanDifferenceDeltaMinusAbsolute": -0.20692,
+          "absoluteGaussianBitsPerObservation": -0.034182,
+          "creatorDeltaGaussianBitsPerObservation": -0.090359,
+          "gaussianBitsDifferenceDeltaMinusAbsolute": -0.056177,
+          "absoluteMaeLog10Lift": 0.455069,
+          "creatorDeltaMaeLog10Lift": 0.477844,
+          "maeDifferenceDeltaMinusAbsolute": 0.022775,
+          "creatorDeltaPairwiseMicroAccuracy": 0.44186,
+          "creatorDeltaPairwiseEqualSourceAccuracy": 0.461538,
+          "absoluteSourceMacroMeanSpearman": -0.190476,
+          "creatorDeltaSourceMacroMeanSpearman": -0.114286,
+          "absoluteSourceMacroPositiveFraction": 0.333333,
+          "creatorDeltaSourceMacroPositiveFraction": 0.333333
+        },
+        "laterVideo": {
+          "absoluteR2": -0.167725,
+          "creatorDeltaR2": -0.030192,
+          "r2DifferenceDeltaMinusAbsolute": 0.137533,
+          "absoluteSpearman": -0.043539,
+          "creatorDeltaSpearman": 0.121837,
+          "spearmanDifferenceDeltaMinusAbsolute": 0.165376,
+          "absoluteGaussianBitsPerObservation": -0.110003,
+          "creatorDeltaGaussianBitsPerObservation": -0.01961,
+          "gaussianBitsDifferenceDeltaMinusAbsolute": 0.090393,
+          "absoluteMaeLog10Lift": 0.513985,
+          "creatorDeltaMaeLog10Lift": 0.469474,
+          "maeDifferenceDeltaMinusAbsolute": -0.044511,
+          "creatorDeltaPairwiseMicroAccuracy": 1.0,
+          "creatorDeltaPairwiseEqualSourceAccuracy": 1.0,
+          "absoluteSourceMacroMeanSpearman": null,
+          "creatorDeltaSourceMacroMeanSpearman": null,
+          "absoluteSourceMacroPositiveFraction": null,
+          "creatorDeltaSourceMacroPositiveFraction": null
+        }
+      }
+    }
+  ],
+  "multiplicity": {
+    "hypotheses": 12,
+    "passingHolm05": [
+      "shorts:visual:unseenCreator",
+      "shorts:visual:laterVideo",
+      "shorts:together:unseenCreator",
+      "shorts:together:laterVideo"
+    ],
+    "passingFdr05": [
+      "shorts:visual:unseenCreator",
+      "shorts:visual:laterVideo",
+      "shorts:together:unseenCreator",
+      "shorts:together:laterVideo"
+    ]
+  },
+  "claimBoundary": [
+    "Creator-delta features use only content representations and historically observable prior videos.",
+    "Absolute and creator-delta models are compared on exactly the same rows.",
+    "The creator baseline is an unweighted mean; recency weighting is not selected from evaluation outcomes.",
+    "Positive pooled discrimination is insufficient unless source-macro ordering and later-video performance also improve.",
+    "Long remains underpowered because very few historically observable targets overlap the current vector archives."
+  ],
+  "contentHash": "257b5285de0c3d302709b804dc9d10c51945a9d1bb67d74e7ac1f03b97de8dd4"
+}

@@ -1,0 +1,1162 @@
+{
+  "schema": "opportunity-adjusted-cluster-outcomes-v2",
+  "generatedAt": "2026-07-26T17:51:41.317Z",
+  "target": "creatorRelativeLift",
+  "tests": 24,
+  "familyWiseSignificantTests": 0,
+  "bestLaterVideo": {
+    "id": "shorts:visual:k24",
+    "format": "shorts",
+    "modality": "visual",
+    "clusterCount": 24,
+    "observations": 9952,
+    "sources": 4190,
+    "etaSquared": 0.038728,
+    "sourceMacro": {
+      "sources": 321,
+      "meanEtaSquared": 0.314988
+    },
+    "validation": {
+      "unseenCreator": {
+        "n": 9952,
+        "meanTrainingRowsAfterFamilyExclusion": 7775.4,
+        "r2": 0.029625,
+        "pearson": 0.173934,
+        "spearman": 0.149986,
+        "maeLog10Lift": 0.428923
+      },
+      "laterVideo": {
+        "n": 3046,
+        "trainingRowsBeforeFamilyExclusion": 6906,
+        "trainingRowsAfterFamilyExclusion": 6349,
+        "r2": 0.037561,
+        "pearson": 0.199589,
+        "spearman": 0.1696,
+        "maeLog10Lift": 0.400354,
+        "zeroBaselineMae": 0.409549,
+        "maeImprovement": 0.009195
+      }
+    },
+    "familyWiseP": 0.266932,
+    "familyWiseSignificant": false
+  },
+  "bestUnseenCreator": {
+    "id": "shorts:together:k16",
+    "format": "shorts",
+    "modality": "together",
+    "clusterCount": 16,
+    "observations": 9951,
+    "sources": 4190,
+    "etaSquared": 0.034685,
+    "sourceMacro": {
+      "sources": 358,
+      "meanEtaSquared": 0.297921
+    },
+    "validation": {
+      "unseenCreator": {
+        "n": 9951,
+        "meanTrainingRowsAfterFamilyExclusion": 7774.6,
+        "r2": 0.02845,
+        "pearson": 0.169681,
+        "spearman": 0.161792,
+        "maeLog10Lift": 0.430506
+      },
+      "laterVideo": {
+        "n": 3045,
+        "trainingRowsBeforeFamilyExclusion": 6906,
+        "trainingRowsAfterFamilyExclusion": 6349,
+        "r2": 0.032055,
+        "pearson": 0.184896,
+        "spearman": 0.166591,
+        "maeLog10Lift": 0.401943,
+        "zeroBaselineMae": 0.409241,
+        "maeImprovement": 0.007298
+      }
+    },
+    "familyWiseP": 0.992032,
+    "familyWiseSignificant": false
+  },
+  "formats": [
+    {
+      "format": "shorts",
+      "eligibleTargetRows": 9973,
+      "tests": [
+        {
+          "id": "shorts:visual:k6",
+          "format": "shorts",
+          "modality": "visual",
+          "clusterCount": 6,
+          "observations": 9952,
+          "sources": 4190,
+          "etaSquared": 0.006568,
+          "sourceMacro": {
+            "sources": 335,
+            "meanEtaSquared": 0.251012
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 9952,
+              "meanTrainingRowsAfterFamilyExclusion": 7775.4,
+              "r2": 0.003972,
+              "pearson": 0.065588,
+              "spearman": 0.055798,
+              "maeLog10Lift": 0.4367
+            },
+            "laterVideo": {
+              "n": 3046,
+              "trainingRowsBeforeFamilyExclusion": 6906,
+              "trainingRowsAfterFamilyExclusion": 6349,
+              "r2": 0.006785,
+              "pearson": 0.090986,
+              "spearman": 0.083831,
+              "maeLog10Lift": 0.408352,
+              "zeroBaselineMae": 0.409549,
+              "maeImprovement": 0.001197
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "shorts:visual:k10",
+          "format": "shorts",
+          "modality": "visual",
+          "clusterCount": 10,
+          "observations": 9952,
+          "sources": 4190,
+          "etaSquared": 0.024035,
+          "sourceMacro": {
+            "sources": 309,
+            "meanEtaSquared": 0.27781
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 9952,
+              "meanTrainingRowsAfterFamilyExclusion": 7775.4,
+              "r2": 0.018606,
+              "pearson": 0.137663,
+              "spearman": 0.112727,
+              "maeLog10Lift": 0.432952
+            },
+            "laterVideo": {
+              "n": 3046,
+              "trainingRowsBeforeFamilyExclusion": 6906,
+              "trainingRowsAfterFamilyExclusion": 6349,
+              "r2": 0.018448,
+              "pearson": 0.143582,
+              "spearman": 0.104351,
+              "maeLog10Lift": 0.405544,
+              "zeroBaselineMae": 0.409549,
+              "maeImprovement": 0.004005
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "shorts:visual:k16",
+          "format": "shorts",
+          "modality": "visual",
+          "clusterCount": 16,
+          "observations": 9952,
+          "sources": 4190,
+          "etaSquared": 0.030732,
+          "sourceMacro": {
+            "sources": 296,
+            "meanEtaSquared": 0.293003
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 9952,
+              "meanTrainingRowsAfterFamilyExclusion": 7775.4,
+              "r2": 0.024922,
+              "pearson": 0.158777,
+              "spearman": 0.134232,
+              "maeLog10Lift": 0.429759
+            },
+            "laterVideo": {
+              "n": 3046,
+              "trainingRowsBeforeFamilyExclusion": 6906,
+              "trainingRowsAfterFamilyExclusion": 6349,
+              "r2": 0.021536,
+              "pearson": 0.159819,
+              "spearman": 0.124509,
+              "maeLog10Lift": 0.40374,
+              "zeroBaselineMae": 0.409549,
+              "maeImprovement": 0.00581
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "shorts:visual:k24",
+          "format": "shorts",
+          "modality": "visual",
+          "clusterCount": 24,
+          "observations": 9952,
+          "sources": 4190,
+          "etaSquared": 0.038728,
+          "sourceMacro": {
+            "sources": 321,
+            "meanEtaSquared": 0.314988
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 9952,
+              "meanTrainingRowsAfterFamilyExclusion": 7775.4,
+              "r2": 0.029625,
+              "pearson": 0.173934,
+              "spearman": 0.149986,
+              "maeLog10Lift": 0.428923
+            },
+            "laterVideo": {
+              "n": 3046,
+              "trainingRowsBeforeFamilyExclusion": 6906,
+              "trainingRowsAfterFamilyExclusion": 6349,
+              "r2": 0.037561,
+              "pearson": 0.199589,
+              "spearman": 0.1696,
+              "maeLog10Lift": 0.400354,
+              "zeroBaselineMae": 0.409549,
+              "maeImprovement": 0.009195
+            }
+          },
+          "familyWiseP": 0.266932,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "shorts:text:k6",
+          "format": "shorts",
+          "modality": "text",
+          "clusterCount": 6,
+          "observations": 2990,
+          "sources": 1620,
+          "etaSquared": 0.003664,
+          "sourceMacro": {
+            "sources": 82,
+            "meanEtaSquared": 0.238548
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 2990,
+              "meanTrainingRowsAfterFamilyExclusion": 2358.6,
+              "r2": -0.000201,
+              "pearson": 0.031848,
+              "spearman": 0.009459,
+              "maeLog10Lift": 0.443864
+            },
+            "laterVideo": {
+              "n": 778,
+              "trainingRowsBeforeFamilyExclusion": 2212,
+              "trainingRowsAfterFamilyExclusion": 2134,
+              "r2": -0.015415,
+              "pearson": -0.016057,
+              "spearman": -0.01429,
+              "maeLog10Lift": 0.424195,
+              "zeroBaselineMae": 0.422492,
+              "maeImprovement": -0.001704
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "shorts:text:k10",
+          "format": "shorts",
+          "modality": "text",
+          "clusterCount": 10,
+          "observations": 2990,
+          "sources": 1620,
+          "etaSquared": 0.012643,
+          "sourceMacro": {
+            "sources": 81,
+            "meanEtaSquared": 0.329908
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 2990,
+              "meanTrainingRowsAfterFamilyExclusion": 2358.6,
+              "r2": 0.00588,
+              "pearson": 0.08428,
+              "spearman": 0.064595,
+              "maeLog10Lift": 0.441965
+            },
+            "laterVideo": {
+              "n": 778,
+              "trainingRowsBeforeFamilyExclusion": 2212,
+              "trainingRowsAfterFamilyExclusion": 2134,
+              "r2": -0.003103,
+              "pearson": 0.071472,
+              "spearman": 0.074872,
+              "maeLog10Lift": 0.422062,
+              "zeroBaselineMae": 0.422492,
+              "maeImprovement": 0.00043
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "shorts:text:k16",
+          "format": "shorts",
+          "modality": "text",
+          "clusterCount": 16,
+          "observations": 2990,
+          "sources": 1620,
+          "etaSquared": 0.01483,
+          "sourceMacro": {
+            "sources": 77,
+            "meanEtaSquared": 0.40144
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 2990,
+              "meanTrainingRowsAfterFamilyExclusion": 2358.6,
+              "r2": 0.000268,
+              "pearson": 0.066885,
+              "spearman": 0.072797,
+              "maeLog10Lift": 0.444244
+            },
+            "laterVideo": {
+              "n": 778,
+              "trainingRowsBeforeFamilyExclusion": 2212,
+              "trainingRowsAfterFamilyExclusion": 2134,
+              "r2": -0.00758,
+              "pearson": 0.063557,
+              "spearman": 0.08567,
+              "maeLog10Lift": 0.423706,
+              "zeroBaselineMae": 0.422492,
+              "maeImprovement": -0.001214
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "shorts:text:k24",
+          "format": "shorts",
+          "modality": "text",
+          "clusterCount": 24,
+          "observations": 2990,
+          "sources": 1620,
+          "etaSquared": 0.024989,
+          "sourceMacro": {
+            "sources": 83,
+            "meanEtaSquared": 0.45833
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 2990,
+              "meanTrainingRowsAfterFamilyExclusion": 2358.6,
+              "r2": 0.005775,
+              "pearson": 0.104884,
+              "spearman": 0.094417,
+              "maeLog10Lift": 0.443196
+            },
+            "laterVideo": {
+              "n": 778,
+              "trainingRowsBeforeFamilyExclusion": 2212,
+              "trainingRowsAfterFamilyExclusion": 2134,
+              "r2": -0.010702,
+              "pearson": 0.081795,
+              "spearman": 0.071395,
+              "maeLog10Lift": 0.428342,
+              "zeroBaselineMae": 0.422492,
+              "maeImprovement": -0.005851
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "shorts:together:k6",
+          "format": "shorts",
+          "modality": "together",
+          "clusterCount": 6,
+          "observations": 9951,
+          "sources": 4190,
+          "etaSquared": 0.007241,
+          "sourceMacro": {
+            "sources": 308,
+            "meanEtaSquared": 0.236313
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 9951,
+              "meanTrainingRowsAfterFamilyExclusion": 7774.6,
+              "r2": 0.005063,
+              "pearson": 0.073417,
+              "spearman": 0.060195,
+              "maeLog10Lift": 0.43652
+            },
+            "laterVideo": {
+              "n": 3045,
+              "trainingRowsBeforeFamilyExclusion": 6906,
+              "trainingRowsAfterFamilyExclusion": 6349,
+              "r2": -0.00129,
+              "pearson": 0.057062,
+              "spearman": 0.05488,
+              "maeLog10Lift": 0.409513,
+              "zeroBaselineMae": 0.409241,
+              "maeImprovement": -0.000272
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "shorts:together:k10",
+          "format": "shorts",
+          "modality": "together",
+          "clusterCount": 10,
+          "observations": 9951,
+          "sources": 4190,
+          "etaSquared": 0.019263,
+          "sourceMacro": {
+            "sources": 374,
+            "meanEtaSquared": 0.28054
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 9951,
+              "meanTrainingRowsAfterFamilyExclusion": 7774.6,
+              "r2": 0.015584,
+              "pearson": 0.12561,
+              "spearman": 0.116693,
+              "maeLog10Lift": 0.433283
+            },
+            "laterVideo": {
+              "n": 3045,
+              "trainingRowsBeforeFamilyExclusion": 6906,
+              "trainingRowsAfterFamilyExclusion": 6349,
+              "r2": 0.011369,
+              "pearson": 0.117341,
+              "spearman": 0.097232,
+              "maeLog10Lift": 0.406606,
+              "zeroBaselineMae": 0.409241,
+              "maeImprovement": 0.002636
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "shorts:together:k16",
+          "format": "shorts",
+          "modality": "together",
+          "clusterCount": 16,
+          "observations": 9951,
+          "sources": 4190,
+          "etaSquared": 0.034685,
+          "sourceMacro": {
+            "sources": 358,
+            "meanEtaSquared": 0.297921
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 9951,
+              "meanTrainingRowsAfterFamilyExclusion": 7774.6,
+              "r2": 0.02845,
+              "pearson": 0.169681,
+              "spearman": 0.161792,
+              "maeLog10Lift": 0.430506
+            },
+            "laterVideo": {
+              "n": 3045,
+              "trainingRowsBeforeFamilyExclusion": 6906,
+              "trainingRowsAfterFamilyExclusion": 6349,
+              "r2": 0.032055,
+              "pearson": 0.184896,
+              "spearman": 0.166591,
+              "maeLog10Lift": 0.401943,
+              "zeroBaselineMae": 0.409241,
+              "maeImprovement": 0.007298
+            }
+          },
+          "familyWiseP": 0.992032,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "shorts:together:k24",
+          "format": "shorts",
+          "modality": "together",
+          "clusterCount": 24,
+          "observations": 9951,
+          "sources": 4190,
+          "etaSquared": 0.036014,
+          "sourceMacro": {
+            "sources": 346,
+            "meanEtaSquared": 0.318894
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 9951,
+              "meanTrainingRowsAfterFamilyExclusion": 7774.6,
+              "r2": 0.027493,
+              "pearson": 0.167581,
+              "spearman": 0.142687,
+              "maeLog10Lift": 0.429162
+            },
+            "laterVideo": {
+              "n": 3045,
+              "trainingRowsBeforeFamilyExclusion": 6906,
+              "trainingRowsAfterFamilyExclusion": 6349,
+              "r2": 0.029991,
+              "pearson": 0.181218,
+              "spearman": 0.148678,
+              "maeLog10Lift": 0.400879,
+              "zeroBaselineMae": 0.409241,
+              "maeImprovement": 0.008362
+            }
+          },
+          "familyWiseP": 0.916335,
+          "familyWiseSignificant": false
+        }
+      ],
+      "familyNull": {
+        "permutations": 250,
+        "shuffleUnit": "creator",
+        "method": "Outcomes are shuffled only within creator. The maximum eta-squared across all 12 modality/resolution tests defines the family-wise null.",
+        "p95MaximumEtaSquared": 0.040199
+      },
+      "continuousDiagnostics": {
+        "visual": [
+          {
+            "projection": "pca",
+            "coordinate": "x",
+            "observations": 9952,
+            "outcomeBlind": true,
+            "pearson": 0.029194,
+            "spearman": 0.024141,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          },
+          {
+            "projection": "pca",
+            "coordinate": "y",
+            "observations": 9952,
+            "outcomeBlind": true,
+            "pearson": -0.059029,
+            "spearman": -0.05104,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          },
+          {
+            "projection": "pca",
+            "coordinate": "estimate",
+            "observations": 9952,
+            "outcomeBlind": true,
+            "pearson": 0,
+            "spearman": 0,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          }
+        ],
+        "text": [
+          {
+            "projection": "pca",
+            "coordinate": "x",
+            "observations": 2990,
+            "outcomeBlind": true,
+            "pearson": -0.028908,
+            "spearman": -0.022328,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          },
+          {
+            "projection": "pca",
+            "coordinate": "y",
+            "observations": 2990,
+            "outcomeBlind": true,
+            "pearson": 0.006662,
+            "spearman": 0.002631,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          },
+          {
+            "projection": "pca",
+            "coordinate": "estimate",
+            "observations": 2990,
+            "outcomeBlind": true,
+            "pearson": 0,
+            "spearman": 0,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          }
+        ],
+        "together": [
+          {
+            "projection": "pca",
+            "coordinate": "x",
+            "observations": 9951,
+            "outcomeBlind": true,
+            "pearson": 0.008715,
+            "spearman": 0.001564,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          },
+          {
+            "projection": "pca",
+            "coordinate": "y",
+            "observations": 9951,
+            "outcomeBlind": true,
+            "pearson": 0.024967,
+            "spearman": 0.023792,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          },
+          {
+            "projection": "pca",
+            "coordinate": "estimate",
+            "observations": 9951,
+            "outcomeBlind": true,
+            "pearson": 0,
+            "spearman": 0,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          }
+        ]
+      }
+    },
+    {
+      "format": "long",
+      "eligibleTargetRows": 9792,
+      "tests": [
+        {
+          "id": "long:visual:k6",
+          "format": "long",
+          "modality": "visual",
+          "clusterCount": 6,
+          "observations": 148,
+          "sources": 124,
+          "etaSquared": 0.009145,
+          "sourceMacro": {
+            "sources": 1,
+            "meanEtaSquared": 0.484763
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 148,
+              "meanTrainingRowsAfterFamilyExclusion": 112.4,
+              "r2": -0.057951,
+              "pearson": -0.090449,
+              "spearman": -0.18176,
+              "maeLog10Lift": 0.455058
+            },
+            "laterVideo": {
+              "n": 16,
+              "trainingRowsBeforeFamilyExclusion": 132,
+              "trainingRowsAfterFamilyExclusion": 123,
+              "r2": -0.13858,
+              "pearson": -0.101428,
+              "spearman": -0.352061,
+              "maeLog10Lift": 0.412272,
+              "zeroBaselineMae": 0.38677,
+              "maeImprovement": -0.025501
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "long:visual:k10",
+          "format": "long",
+          "modality": "visual",
+          "clusterCount": 10,
+          "observations": 148,
+          "sources": 124,
+          "etaSquared": 0.070322,
+          "sourceMacro": {
+            "sources": 0,
+            "meanEtaSquared": 0
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 148,
+              "meanTrainingRowsAfterFamilyExclusion": 112.4,
+              "r2": -0.058997,
+              "pearson": -0.026268,
+              "spearman": -0.090394,
+              "maeLog10Lift": 0.449474
+            },
+            "laterVideo": {
+              "n": 16,
+              "trainingRowsBeforeFamilyExclusion": 132,
+              "trainingRowsAfterFamilyExclusion": 123,
+              "r2": -0.06391,
+              "pearson": -0.084582,
+              "spearman": -0.207718,
+              "maeLog10Lift": 0.374571,
+              "zeroBaselineMae": 0.38677,
+              "maeImprovement": 0.0122
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "long:visual:k16",
+          "format": "long",
+          "modality": "visual",
+          "clusterCount": 16,
+          "observations": 148,
+          "sources": 124,
+          "etaSquared": 0.090823,
+          "sourceMacro": {
+            "sources": 0,
+            "meanEtaSquared": 0
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 148,
+              "meanTrainingRowsAfterFamilyExclusion": 112.4,
+              "r2": -0.077327,
+              "pearson": -0.178317,
+              "spearman": -0.169667,
+              "maeLog10Lift": 0.455903
+            },
+            "laterVideo": {
+              "n": 16,
+              "trainingRowsBeforeFamilyExclusion": 132,
+              "trainingRowsAfterFamilyExclusion": 123,
+              "r2": -0.131032,
+              "pearson": -0.208419,
+              "spearman": -0.188655,
+              "maeLog10Lift": 0.393781,
+              "zeroBaselineMae": 0.38677,
+              "maeImprovement": -0.007011
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "long:visual:k24",
+          "format": "long",
+          "modality": "visual",
+          "clusterCount": 24,
+          "observations": 148,
+          "sources": 124,
+          "etaSquared": 0.135,
+          "sourceMacro": {
+            "sources": 0,
+            "meanEtaSquared": 0
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 148,
+              "meanTrainingRowsAfterFamilyExclusion": 112.4,
+              "r2": -0.073012,
+              "pearson": -0.14031,
+              "spearman": -0.096025,
+              "maeLog10Lift": 0.451551
+            },
+            "laterVideo": {
+              "n": 16,
+              "trainingRowsBeforeFamilyExclusion": 132,
+              "trainingRowsAfterFamilyExclusion": 123,
+              "r2": -0.236318,
+              "pearson": -0.259041,
+              "spearman": -0.188655,
+              "maeLog10Lift": 0.406108,
+              "zeroBaselineMae": 0.38677,
+              "maeImprovement": -0.019338
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "long:text:k6",
+          "format": "long",
+          "modality": "text",
+          "clusterCount": 6,
+          "observations": 148,
+          "sources": 124,
+          "etaSquared": 0.046713,
+          "sourceMacro": {
+            "sources": 0,
+            "meanEtaSquared": 0
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 148,
+              "meanTrainingRowsAfterFamilyExclusion": 112.4,
+              "r2": -0.011215,
+              "pearson": 0.066476,
+              "spearman": 0.067126,
+              "maeLog10Lift": 0.441213
+            },
+            "laterVideo": {
+              "n": 16,
+              "trainingRowsBeforeFamilyExclusion": 132,
+              "trainingRowsAfterFamilyExclusion": 123,
+              "r2": -0.060664,
+              "pearson": -0.057294,
+              "spearman": -0.111337,
+              "maeLog10Lift": 0.379983,
+              "zeroBaselineMae": 0.38677,
+              "maeImprovement": 0.006787
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "long:text:k10",
+          "format": "long",
+          "modality": "text",
+          "clusterCount": 10,
+          "observations": 148,
+          "sources": 124,
+          "etaSquared": 0.164479,
+          "sourceMacro": {
+            "sources": 0,
+            "meanEtaSquared": 0
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 148,
+              "meanTrainingRowsAfterFamilyExclusion": 112.4,
+              "r2": 0.008381,
+              "pearson": 0.141055,
+              "spearman": 0.080949,
+              "maeLog10Lift": 0.439818
+            },
+            "laterVideo": {
+              "n": 16,
+              "trainingRowsBeforeFamilyExclusion": 132,
+              "trainingRowsAfterFamilyExclusion": 123,
+              "r2": -0.28211,
+              "pearson": -0.285911,
+              "spearman": -0.356629,
+              "maeLog10Lift": 0.429767,
+              "zeroBaselineMae": 0.38677,
+              "maeImprovement": -0.042997
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "long:text:k16",
+          "format": "long",
+          "modality": "text",
+          "clusterCount": 16,
+          "observations": 148,
+          "sources": 124,
+          "etaSquared": 0.134653,
+          "sourceMacro": {
+            "sources": 0,
+            "meanEtaSquared": 0
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 148,
+              "meanTrainingRowsAfterFamilyExclusion": 112.4,
+              "r2": -0.044712,
+              "pearson": 0.011232,
+              "spearman": 0.034946,
+              "maeLog10Lift": 0.451147
+            },
+            "laterVideo": {
+              "n": 16,
+              "trainingRowsBeforeFamilyExclusion": 132,
+              "trainingRowsAfterFamilyExclusion": 123,
+              "r2": -0.194013,
+              "pearson": -0.08865,
+              "spearman": -0.111337,
+              "maeLog10Lift": 0.398057,
+              "zeroBaselineMae": 0.38677,
+              "maeImprovement": -0.011287
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "long:text:k24",
+          "format": "long",
+          "modality": "text",
+          "clusterCount": 24,
+          "observations": 148,
+          "sources": 124,
+          "etaSquared": 0.120967,
+          "sourceMacro": {
+            "sources": 0,
+            "meanEtaSquared": 0
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 148,
+              "meanTrainingRowsAfterFamilyExclusion": 112.4,
+              "r2": -0.068786,
+              "pearson": -0.069729,
+              "spearman": -0.050719,
+              "maeLog10Lift": 0.453986
+            },
+            "laterVideo": {
+              "n": 16,
+              "trainingRowsBeforeFamilyExclusion": 132,
+              "trainingRowsAfterFamilyExclusion": 123,
+              "r2": -0.471129,
+              "pearson": -0.553615,
+              "spearman": -0.565557,
+              "maeLog10Lift": 0.441916,
+              "zeroBaselineMae": 0.38677,
+              "maeImprovement": -0.055145
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "long:together:k6",
+          "format": "long",
+          "modality": "together",
+          "clusterCount": 6,
+          "observations": 145,
+          "sources": 121,
+          "etaSquared": 0.106004,
+          "sourceMacro": {
+            "sources": 0,
+            "meanEtaSquared": 0
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 145,
+              "meanTrainingRowsAfterFamilyExclusion": 110,
+              "r2": 0.037005,
+              "pearson": 0.200759,
+              "spearman": 0.052351,
+              "maeLog10Lift": 0.435193
+            },
+            "laterVideo": {
+              "n": 16,
+              "trainingRowsBeforeFamilyExclusion": 129,
+              "trainingRowsAfterFamilyExclusion": 120,
+              "r2": -0.047459,
+              "pearson": -0.23909,
+              "spearman": -0.090187,
+              "maeLog10Lift": 0.379006,
+              "zeroBaselineMae": 0.38677,
+              "maeImprovement": 0.007764
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "long:together:k10",
+          "format": "long",
+          "modality": "together",
+          "clusterCount": 10,
+          "observations": 145,
+          "sources": 121,
+          "etaSquared": 0.07792,
+          "sourceMacro": {
+            "sources": 0,
+            "meanEtaSquared": 0
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 145,
+              "meanTrainingRowsAfterFamilyExclusion": 110,
+              "r2": -0.050689,
+              "pearson": -0.092968,
+              "spearman": -0.035061,
+              "maeLog10Lift": 0.451851
+            },
+            "laterVideo": {
+              "n": 16,
+              "trainingRowsBeforeFamilyExclusion": 129,
+              "trainingRowsAfterFamilyExclusion": 120,
+              "r2": -0.143087,
+              "pearson": -0.216235,
+              "spearman": -0.120615,
+              "maeLog10Lift": 0.382972,
+              "zeroBaselineMae": 0.38677,
+              "maeImprovement": 0.003798
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "long:together:k16",
+          "format": "long",
+          "modality": "together",
+          "clusterCount": 16,
+          "observations": 145,
+          "sources": 121,
+          "etaSquared": 0.103193,
+          "sourceMacro": {
+            "sources": 0,
+            "meanEtaSquared": 0
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 145,
+              "meanTrainingRowsAfterFamilyExclusion": 110,
+              "r2": -0.076481,
+              "pearson": -0.162406,
+              "spearman": -0.098943,
+              "maeLog10Lift": 0.457492
+            },
+            "laterVideo": {
+              "n": 16,
+              "trainingRowsBeforeFamilyExclusion": 129,
+              "trainingRowsAfterFamilyExclusion": 120,
+              "r2": -0.181177,
+              "pearson": -0.26063,
+              "spearman": -0.306177,
+              "maeLog10Lift": 0.395231,
+              "zeroBaselineMae": 0.38677,
+              "maeImprovement": -0.008461
+            }
+          },
+          "familyWiseP": 1,
+          "familyWiseSignificant": false
+        },
+        {
+          "id": "long:together:k24",
+          "format": "long",
+          "modality": "together",
+          "clusterCount": 24,
+          "observations": 145,
+          "sources": 121,
+          "etaSquared": 0.199951,
+          "sourceMacro": {
+            "sources": 0,
+            "meanEtaSquared": 0
+          },
+          "validation": {
+            "unseenCreator": {
+              "n": 145,
+              "meanTrainingRowsAfterFamilyExclusion": 110,
+              "r2": -0.042796,
+              "pearson": -0.030568,
+              "spearman": 0.051157,
+              "maeLog10Lift": 0.452172
+            },
+            "laterVideo": {
+              "n": 16,
+              "trainingRowsBeforeFamilyExclusion": 129,
+              "trainingRowsAfterFamilyExclusion": 120,
+              "r2": -0.199709,
+              "pearson": -0.227878,
+              "spearman": -0.188655,
+              "maeLog10Lift": 0.391411,
+              "zeroBaselineMae": 0.38677,
+              "maeImprovement": -0.00464
+            }
+          },
+          "familyWiseP": 0.2749,
+          "familyWiseSignificant": false
+        }
+      ],
+      "familyNull": {
+        "permutations": 250,
+        "shuffleUnit": "creator",
+        "method": "Outcomes are shuffled only within creator. The maximum eta-squared across all 12 modality/resolution tests defines the family-wise null.",
+        "p95MaximumEtaSquared": 0.202429
+      },
+      "continuousDiagnostics": {
+        "visual": [
+          {
+            "projection": "pca",
+            "coordinate": "x",
+            "observations": 148,
+            "outcomeBlind": true,
+            "pearson": 0.099152,
+            "spearman": 0.080349,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          },
+          {
+            "projection": "pca",
+            "coordinate": "y",
+            "observations": 148,
+            "outcomeBlind": true,
+            "pearson": -0.107792,
+            "spearman": -0.102655,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          },
+          {
+            "projection": "pca",
+            "coordinate": "estimate",
+            "observations": 148,
+            "outcomeBlind": true,
+            "pearson": 0,
+            "spearman": 0,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          }
+        ],
+        "text": [
+          {
+            "projection": "pca",
+            "coordinate": "x",
+            "observations": 148,
+            "outcomeBlind": true,
+            "pearson": -0.139808,
+            "spearman": -0.085682,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          },
+          {
+            "projection": "pca",
+            "coordinate": "y",
+            "observations": 148,
+            "outcomeBlind": true,
+            "pearson": 0.092903,
+            "spearman": 0.105985,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          },
+          {
+            "projection": "pca",
+            "coordinate": "estimate",
+            "observations": 148,
+            "outcomeBlind": true,
+            "pearson": 0,
+            "spearman": 0,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          }
+        ],
+        "together": [
+          {
+            "projection": "pca",
+            "coordinate": "x",
+            "observations": 145,
+            "outcomeBlind": true,
+            "pearson": -0.132625,
+            "spearman": -0.061519,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          },
+          {
+            "projection": "pca",
+            "coordinate": "y",
+            "observations": 145,
+            "outcomeBlind": true,
+            "pearson": 0.109088,
+            "spearman": 0.13804,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          },
+          {
+            "projection": "pca",
+            "coordinate": "estimate",
+            "observations": 145,
+            "outcomeBlind": true,
+            "pearson": 0,
+            "spearman": 0,
+            "boundary": "Descriptive association of an outcome-blind coordinate."
+          }
+        ]
+      }
+    }
+  ],
+  "evidenceBoundary": [
+    "Cluster geometry is reconstructed from frozen raw vectors without outcomes, but remains transductive because unlabeled test inputs enter PCA and KMeans.",
+    "The adjusted outcome uses unrechecked views observed near each video storedAt time and only creator history observed before target publication.",
+    "Native supervised map axes are excluded from this analysis.",
+    "Outcome-free semantic near-copy families are removed from training when present in evaluation.",
+    "Family-wise p-values protect the 12 cluster tests within each format, not every historical Jarvis search."
+  ],
+  "snapshotRunId": "efaa82b96450e04275a4c457",
+  "snapshotIdentityHash": "efaa82b96450e04275a4c4571e8e87f75444d503eaafed7327d5b0b256842af7",
+  "targetContentHash": "def1540026c4fef5032bc23183f3fde1673eea15dbcc91b59afda721bb479484",
+  "semanticFamilyHash": "466eb56407364b07de9c8cc9dc2c5e1d9c918e1f3ea2d8caea417e1da935b357",
+  "reconstructedGeometryHash": "b4a14b5a9f39f6c90e9a116ecd0ccedde17b8d3a9ace4af5ea7772b62f44a618",
+  "sourcePanelHash": "47d0c9aa90b0e283feecbf3e40ee41312e225c6083779e1bad8eaa5a2d7077a0",
+  "sourceTargetHash": "d8cb385c904c9187700ccb5a2afb96dfe2fb64224d83f406a2cea9dfc89afb67",
+  "contentHash": "f82e017ce9d1a915548043f95587b282c99179326d1d18128541e6d013b2b726"
+}

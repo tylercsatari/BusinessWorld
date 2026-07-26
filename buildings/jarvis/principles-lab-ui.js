@@ -1,8 +1,9 @@
 (function () {
     'use strict';
 
-    const ARTIFACT_URL = './buildings/jarvis/principles-lab/artifact.json?v=2';
+    const ARTIFACT_URL = './buildings/jarvis/principles-lab/artifact.json?v=3';
     const VIEWS = [
+        ['audit', 'Quant audit'],
         ['discoveries', 'Discoveries'],
         ['system', 'Whole system'],
         ['atlas', 'Cluster atlas'],
@@ -40,13 +41,29 @@
         failed: ['failed', 'red'],
         untested: ['untested', 'muted'],
     };
+    const AUDIT_STATUS = {
+        supported_regional: ['supported regional signal', 'green'],
+        supported_ood_bits: ['positive OOD bits', 'green'],
+        broad_style_signal: ['broad style signal', 'cyan'],
+        detectable_not_decision_grade: ['detectable, not decision-grade', 'amber'],
+        known_source_only: ['known-source only', 'amber'],
+        blocked_for_power: ['blocked for power', 'red'],
+        not_supported_as_alpha: ['not supported as alpha', 'red'],
+        not_supported: ['not supported', 'red'],
+        post_outcome_diagnostic_only: ['post-outcome only', 'purple'],
+        no_promoted_principle: ['no promoted principle', 'red'],
+        partial_local_support: ['partial local support', 'amber'],
+        not_testable_from_fixed_k_grid: ['not identified', 'amber'],
+        rejected: ['rejected', 'red'],
+        unresolved_together_only: ['unresolved', 'amber'],
+    };
 
     const state = {
         root: null,
         data: null,
         error: '',
         loading: false,
-        view: 'discoveries',
+        view: 'audit',
         invariantId: null,
         transformationId: null,
         mapId: 'shorts:visual',
@@ -60,6 +77,9 @@
         graphNodeId: null,
         evidenceSearch: '',
         surfaceFilter: 'all',
+        quantChannel: 'shorts:visual',
+        quantSplit: 'laterVideo',
+        quantSignal: 'creatorDelta',
     };
 
     function esc(value) {
@@ -142,6 +162,11 @@
         return `<span class="pla-cell-dot is-${meta[1]}" title="${esc(meta[0])}"></span>`;
     }
 
+    function auditChip(status) {
+        const meta = AUDIT_STATUS[status] || [words(status), 'muted'];
+        return chip(meta[0], meta[1]);
+    }
+
     function setUrl() {
         try {
             const url = new URL(window.location.href);
@@ -151,11 +176,25 @@
                 url.searchParams.set('principles_projection', state.projection);
                 url.searchParams.set('principles_k', String(state.clusterCount));
                 url.searchParams.set('principles_color', state.colorBy);
+                url.searchParams.delete('quant_channel');
+                url.searchParams.delete('quant_split');
+                url.searchParams.delete('quant_signal');
+            } else if (state.view === 'audit') {
+                url.searchParams.set('quant_channel', state.quantChannel);
+                url.searchParams.set('quant_split', state.quantSplit);
+                url.searchParams.set('quant_signal', state.quantSignal);
+                url.searchParams.delete('principles_map');
+                url.searchParams.delete('principles_projection');
+                url.searchParams.delete('principles_k');
+                url.searchParams.delete('principles_color');
             } else {
                 url.searchParams.delete('principles_map');
                 url.searchParams.delete('principles_projection');
                 url.searchParams.delete('principles_k');
                 url.searchParams.delete('principles_color');
+                url.searchParams.delete('quant_channel');
+                url.searchParams.delete('quant_split');
+                url.searchParams.delete('quant_signal');
             }
             window.history.replaceState({}, '', url);
         } catch (_error) {
@@ -172,6 +211,9 @@
             state.projection = params.get('principles_projection') || state.projection;
             state.clusterCount = Number(params.get('principles_k')) || state.clusterCount;
             state.colorBy = params.get('principles_color') || state.colorBy;
+            state.quantChannel = params.get('quant_channel') || state.quantChannel;
+            state.quantSplit = params.get('quant_split') || state.quantSplit;
+            state.quantSignal = params.get('quant_signal') || state.quantSignal;
         } catch (_error) {
             // Defaults remain valid.
         }
@@ -292,6 +334,7 @@
     }
 
     function renderView() {
+        if (state.view === 'audit') return renderQuantAudit();
         if (state.view === 'system') return renderSystem();
         if (state.view === 'atlas') return renderAtlas();
         if (state.view === 'models') return renderModels();
@@ -307,6 +350,748 @@
                 <b>${esc(value)}</b>
                 <small>${esc(detail)}</small>
             </div>`;
+    }
+
+    function quantChannelLabel(id) {
+        const [format, modality] = String(id || '').split(':');
+        return `${format === 'long' ? 'Long' : 'Shorts'} ${modality || ''}`;
+    }
+
+    function selectedQuantEvidence() {
+        const audit = state.data?.quantAudit;
+        const channel = audit?.signals?.creatorDelta?.find(
+            row => row.id === state.quantChannel
+        ) || audit?.signals?.creatorDelta?.[0];
+        if (!channel) return { channel: null, metric: null };
+        const family = state.quantSignal === 'creatorDelta'
+            ? channel.creatorDelta
+            : channel.absoluteHistoryMatched;
+        return {
+            channel,
+            metric: family?.[state.quantSplit] || null,
+        };
+    }
+
+    function metricValue(metric, key) {
+        if (!metric) return null;
+        if (key === 'sourceMacro') return metric.sourceMacro?.meanSpearman;
+        if (key === 'pairwise') return metric.pairwise?.microAccuracy;
+        return metric[key];
+    }
+
+    function scale(value, minimum, maximum) {
+        const number = Number(value);
+        if (!Number.isFinite(number) || maximum <= minimum) return 0;
+        return Math.max(0, Math.min(1, (number - minimum) / (maximum - minimum)));
+    }
+
+    function rangeTrack(range, minimum, maximum, format = value => fmt(value, 3)) {
+        const low = Number(range?.[0]);
+        const high = Number(range?.[1]);
+        if (!Number.isFinite(low) || !Number.isFinite(high)) return '<span>—</span>';
+        const left = scale(low, minimum, maximum) * 100;
+        const width = Math.max(1.5, (scale(high, minimum, maximum) - scale(low, minimum, maximum)) * 100);
+        return `
+            <div class="pla-range">
+                <div class="pla-range-track">
+                    <i class="pla-range-zero" style="--position:${scale(0, minimum, maximum) * 100}%"></i>
+                    <span style="--left:${left}%;--width:${width}%"></span>
+                </div>
+                <small>${esc(format(low))} to ${esc(format(high))}</small>
+            </div>`;
+    }
+
+    function calibrationChart(calibration) {
+        const bins = (calibration?.bins || []).filter(row => (
+            Number.isFinite(Number(row.meanPrediction))
+            && Number.isFinite(Number(row.meanActualLift))
+        ));
+        if (bins.length < 2) return '<div class="pla-empty">No calibration bins are available for this split.</div>';
+        const width = 720;
+        const height = 250;
+        const pad = { left: 54, right: 20, top: 22, bottom: 40 };
+        const values = bins.flatMap(row => [
+            Number(row.meanPrediction),
+            Number(row.meanActualLift),
+        ]);
+        let minimum = Math.min(...values, 0);
+        let maximum = Math.max(...values, 0);
+        const margin = Math.max(.03, (maximum - minimum) * .12);
+        minimum -= margin;
+        maximum += margin;
+        const x = index => pad.left + (
+            (index / Math.max(1, bins.length - 1))
+            * (width - pad.left - pad.right)
+        );
+        const y = value => pad.top + (
+            (1 - scale(value, minimum, maximum))
+            * (height - pad.top - pad.bottom)
+        );
+        const path = key => bins.map((row, index) => (
+            `${index ? 'L' : 'M'}${x(index).toFixed(1)},${y(Number(row[key])).toFixed(1)}`
+        )).join(' ');
+        const ticks = Array.from({ length: 5 }, (_, index) => (
+            minimum + ((maximum - minimum) * (index / 4))
+        ));
+        return `
+            <div class="pla-quant-chart">
+                <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Predicted and observed opportunity-adjusted log view lift by score decile">
+                    ${ticks.map(value => `
+                        <line x1="${pad.left}" x2="${width - pad.right}" y1="${y(value)}" y2="${y(value)}"></line>
+                        <text x="${pad.left - 9}" y="${y(value) + 4}" text-anchor="end">${esc(signed(value, 2))}</text>
+                    `).join('')}
+                    <line class="pla-chart-zero" x1="${pad.left}" x2="${width - pad.right}" y1="${y(0)}" y2="${y(0)}"></line>
+                    <path class="is-predicted" d="${path('meanPrediction')}"></path>
+                    <path class="is-observed" d="${path('meanActualLift')}"></path>
+                    ${bins.map((row, index) => `
+                        <circle class="is-predicted" cx="${x(index)}" cy="${y(Number(row.meanPrediction))}" r="3"></circle>
+                        <circle class="is-observed" cx="${x(index)}" cy="${y(Number(row.meanActualLift))}" r="3.5"></circle>
+                        <text x="${x(index)}" y="${height - 15}" text-anchor="middle">D${index + 1}</text>
+                    `).join('')}
+                </svg>
+                <div class="pla-chart-legend">
+                    <span class="is-predicted">fold-local prediction</span>
+                    <span class="is-observed">observed opportunity lift</span>
+                </div>
+            </div>`;
+    }
+
+    function decisionMetric(row) {
+        const primary = row.primary || {};
+        if (row.id === 'market_hold_entry' || row.id === 'market_hold_ret5') {
+            return {
+                main: primary.forwardBitsPerObservation == null
+                    ? '—'
+                    : `${signed(primary.forwardBitsPerObservation, 3)} bits`,
+                detail: `Grouped ${signed(primary.groupedBitsPerObservation, 3)} · frozen rank ${signed(primary.frozenZeroShotSpearman, 3)}`,
+            };
+        }
+        if (row.id === 'absolute_short_geometry') {
+            return {
+                main: `ρ ${signed(primary.visualLater?.spearman, 3)}`,
+                detail: `${pct(primary.visualLater?.pairwise?.microAccuracy)} within-creator pairs · ${signed(primary.visualLater?.bitsPerObservation, 3)} bits`,
+            };
+        }
+        if (row.id === 'creator_delta') {
+            return {
+                main: pct(primary.visualLater?.pairwise?.microAccuracy),
+                detail: `chance 50% · ρ ${signed(primary.visualLater?.spearman, 3)} · ${signed(primary.visualLater?.bitsPerObservation, 4)} bits`,
+            };
+        }
+        if (row.id === 'clusters') {
+            return {
+                main: `${fmt(primary.familyWiseSignificant, 0)} / 24`,
+                detail: `best later family p ${fmt(primary.bestLater?.familyWiseP, 3)}`,
+            };
+        }
+        return {
+            main: fmt(primary.strictAllModalityRows, 0),
+            detail: `${fmt(primary.requiredBeforeDesignEffect, 0)} required before design effect`,
+        };
+    }
+
+    function renderQuantAudit() {
+        const audit = state.data.quantAudit;
+        if (!audit) return '<div class="pla-error"><b>Quant audit missing</b><span>The artifact was built without the governed evidence layer.</span></div>';
+        const selected = selectedQuantEvidence();
+        const pairwise = metricValue(selected.metric, 'pairwise');
+        const deltaLater = audit.signals.creatorDelta
+            .find(row => row.id === 'shorts:visual')
+            ?.creatorDelta?.laterVideo;
+        const searches = audit.promotion.searchUniverse
+            ?.knownOutcomeOrientedSearchExecutionsLowerBound;
+        return `
+            <section class="pla-quant-verdict">
+                <div>
+                    <span class="pla-section-label">Promotion-gated conclusion</span>
+                    <div>${auditChip(audit.verdict.status)}</div>
+                    <h3>${esc(audit.verdict.headline)}</h3>
+                    <p>${esc(audit.verdict.summary)}</p>
+                </div>
+                <div class="pla-quant-verdict-grid">
+                    ${stat('Promoted principles', audit.verdict.promotedPrinciples, 'Must clear lineage, transfer, multiplicity, and prospective gates', 'red')}
+                    ${stat('Regional OOD factors', audit.verdict.supportedRegionalFactors, 'Repeatable information, not universal law', 'green')}
+                    ${stat('Later next-video ordering', pct(deltaLater?.pairwise?.microAccuracy), 'Shorts visual creator-delta; 50% is chance', 'amber')}
+                    ${stat('Visible adaptive searches', compact(searches), 'Lower bound used by the promotion ledger', 'red')}
+                </div>
+            </section>
+
+            ${renderQuantDecisionSummary(audit)}
+            ${renderQuantSignalWorkbench(audit, selected, pairwise)}
+            ${renderQuantSensitivity(audit)}
+            ${renderQuantFactors(audit)}
+            ${renderQuantClusters(audit)}
+            ${renderQuantLineage(audit)}
+            ${renderQuantMultiplicity(audit)}
+            ${renderQuantDefinitions(audit)}
+        `;
+    }
+
+    function renderQuantDecisionSummary(audit) {
+        return `
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div>
+                        <span class="pla-section-label">Decision ledger</span>
+                        <h3>What the combined Shorts and Long evidence actually permits</h3>
+                    </div>
+                    <span>Strongest admissible claim, not strongest observed correlation</span>
+                </div>
+                <div class="pla-decision-ledger">
+                    ${audit.decisionSummary.map(row => {
+                        const metric = decisionMetric(row);
+                        return `
+                            <article>
+                                <div>
+                                    ${auditChip(row.status)}
+                                    <b>${esc(row.label)}</b>
+                                    <p>${esc(row.interpretation)}</p>
+                                </div>
+                                <strong>${esc(metric.main)}</strong>
+                                <small>${esc(metric.detail)}</small>
+                            </article>`;
+                    }).join('')}
+                </div>
+            </section>`;
+    }
+
+    function renderQuantSignalWorkbench(audit, selected, pairwise) {
+        const metric = selected.metric;
+        const channelIds = audit.signals.creatorDelta.map(row => row.id);
+        const signalLabel = state.quantSignal === 'creatorDelta'
+            ? 'creator-relative content delta'
+            : 'absolute geometry + history baseline';
+        const calibration = metric?.calibration;
+        return `
+            <section class="pla-section">
+                <div class="pla-section-head pla-quant-controls-head">
+                    <div>
+                        <span class="pla-section-label">Leakage-safe validation workbench</span>
+                        <h3>Separate broad ranking from the next decision</h3>
+                    </div>
+                    <span>${esc(quantChannelLabel(selected.channel?.id))} · ${esc(words(state.quantSplit))}</span>
+                </div>
+                <div class="pla-quant-toolbar">
+                    <div>
+                        <span>Representation</span>
+                        <div class="pla-segmented">
+                            ${channelIds.map(id => `
+                                <button type="button" class="${state.quantChannel === id ? 'active' : ''}" data-quant-channel="${esc(id)}">${esc(quantChannelLabel(id))}</button>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <div>
+                        <span>Estimand</span>
+                        <div class="pla-segmented">
+                            <button type="button" class="${state.quantSignal === 'absolute' ? 'active' : ''}" data-quant-signal="absolute">Absolute rank</button>
+                            <button type="button" class="${state.quantSignal === 'creatorDelta' ? 'active' : ''}" data-quant-signal="creatorDelta">Creator delta</button>
+                        </div>
+                    </div>
+                    <div>
+                        <span>Blind split</span>
+                        <div class="pla-segmented">
+                            <button type="button" class="${state.quantSplit === 'unseenCreator' ? 'active' : ''}" data-quant-split="unseenCreator">Unseen creator</button>
+                            <button type="button" class="${state.quantSplit === 'laterVideo' ? 'active' : ''}" data-quant-split="laterVideo">Later video</button>
+                        </div>
+                    </div>
+                </div>
+                ${metric ? `
+                    <div class="pla-quant-metrics">
+                        ${stat('Pooled rank ρ', signed(metric.spearman, 3), audit.definitions.pooledRank)}
+                        ${stat('Creator-macro ρ', signed(metric.sourceMacro?.meanSpearman, 3), audit.definitions.sourceMacro)}
+                        ${stat('Within-creator pairs', pct(pairwise), audit.definitions.pairwise, pairwise >= .53 ? 'green' : 'amber')}
+                        ${stat('Predictive information', `${signed(metric.bitsPerObservation, 4)} bits`, audit.definitions.predictiveBits, metric.bitsPerObservation > 0 ? 'green' : 'red')}
+                        ${stat('Out-of-sample R²', signed(metric.r2, 3), 'Variance explained after the fold-local null')}
+                        ${stat('Top-decile AUC', fmt(metric.topDecileAuc, 3), '0.5 is random; 1.0 is perfect ranking')}
+                    </div>
+                    <div class="pla-quant-signal-note">
+                        <b>${esc(signalLabel)}</b>
+                        <p>${esc(metric.split || '')}</p>
+                    </div>
+                    <div class="pla-quant-chart-grid">
+                        <div>
+                            <div class="pla-mini-head">
+                                <div><span class="pla-section-label">Calibration</span><h4>Predicted versus realized opportunity lift</h4></div>
+                                <span>${fmt(calibration?.monotonicAdjacentSteps, 0)} / ${fmt(calibration?.possibleAdjacentSteps, 0)} monotonic steps</span>
+                            </div>
+                            ${calibrationChart(calibration)}
+                        </div>
+                        <div>
+                            <div class="pla-mini-head">
+                                <div><span class="pla-section-label">Action test</span><h4>Can it order two videos from one creator?</h4></div>
+                            </div>
+                            <div class="pla-pairwise-gauge">
+                                <div class="pla-pairwise-number">${pct(pairwise)}</div>
+                                <div class="pla-pairwise-track">
+                                    <i></i>
+                                    <span style="--position:${scale(pairwise, .45, .55) * 100}%"></span>
+                                </div>
+                                <div class="pla-pairwise-labels"><span>45%</span><b>50% chance</b><span>55%</span></div>
+                                <p>${pairwise >= .55
+                                    ? 'Potentially decision-relevant; requires prospective confirmation.'
+                                    : 'Statistically detectable at this sample size, but too close to chance to justify a high-confidence publishing bet.'}</p>
+                            </div>
+                            <dl class="pla-quant-detail-list">
+                                <div><dt>Test observations</dt><dd>${fmt(metric.n, 0)}</dd></div>
+                                <div><dt>Creators in pair test</dt><dd>${fmt(metric.pairwise?.sources, 0)}</dd></div>
+                                <div><dt>Within-creator pairs</dt><dd>${fmt(metric.pairwise?.pairs, 0)}</dd></div>
+                                <div><dt>Positive creator fraction</dt><dd>${pct(metric.sourceMacro?.positiveFraction)}</dd></div>
+                                <div><dt>Prediction spread</dt><dd>${fmt(metric.predictionStandardDeviation, 4)}</dd></div>
+                                <div><dt>Actual spread</dt><dd>${fmt(metric.actualStandardDeviation, 4)}</dd></div>
+                            </dl>
+                        </div>
+                    </div>
+                    <details class="pla-quant-details">
+                        <summary>Show every calibration bin</summary>
+                        <div class="pla-table-scroll">
+                            <table class="pla-data-table">
+                                <thead><tr><th>Score decile</th><th>n</th><th>Mean prediction</th><th>Mean actual lift</th><th>Median lift</th><th>Positive lift</th><th>Actual top-decile rate</th></tr></thead>
+                                <tbody>${(calibration?.bins || []).map(row => `
+                                    <tr>
+                                        <td>D${fmt(row.decile, 0)}</td>
+                                        <td>${fmt(row.n, 0)}</td>
+                                        <td>${signed(row.meanPrediction, 4)}</td>
+                                        <td>${signed(row.meanActualLift, 4)}</td>
+                                        <td>${signed(row.medianActualLift, 4)}</td>
+                                        <td>${pct(row.positiveLiftRate)}</td>
+                                        <td>${pct(row.actualTopDecileRate)}</td>
+                                    </tr>
+                                `).join('')}</tbody>
+                            </table>
+                        </div>
+                    </details>
+                ` : '<div class="pla-empty">This channel does not have a governed validation result.</div>'}
+            </section>`;
+    }
+
+    function renderQuantSensitivity(audit) {
+        const sensitivity = audit.signals.baselineSensitivity;
+        const [format, modality] = state.quantChannel.split(':');
+        const stability = format === 'shorts'
+            ? sensitivity.stability?.[modality]?.[state.quantSplit]
+            : null;
+        const history = format === 'shorts'
+            ? sensitivity.historySupportStability?.[modality]?.[state.quantSplit]
+            : null;
+        const specificationRows = format === 'shorts'
+            ? (sensitivity.specifications || []).map(row => ({
+                id: row.id,
+                age: row.ageSpecification,
+                history: row.historySpecification,
+                result: row.results?.[modality]?.[state.quantSplit],
+            })).filter(row => row.result)
+            : [];
+        const historyRows = format === 'shorts'
+            ? (sensitivity.historySupportSpecifications || []).map(row => ({
+                id: `minimum-history-${row.minimumHistory}`,
+                minimumHistory: row.minimumHistory,
+                result: row.results?.[modality]?.[state.quantSplit],
+            })).filter(row => row.result)
+            : [];
+        const multiplicity = specificationRows[0]?.result?.multiplicity;
+        return `
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div>
+                        <span class="pla-section-label">Nuisance-model sensitivity</span>
+                        <h3>Does the result survive reasonable definitions of “expected performance”?</h3>
+                    </div>
+                    <span>${fmt(sensitivity.grid?.hypotheses, 0)} predeclared checks</span>
+                </div>
+                ${stability ? `
+                    <div class="pla-sensitivity-grid">
+                        <article>
+                            <span>Within-creator pair accuracy</span>
+                            ${rangeTrack(stability.pairwiseMicroAccuracyRange, .45, .55, value => pct(value))}
+                            <p>Crosses 50% chance in ${stability.aboveChancePairwiseSpecifications} of ${stability.specifications} nuisance baselines.</p>
+                        </article>
+                        <article>
+                            <span>Pooled Spearman rank</span>
+                            ${rangeTrack(stability.spearmanRange, -.1, .3, value => signed(value, 3))}
+                            <p>Broad corpus ordering remains positive, but its magnitude depends strongly on the baseline.</p>
+                        </article>
+                        <article>
+                            <span>Creator-macro Spearman</span>
+                            ${rangeTrack(stability.sourceMacroMeanSpearmanRange, -.1, .1, value => signed(value, 3))}
+                            <p>The equal-creator estimate crosses zero, so portability is not stable.</p>
+                        </article>
+                        <article>
+                            <span>Predictive bits per video</span>
+                            ${rangeTrack(stability.bitsRange, -.01, .08, value => signed(value, 4))}
+                            <p>Positive pooled log score does not imply useful next-video discrimination.</p>
+                        </article>
+                    </div>
+                    <div class="pla-sensitivity-verdict">
+                        <div>${auditChip('detectable_not_decision_grade')}</div>
+                        <p>No nuisance-baseline result survives family-wise Holm control across all ${fmt(multiplicity?.hypotheses, 0)} checks (best adjusted p ${fmt(multiplicity?.holmP, 3)}). FDR survivors are exploratory because the actionable metrics cross chance under reasonable baselines.</p>
+                    </div>
+                    <details class="pla-quant-details">
+                        <summary>All age and creator-history specifications</summary>
+                        <div class="pla-table-scroll">
+                            <table class="pla-data-table">
+                                <thead><tr><th>Age curve</th><th>Creator history</th><th>n</th><th>Pooled ρ</th><th>Creator-macro ρ</th><th>Pair accuracy</th><th>Bits/video</th><th>Holm p</th></tr></thead>
+                                <tbody>${specificationRows.map(row => `
+                                    <tr>
+                                        <td>${esc(words(row.age))}</td>
+                                        <td>${esc(words(row.history))}</td>
+                                        <td>${fmt(row.result.n, 0)}</td>
+                                        <td>${signed(row.result.spearman, 3)}</td>
+                                        <td>${signed(row.result.sourceMacroMeanSpearman, 3)}</td>
+                                        <td>${pct(row.result.pairwiseMicroAccuracy)}</td>
+                                        <td>${signed(row.result.gaussianBitsPerObservation, 4)}</td>
+                                        <td>${fmt(row.result.multiplicity?.holmP, 3)}</td>
+                                    </tr>
+                                `).join('')}</tbody>
+                            </table>
+                        </div>
+                    </details>
+                    <details class="pla-quant-details">
+                        <summary>History-support stress test</summary>
+                        <div class="pla-history-summary">
+                            <span>Pair accuracy ${history ? `${pct(history.pairwiseMicroAccuracyRange?.[0])} to ${pct(history.pairwiseMicroAccuracyRange?.[1])}` : '—'}</span>
+                            <span>Creator-macro ρ ${history ? `${signed(history.sourceMacroMeanSpearmanRange?.[0], 3)} to ${signed(history.sourceMacroMeanSpearmanRange?.[1], 3)}` : '—'}</span>
+                        </div>
+                        <div class="pla-table-scroll">
+                            <table class="pla-data-table">
+                                <thead><tr><th>Minimum prior videos</th><th>n</th><th>Pooled ρ</th><th>Creator-macro ρ</th><th>Pair accuracy</th><th>Bits/video</th></tr></thead>
+                                <tbody>${historyRows.map(row => `
+                                    <tr>
+                                        <td>${fmt(row.minimumHistory, 0)}</td>
+                                        <td>${fmt(row.result.n, 0)}</td>
+                                        <td>${signed(row.result.spearman, 3)}</td>
+                                        <td>${signed(row.result.sourceMacroMeanSpearman, 3)}</td>
+                                        <td>${pct(row.result.pairwiseMicroAccuracy)}</td>
+                                        <td>${signed(row.result.gaussianBitsPerObservation, 4)}</td>
+                                    </tr>
+                                `).join('')}</tbody>
+                            </table>
+                        </div>
+                    </details>
+                ` : `
+                    <div class="pla-audit-blocker">
+                        ${auditChip(format === 'long' ? 'blocked_for_power' : 'not_supported')}
+                        <b>${format === 'long' ? 'Long-form sensitivity is blocked by historical support.' : 'No predeclared sensitivity grid exists for this channel.'}</b>
+                        <p>${format === 'long'
+                            ? 'Only 171 Long observations have historically valid visual, text, and together inputs. Running a large grid here would create apparent precision without independent power.'
+                            : 'The confirmatory nuisance grid was limited to Shorts visual and together because text support is materially smaller.'}</p>
+                    </div>`}
+                <p class="pla-boundary">${(sensitivity.claimBoundary || []).map(esc).join(' ')}</p>
+            </section>`;
+    }
+
+    function bitMarker(value) {
+        const position = scale(value, -.15, .15) * 100;
+        return `
+            <div class="pla-bit-marker" title="${esc(`${signed(value, 4)} bits per observation`)}">
+                <i></i><span style="--position:${position}%"></span>
+            </div>`;
+    }
+
+    function renderQuantFactors(audit) {
+        const factors = audit.signals.factorized.ledger || [];
+        return `
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div>
+                        <span class="pla-section-label">Factor-by-factor OOD ledger</span>
+                        <h3>Which layer carries information after it leaves its training neighborhood?</h3>
+                    </div>
+                    <span>${factors.filter(row => row.status === 'supported_ood_bits').length} supported of ${factors.length}</span>
+                </div>
+                <div class="pla-factor-ledger-intro">
+                    <p>Positive bits mean the factor improves out-of-sample probabilistic prediction over its declared null. A correlation without positive grouped and forward bits is not promoted.</p>
+                    <div><span>−0.15 worse</span><b>0 null</b><span>+0.15 better</span></div>
+                </div>
+                <div class="pla-table-scroll">
+                    <table class="pla-data-table pla-factor-ledger">
+                        <thead><tr><th>Factor</th><th>Target</th><th>Evaluation contract</th><th>Grouped bits</th><th>Forward bits</th><th>Frozen rank ρ</th><th>Verdict</th></tr></thead>
+                        <tbody>${factors.map(row => `
+                            <tr>
+                                <td><b>${esc(words(row.factor))}</b><code>${esc(row.id)}</code></td>
+                                <td>${esc(words(row.target))}</td>
+                                <td>${esc(row.evaluation)}</td>
+                                <td>${bitMarker(row.groupedBitsPerObservation)}<span>${signed(row.groupedBitsPerObservation, 4)}</span></td>
+                                <td>${row.forwardBitsPerObservation == null ? '—' : `${bitMarker(row.forwardBitsPerObservation)}<span>${signed(row.forwardBitsPerObservation, 4)}</span>`}</td>
+                                <td>${signed(row.frozenZeroShotSpearman, 3)}</td>
+                                <td>${auditChip(row.status)}</td>
+                            </tr>
+                            <tr class="pla-ledger-caveat"><td colspan="7">${esc(row.caveat)}</td></tr>
+                        `).join('')}</tbody>
+                    </table>
+                </div>
+                <p class="pla-boundary">${Object.entries(audit.signals.factorized.contract || {}).map(([factor, row]) => `${words(factor)}: ${row.inputs}`).map(esc).join(' ')}</p>
+            </section>`;
+    }
+
+    function renderQuantClusters(audit) {
+        const outcome = audit.clusters.outcomeAudit;
+        const invariance = audit.clusters.invariance;
+        const tests = (outcome.formats || []).flatMap(row => row.tests || []);
+        const geometry = invariance.geometry || {};
+        const mechanisms = invariance.mechanisms || {};
+        return `
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div>
+                        <span class="pla-section-label">Cluster falsification</span>
+                        <h3>Real geometric structure is not automatically predictive structure</h3>
+                    </div>
+                    <span>${fmt(outcome.familyWiseSignificantTests, 0)} / ${fmt(outcome.tests, 0)} outcome families survive</span>
+                </div>
+                <div class="pla-cluster-audit-grid">
+                    <article>
+                        <span>Adjacent-map lineage NMI</span>
+                        <b>${fmt(geometry.lineageNmi?.mean, 3)}</b>
+                        <p>The production k maps share a genuine nested geometry.</p>
+                    </article>
+                    <article>
+                        <span>De-novo recovery NMI</span>
+                        <b>${fmt(geometry.deNovoProductionNmi?.mean, 3)}</b>
+                        <p>Independent reruns recover only a modest fraction of that taxonomy.</p>
+                    </article>
+                    <article>
+                        <span>Strict stable core</span>
+                        <b>${pct(geometry.strictMutualLineageCoreSourceBalancedFraction?.mean)}</b>
+                        <p>Only mutually stable source-balanced observations count as the core.</p>
+                    </article>
+                    <article>
+                        <span>Validated relationship cells</span>
+                        <b>${fmt(mechanisms.validatedPairRelationships, 0)}</b>
+                        <p>None survive unseen-source recurrence, forward time, and BH control.</p>
+                    </article>
+                </div>
+                <div class="pla-quant-chart-grid">
+                    <div>
+                        <div class="pla-mini-head">
+                            <div><span class="pla-section-label">Outcome family</span><h4>Every k and modality was charged to the same selection family</h4></div>
+                        </div>
+                        <div class="pla-cluster-family">
+                            ${tests.map(row => `
+                                <div>
+                                    <span>${esc(`${quantChannelLabel(`${row.format}:${row.modality}`)} · k${row.clusterCount}`)}</span>
+                                    <div class="pla-p-track"><i style="--position:${scale(row.familyWiseP, 0, 1) * 100}%"></i></div>
+                                    <b>p ${fmt(row.familyWiseP, 3)}</b>
+                                    <small>later ρ ${signed(row.validation?.laterVideo?.spearman, 3)} · R² ${signed(row.validation?.laterVideo?.r2, 3)}</small>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="pla-mini-head">
+                            <div><span class="pla-section-label">Relationship tests</span><h4>Do cross-modal cluster interactions add portable signal?</h4></div>
+                        </div>
+                        <div class="pla-mechanism-tests">
+                            ${(mechanisms.tests || []).map(row => `
+                                <div>
+                                    <b>k${fmt(row.k, 0)}</b>
+                                    <span>unseen additive r ${signed(row.unseenSourceAdditiveR, 3)}</span>
+                                    <span>+ relationship ${signed(row.unseenSourceDeltaR, 3)}</span>
+                                    <span>unseen + time r ${signed(row.unseenSourceTimeR, 3)}</span>
+                                    ${chip(`${row.survivingRelationships} survive`, row.survivingRelationships ? 'green' : 'red')}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+                <div class="pla-cluster-claims">
+                    ${(invariance.claims || []).map(row => `
+                        <article>
+                            ${auditChip(row.status)}
+                            <b>${esc(row.claim)}</b>
+                            <p>${esc(row.basis)}</p>
+                        </article>
+                    `).join('')}
+                </div>
+                <p class="pla-boundary">${esc(geometry.interpretation || '')} ${(Array.isArray(outcome.boundary) ? outcome.boundary : [outcome.boundary]).filter(Boolean).map(esc).join(' ')}</p>
+            </section>`;
+    }
+
+    function renderQuantLineage(audit) {
+        const lineage = audit.lineage;
+        const support = audit.support;
+        const snapshot = lineage.snapshot;
+        return `
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div>
+                        <span class="pla-section-label">Immutable evidence lineage</span>
+                        <h3>What was frozen, rebuilt, blocked, and allowed into a claim</h3>
+                    </div>
+                    <span><code>${esc(shortHash(snapshot.identityHash))}</code></span>
+                </div>
+                <div class="pla-lineage-strip">
+                    ${stat('Frozen objects', fmt(snapshot.objects, 0), `${compact(snapshot.bytes)} bytes · ${snapshot.completeReadsPerObject} complete reads each`, 'green')}
+                    ${stat('Governed observations', compact(support.formats.reduce((sum, row) => sum + Number(row.observations || 0), 0)), 'Stored rows with immutable source identity')}
+                    ${stat('Strict outcome rows', compact(support.strictOutcomeRows), 'Historical opportunity target available')}
+                    ${stat('Long all-modality rows', fmt(support.formats.find(row => row.format === 'long')?.historicallyObservableSupport?.targetsWithAllModalities, 0), 'Below the confirmatory power floor', 'red')}
+                </div>
+                <div class="pla-lineage-columns">
+                    <div>
+                        <div class="pla-mini-head">
+                            <div><span class="pla-section-label">Outcome-blind reconstruction</span><h4>Six maps rebuilt from the exact frozen 1,536-D vectors</h4></div>
+                            ${lineage.reconstructedGeometry.pass ? chip('gate passed', 'green') : chip('gate failed', 'red')}
+                        </div>
+                        <div class="pla-geometry-ledger">
+                            ${(lineage.reconstructedGeometry.channels || []).map(row => `
+                                <div>
+                                    <b>${esc(quantChannelLabel(row.id))}</b>
+                                    <span>${compact(row.rows)} × ${fmt(row.dimensions, 0)}</span>
+                                    <span>PCA64 ${pct(row.pcaVarianceExplained)}</span>
+                                    <code>${esc(shortHash(row.vectorSha256))}</code>
+                                    ${row.nativeMapVectorCoherent
+                                        ? chip('native coherent', 'green')
+                                        : chip('native rejected; rebuilt', 'amber')}
+                                </div>
+                            `).join('')}
+                        </div>
+                        <p class="pla-boundary">${esc(lineage.reconstructedGeometry.remediation || '')}</p>
+                    </div>
+                    <div>
+                        <div class="pla-mini-head">
+                            <div><span class="pla-section-label">Hard gates</span><h4>A failed required gate lowers the evidence ceiling</h4></div>
+                        </div>
+                        <div class="pla-gate-list">
+                            ${(lineage.hardGates || []).map(row => `
+                                <details>
+                                    <summary>
+                                        ${chip(row.pass ? 'pass' : 'fail', row.pass ? 'green' : 'red')}
+                                        <b>${esc(words(row.id))}</b>
+                                    </summary>
+                                    <p>${esc(row.required)}</p>
+                                    ${row.evidence ? `<pre>${esc(JSON.stringify(row.evidence, null, 2))}</pre>` : ''}
+                                </details>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+                <div class="pla-lineage-warnings">
+                    <div>
+                        <span class="pla-section-label">Native source failures retained</span>
+                        ${(lineage.nativeIntegrity.failures || []).map(row => `<p>${esc(row)}</p>`).join('')}
+                    </div>
+                    <div>
+                        <span class="pla-section-label">Mutable upstream sources changed after freeze</span>
+                        ${(snapshot.mutableSourcesChangedAfterFreeze || []).map(row => `<p>${esc(row)}</p>`).join('')}
+                        <small>The frozen snapshot remains the governed input; later mutations cannot silently alter this run.</small>
+                    </div>
+                </div>
+                <details class="pla-quant-details">
+                    <summary>Governed downstream artifact status</summary>
+                    <div class="pla-table-scroll">
+                        <table class="pla-data-table">
+                            <thead><tr><th>Artifact</th><th>Shorts</th><th>Long</th><th>Status</th></tr></thead>
+                            <tbody>${(lineage.governedArtifacts || []).map(row => `
+                                <tr>
+                                    <td><code>${esc(row.id)}</code></td>
+                                    <td>${chip(row.shortsConfirmatoryDataUseValid ? 'valid' : 'blocked', row.shortsConfirmatoryDataUseValid ? 'green' : 'red')}</td>
+                                    <td>${chip(row.longConfirmatoryDataUseValid ? 'valid' : 'blocked', row.longConfirmatoryDataUseValid ? 'green' : 'red')}</td>
+                                    <td>${esc(words(row.status))}</td>
+                                </tr>
+                            `).join('')}</tbody>
+                        </table>
+                    </div>
+                </details>
+            </section>`;
+    }
+
+    function renderQuantMultiplicity(audit) {
+        const search = audit.promotion.searchUniverse || {};
+        const findings = audit.promotion.findings || {};
+        const executions = search.outcomeOrientedExecutions || {};
+        const native = findings.nativeFamilyStatisticalSurvivors || {};
+        const market = native.promiseMarketHold || [];
+        const falsifications = findings.falsificationsThatCurrentlyHold || [];
+        return `
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div>
+                        <span class="pla-section-label">Search and promotion debt</span>
+                        <h3>Every adaptive look makes the next “breakthrough” more expensive</h3>
+                    </div>
+                    <span>flat threshold ${Number(search.exactVisibleBonferroniThreshold || 0).toExponential(2)}</span>
+                </div>
+                <div class="pla-search-universe">
+                    <article>
+                        <b>${compact(executions.operations)}</b>
+                        <span>Operations outcome searches</span>
+                    </article>
+                    <article>
+                        <b>${compact(executions.promise)}</b>
+                        <span>Promise outcome searches</span>
+                    </article>
+                    <article>
+                        <b>${compact(executions.retention)}</b>
+                        <span>Retention searches</span>
+                    </article>
+                    <article>
+                        <b>${compact(executions.tribe)}</b>
+                        <span>Tribe searches</span>
+                    </article>
+                    <article>
+                        <b>${compact(executions.legacyExperimentLog)}</b>
+                        <span>Legacy logged executions</span>
+                    </article>
+                </div>
+                <div class="pla-quant-chart-grid">
+                    <div>
+                        <div class="pla-mini-head"><div><span class="pla-section-label">Native survivors</span><h4>Interesting associations that still fail promotion</h4></div></div>
+                        <div class="pla-native-survivors">
+                            ${market.map(row => `
+                                <article>
+                                    ${chip(words(row.ceiling), 'amber')}
+                                    <b>${esc(row.finding)}</b>
+                                    <span>ρ ${signed(row.spearman, 3)} · native BY ${fmt(row.nativeFourEndpointBy, 6)}</span>
+                                    <p>${esc(row.blocker)}</p>
+                                </article>
+                            `).join('')}
+                            ${(native.tribeCoreDeconfounded || []).slice(0, 8).map(row => `
+                                <article>
+                                    ${chip('local diagnostic', 'purple')}
+                                    <b>${esc(row.finding)}</b>
+                                    <span>partial ρ ${signed(row.partialSpearman, 3)} · global BY ${fmt(row.globalBy, 4)}</span>
+                                    <p>${esc(row.blocker)}</p>
+                                </article>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="pla-mini-head"><div><span class="pla-section-label">Falsifications</span><h4>Negative results that constrain the next model</h4></div></div>
+                        <div class="pla-falsification-list">
+                            ${falsifications.map(row => `
+                                <article>
+                                    ${chip('did not survive', 'red')}
+                                    <b>${esc(row.finding)}</b>
+                                    <pre>${esc(JSON.stringify(Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'finding')), null, 2))}</pre>
+                                </article>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+                <div class="pla-promotion-rule">
+                    <b>Promotion rule</b>
+                    <p>${esc(findings.wholeProgramVerdict || '')}</p>
+                </div>
+            </section>`;
+    }
+
+    function renderQuantDefinitions(audit) {
+        return `
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div>
+                        <span class="pla-section-label">Plain-English metric contract</span>
+                        <h3>What each number means before anyone acts on it</h3>
+                    </div>
+                </div>
+                <div class="pla-definition-ledger">
+                    ${Object.entries(audit.definitions || {}).map(([key, value]) => `
+                        <article>
+                            <b>${esc(words(key))}</b>
+                            <p>${esc(value)}</p>
+                        </article>
+                    `).join('')}
+                </div>
+            </section>`;
     }
 
     function renderDiscoveries() {
@@ -1180,6 +1965,21 @@
             state.transformationId = null;
             setUrl();
             render();
+        }));
+        state.root.querySelectorAll('[data-quant-channel]').forEach(button => button.addEventListener('click', () => {
+            state.quantChannel = button.dataset.quantChannel;
+            setUrl();
+            preserveScroll(render);
+        }));
+        state.root.querySelectorAll('[data-quant-split]').forEach(button => button.addEventListener('click', () => {
+            state.quantSplit = button.dataset.quantSplit;
+            setUrl();
+            preserveScroll(render);
+        }));
+        state.root.querySelectorAll('[data-quant-signal]').forEach(button => button.addEventListener('click', () => {
+            state.quantSignal = button.dataset.quantSignal;
+            setUrl();
+            preserveScroll(render);
         }));
         state.root.querySelectorAll('[data-invariant]').forEach(button => button.addEventListener('click', () => {
             state.invariantId = button.dataset.invariant;
