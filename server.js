@@ -652,6 +652,26 @@ const RAW_PYTHON = (() => {
     return 'python3';
 })();
 console.log('[raw-upload] using python:', RAW_PYTHON);
+// Most recent raw_upload.py run (exit code, kill signal, stage markers) — surfaced in
+// /api/raw/upload-health so a scorer that the kernel OOM-kills is visible remotely.
+let lastRawScorer = null;
+function rawBoxStats() {
+    const os = require('os');
+    const mu = process.memoryUsage();
+    const st = { uptimeSec: Math.round(process.uptime()), node: { rssMB: Math.round(mu.rss / 1048576), heapMB: Math.round(mu.heapUsed / 1048576) } };
+    try {   // cgroup v2 — the REAL container limit (os.totalmem() reports the HOST inside containers)
+        const lim = fs.readFileSync('/sys/fs/cgroup/memory.max', 'utf8').trim();
+        st.cgroup = { limitMB: lim === 'max' ? null : Math.round(+lim / 1048576), currentMB: Math.round(+fs.readFileSync('/sys/fs/cgroup/memory.current', 'utf8') / 1048576) };
+    } catch (e) {
+        try { st.cgroup = { limitMB: Math.round(+fs.readFileSync('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf8') / 1048576), currentMB: Math.round(+fs.readFileSync('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf8') / 1048576) }; } catch (e2) { st.cgroup = null; }
+    }
+    try { const s = fs.statfsSync(os.tmpdir()); st.tmpDiskFreeMB = Math.round(s.bavail * s.bsize / 1048576); } catch (e) { st.tmpDiskFreeMB = null; }
+    try {
+        st.rawembCacheMB = fs.readdirSync(os.tmpdir()).filter(f => f.startsWith('rawemb_')).map(f => { try { return { f, mb: Math.round(fs.statSync(path.join(os.tmpdir(), f)).size / 1048576) }; } catch (e) { return { f, mb: null }; } });
+    } catch (e) { st.rawembCacheMB = null; }
+    st.lastScorer = lastRawScorer;
+    return st;
+}
 const LONGQUANT_IDEA_MODEL = process.env.LONGQUANT_IDEA_MODEL || 'idea_long_r26';
 const LONGQUANT_THUMB_MODEL = process.env.LONGQUANT_THUMB_MODEL || 'thumb_b10';
 const LONGQUANT_RENDER_MODEL = process.env.LONGQUANT_RENDER_MODEL || 'black-forest-labs/flux-2-pro';
@@ -1925,8 +1945,58 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
             gemini,
             hasR2: !!process.env.R2_ACCESS_KEY_ID,
             gitCommit: process.env.RENDER_GIT_COMMIT || null,
+            box: rawBoxStats(),
             promiseScorerServingContract: 'numpy-variable-horizon-four-cluster-v3',
         }));
+        return;
+    }
+
+    // Diagnostic (API_READ_KEY-gated): run the REAL upload scorer end-to-end on THIS box with a
+    // tiny generated image — exercises the Gemini embeds + the full neighbour-library warm (the
+    // heavy stage that OOM-restarted the deploy) without needing a signed-in browser, and reports
+    // exit code / kill signal / stderr stage markers / box memory so crashes are debuggable remotely.
+    if (pathname === '/api/raw/upload-selftest' && req.method === 'GET') {
+        const want = process.env.API_READ_KEY;
+        const got = url.searchParams.get('key') || String(req.headers['x-api-key'] || '');
+        if (!want || got !== want) {
+            res.writeHead(want ? 403 : 503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: want ? 'bad key' : 'API_READ_KEY not configured on this deploy' }));
+            return;
+        }
+        const os = require('os');
+        const { execSync } = require('child_process');
+        const tmpImg = path.join(os.tmpdir(), `rawselftest_${Date.now()}.jpg`);
+        try { execSync(`ffmpeg -y -f lavfi -i color=c=gray:s=64x64 -frames:v 1 "${tmpImg}"`, { env: RAW_PY_ENV, timeout: 20000, stdio: 'ignore' }); }
+        catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'ffmpeg could not build the test image: ' + e.message })); return; }
+        const t0 = Date.now();
+        try {
+            const r = await runHeavyScoreInteractive(() => new Promise(ok => {
+                const py = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--image', tmpImg, '--text', 'selftest hook do not save', '--title', 'selftest'], { env: RAW_PY_ENV });
+                let out = '', err = '';
+                py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
+                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} ok({ code: null, signal: 'TIMEOUT-238s', out, err }); }, 238000);
+                py.on('close', (code, signal) => { clearTimeout(timer); ok({ code, signal, out, err }); });
+                py.on('error', e => { clearTimeout(timer); ok({ code: -1, signal: null, out, err: err + '\nspawn: ' + e.message }); });
+            }));
+            const ms = Date.now() - t0;
+            let parsed = null;
+            try { parsed = JSON.parse(r.out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop()); } catch (e) {}
+            const ch = (parsed && parsed.channels) || {};
+            const nb = c => !!(ch[c] && ch[c].neighbors && ch[c].neighbors.length);
+            const stderrTail = r.err.trim().split('\n').slice(-10);
+            lastRawScorer = { kind: 'selftest', ts: Date.now(), ms, code: r.code, signal: r.signal, stderrTail: stderrTail.slice(-4) };
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                ok: r.code === 0 && !!parsed && !parsed.error && nb('visual') && nb('together'),
+                ms, exitCode: r.code, signal: r.signal,
+                pyError: (parsed && parsed.error) || null,
+                neighbors: { visual: nb('visual'), text: nb('text'), together: nb('together') },
+                indicators: parsed && parsed.indicators ? Object.keys(parsed.indicators).length : 0,
+                steer: parsed && parsed.steer ? Object.keys(parsed.steer).length : 0,
+                stderrTail,
+                box: rawBoxStats(),
+            }));
+        } finally { try { fs.unlinkSync(tmpImg); } catch (e) {} }
         return;
     }
 
@@ -2105,15 +2175,17 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
                 const script = path.join(__dirname, 'raw_upload.py');
                 const pyArgs = [script, '--file', tmp, '--title', title];
                 if (durH > 0 && isFinite(durH)) pyArgs.push('--duration', String(Math.round(durH)));
+                const upT0 = Date.now();
                 const upRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
                         const py = spawn(RAW_PYTHON, pyArgs, { env: RAW_PY_ENV });
                         let out = '', err = '';
                         py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
                         const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout')); }, 240000);
-                        py.on('close', () => {
+                        py.on('close', (code, signal) => {
                             clearTimeout(timer);
+                            lastRawScorer = { kind: 'embed-upload', ts: Date.now(), ms: Date.now() - upT0, code, signal, stderrTail: err.trim().split('\n').slice(-4) };
                             const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
-                            if (!line) return no(new Error('embedding produced no result — ' + (err.trim().split('\n').pop() || 'no output').slice(-160)));
+                            if (!line) return no(new Error('embedding produced no result — ' + (signal ? `scorer killed (${signal}${signal === 'SIGKILL' ? ', likely out of memory' : ''}) — ` : '') + (err.trim().split('\n').pop() || 'no output').slice(-160)));
                             ok(line);
                         });
                         py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });

@@ -267,10 +267,50 @@ import gc, tempfile
 # after a deploy warms the cache; every one after skips the download entirely. Result cached per request.
 _CDIR = tempfile.gettempdir()
 _NBR = {}
+def _zip_central_dir(key, size):
+    """Member table of a remote zip (npz) from ONE small ranged read of its central directory."""
+    import struct
+    tl = min(size, 65536)
+    tail = s3.get_object(Bucket=BUCKET, Key=key, Range=f'bytes={size - tl}-')['Body'].read()
+    out = {}
+    for m in re.finditer(rb'PK\x01\x02', tail):
+        e = tail[m.start():m.start() + 46]
+        if len(e) < 46: continue
+        nlen = struct.unpack('<H', e[28:30])[0]
+        rec = {'method': struct.unpack('<H', e[10:12])[0],
+               'csize': struct.unpack('<I', e[20:24])[0],
+               'usize': struct.unpack('<I', e[24:28])[0],
+               'off': struct.unpack('<I', e[42:46])[0]}
+        if rec['csize'] == 0xFFFFFFFF or rec['off'] == 0xFFFFFFFF: raise RuntimeError('zip64 npz not supported')
+        out[tail[m.start() + 46:m.start() + 46 + nlen].decode('utf-8', 'replace')] = rec
+    return out
+
+def _zip_member_stream(key, info, etag=None):
+    """Yield one member's DECOMPRESSED bytes via ranged reads — the archive is never on disk
+    and the array never fully in RAM. IfMatch pins the object so a concurrent rewrite by the
+    embed batch fails loudly (→ stale-cache fallback) instead of corrupting the stream."""
+    import struct, zlib
+    cond = {'IfMatch': etag} if etag else {}
+    hdr = s3.get_object(Bucket=BUCKET, Key=key, Range=f"bytes={info['off']}-{info['off'] + 29}", **cond)['Body'].read()
+    n2, x2 = struct.unpack('<HH', hdr[26:30])
+    start = info['off'] + 30 + n2 + x2
+    body = s3.get_object(Bucket=BUCKET, Key=key, Range=f"bytes={start}-{start + info['csize'] - 1}", **cond)['Body']
+    d = None if info['method'] == 0 else zlib.decompressobj(-15)
+    while True:
+        chunk = body.read(1 << 20)
+        if not chunk: break
+        piece = chunk if d is None else d.decompress(chunk)
+        if piece: yield piece
+    if d is not None:
+        piece = d.flush()
+        if piece: yield piece
+
 def _norm_emb(c):
     npy = os.path.join(_CDIR, f'rawemb_{c}.npy'); meta = os.path.join(_CDIR, f'rawemb_{c}.meta.json')
-    etag = None
-    try: etag = s3.head_object(Bucket=BUCKET, Key=f'raw/{c}/embeddings.npz').get('ETag')
+    key = f'raw/{c}/embeddings.npz'
+    etag, size = None, None
+    try:
+        h = s3.head_object(Bucket=BUCKET, Key=key); etag, size = h.get('ETag'), h['ContentLength']
     except Exception: pass
     def _cached(require_etag=True):
         try:
@@ -281,36 +321,39 @@ def _norm_emb(c):
     if etag and os.path.exists(npy) and os.path.exists(meta):
         hit = _cached()
         if hit: return hit
-    # The library grew ~5x (66k videos → visual/together are ~380MB each, ~900MB total), so the old
-    # read-whole-npz-into-RAM warm held ~3 copies at once (~1.2GB) and OOM-restarted the 2GB deploy
-    # box — which lost the in-memory scoring job and made the UI resubmit into another OOM, forever.
-    # Now: stream the npz to disk, decompress ONE float32 copy, normalize it in place in chunks,
-    # save, then serve from the mmap. If the download fails (R2 mid-rewrite by the embed batch,
-    # network), fall back to the stale cache — old neighbours beat a dead upload.
-    tmp = npy + f'.dl{os.getpid()}'
-    try: s3.download_file(BUCKET, f'raw/{c}/embeddings.npz', tmp)
-    except Exception:
-        try: os.remove(tmp)
-        except Exception: pass
+    # The library grew ~5x (66k videos → visual/together embeddings.npz are ~380MB EACH), so the
+    # old read-whole-npz-into-RAM warm held ~3 copies (~1.2GB) and OOM-restarted the 2GB deploy
+    # box — which lost the in-memory scoring job, and the UI's auto-resubmit looped the OOM.
+    # Now the vecs.npy member is range-streamed from R2 and decompressed STRAIGHT to disk (the
+    # archive never exists here and the matrix is never fully in RAM), then normalized in place
+    # through a writable mmap in 4096-row chunks. If anything fails (R2 mid-rewrite by the embed
+    # batch, network), fall back to the stale disk cache — old neighbours beat a dead upload.
+    if not etag or not size:
         stale = _cached(require_etag=False)
         return stale if stale else (None, None)
+    tmp = npy + f'.dl{os.getpid()}'
     try:
-        z = np.load(tmp, allow_pickle=True)
-        V = z['vecs'].astype(np.float32, copy=False); ids = [str(x) for x in z['ids']]
-        del z
+        print(f'[warm] {c}: streaming {round(size / 1e6)}MB library from R2', file=sys.stderr, flush=True)
+        members = _zip_central_dir(key, size)
+        vi, ii = members.get('vecs.npy'), members.get('ids.npy')
+        if not vi or not ii: raise RuntimeError('npz missing vecs/ids members')
+        with open(tmp, 'wb') as f:
+            for piece in _zip_member_stream(key, vi, etag): f.write(piece)
+        ids = [str(x) for x in np.load(io.BytesIO(b''.join(_zip_member_stream(key, ii, etag))), allow_pickle=True)]
+        V = np.load(tmp, mmap_mode='r+')
+        if V.ndim != 2 or len(V) != len(ids): raise RuntimeError(f'bad matrix {V.shape} vs {len(ids)} ids')
         for i in range(0, len(V), 4096):
             V[i:i + 4096] /= (np.linalg.norm(V[i:i + 4096], axis=1, keepdims=True) + 1e-9)
-        try:
-            np.save(npy, V); json.dump({'etag': etag, 'ids': ids}, open(meta, 'w'))
-            V = np.load(npy, mmap_mode='r'); gc.collect()   # drop the RAM copy; serve from the mmap
-        except Exception: pass
-        return V, ids
-    except Exception:
-        stale = _cached(require_etag=False)
-        return stale if stale else (None, None)
-    finally:
+        V.flush(); del V; gc.collect()
+        os.replace(tmp, npy); json.dump({'etag': etag, 'ids': ids}, open(meta, 'w'))
+        print(f'[warm] {c}: cached + normalized → mmap', file=sys.stderr, flush=True)
+        return np.load(npy, mmap_mode='r'), ids
+    except Exception as e:
+        print(f'[warm] {c}: FAILED ({type(e).__name__}: {str(e)[:120]}) — trying stale cache', file=sys.stderr, flush=True)
         try: os.remove(tmp)
         except Exception: pass
+        stale = _cached(require_etag=False)
+        return stale if stale else (None, None)
 def neighbors(c, vec, k=12):
     if c not in _NBR:
         V, ids = _norm_emb(c)
