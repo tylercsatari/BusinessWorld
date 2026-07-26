@@ -1,29 +1,77 @@
-# Predictive Abstraction Lab
+# Principles Atlas
 
-This folder builds the compact artifact used by the top-level Jarvis
-**Principles** tab.
+The Principles Atlas is the whole-system evidence layer for Jarvis. It audits
+every quantitative Shorts and Long surface rather than treating one tab as the
+research universe.
 
-The lab does not assign a universal "principleness" score. It treats
-abstraction depth as a multi-objective evidence problem:
+## Scope
 
-- distinguishability,
-- metric similarity,
-- persistence under perturbation,
-- prediction on data that could not select the abstraction,
-- source and mechanism diversity,
-- transformation survival, and
-- description complexity.
+The current snapshot includes:
 
-Candidates are promoted only as far as their weakest failed or untested gate
-allows. Pareto fronts are computed only within like-for-like visual-operation
-candidates. Projected outcomes, retrospective folds, external diagnostics, and
-strict-blind observed outcomes remain separate evidence types.
+- the Shorts and Long visual, text, and together maps;
+- every `k=6`, `k=10`, `k=16`, and `k=24` partition;
+- public views, source labels, time, outlier, and 10M outcomes;
+- the four-account private keep cohort;
+- saved-channel view validation;
+- all 208 owned timed openings and their 20-second component lattice;
+- Operations, Promise, Retention, Tribe, and pooled-opening studies;
+- the Long-to-Short transfer test; and
+- the legacy graph and experiment registries as hypothesis generators.
 
-Build the snapshot with:
+Generated candidates and projected scores are included in the system graph but
+are never treated as realized audience outcomes.
+
+## Discovery Contract
+
+The analysis follows:
+
+```text
+observations
+  -> representations
+  -> clusters
+  -> mechanisms
+  -> candidate invariants
+  -> frozen predictions
+  -> transformation survival
+```
+
+An abstraction is promoted only as far as its weakest tested transformation.
+The full identity, availability, clustering, predictive-compression, and
+lockbox rules live in
+[`DISCOVERY_CONTRACT.md`](./DISCOVERY_CONTRACT.md).
+
+## Build
+
+Refresh the six-map system analysis:
+
+```bash
+node buildings/jarvis/principles-lab/analyze-system.js
+```
+
+Assemble the UI artifact:
 
 ```bash
 node buildings/jarvis/principles-lab/build-artifact.js
 ```
 
-The builder records source hashes and quarantines older exploratory artifacts
-instead of silently mixing them into the current evidence hierarchy.
+Run artifact, interaction, canvas, integration, desktop, and mobile checks:
+
+```bash
+node scripts/test-principles-lab.js
+```
+
+The UI uses a bounded, deterministic point sample for rendering. Every
+aggregate statistic is computed on the full eligible map, and the UI labels the
+sample size separately from the analyzed population.
+
+## Current Boundary
+
+The current data supports several methodological and regional invariants, but
+no universal content principle. The strongest positive portable result is a
+frozen external text axis that transfers into owned retention. It does not yet
+transfer strongly into views and is not a causal promise-quality score.
+
+The strongest architectural conclusion is that views should be modeled as
+interacting opportunity, packaging-conversion, attention-survival, and
+distribution-amplification processes. That factorization remains a synthesis
+hypothesis until a frozen prospective product model beats simpler alternatives.

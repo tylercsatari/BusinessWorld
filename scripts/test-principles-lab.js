@@ -13,46 +13,58 @@ const OUTPUT_DIR = path.join(ROOT, 'tmp/principles-lab-qa');
 
 function assertArtifact() {
     const artifact = JSON.parse(fs.readFileSync(ARTIFACT_PATH, 'utf8'));
-    assert.equal(artifact.schema, 'predictive-abstraction-lab-v1');
-    assert.ok(artifact.artifactHash?.length === 64);
-    assert.ok(artifact.sources.length >= 9);
-    assert.ok(artifact.candidates.length >= 20);
-    assert.equal(artifact.summary.universalClaims, 0);
-    assert.equal(artifact.summary.domainClaims, 0);
-    assert.equal(artifact.summary.transformationCounts.prospective.pass, 0);
+    assert.equal(artifact.schema, 'business-world-principles-atlas-v2');
+    assert.equal(artifact.clusterAtlas.maps.length, 6);
+    assert.equal(artifact.clusterAtlas.partitionCount, 24);
+    assert.ok(artifact.clusterAtlas.maps.every(map => map.partitions.length === 4));
+    assert.ok(artifact.clusterAtlas.maps.every(map => map.atlasSample.length > 2_000));
+    assert.ok(artifact.surfaces.length >= 13);
+    assert.ok(artifact.invariants.length >= 12);
+    assert.equal(artifact.verdict.universal, 0);
+    assert.ok(artifact.provenance.length >= 30);
+    assert.ok(artifact.provenance.every(row => row.sha256?.length === 64));
+    assert.equal(artifact.artifactHash?.length, 64);
 
-    const semantic = artifact.candidates.find(row => row.id === 'system:opening-semantic-increment');
-    assert.ok(semantic);
-    assert.equal(semantic.status, 'falsified_currently');
-    assert.equal(semantic.prerequisites.predictability.state, 'fail');
-    assert.ok(semantic.outcomes.strictBlindCandidateVsBaseline.improvementPoints < 0);
+    const opening = artifact.corpus.promise.opening20s;
+    assert.equal(opening.videos, 208);
+    assert.ok(opening.tokens > 17_000);
+    assert.ok(opening.spans > 790_000);
+    assert.ok(opening.components > 2_500);
+    assert.ok(opening.edges > 4_700_000);
+    assert.ok(opening.medianTimingErrorSeconds < 0.11);
+    assert.ok(opening.p95TimingErrorSeconds < 0.30);
 
-    const baseline = artifact.candidates.find(row => row.id === 'system:shorts-opening-decay-baseline');
-    assert.ok(baseline);
-    assert.equal(baseline.level, 'regional_invariant');
-    assert.match(baseline.claimBoundary, /baseline/i);
+    const source = artifact.invariants.find(row => row.id === 'source_opportunity_dominates_cluster_lift');
+    assert.ok(source);
+    assert.equal(source.status, 'supported_negative');
+    assert.ok(source.tests.some(row => row.id === 'unseen_creator_transfer' && row.status === 'fail'));
 
-    for (const id of ['system:known-account-keep', 'system:known-channel-views']) {
-        const candidate = artifact.candidates.find(row => row.id === id);
-        assert.ok(candidate);
-        assert.equal(candidate.prerequisites.persistence.state, 'fail');
-        assert.equal(candidate.prerequisites.predictability.state, 'fail');
-    }
+    const market = artifact.invariants.find(row => row.id === 'external_market_semantics_transfer_to_retention');
+    assert.ok(market);
+    assert.equal(market.status, 'supported');
+    const isolation = market.tests.find(row => row.id === 'external_training_isolation');
+    const retentionTransfer = market.tests.find(row => row.id === 'owned_average_retention_transfer');
+    const viewsTransfer = market.tests.find(row => row.id === 'owned_views_transfer');
+    assert.equal(isolation.value.ownedLabelsUsed, false);
+    assert.ok(retentionTransfer.value.spearman > 0.34);
+    assert.ok(viewsTransfer.value.spearman < 0.08);
 
-    const operations = artifact.candidates.filter(row => row.family === 'visual_operations');
-    assert.ok(operations.length >= 16);
-    assert.ok(operations.every(row => ['mechanism', 'local_invariant'].includes(row.level)));
-    assert.ok(operations.every(row => row.pareto?.front >= 1));
+    const factorization = artifact.invariants.find(row => row.id === 'views_factorization');
+    assert.ok(factorization.claim.includes('Opportunity'));
+    assert.equal(factorization.status, 'synthesis_hypothesis');
 
-    for (const candidate of artifact.candidates) {
-        assert.deepEqual(
-            Object.keys(candidate.prerequisites).sort(),
-            ['distinguishability', 'persistence', 'predictability', 'similarity']
-        );
-        assert.equal(candidate.transformations.length, artifact.transformations.length);
-        assert.ok(candidate.claimBoundary);
-        assert.ok(candidate.nextTest);
-        assert.equal(candidate.description.mdlEligible, false);
+    const openingModel = artifact.models.find(row => row.id === 'pooled_opening_curve');
+    assert.ok(openingModel.fixed20Second.r2 < 0);
+    assert.ok(openingModel.fixed20Second.predictedSd < openingModel.fixed20Second.actualSd / 20);
+
+    const longTransfer = artifact.models.find(row => row.id === 'long_to_short_transfer');
+    assert.ok(Object.values(longTransfer.modalities).every(row => row.r2 < 0));
+
+    for (const invariant of artifact.invariants) {
+        assert.ok(invariant.boundary);
+        assert.ok(invariant.nextFalsifier);
+        assert.ok(invariant.tests.length > 0);
+        assert.ok(artifact.transformationMatrix.some(row => row.invariantId === invariant.id));
     }
     return artifact;
 }
@@ -92,19 +104,14 @@ function jarvisHarnessHtml() {
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="/buildings/jarvis/jarvis.css">
   <link rel="stylesheet" href="/buildings/jarvis/principles-lab.css">
-  <style>
-    html,body{height:100%;margin:0;background:#080d14}
-    #jarvis-root{height:100%;overflow:auto}
-  </style>
+  <style>html,body{height:100%;margin:0;background:#080d14}#jarvis-root{height:100%;overflow:auto}</style>
 </head>
 <body>
   <div id="jarvis-root"></div>
   <script>
-    window.BuildingRegistry = {
-      register(name, controller) {
-        if (name === 'Jarvis') window.__jarvisController = controller;
-      }
-    };
+    window.BuildingRegistry = { register(name, controller) {
+      if (name === 'Jarvis') window.__jarvisController = controller;
+    }};
   </script>
   <script src="/buildings/jarvis/principles-lab-ui.js"></script>
   <script src="/buildings/jarvis/jarvis-ui.js"></script>
@@ -144,18 +151,39 @@ async function startServer() {
     };
 }
 
-async function assertNoPageOverflow(page, label) {
-    const overflow = await page.evaluate(() => ({
-        body: document.body.scrollWidth - document.body.clientWidth,
-        shell: document.getElementById('shell').scrollWidth - document.getElementById('shell').clientWidth,
-        root: document.getElementById('root').scrollWidth - document.getElementById('root').clientWidth,
-    }));
-    assert.ok(overflow.body <= 1, `${label}: body overflow ${overflow.body}px`);
-    assert.ok(overflow.shell <= 1, `${label}: shell overflow ${overflow.shell}px`);
-    assert.ok(overflow.root <= 1, `${label}: root overflow ${overflow.root}px`);
+async function assertNoOverflow(page, selectors, label) {
+    const overflows = await page.evaluate(currentSelectors => currentSelectors.map(selector => {
+        const node = document.querySelector(selector);
+        return node ? { selector, overflow: node.scrollWidth - node.clientWidth } : null;
+    }).filter(Boolean), selectors);
+    for (const row of overflows) {
+        assert.ok(row.overflow <= 1, `${label}: ${row.selector} overflows by ${row.overflow}px`);
+    }
 }
 
-async function runUi() {
+async function assertCanvasHasData(page) {
+    const result = await page.locator('#pla-atlas-canvas').evaluate(canvas => {
+        const context = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        const pixels = context.getImageData(0, 0, width, height).data;
+        const background = [9, 17, 29];
+        let changed = 0;
+        for (let index = 0; index < pixels.length; index += 400) {
+            if (
+                Math.abs(pixels[index] - background[0]) > 8
+                || Math.abs(pixels[index + 1] - background[1]) > 8
+                || Math.abs(pixels[index + 2] - background[2]) > 8
+            ) changed += 1;
+        }
+        return { width, height, changed };
+    });
+    assert.ok(result.width > 500);
+    assert.ok(result.height > 400);
+    assert.ok(result.changed > 10, `atlas canvas appears blank (${JSON.stringify(result)})`);
+}
+
+async function runUi(artifact) {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     const { server, labUrl, jarvisUrl } = await startServer();
     const browser = await chromium.launch({ headless: true });
@@ -166,33 +194,48 @@ async function runUi() {
         page.on('console', message => {
             if (message.type() === 'error') errors.push(message.text());
         });
+
         await page.goto(labUrl, { waitUntil: 'networkidle' });
-        await page.getByRole('heading', { name: 'When is an abstraction justified?' }).waitFor();
-        assert.equal(await page.locator('.pl-gate').count(), 4);
-        assert.equal(await page.locator('.pl-map-point').count(), 23);
-        await assertNoPageOverflow(page, 'desktop map');
-        await page.screenshot({ path: path.join(OUTPUT_DIR, 'desktop-map.png'), fullPage: true });
+        await page.getByRole('heading', { name: artifact.title }).waitFor();
+        assert.equal(await page.locator('.pla-invariant-row').count(), artifact.invariants.length);
+        assert.equal(await page.locator('.pla-factor-flow article').count(), 4);
+        await assertNoOverflow(page, ['body', '#shell', '#root'], 'desktop discoveries');
+        await page.screenshot({ path: path.join(OUTPUT_DIR, 'desktop-discoveries.png'), fullPage: true });
 
-        await page.getByRole('button', { name: 'Candidate registry' }).click();
-        await page.locator('.pl-registry-table').waitFor();
-        assert.equal(await page.locator('.pl-registry-table tbody tr').count(), 23);
-        await page.locator('[data-pl-status]').selectOption('falsified_currently');
-        assert.equal(await page.locator('.pl-registry-table tbody tr').count(), 4);
-        await page.locator('[data-pl-clear]').click();
+        await page.getByRole('button', { name: 'Whole system', exact: true }).click();
+        assert.equal(await page.locator('.pla-surface-row').count(), artifact.surfaces.length);
+        assert.ok(await page.locator('.pla-system-graph').count() === 1);
 
-        await page.getByRole('button', { name: 'Transformation survival' }).click();
-        await page.locator('.pl-survival-matrix').waitFor();
-        assert.equal(await page.locator('.pl-survival-matrix tbody tr').count(), 23);
-        await page.locator('[data-pl-transform="source"]').click();
-        await page.locator('[data-pl-cell]').first().click();
+        await page.getByRole('button', { name: 'Cluster atlas', exact: true }).click();
+        await page.locator('#pla-atlas-canvas').waitFor();
+        await page.waitForTimeout(300);
+        await assertCanvasHasData(page);
+        assert.equal(await page.locator('[data-atlas-map] option').count(), 6);
+        assert.equal(await page.locator('[data-atlas-k] option').count(), 4);
+        await page.locator('[data-atlas-map]').selectOption('long:text');
+        await page.locator('[data-atlas-projection]').selectOption('views');
+        await page.locator('[data-atlas-k]').selectOption('16');
+        await page.locator('[data-atlas-color]').selectOption('views');
+        await page.waitForTimeout(300);
+        await assertCanvasHasData(page);
+        await page.locator('#pla-atlas-canvas').click({ position: { x: 400, y: 280 } });
+        await page.screenshot({ path: path.join(OUTPUT_DIR, 'desktop-atlas.png'), fullPage: true });
 
-        await page.getByRole('button', { name: 'Source audit' }).click();
-        assert.equal(await page.locator('.pl-source-list > button').count(), 9);
-        assert.equal(await page.locator('.pl-quarantine > div').count(), 5);
+        await page.getByRole('button', { name: 'Prediction audit', exact: true }).click();
+        assert.equal(await page.locator('.pla-model-list button').count(), artifact.models.length);
+        await page.getByText('Owned-hook retention from frozen external text market axis', { exact: true }).click();
+        await page.getByText(/average retention · spearman/i).waitFor();
 
-        await page.getByRole('button', { name: 'Method' }).click();
-        assert.equal(await page.locator('.pl-method-grid > div').count(), 4);
-        assert.equal(await page.locator('.pl-transform-definitions > div').count(), 11);
+        await page.getByRole('button', { name: 'Evidence ledger', exact: true }).click();
+        assert.equal(await page.locator('.pla-opening-audit .pla-stat').count(), 6);
+        assert.equal(await page.locator('.pla-transfer-table > div').count(), 4);
+        assert.equal(await page.locator('.pla-provenance-table tbody tr').count(), artifact.provenance.length);
+        await page.locator('[data-evidence-search]').fill('market-reward');
+        assert.ok(await page.locator('.pla-provenance-table tbody tr').count() >= 1);
+
+        await page.getByRole('button', { name: 'Method', exact: true }).click();
+        assert.ok(await page.locator('.pla-pipeline > div').count() >= 8);
+        assert.ok(await page.locator('.pla-lockboxes > span').count() >= 4);
         assert.deepEqual(errors, []);
 
         for (const viewport of [
@@ -200,23 +243,19 @@ async function runUi() {
             { name: 'mobile-320', width: 320, height: 700 },
         ]) {
             await page.setViewportSize({ width: viewport.width, height: viewport.height });
-            await page.goto(labUrl, { waitUntil: 'networkidle' });
-            await page.getByRole('heading', { name: 'When is an abstraction justified?' }).waitFor();
-            await assertNoPageOverflow(page, viewport.name);
+            await page.goto(`${labUrl}?principles_view=discoveries`, { waitUntil: 'networkidle' });
+            await page.getByRole('heading', { name: artifact.title }).waitFor();
+            await assertNoOverflow(page, ['body', '#shell', '#root'], viewport.name);
             await page.screenshot({ path: path.join(OUTPUT_DIR, `${viewport.name}.png`), fullPage: true });
         }
 
         await page.setViewportSize({ width: 1440, height: 960 });
         await page.goto(jarvisUrl, { waitUntil: 'networkidle' });
-        const tabs = await page.locator('.jarvis-tab').allTextContents();
-        assert.deepEqual(tabs.slice(0, 3).map(text => text.replace(/[^\p{L}\s]/gu, '').trim()), [
-            'Shorts Quant',
-            'Long Quant',
-            'Principles',
-        ]);
-        await page.getByRole('button', { name: 'Principles' }).click();
-        await page.getByRole('heading', { name: 'When is an abstraction justified?' }).waitFor();
-        assert.equal(await page.locator('#principles-lab-root .pl-map-point').count(), 23);
+        const principlesTab = page.locator('.jarvis-tab').filter({ hasText: 'Principles' });
+        assert.equal(await principlesTab.count(), 1);
+        await principlesTab.click();
+        await page.getByRole('heading', { name: artifact.title }).waitFor();
+        assert.equal(await page.locator('#principles-lab-root .pla-invariant-row').count(), artifact.invariants.length);
         await page.screenshot({ path: path.join(OUTPUT_DIR, 'jarvis-integration.png'), fullPage: true });
         assert.deepEqual(errors, []);
     } finally {
@@ -227,8 +266,8 @@ async function runUi() {
 
 async function main() {
     const artifact = assertArtifact();
-    await runUi();
-    console.log(`Principles Lab contract: ${artifact.candidates.length} candidates, ${artifact.sources.length} sources`);
+    await runUi(artifact);
+    console.log(`Principles Atlas: ${artifact.surfaces.length} surfaces, ${artifact.clusterAtlas.mapCount} maps, ${artifact.invariants.length} findings`);
     console.log(`Screenshots: ${path.relative(ROOT, OUTPUT_DIR)}`);
 }
 
