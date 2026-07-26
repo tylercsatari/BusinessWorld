@@ -332,6 +332,11 @@ def _norm_emb(c):
         stale = _cached(require_etag=False)
         return stale if stale else (None, None)
     tmp = npy + f'.dl{os.getpid()}'
+    try:   # sweep partial downloads orphaned by killed runs (SIGKILL skips finally blocks)
+        import glob
+        for g in glob.glob(npy + '.dl*'):
+            if g != tmp and time.time() - os.path.getmtime(g) > 900: os.remove(g)
+    except Exception: pass
     try:
         print(f'[warm] {c}: streaming {round(size / 1e6)}MB library from R2', file=sys.stderr, flush=True)
         members = _zip_central_dir(key, size)
@@ -354,6 +359,17 @@ def _norm_emb(c):
         except Exception: pass
         stale = _cached(require_etag=False)
         return stale if stale else (None, None)
+def warm_all():
+    """Warm the three neighbour caches in PARALLEL threads — each stream is network-bound
+    and independent, so overlapping them cuts a cold warm (fresh deploy, ~900MB at the
+    deploy's ~4MB/s from R2) from sequential minutes to the slowest single file. Safe to
+    run concurrently with anything: caches land via atomic os.replace."""
+    from concurrent.futures import ThreadPoolExecutor
+    chans = ('visual', 'text', 'together')
+    with ThreadPoolExecutor(3) as ex:
+        for c, (V, ids) in zip(chans, ex.map(_norm_emb, chans)):
+            print(f'[warm] {c}: {("ready n=" + str(len(ids))) if ids else "UNAVAILABLE"}', file=sys.stderr, flush=True)
+
 def neighbors(c, vec, k=12):
     if c not in _NBR:
         V, ids = _norm_emb(c)
@@ -440,6 +456,8 @@ def _run():
     ev = embed([img_part(b64)])
     et = embed([{'text': txt}]) if good else None
     eg = embed([img_part(b64)] + ([{'text': txt}] if good else []))
+    try: warm_all()   # cold caches warm in parallel here; the lookups below then hit disk instantly
+    except Exception: pass
     # score the hook on every validated indicator (project its embedding onto the
     # registry's probe weights; + per-modality global novelty from the neighbours).
     indicators = {}
@@ -571,6 +589,10 @@ def _run():
     print(json.dumps(out))
 
 def main():
+    if '--prewarm' in sys.argv:   # server boot: fill the neighbour caches before anyone uploads
+        try: warm_all()
+        except Exception as e: print(f'[prewarm] failed: {e}', file=sys.stderr, flush=True)
+        return
     try:
         _run()
     except Exception as e:

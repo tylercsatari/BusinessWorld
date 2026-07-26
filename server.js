@@ -672,6 +672,19 @@ function rawBoxStats() {
     st.lastScorer = lastRawScorer;
     return st;
 }
+// Pre-warm the scorer's neighbour-library disk cache in the background shortly after boot.
+// A deploy wipes /tmp, and a cold warm streams ~900MB from R2 (~4MB/s on the deploy box →
+// minutes) — pre-warming means the first upload after a deploy scores at normal speed
+// instead of eating that wait. Runs outside the heavy-score queue; cache writes are atomic.
+if (process.env.R2_ACCESS_KEY_ID) setTimeout(() => {
+    try {
+        const pw = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--prewarm'], { env: RAW_PY_ENV, stdio: ['ignore', 'ignore', 'pipe'] });
+        let perr = '';
+        pw.stderr.on('data', d => { perr += d; if (perr.length > 8192) perr = perr.slice(-4096); });
+        pw.on('close', code => console.log('[raw-prewarm] exit', code, '—', String(perr).trim().split('\n').slice(-3).join(' | ')));
+        pw.on('error', e => console.log('[raw-prewarm] spawn failed:', e.message));
+    } catch (e) { console.log('[raw-prewarm] failed:', e.message); }
+}, 15000);
 const LONGQUANT_IDEA_MODEL = process.env.LONGQUANT_IDEA_MODEL || 'idea_long_r26';
 const LONGQUANT_THUMB_MODEL = process.env.LONGQUANT_THUMB_MODEL || 'thumb_b10';
 const LONGQUANT_RENDER_MODEL = process.env.LONGQUANT_RENDER_MODEL || 'black-forest-labs/flux-2-pro';
@@ -1974,7 +1987,7 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
                 const py = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--image', tmpImg, '--text', 'selftest hook do not save', '--title', 'selftest'], { env: RAW_PY_ENV });
                 let out = '', err = '';
                 py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} ok({ code: null, signal: 'TIMEOUT-238s', out, err }); }, 238000);
+                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} ok({ code: null, signal: 'TIMEOUT-420s', out, err }); }, 420000);
                 py.on('close', (code, signal) => { clearTimeout(timer); ok({ code, signal, out, err }); });
                 py.on('error', e => { clearTimeout(timer); ok({ code: -1, signal: null, out, err: err + '\nspawn: ' + e.message }); });
             }));
@@ -2112,7 +2125,7 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
                 const py = spawn(RAW_PYTHON, ytArgs, { env: RAW_PY_ENV });
                 let out = '', err = '';
                 py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('YouTube score timeout (download + embed took >6 min)')); }, 360000);
+                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('YouTube score timeout (download + embed took >8 min)')); }, 480000);
                 py.on('close', () => {
                     clearTimeout(timer);
                     const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
@@ -2180,7 +2193,7 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
                         const py = spawn(RAW_PYTHON, pyArgs, { env: RAW_PY_ENV });
                         let out = '', err = '';
                         py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                        const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout')); }, 240000);
+                        const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout (>7 min — even a cold cache warm fits this; check /api/raw/upload-health)')); }, 420000);
                         py.on('close', (code, signal) => {
                             clearTimeout(timer);
                             lastRawScorer = { kind: 'embed-upload', ts: Date.now(), ms: Date.now() - upT0, code, signal, stderrTail: err.trim().split('\n').slice(-4) };
@@ -2238,7 +2251,7 @@ print('ok: ' + str(i.get('title'))[:40])"`, { env: RAW_PY_ENV, timeout: 45000 })
                     const py = spawn(RAW_PYTHON, monArgs, { env: RAW_PY_ENV });
                     let out = '', err = '';
                     py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                    const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout')); }, 120000);
+                    const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout (>5 min)')); }, 300000);
                     py.on('close', () => {
                         clearTimeout(timer);
                         const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
