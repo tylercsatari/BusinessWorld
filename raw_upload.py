@@ -272,19 +272,45 @@ def _norm_emb(c):
     etag = None
     try: etag = s3.head_object(Bucket=BUCKET, Key=f'raw/{c}/embeddings.npz').get('ETag')
     except Exception: pass
-    if etag and os.path.exists(npy) and os.path.exists(meta):
+    def _cached(require_etag=True):
         try:
             m = json.load(open(meta))
-            if m.get('etag') == etag: return np.load(npy, mmap_mode='r'), m['ids']
+            if (not require_etag) or m.get('etag') == etag: return np.load(npy, mmap_mode='r'), m['ids']
         except Exception: pass
-    buf = r2_get(f'raw/{c}/embeddings.npz')
-    if buf is None: return None, None
-    z = np.load(io.BytesIO(buf), allow_pickle=True)
-    V = np.array(z['vecs'], np.float32); ids = [str(x) for x in z['ids']]; del z, buf
-    if len(V): V /= (np.linalg.norm(V, axis=1, keepdims=True) + 1e-9)
-    try: np.save(npy, V); json.dump({'etag': etag, 'ids': ids}, open(meta, 'w'))
-    except Exception: pass
-    return V, ids
+        return None
+    if etag and os.path.exists(npy) and os.path.exists(meta):
+        hit = _cached()
+        if hit: return hit
+    # The library grew ~5x (66k videos → visual/together are ~380MB each, ~900MB total), so the old
+    # read-whole-npz-into-RAM warm held ~3 copies at once (~1.2GB) and OOM-restarted the 2GB deploy
+    # box — which lost the in-memory scoring job and made the UI resubmit into another OOM, forever.
+    # Now: stream the npz to disk, decompress ONE float32 copy, normalize it in place in chunks,
+    # save, then serve from the mmap. If the download fails (R2 mid-rewrite by the embed batch,
+    # network), fall back to the stale cache — old neighbours beat a dead upload.
+    tmp = npy + f'.dl{os.getpid()}'
+    try: s3.download_file(BUCKET, f'raw/{c}/embeddings.npz', tmp)
+    except Exception:
+        try: os.remove(tmp)
+        except Exception: pass
+        stale = _cached(require_etag=False)
+        return stale if stale else (None, None)
+    try:
+        z = np.load(tmp, allow_pickle=True)
+        V = z['vecs'].astype(np.float32, copy=False); ids = [str(x) for x in z['ids']]
+        del z
+        for i in range(0, len(V), 4096):
+            V[i:i + 4096] /= (np.linalg.norm(V[i:i + 4096], axis=1, keepdims=True) + 1e-9)
+        try:
+            np.save(npy, V); json.dump({'etag': etag, 'ids': ids}, open(meta, 'w'))
+            V = np.load(npy, mmap_mode='r'); gc.collect()   # drop the RAM copy; serve from the mmap
+        except Exception: pass
+        return V, ids
+    except Exception:
+        stale = _cached(require_etag=False)
+        return stale if stale else (None, None)
+    finally:
+        try: os.remove(tmp)
+        except Exception: pass
 def neighbors(c, vec, k=12):
     if c not in _NBR:
         V, ids = _norm_emb(c)
