@@ -1,45 +1,65 @@
 (function () {
     'use strict';
 
-    const ARTIFACT_URL = './buildings/jarvis/principles-lab/artifact.json?v=1';
-    const VIEW_TABS = [
-        ['map', 'Evidence map'],
-        ['registry', 'Candidate registry'],
-        ['survival', 'Transformation survival'],
-        ['sources', 'Source audit'],
+    const ARTIFACT_URL = './buildings/jarvis/principles-lab/artifact.json?v=2';
+    const VIEWS = [
+        ['discoveries', 'Discoveries'],
+        ['system', 'Whole system'],
+        ['atlas', 'Cluster atlas'],
+        ['models', 'Prediction audit'],
+        ['evidence', 'Evidence ledger'],
         ['method', 'Method'],
     ];
+    const CLUSTER_COLORS = [
+        '#56c9ff', '#ff775f', '#6ed69f', '#f0bd4e', '#b396ff', '#ef7eb6',
+        '#43d5c3', '#ff9f43', '#82a7ff', '#d4d968', '#c88356', '#84d3ef',
+        '#ff607d', '#62ba77', '#d09dff', '#ffd27a', '#66a8a1', '#d77f68',
+        '#5f88cf', '#b8cd5d', '#b68973', '#7cddbc', '#ea88de', '#a8b9d8',
+    ];
+    const STATUS = {
+        supported: ['supported', 'green'],
+        supported_negative: ['supported negative', 'green'],
+        methodological: ['method invariant', 'cyan'],
+        mixed: ['mixed evidence', 'amber'],
+        taxonomy_only: ['taxonomy only', 'amber'],
+        synthesis_hypothesis: ['synthesis to test', 'purple'],
+        falsified: ['falsified', 'red'],
+        invalidated: ['invalidated', 'red'],
+    };
+    const TEST_STATUS = {
+        pass: ['supports', 'green'],
+        fail: ['fails', 'red'],
+        mixed: ['mixed', 'amber'],
+        invalid: ['invalid test', 'red'],
+        unknown: ['not tested', 'muted'],
+    };
+    const CELL_STATUS = {
+        survived: ['survived', 'green'],
+        tested: ['tested', 'cyan'],
+        partial: ['partial', 'amber'],
+        failed: ['failed', 'red'],
+        untested: ['untested', 'muted'],
+    };
 
     const state = {
         root: null,
         data: null,
         error: '',
         loading: false,
-        view: 'map',
-        selectedId: null,
-        search: '',
-        family: 'all',
-        level: 'all',
-        status: 'all',
-        gate: 'all',
-        selectedTransformation: null,
-    };
-
-    const STATUS = {
-        supported_regionally: { label: 'regionally supported', tone: 'green' },
-        supported_locally: { label: 'locally supported', tone: 'cyan' },
-        partial_signal: { label: 'partial signal', tone: 'amber' },
-        exploratory: { label: 'exploratory', tone: 'muted' },
-        falsified_currently: { label: 'failed current test', tone: 'red' },
-    };
-
-    const EVIDENCE = {
-        pass: { label: 'pass', glyph: '●', tone: 'green' },
-        fail: { label: 'fail', glyph: '×', tone: 'red' },
-        diagnostic: { label: 'diagnostic', glyph: '◆', tone: 'amber' },
-        tested: { label: 'tested', glyph: '○', tone: 'cyan' },
-        not_tested: { label: 'not tested', glyph: '–', tone: 'muted' },
-        not_applicable: { label: 'not applicable', glyph: '–', tone: 'muted' },
+        view: 'discoveries',
+        invariantId: null,
+        transformationId: null,
+        mapId: 'shorts:visual',
+        projection: 'pca',
+        clusterCount: 6,
+        colorBy: 'cluster',
+        pointId: null,
+        transportKey: null,
+        modelId: null,
+        surfaceId: null,
+        graphNodeId: null,
+        evidenceSearch: '',
+        surfaceFilter: 'all',
     };
 
     function esc(value) {
@@ -59,80 +79,153 @@
         });
     }
 
-    function pct(value, digits = 0) {
+    function compact(value) {
+        if (!Number.isFinite(Number(value))) return '—';
+        return Intl.NumberFormat('en', {
+            notation: 'compact',
+            maximumFractionDigits: 1,
+        }).format(Number(value));
+    }
+
+    function pct(value, digits = 1) {
         if (!Number.isFinite(Number(value))) return '—';
         return `${(Number(value) * 100).toFixed(digits)}%`;
     }
 
-    function signed(value, digits = 2) {
+    function signed(value, digits = 3) {
         if (!Number.isFinite(Number(value))) return '—';
         const number = Number(value);
         return `${number > 0 ? '+' : ''}${number.toFixed(digits)}`;
     }
 
-    function compactNumber(value) {
-        const number = Number(value);
-        if (!Number.isFinite(number)) return '—';
-        return Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(number);
+    function words(value) {
+        return String(value || '')
+            .replaceAll('_', ' ')
+            .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+            .toLowerCase();
+    }
+
+    function flattenMetricEntries(value, prefix = '', depth = 0) {
+        if (!value || typeof value !== 'object' || depth > 2) return [];
+        const rows = [];
+        for (const [key, item] of Object.entries(value)) {
+            const label = prefix ? `${prefix} · ${words(key)}` : words(key);
+            if (item != null && ['string', 'number', 'boolean'].includes(typeof item)) {
+                rows.push([label, item]);
+            } else if (item && typeof item === 'object' && !Array.isArray(item)) {
+                rows.push(...flattenMetricEntries(item, label, depth + 1));
+            }
+        }
+        return rows;
     }
 
     function shortHash(value) {
         return value ? String(value).slice(0, 10) : '—';
     }
 
-    function selectedCandidate() {
-        if (!state.data) return null;
-        return state.data.candidates.find(candidate => candidate.id === state.selectedId)
-            || state.data.candidates[0]
-            || null;
-    }
-
-    function levelLabel(levelId) {
-        return state.data?.operationalContract?.hierarchy?.find(level => level.id === levelId)?.label
-            || String(levelId || '').replaceAll('_', ' ');
-    }
-
-    function statusMeta(status) {
-        return STATUS[status] || { label: String(status || 'unknown').replaceAll('_', ' '), tone: 'muted' };
-    }
-
-    function evidenceMeta(status) {
-        return EVIDENCE[status] || EVIDENCE.not_tested;
-    }
-
-    function evidenceChip(status, extra = '') {
-        const meta = evidenceMeta(status);
-        return `<span class="pl-evidence-chip is-${meta.tone}"><span aria-hidden="true">${meta.glyph}</span>${esc(extra || meta.label)}</span>`;
+    function chip(label, tone = 'muted') {
+        return `<span class="pla-chip is-${esc(tone)}">${esc(label)}</span>`;
     }
 
     function statusChip(status) {
-        const meta = statusMeta(status);
-        return `<span class="pl-status-chip is-${meta.tone}">${esc(meta.label)}</span>`;
+        const meta = STATUS[status] || [words(status), 'muted'];
+        return chip(meta[0], meta[1]);
     }
 
-    function preserveScroll(renderFn) {
+    function testChip(status) {
+        const meta = TEST_STATUS[status] || [words(status), 'muted'];
+        return chip(meta[0], meta[1]);
+    }
+
+    function cellChip(status) {
+        const meta = CELL_STATUS[status] || [words(status), 'muted'];
+        return `<span class="pla-cell-dot is-${meta[1]}" title="${esc(meta[0])}"></span>`;
+    }
+
+    function setUrl() {
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('principles_view', state.view);
+            if (state.view === 'atlas') {
+                url.searchParams.set('principles_map', state.mapId);
+                url.searchParams.set('principles_projection', state.projection);
+                url.searchParams.set('principles_k', String(state.clusterCount));
+                url.searchParams.set('principles_color', state.colorBy);
+            } else {
+                url.searchParams.delete('principles_map');
+                url.searchParams.delete('principles_projection');
+                url.searchParams.delete('principles_k');
+                url.searchParams.delete('principles_color');
+            }
+            window.history.replaceState({}, '', url);
+        } catch (_error) {
+            // Embedded harnesses can expose an immutable location.
+        }
+    }
+
+    function readUrl() {
+        try {
+            const params = new URL(window.location.href).searchParams;
+            const view = params.get('principles_view');
+            if (VIEWS.some(([id]) => id === view)) state.view = view;
+            state.mapId = params.get('principles_map') || state.mapId;
+            state.projection = params.get('principles_projection') || state.projection;
+            state.clusterCount = Number(params.get('principles_k')) || state.clusterCount;
+            state.colorBy = params.get('principles_color') || state.colorBy;
+        } catch (_error) {
+            // Defaults remain valid.
+        }
+    }
+
+    function selectedInvariant() {
+        return state.data?.invariants.find(row => row.id === state.invariantId)
+            || state.data?.invariants[0]
+            || null;
+    }
+
+    function selectedMap() {
+        return state.data?.clusterAtlas.maps.find(row => row.id === state.mapId)
+            || state.data?.clusterAtlas.maps[0]
+            || null;
+    }
+
+    function selectedModel() {
+        return state.data?.models.find(row => row.id === state.modelId)
+            || state.data?.models[0]
+            || null;
+    }
+
+    function selectedSurface() {
+        return state.data?.surfaces.find(row => row.id === state.surfaceId)
+            || state.data?.surfaces[0]
+            || null;
+    }
+
+    function preserveScroll(callback) {
         const scroller = state.root?.closest('.jarvis-content');
-        const top = scroller ? scroller.scrollTop : 0;
-        renderFn();
+        const top = scroller?.scrollTop || 0;
+        callback();
         if (scroller) requestAnimationFrame(() => { scroller.scrollTop = top; });
     }
 
     async function load() {
-        if (state.data || state.loading) return;
+        if (state.loading || state.data) return;
         state.loading = true;
-        state.error = '';
         render();
         try {
             const response = await fetch(ARTIFACT_URL, { cache: 'no-cache' });
             if (!response.ok) throw new Error(`artifact request failed (${response.status})`);
             const data = await response.json();
-            if (data.schema !== 'predictive-abstraction-lab-v1') {
-                throw new Error('unexpected predictive abstraction artifact');
+            if (data.schema !== 'business-world-principles-atlas-v2') {
+                throw new Error('unexpected Principles Atlas artifact');
             }
             state.data = data;
-            state.selectedId = data.summary?.strongestSupported?.[0]
-                || data.candidates?.[0]?.id
-                || null;
+            state.invariantId = data.invariants[0]?.id || null;
+            state.modelId = data.models[0]?.id || null;
+            state.surfaceId = data.surfaces[0]?.id || null;
+            if (!data.clusterAtlas.maps.some(row => row.id === state.mapId)) {
+                state.mapId = data.clusterAtlas.maps[0]?.id || '';
+            }
         } catch (error) {
             state.error = error?.message || String(error);
         } finally {
@@ -143,6 +236,7 @@
 
     function mount(root) {
         state.root = root;
+        readUrl();
         render();
         load();
     }
@@ -151,714 +245,1017 @@
         if (!state.root) return;
         if (state.loading && !state.data) {
             state.root.innerHTML = `
-                <div class="principles-lab pl-loading">
-                    <span class="pl-loading-mark" aria-hidden="true"></span>
-                    <div><b>Loading the evidence registry</b><span>Reading the compact, source-hashed snapshot.</span></div>
+                <div class="principles-atlas pla-loading">
+                    <span class="pla-loader" aria-hidden="true"></span>
+                    <div><b>Assembling the whole-system atlas</b><span>Loading six maps, every quantitative surface, and the falsification ledger.</span></div>
                 </div>`;
             return;
         }
         if (state.error) {
             state.root.innerHTML = `
-                <div class="principles-lab">
-                    <div class="pl-error"><b>Principles artifact unavailable</b><span>${esc(state.error)}</span>
-                    <button type="button" data-pl-retry>Retry</button></div>
+                <div class="principles-atlas">
+                    <div class="pla-error">
+                        <b>Principles Atlas unavailable</b>
+                        <span>${esc(state.error)}</span>
+                        <button type="button" data-action="retry">Retry</button>
+                    </div>
                 </div>`;
-            state.root.querySelector('[data-pl-retry]')?.addEventListener('click', () => {
-                state.data = null;
-                load();
-            });
+            bind();
             return;
         }
         if (!state.data) return;
 
         const data = state.data;
-        const summary = data.summary;
-        const generated = new Date(data.generatedAt);
         state.root.innerHTML = `
-            <div class="principles-lab">
-                <header class="pl-header">
-                    <div class="pl-header-main">
-                        <div class="pl-eyebrow">Predictive abstraction / current evidence</div>
-                        <h2>When is an abstraction justified?</h2>
-                        <p>${esc(data.thesis)}</p>
+            <div class="principles-atlas">
+                <header class="pla-header">
+                    <div>
+                        <span class="pla-kicker">BusinessWorld / complete evidence system</span>
+                        <h2>${esc(data.title)}</h2>
+                        <p>${esc(data.mission)}</p>
                     </div>
-                    <div class="pl-snapshot">
-                        <span>Evidence snapshot</span>
-                        <b>${Number.isNaN(generated.getTime()) ? 'unknown' : generated.toLocaleDateString()}</b>
+                    <div class="pla-snapshot">
+                        <span>Snapshot</span>
+                        <b>${esc(new Date(data.generatedAt).toLocaleDateString())}</b>
                         <code>${esc(shortHash(data.artifactHash))}</code>
                     </div>
                 </header>
-
-                <div class="pl-ceiling">
-                    <div>
-                        <span>Current ceiling</span>
-                        <b>${esc(summary.headline)}</b>
-                    </div>
-                    <div class="pl-ceiling-counts">
-                        <span><b>${summary.levelCounts.regional_invariant || 0}</b> regional</span>
-                        <span><b>${summary.levelCounts.local_invariant || 0}</b> local</span>
-                        <span><b>${summary.levelCounts.domain_invariant || 0}</b> domain</span>
-                        <span><b>0</b> universal</span>
-                    </div>
-                </div>
-
-                <nav class="pl-tabs" aria-label="Principles lab views">
-                    ${VIEW_TABS.map(([id, label]) => `
-                        <button type="button" class="${state.view === id ? 'active' : ''}" data-pl-view="${id}">${label}</button>
+                <nav class="pla-tabs" aria-label="Principles Atlas views">
+                    ${VIEWS.map(([id, label]) => `
+                        <button type="button" class="${state.view === id ? 'active' : ''}" data-view="${id}">${esc(label)}</button>
                     `).join('')}
                 </nav>
-
-                <main class="pl-view">${renderView()}</main>
+                <main class="pla-main">${renderView()}</main>
             </div>`;
         bind();
+        if (state.view === 'atlas') requestAnimationFrame(setupAtlasCanvas);
     }
 
     function renderView() {
-        if (state.view === 'registry') return renderRegistry();
-        if (state.view === 'survival') return renderSurvival();
-        if (state.view === 'sources') return renderSources();
+        if (state.view === 'system') return renderSystem();
+        if (state.view === 'atlas') return renderAtlas();
+        if (state.view === 'models') return renderModels();
+        if (state.view === 'evidence') return renderEvidence();
         if (state.view === 'method') return renderMethod();
-        return renderMap();
+        return renderDiscoveries();
     }
 
-    function renderMap() {
-        const data = state.data;
-        const summary = data.summary;
-        const candidate = selectedCandidate();
+    function stat(label, value, detail, tone = '') {
         return `
-            <section class="pl-stat-strip" aria-label="Evidence summary">
-                ${stat('Evidence sources', summary.sourceCount, 'Canonical, current artifacts')}
-                ${stat('Candidate abstractions', summary.candidateCount, 'Comparable only inside a target family')}
-                ${stat('Failed current OOD tests', summary.statusCounts.falsified_currently || 0, 'Failures remain first-class evidence', 'red')}
-                ${stat('Prospective passes', summary.transformationCounts.prospective.pass || 0, 'No future lockbox has passed', 'amber')}
-            </section>
+            <div class="pla-stat ${tone ? `is-${tone}` : ''}">
+                <span>${esc(label)}</span>
+                <b>${esc(value)}</b>
+                <small>${esc(detail)}</small>
+            </div>`;
+    }
 
-            <section class="pl-prerequisite-band">
-                <div class="pl-section-heading">
-                    <div><span>Justification gates</span><h3>All four are necessary</h3></div>
-                    <p>A candidate is capped by its weakest failed or untested gate. Sample size cannot compensate for missing source diversity.</p>
+    function renderDiscoveries() {
+        const data = state.data;
+        const invariant = selectedInvariant();
+        return `
+            <section class="pla-verdict">
+                <div>
+                    <span class="pla-section-label">Whole-system verdict</span>
+                    <h3>${esc(data.verdict.headline)}</h3>
+                    <p>${esc(data.verdict.summary)}</p>
                 </div>
-                <div class="pl-gate-grid">
-                    ${data.operationalContract.prerequisites.map((gate, index) => {
-                        const counts = prerequisiteCounts(gate.id);
-                        return `
-                            <button type="button" class="pl-gate ${state.gate === gate.id ? 'active' : ''}" data-pl-gate="${gate.id}">
-                                <span class="pl-gate-number">0${index + 1}</span>
-                                <b>${esc(gate.label)}</b>
-                                <small>${esc(gate.question)}</small>
-                                <em>${counts.pass} pass · ${counts.fail} fail · ${counts.unknown} unresolved</em>
-                            </button>`;
-                    }).join('')}
+                <div class="pla-verdict-counts">
+                    ${stat('Surviving findings', data.verdict.promoted, 'Across independent transformations', 'green')}
+                    ${stat('Mixed / provisional', data.verdict.mixed, 'Useful structure, incomplete outcome proof', 'amber')}
+                    ${stat('Universal principles', data.verdict.universal, 'No universal claim is justified', 'red')}
                 </div>
             </section>
 
-            <div class="pl-map-layout">
-                <section class="pl-panel pl-map-panel">
-                    <div class="pl-section-heading">
-                        <div><span>Diversity × falsification distance</span><h3>How far each claim has actually traveled</h3></div>
-                        <p>Horizontal position is independent-source diversity. Vertical position is the hardest test attempted, not evidence strength. Red points traveled far enough to fail.</p>
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div>
+                        <span class="pla-section-label">Breakthrough ledger</span>
+                        <h3>What survives when every subsystem is forced to disagree</h3>
                     </div>
-                    ${renderEvidenceMapSvg()}
-                    <div class="pl-chart-legend">
-                        <span><i class="is-green"></i>supported</span>
-                        <span><i class="is-cyan"></i>local</span>
-                        <span><i class="is-amber"></i>partial</span>
-                        <span><i class="is-red"></i>failed</span>
-                        <span><i class="is-muted"></i>exploratory</span>
-                        <em>circle area = observations</em>
-                    </div>
-                </section>
-                ${renderCandidateDetail(candidate, true)}
-            </div>
-
-            <section class="pl-panel pl-depth-panel">
-                <div class="pl-section-heading">
-                    <div><span>Recursive constraint hierarchy</span><h3>Depth is earned by transformation survival</h3></div>
-                    <p>Mechanisms compose into stable interactions. Only invariants that keep predicting can constrain the next layer.</p>
+                    <span>${data.invariants.length} claims</span>
                 </div>
-                ${renderDepthLadder()}
+                <div class="pla-discovery-layout">
+                    <div class="pla-invariant-list">
+                        ${data.invariants.map((row, index) => `
+                            <button type="button" class="pla-invariant-row ${row.id === invariant.id ? 'active' : ''}" data-invariant="${esc(row.id)}">
+                                <span class="pla-index">${String(index + 1).padStart(2, '0')}</span>
+                                <span>
+                                    <b>${esc(row.title)}</b>
+                                    <small>${esc(row.headline)}</small>
+                                </span>
+                                <span class="pla-row-meta">${statusChip(row.status)}<em>${esc(words(row.level))}</em></span>
+                            </button>
+                        `).join('')}
+                    </div>
+                    ${renderInvariantInspector(invariant)}
+                </div>
             </section>
 
-            <section class="pl-panel">
-                <div class="pl-section-heading">
-                    <div><span>Prediction ledger</span><h3>The most informative results include the failures</h3></div>
-                    <p>These are the current system-level claims. Click any row to inspect exactly what survived and what did not.</p>
+            ${renderTransformationMatrix()}
+
+            ${renderCurrentArchitecture()}
+
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div>
+                        <span class="pla-section-label">Failure lab</span>
+                        <h3>Attractive shortcuts the complete data rejects</h3>
+                    </div>
+                    <span>${data.failureLab.length} failed claims</span>
                 </div>
-                ${renderPredictionLedger()}
+                <div class="pla-failure-grid">
+                    ${data.failureLab.map(row => `
+                        <button type="button" class="pla-failure" data-surface="${esc(row.systems[0] || '')}">
+                            <span>${statusChip(row.status)}</span>
+                            <b>${esc(row.title)}</b>
+                            <p>${esc(row.reason)}</p>
+                            <small>${row.systems.map(words).join(' · ')}</small>
+                        </button>
+                    `).join('')}
+                </div>
             </section>`;
     }
 
-    function stat(label, value, note, tone = '') {
+    function renderCurrentArchitecture() {
+        const market = state.data.corpus.promise.marketHold;
+        const factorization = state.data.invariants.find(row => row.id === 'views_factorization');
+        const factors = [
+            ['Opportunity', 'Source, format, publication time, audience scale, and distribution eligibility.', 'Observed source/time history', 'amber'],
+            ['Packaging conversion', 'Whether the first exposed viewer chooses to watch.', 'Visual + text projections; observed keep where available', 'cyan'],
+            ['Attention survival', 'How the opening and execution preserve viewers after entry.', 'Timed components, retention curve, duration', 'green'],
+            ['Distribution amplification', 'How the platform expands a successful exposure event.', 'Impressions and age histories are still missing', 'red'],
+        ];
         return `
-            <div class="pl-stat ${tone ? `is-${tone}` : ''}">
-                <span>${esc(label)}</span>
-                <b>${esc(value)}</b>
-                <small>${esc(note)}</small>
-            </div>`;
-    }
-
-    function prerequisiteCounts(id) {
-        const values = state.data.candidates.map(candidate => candidate.prerequisites?.[id]?.state || 'not_tested');
-        return {
-            pass: values.filter(value => value === 'pass').length,
-            fail: values.filter(value => value === 'fail').length,
-            unknown: values.filter(value => !['pass', 'fail'].includes(value)).length,
-        };
-    }
-
-    function validationReach(candidate) {
-        const get = id => candidate.transformations.find(row => row.id === id)?.state;
-        if (!['not_tested', 'not_applicable', undefined].includes(get('prospective'))) return 5;
-        if (!['not_tested', 'not_applicable', undefined].includes(get('format'))) return 4;
-        if (!['not_tested', 'not_applicable', undefined].includes(get('source'))) return 3;
-        if (!['not_tested', 'not_applicable', undefined].includes(get('time'))) return 2;
-        if (!['not_tested', 'not_applicable', undefined].includes(get('resample'))) return 1;
-        return 0;
-    }
-
-    function renderEvidenceMapSvg() {
-        const width = 760;
-        const height = 360;
-        const left = 58;
-        const right = 22;
-        const top = 24;
-        const bottom = 48;
-        const plotW = width - left - right;
-        const plotH = height - top - bottom;
-        const maxSources = Math.max(1, ...state.data.candidates.map(candidate => candidate.sample?.independentSources || 0));
-        const maxLogSources = Math.log10(maxSources + 1);
-        const yLabels = ['internal', 'resampled', 'forward time', 'unseen source', 'cross-format', 'prospective'];
-        const statusColor = {
-            supported_regionally: '#42d392',
-            supported_locally: '#35c7d8',
-            partial_signal: '#e8b44f',
-            exploratory: '#78869a',
-            falsified_currently: '#f06a72',
-        };
-        const circles = state.data.candidates.map(candidate => {
-            const independent = Math.max(0, candidate.sample?.independentSources || 0);
-            const x = left + (Math.log10(independent + 1) / maxLogSources) * plotW;
-            const reach = validationReach(candidate);
-            const y = top + plotH - (reach / 5) * plotH;
-            const radius = Math.max(5, Math.min(17, 4 + Math.sqrt(Math.max(1, candidate.sample?.observations || 1)) / 7));
-            const selected = candidate.id === state.selectedId;
-            const label = candidate.label.length > 28 ? `${candidate.label.slice(0, 27)}…` : candidate.label;
-            return `
-                <g class="pl-map-point ${selected ? 'is-selected' : ''}" data-principle-id="${esc(candidate.id)}" role="button" tabindex="0"
-                    transform="translate(${x.toFixed(2)} ${y.toFixed(2)})">
-                    <title>${esc(candidate.label)} · ${independent || 'unknown'} independent sources · ${yLabels[reach]}</title>
-                    <circle r="${radius.toFixed(2)}" fill="${statusColor[candidate.status] || '#78869a'}"></circle>
-                    ${selected ? `<circle class="pl-map-ring" r="${(radius + 5).toFixed(2)}"></circle>
-                        <text x="${radius + 9}" y="4">${esc(label)}</text>` : ''}
-                </g>`;
-        }).join('');
-
-        const yGrid = yLabels.map((label, index) => {
-            const y = top + plotH - (index / 5) * plotH;
-            return `<line x1="${left}" x2="${width - right}" y1="${y}" y2="${y}"></line>
-                <text class="pl-axis-label" x="${left - 10}" y="${y + 3}" text-anchor="end">${esc(label)}</text>`;
-        }).join('');
-        const sourceTicks = [0, 1, 3, 10, 30, 100].filter(value => value <= maxSources);
-        if (!sourceTicks.includes(maxSources)) sourceTicks.push(maxSources);
-        const xGrid = sourceTicks.map(value => {
-            const x = left + (Math.log10(value + 1) / maxLogSources) * plotW;
-            return `<line x1="${x}" x2="${x}" y1="${top}" y2="${top + plotH}"></line>
-                <text class="pl-axis-label" x="${x}" y="${height - 19}" text-anchor="middle">${value}</text>`;
-        }).join('');
-
-        return `
-            <div class="pl-svg-wrap">
-                <svg class="pl-evidence-map" viewBox="0 0 ${width} ${height}" aria-label="Candidate evidence diversity and validation reach">
-                    <g class="pl-grid">${yGrid}${xGrid}</g>
-                    <text class="pl-axis-title" x="${left + plotW / 2}" y="${height - 2}" text-anchor="middle">independent source families (log scale)</text>
-                    <text class="pl-axis-title" transform="translate(12 ${top + plotH / 2}) rotate(-90)" text-anchor="middle">hardest test attempted</text>
-                    <g>${circles}</g>
-                </svg>
-            </div>`;
-    }
-
-    function renderCandidateDetail(candidate, compact = false) {
-        if (!candidate) return '';
-        const prereqs = Object.entries(candidate.prerequisites || {});
-        const sources = candidate.sourceIds.map(id => state.data.sources.find(source => source.id === id)).filter(Boolean);
-        const transformSummary = candidate.transformations.reduce((acc, row) => {
-            acc[row.state] = (acc[row.state] || 0) + 1;
-            return acc;
-        }, {});
-        return `
-            <aside class="pl-detail ${compact ? 'is-compact' : ''}">
-                <div class="pl-detail-head">
+            <section class="pla-section pla-architecture">
+                <div class="pla-section-head">
                     <div>
-                        <span>${esc(candidate.familyLabel)}</span>
-                        <h3>${esc(candidate.label)}</h3>
+                        <span class="pla-section-label">Revised predictive architecture</span>
+                        <h3>One “virality score” is four interacting processes</h3>
                     </div>
-                    ${statusChip(candidate.status)}
+                    ${statusChip(factorization?.status || 'synthesis_hypothesis')}
                 </div>
-                <p class="pl-statement">${esc(candidate.statement)}</p>
-                <div class="pl-level-row">
-                    <span>Current depth <b>${esc(levelLabel(candidate.level))}</b></span>
-                    <span>Claim ceiling <b>${esc(levelLabel(candidate.ceiling))}</b></span>
-                    ${candidate.pareto?.front ? `<span>Pareto front <b>${candidate.pareto.front}</b></span>` : ''}
-                </div>
-                <div class="pl-prereq-list">
-                    ${prereqs.map(([id, row]) => `
-                        <div>
-                            <span>${esc(id)}</span>
-                            ${evidenceChip(row.state)}
-                            <b>${esc(row.measure)}</b>
-                            <small>${esc(row.detail)}</small>
-                        </div>`).join('')}
-                </div>
-                <div class="pl-mini-metrics">
-                    <span><b>${compactNumber(candidate.sample?.observations)}</b> observations</span>
-                    <span><b>${candidate.sample?.independentSources == null ? 'unknown' : fmt(candidate.sample.independentSources, 0)}</b> independent sources</span>
-                    <span><b>${transformSummary.pass || 0}</b> transformations passed</span>
-                    <span><b>${transformSummary.fail || 0}</b> failed</span>
-                </div>
-                <div class="pl-boundary"><span>Claim boundary</span>${esc(candidate.claimBoundary)}</div>
-                <div class="pl-next-test"><span>Next falsification test</span>${esc(candidate.nextTest)}</div>
-                ${sources.length ? `
-                    <div class="pl-source-chips">${sources.map(source => `
-                        <button type="button" data-pl-source="${esc(source.id)}">${esc(source.label)}</button>
-                    `).join('')}</div>` : ''}
-                ${candidate.examples?.length ? `
-                    <details class="pl-examples">
-                        <summary>Representative observations (${candidate.examples.length})</summary>
-                        ${candidate.examples.map(example => `<p>${esc(example)}</p>`).join('')}
-                    </details>` : ''}
-            </aside>`;
-    }
-
-    function renderDepthLadder() {
-        const hierarchy = state.data.operationalContract.hierarchy;
-        return `
-            <div class="pl-depth-ladder">
-                ${hierarchy.map((level, index) => {
-                    const count = state.data.summary.levelCounts[level.id] || 0;
-                    return `
-                        <button type="button" data-pl-level="${esc(level.id)}" class="${state.level === level.id ? 'active' : ''}">
+                <p class="pla-equation">${esc(factorization?.claim || '')}</p>
+                <div class="pla-factor-flow">
+                    ${factors.map(([title, description, evidence, tone], index) => `
+                        <article class="is-${tone}">
                             <span>${String(index + 1).padStart(2, '0')}</span>
-                            <b>${esc(level.label)}</b>
-                            <em>${count}</em>
-                            <small>${esc(level.definition)}</small>
-                        </button>`;
-                }).join('')}
-            </div>`;
+                            <b>${esc(title)}</b>
+                            <p>${esc(description)}</p>
+                            <small>${esc(evidence)}</small>
+                        </article>
+                    `).join('')}
+                </div>
+                <div class="pla-transfer-proof">
+                    <div>
+                        <span class="pla-section-label">Strongest positive portable signal</span>
+                        <b>Frozen external text semantics transfer into owned retention</b>
+                        <p>The axis was fit on ${fmt(market.externalRows, 0)} non-owned Shorts across ${fmt(market.externalGroups, 0)} source/copy groups, then applied unchanged to all 208 owned openings.</p>
+                    </div>
+                    <dl>
+                        <div><dt>Average retention rank ρ</dt><dd>${signed(market.transfer.averageRetention?.spearman, 3)}</dd></div>
+                        <div><dt>Viewed percent rank ρ</dt><dd>${signed(market.transfer.viewedPercent?.spearman, 3)}</dd></div>
+                        <div><dt>5-second retention rank ρ</dt><dd>${signed(market.transfer.retention5s?.spearman, 3)}</dd></div>
+                        <div><dt>Log views rank ρ</dt><dd>${signed(market.transfer.logViews?.spearman, 3)}</dd></div>
+                    </dl>
+                </div>
+                <p class="pla-boundary">${esc(factorization?.boundary || '')}</p>
+            </section>`;
     }
 
-    function systemCandidates() {
-        return state.data.candidates.filter(candidate => !candidate.id.startsWith('operations:'));
-    }
-
-    function metricSummary(candidate) {
-        const prerequisites = candidate.prerequisites || {};
-        const predictive = prerequisites.predictability;
-        const persistent = prerequisites.persistence;
-        return `${predictive?.measure || 'prediction unmeasured'} · ${persistent?.measure || 'persistence unmeasured'}`;
-    }
-
-    function renderPredictionLedger() {
+    function renderInvariantInspector(row) {
+        if (!row) return '';
+        const matrix = state.data.transformationMatrix.find(item => item.invariantId === row.id);
+        const selectedCell = state.transformationId
+            ? matrix?.cells?.[state.transformationId]
+            : null;
+        const selectedTests = selectedCell?.testIds?.length
+            ? row.tests.filter(testRow => selectedCell.testIds.includes(testRow.id))
+            : row.tests;
         return `
-            <div class="pl-ledger">
-                ${systemCandidates().map(candidate => `
-                    <button type="button" data-principle-id="${esc(candidate.id)}" class="${candidate.id === state.selectedId ? 'active' : ''}">
-                        <span class="pl-ledger-name"><b>${esc(candidate.label)}</b><small>${esc(candidate.familyLabel)}</small></span>
-                        <span>${statusChip(candidate.status)}</span>
-                        <span class="pl-ledger-metric">${esc(metricSummary(candidate))}</span>
-                        <span class="pl-ledger-level">${esc(levelLabel(candidate.level))}</span>
-                    </button>
+            <article class="pla-inspector">
+                <div class="pla-inspector-head">
+                    <div>${statusChip(row.status)} ${chip(words(row.level), 'outline')}</div>
+                    <h3>${esc(row.title)}</h3>
+                    <p>${esc(row.claim)}</p>
+                </div>
+                <dl class="pla-definition-grid">
+                    <div><dt>Scope</dt><dd>${esc(row.scope)}</dd></div>
+                    <div><dt>Operational consequence</dt><dd>${esc(row.implication)}</dd></div>
+                    <div><dt>Next falsifier</dt><dd>${esc(row.nextFalsifier)}</dd></div>
+                    <div><dt>Claim boundary</dt><dd>${esc(row.boundary)}</dd></div>
+                </dl>
+                ${row.confounds?.length ? `
+                    <div class="pla-note-list">
+                        <b>Remaining confounds</b>
+                        ${row.confounds.map(item => `<span>${esc(item)}</span>`).join('')}
+                    </div>` : ''}
+                <div class="pla-test-head">
+                    <b>${state.transformationId ? `${words(state.transformationId)} evidence` : 'Exact tests'}</b>
+                    <span>${selectedTests.length} shown</span>
+                </div>
+                <div class="pla-test-list">
+                    ${selectedTests.length ? selectedTests.map(testRow => `
+                        <div class="pla-test">
+                            <div>${testChip(testRow.status)}<code>${esc(testRow.id)}</code></div>
+                            <p>${esc(testRow.detail)}</p>
+                            ${testRow.value != null ? `<pre>${esc(JSON.stringify(testRow.value, null, 2))}</pre>` : ''}
+                            <small>${(testRow.sourceIds || []).map(source => esc(source.replace(/^local:|^r2:/, ''))).join(' · ') || 'No independent source yet'}</small>
+                        </div>
+                    `).join('') : '<div class="pla-empty">No direct test is attached to this transformation yet.</div>'}
+                </div>
+            </article>`;
+    }
+
+    function renderTransformationMatrix() {
+        const data = state.data;
+        return `
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div>
+                        <span class="pla-section-label">Invariant survival</span>
+                        <h3>The weakest transformation sets the ceiling</h3>
+                    </div>
+                    <div class="pla-cell-legend">
+                        ${Object.entries(CELL_STATUS).map(([id, [label]]) => `${cellChip(id)}<span>${esc(label)}</span>`).join('')}
+                    </div>
+                </div>
+                <div class="pla-table-scroll">
+                    <table class="pla-matrix">
+                        <thead><tr><th>Claim</th>${data.transformations.map(row => `<th title="${esc(row.family)}">${esc(row.label)}</th>`).join('')}</tr></thead>
+                        <tbody>
+                            ${data.transformationMatrix.map(matrixRow => {
+                                const row = data.invariants.find(item => item.id === matrixRow.invariantId);
+                                return `
+                                    <tr>
+                                        <th><button type="button" data-invariant="${esc(row.id)}">${esc(row.title)}</button></th>
+                                        ${data.transformations.map(transformation => {
+                                            const cell = matrixRow.cells[transformation.id];
+                                            return `<td><button type="button" class="${state.invariantId === row.id && state.transformationId === transformation.id ? 'active' : ''}" data-matrix="${esc(row.id)}" data-transformation="${esc(transformation.id)}" title="${esc(`${row.title}: ${CELL_STATUS[cell.status]?.[0] || cell.status}`)}">${cellChip(cell.status)}</button></td>`;
+                                        }).join('')}
+                                    </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </section>`;
+    }
+
+    function renderSystem() {
+        const data = state.data;
+        const shorts = data.corpus.databases.find(row => row.format === 'shorts');
+        const long = data.corpus.databases.find(row => row.format === 'long');
+        const selected = selectedSurface();
+        const filters = ['all', 'ingested', 'partial', 'hypothesis', 'candidate'];
+        const visible = data.surfaces.filter(row => (
+            state.surfaceFilter === 'all'
+            || row.status.includes(state.surfaceFilter)
+        ));
+        return `
+            <section class="pla-stat-grid">
+                ${stat('Shorts observations', compact(shorts.records), `${compact(shorts.channels)} source labels`)}
+                ${stat('Long observations', compact(long.records), `${compact(long.channels)} source labels`)}
+                ${stat('Private retention', compact(data.corpus.privateKeep.videos), `${data.corpus.privateKeep.accounts.length} accounts`)}
+                ${stat('Cluster partitions', data.clusterAtlas.partitionCount, '6 modality/format maps')}
+                ${stat('Opening spans', compact(data.corpus.promise.allContiguousSpans), `${data.corpus.promise.hooks} owned openings`)}
+                ${stat('20-second lattice', compact(data.corpus.promise.opening20s.spans), `${compact(data.corpus.promise.opening20s.edges)} typed edges`)}
+                ${stat('Legacy search rows', compact(data.corpus.legacy.derivedExperimentRows), 'Hypothesis generation only')}
+            </section>
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div>
+                        <span class="pla-section-label">Observation graph</span>
+                        <h3>From raw reality to claims</h3>
+                    </div>
+                    <span>${data.systemGraph.nodes.length} nodes · ${data.systemGraph.edges.length} typed edges</span>
+                </div>
+                <div class="pla-graph-wrap">${renderSystemGraph()}</div>
+                <p class="pla-boundary">${esc(data.systemGraph.boundary)}</p>
+            </section>
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div>
+                        <span class="pla-section-label">Surface inventory</span>
+                        <h3>Every Jarvis area has an explicit evidentiary role</h3>
+                    </div>
+                    <div class="pla-segmented">
+                        ${filters.map(id => `<button type="button" class="${state.surfaceFilter === id ? 'active' : ''}" data-surface-filter="${id}">${esc(id)}</button>`).join('')}
+                    </div>
+                </div>
+                <div class="pla-surface-layout">
+                    <div class="pla-surface-list">
+                        ${visible.map(row => `
+                            <button type="button" class="pla-surface-row ${selected?.id === row.id ? 'active' : ''}" data-surface="${esc(row.id)}">
+                                <span><b>${esc(row.area)}</b><small>${esc(row.section)}</small></span>
+                                <span>${chip(words(row.status), row.status.includes('ingested') ? 'green' : row.status.includes('partial') ? 'amber' : 'muted')}<em>${row.observations == null ? '—' : compact(row.observations)}</em></span>
+                            </button>
+                        `).join('')}
+                    </div>
+                    ${selected ? `
+                        <article class="pla-surface-inspector">
+                            <span class="pla-section-label">${esc(selected.area)}</span>
+                            <h3>${esc(selected.section)}</h3>
+                            <p>${esc(selected.summary)}</p>
+                            <div class="pla-kind-row">
+                                ${(selected.evidenceKinds || []).map(id => {
+                                    const kind = data.evidenceKinds.find(row => row.id === id);
+                                    return kind ? `<span style="--kind:${esc(kind.color)}">${esc(kind.label)}</span>` : '';
+                                }).join('') || '<span>No quantitative evidence exported</span>'}
+                            </div>
+                            <dl class="pla-definition-grid">
+                                <div><dt>Rows</dt><dd>${selected.observations == null ? 'Not a row-level evidence store' : fmt(selected.observations, 0)}</dd></div>
+                                <div><dt>Accounts / sources</dt><dd>${selected.accounts == null ? 'Not persisted here' : fmt(selected.accounts, 0)}</dd></div>
+                                <div><dt>Status</dt><dd>${esc(words(selected.status))}</dd></div>
+                                <div><dt>Canonical artifacts</dt><dd>${selected.sourceIds.length ? selected.sourceIds.map(id => esc(id.replace(/^local:|^r2:/, ''))).join('<br>') : 'No canonical statistical export'}</dd></div>
+                            </dl>
+                        </article>` : ''}
+                </div>
+            </section>
+            <section class="pla-section">
+                <div class="pla-section-head"><div><span class="pla-section-label">Evidence classes</span><h3>What may confirm what</h3></div></div>
+                <div class="pla-evidence-kinds">
+                    ${data.evidenceKinds.map(row => `
+                        <div style="--kind:${esc(row.color)}"><b>${esc(row.label)}</b><p>${esc(row.definition)}</p></div>
+                    `).join('')}
+                </div>
+            </section>`;
+    }
+
+    function renderSystemGraph() {
+        const graph = state.data.systemGraph;
+        const width = 1180;
+        const height = 520;
+        const groups = new Map();
+        graph.nodes.forEach(node => {
+            if (!groups.has(node.layer)) groups.set(node.layer, []);
+            groups.get(node.layer).push(node);
+        });
+        const positions = {};
+        [...groups.entries()].forEach(([layer, nodes]) => {
+            const x = 72 + (layer * 172);
+            nodes.forEach((node, index) => {
+                const gap = height / (nodes.length + 1);
+                positions[node.id] = { x, y: gap * (index + 1) };
+            });
+        });
+        return `
+            <svg class="pla-system-graph" viewBox="0 0 ${width} ${height}" role="img" aria-label="Whole-system observation and inference graph">
+                <defs><marker id="pla-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z"></path></marker></defs>
+                ${graph.edges.map(edge => {
+                    const from = positions[edge.from];
+                    const to = positions[edge.to];
+                    if (!from || !to) return '';
+                    const x1 = from.x + 61;
+                    const x2 = to.x - 61;
+                    const midpoint = (x1 + x2) / 2;
+                    return `<path class="pla-graph-edge" d="M${x1},${from.y} C${midpoint},${from.y} ${midpoint},${to.y} ${x2},${to.y}" marker-end="url(#pla-arrow)"><title>${esc(edge.type)}</title></path>`;
+                }).join('')}
+                ${graph.nodes.map(node => {
+                    const point = positions[node.id];
+                    const active = state.graphNodeId === node.id ? 'active' : '';
+                    return `
+                        <g class="pla-graph-node is-${esc(node.kind)} ${active}" data-graph-node="${esc(node.id)}" tabindex="0" role="button">
+                            <rect x="${point.x - 61}" y="${point.y - 25}" width="122" height="50" rx="5"></rect>
+                            <text x="${point.x}" y="${point.y + 4}" text-anchor="middle">${esc(node.label)}</text>
+                            <title>${esc(`${node.label} · ${node.kind}`)}</title>
+                        </g>`;
+                }).join('')}
+            </svg>`;
+    }
+
+    function renderAtlas() {
+        const data = state.data;
+        const map = selectedMap();
+        if (!map) return '<div class="pla-empty">No cluster maps are available.</div>';
+        const projectionNames = Object.keys(map.projections);
+        if (!projectionNames.includes(state.projection)) state.projection = projectionNames[0] || 'pca';
+        const partition = map.partitions.find(row => row.clusterCount === state.clusterCount)
+            || map.partitions[0];
+        if (partition.clusterCount !== state.clusterCount) state.clusterCount = partition.clusterCount;
+        const point = map.atlasSample.find(row => row.id === state.pointId) || null;
+        const formatEdges = data.clusterAtlas.modalityEdges.filter(row => row.format === map.format);
+        const transport = map.resolutionEdges.find(row => `${row.from}:${row.to}` === state.transportKey)
+            || map.resolutionEdges[0]
+            || null;
+        return `
+            <section class="pla-atlas-toolbar">
+                <label>Map<select data-atlas-map>${data.clusterAtlas.maps.map(row => `<option value="${esc(row.id)}" ${row.id === map.id ? 'selected' : ''}>${esc(words(row.id))} · ${compact(row.mapRows)}</option>`).join('')}</select></label>
+                <label>Plane<select data-atlas-projection>${projectionNames.map(name => `<option value="${esc(name)}" ${name === state.projection ? 'selected' : ''}>${esc(words(name))}${map.projections[name].supervised ? ' · supervised' : ''}</option>`).join('')}</select></label>
+                <label>Resolution<select data-atlas-k>${map.partitions.map(row => `<option value="${row.clusterCount}" ${row.clusterCount === partition.clusterCount ? 'selected' : ''}>k = ${row.clusterCount}</option>`).join('')}</select></label>
+                <label>Color<select data-atlas-color>
+                    ${[['cluster', 'Cluster'], ['views', 'Log views'], ['outlier', 'Outlier'], ['owned', 'Owned'], ['silent', 'Speech availability']].map(([id, label]) => `<option value="${id}" ${id === state.colorBy ? 'selected' : ''}>${label}</option>`).join('')}
+                </select></label>
+            </section>
+            <section class="pla-section pla-atlas-section">
+                <div class="pla-section-head">
+                    <div>
+                        <span class="pla-section-label">${esc(map.format)} / ${esc(map.modality)} / ${esc(state.projection)}</span>
+                        <h3>${compact(map.mapRows)} observations · ${map.atlasSample.length.toLocaleString()} deterministic overview points</h3>
+                    </div>
+                    <div>${chip(map.stale ? 'map stale' : 'map current', map.stale ? 'red' : 'green')} ${chip(map.projections[state.projection].supervised ? 'outcome-directed plane' : 'outcome-blind plane', map.projections[state.projection].supervised ? 'amber' : 'cyan')}</div>
+                </div>
+                <div class="pla-atlas-layout">
+                    <div class="pla-canvas-shell">
+                        <canvas id="pla-atlas-canvas" aria-label="${esc(`${map.id} ${state.projection} embedding sample`)}"></canvas>
+                        <div class="pla-canvas-tooltip" id="pla-canvas-tooltip" hidden></div>
+                        <div class="pla-canvas-legend">${renderAtlasLegend(partition)}</div>
+                    </div>
+                    <aside class="pla-point-inspector">
+                        ${point ? renderPoint(map, point) : `
+                            <span class="pla-section-label">Observation inspector</span>
+                            <h3>Select a point</h3>
+                            <p>Every plotted point carries its video ID, source, actual views, modality availability, coordinates, and membership at all four resolutions.</p>
+                            <dl class="pla-definition-grid">
+                                <div><dt>Sampling</dt><dd>${esc(map.atlasSampling.method)}</dd></div>
+                                <div><dt>Full map</dt><dd>${compact(map.mapRows)} rows at ${esc(map.endpoint)}</dd></div>
+                                <div><dt>Heldout AUC 10M</dt><dd>${fmt(map.heldout.auc10m, 3)}</dd></div>
+                                <div><dt>Heldout r views</dt><dd>${fmt(map.heldout.viewsCorrelation, 3)}</dd></div>
+                            </dl>`}
+                    </aside>
+                </div>
+                <p class="pla-boundary">${esc(data.clusterAtlas.mappingRule)}</p>
+            </section>
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div><span class="pla-section-label">Pooled fit versus portable lift</span><h3>Cluster outcome separation by resolution</h3></div>
+                    <span>Eta² and creator-fold R²</span>
+                </div>
+                ${renderPartitionChart(map)}
+                <div class="pla-table-scroll">
+                    <table class="pla-data-table">
+                        <thead><tr><th>k</th><th>Global views η²</th><th>Within-source η²</th><th>Unseen-creator R²</th><th>Maximum 10M lift</th><th>Rows</th></tr></thead>
+                        <tbody>${map.partitions.map(row => `
+                            <tr class="${row.clusterCount === partition.clusterCount ? 'active' : ''}">
+                                <td>${row.clusterCount}</td>
+                                <td>${pct(row.global.viewsEtaSquared)}</td>
+                                <td>${pct(row.sourceTransfer.sourceCenteredClusterEtaSquared, 2)}</td>
+                                <td>${signed(row.sourceTransfer.creatorFoldR2, 4)}</td>
+                                <td>${fmt(row.global.maximumLift10m)}×</td>
+                                <td>${compact(row.observations)}</td>
+                            </tr>`).join('')}</tbody>
+                    </table>
+                </div>
+            </section>
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div><span class="pla-section-label">Cluster membership</span><h3>What each cluster contains at k=${partition.clusterCount}</h3></div>
+                    <span>${partition.global.clusters.length} clusters</span>
+                </div>
+                <div class="pla-cluster-strip">
+                    ${partition.global.clusters.map(row => `
+                        <div style="--cluster:${CLUSTER_COLORS[row.cluster % CLUSTER_COLORS.length]}">
+                            <span>Cluster ${row.cluster}</span>
+                            <b>${compact(row.n)}</b>
+                            <small>${fmt(10 ** row.meanLogViews, 0)} mean views · ${pct(row.hitRate10m)} hit 10M · ${fmt(row.lift10m)}× lift</small>
+                        </div>
+                    `).join('')}
+                </div>
+            </section>
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div><span class="pla-section-label">Resolution lineage</span><h3>Splits and merges across k</h3></div>
+                    <span>Shared-observation transport</span>
+                </div>
+                <div class="pla-transport-layout">
+                    <div class="pla-transport-list">
+                        ${map.resolutionEdges.map(row => `
+                            <button type="button" class="${transport && row.from === transport.from && row.to === transport.to ? 'active' : ''}" data-transport="${row.from}:${row.to}">
+                                <span>k${row.from} → k${row.to}</span><b>NMI ${fmt(row.nmi, 3)}</b><small>VI ${fmt(row.variationOfInformationBits, 3)} bits</small>
+                            </button>
+                        `).join('')}
+                    </div>
+                    ${transport ? `
+                        <div class="pla-link-table">
+                            <div><b>Top overlap paths</b><span>${transport.observations.toLocaleString()} shared observations</span></div>
+                            <div class="pla-table-scroll"><table class="pla-data-table">
+                                <thead><tr><th>From</th><th>To</th><th>Overlap</th><th>From share</th><th>To share</th><th>Jaccard</th></tr></thead>
+                                <tbody>${transport.links.slice(0, 36).map(link => `<tr><td>C${link.from}</td><td>C${link.to}</td><td>${compact(link.overlap)}</td><td>${pct(link.fromShare)}</td><td>${pct(link.toShare)}</td><td>${fmt(link.jaccard, 3)}</td></tr>`).join('')}</tbody>
+                            </table></div>
+                        </div>` : ''}
+                </div>
+            </section>
+            <section class="pla-section">
+                <div class="pla-section-head"><div><span class="pla-section-label">Cross-modality mapping</span><h3>The same observations partition differently</h3></div></div>
+                <div class="pla-modality-grid">
+                    ${formatEdges.map(edge => `
+                        <div>
+                            <b>${esc(edge.left)} ↔ ${esc(edge.right)}</b>
+                            <span>${compact(edge.commonObservations)} paired rows</span>
+                            ${edge.byResolution.map(row => `<p><em>k${row.clusterCount}</em><span style="--nmi:${Math.max(0, Math.min(1, row.nmi))}"></span><strong>${fmt(row.nmi, 3)}</strong></p>`).join('')}
+                            ${edge.silent ? `<small>silent mean NMI ${fmt(edge.silent.byResolution.reduce((sum, row) => sum + row.nmi, 0) / edge.silent.byResolution.length, 3)} · voiced ${fmt(edge.voiced.byResolution.reduce((sum, row) => sum + row.nmi, 0) / edge.voiced.byResolution.length, 3)}</small>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            </section>`;
+    }
+
+    function renderAtlasLegend(partition) {
+        if (state.colorBy === 'cluster') {
+            return partition.global.clusters.map(row => `<span><i style="--color:${CLUSTER_COLORS[row.cluster % CLUSTER_COLORS.length]}"></i>C${row.cluster}</span>`).join('');
+        }
+        if (state.colorBy === 'owned') return '<span><i style="--color:#57d6a2"></i>Owned</span><span><i style="--color:#596779"></i>Public corpus</span>';
+        if (state.colorBy === 'silent') return '<span><i style="--color:#f4bf59"></i>No speech</span><span><i style="--color:#5fc9ff"></i>Speech present</span>';
+        return '<span><i class="pla-ramp"></i>low → high</span>';
+    }
+
+    function renderPoint(map, point) {
+        const href = map.format === 'shorts'
+            ? `https://www.youtube.com/shorts/${encodeURIComponent(point.id)}`
+            : `https://www.youtube.com/watch?v=${encodeURIComponent(point.id)}`;
+        return `
+            <span class="pla-section-label">${esc(point.source)}</span>
+            <h3>${esc(point.title || point.id)}</h3>
+            ${point.transcript ? `<p class="pla-transcript">${esc(point.transcript)}</p>` : '<p class="pla-transcript is-empty">No transcript stored in this modality row.</p>'}
+            <div class="pla-point-metrics">
+                <span><b>${compact(point.views)}</b>views</span>
+                <span><b>${fmt(point.outlier, 2)}×</b>outlier</span>
+                <span><b>${compact(point.subscribers)}</b>subscribers</span>
+                <span><b>${point.silent ? 'no' : 'yes'}</b>speech</span>
+            </div>
+            <div class="pla-memberships">
+                ${Object.entries(point.clusters).map(([k, cluster]) => `<span style="--cluster:${CLUSTER_COLORS[Number(cluster) % CLUSTER_COLORS.length]}"><b>k${k}</b>C${cluster}</span>`).join('')}
+            </div>
+            <dl class="pla-definition-grid">
+                <div><dt>Video ID</dt><dd><code>${esc(point.id)}</code></dd></div>
+                <div><dt>Owned</dt><dd>${point.owned ? 'Yes' : 'No'}</dd></div>
+                <div><dt>${esc(state.projection)} x</dt><dd>${fmt(point.projections[state.projection]?.x, 3)}</dd></div>
+                <div><dt>${esc(state.projection)} y</dt><dd>${fmt(point.projections[state.projection]?.y, 3)}</dd></div>
+            </dl>
+            <a class="pla-link" href="${href}" target="_blank" rel="noopener">Open source video</a>`;
+    }
+
+    function renderPartitionChart(map) {
+        const width = 920;
+        const height = 230;
+        const rows = map.partitions;
+        const max = Math.max(...rows.flatMap(row => [
+            row.global.viewsEtaSquared,
+            row.sourceTransfer.sourceCenteredClusterEtaSquared,
+            Math.max(0, row.sourceTransfer.creatorFoldR2),
+        ]), 0.001);
+        const chartTop = 24;
+        const chartBottom = 186;
+        const chartHeight = chartBottom - chartTop;
+        const groupWidth = 180;
+        const startX = 88;
+        const barWidth = 28;
+        return `
+            <div class="pla-chart-scroll"><svg class="pla-partition-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Pooled and creator-relative cluster performance by resolution">
+                ${[0, .25, .5, .75, 1].map(part => {
+                    const y = chartBottom - (part * chartHeight);
+                    return `<line x1="68" x2="${width - 30}" y1="${y}" y2="${y}"></line><text x="58" y="${y + 4}" text-anchor="end">${pct(max * part, 1)}</text>`;
+                }).join('')}
+                ${rows.map((row, index) => {
+                    const center = startX + (index * groupWidth);
+                    const series = [
+                        ['global', row.global.viewsEtaSquared, '#58c9ff'],
+                        ['centered', row.sourceTransfer.sourceCenteredClusterEtaSquared, '#60d59d'],
+                        ['creator', Math.max(0, row.sourceTransfer.creatorFoldR2), '#f2bd57'],
+                    ];
+                    return `${series.map(([label, value, color], seriesIndex) => {
+                        const barHeight = (value / max) * chartHeight;
+                        const x = center + ((seriesIndex - 1) * (barWidth + 5));
+                        return `<rect x="${x}" y="${chartBottom - barHeight}" width="${barWidth}" height="${Math.max(1, barHeight)}" fill="${color}"><title>${label}: ${fmt(value, 5)}</title></rect>`;
+                    }).join('')}<text x="${center + 14}" y="211" text-anchor="middle">k${row.clusterCount}</text>`;
+                }).join('')}
+                <g class="pla-chart-legend">
+                    <rect x="470" y="5" width="10" height="10" fill="#58c9ff"></rect><text x="485" y="14">pooled η²</text>
+                    <rect x="575" y="5" width="10" height="10" fill="#60d59d"></rect><text x="590" y="14">within-source η²</text>
+                    <rect x="720" y="5" width="10" height="10" fill="#f2bd57"></rect><text x="735" y="14">creator-fold R²</text>
+                </g>
+            </svg></div>`;
+    }
+
+    function renderModels() {
+        const data = state.data;
+        const model = selectedModel();
+        const market = data.corpus.promise.marketHold;
+        return `
+            <section class="pla-stat-grid">
+                ${stat('Audited models', data.models.length, 'Raw, Predictor, Promise, Operations, Retention')}
+                ${stat('Private accounts', data.corpus.privateKeep.accounts.length, `${data.corpus.privateKeep.videos} keep labels`)}
+                ${stat('Saved channels', data.corpus.savedChannels.channels, `${data.corpus.savedChannels.videos} view rows`)}
+                ${stat('Best external retention ρ', signed(market.transfer.averageRetention?.spearman, 3), 'Frozen axis → 208 owned hooks', 'green')}
+            </section>
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div><span class="pla-section-label">Validation ladder</span><h3>Performance contracts as the test gets harder</h3></div>
+                    <span>R² · rank · error · calibration</span>
+                </div>
+                <div class="pla-model-layout">
+                    <div class="pla-model-list">
+                        ${data.models.map(row => `
+                            <button type="button" class="${row.id === model.id ? 'active' : ''}" data-model="${esc(row.id)}">
+                                <span><b>${esc(row.target)}</b><small>${esc(row.role)}</small></span>
+                                ${chip(words(row.status), /failed|not prospectively|not_portable/.test(row.status) ? 'red' : /supported|local|observational/.test(row.status) ? 'green' : 'amber')}
+                            </button>
+                        `).join('')}
+                    </div>
+                    ${renderModelInspector(model)}
+                </div>
+            </section>
+            <section class="pla-section">
+                <div class="pla-section-head"><div><span class="pla-section-label">Deployment gap</span><h3>Random folds are the beginning, not the result</h3></div></div>
+                ${renderModelComparisonChart()}
+            </section>`;
+    }
+
+    function renderModelInspector(model) {
+        const sections = [
+            ['Development / pooled', model.development],
+            ['Content only', model.contentOnly],
+            ['Within source', model.withinSource],
+            ['Forward time', model.forwardTime],
+            ['Unseen source', model.unseenSource],
+            ['Fixed 20 seconds', model.fixed20Second],
+            ['Validation', model.validation],
+        ].filter(([, value]) => value && typeof value === 'object');
+        return `
+            <article class="pla-model-inspector">
+                <span class="pla-section-label">${esc(model.role)}</span>
+                <h3>${esc(model.target)}</h3>
+                <p>${esc(model.boundary || '')}</p>
+                <div class="pla-metric-sections">
+                    ${sections.map(([label, metrics]) => `
+                        <div>
+                            <b>${esc(label)}</b>
+                            <dl>${flattenMetricEntries(metrics).slice(0, 24).map(([key, value]) => `<div><dt>${esc(key)}</dt><dd>${typeof value === 'number' ? fmt(value, 4) : esc(value)}</dd></div>`).join('')}</dl>
+                        </div>
+                    `).join('')}
+                </div>
+                ${model.modalities ? `
+                    <div class="pla-modality-metrics">
+                        ${Object.entries(model.modalities).map(([name, metrics]) => `<span><b>${esc(name)}</b><em>R² ${signed(metrics.r2, 3)}</em><small>ρ ${signed(metrics.spearman, 3)} · ${fmt(metrics.medianFactorError, 1)}× median error</small></span>`).join('')}
+                    </div>` : ''}
+            </article>`;
+    }
+
+    function renderModelComparisonChart() {
+        const models = state.data.models.filter(row => (
+            row.development?.r2 != null
+            || row.withinSource?.r2 != null
+            || row.forwardTime?.r2 != null
+            || row.unseenSource?.r2 != null
+        ));
+        const series = [
+            ['development', '#58c9ff'],
+            ['withinSource', '#60d59d'],
+            ['forwardTime', '#f2bd57'],
+            ['unseenSource', '#ff6f80'],
+        ];
+        return `
+            <div class="pla-r2-grid">
+                ${models.map(model => `
+                    <div>
+                        <b>${esc(model.target)}</b>
+                        ${series.map(([key, color]) => {
+                            const value = finiteUi(model[key]?.r2);
+                            if (value == null) return '';
+                            const clamped = Math.max(-1, Math.min(.6, value));
+                            const zero = 62.5;
+                            const width = Math.abs(clamped) / 1.6 * 100;
+                            const left = clamped >= 0 ? zero : zero - width;
+                            return `<p><span>${esc(words(key))}</span><i><em style="--left:${left}%;--width:${width}%;--color:${color}"></em></i><strong>${signed(value, 3)}</strong></p>`;
+                        }).join('')}
+                    </div>
                 `).join('')}
             </div>`;
     }
 
-    function filteredCandidates() {
-        const query = state.search.trim().toLowerCase();
-        return state.data.candidates.filter(candidate => {
-            if (state.family !== 'all' && candidate.family !== state.family) return false;
-            if (state.level !== 'all' && candidate.level !== state.level) return false;
-            if (state.status !== 'all' && candidate.status !== state.status) return false;
-            if (state.gate !== 'all' && candidate.prerequisites?.[state.gate]?.state !== 'fail') return false;
-            if (query && !`${candidate.label} ${candidate.statement} ${candidate.familyLabel}`.toLowerCase().includes(query)) return false;
-            return true;
-        });
+    function finiteUi(value) {
+        return Number.isFinite(Number(value)) ? Number(value) : null;
     }
 
-    function renderRegistry() {
-        const candidates = filteredCandidates();
-        const families = [...new Set(state.data.candidates.map(candidate => candidate.family))].sort();
-        const statuses = [...new Set(state.data.candidates.map(candidate => candidate.status))].sort();
+    function renderEvidence() {
+        const data = state.data;
+        const query = state.evidenceSearch.trim().toLowerCase();
+        const provenance = data.provenance.filter(row => !query || JSON.stringify(row).toLowerCase().includes(query));
+        const opening = data.corpus.promise.opening20s;
+        const market = data.corpus.promise.marketHold;
         return `
-            <section class="pl-registry-controls">
-                <label><span>Search</span><input type="search" value="${esc(state.search)}" placeholder="candidate, family, or claim" data-pl-search></label>
-                <label><span>Family</span><select data-pl-family>
-                    <option value="all">All families</option>
-                    ${families.map(family => `<option value="${esc(family)}" ${state.family === family ? 'selected' : ''}>${esc(family.replaceAll('_', ' '))}</option>`).join('')}
-                </select></label>
-                <label><span>Depth</span><select data-pl-level-select>
-                    <option value="all">All depths</option>
-                    ${state.data.operationalContract.hierarchy.map(level => `<option value="${esc(level.id)}" ${state.level === level.id ? 'selected' : ''}>${esc(level.label)}</option>`).join('')}
-                </select></label>
-                <label><span>Status</span><select data-pl-status>
-                    <option value="all">All statuses</option>
-                    ${statuses.map(status => `<option value="${esc(status)}" ${state.status === status ? 'selected' : ''}>${esc(statusMeta(status).label)}</option>`).join('')}
-                </select></label>
-                <button type="button" data-pl-clear>Clear filters</button>
-            </section>
-            <div class="pl-registry-layout">
-                <section class="pl-panel pl-table-panel">
-                    <div class="pl-section-heading">
-                        <div><span>Candidate registry</span><h3>${candidates.length} of ${state.data.candidates.length} abstractions</h3></div>
-                        <p>Prerequisite states are kept separate. No weighted score can hide a failed OOD test.</p>
-                    </div>
-                    <div class="pl-table-scroll">
-                        <table class="pl-registry-table">
-                            <thead><tr>
-                                <th>Candidate</th><th>Depth</th><th>D</th><th>S</th><th>P</th><th>Prediction</th>
-                                <th>n</th><th>sources</th><th>hardest test</th>
-                            </tr></thead>
-                            <tbody>${candidates.map(candidate => `
-                                <tr data-principle-id="${esc(candidate.id)}" class="${candidate.id === state.selectedId ? 'active' : ''}" tabindex="0">
-                                    <td><b>${esc(candidate.label)}</b><small>${esc(candidate.familyLabel)}</small></td>
-                                    <td>${statusChip(candidate.status)}<small>${esc(levelLabel(candidate.level))}</small></td>
-                                    ${['distinguishability', 'similarity', 'persistence', 'predictability'].map(id => {
-                                        const row = candidate.prerequisites[id];
-                                        return `<td title="${esc(row?.detail)}">${evidenceChip(row?.state || 'not_tested', row?.measure || '')}</td>`;
-                                    }).join('')}
-                                    <td>${compactNumber(candidate.sample?.observations)}</td>
-                                    <td>${candidate.sample?.independentSources == null ? 'unknown' : fmt(candidate.sample.independentSources, 0)}</td>
-                                    <td>${esc(['internal', 'resampled', 'forward time', 'unseen source', 'cross-format', 'prospective'][validationReach(candidate)])}</td>
-                                </tr>`).join('')}</tbody>
-                        </table>
-                    </div>
-                </section>
-                ${renderCandidateDetail(selectedCandidate(), true)}
-            </div>`;
-    }
-
-    function renderSurvival() {
-        const candidates = filteredCandidates();
-        const transforms = state.data.transformations;
-        const selectedTransform = transforms.find(row => row.id === state.selectedTransformation);
-        return `
-            <section class="pl-panel">
-                <div class="pl-section-heading">
-                    <div><span>Transformation matrix</span><h3>What survived, failed, or was never tested</h3></div>
-                    <p>A principle-like claim needs breadth across columns. Click a cell for its exact evidence, or a header to isolate one transformation.</p>
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div><span class="pla-section-label">Observation coverage</span><h3>What the current claims can actually see</h3></div>
                 </div>
-                <div class="pl-matrix-scroll">
-                    <table class="pl-survival-matrix">
-                        <thead><tr><th>Candidate</th>${transforms.map(row => `
-                            <th><button type="button" data-pl-transform="${esc(row.id)}" class="${state.selectedTransformation === row.id ? 'active' : ''}">${esc(row.label)}</button></th>
-                        `).join('')}</tr></thead>
-                        <tbody>${candidates.map(candidate => `
-                            <tr>
-                                <th><button type="button" data-principle-id="${esc(candidate.id)}">${esc(candidate.label)}</button></th>
-                                ${transforms.map(transformRow => {
-                                    const result = candidate.transformations.find(row => row.id === transformRow.id)
-                                        || { state: 'not_tested', detail: 'Not tested.' };
-                                    const meta = evidenceMeta(result.state);
-                                    return `<td><button type="button" class="pl-matrix-cell is-${meta.tone}" data-pl-cell="${esc(candidate.id)}|${esc(transformRow.id)}" title="${esc(result.detail)}"><span>${meta.glyph}</span></button></td>`;
-                                }).join('')}
-                            </tr>`).join('')}</tbody>
-                    </table>
-                </div>
-                <div class="pl-chart-legend">
-                    ${['pass', 'fail', 'diagnostic', 'tested', 'not_tested'].map(key => {
-                        const meta = evidenceMeta(key);
-                        return `<span><i class="is-${meta.tone}"></i>${esc(meta.label)}</span>`;
-                    }).join('')}
-                </div>
-                ${selectedTransform ? `
-                    <div class="pl-transform-note"><b>${esc(selectedTransform.label)}</b><span>${esc(selectedTransform.family)} transformation</span>
-                    <p>${esc(transformationDefinition(selectedTransform.id))}</p></div>` : ''}
-            </section>
-
-            <div class="pl-two-column">
-                <section class="pl-panel">
-                    <div class="pl-section-heading">
-                        <div><span>Like-for-like ranking</span><h3>Visual-operation Pareto fronts</h3></div>
-                        <p>Only candidates sharing the same discovery corpus and outcome contract are compared.</p>
-                    </div>
-                    ${renderParetoFronts()}
-                </section>
-                ${renderCandidateDetail(selectedCandidate(), true)}
-            </div>`;
-    }
-
-    function transformationDefinition(id) {
-        const definitions = {
-            outcome_blind: 'Could the outcome influence which pattern was discovered or selected?',
-            algorithm: 'Does the candidate recur when the clustering or fitting mechanism changes?',
-            resolution: 'Does it survive a coarser or finer representation?',
-            resample: 'Does it recur when observations or grouped lineages are resampled?',
-            threshold: 'Does the result depend on one hand-picked decision threshold?',
-            topic: 'Does it survive removal or redistribution of topic, subject, object, and setting?',
-            time: 'Does it predict observations that occurred after every training and selection decision?',
-            source: 'Does it work in creators or accounts that could not shape the abstraction?',
-            format: 'Does it survive a change such as long-form to Shorts?',
-            observed: 'Was the claim tested against a measured human outcome rather than a model projection?',
-            prospective: 'Was the abstraction and test policy sealed before future observations existed?',
-        };
-        return definitions[id] || '';
-    }
-
-    function renderParetoFronts() {
-        const operations = state.data.candidates
-            .filter(candidate => candidate.family === 'visual_operations')
-            .sort((a, b) => (a.pareto?.front || 99) - (b.pareto?.front || 99));
-        const fronts = [...new Set(operations.map(candidate => candidate.pareto?.front).filter(Boolean))];
-        return `
-            <div class="pl-pareto">
-                ${fronts.map(front => `
-                    <div>
-                        <span>Front ${front}</span>
-                        <div>${operations.filter(candidate => candidate.pareto?.front === front).map(candidate => `
-                            <button type="button" data-principle-id="${esc(candidate.id)}" class="${candidate.id === state.selectedId ? 'active' : ''}">
-                                <b>${esc(candidate.label)}</b>
-                                <small>${candidate.geometry.algorithmSupport} alg · ${candidate.geometry.resolutionSupport} resolutions · stability ${fmt(candidate.geometry.stability?.median, 3)}</small>
-                            </button>`).join('')}</div>
-                    </div>`).join('')}
-            </div>
-            <p class="pl-footnote">${esc(operations[0]?.pareto?.boundary || '')}</p>`;
-    }
-
-    function renderSources() {
-        const maxN = Math.max(...state.data.sources.map(source => source.observations || 0), 1);
-        return `
-            <section class="pl-panel">
-                <div class="pl-section-heading">
-                    <div><span>Canonical inputs</span><h3>Sample count and diversity are different variables</h3></div>
-                    <p>Bars show rows on a log scale. The independent-source column controls how far a claim can travel.</p>
-                </div>
-                <div class="pl-source-list">
-                    ${state.data.sources.map(source => {
-                        const width = Math.log10((source.observations || 0) + 1) / Math.log10(maxN + 1) * 100;
-                        return `
-                            <button type="button" data-pl-source="${esc(source.id)}">
-                                <span class="pl-source-name"><b>${esc(source.label)}</b><small>${esc(source.domain)} · ${esc(source.outcome)}</small></span>
-                                <span class="pl-source-bar"><i style="width:${width.toFixed(1)}%"></i></span>
-                                <span><b>${compactNumber(source.observations)}</b><small>rows</small></span>
-                                <span><b>${source.independentSources == null ? 'unknown' : fmt(source.independentSources, 0)}</b><small>sources</small></span>
-                                <span>${esc(source.validation)}</span>
-                            </button>`;
-                    }).join('')}
+                <div class="pla-corpus-bands">
+                    ${data.corpus.databases.map(row => `
+                        <div>
+                            <span>${esc(row.format)}</span>
+                            <b>${fmt(row.records, 0)}</b>
+                            <p><i style="--coverage:${row.records ? row.stored / row.records : 0}"></i></p>
+                            <small>${fmt(row.stored, 0)} stored · ${fmt(row.channels, 0)} source labels · ${fmt(row.withPublishedTime, 0)} dated</small>
+                        </div>
+                    `).join('')}
+                    <div><span>private keep</span><b>${fmt(data.corpus.privateKeep.videos, 0)}</b><p><i style="--coverage:1"></i></p><small>${data.corpus.privateKeep.accounts.map(row => `${esc(row.id)} ${row.n}`).join(' · ')}</small></div>
+                    <div><span>promise lattice</span><b>${fmt(data.corpus.promise.allContiguousSpans, 0)}</b><p><i style="--coverage:1"></i></p><small>${data.corpus.promise.hooks} hooks · ${fmt(data.corpus.promise.selectedComponents, 0)} selected components</small></div>
+                    <div><span>operations</span><b>${fmt(data.corpus.operations.partitionsTested, 0)}</b><p><i style="--coverage:${data.corpus.operations.acceptedRegions / data.corpus.operations.partitionsTested}"></i></p><small>${data.corpus.operations.savedHooks} hooks · ${data.corpus.operations.acceptedRegions} accepted regions</small></div>
                 </div>
             </section>
-
-            <section class="pl-panel">
-                <div class="pl-section-heading">
-                    <div><span>Prediction cycle</span><h3>Compression earns depth only by leaving the training region</h3></div>
-                    <p>The loop is recursive. New failures return to the observation layer instead of being hidden as model error.</p>
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div><span class="pla-section-label">Opening evidence path</span><h3>The 20-second analysis is measured, timed, and outcome-separated</h3></div>
+                    <span>${opening.videos} source videos</span>
                 </div>
-                ${renderFlowGraph()}
+                <div class="pla-opening-audit">
+                    ${stat('Timed tokens', fmt(opening.tokens, 0), 'Aligned to local/public media')}
+                    ${stat('Contiguous spans', fmt(opening.spans, 0), 'Every start/end combination')}
+                    ${stat('Exact-cover components', fmt(opening.components, 0), 'Variable count, no overlap')}
+                    ${stat('Relational edges', compact(opening.edges), 'Containment, sequence, semantic, context')}
+                    ${stat('Median timing error', `${fmt(opening.medianTimingErrorSeconds, 3)}s`, 'Independent free-decode audit', 'green')}
+                    ${stat('P95 timing error', `${fmt(opening.p95TimingErrorSeconds, 3)}s`, 'Independent free-decode audit')}
+                </div>
+                <div class="pla-evidence-flow">
+                    <span>media</span><i></i><span>word times</span><i></i><span>all spans</span><i></i><span>exact cover</span><i></i><span>4 frozen categories</span><i></i><span>out-of-fold outcome test</span>
+                </div>
+                <p class="pla-boundary">The structural lattice is outcome-blind. Outcomes enter only inside training folds. Four categories are a fixed current representation, not proof that reality contains exactly four semantic kinds.</p>
             </section>
-
-            <section class="pl-panel">
-                <div class="pl-section-heading">
-                    <div><span>Quarantine</span><h3>Retained for audit, excluded from promotion</h3></div>
-                    <p>Older exploratory outputs remain inspectable but cannot vote as independent evidence for current candidates.</p>
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div><span class="pla-section-label">Cross-source transfer</span><h3>The positive result and its exact boundary</h3></div>
+                    ${chip('regional invariant', 'green')}
                 </div>
-                <div class="pl-quarantine">
-                    ${state.data.quarantinedSources.map(source => `
-                        <div><span>${esc(source.label)}</span><code>${esc(shortHash(source.fingerprint?.sha256))}</code><p>${esc(source.reason)}</p></div>
+                <div class="pla-transfer-table">
+                    ${Object.entries(market.transfer).map(([target, metrics]) => `
+                        <div>
+                            <b>${esc(words(target))}</b>
+                            <span>Spearman ${signed(metrics.spearman, 3)}</span>
+                            <small>Pearson ${signed(metrics.pearson, 3)} · n=${fmt(metrics.n, 0)}</small>
+                        </div>
                     `).join('')}
                 </div>
+                <p class="pla-boundary">This is a frozen cross-source retention proxy. It is not yet a causal promise-quality score, and its weak log-views transfer is exactly why retention and distribution must remain separate factors.</p>
+            </section>
+            <section class="pla-section">
+                <div class="pla-section-head">
+                    <div><span class="pla-section-label">Provenance ledger</span><h3>Every source is hashed</h3></div>
+                    <label class="pla-search"><span>Search</span><input type="search" value="${esc(state.evidenceSearch)}" placeholder="artifact, R2 key, hash…" data-evidence-search></label>
+                </div>
+                <div class="pla-table-scroll">
+                    <table class="pla-data-table pla-provenance-table">
+                        <thead><tr><th>Location</th><th>Artifact</th><th>Bytes</th><th>SHA-256</th><th>Modified</th></tr></thead>
+                        <tbody>${provenance.map(row => `
+                            <tr>
+                                <td>${chip(row.location, row.location === 'r2' ? 'cyan' : 'outline')}</td>
+                                <td><code>${esc(row.key || row.path || row.id)}</code></td>
+                                <td>${compact(row.bytes)}</td>
+                                <td><code>${esc(shortHash(row.sha256))}</code></td>
+                                <td>${row.modifiedAt ? esc(new Date(row.modifiedAt).toLocaleString()) : 'R2 snapshot'}</td>
+                            </tr>
+                        `).join('')}</tbody>
+                    </table>
+                </div>
+            </section>
+            <section class="pla-section">
+                <div class="pla-section-head"><div><span class="pla-section-label">Missing identity</span><h3>What must be added before stronger claims</h3></div></div>
+                <div class="pla-identity-grid">
+                    ${data.clusterAtlas.observationIdentity.required.map((item, index) => `<div><span>${String(index + 1).padStart(2, '0')}</span><b>${esc(words(item))}</b></div>`).join('')}
+                </div>
+                <p class="pla-boundary">Current identity: ${esc(data.clusterAtlas.observationIdentity.current)}</p>
             </section>`;
-    }
-
-    function renderFlowGraph() {
-        const nodes = state.data.flow.nodes;
-        const width = 930;
-        const height = 190;
-        const positions = Object.fromEntries(nodes.map((node, index) => [
-            node.id,
-            { x: 58 + index * ((width - 116) / (nodes.length - 1)), y: 84 + (index % 2 ? 26 : -18) },
-        ]));
-        const edges = state.data.flow.edges.map(([from, to]) => {
-            const a = positions[from];
-            const b = positions[to];
-            if (!a || !b) return '';
-            const bend = from === 'new_observations' && to === 'observations';
-            return bend
-                ? `<path d="M ${a.x} ${a.y + 22} C ${a.x} ${height - 4}, ${b.x} ${height - 4}, ${b.x} ${b.y + 22}"></path>`
-                : `<path d="M ${a.x + 43} ${a.y} C ${(a.x + b.x) / 2} ${a.y}, ${(a.x + b.x) / 2} ${b.y}, ${b.x - 43} ${b.y}"></path>`;
-        }).join('');
-        return `
-            <div class="pl-svg-wrap">
-                <svg class="pl-flow" viewBox="0 0 ${width} ${height}" aria-label="Recursive predictive abstraction cycle">
-                    <defs><marker id="pl-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"></path></marker></defs>
-                    <g class="pl-flow-edges">${edges}</g>
-                    ${nodes.map(node => {
-                        const point = positions[node.id];
-                        return `<g transform="translate(${point.x} ${point.y})"><rect x="-43" y="-22" width="86" height="44"></rect><text y="-3">${esc(node.label)}</text><text class="pl-flow-count" y="13">${compactNumber(node.count)}</text></g>`;
-                    }).join('')}
-                </svg>
-            </div>`;
     }
 
     function renderMethod() {
+        const data = state.data;
+        const contract = data.implementationContract;
         return `
-            <section class="pl-panel">
-                <div class="pl-section-heading">
-                    <div><span>Operational definition</span><h3>Principle = predictive compression that survives transformation</h3></div>
-                    <p>The tab deliberately refuses a universal weighted score. Evidence dimensions retain their units and promotion is conjunctive.</p>
-                </div>
-                <div class="pl-method-grid">
-                    ${state.data.operationalContract.prerequisites.map((gate, index) => `
-                        <div><span>0${index + 1}</span><b>${esc(gate.label)}</b><p>${esc(gate.gate)}</p></div>
+            <section class="pla-method-hero">
+                <span class="pla-section-label">Operational definition</span>
+                <h3>${esc(data.researchQuestion.question)}</h3>
+                <p>${esc(data.researchQuestion.operationalAnswer)}</p>
+            </section>
+            <section class="pla-section">
+                <div class="pla-section-head"><div><span class="pla-section-label">Discovery order</span><h3>Compression earns status through prediction</h3></div></div>
+                <div class="pla-pipeline">
+                    ${data.researchQuestion.discoveryOrder.map((label, index) => `
+                        <div><span>${String(index + 1).padStart(2, '0')}</span><b>${esc(label)}</b></div>
                     `).join('')}
                 </div>
             </section>
-
-            <div class="pl-two-column">
-                <section class="pl-panel">
-                    <div class="pl-section-heading">
-                        <div><span>Ranking contract</span><h3>No arbitrary total score</h3></div>
-                    </div>
-                    <dl class="pl-definition-list">
-                        <div><dt>Method</dt><dd>${esc(state.data.operationalContract.ranking.method)}</dd></div>
-                        <div><dt>Why</dt><dd>${esc(state.data.operationalContract.ranking.reason)}</dd></div>
-                        <div><dt>Weakest link</dt><dd>${esc(state.data.operationalContract.ranking.weakestLinkRule)}</dd></div>
-                        <div><dt>Diversity</dt><dd>${esc(state.data.operationalContract.diversityRule)}</dd></div>
-                        <div><dt>MDL boundary</dt><dd>${esc(state.data.operationalContract.mdlBoundary)}</dd></div>
-                    </dl>
-                </section>
-                <section class="pl-panel">
-                    <div class="pl-section-heading">
-                        <div><span>Depth ladder</span><h3>What each label permits</h3></div>
-                    </div>
-                    <div class="pl-level-definitions">
-                        ${state.data.operationalContract.hierarchy.map((level, index) => `
-                            <div><span>${index + 1}</span><b>${esc(level.label)}</b><p>${esc(level.definition)}</p></div>
-                        `).join('')}
-                    </div>
-                </section>
-            </div>
-
-            <section class="pl-panel">
-                <div class="pl-section-heading">
-                    <div><span>Transformation definitions</span><h3>The tests that increase abstraction depth</h3></div>
-                </div>
-                <div class="pl-transform-definitions">
-                    ${state.data.transformations.map(transform => `
-                        <div><b>${esc(transform.label)}</b><span>${esc(transform.family)}</span><p>${esc(transformationDefinition(transform.id))}</p></div>
-                    `).join('')}
+            <section class="pla-section">
+                <div class="pla-method-grid">
+                    <article>
+                        <span class="pla-section-label">Observation identity</span>
+                        <h3>One immutable lineage</h3>
+                        ${contract.evidenceIdentity.map(item => `<code>${esc(item)}</code>`).join('')}
+                    </article>
+                    <article>
+                        <span class="pla-section-label">Causal availability</span>
+                        <h3>No future information</h3>
+                        ${contract.causalAvailability.map(item => `<p>${esc(item)}</p>`).join('')}
+                    </article>
+                    <article>
+                        <span class="pla-section-label">Predictive compression</span>
+                        <h3>Pay for the abstraction</h3>
+                        <pre>${esc(contract.predictiveCompression)}</pre>
+                        <p>Description length includes representation, algorithm, k, parameters, feature selection, and search policy. English label length does not count.</p>
+                    </article>
+                    <article>
+                        <span class="pla-section-label">Promotion</span>
+                        <h3>Weakest gate wins</h3>
+                        <p>${esc(contract.promotionRule)}</p>
+                        ${data.levels.map(row => `<div><b>${esc(row.label)}</b><span>${esc(row.definition)}</span></div>`).join('')}
+                    </article>
                 </div>
             </section>
-
-            <section class="pl-panel">
-                <div class="pl-section-heading">
-                    <div><span>Artifact provenance</span><h3>Every current input is fingerprinted</h3></div>
-                    <p>Rebuilding the snapshot changes the artifact hash whenever a source, claim, or promotion boundary changes.</p>
-                </div>
-                <div class="pl-provenance">
-                    ${state.data.sources.map(source => `
-                        <div><span>${esc(source.label)}</span><code>${esc(shortHash(source.fingerprint?.sha256))}</code><small>${esc(source.fingerprint?.path || '')}</small></div>
-                    `).join('')}
-                </div>
+            <section class="pla-section">
+                <div class="pla-section-head"><div><span class="pla-section-label">Lockboxes</span><h3>Data can be opened once</h3></div></div>
+                <div class="pla-lockboxes">${contract.lockboxes.map((item, index) => `<span><b>${index + 1}</b>${esc(item)}</span>`).join('')}</div>
+            </section>
+            <section class="pla-section">
+                <div class="pla-section-head"><div><span class="pla-section-label">Forbidden shortcuts</span><h3>What the program will not call a principle</h3></div></div>
+                <div class="pla-nongoals">${data.researchQuestion.nonGoals.map(item => `<p>${esc(item)}</p>`).join('')}</div>
             </section>`;
     }
 
-    function bind() {
-        state.root.querySelectorAll('[data-pl-view]').forEach(button => {
-            button.addEventListener('click', () => {
-                state.view = button.dataset.plView;
-                render();
-            });
+    function atlasColor(point, partition) {
+        if (state.colorBy === 'cluster') {
+            const cluster = Number(point.clusters[String(partition.clusterCount)] || 0);
+            return CLUSTER_COLORS[cluster % CLUSTER_COLORS.length];
+        }
+        if (state.colorBy === 'owned') return point.owned ? '#57d6a2' : '#596779';
+        if (state.colorBy === 'silent') return point.silent ? '#f4bf59' : '#5fc9ff';
+        const value = state.colorBy === 'outlier'
+            ? Math.log10(Math.max(0, Number(point.outlier) || 0) + 1)
+            : Math.log10(Math.max(0, Number(point.views) || 0) + 1);
+        const max = state.colorBy === 'outlier' ? 2 : 9;
+        const min = state.colorBy === 'outlier' ? 0 : 3;
+        const t = Math.max(0, Math.min(1, (value - min) / (max - min)));
+        const hue = 215 - (195 * t);
+        return `hsl(${hue} 78% ${48 + (t * 12)}%)`;
+    }
+
+    function setupAtlasCanvas() {
+        const canvas = state.root?.querySelector('#pla-atlas-canvas');
+        const tooltip = state.root?.querySelector('#pla-canvas-tooltip');
+        const map = selectedMap();
+        if (!canvas || !map || !tooltip) return;
+        const partition = map.partitions.find(row => row.clusterCount === state.clusterCount) || map.partitions[0];
+        const points = map.atlasSample.filter(point => {
+            const projection = point.projections[state.projection];
+            return Number.isFinite(Number(projection?.x)) && Number.isFinite(Number(projection?.y));
         });
-        state.root.querySelectorAll('[data-principle-id]').forEach(element => {
-            const activate = () => {
-                state.selectedId = element.dataset.principleId;
+        const ratio = window.devicePixelRatio || 1;
+        const bounds = canvas.getBoundingClientRect();
+        const width = Math.max(320, Math.floor(bounds.width));
+        const height = Math.max(300, Math.floor(bounds.height));
+        canvas.width = Math.floor(width * ratio);
+        canvas.height = Math.floor(height * ratio);
+        const context = canvas.getContext('2d');
+        context.scale(ratio, ratio);
+        context.fillStyle = '#09111d';
+        context.fillRect(0, 0, width, height);
+        const xs = points.map(point => Number(point.projections[state.projection].x));
+        const ys = points.map(point => Number(point.projections[state.projection].y));
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        const pad = 24;
+        const sx = value => pad + (((value - minX) / Math.max(1e-9, maxX - minX)) * (width - (pad * 2)));
+        const sy = value => height - pad - (((value - minY) / Math.max(1e-9, maxY - minY)) * (height - (pad * 2)));
+        const plotted = points.map(point => ({
+            point,
+            x: sx(Number(point.projections[state.projection].x)),
+            y: sy(Number(point.projections[state.projection].y)),
+        }));
+        context.globalAlpha = .78;
+        plotted.forEach(row => {
+            context.beginPath();
+            context.arc(row.x, row.y, row.point.owned ? 3.2 : 2.2, 0, Math.PI * 2);
+            context.fillStyle = atlasColor(row.point, partition);
+            context.fill();
+            if (row.point.id === state.pointId) {
+                context.globalAlpha = 1;
+                context.lineWidth = 2;
+                context.strokeStyle = '#ffffff';
+                context.stroke();
+                context.globalAlpha = .78;
+            }
+        });
+        context.globalAlpha = 1;
+
+        function nearest(event) {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            let best = null;
+            let distance = 100;
+            for (const row of plotted) {
+                const current = ((row.x - x) ** 2) + ((row.y - y) ** 2);
+                if (current < distance) {
+                    distance = current;
+                    best = row;
+                }
+            }
+            return distance <= 100 ? best : null;
+        }
+        canvas.addEventListener('mousemove', event => {
+            const row = nearest(event);
+            if (!row) {
+                tooltip.hidden = true;
+                return;
+            }
+            tooltip.hidden = false;
+            tooltip.style.left = `${Math.min(width - 230, row.x + 12)}px`;
+            tooltip.style.top = `${Math.max(8, row.y - 54)}px`;
+            tooltip.innerHTML = `<b>${esc(row.point.title || row.point.id)}</b><span>${esc(row.point.source)} · ${compact(row.point.views)} views · C${row.point.clusters[String(partition.clusterCount)]}</span>`;
+        });
+        canvas.addEventListener('mouseleave', () => { tooltip.hidden = true; });
+        canvas.addEventListener('click', event => {
+            const row = nearest(event);
+            if (!row) return;
+            state.pointId = row.point.id;
+            preserveScroll(render);
+        });
+    }
+
+    function bind() {
+        if (!state.root) return;
+        state.root.querySelector('[data-action="retry"]')?.addEventListener('click', () => {
+            state.error = '';
+            state.data = null;
+            load();
+        });
+        state.root.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => {
+            state.view = button.dataset.view;
+            state.transformationId = null;
+            setUrl();
+            render();
+        }));
+        state.root.querySelectorAll('[data-invariant]').forEach(button => button.addEventListener('click', () => {
+            state.invariantId = button.dataset.invariant;
+            state.transformationId = null;
+            preserveScroll(render);
+        }));
+        state.root.querySelectorAll('[data-matrix]').forEach(button => button.addEventListener('click', () => {
+            state.invariantId = button.dataset.matrix;
+            state.transformationId = button.dataset.transformation;
+            preserveScroll(render);
+        }));
+        state.root.querySelectorAll('[data-surface]').forEach(button => button.addEventListener('click', () => {
+            const id = button.dataset.surface;
+            if (!id) return;
+            state.surfaceId = id;
+            if (state.view === 'discoveries') state.view = 'system';
+            setUrl();
+            preserveScroll(render);
+        }));
+        state.root.querySelectorAll('[data-surface-filter]').forEach(button => button.addEventListener('click', () => {
+            state.surfaceFilter = button.dataset.surfaceFilter;
+            preserveScroll(render);
+        }));
+        state.root.querySelectorAll('[data-graph-node]').forEach(node => {
+            const select = () => {
+                state.graphNodeId = node.dataset.graphNode;
                 preserveScroll(render);
             };
-            element.addEventListener('click', activate);
-            element.addEventListener('keydown', event => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    activate();
-                }
+            node.addEventListener('click', select);
+            node.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') select();
             });
         });
-        state.root.querySelectorAll('[data-pl-gate]').forEach(button => {
-            button.addEventListener('click', () => {
-                state.gate = state.gate === button.dataset.plGate ? 'all' : button.dataset.plGate;
-                if (state.gate !== 'all') {
-                    state.view = 'registry';
-                    state.family = 'all';
-                    state.level = 'all';
-                    state.status = 'all';
-                }
-                render();
-            });
-        });
-        state.root.querySelectorAll('[data-pl-level]').forEach(button => {
-            button.addEventListener('click', () => {
-                state.level = button.dataset.plLevel;
-                state.view = 'registry';
-                render();
-            });
-        });
-        state.root.querySelector('[data-pl-search]')?.addEventListener('input', event => {
-            state.search = event.target.value;
-            preserveScroll(render);
-            requestAnimationFrame(() => {
-                const input = state.root.querySelector('[data-pl-search]');
-                if (input) {
-                    input.focus();
-                    input.setSelectionRange(input.value.length, input.value.length);
-                }
-            });
-        });
-        state.root.querySelector('[data-pl-family]')?.addEventListener('change', event => {
-            state.family = event.target.value;
-            preserveScroll(render);
-        });
-        state.root.querySelector('[data-pl-level-select]')?.addEventListener('change', event => {
-            state.level = event.target.value;
-            preserveScroll(render);
-        });
-        state.root.querySelector('[data-pl-status]')?.addEventListener('change', event => {
-            state.status = event.target.value;
-            preserveScroll(render);
-        });
-        state.root.querySelector('[data-pl-clear]')?.addEventListener('click', () => {
-            state.search = '';
-            state.family = 'all';
-            state.level = 'all';
-            state.status = 'all';
-            state.gate = 'all';
+        state.root.querySelector('[data-atlas-map]')?.addEventListener('change', event => {
+            state.mapId = event.target.value;
+            const map = selectedMap();
+            state.projection = Object.keys(map.projections)[0] || 'pca';
+            state.clusterCount = map.partitions[0]?.clusterCount || 6;
+            state.pointId = null;
+            state.transportKey = null;
+            setUrl();
             render();
         });
-        state.root.querySelectorAll('[data-pl-transform]').forEach(button => {
-            button.addEventListener('click', () => {
-                state.selectedTransformation = state.selectedTransformation === button.dataset.plTransform
-                    ? null
-                    : button.dataset.plTransform;
-                preserveScroll(render);
-            });
+        state.root.querySelector('[data-atlas-projection]')?.addEventListener('change', event => {
+            state.projection = event.target.value;
+            state.pointId = null;
+            setUrl();
+            render();
         });
-        state.root.querySelectorAll('[data-pl-cell]').forEach(button => {
-            button.addEventListener('click', () => {
-                const [candidateId, transformId] = button.dataset.plCell.split('|');
-                state.selectedId = candidateId;
-                state.selectedTransformation = transformId;
-                preserveScroll(render);
-            });
+        state.root.querySelector('[data-atlas-k]')?.addEventListener('change', event => {
+            state.clusterCount = Number(event.target.value);
+            setUrl();
+            render();
         });
-        state.root.querySelectorAll('[data-pl-source]').forEach(button => {
-            button.addEventListener('click', () => {
-                const sourceId = button.dataset.plSource;
-                state.view = 'sources';
-                state.family = 'all';
-                render();
-                requestAnimationFrame(() => {
-                    const source = state.root.querySelector(`[data-pl-source="${CSS.escape(sourceId)}"]`);
-                    source?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                    source?.classList.add('is-highlighted');
-                });
-            });
+        state.root.querySelector('[data-atlas-color]')?.addEventListener('change', event => {
+            state.colorBy = event.target.value;
+            setUrl();
+            render();
+        });
+        state.root.querySelectorAll('[data-transport]').forEach(button => button.addEventListener('click', () => {
+            state.transportKey = button.dataset.transport;
+            preserveScroll(render);
+        }));
+        state.root.querySelectorAll('[data-model]').forEach(button => button.addEventListener('click', () => {
+            state.modelId = button.dataset.model;
+            preserveScroll(render);
+        }));
+        state.root.querySelector('[data-evidence-search]')?.addEventListener('input', event => {
+            state.evidenceSearch = event.target.value;
+            const selectionStart = event.target.selectionStart;
+            preserveScroll(render);
+            const input = state.root.querySelector('[data-evidence-search]');
+            input?.focus();
+            input?.setSelectionRange(selectionStart, selectionStart);
         });
     }
 
     window.JarvisPrinciplesLab = { mount };
-})();
+}());

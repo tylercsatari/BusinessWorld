@@ -8,58 +8,115 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..', '..', '..');
 const OUTPUT_PATH = path.join(__dirname, 'artifact.json');
 
-const SOURCE_PATHS = {
+const PATHS = {
+    system: 'buildings/jarvis/principles-lab/system-analysis.json',
     operations: 'buildings/jarvis/operations-lab/.cache/principles85.json',
     predictor: 'buildings/jarvis/predictor-lab/results.json',
-    opening: 'buildings/jarvis/promise-lab/.cache/pooled-opening-predictions.json',
+    promiseManifest: 'buildings/jarvis/promise-lab/.cache/manifest.json',
+    promiseDiscovery: 'buildings/jarvis/promise-lab/.cache/discovery-summary.json',
+    promisePartition: 'buildings/jarvis/promise-lab/.cache/canonical-partition-model.json',
+    promiseQuality: 'buildings/jarvis/promise-lab/.cache/hook-quality.json',
+    promiseForward: 'buildings/jarvis/promise-lab/.cache/forward-response.json',
+    pooledOpening: 'buildings/jarvis/promise-lab/.cache/pooled-opening-predictions.json',
+    pooledBlind: 'buildings/jarvis/promise-lab/.cache/pooled-opening-blind-manifest.json',
     openingContext: 'buildings/jarvis/promise-lab/.cache/opening-context-study.json',
+    opening20s: 'buildings/jarvis/promise-lab/.cache/opening-20s.json',
+    clusterOutcomes: 'buildings/jarvis/promise-lab/.cache/cluster-outcomes.json',
+    marketReward: 'buildings/jarvis/promise-lab/.cache/market-reward.json',
+    longTitlePrior: 'buildings/jarvis/promise-lab/.cache/long-title-prior.json',
     retention: 'buildings/jarvis/retention-study/retention_study.json',
-    bridgeLegacy: 'buildings/jarvis/bridge_top_principles.json',
-    retentionLegacy: 'buildings/jarvis/retention-patterns.json',
-    predictionLegacy: 'buildings/jarvis/prediction-model.json',
-    forwardResponseLegacy: 'buildings/jarvis/promise-lab/.cache/forward-response.json',
-    hookQualityLegacy: 'buildings/jarvis/promise-lab/.cache/hook-quality.json',
+    tribe: 'buildings/jarvis/retention-study/tribe-corr.json',
+    graph: 'buildings/jarvis/graph_compact.json',
+    indicators: 'buildings/jarvis/indicators_compact.json',
+    legacyExperiments: 'buildings/jarvis/experiments_log_compact.json',
+    legacyDerived: 'buildings/jarvis/derived_experiments_compact.json',
+    legacyRetention: 'buildings/jarvis/retention-patterns.json',
+    legacyPredictor: 'buildings/jarvis/prediction-model.json',
+    bridge: 'buildings/jarvis/bridge_top_principles.json',
 };
+
+const EVIDENCE_KINDS = [
+    {
+        id: 'observed_input',
+        label: 'Observed input',
+        definition: 'Media, title, transcript, duration, source, and upload time actually observed.',
+        color: '#67d5ff',
+    },
+    {
+        id: 'observed_outcome',
+        label: 'Observed outcome',
+        definition: 'CTR, keep, retention, or views measured at an explicit horizon.',
+        color: '#37d99a',
+    },
+    {
+        id: 'projected_score',
+        label: 'Projected score',
+        definition: 'An embedding axis, percentile, estimated views, novelty, or class probability. It is a feature, not independent truth.',
+        color: '#f3c95f',
+    },
+    {
+        id: 'generated_candidate',
+        label: 'Generated candidate',
+        definition: 'A generated hook, idea, thumbnail, title, or grind result that has not been published and measured.',
+        color: '#bd94ff',
+    },
+    {
+        id: 'model_counterfactual',
+        label: 'Model counterfactual',
+        definition: 'A deletion, swap, reorder, or recomposition used to probe a model. It is not a randomized human experiment.',
+        color: '#ff9d70',
+    },
+    {
+        id: 'post_outcome_indicator',
+        label: 'Post-outcome indicator',
+        definition: 'Likes, comments, outlier ratios, endpoint-conditioned corrections, and descendants of outcomes.',
+        color: '#ff6f87',
+    },
+];
 
 const TRANSFORMATIONS = [
     { id: 'outcome_blind', label: 'Outcome-blind discovery', family: 'selection' },
-    { id: 'algorithm', label: 'Algorithm change', family: 'geometry' },
-    { id: 'resolution', label: 'Semantic resolution', family: 'geometry' },
+    { id: 'algorithm', label: 'Algorithm family', family: 'geometry' },
+    { id: 'resolution', label: 'Resolution / k', family: 'geometry' },
+    { id: 'modality', label: 'Visual / text / together', family: 'representation' },
     { id: 'resample', label: 'Grouped resampling', family: 'stability' },
-    { id: 'threshold', label: 'Threshold shift', family: 'measurement' },
-    { id: 'topic', label: 'Topic adjustment', family: 'confounding' },
-    { id: 'time', label: 'Forward time', family: 'distribution' },
+    { id: 'confounds', label: 'Confound controls', family: 'causal' },
     { id: 'source', label: 'Unseen source', family: 'distribution' },
-    { id: 'format', label: 'Cross-format transfer', family: 'distribution' },
-    { id: 'observed', label: 'Observed outcome', family: 'measurement' },
-    { id: 'prospective', label: 'Prospective lockbox', family: 'prediction' },
+    { id: 'time', label: 'Forward time', family: 'distribution' },
+    { id: 'format', label: 'Shorts / Long transfer', family: 'distribution' },
+    { id: 'prospective', label: 'Prospective outcome', family: 'prediction' },
 ];
 
 const LEVELS = [
     {
+        id: 'taxonomy',
+        label: 'Taxonomy',
+        definition: 'A reproducible organization of observations. It does not yet predict an unseen outcome.',
+    },
+    {
         id: 'mechanism',
         label: 'Mechanism',
-        definition: 'A stable pattern or model inside one observed setting.',
+        definition: 'A reproducible relation inside one bounded setting.',
     },
     {
         id: 'local_invariant',
         label: 'Local invariant',
-        definition: 'Survives grouped resampling and perturbations inside one bounded corpus.',
+        definition: 'Survives resampling, algorithms, and perturbations inside one corpus.',
     },
     {
         id: 'regional_invariant',
         label: 'Regional invariant',
-        definition: 'Predicts in independently held-out sources inside one content domain.',
+        definition: 'Survives unseen sources or later time inside one format.',
     },
     {
         id: 'domain_invariant',
         label: 'Domain invariant',
-        definition: 'Survives multiple independently sampled corpora, sources, and formats.',
+        definition: 'Survives a genuinely distinct corpus or Shorts/Long format change.',
     },
     {
         id: 'universal_invariant',
         label: 'Universal invariant',
-        definition: 'Keeps predicting across every tested domain and transformation. Current data cannot justify this tier.',
+        definition: 'Survives independent domains and prospective intervention. Nothing in this artifact reaches this level.',
     },
 ];
 
@@ -72,15 +129,22 @@ function readJson(relativePath, required = true) {
     return JSON.parse(fs.readFileSync(absolutePath, 'utf8'));
 }
 
-function sourceFingerprint(relativePath) {
+function sha256(bytes) {
+    return crypto.createHash('sha256').update(bytes).digest('hex');
+}
+
+function fingerprint(relativePath) {
     const absolutePath = path.join(ROOT, relativePath);
     if (!fs.existsSync(absolutePath)) return null;
     const bytes = fs.readFileSync(absolutePath);
+    const stats = fs.statSync(absolutePath);
     return {
+        id: `local:${relativePath}`,
+        location: 'local',
         path: relativePath,
-        sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
         bytes: bytes.length,
-        modifiedAt: fs.statSync(absolutePath).mtime.toISOString(),
+        sha256: sha256(bytes),
+        modifiedAt: stats.mtime.toISOString(),
     };
 }
 
@@ -88,906 +152,1681 @@ function finite(value, fallback = null) {
     return Number.isFinite(Number(value)) ? Number(value) : fallback;
 }
 
-function compactMetrics(metrics, keys = [
-    'n', 'r2', 'pearson', 'spearman', 'mae', 'rmse',
-    'medianFactorError', 'calibrationSlope',
-]) {
+function round(value, digits = 4) {
+    if (!Number.isFinite(Number(value))) return null;
+    return Number(Number(value).toFixed(digits));
+}
+
+function mean(values) {
+    const rows = values.filter(Number.isFinite);
+    return rows.length ? rows.reduce((sum, value) => sum + value, 0) / rows.length : null;
+}
+
+function correlation(left, right) {
+    if (left.length !== right.length || left.length < 3) return null;
+    const leftMean = mean(left);
+    const rightMean = mean(right);
+    let numerator = 0;
+    let leftSum = 0;
+    let rightSum = 0;
+    for (let index = 0; index < left.length; index += 1) {
+        const a = left[index] - leftMean;
+        const b = right[index] - rightMean;
+        numerator += a * b;
+        leftSum += a * a;
+        rightSum += b * b;
+    }
+    return leftSum > 0 && rightSum > 0
+        ? numerator / Math.sqrt(leftSum * rightSum)
+        : null;
+}
+
+function ranks(values) {
+    const indexed = values.map((value, index) => ({ value, index }))
+        .sort((left, right) => left.value - right.value);
+    const output = new Array(values.length);
+    let cursor = 0;
+    while (cursor < indexed.length) {
+        let end = cursor + 1;
+        while (end < indexed.length && indexed[end].value === indexed[cursor].value) end += 1;
+        const averageRank = (cursor + end - 1) / 2;
+        for (let index = cursor; index < end; index += 1) {
+            output[indexed[index].index] = averageRank;
+        }
+        cursor = end;
+    }
+    return output;
+}
+
+function spearman(left, right) {
+    return correlation(ranks(left), ranks(right));
+}
+
+function marketTransfer(marketReward) {
+    const rows = marketReward.hooks || [];
+    const targets = {
+        viewedPercent: 'viewed_percent',
+        retention5s: 'retention_5s',
+        averageRetention: 'average_retention',
+        logViews: 'log_views',
+    };
+    return Object.fromEntries(Object.entries(targets).map(([label, target]) => {
+        const pairs = rows
+            .map(row => [
+                finite(row.score?.coordinate),
+                finite(row.outcomes?.[target]?.actual),
+            ])
+            .filter(pair => pair.every(Number.isFinite));
+        return [label, {
+            n: pairs.length,
+            pearson: round(correlation(
+                pairs.map(pair => pair[0]),
+                pairs.map(pair => pair[1])
+            ), 6),
+            spearman: round(spearman(
+                pairs.map(pair => pair[0]),
+                pairs.map(pair => pair[1])
+            ), 6),
+        }];
+    }));
+}
+
+function countToken(relativePath, token) {
+    const absolutePath = path.join(ROOT, relativePath);
+    if (!fs.existsSync(absolutePath)) return null;
+    const descriptor = fs.openSync(absolutePath, 'r');
+    const buffer = Buffer.allocUnsafe(1024 * 1024);
+    let carry = '';
+    let count = 0;
+    let bytesRead = 0;
+    try {
+        do {
+            bytesRead = fs.readSync(descriptor, buffer, 0, buffer.length, null);
+            const text = carry + buffer.subarray(0, bytesRead).toString('utf8');
+            let offset = 0;
+            while ((offset = text.indexOf(token, offset)) !== -1) {
+                count += 1;
+                offset += token.length;
+            }
+            carry = text.slice(-(token.length - 1));
+        } while (bytesRead);
+    } finally {
+        fs.closeSync(descriptor);
+    }
+    return count;
+}
+
+function compactMetrics(metrics) {
     if (!metrics) return null;
+    const keys = [
+        'n', 'r2', 'pearson', 'spearman', 'mae', 'rmse',
+        'calibrationSlope', 'calibrationIntercept', 'medianFactorError',
+    ];
     return Object.fromEntries(keys
         .filter(key => Number.isFinite(Number(metrics[key])))
-        .map(key => [key, Number(metrics[key])]));
+        .map(key => [key, round(Number(metrics[key]), 5)]));
 }
 
-function intervalExcludesZero(interval) {
-    return Array.isArray(interval)
-        && interval.length === 2
-        && Number.isFinite(Number(interval[0]))
-        && Number.isFinite(Number(interval[1]))
-        && (Number(interval[0]) > 0 || Number(interval[1]) < 0);
-}
-
-function evidence(state, measure, detail, value = null) {
-    return { state, measure, detail, value };
-}
-
-function transformation(id, state, detail, value = null) {
-    return { id, state, detail, value };
-}
-
-function descriptionStats(statement) {
-    const text = String(statement || '').trim();
-    const tokens = text ? text.split(/\s+/).length : 0;
-    const bytes = Buffer.byteLength(text, 'utf8');
+function test(id, status, value, detail, sourceIds, extra = {}) {
     return {
-        tokens,
-        bytes,
-        mdlEligible: false,
-        boundary: 'This is display-description length, not total model description length or a valid MDL score.',
+        id,
+        status,
+        value,
+        detail,
+        sourceIds,
+        ...extra,
     };
 }
 
-function levelRank(level) {
-    return LEVELS.findIndex(row => row.id === level);
+function invariant({
+    id,
+    title,
+    headline,
+    claim,
+    level,
+    status,
+    scope,
+    implication,
+    tests,
+    systems,
+    confounds = [],
+    nextFalsifier,
+    boundary,
+}) {
+    const counts = tests.reduce((output, row) => {
+        output[row.status] = (output[row.status] || 0) + 1;
+        return output;
+    }, {});
+    return {
+        id,
+        title,
+        headline,
+        claim,
+        level,
+        status,
+        scope,
+        implication,
+        tests,
+        testCounts: counts,
+        systems,
+        confounds,
+        nextFalsifier,
+        boundary,
+    };
 }
 
-function buildOperationsCandidates(operations) {
-    return (operations.principles || []).map(principle => {
-        const target = principle.effects?.together_keep || {};
-        const projectedCi = target.keepDeltaCi95 || target.ci95;
-        const projectedCorrected = finite(target.q, 1) <= 0.05
-            && intervalExcludesZero(projectedCi)
-            && finite(target.foldSignConsistency, 0) >= 0.8;
-        const observed = principle.observedDiagnostic || {};
-        const observedContinuous = observed.continuous || {};
-        const observedConsistency = Boolean(
-            observed.directionalConsistencyWithSaved?.passes
-            && intervalExcludesZero(observedContinuous.ci95GroupedBootstrap)
-        );
-        const algorithmCount = finite(principle.algorithmSupport, (principle.algorithms || []).length) || 0;
-        const resolutionCount = finite(principle.resolutionSupport, (principle.resolutions || []).length) || 0;
-        const stabilityMedian = finite(principle.stability?.median, 0);
-        const geometryPass = algorithmCount >= 2;
-        const resamplePass = stabilityMedian >= 0.6;
-        const level = projectedCorrected ? 'local_invariant' : 'mechanism';
-        const statement = `${principle.familyLabel || 'Visual semantic region'}: ${principle.comparisonLabel || principle.label}`;
-        const sourceDiversity = {
-            independentSources: 0,
-            groupedUnits: finite(operations.method?.lineages?.groupCount, 0),
-            observedDiagnosticSources: finite(observed.uniqueGroups, 0),
-            boundary: 'Discovery rows do not persist creator identity. Semantic lineages are not independent creators.',
-        };
-
-        return {
-            id: `operations:${principle.id}`,
-            family: 'visual_operations',
-            familyLabel: 'Outcome-blind visual operations',
-            label: principle.comparisonLabel || principle.label,
-            statement,
-            level,
-            ceiling: 'local_invariant',
-            status: projectedCorrected ? 'supported_locally' : 'exploratory',
-            direction: principle.direction || 'unknown',
-            sourceIds: ['operations_saved_hooks', 'operations_observed_diagnostic'],
-            sample: {
-                observations: finite(principle.n, 0),
-                discoveryPopulation: finite(operations.source?.n, 0),
-                prevalence: finite(principle.prevalence, null),
-                ...sourceDiversity,
-            },
-            prerequisites: {
-                distinguishability: evidence(
-                    geometryPass ? 'pass' : 'fail',
-                    `${algorithmCount} algorithms`,
-                    'The semantic region had to recur under at least two outcome-blind clustering algorithms.',
-                    algorithmCount
-                ),
-                similarity: evidence(
-                    resamplePass ? 'pass' : 'fail',
-                    `median stability ${stabilityMedian.toFixed(3)}`,
-                    'Member similarity was tested by lineage-group resampling before outcomes were attached.',
-                    stabilityMedian
-                ),
-                persistence: evidence(
-                    projectedCorrected ? 'pass' : 'diagnostic',
-                    `${Math.round(finite(target.foldSignConsistency, 0) * 100)}% fold direction`,
-                    projectedCorrected
-                        ? 'The projected association survived global BY correction, grouped intervals, and lineage folds.'
-                        : 'The geometry persisted, but the projected outcome association did not clear the complete corrected contract.',
-                    finite(target.foldSignConsistency, 0)
-                ),
-                predictability: evidence(
-                    observedConsistency ? 'diagnostic' : projectedCorrected ? 'diagnostic' : 'not_tested',
-                    observedConsistency
-                        ? `observed keep Δ ${finite(observedContinuous.meanDifference, 0).toFixed(2)} pts`
-                        : `projected keep Δ ${finite(target.keepDelta, 0).toFixed(2)} pts`,
-                    observedConsistency
-                        ? 'Exact-ID-disjoint observed keep agrees directionally, but this diagnostic is not multiplicity-corrected replication.'
-                        : 'Projected keep is produced by the same scorer family and cannot independently validate prediction.',
-                    observedConsistency
-                        ? finite(observedContinuous.meanDifference, null)
-                        : finite(target.keepDelta, null)
-                ),
-            },
-            outcomes: {
-                projectedTogetherKeep: {
-                    meanDifferencePoints: finite(target.keepDelta, null),
-                    confidence95: projectedCi || null,
-                    q: finite(target.q, null),
-                    foldSignConsistency: finite(target.foldSignConsistency, null),
-                    riskDifference85: finite(target.riskDifference, null),
-                    riskRatio85: finite(target.riskRatio, null),
-                    projected: true,
-                },
-                observedKeepDiagnostic: observed.status === 'ok' ? {
-                    n: finite(observed.n, null),
-                    sources: finite(observed.uniqueGroups, null),
-                    meanDifferencePoints: finite(observedContinuous.meanDifference, null),
-                    confidence95: observedContinuous.ci95GroupedBootstrap || null,
-                    directionallyConsistent: observedConsistency,
-                    multiplicityCorrected: false,
-                    replicationClaim: false,
-                } : null,
-            },
-            geometry: {
-                algorithms: principle.algorithms || [],
-                resolutions: principle.resolutions || [],
-                algorithmSupport: algorithmCount,
-                resolutionSupport: resolutionCount,
-                stability: principle.stability || null,
-                transportTier: principle.transportEvidenceTier || 'geometry_only',
-            },
-            transformations: [
-                transformation('outcome_blind', 'pass', 'Cluster membership was frozen before keep outcomes were attached.'),
-                transformation('algorithm', geometryPass ? 'pass' : 'fail', `${algorithmCount} supporting algorithms.`, algorithmCount),
-                transformation('resolution', resolutionCount > 1 ? 'pass' : 'tested', `${resolutionCount} supporting semantic resolutions.`, resolutionCount),
-                transformation('resample', resamplePass ? 'pass' : 'fail', `Median stability ${stabilityMedian.toFixed(3)}.`, stabilityMedian),
-                transformation('threshold', 'tested', 'Projected 82.5, 85, and 87.5 thresholds were reported descriptively.'),
-                transformation('topic', (principle.resolutions || []).some(row => String(row).startsWith('residual__')) ? 'pass' : 'not_tested',
-                    (principle.resolutions || []).some(row => String(row).startsWith('residual__'))
-                        ? 'A topic-adjusted residual resolution supports this region.'
-                        : 'No topic-adjusted residual resolution supports this retained region.'),
-                transformation('time', 'not_tested', 'No forward-time creator-aware discovery split is available.'),
-                transformation('source', observedConsistency ? 'diagnostic' : 'not_tested',
-                    observedConsistency
-                        ? 'Observed private groups agree directionally, without corrected independent replication.'
-                        : 'No corrected unseen-source replication.'),
-                transformation('format', 'not_tested', 'The region has not been transported to an independent content format.'),
-                transformation('observed', observedConsistency ? 'diagnostic' : 'not_tested',
-                    observedConsistency
-                        ? 'Observed keep direction agrees in an exact-ID-disjoint diagnostic.'
-                        : 'Only scorer-projected keep association is available.'),
-                transformation('prospective', 'not_tested', 'No prospectively sealed publication test.'),
-            ],
-            description: descriptionStats(statement),
-            claimBoundary: principle.transport?.interpretationBoundary
-                || operations.measurementBoundary?.projected
-                || 'Association does not establish causality.',
-            nextTest: 'Persist creator identity, freeze membership, and test the same contrast on prospectively collected observed keep from unseen creators.',
-            examples: (principle.representativeHooks || []).slice(0, 4).map(item => (
-                typeof item === 'string' ? item : item.hook || item.title || item.description || ''
-            )).filter(Boolean),
-        };
-    });
-}
-
-function buildSystemCandidates(predictor, opening, openingContext, retention) {
-    const keep = predictor.targets?.keep || {};
-    const views = predictor.targets?.views || {};
-    const strict = opening.evaluation?.strictBlindExternal || {};
-    const semanticVsBaseline = opening.evaluation?.strictBlindCandidateVsBaseline?.families?.entryIndexed || {};
-    const crossDomain = predictor.corpusBenchmark?.crossDomainLongForm?.modalities || {};
-    const togetherCorpus = predictor.corpusBenchmark?.modalities?.together || {};
-    const retentionPredictor = retention.predictor?.v_best || {};
-    const retentionSelection = retention.selection?.interp || {};
-
+function surfaceInventory({
+    system,
+    predictor,
+    operations,
+    promiseManifest,
+    promiseDiscovery,
+    promiseQuality,
+    promiseForward,
+    pooledOpening,
+    marketReward,
+    retention,
+    tribe,
+    graph,
+    indicators,
+    legacyExperimentCount,
+    legacyDerivedCount,
+}) {
+    const shorts = system.databases.find(row => row.format === 'shorts');
+    const long = system.databases.find(row => row.format === 'long');
     return [
         {
-            id: 'system:shorts-opening-decay-baseline',
-            family: 'opening_retention',
-            familyLabel: 'Opening retention',
-            label: 'Pooled Shorts opening-decay baseline',
-            statement: 'A duration-conditioned pooled decay curve predicts the average shape of unseen Shorts openings within the observed account family.',
-            level: 'regional_invariant',
-            ceiling: 'regional_invariant',
-            status: 'supported_regionally',
-            direction: 'neutral',
-            sourceIds: ['promise_blind_openings'],
-            sample: {
-                observations: finite(strict.videos, 0),
-                independentSources: 3,
-                groupedUnits: finite(strict.contentComponents, 0),
-                boundary: 'Three external accounts in one platform and format; this is not broad domain diversity.',
-            },
-            prerequisites: {
-                distinguishability: evidence('pass', 'second-indexed retention curve', 'Observed curves contain repeatable temporal structure rather than identical outcomes.'),
-                similarity: evidence('pass', `${finite(strict.contentComponents, 0)} content components`, 'Exact and near reposts share one statistical vote.', finite(strict.contentComponents, 0)),
-                persistence: evidence('pass', 'sealed external cohort', 'Predictions and content-isolation policy were sealed before outcomes were joined.'),
-                predictability: evidence('pass', `${finite(strict.sourceEqualCurveMAEPercentagePoints, 0).toFixed(2)}-point curve MAE`, 'This validates the pooled baseline only, not semantic component skill.', finite(strict.sourceEqualCurveMAEPercentagePoints, null)),
-            },
-            outcomes: {
-                strictBlindExternal: {
-                    videos: finite(strict.videos, null),
-                    contentComponents: finite(strict.contentComponents, null),
-                    curveMaePoints: finite(strict.sourceEqualCurveMAEPercentagePoints, null),
-                    curveRmsePoints: finite(strict.cellWeightedCurveRMSEPercentagePoints, null),
-                    endpointMaePoints: finite(strict.endpointMAEPercentagePoints, null),
-                    residualBandCoverage: finite(strict.residualBandCoverageFraction, null),
-                },
-            },
-            transformations: [
-                transformation('outcome_blind', 'pass', 'Prediction manifest and isolation policy were sealed before outcome join.'),
-                transformation('algorithm', 'tested', 'The promoted stage is the pooled baseline; semantic variants were compared separately.'),
-                transformation('resolution', 'tested', 'Retention is evaluated second by second on duration-conditioned risk sets.'),
-                transformation('resample', 'pass', 'External repost groups are collapsed to content components.'),
-                transformation('threshold', 'not_applicable', 'This candidate predicts a continuous curve, not a threshold event.'),
-                transformation('topic', 'pass', 'The baseline does not condition on topic.'),
-                transformation('time', 'diagnostic', 'Development chronology was evaluated, but the external claim is a sealed present-day holdout.'),
-                transformation('source', 'pass', '361 strict-blind videos from three external accounts.'),
-                transformation('format', 'not_tested', 'Only YouTube Shorts retention curves.'),
-                transformation('observed', 'pass', 'Measured retention curves were opened after predictions were sealed.'),
-                transformation('prospective', 'not_tested', 'The cohort is blind but retrospective, not a future publication lockbox.'),
-            ],
-            description: descriptionStats('Pooled Shorts opening-decay baseline'),
-            claimBoundary: 'This is a stable baseline for average retention decay. It does not show that semantic hook components explain individual differences.',
-            nextTest: 'Seal the baseline on future uploads from at least ten unseen accounts and compare both calibration and per-video rank skill.',
-            examples: [],
+            id: 'shorts_library',
+            area: 'Shorts Quant',
+            section: 'Library + Raw',
+            status: 'ingested',
+            observations: shorts.records,
+            accounts: shorts.channels,
+            evidenceKinds: ['observed_input', 'observed_outcome', 'projected_score'],
+            summary: 'Public Shorts corpus, current view snapshots, media, six supervised/unsupervised projections, and four cluster resolutions per modality.',
+            sourceIds: ['r2:library/db.json', 'r2:raw/visual/map.json', 'r2:raw/text/map.json', 'r2:raw/together/map.json'],
         },
         {
-            id: 'system:opening-semantic-increment',
-            family: 'opening_retention',
-            familyLabel: 'Opening retention',
-            label: 'Semantic components add retention prediction',
-            statement: 'The four-cluster semantic component and relationship model improves individual retention-curve prediction beyond the pooled opening baseline.',
-            level: 'mechanism',
-            ceiling: 'regional_invariant',
-            status: 'falsified_currently',
-            direction: 'positive',
-            sourceIds: ['promise_blind_openings', 'promise_context'],
-            sample: {
-                observations: finite(semanticVsBaseline.videos, 0),
-                independentSources: 3,
-                groupedUnits: finite(semanticVsBaseline.contentComponents, 0),
-                boundary: 'Strict-blind external comparison across three accounts.',
-            },
-            prerequisites: {
-                distinguishability: evidence('pass', `${finite(openingContext.categoryCount, 4)} frozen clusters`, 'A repeatable four-cluster semantic partition exists.', finite(openingContext.categoryCount, 4)),
-                similarity: evidence('pass', 'content-isolated groups', 'Near-duplicate policies were frozen without outcomes.'),
-                persistence: evidence('fail', 'external candidate lost', 'The semantic candidate did not preserve its development advantage on the strict-blind external cohort.'),
-                predictability: evidence('fail', `${finite(semanticVsBaseline.pairedImprovementPercentagePoints, 0).toFixed(3)} points vs baseline`, 'Negative improvement means the candidate was worse than the simpler pooled baseline.', finite(semanticVsBaseline.pairedImprovementPercentagePoints, null)),
-            },
-            outcomes: {
-                strictBlindCandidateVsBaseline: {
-                    candidateStage: semanticVsBaseline.candidateStage || null,
-                    videos: finite(semanticVsBaseline.videos, null),
-                    baselineCurveMaePoints: finite(semanticVsBaseline.baselineCurveMAEPercentagePoints, null),
-                    candidateCurveMaePoints: finite(semanticVsBaseline.candidateCurveMAEPercentagePoints, null),
-                    improvementPoints: finite(semanticVsBaseline.pairedImprovementPercentagePoints, null),
-                    confidence95: semanticVsBaseline.pairedImprovementConfidence95 || null,
-                    winFraction: finite(semanticVsBaseline.candidateWinFraction, null),
-                },
-            },
-            transformations: [
-                transformation('outcome_blind', 'pass', 'External inference and isolation were sealed before outcomes.'),
-                transformation('algorithm', 'tested', 'Baseline and semantic relationship stages were compared.'),
-                transformation('resolution', 'pass', 'Variable-length component lattice and four frozen categories.'),
-                transformation('resample', 'pass', 'Content-component statistical units collapse reposts.'),
-                transformation('threshold', 'not_applicable', 'Continuous curve error comparison.'),
-                transformation('topic', 'tested', 'External accounts provide different content mixtures.'),
-                transformation('time', 'diagnostic', 'Chronological development folds exist but did not promote the semantic stage.'),
-                transformation('source', 'fail', 'Strict-blind external candidate was worse than baseline.'),
-                transformation('format', 'not_tested', 'No cross-format retention test.'),
-                transformation('observed', 'fail', 'Observed external retention did not support incremental semantic skill.'),
-                transformation('prospective', 'not_tested', 'No future publication lockbox.'),
-            ],
-            description: descriptionStats('Semantic components add retention prediction'),
-            claimBoundary: opening.evaluation?.claimBoundary || 'Current evidence does not justify semantic predictive skill.',
-            nextTest: 'Keep the four categories frozen, redesign only the incremental model, and require positive paired improvement on a new sealed cohort.',
-            examples: [],
-        },
-        modelCandidate({
-            id: 'system:known-account-keep',
-            family: 'embedding_predictors',
-            familyLabel: 'Embedding predictors',
-            label: 'Known-account keep-rate model',
-            statement: 'The 45 stored embedding indicators predict observed keep rate across videos from already-known accounts.',
-            target: keep,
-            localMetric: 'R²',
-            localValue: keep.metrics?.r2,
-            forwardValue: keep.prospectiveMetrics?.r2,
-            unseenValue: keep.stressTests?.find(row => row.label === 'Unseen-account transfer')?.metrics?.r2,
-            observations: keep.n,
-            sources: keep.sourceSummary?.independentSources,
-            sourceIds: ['predictor_private'],
-            unit: 'percentage points',
-            nextTest: 'Add creator-diverse accounts, freeze the scorer and formula, then require positive R² on entirely unseen accounts and forward uploads.',
-        }),
-        modelCandidate({
-            id: 'system:known-channel-views',
-            family: 'embedding_predictors',
-            familyLabel: 'Embedding predictors',
-            label: 'Known-channel public-views model',
-            statement: 'The 45 stored embedding indicators predict current public views for videos from already-known channels.',
-            target: views,
-            localMetric: 'R²',
-            localValue: views.metrics?.r2,
-            forwardValue: views.prospectiveMetrics?.r2,
-            unseenValue: views.stressTests?.find(row => row.label === 'Unseen-channel transfer')?.metrics?.r2,
-            observations: views.n,
-            sources: views.sourceSummary?.independentSources,
-            sourceIds: ['predictor_saved_channels'],
-            unit: 'log10 views',
-            nextTest: 'Freeze age-normalized outcomes and test on future videos from at least ten entirely unseen channels.',
-        }),
-        {
-            id: 'system:raw-geometry-views',
-            family: 'embedding_geometry',
-            familyLabel: 'Embedding geometry',
-            label: 'Raw multimodal geometry predicts public views',
-            statement: 'Raw multimodal Gemini geometry contains a stable video-level views direction that transports across creators.',
-            level: 'mechanism',
-            ceiling: 'domain_invariant',
-            status: 'falsified_currently',
-            direction: 'positive',
-            sourceIds: ['predictor_corpus'],
-            sample: {
-                observations: finite(togetherCorpus.n, 0),
-                independentSources: finite(togetherCorpus.sourceSummary?.independentSources, 0),
-                groupedUnits: finite(togetherCorpus.n, 0),
-                boundary: 'Large video count but creator-macro performance is the relevant diversity test.',
-            },
-            prerequisites: {
-                distinguishability: evidence('pass', '1,536D raw geometry', 'The embedding space separates observations.'),
-                similarity: evidence('pass', `video-level ρ ${finite(togetherCorpus.metrics?.spearman, 0).toFixed(3)}`, 'Held-out video ranks show modest within-corpus structure.', finite(togetherCorpus.metrics?.spearman, null)),
-                persistence: evidence('fail', `creator-macro R² ${finite(togetherCorpus.sourceSummary?.macroR2, 0).toFixed(2)}`, 'The apparent video-level relationship does not preserve calibrated performance across creators.', finite(togetherCorpus.sourceSummary?.macroR2, null)),
-                predictability: evidence('diagnostic', `video-level R² ${finite(togetherCorpus.metrics?.r2, 0).toFixed(3)}`, 'Positive pooled video skill is real inside this sample but does not justify creator-general prediction.', finite(togetherCorpus.metrics?.r2, null)),
-            },
-            outcomes: {
-                groupedVideoFolds: compactMetrics(togetherCorpus.metrics),
-                creatorMacro: {
-                    independentSources: finite(togetherCorpus.sourceSummary?.independentSources, null),
-                    r2: finite(togetherCorpus.sourceSummary?.macroR2, null),
-                    spearman: finite(togetherCorpus.sourceSummary?.macroSpearman, null),
-                },
-            },
-            transformations: [
-                transformation('outcome_blind', 'pass', 'Raw embeddings exist before view labels are fit.'),
-                transformation('algorithm', 'tested', 'Ridge refits occur inside creator-group folds.'),
-                transformation('resolution', 'tested', 'Visual, text, and together modalities are reported separately.'),
-                transformation('resample', 'pass', 'Creator-group folds hold out videos.'),
-                transformation('threshold', 'tested', 'Continuous views and tail-risk outcomes are both reported.'),
-                transformation('topic', 'not_tested', 'No complete topic intervention.'),
-                transformation('time', 'diagnostic', 'Age cohorts are reported; labels remain current snapshots.'),
-                transformation('source', 'fail', 'Creator-macro calibration is strongly negative.'),
-                transformation('format', 'diagnostic', 'Long-to-Short transfer is a separate weak rank signal.'),
-                transformation('observed', 'pass', 'Public views are observed outcomes.'),
-                transformation('prospective', 'not_tested', 'No sealed future views cohort.'),
-            ],
-            description: descriptionStats('Raw multimodal geometry predicts public views'),
-            claimBoundary: 'Pooled rank signal is not a creator-general law. Large n does not substitute for heterogeneous source survival.',
-            nextTest: 'Use source-balanced training and a sealed set of unseen creators with fixed-age outcomes.',
-            examples: [],
+            id: 'long_library',
+            area: 'Long Quant',
+            section: 'Library + Raw',
+            status: 'ingested',
+            observations: long.records,
+            accounts: long.channels,
+            evidenceKinds: ['observed_input', 'observed_outcome', 'projected_score'],
+            summary: 'Public long-form title/thumbnail corpus with visual, text, and together maps.',
+            sourceIds: ['r2:longform/db.json', 'r2:raw-long/visual/map.json', 'r2:raw-long/text/map.json', 'r2:raw-long/together/map.json'],
         },
         {
-            id: 'system:long-to-short-views',
-            family: 'cross_format_transfer',
-            familyLabel: 'Cross-format transfer',
-            label: 'Long-form views axis transfers to Shorts',
-            statement: 'A frozen Long Quant title-and-thumbnail views axis predicts Shorts views without seeing a Shorts outcome.',
-            level: 'mechanism',
-            ceiling: 'domain_invariant',
-            status: 'partial_signal',
-            direction: 'positive',
-            sourceIds: ['long_to_short_transfer'],
-            sample: {
-                observations: finite(crossDomain.together?.metrics?.n, 0),
-                independentSources: finite(togetherCorpus.sourceSummary?.independentSources, 0),
-                groupedUnits: finite(crossDomain.together?.metrics?.n, 0),
-                boundary: 'Cross-format rank association is positive, but absolute calibration and error remain poor.',
-            },
-            prerequisites: {
-                distinguishability: evidence('pass', 'frozen Long Quant axis', 'The direction is learned entirely in the long-form corpus.'),
-                similarity: evidence('diagnostic', `Shorts ρ ${finite(crossDomain.together?.metrics?.spearman, 0).toFixed(3)}`, 'A small rank signal survives the format change.', finite(crossDomain.together?.metrics?.spearman, null)),
-                persistence: evidence('diagnostic', 'three modalities agree weakly', 'Visual, text, and together transfer correlations are all positive.'),
-                predictability: evidence('fail', `Shorts R² ${finite(crossDomain.together?.metrics?.r2, 0).toFixed(3)}`, 'Negative R² means the transferred absolute prediction is worse than a Shorts mean baseline.', finite(crossDomain.together?.metrics?.r2, null)),
-            },
-            outcomes: {
-                visual: compactMetrics(crossDomain.visual?.metrics),
-                text: compactMetrics(crossDomain.text?.metrics),
-                together: compactMetrics(crossDomain.together?.metrics),
-                longFormTrainN: finite(crossDomain.together?.longFormTrainN, null),
-            },
-            transformations: [
-                transformation('outcome_blind', 'pass', 'No Shorts outcome fits the transferred Long Quant direction.'),
-                transformation('algorithm', 'tested', 'Regularization is selected on Long Quant only.'),
-                transformation('resolution', 'pass', 'Visual, text, and together modalities are tested.'),
-                transformation('resample', 'tested', 'Long-form training sensitivity is reported.'),
-                transformation('threshold', 'not_tested', 'The transfer is evaluated as continuous views.'),
-                transformation('topic', 'diagnostic', 'Cross-format content mix changes substantially.'),
-                transformation('time', 'not_tested', 'No fixed-age forward cohort.'),
-                transformation('source', 'diagnostic', 'Many Shorts creators are present, but source-level calibration is not promoted.'),
-                transformation('format', 'diagnostic', 'Positive rank signal, negative absolute R².'),
-                transformation('observed', 'pass', 'Shorts views are observed.'),
-                transformation('prospective', 'not_tested', 'No future lockbox.'),
-            ],
-            description: descriptionStats('Long-form views axis transfers to Shorts'),
-            claimBoundary: 'This is evidence of weak shared geometry, not a usable cross-format views predictor.',
-            nextTest: 'Pre-register a monotonic rank-only transfer metric and evaluate it on fixed-age future Shorts from unseen creators.',
-            examples: [],
+            id: 'shorts_prediction',
+            area: 'Shorts Quant',
+            section: 'Prediction + Relationship Atlas',
+            status: predictor.artifactState?.complete ? 'ingested' : 'partial',
+            observations: finite(predictor.targets?.keep?.n, 0) + finite(predictor.targets?.views?.n, 0),
+            accounts: finite(predictor.targets?.keep?.accounts?.length, 0) + finite(predictor.coverage?.savedChannels, 0),
+            evidenceKinds: ['observed_input', 'observed_outcome', 'projected_score'],
+            summary: 'Private keep labels, saved-channel public views, feature search, calibration, forward-time diagnostics, and Long-to-Short transfer.',
+            sourceIds: ['local:buildings/jarvis/predictor-lab/results.json'],
         },
         {
-            id: 'system:keep-retention-duration',
-            family: 'retention_views',
-            familyLabel: 'Retention to views',
-            label: 'Keep, retention, and duration jointly predict views',
-            statement: 'Observed keep rate, average retention, and duration jointly preserve useful views information within the private Shorts cohort.',
-            level: 'local_invariant',
-            ceiling: 'local_invariant',
-            status: 'supported_locally',
-            direction: 'positive',
-            sourceIds: ['retention_private'],
-            sample: {
-                observations: finite(retention.meta?.n, retention.scatter?.length || 0),
-                independentSources: 1,
-                groupedUnits: finite(retention.meta?.n, retention.scatter?.length || 0),
-                boundary: 'One private creator cohort; all inputs are post-upload observations.',
-            },
-            prerequisites: {
-                distinguishability: evidence('pass', 'three measured variables', 'Keep, retention, and duration vary across videos.'),
-                similarity: evidence('pass', `CV R² ${finite(retentionSelection.cv_r2, 0).toFixed(3)}`, 'Cross-validation preserves a moderate within-cohort relationship.', finite(retentionSelection.cv_r2, null)),
-                persistence: evidence('diagnostic', 'one creator cohort', 'The relationship repeats across folds but not independent creators.'),
-                predictability: evidence('pass', `CV R² ${finite(retentionPredictor.cv_r2, 0).toFixed(3)}`, 'The combination improves within-cohort views prediction over single metrics.', finite(retentionPredictor.cv_r2, null)),
-            },
-            outcomes: {
-                model: {
-                    features: retentionPredictor.features || [],
-                    coefficients: retentionPredictor.coef || [],
-                    intercept: finite(retentionPredictor.intercept, null),
-                    cvR2: finite(retentionPredictor.cv_r2, null),
-                    residualSdLog10: finite(retentionPredictor.resid_sd_log10, null),
-                },
-            },
-            transformations: [
-                transformation('outcome_blind', 'not_applicable', 'This is a supervised post-upload relationship.'),
-                transformation('algorithm', 'tested', 'Feature subsets were compared by cross-validation.'),
-                transformation('resolution', 'tested', 'Keep, average retention, 5-second retention, and duration subsets were compared.'),
-                transformation('resample', 'pass', 'Cross-validation inside the private cohort.'),
-                transformation('threshold', 'not_applicable', 'Continuous log views.'),
-                transformation('topic', 'not_tested', 'No complete topic adjustment.'),
-                transformation('time', 'not_tested', 'No forward-time lockbox.'),
-                transformation('source', 'not_tested', 'Single creator cohort.'),
-                transformation('format', 'not_tested', 'Shorts only.'),
-                transformation('observed', 'pass', 'All inputs and views are observed.'),
-                transformation('prospective', 'not_tested', 'Post-upload variables cannot validate pre-upload prediction.'),
+            id: 'shorts_experiments',
+            area: 'Shorts Quant',
+            section: 'Experiments',
+            status: 'ingested_as_candidate_store',
+            observations: finite(operations.source?.n, 0),
+            accounts: null,
+            evidenceKinds: ['generated_candidate', 'projected_score'],
+            summary: 'Saved hooks, generated hooks, channel scoring, score-from-link, and grind outputs. Generated rows are not outcome validation until published.',
+            sourceIds: ['local:buildings/jarvis/operations-lab/.cache/principles85.json'],
+        },
+        {
+            id: 'operations',
+            area: 'Shorts Quant',
+            section: 'Operations',
+            status: 'ingested',
+            observations: finite(operations.source?.n, 0),
+            accounts: finite(operations.source?.broadCorpus?.observedUniqueGroups, 0),
+            evidenceKinds: ['observed_input', 'projected_score', 'observed_outcome'],
+            summary: `${finite(operations.method?.partitionSummary?.partitionsTested, 0).toLocaleString()} partitions across ${Object.keys(operations.method?.partitionSummary?.resolutions || {}).length} descriptor resolutions; labels remain projected-score discoveries.`,
+            sourceIds: ['local:buildings/jarvis/operations-lab/.cache/principles85.json'],
+        },
+        {
+            id: 'promise_lattice',
+            area: 'Shorts Quant',
+            section: 'Promise Lab / Opening Library',
+            status: 'ingested',
+            observations: finite(promiseManifest.counts?.openings, promiseDiscovery.hooks),
+            accounts: 1,
+            evidenceKinds: ['observed_input', 'observed_outcome', 'model_counterfactual'],
+            summary: `${finite(promiseManifest.counts?.savedProjectionPoints, 0).toLocaleString()} contiguous spans, variable exact-cover components, sequence/context graph, retention-response tests, and a frozen external-text Market Hold transfer.`,
+            sourceIds: [
+                'local:buildings/jarvis/promise-lab/.cache/manifest.json',
+                'local:buildings/jarvis/promise-lab/.cache/hook-quality.json',
+                'local:buildings/jarvis/promise-lab/.cache/forward-response.json',
             ],
-            description: descriptionStats('Keep, retention, and duration jointly predict views'),
-            claimBoundary: 'This is a local post-upload relationship, not a pre-upload virality principle.',
-            nextTest: 'Freeze the formula and test creator-balanced, fixed-age views outcomes in unseen channels.',
-            examples: [],
+        },
+        {
+            id: 'pooled_openings',
+            area: 'Shorts Quant',
+            section: 'Pooled Opening Validation',
+            status: 'ingested',
+            observations: finite(pooledOpening.sources, 0),
+            accounts: finite(pooledOpening.accounts?.length, 0),
+            evidenceKinds: ['observed_input', 'observed_outcome', 'projected_score'],
+            summary: 'Sealed-before-outcome pooled curve forecasts across four accounts, reported separately for calibration and discrimination.',
+            sourceIds: ['local:buildings/jarvis/promise-lab/.cache/pooled-opening-predictions.json'],
+        },
+        {
+            id: 'retention',
+            area: 'Shorts Quant',
+            section: 'Retention',
+            status: 'ingested',
+            observations: finite(retention.meta?.n, 0),
+            accounts: 1,
+            evidenceKinds: ['observed_outcome', 'post_outcome_indicator'],
+            summary: 'Observed keep, duration, retention shape, and views relationships on the owned-channel cohort.',
+            sourceIds: ['local:buildings/jarvis/retention-study/retention_study.json'],
+        },
+        {
+            id: 'tribe',
+            area: 'Shorts Quant',
+            section: 'Tribe',
+            status: 'ingested_as_diagnostic',
+            observations: finite(tribe.n, 0),
+            accounts: 1,
+            evidenceKinds: ['observed_input', 'observed_outcome', 'post_outcome_indicator'],
+            summary: `${finite(tribe.indicatorIds?.length, 0)} brain-region/network indicators on a Main-account subset. Outcome-derived realviews is quarantined from pre-upload validation.`,
+            sourceIds: ['local:buildings/jarvis/retention-study/tribe-corr.json'],
+        },
+        {
+            id: 'long_experiments',
+            area: 'Long Quant',
+            section: 'Experiments + Channel Grind',
+            status: 'candidate_store_only',
+            observations: null,
+            accounts: null,
+            evidenceKinds: ['generated_candidate', 'projected_score'],
+            summary: 'Idea, title, thumbnail generation, scoring, saved runs, and threshold grinding. These test model behavior, not realized audience outcomes.',
+            sourceIds: [],
+        },
+        {
+            id: 'legacy_research',
+            area: 'Jarvis',
+            section: 'Analytical / Variables / Mechanisms / Knowledge / Resolution',
+            status: 'hypothesis_registry',
+            observations: finite(graph.nodes?.length, 0),
+            accounts: null,
+            evidenceKinds: ['post_outcome_indicator'],
+            summary: `${finite(indicators.length, 0).toLocaleString()} compact indicators, ${legacyExperimentCount.toLocaleString()} exploratory runs, and ${legacyDerivedCount.toLocaleString()} derived interactions. This is one adaptive discovery universe, not independent replication.`,
+            sourceIds: [
+                'local:buildings/jarvis/graph_compact.json',
+                'local:buildings/jarvis/indicators_compact.json',
+                'local:buildings/jarvis/experiments_log_compact.json',
+                'local:buildings/jarvis/derived_experiments_compact.json',
+            ],
+        },
+        {
+            id: 'model_workspaces',
+            area: 'Jarvis',
+            section: 'Idea Model / Hook Model / Brain / Autoresearch',
+            status: 'operational_not_validation',
+            observations: null,
+            accounts: null,
+            evidenceKinds: ['generated_candidate', 'projected_score'],
+            summary: 'Training, generation, candidate queues, autonomous search, and research orchestration. They produce hypotheses and actions; they cannot validate themselves.',
+            sourceIds: [],
+        },
+        {
+            id: 'tactical_meta',
+            area: 'Jarvis',
+            section: 'Tactical / Project Ideas / Meta-Architecture',
+            status: 'knowledge_surface',
+            observations: null,
+            accounts: null,
+            evidenceKinds: [],
+            summary: 'Human-facing plans, rules, and architecture. Included in the system map, excluded from statistical confirmation.',
+            sourceIds: [],
         },
     ];
 }
 
-function modelCandidate(config) {
-    const unseenPass = finite(config.unseenValue, -Infinity) > 0;
-    const forwardPass = finite(config.forwardValue, -Infinity) > 0;
-    const localPass = finite(config.localValue, -Infinity) > 0;
-    const status = unseenPass && forwardPass ? 'supported_regionally' : 'falsified_currently';
-    const level = unseenPass && forwardPass ? 'regional_invariant' : 'mechanism';
-    const stress = config.target.stressTests || [];
-
-    return {
-        id: config.id,
-        family: config.family,
-        familyLabel: config.familyLabel,
-        label: config.label,
-        statement: config.statement,
-        level,
-        ceiling: 'regional_invariant',
-        status,
-        direction: 'positive',
-        sourceIds: config.sourceIds,
-        sample: {
-            observations: finite(config.observations, 0),
-            independentSources: finite(config.sources, 0),
-            groupedUnits: finite(config.observations, 0),
-            boundary: config.target.sourceSummary?.intervalCaveat || 'Limited heterogeneous sources.',
-        },
-        prerequisites: {
-            distinguishability: evidence('pass', `${config.target.singleFeatures?.length || 45} candidate inputs`, 'Stored embedding indicators vary across videos.'),
-            similarity: evidence(localPass ? 'pass' : 'fail', `known-source ${config.localMetric} ${finite(config.localValue, 0).toFixed(3)}`, 'Retrospective held-out videos inside known sources.', finite(config.localValue, null)),
-            persistence: evidence(forwardPass ? 'pass' : 'fail', `forward ${config.localMetric} ${finite(config.forwardValue, 0).toFixed(3)}`, 'Forward-time performance is the stronger temporal test.', finite(config.forwardValue, null)),
-            predictability: evidence(unseenPass ? 'pass' : 'fail', `unseen-source ${config.localMetric} ${finite(config.unseenValue, 0).toFixed(3)}`, 'A principle-like predictor must survive an entirely unseen source.', finite(config.unseenValue, null)),
-        },
-        outcomes: {
-            knownSource: compactMetrics(config.target.metrics),
-            contentOnly: compactMetrics(config.target.contentOnlyMetrics),
-            withinSource: compactMetrics(config.target.withinSourceMetrics),
-            forwardTime: compactMetrics(config.target.prospectiveMetrics),
-            stressTests: stress.map(row => ({
-                label: row.label,
-                metrics: compactMetrics(row.metrics),
-            })),
-        },
-        transformations: [
-            transformation('outcome_blind', 'not_applicable', 'This is a supervised predictor.'),
-            transformation('algorithm', 'pass', '50,000 deterministic feature subsets were compared inside training partitions.'),
-            transformation('resolution', 'pass', 'Visual, text, together, novelty, and metadata inputs were evaluated.'),
-            transformation('resample', localPass ? 'pass' : 'fail', `Known-source R² ${finite(config.localValue, 0).toFixed(3)}.`),
-            transformation('threshold', 'tested', 'Continuous outcomes and tail thresholds are separately evaluated.'),
-            transformation('topic', 'not_tested', 'No complete topic intervention.'),
-            transformation('time', forwardPass ? 'pass' : 'fail', `Forward-time R² ${finite(config.forwardValue, 0).toFixed(3)}.`),
-            transformation('source', unseenPass ? 'pass' : 'fail', `Unseen-source R² ${finite(config.unseenValue, 0).toFixed(3)}.`),
-            transformation('format', 'not_tested', 'No independent platform format test for this fitted model.'),
-            transformation('observed', 'pass', `The target is observed ${config.unit}.`),
-            transformation('prospective', 'not_tested', 'Forward-time backtests are retrospective and upstream embeddings use current axes.'),
-        ],
-        description: descriptionStats(config.label),
-        claimBoundary: config.target.warning || config.target.primaryValidation || 'Known-source interpolation is not universal prediction.',
-        nextTest: config.nextTest,
-        examples: [],
-    };
-}
-
-function assignParetoFronts(candidates) {
-    const operationCandidates = candidates.filter(candidate => candidate.family === 'visual_operations');
-    const metrics = operationCandidates.map(candidate => ({
-        candidate,
-        values: [
-            finite(candidate.geometry?.algorithmSupport, 0),
-            finite(candidate.geometry?.resolutionSupport, 0),
-            finite(candidate.geometry?.stability?.median, 0),
-            candidate.prerequisites.persistence.state === 'pass' ? 1 : 0,
-            candidate.prerequisites.predictability.state === 'diagnostic' ? 1 : 0,
-            -finite(candidate.description?.tokens, 0),
-        ],
-    }));
-
-    let remaining = metrics.slice();
-    let front = 1;
-    while (remaining.length) {
-        const current = remaining.filter(row => !remaining.some(other => {
-            if (row === other) return false;
-            const noWorse = other.values.every((value, index) => value >= row.values[index]);
-            const strictlyBetter = other.values.some((value, index) => value > row.values[index]);
-            return noWorse && strictlyBetter;
-        }));
-        current.forEach(row => {
-            row.candidate.pareto = {
-                comparableFamily: 'visual_operations',
-                front,
-                dimensions: [
-                    'algorithm support',
-                    'resolution support',
-                    'median resample stability',
-                    'corrected projected persistence',
-                    'observed diagnostic availability',
-                    'shorter display description',
-                ],
-                boundary: 'Pareto fronts rank only visual-operation candidates on like-for-like evidence. They are not a scalar principleness score.',
-            };
-        });
-        const ids = new Set(current.map(row => row.candidate.id));
-        remaining = remaining.filter(row => !ids.has(row.candidate.id));
-        front += 1;
-    }
-
-    candidates.filter(candidate => candidate.family !== 'visual_operations').forEach(candidate => {
-        candidate.pareto = {
-            comparableFamily: null,
-            front: null,
-            dimensions: [],
-            boundary: 'Heterogeneous targets are not collapsed into a cross-study scalar.',
-        };
-    });
-}
-
-function summarize(candidates, sources) {
-    const levelCounts = Object.fromEntries(LEVELS.map(level => [
-        level.id,
-        candidates.filter(candidate => candidate.level === level.id).length,
-    ]));
-    const statusCounts = candidates.reduce((acc, candidate) => {
-        acc[candidate.status] = (acc[candidate.status] || 0) + 1;
-        return acc;
-    }, {});
-    const transformationCounts = Object.fromEntries(TRANSFORMATIONS.map(item => {
-        const states = candidates.map(candidate => (
-            candidate.transformations.find(row => row.id === item.id)?.state || 'not_tested'
-        ));
-        return [item.id, {
-            pass: states.filter(state => state === 'pass').length,
-            fail: states.filter(state => state === 'fail').length,
-            diagnostic: states.filter(state => state === 'diagnostic').length,
-            tested: states.filter(state => state === 'tested').length,
-            notTested: states.filter(state => ['not_tested', 'not_applicable'].includes(state)).length,
-        }];
-    }));
-
-    return {
-        candidateCount: candidates.length,
-        sourceCount: sources.length,
-        levelCounts,
-        statusCounts,
-        transformationCounts,
-        universalClaims: 0,
-        domainClaims: levelCounts.domain_invariant || 0,
-        headline: 'Current evidence supports bounded local and regional invariants, not universal principles.',
-        strongestSupported: candidates
-            .filter(candidate => levelRank(candidate.level) >= levelRank('local_invariant'))
-            .map(candidate => candidate.id),
-        strongestFalsifications: candidates
-            .filter(candidate => candidate.status === 'falsified_currently')
-            .map(candidate => candidate.id),
-    };
-}
-
-function buildArtifact() {
-    const operations = readJson(SOURCE_PATHS.operations);
-    const predictor = readJson(SOURCE_PATHS.predictor);
-    const opening = readJson(SOURCE_PATHS.opening);
-    const openingContext = readJson(SOURCE_PATHS.openingContext);
-    const retention = readJson(SOURCE_PATHS.retention);
-
-    const sources = [
+function buildModels({ system, predictor, promisePartition, promiseQuality, promiseForward, pooledOpening, marketReward, longTitlePrior, clusterOutcomes, operations, retention }) {
+    const mapRows = system.rawMaps.flatMap(map => map.partitions.map(partition => ({
+        map: map.id,
+        k: partition.clusterCount,
+        globalEta: partition.global.viewsEtaSquared,
+        sourceCenteredEta: partition.sourceTransfer.sourceCenteredClusterEtaSquared,
+        creatorFoldR2: partition.sourceTransfer.creatorFoldR2,
+    })));
+    const pooled20 = pooledOpening.evaluation?.allPooled?.fixedHorizons?.['20']
+        || pooledOpening.evaluation?.allPooled?.fixed20Second;
+    const keepUnseen = predictor.targets?.keep?.stressTests?.find(row => /unseen-account/i.test(row.label));
+    const viewsUnseen = predictor.targets?.views?.stressTests?.find(row => /unseen-channel/i.test(row.label));
+    const marketMetrics = marketTransfer(marketReward);
+    return [
         {
-            id: 'operations_saved_hooks',
-            label: 'Operations saved-hook discovery bank',
-            domain: 'Shorts visual openings',
-            outcome: 'Projected keep',
-            observations: finite(operations.source?.n, 0),
-            independentSources: null,
-            grouping: `${finite(operations.method?.lineages?.groupCount, 0)} semantic lineages`,
-            validation: 'Outcome-blind multi-algorithm discovery plus grouped internal inference',
-            eligibility: 'local_only',
-            claimBoundary: operations.measurementBoundary?.grouping,
-            fingerprint: sourceFingerprint(SOURCE_PATHS.operations),
+            id: 'raw_cluster_views',
+            target: 'Public view snapshot',
+            role: 'Cluster outcome association',
+            status: 'taxonomy_not_portable_predictor',
+            development: {
+                rows: mapRows.length,
+                strongestGlobalEta: round(Math.max(...mapRows.map(row => row.globalEta || 0))),
+            },
+            validation: {
+                strongestCreatorFoldR2: round(Math.max(...mapRows.map(row => row.creatorFoldR2 || 0))),
+                weakestCreatorFoldR2: round(Math.min(...mapRows.map(row => row.creatorFoldR2 || 0))),
+            },
+            boundary: 'Outcome-blind clusters organize content, but cluster means do not rank lift inside unseen creators.',
+            rows: mapRows,
         },
         {
-            id: 'operations_observed_diagnostic',
-            label: 'Exact-ID-disjoint private keep diagnostic',
-            domain: 'Shorts visual openings',
-            outcome: 'Observed keep',
-            observations: finite(operations.source?.broadCorpus?.observedRows, 0),
-            independentSources: finite(operations.source?.broadCorpus?.observedUniqueGroups, 0),
-            grouping: 'Private account groups',
-            validation: 'Directional diagnostic; no multiplicity-corrected replication',
-            eligibility: 'diagnostic_only',
-            claimBoundary: operations.measurementBoundary?.observed,
-            fingerprint: sourceFingerprint(SOURCE_PATHS.operations),
+            id: 'shorts_keep_predictor',
+            target: 'Observed keep rate',
+            role: 'Pre-upload ranking',
+            status: predictor.targets?.keep?.decisionStatus || 'unknown',
+            development: compactMetrics(predictor.targets?.keep?.metrics),
+            contentOnly: compactMetrics(predictor.targets?.keep?.contentOnlyMetrics),
+            withinSource: compactMetrics(predictor.targets?.keep?.withinSourceMetrics),
+            forwardTime: compactMetrics(predictor.targets?.keep?.prospectiveMetrics),
+            unseenSource: compactMetrics(keepUnseen?.metrics),
+            boundary: predictor.targets?.keep?.prospectiveValidation,
         },
         {
-            id: 'predictor_private',
-            label: 'Private pooled retention outcomes',
-            domain: 'Shorts',
-            outcome: 'Observed keep',
-            observations: finite(predictor.coverage?.privateRetentionRows, 0),
-            independentSources: finite(predictor.targets?.keep?.sourceSummary?.independentSources, 0),
-            grouping: 'Account',
-            validation: 'Known-account folds, forward-time backtest, unseen-account stress test',
-            eligibility: 'regional_test',
-            claimBoundary: predictor.targets?.keep?.warning,
-            fingerprint: sourceFingerprint(SOURCE_PATHS.predictor),
-        },
-        {
-            id: 'predictor_saved_channels',
-            label: 'Saved-channel public views',
-            domain: 'Shorts',
-            outcome: 'Current public views',
-            observations: finite(predictor.targets?.views?.n, 0),
-            independentSources: finite(predictor.targets?.views?.sourceSummary?.independentSources, 0),
-            grouping: 'Channel',
-            validation: 'Known-channel folds, forward-time backtest, unseen-channel stress test',
-            eligibility: 'regional_test',
-            claimBoundary: predictor.targets?.views?.warning,
-            fingerprint: sourceFingerprint(SOURCE_PATHS.predictor),
-        },
-        {
-            id: 'predictor_corpus',
-            label: 'Science Center raw embedding corpus',
-            domain: 'Shorts',
-            outcome: 'Current public views',
-            observations: finite(predictor.corpusBenchmark?.modalities?.together?.n, 0),
-            independentSources: finite(predictor.corpusBenchmark?.modalities?.together?.sourceSummary?.independentSources, 0),
-            grouping: 'Creator-group folds',
-            validation: 'Raw 1,536D geometry refit inside creator-group folds',
-            eligibility: 'regional_test',
-            claimBoundary: predictor.corpusBenchmark?.description,
-            fingerprint: sourceFingerprint(SOURCE_PATHS.predictor),
+            id: 'shorts_views_predictor',
+            target: 'Log10 current public views',
+            role: 'Pre-upload ranking',
+            status: predictor.targets?.views?.decisionStatus || 'unknown',
+            development: compactMetrics(predictor.targets?.views?.metrics),
+            contentOnly: compactMetrics(predictor.targets?.views?.contentOnlyMetrics),
+            withinSource: compactMetrics(predictor.targets?.views?.withinSourceMetrics),
+            forwardTime: compactMetrics(predictor.targets?.views?.prospectiveMetrics),
+            unseenSource: compactMetrics(viewsUnseen?.metrics),
+            boundary: 'Current view snapshots mix content, creator opportunity, age, and distribution. Fixed-age outcomes are not yet available.',
         },
         {
             id: 'long_to_short_transfer',
-            label: 'Long Quant to Shorts frozen transfer',
-            domain: 'Long-form to Shorts',
-            outcome: 'Current public views',
-            observations: finite(predictor.corpusBenchmark?.crossDomainLongForm?.modalities?.together?.metrics?.n, 0),
-            independentSources: finite(predictor.corpusBenchmark?.modalities?.together?.sourceSummary?.independentSources, 0),
-            grouping: 'Cross-format plus creator',
-            validation: 'Long-form-only fit transferred without Shorts labels',
-            eligibility: 'domain_test',
-            claimBoundary: predictor.corpusBenchmark?.crossDomainLongForm?.description,
-            fingerprint: sourceFingerprint(SOURCE_PATHS.predictor),
+            target: 'Shorts log views',
+            role: 'Cross-format transfer',
+            status: 'failed',
+            modalities: Object.fromEntries(Object.entries(
+                predictor.corpusBenchmark?.crossDomainLongForm?.modalities || {}
+            ).map(([modality, row]) => [modality, compactMetrics(row.metrics)])),
+            boundary: predictor.corpusBenchmark?.crossDomainLongForm?.description,
         },
         {
-            id: 'promise_blind_openings',
-            label: 'Sealed pooled opening-retention evaluation',
-            domain: 'Shorts openings',
-            outcome: 'Observed retention curves',
-            observations: finite(opening.sources, 0),
-            independentSources: Array.isArray(opening.accounts) ? opening.accounts.length : 0,
-            grouping: `${finite(opening.blindValidation?.strictBlindContentComponents, 0)} strict-blind content components`,
-            validation: 'Prediction-only manifest sealed before outcomes and near-duplicate isolation',
-            eligibility: 'regional_test',
-            claimBoundary: opening.evaluation?.claimBoundary,
-            fingerprint: sourceFingerprint(SOURCE_PATHS.opening),
-        },
-        {
-            id: 'promise_context',
-            label: 'Four-cluster opening context study',
-            domain: 'Shorts opening semantics',
-            outcome: 'Observed forward retention response',
-            observations: finite(opening.support?.sourceVideos, 0),
-            independentSources: 4,
-            grouping: 'Source-grouped folds',
-            validation: 'Observed ordering association plus synthetic sensitivity controls',
-            eligibility: 'diagnostic_only',
-            claimBoundary: openingContext.claimBoundary,
-            fingerprint: sourceFingerprint(SOURCE_PATHS.openingContext),
-        },
-        {
-            id: 'retention_private',
-            label: 'Private Shorts retention study',
-            domain: 'Shorts',
-            outcome: 'Observed keep, retention, duration, and views',
-            observations: finite(retention.meta?.n, retention.scatter?.length || 0),
-            independentSources: 1,
-            grouping: 'Video folds inside one creator cohort',
-            validation: 'Retrospective cross-validation',
-            eligibility: 'local_only',
-            claimBoundary: 'Post-upload observational inputs; one creator cohort.',
-            fingerprint: sourceFingerprint(SOURCE_PATHS.retention),
-        },
-    ];
-
-    const candidates = [
-        ...buildOperationsCandidates(operations),
-        ...buildSystemCandidates(predictor, opening, openingContext, retention),
-    ];
-    assignParetoFronts(candidates);
-
-    const quarantinedSources = [
-        {
-            id: 'legacy_bridge',
-            label: 'Legacy mechanism-to-indicator bridge',
-            reason: 'Retrospective chain-strength ranking without the current discovery, correction, and transport contract.',
-            fingerprint: sourceFingerprint(SOURCE_PATHS.bridgeLegacy),
-        },
-        {
-            id: 'legacy_retention_patterns',
-            label: 'Legacy retention pattern waves',
-            reason: 'Exploratory findings and design-language interpretations are not an independent validation artifact.',
-            fingerprint: sourceFingerprint(SOURCE_PATHS.retentionLegacy),
-        },
-        {
-            id: 'legacy_prediction_model',
-            label: 'Legacy v27 prediction model',
-            reason: 'Contains a documented history of circular-feature removal; retained for audit, not principle promotion.',
-            fingerprint: sourceFingerprint(SOURCE_PATHS.predictionLegacy),
-        },
-        {
-            id: 'legacy_forward_response',
-            label: 'Promise Lab forward-response diagnostic',
-            reason: 'Artifact explicitly marks itself deconfounded but unvalidated and conditional on a post-hoc category map.',
-            fingerprint: sourceFingerprint(SOURCE_PATHS.forwardResponseLegacy),
-        },
-        {
-            id: 'legacy_hook_quality',
-            label: 'Promise Lab hook-quality diagnostic',
-            reason: 'Useful component diagnostics, but not promoted over the sealed strict-blind candidate-versus-baseline result.',
-            fingerprint: sourceFingerprint(SOURCE_PATHS.hookQualityLegacy),
-        },
-    ];
-
-    const artifact = {
-        schema: 'predictive-abstraction-lab-v1',
-        version: 1,
-        generatedAt: new Date().toISOString(),
-        title: 'Predictive Abstraction Lab',
-        thesis: 'An abstraction is justified only to the extent that it compresses observations and continues to predict after the mechanism, source, time, and domain change.',
-        operationalContract: {
-            prerequisites: [
-                {
-                    id: 'distinguishability',
-                    label: 'Distinguishability',
-                    question: 'Is the proposed pattern measurably different from alternatives?',
-                    gate: 'A candidate needs a reproducible contrast, geometry, or outcome difference.',
-                },
-                {
-                    id: 'similarity',
-                    label: 'Similarity',
-                    question: 'Do related observations remain close under a declared metric?',
-                    gate: 'Similarity must survive resampling or an alternative representation.',
-                },
-                {
-                    id: 'persistence',
-                    label: 'Persistence',
-                    question: 'Does the structure recur when samples, thresholds, or time change?',
-                    gate: 'A one-split effect is a mechanism candidate, not an invariant.',
-                },
-                {
-                    id: 'predictability',
-                    label: 'Predictability',
-                    question: 'Does the compressed representation improve prediction on data that could not select it?',
-                    gate: 'The candidate must beat an appropriate baseline out of fold or out of distribution.',
-                },
-            ],
-            ranking: {
-                scalarScore: false,
-                method: 'Pareto fronts within comparable target families',
-                reason: 'Description length, stability, source diversity, and predictive error are not commensurable enough for an honest universal weighted sum.',
-                weakestLinkRule: 'A failed prerequisite caps promotion regardless of sample size or strength on the other dimensions.',
+            id: 'promise_boundary',
+            target: 'Outcome-blind component boundary',
+            role: 'Structural segmentation',
+            status: 'local_geometry_supported',
+            development: {
+                heldoutAuc: finite(promisePartition.boundaryModel?.heldoutAuc),
+                heldoutAveragePrecision: finite(promisePartition.boundaryModel?.heldoutAveragePrecision),
+                components: finite(promiseQuality.audit?.componentRows, promiseQuality.components?.length),
+                hooks: finite(promiseQuality.model?.trainingHooks, 208),
             },
-            hierarchy: LEVELS,
-            predictionLoop: [
-                'Observations',
-                'Mechanisms',
-                'Candidate invariants',
-                'Predictions on unseen mechanisms',
-                'New observations',
-            ],
-            diversityRule: 'Independent mechanism and source families matter more than repeated rows from the same family.',
-            mdlBoundary: 'A valid minimum-description-length score must encode the model, abstraction, and residuals. Display-label length is shown only as an audit field and never promotes a candidate.',
+            boundary: promisePartition.categoryClaimStatus,
         },
-        transformations: TRANSFORMATIONS,
-        sources,
-        quarantinedSources,
-        candidates,
-        summary: summarize(candidates, sources),
-        flow: {
-            nodes: [
-                { id: 'observations', label: 'Source rows', count: sources.reduce((sum, source) => sum + (source.observations || 0), 0), level: 0 },
-                { id: 'mechanisms', label: 'Mechanisms', count: candidates.filter(candidate => candidate.level === 'mechanism').length, level: 1 },
-                { id: 'local', label: 'Local invariants', count: candidates.filter(candidate => candidate.level === 'local_invariant').length, level: 2 },
-                { id: 'regional', label: 'Regional invariants', count: candidates.filter(candidate => candidate.level === 'regional_invariant').length, level: 3 },
-                { id: 'domain', label: 'Domain invariants', count: candidates.filter(candidate => candidate.level === 'domain_invariant').length, level: 4 },
-                { id: 'universal', label: 'Universal invariants', count: 0, level: 5 },
-                { id: 'prediction', label: 'Unseen predictions', count: candidates.filter(candidate => candidate.transformations.some(row => row.id === 'source' && ['pass', 'fail'].includes(row.state))).length, level: 6 },
-                { id: 'new_observations', label: 'New observations', count: 0, level: 7 },
+        {
+            id: 'promise_quality',
+            target: 'Hook retention factor',
+            role: 'Whole-hook and component score',
+            status: promiseQuality.model?.validationStatus || 'diagnostic',
+            development: {
+                heldoutSpearman: finite(promiseQuality.model?.heldoutSpearman),
+                heldoutPearson: finite(promiseQuality.model?.heldoutPearson),
+                permutationP: finite(promiseQuality.model?.rankPermutationP),
+            },
+            forwardTime: {
+                spearman: finite(promiseQuality.model?.chronologicalHeldoutSpearman),
+                permutationP: finite(promiseQuality.model?.chronologicalRankPermutationP),
+            },
+            boundary: 'A frozen segmentation can be structurally useful even when its outcome axis does not survive chronology.',
+        },
+        {
+            id: 'promise_forward_response',
+            target: 'Forward retention response after a spoken component',
+            role: 'Component timing',
+            status: promiseForward.validationStatus,
+            development: {
+                wholeHookSpearman: finite(promiseForward.wholeHookModel?.heldoutSpearman),
+                componentBalancedSpearman: finite(promiseForward.componentModel?.heldoutCategoryBalancedSpearman),
+                selectedLagSeconds: finite(promiseForward.metricContract?.selectedLagSeconds),
+                processingLagSupported: Boolean(promiseForward.deconfoundingAudit?.processingLagSupported),
+            },
+            boundary: promiseForward.categoryClaimStatus,
+        },
+        {
+            id: 'pooled_opening_curve',
+            target: 'Entry-indexed retention curve',
+            role: 'Curve calibration and video discrimination',
+            status: 'calibrated_mean_not_discriminative',
+            development: {
+                videos: finite(pooledOpening.sources),
+                accounts: finite(pooledOpening.accounts?.length),
+                curveMaePoints: finite(pooledOpening.evaluation?.allPooled?.sourceEqualCurveMAEPercentagePoints),
+            },
+            fixed20Second: pooled20 ? {
+                videos: finite(pooled20.videos),
+                predictedMean: finite(pooled20.predictedMeanPercent),
+                actualMean: finite(pooled20.actualMeanPercent),
+                mae: finite(pooled20.maePercentagePoints),
+                predictedSd: finite(pooled20.predictedStandardDeviationPercent),
+                actualSd: finite(pooled20.actualStandardDeviationPercent),
+                pearson: finite(pooled20.pearson),
+                spearman: finite(pooled20.spearman),
+                r2: finite(pooled20.r2AgainstSecondMean),
+            } : null,
+            boundary: 'Mean trajectory accuracy and between-video discrimination are separate estimands.',
+        },
+        {
+            id: 'market_hold_transfer',
+            target: 'Owned-hook retention from frozen external text market axis',
+            role: 'Cross-source semantic transfer',
+            status: marketReward.status,
+            development: {
+                externalTrainingRows: finite(marketReward.externalTraining?.nonOwnedTrainingRows),
+                externalSourceGroups: finite(marketReward.externalTraining?.sourceGroups),
+                ownedHooks: finite(marketReward.audit?.ownedHooks),
+            },
+            validation: marketMetrics,
+            boundary: marketReward.rewardContract?.claimBoundary,
+        },
+        {
+            id: 'long_title_prior',
+            target: 'Long-form title log views',
+            role: 'Independent title-market prior',
+            status: 'random_holdout_only',
+            development: {
+                rows: finite(longTitlePrior.corpus?.labeledTitleRecords),
+                coverage: finite(longTitlePrior.corpus?.embeddedCoverageFraction),
+            },
+            validation: {
+                policy: longTitlePrior.validation?.policy,
+                r2: finite(longTitlePrior.validation?.heldoutR2),
+                pearson: finite(longTitlePrior.validation?.heldoutPearson),
+                spearman: finite(longTitlePrior.validation?.heldoutSpearman),
+                rmse: finite(longTitlePrior.validation?.heldoutRMSELog10Views),
+            },
+            boundary: longTitlePrior.claimBoundary,
+        },
+        {
+            id: 'promise_cluster_outcomes',
+            target: 'Outcomes conditioned on the four Promise clusters',
+            role: 'Wide cluster-outcome search',
+            status: 'failed_chronological_validation',
+            development: {
+                experiments: finite(clusterOutcomes.experimentCount),
+                selectedFamilies: finite(clusterOutcomes.selectedFamilyCount),
+                randomFoldSupported: finite(clusterOutcomes.randomFoldSupportedFamilyCount),
+            },
+            validation: {
+                chronologicalValidatedFamilies: finite(clusterOutcomes.validatedFamilyCount),
+            },
+            boundary: clusterOutcomes.claimBoundary,
+        },
+        {
+            id: 'operations_85',
+            target: 'Projected keep >=85%',
+            role: 'Outcome-blind visual region discovery',
+            status: 'surrogate_only',
+            development: {
+                savedHooks: finite(operations.source?.n),
+                partitions: finite(operations.method?.partitionSummary?.partitionsTested),
+                acceptedRegions: finite(operations.method?.partitionSummary?.acceptedConsensusComponents),
+                retainedContrasts: finite(operations.summary?.principlesRetained),
+                correctedPositive: finite(operations.summary?.together_keep?.correctedPositivePrinciples),
+            },
+            boundary: operations.measurementBoundary?.headline,
+        },
+        {
+            id: 'owned_retention_views',
+            target: 'Owned-channel log views',
+            role: 'Observed retention relationship',
+            status: 'observational_local',
+            development: {
+                n: finite(retention.meta?.n),
+                contentUniqueR2: finite(retention.Q1?.content_unique_r2),
+                keepFromRetentionR2: finite(retention.Q3?.keep_from_retention_cv_r2),
+                viewsRetentionOnlyR2: finite(retention.Q3?.views_retention_only),
+                viewsPlusKeepR2: finite(retention.Q3?.views_plus_keep),
+                durationUniqueR2: finite(retention.Q4?.duration_unique_r2),
+            },
+            boundary: retention.meta?.caveat,
+        },
+    ];
+}
+
+function buildInvariants({ system, predictor, promisePartition, promiseQuality, promiseForward, pooledOpening, marketReward, longTitlePrior, clusterOutcomes, operations, retention }) {
+    const allPartitions = system.rawMaps.flatMap(map => map.partitions.map(partition => ({
+        map: map.id,
+        format: map.format,
+        modality: map.modality,
+        k: partition.clusterCount,
+        globalEta: finite(partition.global?.viewsEtaSquared, 0),
+        centeredEta: finite(partition.sourceTransfer?.sourceCenteredClusterEtaSquared, 0),
+        creatorR2: finite(partition.sourceTransfer?.creatorFoldR2, 0),
+        maxLift: finite(partition.global?.maximumLift10m, 0),
+    })));
+    const globalEta = allPartitions.map(row => row.globalEta);
+    const centeredEta = allPartitions.map(row => row.centeredEta);
+    const creatorR2 = allPartitions.map(row => row.creatorR2);
+    const kCorrelationGlobal = [];
+    const kCorrelationTransfer = [];
+    for (const map of system.rawMaps) {
+        const rows = map.partitions;
+        kCorrelationGlobal.push(correlation(
+            rows.map(row => row.clusterCount),
+            rows.map(row => row.global.viewsEtaSquared)
+        ));
+        kCorrelationTransfer.push(correlation(
+            rows.map(row => row.clusterCount),
+            rows.map(row => row.sourceTransfer.creatorFoldR2)
+        ));
+    }
+    const silentEdge = system.modalityEdges.find(row => row.id === 'shorts:visual:together');
+    const silentNmi = mean(silentEdge?.silent?.byResolution?.map(row => row.nmi) || []);
+    const voicedNmi = mean(silentEdge?.voiced?.byResolution?.map(row => row.nmi) || []);
+    const pooled20 = pooledOpening.evaluation?.allPooled?.fixedHorizons?.['20']
+        || pooledOpening.evaluation?.allPooled?.fixed20Second;
+    const crossFormat = predictor.corpusBenchmark?.crossDomainLongForm?.modalities || {};
+    const crossFormatR2 = Object.values(crossFormat).map(row => finite(row.metrics?.r2, 0));
+    const keepUnseen = predictor.targets?.keep?.stressTests?.find(row => /unseen-account/i.test(row.label));
+    const viewsUnseen = predictor.targets?.views?.stressTests?.find(row => /unseen-channel/i.test(row.label));
+    const marketMetrics = marketTransfer(marketReward);
+    const promiseCounts = promiseQuality.partition?.validation?.componentCounts
+        || promiseQuality.partition?.validation?.componentCountDistribution
+        || null;
+
+    return [
+        invariant({
+            id: 'source_opportunity_dominates_cluster_lift',
+            title: 'The cohort map is not the lift map',
+            headline: 'Global clusters separate views; the same cluster effects vanish inside unseen creators.',
+            claim: 'The current visual/text/together clusters primarily organize source, category, and opportunity regimes rather than portable within-channel virality lift.',
+            level: 'domain_invariant',
+            status: 'supported_negative',
+            scope: '24 partitions across Shorts and Long, all three modalities',
+            implication: 'A valid pre-upload score must estimate creator-relative lift after modeling source opportunity separately. Global “viral clusters” cannot be used as universal buy signals.',
+            tests: [
+                test(
+                    'global_view_separation',
+                    'pass',
+                    { meanEtaSquared: round(mean(globalEta)), maxEtaSquared: round(Math.max(...globalEta)) },
+                    'Cluster membership explains visible variation in the pooled public snapshot.',
+                    ['r2:raw/visual/map.json', 'r2:raw-long/together/map.json']
+                ),
+                test(
+                    'source_centered_separation',
+                    'fail',
+                    { meanEtaSquared: round(mean(centeredEta)), maxEtaSquared: round(Math.max(...centeredEta)) },
+                    'After centering outcomes within channel, almost none of the pooled cluster separation remains.',
+                    ['local:buildings/jarvis/principles-lab/system-analysis.json']
+                ),
+                test(
+                    'unseen_creator_transfer',
+                    'fail',
+                    { meanR2: round(mean(creatorR2)), maxR2: round(Math.max(...creatorR2)), minR2: round(Math.min(...creatorR2)) },
+                    'Cluster means fit on four channel folds do not rank the fifth channel.',
+                    ['local:buildings/jarvis/principles-lab/system-analysis.json']
+                ),
+                test(
+                    'format_replication',
+                    'pass',
+                    { formats: 2, modalities: 3 },
+                    'The collapse repeats in both Shorts and Long maps and in visual, text, and together representations.',
+                    ['local:buildings/jarvis/principles-lab/system-analysis.json']
+                ),
             ],
-            edges: [
-                ['observations', 'mechanisms'],
-                ['mechanisms', 'local'],
-                ['local', 'regional'],
-                ['regional', 'domain'],
-                ['domain', 'universal'],
-                ['universal', 'prediction'],
-                ['domain', 'prediction'],
-                ['regional', 'prediction'],
-                ['local', 'prediction'],
-                ['prediction', 'new_observations'],
-                ['new_observations', 'observations'],
+            systems: ['shorts_library', 'long_library', 'shorts_prediction'],
+            confounds: ['Channel title is the current source join; immutable channel IDs should replace it.', 'Public views are current snapshots, not fixed-age outcomes.'],
+            nextFalsifier: 'A creator-held-out, fixed-horizon model that retains positive source-macro R² after fitting opportunity and age.',
+            boundary: 'This is a robust finding about the present BusinessWorld representations, not a universal law of recommendation systems.',
+        }),
+        invariant({
+            id: 'resolution_fit_without_transfer',
+            title: 'Granularity creates a fit mirage',
+            headline: 'More clusters increase pooled separation without increasing unseen-creator prediction.',
+            claim: 'Increasing k exposes finer cohort structure, but does not make the abstraction more principle-like unless OOD predictive compression also rises.',
+            level: 'domain_invariant',
+            status: 'supported_negative',
+            scope: 'k=6, 10, 16, and 24 in six maps',
+            implication: 'Choose resolution by prequential OOD value and stability, never by the prettiest separation or largest pooled eta-squared.',
+            tests: [
+                test(
+                    'pooled_complexity_trend',
+                    'pass',
+                    { meanCorrelationKToEta: round(mean(kCorrelationGlobal)) },
+                    'Pooled view separation generally rises with cluster count.',
+                    ['local:buildings/jarvis/principles-lab/system-analysis.json']
+                ),
+                test(
+                    'transfer_complexity_trend',
+                    'fail',
+                    { meanCorrelationKToCreatorR2: round(mean(kCorrelationTransfer)) },
+                    'Creator-fold predictive value does not rise with cluster count.',
+                    ['local:buildings/jarvis/principles-lab/system-analysis.json']
+                ),
+                test(
+                    'resolution_identity',
+                    'mixed',
+                    {
+                        meanNmi: round(mean(system.rawMaps.flatMap(map => map.resolutionEdges.map(edge => edge.nmi)))),
+                    },
+                    'Moderate NMI means stable cores coexist with splits and merges; there is no single natural k in the tested range.',
+                    ['local:buildings/jarvis/principles-lab/system-analysis.json']
+                ),
             ],
+            systems: ['shorts_library', 'long_library'],
+            nextFalsifier: 'A resolution selected without outcomes that improves grouped OOD bits over all simpler resolutions.',
+            boundary: 'This does not say fine clusters are useless. It says descriptive detail is not predictive depth.',
+        }),
+        invariant({
+            id: 'modalities_are_complementary_sensors',
+            title: 'Modalities are different sensors, not 21 votes',
+            headline: 'Visual, text, and together maps disagree substantially, and the useful fusion pattern changes by format.',
+            claim: 'The 21 displayed Shorts outputs are correlated projections of three representations. Their disagreement is information about modality, not independent replication.',
+            level: 'regional_invariant',
+            status: 'supported',
+            scope: 'Six maps plus random-fold heldout diagnostics',
+            implication: 'Model modality-specific mechanisms first, then learn a format-conditioned fusion. Confidence must not rise just because correlated projections agree.',
+            tests: [
+                ...system.modalityEdges.map(edge => test(
+                    `nmi_${edge.id}`,
+                    edge.meanNmi < 0.6 ? 'pass' : 'mixed',
+                    { common: edge.commonObservations, meanNmi: edge.meanNmi },
+                    `${edge.left} and ${edge.right} form overlapping but non-equivalent partitions in ${edge.format}.`,
+                    ['local:buildings/jarvis/principles-lab/system-analysis.json']
+                )),
+                test(
+                    'cross_format_axis_transfer',
+                    'fail',
+                    {
+                        modalities: Object.fromEntries(Object.entries(crossFormat).map(([name, row]) => [
+                            name,
+                            round(finite(row.metrics?.r2)),
+                        ])),
+                    },
+                    'Long-form views axes do not transfer as calibrated Shorts views predictors.',
+                    ['local:buildings/jarvis/predictor-lab/results.json']
+                ),
+            ],
+            systems: ['shorts_library', 'long_library', 'shorts_prediction'],
+            nextFalsifier: 'A frozen shared latent mechanism that improves unseen-source and cross-format predictive bits in every modality.',
+            boundary: 'Current NMI compares cluster labels on paired observations; it does not align semantic meaning by label number.',
+        }),
+        invariant({
+            id: 'missing_modality_changes_fusion',
+            title: 'Missing speech changes what “together” means',
+            headline: 'Visual/together agreement is much higher on silent Shorts than voiced Shorts.',
+            claim: 'When text is absent, the together representation partially degenerates toward visual. Silent rows cannot be treated as ordinary multimodal observations.',
+            level: 'local_invariant',
+            status: 'supported',
+            scope: `${finite(silentEdge?.commonObservations, 0).toLocaleString()} paired Shorts`,
+            implication: 'Use an explicit text-present gate and report modality availability. Visual and together scores on silent rows are not independent evidence.',
+            tests: [
+                test(
+                    'silent_visual_together_nmi',
+                    'pass',
+                    { observations: silentEdge?.silent?.observations, meanNmi: round(silentNmi) },
+                    'Silent rows show stronger partition agreement.',
+                    ['local:buildings/jarvis/principles-lab/system-analysis.json']
+                ),
+                test(
+                    'voiced_visual_together_nmi',
+                    'pass',
+                    { observations: silentEdge?.voiced?.observations, meanNmi: round(voicedNmi) },
+                    'Voiced rows add a genuinely different text signal and reduce visual/together identity.',
+                    ['local:buildings/jarvis/principles-lab/system-analysis.json']
+                ),
+            ],
+            systems: ['shorts_library', 'shorts_prediction'],
+            nextFalsifier: 'A missing-modality-aware fusion model whose visual/together residuals remain independent on silent rows.',
+            boundary: 'NMI is partition agreement, not predictive accuracy.',
+        }),
+        invariant({
+            id: 'retrospective_fit_is_not_deployment',
+            title: 'Retrospective fit is not deployment skill',
+            headline: 'Keep and views look useful in random known-source folds, then fail forward time.',
+            claim: 'Same-source interpolation materially overstates pre-upload generalization in the current predictor studies.',
+            level: 'regional_invariant',
+            status: 'supported_negative',
+            scope: `${finite(predictor.targets?.keep?.n, 0)} private keep rows and ${finite(predictor.targets?.views?.n, 0)} saved-channel view rows`,
+            implication: 'The UI must lead with forward-time and source-macro evidence. Random-fold R² is a development diagnostic only.',
+            tests: [
+                test(
+                    'keep_retrospective',
+                    'pass',
+                    compactMetrics(predictor.targets?.keep?.metrics),
+                    'Known-account random folds show retrospective signal.',
+                    ['local:buildings/jarvis/predictor-lab/results.json']
+                ),
+                test(
+                    'keep_forward',
+                    'fail',
+                    compactMetrics(predictor.targets?.keep?.prospectiveMetrics),
+                    'Expanding-window keep prediction is not validated.',
+                    ['local:buildings/jarvis/predictor-lab/results.json']
+                ),
+                test(
+                    'keep_unseen_account',
+                    'fail',
+                    compactMetrics(keepUnseen?.metrics),
+                    'Leaving an entire account out of axis fitting, formula selection, and calibration produces negative R².',
+                    ['local:buildings/jarvis/predictor-lab/results.json']
+                ),
+                test(
+                    'views_retrospective',
+                    'pass',
+                    compactMetrics(predictor.targets?.views?.metrics),
+                    'Saved-channel random folds show retrospective signal.',
+                    ['local:buildings/jarvis/predictor-lab/results.json']
+                ),
+                test(
+                    'views_forward',
+                    'fail',
+                    compactMetrics(predictor.targets?.views?.prospectiveMetrics),
+                    'Expanding-window views prediction has negative R².',
+                    ['local:buildings/jarvis/predictor-lab/results.json']
+                ),
+                test(
+                    'views_unseen_channel',
+                    'fail',
+                    compactMetrics(viewsUnseen?.metrics),
+                    'Leaving an entire saved channel out reverses rank and produces large factor error.',
+                    ['local:buildings/jarvis/predictor-lab/results.json']
+                ),
+            ],
+            systems: ['shorts_prediction', 'pooled_openings'],
+            nextFalsifier: 'Hash-committed predictions on future uploads with fixed outcome horizons and positive source-macro net bits.',
+            boundary: 'Forward backtests still use present-day representation artifacts, so even they are partial rather than historical reconstructions.',
+        }),
+        invariant({
+            id: 'calibration_not_discrimination',
+            title: 'A mean curve is not a video forecast',
+            headline: 'The opening model tracks the population trajectory but emits almost no between-video spread.',
+            claim: 'Calibration of an average retention curve and discrimination between candidate openings are separate abilities.',
+            level: 'regional_invariant',
+            status: 'supported_negative',
+            scope: `${finite(pooledOpening.sources, 0)} pooled openings across ${finite(pooledOpening.accounts?.length, 0)} accounts`,
+            implication: 'Never convert a well-calibrated average curve into a percentile or “better hook” claim without rank discrimination.',
+            tests: [
+                test(
+                    'curve_mean_error',
+                    'pass',
+                    {
+                        sourceEqualMaePoints: round(finite(pooledOpening.evaluation?.allPooled?.sourceEqualCurveMAEPercentagePoints)),
+                        fixed20MaePoints: round(finite(pooled20?.maePercentagePoints)),
+                    },
+                    'The frozen model produces a usable population-average trajectory.',
+                    ['local:buildings/jarvis/promise-lab/.cache/pooled-opening-predictions.json']
+                ),
+                test(
+                    'fixed20_discrimination',
+                    'fail',
+                    {
+                        predictedSd: round(finite(pooled20?.predictedStandardDeviationPercent), 4),
+                        actualSd: round(finite(pooled20?.actualStandardDeviationPercent), 4),
+                        pearson: round(finite(pooled20?.pearson)),
+                        r2: round(finite(pooled20?.r2AgainstSecondMean)),
+                    },
+                    'At 20 seconds the prediction variance collapses while actual videos vary substantially.',
+                    ['local:buildings/jarvis/promise-lab/.cache/pooled-opening-predictions.json']
+                ),
+            ],
+            systems: ['promise_lattice', 'pooled_openings'],
+            nextFalsifier: 'A frozen opening representation with positive rank correlation and R² at fixed horizons on unseen accounts.',
+            boundary: 'The current model remains useful as a baseline trajectory and uncertainty reference.',
+        }),
+        invariant({
+            id: 'external_market_semantics_transfer_to_retention',
+            title: 'External market semantics transfer to retention',
+            headline: 'A text direction learned without owned outcomes ranks retention on the 208 owned hooks.',
+            claim: 'The language geometry associated with market success in 5,353 non-owned Shorts contains a weak but reproducible retention-relevant direction when frozen and transferred to the owned hook corpus.',
+            level: 'regional_invariant',
+            status: 'supported',
+            scope: `${finite(marketReward.externalTraining?.nonOwnedTrainingRows, 0).toLocaleString()} external texts across ${finite(marketReward.externalTraining?.sourceGroups, 0).toLocaleString()} groups → ${finite(marketReward.audit?.ownedHooks, 0)} owned hooks`,
+            implication: 'This is the current best candidate feedback axis for hook language. Keep it separate from topical relevance, visual packaging, and the four Promise categories.',
+            tests: [
+                test(
+                    'external_training_isolation',
+                    'pass',
+                    {
+                        externalRows: finite(marketReward.externalTraining?.nonOwnedTrainingRows),
+                        sourceGroups: finite(marketReward.externalTraining?.sourceGroups),
+                        ownedLabelsUsed: Boolean(marketReward.externalTraining?.ownedOutcomeLabelsUsedToFitOrSelectAxis),
+                    },
+                    'The text direction and alpha were fit on non-owned transcripts grouped by channel/copy; owned outcome labels did not select the axis.',
+                    ['local:buildings/jarvis/promise-lab/.cache/market-reward.json']
+                ),
+                test(
+                    'owned_average_retention_transfer',
+                    'pass',
+                    marketMetrics.averageRetention,
+                    'The frozen coordinate ranks average retention in the disjoint owned hook corpus.',
+                    ['local:buildings/jarvis/promise-lab/.cache/market-reward.json']
+                ),
+                test(
+                    'owned_viewed_percent_transfer',
+                    'pass',
+                    marketMetrics.viewedPercent,
+                    'The same frozen coordinate ranks viewed percentage without refitting the axis.',
+                    ['local:buildings/jarvis/promise-lab/.cache/market-reward.json']
+                ),
+                test(
+                    'owned_retention_5s_transfer',
+                    'pass',
+                    marketMetrics.retention5s,
+                    'The same coordinate ranks five-second retention more weakly.',
+                    ['local:buildings/jarvis/promise-lab/.cache/market-reward.json']
+                ),
+                test(
+                    'owned_views_transfer',
+                    'fail',
+                    marketMetrics.logViews,
+                    'The direction does not directly rank owned log views; it is a retention proxy, not a universal virality score.',
+                    ['local:buildings/jarvis/promise-lab/.cache/market-reward.json']
+                ),
+                test(
+                    'prospective_same_topic_intervention',
+                    'unknown',
+                    null,
+                    'No randomized or prospectively frozen same-topic hook-variant test has been completed.',
+                    []
+                ),
+            ],
+            systems: ['shorts_library', 'promise_lattice', 'shorts_prediction'],
+            confounds: ['The owned hook corpus is one creator domain.', 'External outcomes are current views, not fixed-age views.', 'The axis may encode market-language resemblance rather than a causal promise mechanism.'],
+            nextFalsifier: 'Hash-commit same-topic hook variants before publishing and test whether the frozen score ranks observed keep on future videos.',
+            boundary: marketReward.rewardContract?.claimBoundary,
+        }),
+        invariant({
+            id: 'promise_structure_before_promise_value',
+            title: 'We found segmentation before we found promise value',
+            headline: 'Component boundaries have local geometric support; the four names and outcome axis do not.',
+            claim: 'The Promise lattice can decompose openings reproducibly, but it has not yet discovered a portable semantic “promise quality” direction.',
+            level: 'mechanism',
+            status: 'mixed',
+            scope: `${finite(promiseQuality.model?.trainingHooks, 208)} owned hooks and ${finite(promiseQuality.audit?.componentRows, promiseQuality.components?.length)} selected components`,
+            implication: 'Keep the lattice, exact cover, and sequence graph. Treat category names and quality percentiles as hypotheses until chronology and unseen sources pass.',
+            tests: [
+                test(
+                    'boundary_geometry',
+                    'pass',
+                    {
+                        auc: round(finite(promisePartition.boundaryModel?.heldoutAuc)),
+                        averagePrecision: round(finite(promisePartition.boundaryModel?.heldoutAveragePrecision)),
+                    },
+                    'Outcome-blind boundary features separate selected boundaries locally.',
+                    ['local:buildings/jarvis/promise-lab/.cache/canonical-partition-model.json']
+                ),
+                test(
+                    'category_ontology',
+                    'invalid',
+                    { categories: finite(promisePartition.categoryModel?.clusterCount, 4), componentDistribution: promiseCounts },
+                    'The k=4 vocabulary was chosen after manual probes; it cannot validate the supplied interpretation.',
+                    ['local:buildings/jarvis/promise-lab/.cache/canonical-partition-model.json']
+                ),
+                test(
+                    'hook_quality_random',
+                    'mixed',
+                    {
+                        spearman: round(finite(promiseQuality.model?.heldoutSpearman)),
+                        p: round(finite(promiseQuality.model?.rankPermutationP)),
+                    },
+                    'Random folds show a weak association.',
+                    ['local:buildings/jarvis/promise-lab/.cache/hook-quality.json']
+                ),
+                test(
+                    'hook_quality_time',
+                    'fail',
+                    {
+                        spearman: round(finite(promiseQuality.model?.chronologicalHeldoutSpearman)),
+                        p: round(finite(promiseQuality.model?.chronologicalRankPermutationP)),
+                    },
+                    'The hook-quality direction collapses chronologically.',
+                    ['local:buildings/jarvis/promise-lab/.cache/hook-quality.json']
+                ),
+            ],
+            systems: ['promise_lattice'],
+            nextFalsifier: 'Outcome-blind categories selected without manual examples, then positive fixed-horizon discrimination on unseen accounts.',
+            boundary: promisePartition.categoryClaimStatus,
+        }),
+        invariant({
+            id: 'positive_processing_lag_not_supported',
+            title: 'The data does not support a positive response lag',
+            headline: 'Forward component-response tests did not justify shifting viewer response one to five seconds forward.',
+            claim: 'For the current timestamp alignment and cohort, serving a positive processing lag would be an unsupported researcher degree of freedom.',
+            level: 'local_invariant',
+            status: 'supported_negative',
+            scope: `${finite(promiseForward.audit?.components, promiseForward.components?.length)} components`,
+            implication: 'Serve lag 0, show all lag tests, and keep reverse-time controls. Re-estimate only on independent aligned data.',
+            tests: [
+                test(
+                    'forward_response',
+                    'fail',
+                    {
+                        validated: Boolean(promiseForward.validated),
+                        wholeHookSpearman: round(finite(promiseForward.wholeHookModel?.heldoutSpearman)),
+                        componentBalancedSpearman: round(finite(promiseForward.componentModel?.heldoutCategoryBalancedSpearman)),
+                    },
+                    'The component and whole-hook response axes are not validated.',
+                    ['local:buildings/jarvis/promise-lab/.cache/forward-response.json']
+                ),
+                test(
+                    'processing_lag',
+                    promiseForward.deconfoundingAudit?.processingLagSupported ? 'pass' : 'fail',
+                    {
+                        servedLagSeconds: finite(promiseForward.metricContract?.selectedLagSeconds),
+                        supported: Boolean(promiseForward.deconfoundingAudit?.processingLagSupported),
+                    },
+                    'The predeclared forward/reverse family did not support a positive lag.',
+                    ['local:buildings/jarvis/promise-lab/.cache/forward-response.json']
+                ),
+            ],
+            systems: ['promise_lattice'],
+            nextFalsifier: 'Word-level acoustic alignment plus a preregistered lag family on new videos with a stable positive lag and failed reverse-time controls.',
+            boundary: 'A null lag result does not prove instantaneous cognition; it says this dataset cannot identify the delay.',
+        }),
+        invariant({
+            id: 'surrogate_clusters_are_not_observed_keep',
+            title: 'Projected keep can discover geometry, not truth',
+            headline: 'Operations found stable visual regions, but only against a projected 85% threshold.',
+            claim: 'Outcome-blind operational clusters are candidate mechanisms until replicated against observed keep in independent creators.',
+            level: 'taxonomy',
+            status: 'taxonomy_only',
+            scope: `${finite(operations.source?.n, 0)} saved hooks, ${finite(operations.method?.partitionSummary?.partitionsTested, 0)} partitions`,
+            implication: 'Use Operations to generate English hypotheses and candidate interventions, never as proof that a mechanism causes 85% keep.',
+            tests: [
+                test(
+                    'outcome_blind_geometry',
+                    'pass',
+                    {
+                        validPartitions: finite(operations.method?.partitionSummary?.partitionsValid),
+                        acceptedRegions: finite(operations.method?.partitionSummary?.acceptedConsensusComponents),
+                    },
+                    'Geometry was discovered before attaching the projected target.',
+                    ['local:buildings/jarvis/operations-lab/.cache/principles85.json']
+                ),
+                test(
+                    'projected_association',
+                    'mixed',
+                    {
+                        positive: finite(operations.summary?.together_keep?.correctedPositivePrinciples),
+                        lower: finite(operations.summary?.together_keep?.correctedNegativePrinciples),
+                    },
+                    'A small corrected family is associated with the projected score.',
+                    ['local:buildings/jarvis/operations-lab/.cache/principles85.json']
+                ),
+                test(
+                    'observed_replication',
+                    'unknown',
+                    {
+                        groups: finite(operations.source?.broadCorpus?.observedUniqueGroups),
+                        observedTailHits85: finite(operations.source?.broadCorpus?.observedTailHits85),
+                    },
+                    'Observed diagnostics are too sparse and not a corrected external replication.',
+                    ['local:buildings/jarvis/operations-lab/.cache/principles85.json']
+                ),
+            ],
+            systems: ['operations', 'shorts_experiments'],
+            nextFalsifier: 'Freeze the regions, score them on new published hooks, and test observed keep with creator-held-out multiplicity control.',
+            boundary: operations.measurementBoundary?.projected,
+        }),
+        invariant({
+            id: 'views_factorization',
+            title: 'Virality must be factorized before it is predicted',
+            headline: 'One global views axis is trying to absorb four different processes.',
+            claim: 'A more faithful architecture is Views(h) = Opportunity(source,time,h) × Packaging conversion × Attention survival × Distribution amplification.',
+            level: 'mechanism',
+            status: 'synthesis_hypothesis',
+            scope: 'Joint synthesis of Raw, Predictor, Retention, Promise, and Long transfer results',
+            implication: 'Train and validate each factor on its own available outcome, then recombine probabilistically. Source opportunity cannot be hidden inside a content score.',
+            tests: [
+                test(
+                    'opportunity_term',
+                    'pass',
+                    {
+                        viewsWithinSourceR2: round(finite(predictor.targets?.views?.withinSourceMetrics?.r2)),
+                        pooledViewsR2: round(finite(predictor.targets?.views?.metrics?.r2)),
+                    },
+                    'Large pooled-to-within-source collapse identifies a strong source/opportunity term.',
+                    ['local:buildings/jarvis/predictor-lab/results.json']
+                ),
+                test(
+                    'attention_term',
+                    'pass',
+                    {
+                        keepAddsForViewsR2: round(finite(retention.Q3?.keep_adds_for_views)),
+                        durationUniqueR2: round(finite(retention.Q4?.duration_unique_r2)),
+                    },
+                    'Observed keep, retention shape, and duration add separable local information in the owned cohort.',
+                    ['local:buildings/jarvis/retention-study/retention_study.json']
+                ),
+                test(
+                    'cross_format_identity',
+                    'fail',
+                    {
+                        meanLongToShortR2: round(mean(crossFormatR2)),
+                    },
+                    'A single format-agnostic content axis is contradicted by direct Long-to-Short transfer.',
+                    ['local:buildings/jarvis/predictor-lab/results.json']
+                ),
+                test(
+                    'prospective_product',
+                    'unknown',
+                    null,
+                    'The multiplicative factorization has not been fit and prospectively tested as one frozen model.',
+                    []
+                ),
+            ],
+            systems: ['shorts_library', 'long_library', 'shorts_prediction', 'retention', 'promise_lattice'],
+            confounds: ['Exposure/impressions are not currently observed.', 'Public views lack fixed-age histories.', 'Packaging and content execution are correlated choices.'],
+            nextFalsifier: 'A simpler single-axis model that beats the factorized model on crossed unseen-source plus forward-time log score.',
+            boundary: 'This is the strongest architecture implied by the failures, not yet a promoted predictive principle.',
+        }),
+        invariant({
+            id: 'evidence_events_not_output_count',
+            title: 'Twenty-one outputs are not twenty-one replications',
+            headline: 'Views, log views, outlier, scaled views, and 10M class often descend from the same snapshot and embedding.',
+            claim: 'Confidence must be counted by independent evidence events, not by the number of transformed outputs or charts.',
+            level: 'local_invariant',
+            status: 'methodological',
+            scope: 'All Shorts and Long scoring surfaces',
+            implication: 'Assign one evidence_event_id per raw outcome snapshot and one representation_id per model/preprocessing hash; transformed descendants share lineage.',
+            tests: [
+                test(
+                    'representation_count',
+                    'pass',
+                    { primaryRepresentations: 3, displayedShortsOutputs: 21 },
+                    'Visual, text, and together are the primary representation families; their multiple axes are correlated descendants.',
+                    ['local:buildings/jarvis/predictor-lab/results.json']
+                ),
+                test(
+                    'model_version_identity',
+                    'fail',
+                    {
+                        recordLevelVersionPersisted: Boolean(
+                            operations.source?.broadCorpus?.embeddingContract?.recordLevelModelVersionPersisted
+                        ),
+                    },
+                    'Legacy rows do not persist immutable scorer/model identity per observation.',
+                    ['local:buildings/jarvis/operations-lab/.cache/principles85.json']
+                ),
+            ],
+            systems: ['shorts_library', 'long_library', 'shorts_prediction', 'shorts_experiments', 'long_experiments'],
+            nextFalsifier: 'A lineage audit showing genuinely independent labels, encoders, sources, and outcome events behind each claimed replication.',
+            boundary: 'Transforms can still be useful features. They simply do not multiply evidentiary confidence.',
+        }),
+    ];
+}
+
+function graphData(surfaces) {
+    const nodes = [
+        { id: 'reality', label: 'Videos + audiences', layer: 0, kind: 'world' },
+        { id: 'shorts_inputs', label: '81K Shorts inputs', layer: 1, kind: 'observed_input' },
+        { id: 'long_inputs', label: '104K Long inputs', layer: 1, kind: 'observed_input' },
+        { id: 'private_outcomes', label: 'Private keep + curves', layer: 1, kind: 'observed_outcome' },
+        { id: 'public_outcomes', label: 'Public view snapshots', layer: 1, kind: 'observed_outcome' },
+        { id: 'visual_repr', label: 'Visual representation', layer: 2, kind: 'representation' },
+        { id: 'text_repr', label: 'Text representation', layer: 2, kind: 'representation' },
+        { id: 'together_repr', label: 'Together representation', layer: 2, kind: 'representation' },
+        { id: 'opening_lattice', label: 'Opening component lattice', layer: 2, kind: 'representation' },
+        { id: 'cluster_atlas', label: 'Cluster atlas', layer: 3, kind: 'taxonomy' },
+        { id: 'sequence_graph', label: 'Sequence/context graph', layer: 3, kind: 'taxonomy' },
+        { id: 'operations_regions', label: 'Operations regions', layer: 3, kind: 'taxonomy' },
+        { id: 'predictor_models', label: 'Predictor models', layer: 4, kind: 'mechanism' },
+        { id: 'retention_models', label: 'Retention response models', layer: 4, kind: 'mechanism' },
+        { id: 'invariant_tests', label: 'Transformation tests', layer: 5, kind: 'test' },
+        { id: 'principles', label: 'Promoted invariants', layer: 6, kind: 'principle' },
+        { id: 'failures', label: 'Falsified shortcuts', layer: 6, kind: 'failure' },
+    ];
+    const edges = [
+        ['reality', 'shorts_inputs', 'observe'],
+        ['reality', 'long_inputs', 'observe'],
+        ['reality', 'private_outcomes', 'measure'],
+        ['reality', 'public_outcomes', 'measure'],
+        ['shorts_inputs', 'visual_repr', 'encode'],
+        ['shorts_inputs', 'text_repr', 'encode'],
+        ['shorts_inputs', 'together_repr', 'encode'],
+        ['long_inputs', 'visual_repr', 'encode'],
+        ['long_inputs', 'text_repr', 'encode'],
+        ['long_inputs', 'together_repr', 'encode'],
+        ['shorts_inputs', 'opening_lattice', 'segment'],
+        ['visual_repr', 'cluster_atlas', 'cluster'],
+        ['text_repr', 'cluster_atlas', 'cluster'],
+        ['together_repr', 'cluster_atlas', 'cluster'],
+        ['opening_lattice', 'sequence_graph', 'relate'],
+        ['visual_repr', 'operations_regions', 'cluster'],
+        ['cluster_atlas', 'predictor_models', 'feature'],
+        ['sequence_graph', 'retention_models', 'feature'],
+        ['private_outcomes', 'retention_models', 'train fold only'],
+        ['private_outcomes', 'predictor_models', 'train fold only'],
+        ['public_outcomes', 'predictor_models', 'train fold only'],
+        ['predictor_models', 'invariant_tests', 'stress test'],
+        ['retention_models', 'invariant_tests', 'stress test'],
+        ['operations_regions', 'invariant_tests', 'stress test'],
+        ['invariant_tests', 'principles', 'survives'],
+        ['invariant_tests', 'failures', 'fails'],
+    ].map(([from, to, type], index) => ({ id: `edge_${index}`, from, to, type }));
+    return {
+        nodes,
+        edges,
+        surfaceIds: surfaces.map(row => row.id),
+        boundary: 'Outcome edges enter models only inside training folds. Generated candidates and legacy post-outcome indicators are side branches, not confirmation paths.',
+    };
+}
+
+function buildTransformationMatrix(invariants) {
+    const matrix = {
+        source_opportunity_dominates_cluster_lift: {
+            outcome_blind: 'survived', algorithm: 'survived', resolution: 'survived',
+            modality: 'survived', resample: 'tested', confounds: 'partial',
+            source: 'survived', time: 'untested', format: 'survived', prospective: 'untested',
+        },
+        resolution_fit_without_transfer: {
+            outcome_blind: 'survived', algorithm: 'partial', resolution: 'survived',
+            modality: 'survived', resample: 'untested', confounds: 'partial',
+            source: 'survived', time: 'untested', format: 'survived', prospective: 'untested',
+        },
+        modalities_are_complementary_sensors: {
+            outcome_blind: 'survived', algorithm: 'partial', resolution: 'survived',
+            modality: 'survived', resample: 'untested', confounds: 'partial',
+            source: 'partial', time: 'untested', format: 'survived', prospective: 'untested',
+        },
+        missing_modality_changes_fusion: {
+            outcome_blind: 'survived', algorithm: 'untested', resolution: 'survived',
+            modality: 'survived', resample: 'untested', confounds: 'partial',
+            source: 'untested', time: 'untested', format: 'untested', prospective: 'untested',
+        },
+        retrospective_fit_is_not_deployment: {
+            outcome_blind: 'partial', algorithm: 'partial', resolution: 'partial',
+            modality: 'partial', resample: 'survived', confounds: 'partial',
+            source: 'survived', time: 'survived', format: 'partial', prospective: 'untested',
+        },
+        calibration_not_discrimination: {
+            outcome_blind: 'survived', algorithm: 'partial', resolution: 'partial',
+            modality: 'partial', resample: 'survived', confounds: 'partial',
+            source: 'survived', time: 'partial', format: 'untested', prospective: 'partial',
+        },
+        external_market_semantics_transfer_to_retention: {
+            outcome_blind: 'survived', algorithm: 'partial', resolution: 'partial',
+            modality: 'partial', resample: 'survived', confounds: 'partial',
+            source: 'survived', time: 'untested', format: 'untested', prospective: 'untested',
+        },
+        promise_structure_before_promise_value: {
+            outcome_blind: 'survived', algorithm: 'partial', resolution: 'partial',
+            modality: 'untested', resample: 'survived', confounds: 'partial',
+            source: 'failed', time: 'failed', format: 'untested', prospective: 'untested',
+        },
+        positive_processing_lag_not_supported: {
+            outcome_blind: 'survived', algorithm: 'partial', resolution: 'partial',
+            modality: 'untested', resample: 'survived', confounds: 'survived',
+            source: 'untested', time: 'partial', format: 'untested', prospective: 'untested',
+        },
+        surrogate_clusters_are_not_observed_keep: {
+            outcome_blind: 'survived', algorithm: 'survived', resolution: 'survived',
+            modality: 'untested', resample: 'survived', confounds: 'partial',
+            source: 'untested', time: 'untested', format: 'untested', prospective: 'untested',
+        },
+        views_factorization: {
+            outcome_blind: 'partial', algorithm: 'partial', resolution: 'partial',
+            modality: 'survived', resample: 'partial', confounds: 'partial',
+            source: 'survived', time: 'partial', format: 'survived', prospective: 'untested',
+        },
+        evidence_events_not_output_count: {
+            outcome_blind: 'survived', algorithm: 'untested', resolution: 'untested',
+            modality: 'survived', resample: 'untested', confounds: 'survived',
+            source: 'survived', time: 'survived', format: 'survived', prospective: 'untested',
         },
     };
-
-    const withoutHash = JSON.stringify(artifact);
-    artifact.artifactHash = crypto.createHash('sha256').update(withoutHash).digest('hex');
-    return artifact;
+    return invariants.map(row => ({
+        invariantId: row.id,
+        cells: Object.fromEntries(TRANSFORMATIONS.map(transformation => [
+            transformation.id,
+            {
+                status: matrix[row.id]?.[transformation.id] || 'untested',
+                testIds: row.tests
+                    .filter(testRow => {
+                        const text = `${testRow.id} ${testRow.detail}`.toLowerCase();
+                        if (transformation.id === 'source') return /source|creator|channel|account/.test(text);
+                        if (transformation.id === 'time') return /time|chronolog|forward/.test(text);
+                        if (transformation.id === 'format') return /format|long|short/.test(text);
+                        if (transformation.id === 'modality') return /visual|text|together|modality|silent|voiced/.test(text);
+                        if (transformation.id === 'resolution') return /resolution|cluster count|\\bk\\b/.test(text);
+                        if (transformation.id === 'algorithm') return /algorithm|geometry|partition/.test(text);
+                        if (transformation.id === 'resample') return /fold|bootstrap|resampl/.test(text);
+                        if (transformation.id === 'confounds') return /center|confound|lag|availability|opportunity/.test(text);
+                        if (transformation.id === 'prospective') return /prospective|published|future upload/.test(text);
+                        return /outcome-blind|before attaching|discovery/.test(text);
+                    })
+                    .map(testRow => testRow.id),
+            },
+        ])),
+    }));
 }
 
-if (require.main === module) {
-    const artifact = buildArtifact();
-    fs.mkdirSync(path.dirname(OUTPUT_PATH), { recursive: true });
-    fs.writeFileSync(OUTPUT_PATH, `${JSON.stringify(artifact, null, 2)}\n`);
-    console.log(`Wrote ${path.relative(ROOT, OUTPUT_PATH)}`);
-    console.log(`Candidates: ${artifact.summary.candidateCount}`);
-    console.log(`Sources: ${artifact.summary.sourceCount}`);
-    console.log(`Artifact: ${artifact.artifactHash}`);
+function main() {
+    const system = readJson(PATHS.system);
+    const operations = readJson(PATHS.operations);
+    const predictor = readJson(PATHS.predictor);
+    const promiseManifest = readJson(PATHS.promiseManifest);
+    const promiseDiscovery = readJson(PATHS.promiseDiscovery);
+    const promisePartition = readJson(PATHS.promisePartition);
+    const promiseQuality = readJson(PATHS.promiseQuality);
+    const promiseForward = readJson(PATHS.promiseForward);
+    const pooledOpening = readJson(PATHS.pooledOpening);
+    const pooledBlind = readJson(PATHS.pooledBlind);
+    const openingContext = readJson(PATHS.openingContext);
+    const opening20s = readJson(PATHS.opening20s);
+    const clusterOutcomes = readJson(PATHS.clusterOutcomes);
+    const marketReward = readJson(PATHS.marketReward);
+    const longTitlePrior = readJson(PATHS.longTitlePrior);
+    const retention = readJson(PATHS.retention);
+    const tribe = readJson(PATHS.tribe);
+    const graph = readJson(PATHS.graph);
+    const indicatorsObject = readJson(PATHS.indicators);
+    const indicators = Array.isArray(indicatorsObject)
+        ? indicatorsObject
+        : Object.values(indicatorsObject || {});
+    const legacyExperimentCount = countToken(PATHS.legacyExperiments, '"id":') || 0;
+    const legacyDerivedCount = countToken(PATHS.legacyDerived, '"key":') || 0;
+
+    const inputs = {
+        system,
+        predictor,
+        operations,
+        promiseManifest,
+        promiseDiscovery,
+        promisePartition,
+        promiseQuality,
+        promiseForward,
+        pooledOpening,
+        marketReward,
+        longTitlePrior,
+        clusterOutcomes,
+        retention,
+        tribe,
+        graph,
+        indicators,
+        legacyExperimentCount,
+        legacyDerivedCount,
+    };
+    const surfaces = surfaceInventory(inputs);
+    const models = buildModels(inputs);
+    const invariants = buildInvariants(inputs);
+    const transformationMatrix = buildTransformationMatrix(invariants);
+    const localProvenance = Object.values(PATHS).map(fingerprint).filter(Boolean);
+    const provenance = [...system.provenance, ...localProvenance]
+        .filter((row, index, rows) => rows.findIndex(candidate => candidate.id === row.id) === index);
+
+    const artifact = {
+        schema: 'business-world-principles-atlas-v2',
+        generatedAt: new Date().toISOString(),
+        title: 'Principles Atlas',
+        mission: 'Discover the smallest abstractions that preserve predictive information across the widest transformations in every quantitative Jarvis surface.',
+        verdict: {
+            headline: 'The first whole-system result is a correction to the target: predict creator-relative lift, not pooled virality.',
+            summary: 'Across Shorts, Long, every raw modality, private retention, saved channels, Promise, Operations, Tribe, and the legacy registry, pooled semantic structure is abundant. Portable outcome structure is scarce. The strongest repeated finding is that source opportunity, format, time, and modality must be modeled explicitly before content mechanisms can become principles.',
+            promoted: invariants.filter(row => ['supported', 'supported_negative'].includes(row.status)).length,
+            mixed: invariants.filter(row => ['mixed', 'taxonomy_only', 'synthesis_hypothesis'].includes(row.status)).length,
+            universal: 0,
+        },
+        researchQuestion: {
+            question: 'When is an abstraction justified?',
+            operationalAnswer: 'When a frozen relational description saves predictive bits on observations that could not have influenced its discovery.',
+            discoveryOrder: [
+                'Observations',
+                'Representations',
+                'Outcome-blind clusters',
+                'Relational mechanisms',
+                'Transformation tests',
+                'Predictive compression',
+                'Promoted invariant',
+                'Prospective falsification',
+            ],
+            nonGoals: [
+                'Naming a cluster and treating the name as evidence.',
+                'Counting correlated projections as independent confirmation.',
+                'Promoting a retrospective association that fails unseen source or forward time.',
+                'Calling generated candidates audience observations.',
+            ],
+        },
+        evidenceKinds: EVIDENCE_KINDS,
+        transformations: TRANSFORMATIONS,
+        levels: LEVELS,
+        corpus: {
+            databases: system.databases,
+            privateKeep: {
+                videos: finite(predictor.targets?.keep?.n),
+                accounts: predictor.targets?.keep?.accounts || [],
+            },
+            savedChannels: {
+                videos: finite(predictor.coverage?.savedChannelRows),
+                channels: finite(predictor.coverage?.savedChannels),
+            },
+            promise: {
+                hooks: finite(promiseManifest.counts?.openings, promiseDiscovery.hooks),
+                allContiguousSpans: finite(promiseManifest.counts?.savedProjectionPoints),
+                selectedComponents: finite(promiseQuality.audit?.componentRows, promiseQuality.components?.length),
+                sequenceRelationships: finite(promiseManifest.counts?.sequenceRelationships),
+                opening20s: {
+                    videos: finite(opening20s.sourceVideos),
+                    tokens: finite(opening20s.tokenCount),
+                    spans: finite(opening20s.spanCount),
+                    components: finite(opening20s.componentCount),
+                    edges: finite(opening20s.edgeCount),
+                    medianTimingErrorSeconds: finite(opening20s.independentTimingAudit?.medianStartAgreementSeconds),
+                    p95TimingErrorSeconds: finite(opening20s.independentTimingAudit?.p95StartAgreementSeconds),
+                },
+                marketHold: {
+                    externalRows: finite(marketReward.externalTraining?.nonOwnedTrainingRows),
+                    externalGroups: finite(marketReward.externalTraining?.sourceGroups),
+                    transfer: marketTransfer(marketReward),
+                },
+            },
+            operations: {
+                savedHooks: finite(operations.source?.n),
+                partitionsTested: finite(operations.method?.partitionSummary?.partitionsTested),
+                acceptedRegions: finite(operations.method?.partitionSummary?.acceptedConsensusComponents),
+            },
+            tribe: {
+                videos: finite(tribe.n),
+                indicators: finite(tribe.indicatorIds?.length),
+                account: tribe.account,
+            },
+            legacy: {
+                graphNodes: finite(graph.nodes?.length),
+                graphEdges: finite(graph.edges?.length),
+                displayedDerivedEdges: finite(graph.derived_edges?.length),
+                totalDerivedEdges: finite(graph._meta?.total_derived_edges, legacyDerivedCount),
+                compactIndicators: indicators.length,
+                experimentRows: legacyExperimentCount,
+                derivedExperimentRows: legacyDerivedCount,
+                interpretation: 'One adaptive hypothesis-generation universe. It does not provide hundreds of thousands of independent replications.',
+            },
+        },
+        surfaces,
+        systemGraph: graphData(surfaces),
+        clusterAtlas: {
+            maps: system.rawMaps,
+            modalityEdges: system.modalityEdges,
+            mapCount: system.rawMaps.length,
+            partitionCount: system.rawMaps.reduce((sum, map) => sum + map.partitions.length, 0),
+            observationIdentity: {
+                current: 'Exact YouTube video ID; source joined from the corresponding database.',
+                required: [
+                    'platform:video_id upload identity',
+                    'decoded media hash',
+                    'near-duplicate content family',
+                    'stable channel ID',
+                    'outcome snapshot horizon',
+                    'representation model and preprocessing hash',
+                ],
+            },
+            mappingRule: 'Cluster numbers are map-local. Cross-map links use shared-observation overlap, NMI, variation of information, and split/merge links; matching numbers never imply matching meaning.',
+        },
+        models,
+        invariants,
+        transformationMatrix,
+        operationsAtlas: {
+            boundary: operations.measurementBoundary,
+            method: {
+                discoveryFirst: operations.method?.discoveryFirst,
+                outcomeBlind: operations.method?.outcomeBlindClustering,
+                partitions: operations.method?.partitionSummary,
+                lineages: operations.method?.lineages,
+                multipleTesting: operations.method?.multipleTesting,
+            },
+            principles: (operations.principles || []).map(row => ({
+                id: row.id,
+                label: row.comparisonLabel || row.label,
+                family: row.familyLabel,
+                n: finite(row.n),
+                prevalence: finite(row.prevalence),
+                algorithms: row.algorithms || [],
+                resolutions: row.resolutions || [],
+                stability: row.stability,
+                effects: row.effects,
+                observedDiagnostic: row.observedDiagnostic,
+            })),
+        },
+        promiseAtlas: {
+            manifest: {
+                status: promiseManifest.status,
+                embeddingModel: promiseManifest.embeddingModel,
+                dimensions: promiseManifest.embeddingDimensions,
+                counts: promiseManifest.counts,
+                scoringContract: promiseManifest.scoringContract,
+                evidenceBoundary: promiseManifest.evidenceBoundary,
+            },
+            discovery: {
+                hooks: promiseDiscovery.hooks,
+                experiments: promiseDiscovery.experiments,
+                candidateInstances: promiseDiscovery.candidateInstances,
+                outcomesUsed: promiseDiscovery.outcomesUsed,
+            },
+            canonicalPartition: {
+                mapId: promisePartition.mapId,
+                methodVersion: promisePartition.methodVersion,
+                categoryCount: promisePartition.categoryModel?.clusterCount,
+                categoryClaimStatus: promisePartition.categoryClaimStatus,
+                constraints: promisePartition.constraints,
+                boundaryModel: {
+                    heldoutAuc: promisePartition.boundaryModel?.heldoutAuc,
+                    heldoutAveragePrecision: promisePartition.boundaryModel?.heldoutAveragePrecision,
+                    heldoutBalancedAccuracy: promisePartition.boundaryModel?.heldoutBalancedAccuracy,
+                },
+            },
+            componentSample: (promiseQuality.components || []).slice(0, 324).map(row => ({
+                videoId: row.videoId,
+                component: row.component,
+                category: row.category,
+                start: row.start,
+                end: row.end,
+                text: row.text,
+                categoryProbability: row.categoryProbability,
+                deletionEffect: row.deletionEffect,
+                categoryPercentile: row.categoryPercentile,
+                forwardResponse: row.forwardResponse,
+            })),
+            relationshipSample: (promiseForward.relationships || []).slice(0, 250),
+            contextStudy: {
+                status: openingContext.status,
+                categoryCount: openingContext.categoryCount,
+                primaryLagSeconds: openingContext.primaryLagSeconds,
+                testedForwardLagsSeconds: openingContext.testedForwardLagsSeconds,
+                categories: (openingContext.categories || []).map(category => ({
+                    category: category.category,
+                    frozenCategory: category.frozenCategory,
+                    componentRows: category.componentRows,
+                    primaryLagSeconds: category.primaryLagSeconds,
+                    primaryOutcomePlane: {
+                        xAxis: category.primaryOutcomePlane?.xAxis,
+                        yAxis: category.primaryOutcomePlane?.yAxis,
+                        directionStatus: category.primaryOutcomePlane?.directionStatus,
+                        orientationUsesOutcomes: category.primaryOutcomePlane?.orientationUsesOutcomes,
+                        coordinatesOutOfFold: category.primaryOutcomePlane?.coordinatesOutOfFold,
+                        pointPredictionsOutOfFold: category.primaryOutcomePlane?.pointPredictionsOutOfFold,
+                        leakageBoundary: category.primaryOutcomePlane?.leakageBoundary,
+                    },
+                    lagExperiments: (category.lagExperiments || []).map(row => ({
+                        lagSeconds: row.lagSeconds,
+                        rows: row.rows,
+                        sourceVideos: row.sourceVideos,
+                        status: row.status,
+                        incrementalViewerContextReplicated: row.incrementalViewerContextReplicated,
+                        replicationStatus: row.replicationStatus,
+                    })),
+                })),
+                claimBoundary: openingContext.claimBoundary,
+            },
+            opening20s: {
+                methodVersion: opening20s.methodVersion,
+                analysisHorizonSeconds: opening20s.analysisHorizonSeconds,
+                sourceVideos: opening20s.sourceVideos,
+                sourceMediaOrigins: opening20s.sourceMediaOrigins,
+                mediaAlignmentConfidenceBands: opening20s.mediaAlignmentConfidenceBands,
+                independentTimingAudit: opening20s.independentTimingAudit,
+                independentHookEndpointAudit: opening20s.independentHookEndpointAudit,
+                tokenCount: opening20s.tokenCount,
+                componentCount: opening20s.componentCount,
+                spanCount: opening20s.spanCount,
+                edgeCount: opening20s.edgeCount,
+                categoryCount: opening20s.categoryCount,
+                lengthSupport: opening20s.lengthSupport,
+                partitionContract: opening20s.partitionContract,
+                latticeContract: opening20s.latticeContract,
+                retentionContract: opening20s.retentionContract,
+            },
+            clusterOutcomes: {
+                experimentCount: clusterOutcomes.experimentCount,
+                selectedFamilyCount: clusterOutcomes.selectedFamilyCount,
+                randomFoldSupportedFamilyCount: clusterOutcomes.randomFoldSupportedFamilyCount,
+                validatedFamilyCount: clusterOutcomes.validatedFamilyCount,
+                claimBoundary: clusterOutcomes.claimBoundary,
+                timingAudit: clusterOutcomes.timingAudit,
+                normalization: clusterOutcomes.normalization,
+                validation: clusterOutcomes.validation,
+            },
+            marketReward: {
+                status: marketReward.status,
+                methodVersion: marketReward.methodVersion,
+                scoreScale: marketReward.scoreScale,
+                externalTraining: marketReward.externalTraining,
+                transfer: marketTransfer(marketReward),
+                domainGate: marketReward.domainGate,
+                rewardContract: marketReward.rewardContract,
+                audit: marketReward.audit,
+            },
+            longTitlePrior: {
+                status: longTitlePrior.status,
+                methodVersion: longTitlePrior.methodVersion,
+                corpus: longTitlePrior.corpus,
+                validation: longTitlePrior.validation,
+                claimBoundary: longTitlePrior.claimBoundary,
+            },
+            pooledBlind: {
+                status: pooledBlind.status,
+                sources: pooledBlind.sources,
+                nonDevelopmentVideos: pooledBlind.nonDevelopmentVideos,
+                externalHoldoutVideos: pooledBlind.externalHoldoutVideos,
+                externalHoldoutIdsDisjoint: pooledBlind.externalHoldoutIdsDisjoint,
+                policy: pooledBlind.blindIsolationPrimaryPolicy,
+                sealedAt: pooledBlind.sealedAt,
+            },
+        },
+        failureLab: [
+            {
+                id: 'pooled_cluster_virality',
+                title: 'Pooled cluster = portable virality',
+                status: 'falsified',
+                reason: 'Creator-fold source-relative R² is approximately zero across every raw map and k.',
+                systems: ['shorts_library', 'long_library'],
+            },
+            {
+                id: 'more_clusters_deeper',
+                title: 'More clusters = deeper principle',
+                status: 'falsified',
+                reason: 'Pooled fit rises while creator transfer does not.',
+                systems: ['shorts_library', 'long_library'],
+            },
+            {
+                id: 'random_fold_deployment',
+                title: 'Random fold = deployment performance',
+                status: 'falsified',
+                reason: 'Keep, views, and hook-quality results contract or reverse in chronology.',
+                systems: ['shorts_prediction', 'promise_lattice'],
+            },
+            {
+                id: 'mean_curve_ranking',
+                title: 'Mean curve accuracy = opening ranking',
+                status: 'falsified',
+                reason: 'At fixed horizons predicted between-video variance is near zero and R² is negative.',
+                systems: ['pooled_openings'],
+            },
+            {
+                id: 'four_categories_ontology',
+                title: 'The four Promise labels are discovered ontology',
+                status: 'invalidated',
+                reason: 'The category map was selected after manual phrase probes.',
+                systems: ['promise_lattice'],
+            },
+            {
+                id: 'promise_cluster_outcomes',
+                title: 'Random-fold Promise cluster effects are validated outcomes',
+                status: 'falsified',
+                reason: `${finite(clusterOutcomes.experimentCount, 0).toLocaleString()} cluster-outcome searches produced ${finite(clusterOutcomes.randomFoldSupportedFamilyCount, 0)} random-fold families and ${finite(clusterOutcomes.validatedFamilyCount, 0)} chronological validations.`,
+                systems: ['promise_lattice'],
+            },
+            {
+                id: 'legacy_volume_replication',
+                title: 'Hundreds of thousands of legacy tests = replication',
+                status: 'invalidated',
+                reason: 'They form one adaptive, heavily dependent discovery universe and include post-outcome features.',
+                systems: ['legacy_research'],
+            },
+            {
+                id: 'long_short_same_axis',
+                title: 'A Long views axis transfers directly to Shorts',
+                status: 'falsified',
+                reason: 'Every tested direct Long-to-Short modality has negative R².',
+                systems: ['long_library', 'shorts_prediction'],
+            },
+        ],
+        implementationContract: {
+            document: 'DISCOVERY_CONTRACT.md',
+            evidenceIdentity: [
+                'upload_id',
+                'asset_hash',
+                'content_family_id',
+                'source_id',
+                'snapshot_id',
+                'representation_id',
+                'segment_id',
+                'candidate_id',
+            ],
+            causalAvailability: [
+                'A0 creator history',
+                'A1 final pre-upload package',
+                'A2(t) viewer context observed by time t',
+                'A3 platform exposure',
+                'A4(h) outcome at fixed horizon h',
+                'A5 descendants of outcomes',
+                'S synthetic/counterfactual world',
+            ],
+            predictiveCompression: 'Net bits = L(null outcomes | confounds) - [L(abstraction) + L(outcomes | abstraction, confounds)].',
+            lockboxes: [
+                'content-family',
+                'whole unseen source',
+                'forward time',
+                'Shorts-to-Long and Long-to-Short',
+                'crossed unseen-source + future-time',
+                'prospective publication',
+            ],
+            promotionRule: 'The weakest required transformation sets the ceiling. English labels are attached only after freezing and never select a region.',
+        },
+        liveStatus: system.liveStatus,
+        provenance,
+        sourceHash: system.analysisHash,
+    };
+    artifact.artifactHash = sha256(Buffer.from(JSON.stringify(artifact)));
+    fs.writeFileSync(OUTPUT_PATH, `${JSON.stringify(artifact)}\n`);
+    console.log(JSON.stringify({
+        output: path.relative(ROOT, OUTPUT_PATH),
+        schema: artifact.schema,
+        artifactHash: artifact.artifactHash,
+        surfaces: artifact.surfaces.length,
+        maps: artifact.clusterAtlas.mapCount,
+        partitions: artifact.clusterAtlas.partitionCount,
+        sampledObservations: artifact.clusterAtlas.maps.reduce(
+            (sum, map) => sum + map.atlasSample.length,
+            0
+        ),
+        invariants: artifact.invariants.length,
+        failures: artifact.failureLab.length,
+        provenance: artifact.provenance.length,
+    }, null, 2));
 }
 
-module.exports = {
-    LEVELS,
-    SOURCE_PATHS,
-    TRANSFORMATIONS,
-    buildArtifact,
-    intervalExcludesZero,
-};
+main();
