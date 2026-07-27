@@ -824,15 +824,22 @@ const JarvisRetention = (function () {
         const upStage = Math.min(st.rawUpStage || 0, UPSTAGES.length - 1);
         const upPct = Math.min(93, Math.round((upStage + 1) / UPSTAGES.length * 100));
         const q = st.rawUpQueue;
+        const uploadStageLabel = q && q.preparing
+            ? 'Preparing a phone-safe opening…'
+            : q && q.fallback
+                ? 'Recovering with the 5 visual frames…'
+                : q && q.transferMB
+                    ? `Uploading ${q.transferMB} MB opening…`
+                    : UPSTAGES[upStage];
         const uploadBtn = `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};background:transparent;color:${C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">⬆ Upload video${ups.length ? 's — add more' : '(s)'}</span>`;
         const showBtn = ups.length ? `<span data-rawupshow="1" style="cursor:pointer;border:1px solid ${st.rawUpShow ? CYAN : C.border};background:${st.rawUpShow ? CYAN + '22' : 'transparent'};color:${st.rawUpShow ? CYAN : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">⬆ My uploads (${ups.length})</span><span data-rawupclear="1" style="cursor:pointer;color:${C.mute};font-size:10px;margin-left:3px">clear all</span>` : '';
         const upBtn = st.rawUploading
             ? `<span style="display:inline-flex;flex-direction:column;gap:3px;min-width:250px;vertical-align:middle">
-                 <span style="font-size:10px;color:${CYAN};font-weight:700">⏳ ${q && q.total > 1 ? `(${q.i}/${q.total}) ` : ''}${UPSTAGES[upStage]} <span style="color:${C.mute};font-weight:400">${upPct}%</span></span>
+                 <span style="font-size:10px;color:${CYAN};font-weight:700">⏳ ${q && q.total > 1 ? `(${q.i}/${q.total}) ` : ''}${uploadStageLabel} <span style="color:${C.mute};font-weight:400">${upPct}%</span></span>
                  <span style="display:block;height:6px;background:${C.border};border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:${upPct}%;background:linear-gradient(90deg,${CYAN},#67e8f9);border-radius:4px;transition:width .5s ease"></span></span>
                </span>`
             : `${uploadBtn} ${showBtn}`;
-        const upErr = st.rawUpErr ? `<span style="font-size:10px;color:${C.red}">upload failed: ${esc(String(st.rawUpErr).slice(0, 80))}</span>` : '';
+        const upErr = st.rawUpErr ? `<span style="font-size:10px;color:${C.red};line-height:1.4;max-width:560px">upload failed: ${esc(String(st.rawUpErr).slice(0, 320))}</span>` : '';
         const modeToggle = `<span data-rawbuildmode="0" style="cursor:pointer;border:1px solid ${!st.rawBuildMode ? CYAN : C.border};background:${!st.rawBuildMode ? CYAN + '22' : 'transparent'};color:${!st.rawBuildMode ? CYAN : C.dim};border-radius:6px 0 0 6px;padding:3px 9px;font-size:10px;font-weight:700">🎬 Video</span><span data-rawbuildmode="1" style="cursor:pointer;border:1px solid ${st.rawBuildMode ? CYAN : C.border};border-left:none;background:${st.rawBuildMode ? CYAN + '22' : 'transparent'};color:${st.rawBuildMode ? CYAN : C.dim};border-radius:0 6px 6px 0;padding:3px 9px;font-size:10px;font-weight:700">🖼 5 frames + text</span>`;
         const fr = st.rawFrames || [null, null, null, null, null];
         const nFrames = fr.filter(Boolean).length;
@@ -860,6 +867,7 @@ const JarvisRetention = (function () {
                     : `<div style="font-size:11px;color:${C.dim};margin-bottom:6px">Couldn't place it in this channel.</div>`);
             return `<div style="margin-top:10px;border:1px solid ${col};border-radius:10px;padding:12px;background:${C.card2}">
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px"><div style="font-size:12px;font-weight:700;color:${C.text};line-height:1.4"><span style="color:${col}">⬆ #${i + 1}</span> · ${esc(U.title || 'My upload')}${U.silent ? ` <span style="color:${C.faint};font-weight:400;font-size:10px">· no voiceover</span>` : ''}</div><span data-rawupclose="1" style="cursor:pointer;color:${C.dim};font-size:16px;line-height:1;padding:0 4px">×</span></div>
+                  ${U._uploadWarning ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}12;border-left:3px solid ${C.amber};padding:7px 9px;margin-bottom:8px;line-height:1.4">${esc(U._uploadWarning)}</div>` : ''}
                   <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">exact input embedded — first-5s frames, 1/sec</div>
                   ${montageSrc ? `<img src="${esc(montageSrc)}" style="width:100%;border-radius:6px;background:#000;margin-bottom:8px"/>` : ''}
                   ${(() => {
@@ -1478,14 +1486,20 @@ const JarvisRetention = (function () {
         const fr = st.rawFrames || [null, null, null, null, null], nFrames = fr.filter(Boolean).length;
         const modePill = (m, lab) => `<span data-rawbuildmode="${m}" style="cursor:pointer;border:1px solid ${(!!st.rawBuildMode === !!m) ? CY : C.border};background:${(!!st.rawBuildMode === !!m) ? CY + '22' : 'transparent'};color:${(!!st.rawBuildMode === !!m) ? CY : C.dim};border-radius:${m ? '0 6px 6px 0' : '6px 0 0 6px'};padding:4px 10px;font-size:11px;font-weight:700">${lab}</span>`;
         const UPSTAGES = ['Uploading…', 'Extracting 5 frames…', 'Transcribing…', 'Embedding…', 'Scoring indicators…'];
-        const upLabel = (st.rawUpQueue && st.rawUpQueue.trimming) ? 'Trimming to first 6s…' : UPSTAGES[Math.min(st.rawUpStage || 0, 4)];
+        const upLabel = st.rawUpQueue && st.rawUpQueue.preparing
+            ? 'Preparing a phone-safe opening…'
+            : st.rawUpQueue && st.rawUpQueue.fallback
+                ? 'Recovering with the 5 visual frames…'
+                : st.rawUpQueue && st.rawUpQueue.transferMB
+                    ? `Uploading ${st.rawUpQueue.transferMB} MB opening…`
+                    : UPSTAGES[Math.min(st.rawUpStage || 0, 4)];
         const prog = st.rawUploading ? `<span style="display:inline-flex;flex-direction:column;gap:3px;min-width:230px"><span style="font-size:10px;color:${CY};font-weight:700">⏳ ${upLabel}</span><span style="height:6px;background:${C.border};border-radius:4px;overflow:hidden;display:block"><span style="display:block;height:100%;width:${Math.min(93, ((st.rawUpStage || 0) + 1) / 5 * 100)}%;background:${CY};border-radius:4px;transition:width .5s"></span></span></span>` : '';
         const builder = st.rawBuildMode ? `<div style="margin-top:8px;display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">${[0, 1, 2, 3, 4].map(i => fr[i]
             ? `<div style="position:relative"><img src="${fr[i]}" style="width:42px;height:75px;object-fit:cover;border-radius:5px;border:1px solid ${C.border}"/><span data-rawframedel="${i}" style="position:absolute;top:-7px;right:-7px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:15px;height:15px;line-height:13px;text-align:center;font-size:9px;cursor:pointer">✕</span></div>`
             : `<div data-rawframe="${i}" style="width:42px;height:75px;border:1px dashed ${C.border};border-radius:5px;display:flex;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋${i + 1}</div>`).join('')}
             <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="hook text…" style="flex:1;min-width:160px;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:12px"/>
             <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CY : C.border};background:${nFrames ? CY + '22' : 'transparent'};color:${nFrames ? CY : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Score this hook</span></div>${genFramesPanel()}` : '';
-        const controls = cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, '🖼 5 frames + text')}${!st.rawBuildMode ? `<span data-rawupload="1" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ Upload video</span><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;max-width:100%"><input data-rawyturl value="${esc(st.rawYtUrl || '')}" placeholder="or paste a YouTube link…" style="width:220px;max-width:100%;box-sizing:border-box;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 9px;font-size:11px"/><span data-rawytgo style="cursor:pointer;border:1px solid ${st.rawYtBusy ? C.amber : CY};background:${st.rawYtBusy ? C.amber + '18' : CY + '18'};color:${st.rawYtBusy ? C.amber : CY};border-radius:6px;padding:4px 11px;font-size:11px;font-weight:800;white-space:nowrap">${st.rawYtBusy ? '⏳ downloading + embedding…' : '⬇ score from link'}</span></span>` : ''}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red}">${esc(String(st.rawUpErr).slice(0, 70))}</span>` : ''}</div>${builder}`, 12);
+        const controls = cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, '🖼 5 frames + text')}${!st.rawBuildMode ? `<span ${st.rawUploading ? 'aria-disabled="true"' : 'data-rawupload="1"'} style="cursor:${st.rawUploading ? 'not-allowed' : 'pointer'};opacity:${st.rawUploading ? '.45' : '1'};border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ ${st.rawUploading ? 'Video in progress' : 'Upload video'}</span><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;max-width:100%"><input data-rawyturl value="${esc(st.rawYtUrl || '')}" placeholder="or paste a YouTube link…" style="width:220px;max-width:100%;box-sizing:border-box;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 9px;font-size:11px"/><span data-rawytgo style="cursor:pointer;border:1px solid ${st.rawYtBusy ? C.amber : CY};background:${st.rawYtBusy ? C.amber + '18' : CY + '18'};color:${st.rawYtBusy ? C.amber : CY};border-radius:6px;padding:4px 11px;font-size:11px;font-weight:800;white-space:nowrap">${st.rawYtBusy ? '⏳ downloading + embedding…' : '⬇ score from link'}</span></span>` : ''}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red};line-height:1.4;max-width:560px">${esc(String(st.rawUpErr).slice(0, 320))}</span>` : ''}</div>${builder}`, 12);
         if (!EXPREG || EXPREG.loading) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">Loading the indicator registry…</div>`);
         if (EXPREG.error || !EXPREG.indicators) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">No indicator registry yet — run <code>indicators.py</code>.</div>`);
         // scorable = the indicators a NEW hook can actually be scored on (content probes + global novelty)
@@ -1518,6 +1532,7 @@ const JarvisRetention = (function () {
         const trace = cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
               ${titleRow}
               <span data-savescored style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${st.savedFlash ? '✅ saved' : '💾 Save this hook'}</span></div>
+            ${up._uploadWarning ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}12;border-left:3px solid ${C.amber};padding:7px 9px;margin-bottom:8px;line-height:1.4">${esc(up._uploadWarning)}</div>` : ''}
             <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
               <div><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">1 · the 5-frame hook (what gets embedded)</div>${upMontageSrc ? `<img src="${esc(upMontageSrc)}" style="width:260px;border-radius:6px;background:#000"/>` : `<div style="width:260px;padding:20px;box-sizing:border-box;border-radius:6px;background:#000;color:${C.mute};font-size:10px;text-align:center">stored montage unavailable</div>`}</div>
               <div style="flex:1;min-width:220px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">2 · transcript (editable)</div>${transcriptBlock}
@@ -3411,7 +3426,14 @@ const JarvisRetention = (function () {
         st.rawUpErr = String((error && error.message) || error || 'The selected file could not be loaded.');
         refreshRawUploadPanel();
     }
+    function rawScoreBusy() {
+        return !!(st.rawUploading || st.rawYtBusy || st.rawReembedBusy || st.genScoringK != null);
+    }
     function openRawVideoPicker() {
+        if (rawScoreBusy()) {
+            rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before starting another.');
+            return;
+        }
         const upload = window.JarvisUpload;
         if (!upload || typeof upload.pickFiles !== 'function') {
             rawUploadPickerError('The uploader did not initialize. Reload the page and try again.');
@@ -3420,6 +3442,10 @@ const JarvisRetention = (function () {
         upload.pickFiles({ accept: 'video/*', multiple: true, onSelect: files => rtgRawUpload(files), onError: rawUploadPickerError });
     }
     function openRawFramePicker(slot) {
+        if (rawScoreBusy()) {
+            rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before changing frames.');
+            return;
+        }
         const upload = window.JarvisUpload;
         if (!upload || typeof upload.pickFiles !== 'function') {
             rawUploadPickerError('The uploader did not initialize. Reload the page and try again.');
@@ -3479,16 +3505,31 @@ const JarvisRetention = (function () {
         const idempotent = method === 'GET' || method === 'HEAD'
             || Object.keys(headers).some(k => k.toLowerCase() === 'x-quant-request-id');
         const total = idempotent ? Math.max(1, attempts || 1) : 1;
+        const retryDelays = (opts && opts._retryDelays) || [1200, 3000, 6000];
         for (let attempt = 0; attempt < total; attempt++) {
-            if (attempt) await new Promise(resolve => window.setTimeout(resolve, [1200, 3000, 6000][attempt - 1] || 6000));
+            if (attempt) await new Promise(resolve => window.setTimeout(resolve, retryDelays[attempt - 1] || retryDelays[retryDelays.length - 1] || 6000));
             let r, raw;
+            const fetchOpts = { ...(opts || {}) };
+            const timeoutMs = Math.max(5000, Number(fetchOpts._timeoutMs) || 45000);
+            delete fetchOpts._timeoutMs;
+            delete fetchOpts._retryDelays;
+            let timer = null;
+            if (!fetchOpts.signal && window.AbortController) {
+                const controller = new window.AbortController();
+                fetchOpts.signal = controller.signal;
+                timer = window.setTimeout(() => controller.abort(), timeoutMs);
+            }
             try {
-                r = await fetch(url, opts || {});
+                r = await fetch(url, fetchOpts);
                 raw = await r.text();
             } catch (e) {
-                last = new Error(fetchFail(e));
+                last = new Error(e && e.name === 'AbortError'
+                    ? `request timed out after ${Math.round(timeoutMs / 1000)} seconds`
+                    : fetchFail(e));
+                if (timer) window.clearTimeout(timer);
                 continue;
             }
+            if (timer) window.clearTimeout(timer);
             let j = null;
             try { j = raw ? JSON.parse(raw) : null; } catch (e) {}
             const transient = [502, 503, 504].includes(r.status) || /^\s*</.test(raw || '');
@@ -3508,8 +3549,15 @@ const JarvisRetention = (function () {
     }
     async function rtJob(url, opts, resubmits, requestId) {
         requestId = requestId || rtRequestId();
-        const jobOpts = { ...(opts || {}), headers: { ...((opts && opts.headers) || {}), 'X-Quant-Request-Id': requestId } };
-        const j = await rtFetchJson(url, jobOpts, 2);
+        const body = opts && opts.body;
+        const isFileUpload = body && typeof body.size === 'number';
+        const jobOpts = {
+            ...(opts || {}),
+            _timeoutMs: isFileUpload ? 10 * 60e3 : 90e3,
+            _retryDelays: isFileUpload ? [5000, 20000] : [1500, 4000],
+            headers: { ...((opts && opts.headers) || {}), 'X-Quant-Request-Id': requestId },
+        };
+        const j = await rtFetchJson(url, jobOpts, 3);
         rawTrace('rtjob-response', { status: 200 });
         if (!j.jobId) return j;   // sync result
         for (let i = 0; i < 240; i++) {
@@ -3543,7 +3591,7 @@ const JarvisRetention = (function () {
     // recomputes text/together channels + every steered output, replaces the record in place.
     async function rtgReembed(idx, text, visualOnly) {
         const u = (st.rawUploads || [])[idx];
-        if (!u || !u.montage || st.rawReembedBusy) return;
+        if (!u || !u.montage || rawScoreBusy()) return;
         st.rawReembedBusy = true; st.rawUpErr = null; rtgUpdateRaw(); rtgUpdateExp();
         try {
             const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage: u.montage, text: visualOnly ? '' : String(text || '').slice(0, 2000), title: u.title || 'Re-embedded hook', duration: u.dur_s || u.duration || null, async: true }) });
@@ -3582,7 +3630,10 @@ const JarvisRetention = (function () {
     async function rtgScoreYoutube() {
         const inp = window.document.querySelector('[data-rawyturl]'); if (inp) st.rawYtUrl = inp.value;
         const url = String(st.rawYtUrl || '').trim();
-        if (!url || st.rawYtBusy) return;
+        if (!url || rawScoreBusy()) {
+            if (url && rawScoreBusy()) rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before scoring a link.');
+            return;
+        }
         st.rawYtBusy = true; st.rawUpErr = null; render();
         try {
             const j = await rtJob('/api/raw/embed-youtube', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, async: true }) });
@@ -3807,74 +3858,106 @@ const JarvisRetention = (function () {
             && operationsUI().handleKeyDown(e)
         ) return;
     }
-    // Only the first 5s of a video is ever scored, so for anything but a tiny file we record the
-    // first ~6s CLIENT-SIDE into a small webm and upload THAT — a ~1MB clip instead of a 300MB video.
-    // This is why big uploads "worked before but not now": they never reached the server (Render's
-    // edge drops the huge body). Returns a Blob, or null to fall back to uploading the whole file.
-    function extractFirstSeconds(file, seconds) {
-        return new Promise((resolve) => {
-            let settled = false; const done = v => { if (!settled) { settled = true; resolve(v); } };
-            let video; try { video = window.document.createElement('video'); } catch (e) { return done(null); }
-            const url = URL.createObjectURL(file);
-            const cleanup = () => { try { URL.revokeObjectURL(url); } catch (e) {} try { video.pause(); video.src = ''; } catch (e) {} };
-            // captureStream() records the media element's playback stream in some browsers.
-            // Keep audio live here; muting or volume=0 can produce a trimmed upload whose
-            // audio track is literally silent, which then looks like "no voiceover".
-            video.muted = false; video.volume = 1; video.playsInline = true; video.preload = 'auto';
-            video.onerror = () => { cleanup(); done(null); };
-            const guard = window.setTimeout(() => { cleanup(); done(null); }, (seconds + 12) * 1000);   // never hang the UI
-            video.onloadedmetadata = () => {
-                const fullDur = video.duration;   // the REAL video length — passed through so realviews (which uses duration) isn't skewed by the 6s clip
-                if (!fullDur || fullDur <= seconds + 0.6) { window.clearTimeout(guard); cleanup(); return done(null); }  // already short → upload as-is
-                let stream;
-                try { stream = video.captureStream ? video.captureStream() : (video.mozCaptureStream ? video.mozCaptureStream() : null); } catch (e) { stream = null; }
-                if (!stream || !window.MediaRecorder) { window.clearTimeout(guard); cleanup(); return done(null); }
-                const mimes = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm', 'video/mp4'];
-                const mime = mimes.find(m => { try { return window.MediaRecorder.isTypeSupported(m); } catch (e) { return false; } }) || '';
-                let rec; try { rec = new window.MediaRecorder(stream, mime ? { mimeType: mime } : {}); } catch (e) { window.clearTimeout(guard); cleanup(); return done(null); }
-                const chunks = [];
-                rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-                rec.onerror = () => { window.clearTimeout(guard); cleanup(); done(null); };
-                rec.onstop = () => { window.clearTimeout(guard); cleanup(); const b = new Blob(chunks, { type: (mime || 'video/webm').split(';')[0] }); done(b.size > 2000 ? { blob: b, duration: fullDur } : null); };
-                video.play().then(() => { rec.start(); window.setTimeout(() => { try { rec.stop(); } catch (e) {} }, seconds * 1000); })
-                    .catch(() => { window.clearTimeout(guard); cleanup(); done(null); });
-            };
-            video.src = url;
-        });
-    }
     async function rtgRawUpload(files) {
         const list = Array.from(files || []).slice(0, 12);   // cap a batch at 12
         if (!list.length) return;
+        if (rawScoreBusy()) {
+            rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before adding another.');
+            return;
+        }
         st.rawUploading = true; st.rawUpErr = null; st.rawUpShow = true; rtgUpdateRaw();
         for (let n = 0; n < list.length; n++) {
             const file = list[n];
-            st.rawUpStage = 0; st.rawUpQueue = { i: n + 1, total: list.length }; rtgUpdateRaw();
+            st.rawUpStage = 0; st.rawUpQueue = { i: n + 1, total: list.length, preparing: true }; rtgUpdateRaw();
             const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateRaw(); } }, 2400);
             rawTrace('picked', { name: (file.name || '').slice(0, 60), mb: Math.round(file.size / 1e6), type: file.type }, true);
             try {
-                let blob = file, ext = (file.name.split('.').pop() || 'mp4').slice(0, 5).toLowerCase(), realDur = 0;
-                // Bigger than ~25MB → trim to the first ~6s in the browser and upload that tiny clip
-                // (only the first 5s is scored). We also send the REAL video duration so realviews (which
-                // uses duration) is computed on the true length, not the 6s clip. Small files upload whole.
-                if (file.size > 25 * 1024 * 1024) {
-                    st.rawUpErr = null; st.rawUpStage = 0; st.rawUpQueue = { i: n + 1, total: list.length, trimming: true }; rtgUpdateRaw();
-                    rawTrace('trim-start');
-                    let clip = null; try { clip = await extractFirstSeconds(file, 6); } catch (e) { clip = null; }
-                    rawTrace('trim-done', { trimmed: !!(clip && clip.blob) });
-                    if (clip && clip.blob && clip.blob.size > 2000) { blob = clip.blob; ext = 'webm'; realDur = clip.duration || 0; }
-                    else if (file.size > 200 * 1024 * 1024) { st.rawUpErr = (file.name || '') + ': ' + Math.round(file.size / 1e6) + 'MB is too big to upload whole and your browser couldn\'t auto-trim it — please trim the clip to its first ~10 seconds and re-upload'; window.clearInterval(tick); continue; }
-                }
-                if (blob.size > 1024 * 1024 * 1024) { st.rawUpErr = (file.name || '') + ': too large (' + Math.round(blob.size / 1e6) + 'MB)'; window.clearInterval(tick); continue; }
+                const upload = window.JarvisUpload;
+                if (!upload || typeof upload.prepareVideo !== 'function') throw new Error('The phone-safe video uploader did not initialize. Reload the page and try again.');
+                rawTrace('prepare-start');
+                const prepared = await upload.prepareVideo(file, {
+                    prefixSeconds: 6,
+                    directBytes: 20 * 1024 * 1024,
+                    maxClipBytes: 28 * 1024 * 1024,
+                    maxHeadBytes: 56 * 1024 * 1024,
+                    maxTailBytes: 4 * 1024 * 1024,
+                });
+                const blob = prepared.blob;
+                const ext = prepared.ext || 'mp4';
+                const realDur = Number(prepared.duration) || 0;
+                rawTrace('prepare-done', {
+                    mode: prepared.mode,
+                    originalMB: Math.round((prepared.originalBytes || file.size) / 1e6),
+                    transferMB: Math.round((prepared.transferBytes || blob.size) / 1e6),
+                    hasFallback: !!prepared.fallbackMontage,
+                });
                 const safeTitle = (file.name || 'My upload').replace(/[^\x20-\x7E]/g, '').slice(0, 80);   // headers must be ASCII
-                st.rawUpStage = 1; st.rawUpQueue = { i: n + 1, total: list.length }; rtgUpdateRaw();
-                const upHeaders = { 'X-Raw-Ext': ext, 'X-Raw-Title': safeTitle };
+                st.rawUpStage = 1;
+                st.rawUpQueue = {
+                    i: n + 1,
+                    total: list.length,
+                    transferMB: Math.max(1, Math.round((prepared.transferBytes || blob.size) / 1e6)),
+                    mode: prepared.mode,
+                };
+                rtgUpdateRaw();
+                const upHeaders = { 'X-Raw-Ext': ext, 'X-Raw-Title': safeTitle, 'X-Raw-Upload-Mode': prepared.mode || 'direct' };
                 if (realDur > 0) upHeaders['X-Raw-Duration'] = String(Math.round(realDur));   // true full length → correct realviews
-                rawTrace('post-start', { mb: Math.round(blob.size / 1e6) });
-                const j = await rtJob('/api/raw/embed-upload', { method: 'POST', headers: { ...upHeaders, 'x-raw-async': '1' }, body: blob });   // async job — immune to the 100s proxy ceiling
+                if (prepared.sparse) {
+                    upHeaders['X-Raw-Sparse'] = '1';
+                    upHeaders['X-Raw-Original-Size'] = String(prepared.sparse.originalBytes);
+                    upHeaders['X-Raw-Head-Size'] = String(prepared.sparse.headBytes);
+                    upHeaders['X-Raw-Tail-Size'] = String(prepared.sparse.tailBytes);
+                }
+                rawTrace('post-start', { mb: Math.round(blob.size / 1e6), mode: prepared.mode });
+                let j;
+                let primaryError = null;
+                try {
+                    j = await rtJob('/api/raw/embed-upload', { method: 'POST', headers: { ...upHeaders, 'x-raw-async': '1' }, body: blob });   // async job — immune to the proxy ceiling
+                } catch (error) {
+                    primaryError = error;
+                    const message = String((error && error.message) || error || '');
+                    // Only a definitive media/container failure should downgrade to
+                    // visual-only. A transport or polling failure can leave the original
+                    // job running; starting a montage job there would duplicate billing.
+                    if (!/could not read|could not reconstruct|ffmpeg|decode|decoder|codec|unsupported (?:video|container)|invalid data|moov atom/i.test(message)) {
+                        throw error;
+                    }
+                    let montage = prepared.fallbackMontage;
+                    if (!montage && typeof upload.extractVideoMontage === 'function') {
+                        try {
+                            const fallback = await upload.extractVideoMontage(file, { seconds: 5, frameCount: 5, frameWidth: 320, frameHeight: 569 });
+                            montage = fallback && fallback.dataUrl;
+                        } catch (fallbackError) {}
+                    }
+                    if (!montage) throw error;
+                    st.rawUpStage = 2;
+                    st.rawUpQueue = { i: n + 1, total: list.length, fallback: true };
+                    rtgUpdateRaw();
+                    rawTrace('visual-fallback-start', { reason: message.slice(0, 120) });
+                    j = await rtJob('/api/raw/embed-montage', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ montage, text: '', title: safeTitle, duration: realDur || null, async: true }),
+                    });
+                    if (j) {
+                        j._uploadWarning = 'The phone/server could not decode the audio upload, so this result recovered from the exact five visual frames. Text and combined-with-voice scores are unavailable.';
+                        j.transcriptSource = 'phone-safe visual recovery';
+                    }
+                    rawTrace('visual-fallback-done');
+                }
                 rawTrace('scored', { err: (j && j.error) ? String(j.error).slice(0, 80) : null });
                 if (!j || j.error) { st.rawUpErr = (file.name || '') + ': ' + ((j && j.error) || 'embed failed'); }
-                else { st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; }
-            } catch (e) { rawTrace('js-error', { msg: String(e.message || e).slice(0, 120) }); st.rawUpErr = (file.name || '') + ': ' + (String(e.message || e).includes('Failed to fetch') ? 'connection dropped (large upload or redeploy) — retry in a moment' : e.message); }
+                else {
+                    j._uploadMode = prepared.mode;
+                    j._originalBytes = prepared.originalBytes || file.size;
+                    j._transferBytes = prepared.transferBytes || blob.size;
+                    if (primaryError && !j._uploadWarning) j._uploadWarning = 'The original upload recovered automatically after: ' + String(primaryError.message || primaryError).slice(0, 140);
+                    st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+                }
+            } catch (e) {
+                rawTrace('js-error', { msg: String(e.message || e).slice(0, 120) });
+                st.rawUpErr = (file.name || '') + ': ' + fetchFail(e);
+            }
             window.clearInterval(tick);
         }
         rawTraceEnd();   // finished (with or without an error the panel already shows) — journal only unfinished runs
@@ -3912,6 +3995,7 @@ const JarvisRetention = (function () {
     }
     async function rtgPlaceHook() {
         if (!(st.rawFrames || []).some(Boolean)) { st.rawUpErr = 'add at least one frame first'; rtgUpdateRaw(); return; }
+        if (rawScoreBusy()) { rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before scoring these frames.'); return; }
         st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; st.rawUpQueue = null; rtgUpdateRaw();
         const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateRaw(); } }, 1600);
         try {
@@ -3953,6 +4037,7 @@ const JarvisRetention = (function () {
     // Score a GENERATED hook through the SAME embed+score pipeline as a built/uploaded hook,
     // so it lands in the same indicator + embedded-space display.
     async function scoreGenerated(k, fids, text) {
+        if (rawScoreBusy()) { rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before scoring this generated hook.'); return; }
         st.genScoringK = k; st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; rtgUpdateExp();
         const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1600);
         try {
@@ -3994,6 +4079,7 @@ const JarvisRetention = (function () {
     // Saved hooks open from their durable score artifact. A legacy hook without a complete artifact is
     // scored once, enriched in place, and then uses this same instant path on every later open.
     async function openSaved(id) {
+        if (rawScoreBusy()) { rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before opening this saved hook.'); return; }
         st.savedSel = id; st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; rtgUpdateExp();
         try {
             let stored = SAVEDDETAIL[id];

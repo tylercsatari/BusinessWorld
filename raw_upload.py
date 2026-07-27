@@ -12,7 +12,7 @@ to — consistent across all three channels/projections).
 Identical montage/whisper/embed to raw_embed.py so the upload's vectors are comparable.
 """
 import os, sys, json, base64, subprocess, tempfile, shutil, io, time, re
-import numpy as np, boto3, urllib.request
+import numpy as np, boto3, urllib.request, urllib.error
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 def env(k):
@@ -49,34 +49,78 @@ def embed(parts, tries=3):
     # bounded so 3 sequential embeds can't blow past the server's 240s kill (was 5×60s=300s PER call,
     # which intermittently hung the whole upload when Gemini was slow). 3×30s = 90s worst case per embed.
     body = json.dumps({'content': {'parts': parts}, 'outputDimensionality': DIM}).encode()
+    if not KEY:
+        raise RuntimeError('GEMINI_API_KEY is not configured')
+    last_error = 'unknown Gemini embedding failure'
     for a in range(tries):
+        retry_delay = 1.0 * (a + 1)
         try:
             req = urllib.request.Request(EMB_URL, data=body, method='POST', headers={'Content-Type': 'application/json', 'x-goog-api-key': KEY})
             with urllib.request.urlopen(req, timeout=30) as r:
                 return np.array(json.loads(r.read())['embedding']['values'], np.float32)
-        except Exception:
-            if a < tries - 1: time.sleep(1.0 * (a + 1)); continue
-            return None
+        except urllib.error.HTTPError as error:
+            try:
+                payload = json.loads(error.read().decode('utf-8', 'replace'))
+                detail = str((payload.get('error') or {}).get('message') or '')[:240]
+            except Exception:
+                detail = ''
+            last_error = f'Gemini embedding HTTP {error.code}' + (f': {detail}' if detail else '')
+            # Bad key, billing suspension, and exhausted project quota do not improve
+            # when retried seconds later. A 429 can also be a transient rate limit,
+            # so honor Retry-After and surface it only after bounded retries.
+            if error.code in (400, 401, 403):
+                raise RuntimeError(last_error)
+            if error.code == 429:
+                try: retry_delay = min(10.0, max(1.0, float(error.headers.get('Retry-After') or retry_delay)))
+                except Exception: pass
+        except Exception as error:
+            last_error = f'{type(error).__name__}: {str(error)[:220]}'
+        if a < tries - 1:
+            time.sleep(retry_delay)
+    raise RuntimeError(last_error)
 def img_part(b64): return {'inlineData': {'mimeType': 'image/jpeg', 'data': b64}}
 
 def gemini_transcribe(wav):
     """Transcribe via the Gemini API — used where Whisper/torch isn't installed
     (e.g. the Render box). Returns (text, is_voiceover)."""
-    try:
-        data = base64.b64encode(open(wav, 'rb').read()).decode()
-        url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent'
-        body = json.dumps({'contents': [{'parts': [
-            {'inlineData': {'mimeType': 'audio/wav', 'data': data}},
-            {'text': 'Transcribe ONLY the spoken words in this short audio, verbatim. If there is no speech (music or ambient noise only), reply with exactly: NO_SPEECH'}]}],
-            'generationConfig': {'temperature': 0, 'topP': 1, 'topK': 1}}).encode()   # greedy → deterministic transcript (text/together stay stable on re-upload)
-        req = urllib.request.Request(url, data=body, method='POST', headers={'Content-Type': 'application/json', 'x-goog-api-key': KEY})
-        with urllib.request.urlopen(req, timeout=60) as r:
-            j = json.loads(r.read())
-        t = (((j.get('candidates') or [{}])[0].get('content') or {}).get('parts') or [{}])[0].get('text', '').strip()
-        if not t or 'NO_SPEECH' in t.upper(): return '', False
-        return t, coherent(t)
-    except Exception:
-        return '', False
+    if not KEY:
+        raise RuntimeError('GEMINI_API_KEY is not configured for transcription')
+    data = base64.b64encode(open(wav, 'rb').read()).decode()
+    url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent'
+    body = json.dumps({'contents': [{'parts': [
+        {'inlineData': {'mimeType': 'audio/wav', 'data': data}},
+        {'text': 'Transcribe ONLY the spoken words in this short audio, verbatim. If there is no speech (music or ambient noise only), reply with exactly: NO_SPEECH'}]}],
+        'generationConfig': {'temperature': 0, 'topP': 1, 'topK': 1}}).encode()   # greedy → deterministic transcript (text/together stay stable on re-upload)
+    last_error = 'unknown Gemini transcription failure'
+    for attempt in range(3):
+        retry_delay = 1.0 * (attempt + 1)
+        try:
+            req = urllib.request.Request(url, data=body, method='POST', headers={'Content-Type': 'application/json', 'x-goog-api-key': KEY})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                j = json.loads(r.read())
+            t = (((j.get('candidates') or [{}])[0].get('content') or {}).get('parts') or [{}])[0].get('text', '').strip()
+            if not t:
+                raise RuntimeError('Gemini transcription returned no text')
+            if t.upper() == 'NO_SPEECH':
+                return '', False
+            return t, coherent(t)
+        except urllib.error.HTTPError as error:
+            try:
+                payload = json.loads(error.read().decode('utf-8', 'replace'))
+                detail = str((payload.get('error') or {}).get('message') or '')[:240]
+            except Exception:
+                detail = ''
+            last_error = f'Gemini transcription HTTP {error.code}' + (f': {detail}' if detail else '')
+            if error.code in (400, 401, 403):
+                raise RuntimeError(last_error)
+            if error.code == 429:
+                try: retry_delay = min(10.0, max(1.0, float(error.headers.get('Retry-After') or retry_delay)))
+                except Exception: pass
+        except Exception as error:
+            last_error = f'{type(error).__name__}: {str(error)[:220]}'
+        if attempt < 2:
+            time.sleep(retry_delay)
+    raise RuntimeError(last_error)
 
 def whisper_text(wav):
     """Whisper-tiny where available (matches how the dataset was transcribed) with a Gemini
@@ -109,8 +153,9 @@ def _montage_audio(src, mon, wav):
     if os.path.exists(mon):
         try:
             subprocess.run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-t', '5', '-i', src, '-vn', '-ar', '16000', '-ac', '1', wav], timeout=90)
-            if os.path.exists(wav) and os.path.getsize(wav) > 1000: txt, good = whisper_text(wav)
         except Exception: pass
+        if os.path.exists(wav) and os.path.getsize(wav) > 1000:
+            txt, good = whisper_text(wav)
     return txt, good
 
 def hook_inputs(src):

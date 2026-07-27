@@ -338,12 +338,17 @@ async function serveR2ObjectForRequest(req, res, key, contentType, opts = {}) {
 }
 
 const _limiters = new Map();
+let _serverStopping = false;
 function runLimited(name, limit, fn, front) {
     limit = Math.max(1, parseInt(limit, 10) || 1);
     let q = _limiters.get(name);
     if (!q) { q = { active: 0, waiters: [] }; _limiters.set(name, q); }
     return new Promise((resolve, reject) => {
         const run = () => {
+            if (_serverStopping) {
+                reject(new Error('server is shutting down; retry when the new instance is ready'));
+                return;
+            }
             q.active++;
             Promise.resolve().then(fn).then(resolve, reject).finally(() => {
                 q.active--;
@@ -351,7 +356,8 @@ function runLimited(name, limit, fn, front) {
                 if (next) next();
             });
         };
-        if (q.active < limit) run();
+        if (_serverStopping) reject(new Error('server is shutting down; retry when the new instance is ready'));
+        else if (q.active < limit) run();
         else if (front) q.waiters.unshift(run);   // interactive work jumps ahead of queued background scores
         else q.waiters.push(run);
     });
@@ -364,6 +370,7 @@ const runHeavyScoreInteractive = fn => runLimited('heavy-score', HEAVY_SCORE_LIM
 //    the scorer runs in-process, results persist to R2 so a redeploy can't lose them silently ──
 const _quantJobs = new Map();
 const _quantJobRequests = new Map();
+const _quantJobInitialPersists = new Map();
 const QUANT_JOB_INSTANCE = `${process.pid}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
 const QUANT_JOB_RESTART_GRACE_MS = Math.max(15000, parseInt(process.env.QUANT_JOB_RESTART_GRACE_MS || '45000', 10));
 function quantJobNamespace(namespace) {
@@ -373,6 +380,13 @@ function quantRequestId(req) {
     return String((req && req.headers && req.headers['x-quant-request-id']) || '')
         .replace(/[^a-z0-9_-]/gi, '')
         .slice(0, 96);
+}
+function quantJobExisting(kind, namespace = 'longform', requestId = '') {
+    namespace = quantJobNamespace(namespace);
+    requestId = String(requestId || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 96);
+    if (!requestId) return '';
+    const prior = _quantJobRequests.get(`${namespace}:${kind}:${requestId}`);
+    return prior && Date.now() - prior.ts < 20 * 60e3 ? prior.jid : '';
 }
 function quantJobSubmit(kind, runner, namespace = 'longform', requestId = '') {
     namespace = quantJobNamespace(namespace);
@@ -384,21 +398,39 @@ function quantJobSubmit(kind, runner, namespace = 'longform', requestId = '') {
     const rec = { jid, kind, namespace, requestId: requestId || null, instance: QUANT_JOB_INSTANCE, status: 'queued', ts: Date.now() };
     _quantJobs.set(`${namespace}:${jid}`, rec);
     if (requestKey) _quantJobRequests.set(requestKey, { jid, ts: Date.now() });
-    const persist = async () => {
-        try {
-            await cloud.uploadToR2(`${namespace}/jobs/${jid}.json`, Buffer.from(JSON.stringify(rec)), 'application/json');
-        } catch (error) {
-            console.warn(`[quant-job ${jid}] status persistence failed:`, error.message || error);
-        }
+    let persistChain = Promise.resolve();
+    const persist = () => {
+        const snapshot = Buffer.from(JSON.stringify(rec));
+        persistChain = persistChain.catch(() => {}).then(async () => {
+            try {
+                await cloud.uploadToR2(`${namespace}/jobs/${jid}.json`, snapshot, 'application/json');
+            } catch (error) {
+                console.warn(`[quant-job ${jid}] status persistence failed:`, error.message || error);
+            }
+        });
+        return persistChain;
     };
+    const initialPersist = persist();
+    _quantJobInitialPersists.set(`${namespace}:${jid}`, initialPersist);
+    initialPersist.finally(() => _quantJobInitialPersists.delete(`${namespace}:${jid}`));
     (async () => {
         // Serialize status writes so a slower queued write cannot overwrite
         // the newer running state.
-        await persist();
+        await initialPersist;
         rec.status = 'running'; rec.ts = Date.now();
         await persist();
+        let heartbeat = null;
+        if (kind.startsWith('raw-')) {
+            heartbeat = setInterval(() => {
+                if (rec.status !== 'running') return;
+                rec.ts = Date.now();
+                persist();
+            }, 15000);
+            heartbeat.unref();
+        }
         try { rec.result = await runner(rec); rec.status = 'done'; }
         catch (e) { rec.status = 'error'; rec.error = String((e && e.message) || e).slice(0, 300); }
+        finally { if (heartbeat) clearInterval(heartbeat); }
         rec.ts = Date.now();
         await persist();
         setTimeout(() => {
@@ -407,6 +439,10 @@ function quantJobSubmit(kind, runner, namespace = 'longform', requestId = '') {
         }, 20 * 60e3);
     })();
     return jid;
+}
+async function quantJobReady(jid, namespace = 'longform') {
+    const pending = _quantJobInitialPersists.get(`${quantJobNamespace(namespace)}:${jid}`);
+    if (pending) await pending;
 }
 async function quantJobGet(jid, namespace = 'longform') {
     namespace = quantJobNamespace(namespace);
@@ -668,9 +704,57 @@ const RAW_PYTHON = (() => {
     return 'python3';
 })();
 console.log('[raw-upload] using python:', RAW_PYTHON);
+const _rawScoreChildren = new Set();
+function spawnRawPython(args, options) {
+    const child = spawn(RAW_PYTHON, args, {
+        env: RAW_PY_ENV,
+        ...(options || {}),
+        detached: process.platform !== 'win32',
+    });
+    _rawScoreChildren.add(child);
+    child.once('close', () => _rawScoreChildren.delete(child));
+    child.once('error', () => _rawScoreChildren.delete(child));
+    return child;
+}
+function killRawPythonTree(child, signal = 'SIGKILL') {
+    if (!child || !child.pid) return;
+    try {
+        if (process.platform !== 'win32') process.kill(-child.pid, signal);
+        else child.kill(signal);
+    } catch (error) {
+        try { child.kill(signal); } catch (_) {}
+    }
+}
+function validateRawScoreResult(result) {
+    if (!result || typeof result !== 'object') throw new Error('scorer returned no JSON result');
+    if (result.error) throw new Error(result.error);
+    const missing = [];
+    const validPreview = value => Array.isArray(value) && value.length === 48 && value.every(Number.isFinite);
+    const validPlacement = channel => channel && Array.isArray(channel.neighbors)
+        && channel.neighbors.length > 0
+        && channel.neighbors.every(item => item && item.id != null && Number.isFinite(Number(item.sim)));
+    if (!result.montage) missing.push('5-frame montage');
+    if (!result.emb_preview || !validPreview(result.emb_preview.visual)) missing.push('visual embedding');
+    if (!result.emb_preview || !validPreview(result.emb_preview.together)) missing.push('combined embedding');
+    if (!result.indicators || !Object.keys(result.indicators).length) missing.push('indicator outputs');
+    const steerRequired = ['keep', 'ret5', 'views', 'outlier', 'gt10M', 'realviews']
+        .flatMap(metric => [`visual_${metric}`, `together_${metric}`]);
+    if (!result.steer || steerRequired.some(key => {
+        const output = result.steer && result.steer[key];
+        return !output || !Number.isFinite(Number(output.est));
+    })) missing.push('complete visual + combined steered outputs');
+    if (!result.channels || !validPlacement(result.channels.visual)) missing.push('visual map placement');
+    if (!result.channels || !validPlacement(result.channels.together)) missing.push('combined map placement');
+    if (missing.length) {
+        throw new Error(`scoring dependencies returned an incomplete result (${missing.join(', ')}); check Gemini credit/billing and /api/raw/upload-health`);
+    }
+    return result;
+}
 // Most recent raw_upload.py run (exit code, kill signal, stage markers) — surfaced in
 // /api/raw/upload-health so a scorer that the kernel OOM-kills is visible remotely.
 let lastRawScorer = null;
+let lastRawUpload = null;
+const _rawActiveTempPaths = new Set();
 function rawBoxStats() {
     const os = require('os');
     const mu = process.memoryUsage();
@@ -678,6 +762,22 @@ function rawBoxStats() {
     try {   // cgroup v2 — the REAL container limit (os.totalmem() reports the HOST inside containers)
         const lim = fs.readFileSync('/sys/fs/cgroup/memory.max', 'utf8').trim();
         st.cgroup = { limitMB: lim === 'max' ? null : Math.round(+lim / 1048576), currentMB: Math.round(+fs.readFileSync('/sys/fs/cgroup/memory.current', 'utf8') / 1048576) };
+        try { st.cgroup.peakMB = Math.round(+fs.readFileSync('/sys/fs/cgroup/memory.peak', 'utf8') / 1048576); } catch (e) {}
+        try {
+            st.cgroup.events = Object.fromEntries(fs.readFileSync('/sys/fs/cgroup/memory.events', 'utf8').trim().split('\n').map(line => {
+                const [key, value] = line.trim().split(/\s+/);
+                return [key, Number(value)];
+            }));
+        } catch (e) {}
+        try {
+            const memoryStat = Object.fromEntries(fs.readFileSync('/sys/fs/cgroup/memory.stat', 'utf8').trim().split('\n').map(line => {
+                const [key, value] = line.trim().split(/\s+/);
+                return [key, Number(value)];
+            }));
+            st.cgroup.anonMB = Math.round(Number(memoryStat.anon || 0) / 1048576);
+            st.cgroup.fileMB = Math.round(Number(memoryStat.file || 0) / 1048576);
+            st.cgroup.shmemMB = Math.round(Number(memoryStat.shmem || 0) / 1048576);
+        } catch (e) {}
     } catch (e) {
         try { st.cgroup = { limitMB: Math.round(+fs.readFileSync('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf8') / 1048576), currentMB: Math.round(+fs.readFileSync('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf8') / 1048576) }; } catch (e2) { st.cgroup = null; }
     }
@@ -685,9 +785,40 @@ function rawBoxStats() {
     try {
         st.rawembCacheMB = fs.readdirSync(os.tmpdir()).filter(f => f.startsWith('rawemb_')).map(f => { try { return { f, mb: Math.round(fs.statSync(path.join(os.tmpdir(), f)).size / 1048576) }; } catch (e) { return { f, mb: null }; } });
     } catch (e) { st.rawembCacheMB = null; }
+    try {
+        const rawTemps = fs.readdirSync(os.tmpdir()).filter(f => /^(rawup_|rawmon_|rawyt_)/.test(f));
+        st.rawTemp = {
+            files: rawTemps.length,
+            mb: Math.round(rawTemps.reduce((sum, file) => {
+                try { return sum + fs.statSync(path.join(os.tmpdir(), file)).blocks * 512; } catch (e) { return sum; }
+            }, 0) / 1048576),
+        };
+    } catch (e) { st.rawTemp = null; }
+    const heavy = _limiters.get('heavy-score');
+    st.heavyScore = heavy ? { active: heavy.active, queued: heavy.waiters.length, limit: HEAVY_SCORE_LIMIT } : { active: 0, queued: 0, limit: HEAVY_SCORE_LIMIT };
+    st.rawScoreChildren = _rawScoreChildren.size;
     st.lastScorer = lastRawScorer;
+    st.lastUpload = lastRawUpload;
     return st;
 }
+function sweepRawUploadTemps(maxAgeMs = 30 * 60e3) {
+    const os = require('os');
+    let removed = 0;
+    try {
+        for (const file of fs.readdirSync(os.tmpdir())) {
+            if (!/^(rawup_|rawmon_|rawyt_)/.test(file)) continue;
+            const target = path.join(os.tmpdir(), file);
+            if (_rawActiveTempPaths.has(target)) continue;
+            let age = 0;
+            try { age = Date.now() - fs.statSync(target).mtimeMs; } catch (e) { continue; }
+            if (age < maxAgeMs) continue;
+            try { fs.rmSync(target, { recursive: true, force: true }); removed++; } catch (e) {}
+        }
+    } catch (e) {}
+    if (removed) console.log(`[raw-upload] swept ${removed} abandoned temp item(s)`);
+}
+setTimeout(() => sweepRawUploadTemps(), 5000);
+setInterval(() => sweepRawUploadTemps(), 15 * 60e3);
 // Pre-warm the scorer's neighbour-library disk cache in the background shortly after boot.
 // A deploy wipes /tmp, and a cold warm streams ~900MB from R2 (~4MB/s on the deploy box →
 // minutes) — pre-warming means the first upload after a deploy scores at normal speed
@@ -699,14 +830,20 @@ if (process.env.R2_ACCESS_KEY_ID && process.env.RAW_PREWARM !== '0') setTimeout(
     // second copy concurrently and push the Render service over its memory limit.
     runHeavyScore(() => new Promise(resolve => {
         try {
-            const pw = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--prewarm'], { env: RAW_PY_ENV, stdio: ['ignore', 'ignore', 'pipe'] });
+            const pw = spawnRawPython([path.join(__dirname, 'raw_upload.py'), '--prewarm'], { stdio: ['ignore', 'ignore', 'pipe'] });
             let perr = '';
+            let timedOut = false;
+            const timer = setTimeout(() => {
+                timedOut = true;
+                killRawPythonTree(pw);
+            }, 8 * 60e3);
             pw.stderr.on('data', d => { perr += d; if (perr.length > 8192) perr = perr.slice(-4096); });
             pw.on('close', code => {
-                console.log('[raw-prewarm] exit', code, '—', String(perr).trim().split('\n').slice(-3).join(' | '));
+                clearTimeout(timer);
+                console.log('[raw-prewarm] exit', code, timedOut ? '(timeout)' : '', '—', String(perr).trim().split('\n').slice(-3).join(' | '));
                 resolve();
             });
-            pw.on('error', e => { console.log('[raw-prewarm] spawn failed:', e.message); resolve(); });
+            pw.on('error', e => { clearTimeout(timer); console.log('[raw-prewarm] spawn failed:', e.message); resolve(); });
         } catch (e) { console.log('[raw-prewarm] failed:', e.message); resolve(); }
     })).catch(e => console.log('[raw-prewarm] queue failed:', e.message));
 }, 15000);
@@ -1820,7 +1957,21 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/api/')) {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-Quant-Request-Id');
+        res.setHeader('Access-Control-Allow-Headers', [
+            'Content-Type',
+            'Authorization',
+            'X-API-Key',
+            'X-Quant-Request-Id',
+            'X-Raw-Ext',
+            'X-Raw-Title',
+            'X-Raw-Duration',
+            'X-Raw-Async',
+            'X-Raw-Upload-Mode',
+            'X-Raw-Sparse',
+            'X-Raw-Original-Size',
+            'X-Raw-Head-Size',
+            'X-Raw-Tail-Size',
+        ].join(', '));
         if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
     }
 
@@ -2019,11 +2170,12 @@ const server = http.createServer(async (req, res) => {
         const t0 = Date.now();
         try {
             const r = await runHeavyScoreInteractive(() => new Promise(ok => {
-                const py = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--image', tmpImg, '--text', 'selftest hook do not save', '--title', 'selftest'], { env: RAW_PY_ENV });
+                const py = spawnRawPython([path.join(__dirname, 'raw_upload.py'), '--image', tmpImg, '--text', 'selftest hook do not save', '--title', 'selftest']);
                 let out = '', err = '';
+                let timedOut = false;
                 py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} ok({ code: null, signal: 'TIMEOUT-420s', out, err }); }, 420000);
-                py.on('close', (code, signal) => { clearTimeout(timer); ok({ code, signal, out, err }); });
+                const timer = setTimeout(() => { timedOut = true; killRawPythonTree(py); }, 420000);
+                py.on('close', (code, signal) => { clearTimeout(timer); ok({ code, signal: timedOut ? 'TIMEOUT-420s' : signal, out, err }); });
                 py.on('error', e => { clearTimeout(timer); ok({ code: -1, signal: null, out, err: err + '\nspawn: ' + e.message }); });
             }));
             const ms = Date.now() - t0;
@@ -2157,15 +2309,17 @@ const server = http.createServer(async (req, res) => {
             const yTitle = String(body.title || '').slice(0, 80).trim();
             if (yTitle) ytArgs.push('--title', yTitle);
             const ytRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
-                const py = spawn(RAW_PYTHON, ytArgs, { env: RAW_PY_ENV });
+                const py = spawnRawPython(ytArgs);
                 let out = '', err = '';
+                let timedOut = false;
                 py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('YouTube score timeout (download + embed took >8 min)')); }, 480000);
+                const timer = setTimeout(() => { timedOut = true; killRawPythonTree(py); }, 480000);
                 py.on('close', () => {
                     clearTimeout(timer);
+                    if (timedOut) return no(new Error('YouTube score timeout (download + embed took >8 min)'));
                     const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
                     if (!line) return no(new Error('no result — ' + (err.trim().split('\n').pop() || 'no output').slice(-160)));
-                    try { const j = JSON.parse(line); return j.error ? no(new Error(j.error)) : ok(j); } catch (e) { no(e); }
+                    try { return ok(validateRawScoreResult(JSON.parse(line))); } catch (e) { no(e); }
                 });
                 py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
             }));
@@ -2192,46 +2346,169 @@ const server = http.createServer(async (req, res) => {
                     throw new Error('YouTube blocks this server and the Mac relay did not answer in 8 min — is the relay watcher running? (launchctl list | grep ytrelay)');
                 }
             };
-            if (body.async) { const jobId = quantJobSubmit('raw-embed-youtube', relayRunner, 'shorts', quantRequestId(req)); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return; }
+            if (body.async) {
+                const jobId = quantJobSubmit('raw-embed-youtube', relayRunner, 'shorts', quantRequestId(req));
+                await quantJobReady(jobId, 'shorts');
+                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return;
+            }
             const out = await relayRunner();
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(out));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
     if (pathname === '/api/raw/embed-upload' && req.method === 'POST') {
+        const requestId = quantRequestId(req);
+        const existingJobId = quantJobExisting('raw-embed-upload', 'shorts', requestId);
+        if (existingJobId) {
+            // A response can be lost after the server accepted an upload. The browser
+            // retries with the same id; reuse that job instead of writing/scoring twice.
+            req.on('error', () => {});
+            req.resume();
+            await quantJobReady(existingJobId, 'shorts');
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+            res.end(JSON.stringify({ ok: true, jobId: existingJobId, reused: true }));
+            return;
+        }
         const ext = (req.headers['x-raw-ext'] || 'mp4').replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'mp4';
         const title = (req.headers['x-raw-title'] || 'My upload').toString().slice(0, 80);
         const durH = parseFloat(req.headers['x-raw-duration']);   // real full-video length (client trims to 6s but sends this so realviews isn't skewed)
+        const uploadMode = String(req.headers['x-raw-upload-mode'] || 'direct').replace(/[^a-z-]/gi, '').slice(0, 24) || 'direct';
+        const sparse = String(req.headers['x-raw-sparse'] || '') === '1';
+        const logicalSize = Number(req.headers['x-raw-original-size'] || 0);
+        const headSize = Number(req.headers['x-raw-head-size'] || 0);
+        const tailSize = Number(req.headers['x-raw-tail-size'] || 0);
+        const DIRECT_MAX = 32 * 1024 * 1024;
+        const SPARSE_MAX = 72 * 1024 * 1024;
+        const LOGICAL_MAX = 8 * 1024 * 1024 * 1024;
+        const MAX = sparse ? SPARSE_MAX : DIRECT_MAX;
+        if (sparse && (
+            !Number.isSafeInteger(logicalSize) || !Number.isSafeInteger(headSize) || !Number.isSafeInteger(tailSize)
+            || logicalSize <= 0 || logicalSize > LOGICAL_MAX
+            || headSize <= 0 || tailSize <= 0
+            || headSize + tailSize >= logicalSize
+            || headSize + tailSize > SPARSE_MAX
+        )) {
+            req.resume();
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'invalid bounded phone-video upload metadata' }));
+            return;
+        }
+        const declaredLength = Number(req.headers['content-length'] || 0);
+        if (declaredLength > MAX) {
+            req.resume();
+            res.writeHead(413, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `prepared video transfer is too large (${Math.round(declaredLength / 1048576)} MB; max ${Math.round(MAX / 1048576)} MB)` }));
+            return;
+        }
         const os = require('os');
         const tmp = path.join(os.tmpdir(), `rawup_${Date.now()}_${Math.round(Math.random() * 1e6)}.${ext}`);
-        const MAX = 1024 * 1024 * 1024;   // 1 GB — STREAMED to disk (never buffered in RAM), so big phone videos don't OOM
+        _rawActiveTempPaths.add(tmp);
+        const cleanupTmp = () => {
+            _rawActiveTempPaths.delete(tmp);
+            try { fs.unlinkSync(tmp); } catch (error) {}
+        };
         const ws = fs.createWriteStream(tmp);
         let size = 0, done = false;
-        const fail = (code, msg) => { if (done) return; done = true; try { ws.destroy(); } catch (e) {} try { fs.unlinkSync(tmp); } catch (e) {} if (!res.headersSent) { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: msg })); } try { req.destroy(); } catch (e) {} };
+        lastRawUpload = {
+            stage: 'receiving',
+            ts: Date.now(),
+            mode: uploadMode,
+            sparse,
+            declaredMB: declaredLength ? Math.round(declaredLength / 1048576) : null,
+            logicalMB: sparse ? Math.round(logicalSize / 1048576) : null,
+            requestId: requestId || null,
+        };
+        const fail = (code, msg) => {
+            if (done) return;
+            done = true;
+            try { ws.destroy(); } catch (e) {}
+            cleanupTmp();
+            lastRawUpload = { ...(lastRawUpload || {}), stage: 'error', finishedAt: Date.now(), error: String(msg).slice(0, 220), receivedMB: Math.round(size / 1048576) };
+            if (!res.headersSent) {
+                res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+                res.end(JSON.stringify({ error: msg }));
+            }
+            // Do not destroy the socket after writing JSON. On mobile that turns a useful
+            // 4xx into the browser's opaque "Failed to fetch"; just drain the remaining body.
+            try { req.resume(); } catch (e) {}
+        };
         req.on('data', c => {
             if (done) return;
             size += c.length;
-            if (size > MAX) { fail(413, 'video too large (over 1 GB) — trim it to the first ~10 seconds and re-upload (only the first 5s is scored)'); return; }
+            if (size > MAX) { fail(413, `prepared video transfer exceeded ${Math.round(MAX / 1048576)} MB`); return; }
             if (!ws.write(c)) { req.pause(); ws.once('drain', () => { if (!done) req.resume(); }); }   // back-pressure so a fast upload can't buffer in RAM
         });
         req.on('error', () => fail(400, 'upload stream error — check your connection and retry'));
+        req.on('aborted', () => fail(400, 'upload was interrupted before it reached the server'));
         ws.on('error', e => fail(500, 'write failed: ' + e.message));
         req.on('end', () => {
             if (done) return;
             if (size === 0) return fail(400, 'empty upload');
             ws.end(async () => {
+                if (sparse && size !== headSize + tailSize) {
+                    return fail(400, `bounded upload was incomplete (${size} of ${headSize + tailSize} bytes)`);
+                }
+                if (sparse) {
+                    // The browser sends only [opening bytes][final metadata bytes]. Expand
+                    // that compact transfer into a sparse file at the original offsets:
+                    // ffmpeg sees a normal MP4/MOV, while the unwritten middle consumes no
+                    // disk blocks or request memory.
+                    let fd = null;
+                    try {
+                        fd = fs.openSync(tmp, 'r+');
+                        const tail = Buffer.allocUnsafe(tailSize);
+                        let read = 0;
+                        while (read < tailSize) {
+                            const count = fs.readSync(fd, tail, read, tailSize - read, headSize + read);
+                            if (!count) throw new Error(`tail read ${read}/${tailSize}`);
+                            read += count;
+                        }
+                        // Remove the packed tail before extending the file. Otherwise the
+                        // reconstruction would be [head][tail][hole][tail], corrupting the
+                        // media bytes immediately after the retained opening.
+                        fs.ftruncateSync(fd, headSize);
+                        fs.ftruncateSync(fd, logicalSize);
+                        let written = 0;
+                        while (written < tailSize) {
+                            written += fs.writeSync(fd, tail, written, tailSize - written, logicalSize - tailSize + written);
+                        }
+                    } catch (error) {
+                        if (fd != null) { try { fs.closeSync(fd); } catch (_) {} fd = null; }
+                        return fail(400, 'could not reconstruct the bounded phone video: ' + error.message);
+                    } finally {
+                        if (fd != null) { try { fs.closeSync(fd); } catch (_) {} }
+                    }
+                }
+                lastRawUpload = {
+                    ...(lastRawUpload || {}),
+                    stage: 'queued',
+                    receivedMB: Math.round(size / 1048576),
+                    logicalMB: Math.round((sparse ? logicalSize : size) / 1048576),
+                    receivedAt: Date.now(),
+                };
                 const script = path.join(__dirname, 'raw_upload.py');
                 const pyArgs = [script, '--file', tmp, '--title', title];
                 if (durH > 0 && isFinite(durH)) pyArgs.push('--duration', String(Math.round(durH)));
                 const upT0 = Date.now();
                 const upRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
-                        const py = spawn(RAW_PYTHON, pyArgs, { env: RAW_PY_ENV });
+                        lastRawUpload = { ...(lastRawUpload || {}), stage: 'scoring', scoringAt: Date.now(), cgroupBeforeMB: (rawBoxStats().cgroup || {}).currentMB || null };
+                        const py = spawnRawPython(pyArgs);
                         let out = '', err = '';
+                        let timedOut = false;
                         py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                        const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout (>7 min — even a cold cache warm fits this; check /api/raw/upload-health)')); }, 420000);
+                        const timer = setTimeout(() => { timedOut = true; killRawPythonTree(py); }, 420000);
                         py.on('close', (code, signal) => {
                             clearTimeout(timer);
                             lastRawScorer = { kind: 'embed-upload', ts: Date.now(), ms: Date.now() - upT0, code, signal, stderrTail: err.trim().split('\n').slice(-4) };
+                            lastRawUpload = {
+                                ...(lastRawUpload || {}),
+                                stage: code === 0 && !signal ? 'finished' : 'scorer-error',
+                                finishedAt: Date.now(),
+                                scorerCode: code,
+                                scorerSignal: signal || null,
+                                cgroupAfterMB: (rawBoxStats().cgroup || {}).currentMB || null,
+                            };
+                            if (timedOut) return no(new Error('embedding timeout (>7 min — even a cold cache warm fits this; check /api/raw/upload-health)'));
                             const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
                             if (!line) return no(new Error('embedding produced no result — ' + (signal ? `scorer killed (${signal}${signal === 'SIGKILL' ? ', likely out of memory' : ''}) — ` : '') + (err.trim().split('\n').pop() || 'no output').slice(-160)));
                             ok(line);
@@ -2239,23 +2516,30 @@ const server = http.createServer(async (req, res) => {
                         py.on('error', e => { clearTimeout(timer); no(new Error('spawn failed: ' + e.message)); });
                     }));
                 if (String(req.headers['x-raw-async'] || '') === '1') {
+                    const racedJobId = quantJobExisting('raw-embed-upload', 'shorts', requestId);
+                    if (racedJobId) {
+                        cleanupTmp();
+                        await quantJobReady(racedJobId, 'shorts');
+                        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+                        res.end(JSON.stringify({ ok: true, jobId: racedJobId, reused: true }));
+                        return;
+                    }
                     const jobId = quantJobSubmit('raw-embed-upload', async () => {
                         try {
-                            const result = JSON.parse(await upRunner());
-                            if (result && result.error) throw new Error(result.error);
-                            return result;
+                            return validateRawScoreResult(JSON.parse(await upRunner()));
                         }
-                        finally { try { fs.unlinkSync(tmp); } catch (_) {} }
-                    }, 'shorts', quantRequestId(req));
+                        finally { cleanupTmp(); }
+                    }, 'shorts', requestId);
+                    await quantJobReady(jobId, 'shorts');
                     res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return;
                 }
                 try {
-                    const line = await upRunner();
-                    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(line);
+                    const result = validateRawScoreResult(JSON.parse(await upRunner()));
+                    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(result));
                 } catch (e) {
                     res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message }));
                 } finally {
-                    try { fs.unlinkSync(tmp); } catch (_) {}
+                    cleanupTmp();
                 }
             });
         });
@@ -2308,12 +2592,14 @@ const server = http.createServer(async (req, res) => {
             const monDur = parseFloat(j.duration);
             if (monDur > 0 && isFinite(monDur)) monArgs.push('--duration', String(Math.round(monDur)));
             const monRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
-                    const py = spawn(RAW_PYTHON, monArgs, { env: RAW_PY_ENV });
+                    const py = spawnRawPython(monArgs);
                     let out = '', err = '';
+                    let timedOut = false;
                     py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
-                    const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} no(new Error('embedding timeout (>5 min)')); }, 300000);
+                    const timer = setTimeout(() => { timedOut = true; killRawPythonTree(py); }, 300000);
                     py.on('close', () => {
                         clearTimeout(timer);
+                        if (timedOut) return no(new Error('embedding timeout (>5 min)'));
                         const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
                         if (!line) return no(new Error('embedding produced no result — ' + (err.trim().split('\n').pop() || 'no output').slice(-160)));
                         ok(line);
@@ -2323,17 +2609,16 @@ const server = http.createServer(async (req, res) => {
             if (j.async) {
                 const jobId = quantJobSubmit('raw-embed-montage', async () => {
                     try {
-                        const result = JSON.parse(await monRunner());
-                        if (result && result.error) throw new Error(result.error);
-                        return result;
+                        return validateRawScoreResult(JSON.parse(await monRunner()));
                     }
                     finally { try { fs.unlinkSync(tmp); } catch (_) {} }
                 }, 'shorts', quantRequestId(req));
+                await quantJobReady(jobId, 'shorts');
                 res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, jobId })); return;
             }
             try {
-                const line = await monRunner();
-                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(line);
+                const result = validateRawScoreResult(JSON.parse(await monRunner()));
+                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(result));
             } catch (e) {
                 res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message }));
             } finally {
@@ -11742,11 +12027,11 @@ async function scoreMontage(buf, text, title) {
     fs.writeFileSync(tmp, buf);
     try {
         return await runHeavyScore(() => new Promise((ok, no) => {
-            const py = spawn(RAW_PYTHON, [path.join(__dirname, 'raw_upload.py'), '--image', tmp, '--text', String(text || '').slice(0, 2000), '--title', String(title || 'grind').slice(0, 80)], { env: RAW_PY_ENV });
+            const py = spawnRawPython([path.join(__dirname, 'raw_upload.py'), '--image', tmp, '--text', String(text || '').slice(0, 2000), '--title', String(title || 'grind').slice(0, 80)]);
             let out = '', err2 = '';
             py.stdout.on('data', d => out += d); py.stderr.on('data', d => err2 += d);
-            const t = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 150000);
-            py.on('close', () => { clearTimeout(t); const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop(); if (!line) return no(new Error('scorer: ' + (err2.trim().split('\n').pop() || 'no output').slice(-140))); try { const j = JSON.parse(line); j.error ? no(new Error(j.error)) : ok(j); } catch (e) { no(e); } });
+            const t = setTimeout(() => { killRawPythonTree(py); }, 150000);
+            py.on('close', () => { clearTimeout(t); const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop(); if (!line) return no(new Error('scorer: ' + (err2.trim().split('\n').pop() || 'no output').slice(-140))); try { ok(validateRawScoreResult(JSON.parse(line))); } catch (e) { no(e); } });
             py.on('error', no);
         }));
     } finally { try { fs.unlinkSync(tmp); } catch (e) {} }
@@ -13377,6 +13662,40 @@ async function longQuantGrindQueue() {
     }
 }
 setInterval(() => { longQuantGrindQueue().catch(() => {}); }, 5000);
+
+// Phone video probes are bounded in bytes, but a slow cellular uplink can
+// legitimately take more than Node's five-minute default request timeout.
+// The client has its own ten-minute abort and the route enforces a 72 MB cap.
+server.requestTimeout = Math.max(5 * 60e3, parseInt(process.env.SERVER_REQUEST_TIMEOUT_MS || String(12 * 60e3), 10));
+server.headersTimeout = Math.max(65000, parseInt(process.env.SERVER_HEADERS_TIMEOUT_MS || '65000', 10));
+function stopServer(signal) {
+    if (_serverStopping) return;
+    _serverStopping = true;
+    // Reject queued scorers before terminating the active tree. Otherwise the
+    // limiter would start the next memory-heavy process as the first one exits.
+    for (const limiter of _limiters.values()) {
+        for (const waiter of limiter.waiters.splice(0)) waiter();
+    }
+    for (const child of _rawScoreChildren) killRawPythonTree(child, 'SIGTERM');
+    let serverClosed = false;
+    server.close(() => { serverClosed = true; });
+    const settled = setInterval(() => {
+        const active = Array.from(_limiters.values()).reduce((sum, limiter) => sum + limiter.active, 0);
+        if (!serverClosed || _rawScoreChildren.size || active) return;
+        clearInterval(settled);
+        // Leave a short window for the async job's final R2 status write.
+        setTimeout(() => process.exit(0), 1000).unref();
+    }, 100);
+    const force = setTimeout(() => {
+        clearInterval(settled);
+        for (const child of _rawScoreChildren) killRawPythonTree(child, 'SIGKILL');
+        process.exit(0);
+    }, 8000);
+    force.unref();
+    console.log(`[shutdown] ${signal}: stopped accepting requests; terminating ${_rawScoreChildren.size} raw scorer process group(s)`);
+}
+process.once('SIGTERM', () => stopServer('SIGTERM'));
+process.once('SIGINT', () => stopServer('SIGINT'));
 
 // Initialize R2 cloud storage before accepting requests
 cloud.initR2();
