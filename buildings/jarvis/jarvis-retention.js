@@ -10,13 +10,13 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', amber: '#f59e0b', accent: '#38bdf8' };
-    let root = null, mountMode = 'full', DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, EXPPLOTS = {}, PREDICTORLAB = null, PREDICTORSTATUS = null, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, SAVEDCHANNELS = null, SAVEDCHANNELDETAIL = {}, SAVEDCHANNELANALYSIS = {}, SAVEDCHANNELVIDEOCACHE = {}, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
+    let root = null, mountMode = 'full', DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, EXPPLOTS = {}, PREDICTORLAB = null, PREDICTORSTATUS = null, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, SAVEDCHANNELS = null, SAVEDCHANNELDETAIL = {}, SAVEDCHANNELANALYSIS = {}, SAVEDCHANNELVALIDATION = null, SAVEDCHANNELVIDEOCACHE = {}, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     let PROMISE_UI = null, OPERATIONS_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1 };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationProtocol: 'video', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationSort: 'selectedError', savedValidationShow: 60, savedValidationExpanded: null };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
@@ -3692,7 +3692,23 @@ const JarvisRetention = (function () {
         const scstop = e.target.closest('[data-savedchannelstop]'); if (scstop) { savedChannelAction(scstop.getAttribute('data-savedchannelstop'), 'stop'); return; }
         const scresume = e.target.closest('[data-savedchannelresume]'); if (scresume) { savedChannelAction(scresume.getAttribute('data-savedchannelresume'), 'resume'); return; }
         const scdelete = e.target.closest('[data-savedchanneldelete]'); if (scdelete) { savedChannelAction(scdelete.getAttribute('data-savedchanneldelete'), 'delete'); return; }
-        const sctab = e.target.closest('[data-savedchanneltab]'); if (sctab) { st.savedChannelTab = sctab.getAttribute('data-savedchanneltab'); if ((st.savedChannelTab === 'analysis' || st.savedChannelTab === 'atlas') && st.savedChannelSel) loadSavedChannelAnalysis(st.savedChannelSel); rtgUpdateExp(); return; }
+        const sctab = e.target.closest('[data-savedchanneltab]'); if (sctab) {
+            st.savedChannelTab = sctab.getAttribute('data-savedchanneltab');
+            if ((st.savedChannelTab === 'analysis' || st.savedChannelTab === 'atlas') && st.savedChannelSel) loadSavedChannelAnalysis(st.savedChannelSel);
+            if (st.savedChannelTab === 'validation') loadSavedChannelValidation();
+            rtgUpdateExp(); return;
+        }
+        const scvalidationscope = e.target.closest('[data-savedvalidationscope]'); if (scvalidationscope) { st.savedValidationScope = scvalidationscope.getAttribute('data-savedvalidationscope'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
+        const scvalidationprotocol = e.target.closest('[data-savedvalidationprotocol]'); if (scvalidationprotocol) { st.savedValidationProtocol = scvalidationprotocol.getAttribute('data-savedvalidationprotocol'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
+        const scvalidationtarget = e.target.closest('[data-savedvalidationtarget]'); if (scvalidationtarget) {
+            st.savedValidationTarget = scvalidationtarget.getAttribute('data-savedvalidationtarget');
+            st.savedValidationFeature = null; st.savedValidationShow = 60; rtgUpdateExp(); return;
+        }
+        const scvalidationfeature = e.target.closest('[data-savedvalidationfeature]'); if (scvalidationfeature) { st.savedValidationFeature = scvalidationfeature.getAttribute('data-savedvalidationfeature'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
+        const scvalidationsort = e.target.closest('[data-savedvalidationsort]'); if (scvalidationsort) { st.savedValidationSort = scvalidationsort.getAttribute('data-savedvalidationsort'); rtgUpdateExp(); return; }
+        if (e.target.closest('[data-savedvalidationmore]')) { st.savedValidationShow = (st.savedValidationShow || 60) + 60; rtgUpdateExp(); return; }
+        if (e.target.closest('[data-savedvalidationreload]')) { loadSavedChannelValidation(true); return; }
+        const scvalidationexpand = e.target.closest('[data-savedvalidationexpand]'); if (scvalidationexpand) { const id = scvalidationexpand.getAttribute('data-savedvalidationexpand'); st.savedValidationExpanded = st.savedValidationExpanded === id ? null : id; rtgUpdateExp(); return; }
         const scatlasscale = e.target.closest('[data-savedchannelatlasscale]'); if (scatlasscale) { st.savedChannelAtlasScale = scatlasscale.getAttribute('data-savedchannelatlasscale'); rtgUpdateExp(); return; }
         const scgroup = e.target.closest('[data-savedchannelgroup]'); if (scgroup) { st.savedChannelGroup = scgroup.getAttribute('data-savedchannelgroup'); st.savedChannelFeature = null; st.savedChannelMinPct = 0; st.savedChannelSort = st.savedChannelGroup === 'views' ? 'views' : 'feature'; st.savedChannelShow = 60; rtgUpdateExp(); return; }
         const scfeature = e.target.closest('[data-savedchannelfeature]'); if (scfeature) { st.savedChannelFeature = scfeature.getAttribute('data-savedchannelfeature'); st.savedChannelSort = 'feature'; st.savedChannelShow = 60; rtgUpdateExp(); return; }
@@ -4189,7 +4205,10 @@ const JarvisRetention = (function () {
             const oldFingerprint = previous && [previous.completed, previous.failed, previous.discovered].join(':');
             const nextFingerprint = [j.completed, j.failed, j.discovered].join(':');
             const analysisChanged = previous && previous.analysisFingerprint && j.analysisFingerprint && previous.analysisFingerprint !== j.analysisFingerprint;
-            if (analysisChanged || (oldFingerprint && oldFingerprint !== nextFingerprint)) delete SAVEDCHANNELANALYSIS[id];
+            if (analysisChanged || (oldFingerprint && oldFingerprint !== nextFingerprint)) {
+                delete SAVEDCHANNELANALYSIS[id];
+                if (id === 'chd3f5a3dae83f3382' || id === 'ch87ccaa3dd3383515') SAVEDCHANNELVALIDATION = null;
+            }
             return j;
         } catch (e) {
             SAVEDCHANNELDETAIL[id] = { ...(previous || {}), id, loading: false, error: fetchFail(e) };
@@ -4244,6 +4263,8 @@ const JarvisRetention = (function () {
     }
     async function openSavedChannel(id) {
         st.savedChannelSel = id; st.savedChannelShow = 60; st.savedChannelErr = null;
+        if (id === 'chd3f5a3dae83f3382') st.savedValidationScope = 'tyler';
+        if (id === 'ch87ccaa3dd3383515') st.savedValidationScope = 'hafu';
         if (!SAVEDCHANNELDETAIL[id]) { SAVEDCHANNELDETAIL[id] = { loading: 1, id }; rtgUpdateExp(); }
         await loadSavedChannelDetail(id, true); rtgUpdateExp();
     }
@@ -4254,6 +4275,16 @@ const JarvisRetention = (function () {
             const j = await rtFetchJson(`/api/raw/saved-channel/${id}/analysis`, { cache: force ? 'reload' : 'default' }, 4);
             SAVEDCHANNELANALYSIS[id] = j;
         } catch (e) { SAVEDCHANNELANALYSIS[id] = { error: fetchFail(e) }; }
+        rtgUpdateExp();
+    }
+    async function loadSavedChannelValidation(force) {
+        if (SAVEDCHANNELVALIDATION && !force && !SAVEDCHANNELVALIDATION.error) return;
+        SAVEDCHANNELVALIDATION = { loading: 1 }; rtgUpdateExp();
+        try {
+            SAVEDCHANNELVALIDATION = await rtFetchJson('/api/raw/saved-channel-validation', { cache: force ? 'reload' : 'default' }, 4);
+        } catch (e) {
+            SAVEDCHANNELVALIDATION = { error: fetchFail(e) };
+        }
         rtgUpdateExp();
     }
     async function openSavedChannelVideo(channelId, videoId) {
@@ -4295,6 +4326,7 @@ const JarvisRetention = (function () {
     function savedChannelFeatureDisplay(definition, cell) {
         if (!cell || cell.value == null || !isFinite(cell.value)) return '—';
         if (definition.unit === 'views') return fv(cell.value);
+        if (definition.unit === 'log10_views') return fv(Math.max(0, Math.pow(10, cell.value) - 1));
         if (definition.unit === 'probability') return (cell.value * 100).toFixed(0) + '%';
         if (definition.unit === 'percent') return cell.value.toFixed(0) + '%';
         return Math.abs(cell.value) >= 100 ? cell.value.toFixed(0) : cell.value.toFixed(2);
@@ -5268,6 +5300,213 @@ const JarvisRetention = (function () {
           <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:stretch">${page.map(card).join('')}</div>
           ${shown.length > limit ? `<div style="text-align:center;margin-top:12px"><span data-savedchannelmore style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:7px;padding:5px 16px;font-size:10px;font-weight:800">Load ${Math.min(60, shown.length - limit)} more · ${shown.length - limit} left</span></div>` : ''}`;
     }
+    function savedValidationActual(row, target) {
+        const actual = row && row.actual || {};
+        if (target === 'keep') return actual.keep;
+        if (target === 'ret5') return actual.ret5;
+        if (target === 'views' || target === 'realviews') return actual.viewsCurrent;
+        if (target === 'outlier') return actual.outlierCurrent;
+        if (target === 'gt10M') return actual.hit10MCurrent;
+        return null;
+    }
+    function savedValidationDefinitions(validation, protocol, target) {
+        const definitions = validation && validation.featureContract && validation.featureContract.features || [];
+        return definitions.filter(definition => definition.target === target && (protocol === 'stored' || definition.group !== 'novelty'));
+    }
+    function savedValidationRows(validation, scope) {
+        const rows = validation && validation.rows || [];
+        return scope === 'pooled' ? rows : rows.filter(row => row.accountId === scope);
+    }
+    function savedValidationStoredCell(validation, row, key) {
+        const definitions = validation && validation.featureContract && validation.featureContract.features || [];
+        const index = definitions.findIndex(definition => definition.key === key);
+        return index < 0 ? { value: null, percentile: null } : {
+            value: row.storedRaw && row.storedRaw[index],
+            percentile: row.storedPercentile && row.storedPercentile[index],
+        };
+    }
+    function savedValidationPrediction(validation, row, definition, protocol) {
+        if (!row || !definition) return null;
+        if (protocol === 'stored') {
+            const value = savedValidationStoredCell(validation, row, definition.key).value;
+            if (value == null || !isFinite(+value)) return null;
+            return definition.unit === 'log10_views' ? Math.max(0, Math.pow(10, +value) - 1) : +value;
+        }
+        const featureName = definition.key + '.raw';
+        const index = (row.blindFeatureNames || []).indexOf(featureName);
+        const values = protocol === 'account' ? row.blindAccountHeldOut : row.blindVideoHeldOut;
+        const value = index >= 0 && values && values[index] != null ? +values[index] : null;
+        if (value == null || !isFinite(value)) return null;
+        return definition.target === 'views' || definition.target === 'realviews' || definition.target === 'outlier'
+            ? Math.max(0, Math.pow(10, value) - 1)
+            : value;
+    }
+    function savedValidationFormat(value, target) {
+        if (value == null || !isFinite(+value)) return '—';
+        if (target === 'views' || target === 'realviews') return fv(+value);
+        if (target === 'keep' || target === 'ret5') return (+value).toFixed(1) + '%';
+        if (target === 'gt10M') return (+value * 100).toFixed(1) + '%';
+        return Math.abs(+value) >= 100 ? (+value).toFixed(0) : (+value).toFixed(2);
+    }
+    function savedValidationError(actual, predicted, target) {
+        if (actual == null || predicted == null || !isFinite(+actual) || !isFinite(+predicted)) return null;
+        if (target === 'views' || target === 'realviews' || target === 'outlier') {
+            const low = Math.max(1e-9, Math.min(+actual + (target === 'outlier' ? 1e-9 : 1), +predicted + (target === 'outlier' ? 1e-9 : 1)));
+            const high = Math.max(+actual + (target === 'outlier' ? 1e-9 : 1), +predicted + (target === 'outlier' ? 1e-9 : 1));
+            return high / low;
+        }
+        return Math.abs(+predicted - +actual);
+    }
+    function savedValidationMetricFor(scope, protocol, featureKey) {
+        if (!scope) return null;
+        if (protocol === 'stored') {
+            const entry = (scope.storedIndicators || []).find(item => item.key === featureKey);
+            return entry && entry.metrics && entry.metrics.raw;
+        }
+        const list = protocol === 'account' ? scope.blindAccountIndicators : scope.blindVideoIndicators;
+        const entry = (list || []).find(item => item.key === featureKey + '.raw');
+        return entry && entry.metrics;
+    }
+    function savedValidationMetricSummary(metrics, target) {
+        if (!metrics || !metrics.n) return 'no matched outcomes';
+        if (target === 'gt10M') return `AUC ${fmtv(metrics.auc, 3)} · Brier ${fmtv(metrics.brier, 3)} · n=${metrics.n}`;
+        const error = target === 'views' || target === 'realviews' || target === 'outlier'
+            ? `${fmtv(metrics.medianFactorError, 2)}× median error`
+            : `${fmtv(metrics.mae, 2)} pp MAE`;
+        return `ρ ${fmtv(metrics.spearman, 3)} · R² ${fmtv(metrics.r2, 3)} · ${error} · n=${metrics.n}`;
+    }
+    function savedValidationAccuracyAtlas(scope, protocol, definitions, selectedKey) {
+        if (!scope || !definitions.length) return '';
+        const rows = definitions.map(definition => {
+            const metrics = savedValidationMetricFor(scope, protocol, definition.key) || {};
+            const binary = definition.target === 'gt10M';
+            const displayed = binary ? metrics.auc : metrics.spearman;
+            const signed = displayed == null ? null : (binary ? (+displayed - .5) * 2 : +displayed);
+            const width = signed == null ? 0 : Math.min(50, Math.abs(signed) * 50);
+            const left = signed == null || signed >= 0 ? 50 : 50 - width;
+            const color = signed == null ? C.border2 : signed >= 0 ? C.green : C.red;
+            const selected = selectedKey === definition.key;
+            return `<div data-savedvalidationfeature="${esc(definition.key)}" style="cursor:pointer;display:grid;grid-template-columns:minmax(118px,1.05fr) minmax(125px,1fr) minmax(150px,1.25fr);gap:8px;align-items:center;padding:6px 7px;border:1px solid ${selected ? C.cyan : C.border};background:${selected ? C.cyan + '0d' : C.card2}">
+              <div style="min-width:0"><div style="font-size:9px;font-weight:900;color:${savedChannelFeatureColor(definition.group)};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(definition.group === 'together' ? 'both' : definition.group)} · ${esc(definition.label)}</div><div style="font-size:7.5px;color:${C.faint}">${metrics.n || 0} matched</div></div>
+              <div style="position:relative;height:13px;background:${C.card};border:1px solid ${C.border};overflow:hidden"><span style="position:absolute;left:50%;top:0;bottom:0;border-left:1px solid ${C.mute}"></span>${signed != null ? `<span style="position:absolute;left:${left}%;width:${width}%;top:2px;bottom:2px;background:${color}"></span>` : ''}</div>
+              <div style="font-size:8px;color:${C.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(savedValidationMetricSummary(metrics, definition.target))}</div></div>`;
+        }).join('');
+        return `<div style="overflow:auto"><div style="min-width:520px;display:grid;gap:3px">${rows}</div></div>`;
+    }
+    function savedValidationScatter(rows, target, prediction, title) {
+        const points = (rows || []).map(row => ({
+            row,
+            actual: savedValidationActual(row, target),
+            predicted: prediction(row),
+        })).filter(point => point.actual != null && point.predicted != null && isFinite(+point.actual) && isFinite(+point.predicted));
+        if (!points.length) return note('No matched actual/predicted pairs are available for this view.', C.amber);
+        const logarithmic = target === 'views' || target === 'realviews' || target === 'outlier';
+        const coordinate = value => logarithmic ? Math.log10(Math.max(0, +value) + 1) : +value;
+        const values = points.flatMap(point => [coordinate(point.actual), coordinate(point.predicted)]);
+        let lo = Math.min(...values), hi = Math.max(...values);
+        if (lo === hi) { lo -= 1; hi += 1; }
+        const margin = (hi - lo) * .05; lo -= margin; hi += margin;
+        const W = 520, H = 310, left = 48, right = 15, top = 17, bottom = 39;
+        const X = value => left + (coordinate(value) - lo) / (hi - lo) * (W - left - right);
+        const Y = value => H - bottom - (coordinate(value) - lo) / (hi - lo) * (H - top - bottom);
+        let svg = `<rect x="${left}" y="${top}" width="${W - left - right}" height="${H - top - bottom}" fill="${C.card2}"/><line x1="${X(logarithmic ? Math.max(0, Math.pow(10, lo) - 1) : lo)}" y1="${Y(logarithmic ? Math.max(0, Math.pow(10, lo) - 1) : lo)}" x2="${X(logarithmic ? Math.max(0, Math.pow(10, hi) - 1) : hi)}" y2="${Y(logarithmic ? Math.max(0, Math.pow(10, hi) - 1) : hi)}" stroke="${C.mute}" stroke-dasharray="4 3"/>`;
+        points.forEach(point => {
+            const color = point.row.accountId === 'tyler' ? C.cyan : C.purple;
+            svg += `<circle data-savedchannelvideo="${esc(point.row.channelId)}:${esc(point.row.id)}" cx="${X(point.actual).toFixed(1)}" cy="${Y(point.predicted).toFixed(1)}" r="3.6" fill="${color}" opacity=".68" style="cursor:pointer"><title>${esc(point.row.accountName)} · ${esc(point.row.title)} · actual ${savedValidationFormat(point.actual, target)} · predicted ${savedValidationFormat(point.predicted, target)}</title></circle>`;
+        });
+        const lowLabel = logarithmic ? savedValidationFormat(Math.max(0, Math.pow(10, lo) - 1), target) : savedValidationFormat(lo, target);
+        const highLabel = logarithmic ? savedValidationFormat(Math.max(0, Math.pow(10, hi) - 1), target) : savedValidationFormat(hi, target);
+        svg += `<text x="${left}" y="${H - 24}" fill="${C.faint}" font-size="8">${esc(lowLabel)}</text><text x="${W - right}" y="${H - 24}" text-anchor="end" fill="${C.faint}" font-size="8">${esc(highLabel)}</text><text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="9">actual ${esc(target)}${logarithmic ? ' · log scale' : ''}</text><text x="11" y="${H / 2}" transform="rotate(-90 11 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">predicted ${esc(target)}${logarithmic ? ' · log scale' : ''}</text>`;
+        return `<div><div style="font-size:10px;font-weight:900;color:${C.text};margin-bottom:4px">${esc(title)}</div><div style="font-size:8px;color:${C.mute};margin-bottom:4px"><span style="color:${C.cyan}">● Tyler</span> · <span style="color:${C.purple}">● Hafu</span> · dashed line = exact prediction · click any point</div><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border:1px solid ${C.border}">${svg}</svg></div>`;
+    }
+    function savedValidationModelCard(model) {
+        if (!model) return '';
+        const metrics = model.metrics || {}, views = /^Views/.test(model.label || '');
+        const color = metrics.r2 != null && metrics.r2 > 0 ? C.green : C.red;
+        return `<div style="border-top:2px solid ${color};background:${C.card2};padding:8px;min-width:0"><div style="font-size:9px;font-weight:900;color:${C.text}">${esc(model.label)}</div><div style="font-size:8px;color:${C.mute};margin:2px 0 5px">${esc(String(model.tier || '').replace(/_/g, ' '))}</div><div style="font-size:17px;font-weight:950;color:${color}">R² ${fmtv(metrics.r2, 3)}</div><div style="font-size:8px;color:${C.dim};line-height:1.45">rank ρ ${fmtv(metrics.spearman, 3)} · ${views ? `${fmtv(metrics.medianFactorError, 2)}× median error` : `${fmtv(metrics.mae, 2)} pp MAE`} · n=${metrics.n || 0}</div></div>`;
+    }
+    function savedValidationExpandedRow(validation, row, protocol) {
+        const definitions = validation.featureContract && validation.featureContract.features || [];
+        const stored = definitions.map(definition => {
+            const cell = savedValidationStoredCell(validation, row, definition.key);
+            return `<span style="border:1px solid ${C.border};padding:3px 5px;font-size:8px;color:${C.dim}"><b style="color:${savedChannelFeatureColor(definition.group)}">${esc(definition.key)}</b> ${savedValidationFormat(definition.unit === 'log10_views' && cell.value != null ? Math.max(0, Math.pow(10, cell.value) - 1) : cell.value, definition.target)}${cell.percentile != null ? ` · ${(+cell.percentile).toFixed(0)}th` : ''}</span>`;
+        }).join('');
+        const blindDefinitions = definitions.filter(definition => definition.group !== 'novelty');
+        const blind = blindDefinitions.map(definition => `<span style="border:1px solid ${C.border};padding:3px 5px;font-size:8px;color:${C.dim}"><b style="color:${savedChannelFeatureColor(definition.group)}">${esc(definition.key)}</b> ${savedValidationFormat(savedValidationPrediction(validation, row, definition, protocol === 'stored' ? 'video' : protocol), definition.target)}</span>`).join('');
+        return `<tr style="background:${C.card2}"><td colspan="10" style="padding:8px"><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:5px">Actual outcomes</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px">${['keep', 'ret5', 'views', 'outlier', 'gt10M'].map(target => `<span style="font-size:8px;color:${C.dim};border:1px solid ${C.border};padding:3px 5px">${esc(target)} <b style="color:${C.text}">${savedValidationFormat(savedValidationActual(row, target), target)}</b></span>`).join('')}<span style="font-size:8px;color:${C.dim};border:1px solid ${C.border};padding:3px 5px">private views snapshot <b style="color:${C.text}">${savedValidationFormat(row.actual.viewsPrivateSnapshot, 'views')}</b></span></div><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:5px">All 21 stored channel scores · diagnostic replay</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:9px">${stored}</div><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:5px">All 18 ${protocol === 'account' ? 'account-held-out' : 'video-held-out'} target-aligned scores</div><div style="display:flex;gap:4px;flex-wrap:wrap">${blind}</div></td></tr>`;
+    }
+    function savedValidationVideoTable(validation, rows, definition, protocol) {
+        const target = definition.target;
+        const tableRows = rows.map(row => {
+            const actual = savedValidationActual(row, target);
+            const predicted = savedValidationPrediction(validation, row, definition, protocol);
+            return { row, actual, predicted, error: savedValidationError(actual, predicted, target) };
+        });
+        const sort = st.savedValidationSort || 'selectedError';
+        tableRows.sort((left, right) => {
+            if (sort === 'actualViews') return (+right.row.actual.viewsCurrent || 0) - (+left.row.actual.viewsCurrent || 0);
+            if (sort === 'actualKeep') return (+right.row.actual.keep || -Infinity) - (+left.row.actual.keep || -Infinity);
+            if (sort === 'predicted') return (+right.predicted || -Infinity) - (+left.predicted || -Infinity);
+            if (sort === 'recent') return (+right.row.publishedAt || 0) - (+left.row.publishedAt || 0);
+            return (+right.error || -Infinity) - (+left.error || -Infinity);
+        });
+        const limit = st.savedValidationShow || 60, visible = tableRows.slice(0, limit);
+        const buttons = [['selectedError', 'largest selected error'], ['actualViews', 'actual views'], ['actualKeep', 'actual keep'], ['predicted', 'selected prediction'], ['recent', 'newest']].map(([key, label]) => `<span data-savedvalidationsort="${key}" style="cursor:pointer;border:1px solid ${sort === key ? C.cyan : C.border};color:${sort === key ? C.cyan : C.dim};padding:3px 7px;font-size:8px">${esc(label)}</span>`).join('');
+        const body = visible.map(item => {
+            const row = item.row, keepError = savedValidationError(row.actual.keep, row.predictions.keepVideoHeldOut, 'keep');
+            const viewError = savedValidationError(row.actual.viewsCurrent, row.predictions.viewsPublicAxisEnsemble, 'views');
+            const errorLabel = item.error == null ? '—' : (target === 'views' || target === 'realviews' || target === 'outlier' ? item.error.toFixed(2) + '×' : item.error.toFixed(2) + ' pp');
+            const expanded = st.savedValidationExpanded === row.id;
+            return `<tr style="border-top:1px solid ${C.border};vertical-align:top"><td style="padding:6px;min-width:210px"><span data-savedchannelvideo="${esc(row.channelId)}:${esc(row.id)}" style="cursor:pointer;color:${C.text};font-weight:800">${esc(row.title)}</span><div style="font-size:7.5px;color:${row.accountId === 'tyler' ? C.cyan : C.purple};margin-top:2px">${esc(row.accountName)}${row.publishedAt ? ` · ${esc(new Date(row.publishedAt).toLocaleDateString())}` : ''}</div><span data-savedvalidationexpand="${esc(row.id)}" style="display:inline-block;cursor:pointer;color:${C.accent};font-size:8px;margin-top:3px">${expanded ? 'hide all inputs' : 'show all 21 + blind inputs'}</span></td><td>${savedValidationFormat(row.actual.keep, 'keep')}</td><td>${savedValidationFormat(row.predictions.keepVideoHeldOut, 'keep')}<div style="font-size:7px;color:${C.faint}">${keepError == null ? '—' : keepError.toFixed(1) + ' pp error'}</div></td><td>${savedValidationFormat(row.predictions.keepAccountHeldOut, 'keep')}</td><td>${savedValidationFormat(row.actual.ret5, 'ret5')}</td><td>${savedValidationFormat(row.actual.viewsCurrent, 'views')}<div style="font-size:7px;color:${C.faint}">private snapshot ${savedValidationFormat(row.actual.viewsPrivateSnapshot, 'views')}</div></td><td>${savedValidationFormat(row.predictions.viewsPublicAxisEnsemble, 'views')}<div style="font-size:7px;color:${C.faint}">${viewError == null ? '—' : viewError.toFixed(2) + '× error'}</div></td><td style="color:${savedChannelFeatureColor(definition.group)}">${savedValidationFormat(item.predicted, target)}</td><td>${savedValidationFormat(item.actual, target)}</td><td style="color:${item.error != null && item.error > (target === 'views' || target === 'realviews' || target === 'outlier' ? 3 : 10) ? C.red : C.dim}">${errorLabel}</td></tr>${expanded ? savedValidationExpandedRow(validation, row, protocol) : ''}`;
+        }).join('');
+        return `<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:9px 0 6px"><span style="font-size:8px;color:${C.mute};text-transform:uppercase">sort</span>${buttons}</div><div style="overflow:auto;max-height:650px"><table style="width:100%;min-width:1060px;border-collapse:collapse;font-size:8.5px"><thead style="position:sticky;top:0;background:${C.card};z-index:2"><tr style="color:${C.mute};text-align:left"><th style="padding:6px">Short</th><th>actual keep</th><th>video-held-out keep</th><th>account-held-out keep</th><th>actual 5s</th><th>actual views</th><th>strict views axis</th><th>selected predicted</th><th>selected actual</th><th>selected error</th></tr></thead><tbody>${body}</tbody></table></div>${tableRows.length > limit ? `<div style="text-align:center;margin-top:10px"><span data-savedvalidationmore style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};padding:5px 14px;font-size:9px">show ${Math.min(60, tableRows.length - limit)} more · ${tableRows.length - limit} left</span></div>` : ''}`;
+    }
+    function renderSavedChannelValidation(detail) {
+        const validation = SAVEDCHANNELVALIDATION;
+        if (!validation) { window.setTimeout(() => loadSavedChannelValidation(), 0); return `<div style="padding:28px;text-align:center;color:${C.dim}">Preparing Tyler + Hafu leakage audit…</div>`; }
+        if (validation.loading) return `<div style="padding:28px;text-align:center;color:${C.cyan}">Joining private outcomes to saved embeddings and loading blind folds…</div>`;
+        if (validation.error) return `<div style="padding:18px;color:${C.red}">${esc(validation.error)} <span data-savedvalidationreload style="cursor:pointer;text-decoration:underline;color:${C.accent}">retry</span></div>`;
+        const scopes = validation.scopes || {}, scopeKey = scopes[st.savedValidationScope] ? st.savedValidationScope : 'pooled', scope = scopes[scopeKey];
+        const protocol = ['stored', 'video', 'account'].includes(st.savedValidationProtocol) ? st.savedValidationProtocol : 'video';
+        const target = st.savedValidationTarget || 'keep';
+        const definitions = savedValidationDefinitions(validation, protocol, target);
+        let definition = definitions.find(item => item.key === st.savedValidationFeature);
+        if (!definition) definition = definitions.find(item => item.key === `together.${target}`) || definitions[0];
+        if (definition) st.savedValidationFeature = definition.key;
+        const rows = savedValidationRows(validation, scopeKey);
+        const selectedMetrics = definition && savedValidationMetricFor(scope, protocol, definition.key);
+        const artifact = validation.artifact || {}, audit = validation.leakageAudit || {};
+        const scopeButton = (key, label) => `<span data-savedvalidationscope="${key}" style="cursor:pointer;border-bottom:2px solid ${scopeKey === key ? C.cyan : 'transparent'};color:${scopeKey === key ? C.text : C.dim};padding:5px 10px;font-size:10px;font-weight:900">${label} <b style="color:${scopeKey === key ? C.cyan : C.faint}">${(scopes[key] && scopes[key].n) || 0}</b></span>`;
+        const protocolMeta = {
+            stored: ['Stored production score', C.amber, 'Exact values saved at scoring time. Useful for diagnosis, but Tyler keep/5s axes saw Tyler labels and every saved row lacks an immutable scorer-generation ID.'],
+            video: ['Video held out', C.green, 'The evaluated video is excluded from every target-aligned fit. Same-account videos can still appear in training.'],
+            account: ['Whole account held out', C.purple, 'The evaluated creator is absent from keep/5s fitting and percentile calibration. This is the strictest creator-transfer test.'],
+        };
+        const protocolButtons = Object.entries(protocolMeta).map(([key, meta]) => `<span data-savedvalidationprotocol="${key}" style="cursor:pointer;border:1px solid ${protocol === key ? meta[1] : C.border};background:${protocol === key ? meta[1] + '14' : 'transparent'};color:${protocol === key ? meta[1] : C.dim};padding:5px 8px;font-size:9px;font-weight:800">${esc(meta[0])}</span>`).join('');
+        const targetLabels = { keep: 'Keep rate', ret5: '5s retention', views: 'Views', realviews: 'Realistic views', outlier: 'Outlier', gt10M: '10M class' };
+        const targetButtons = Object.entries(targetLabels).map(([key, label]) => `<span data-savedvalidationtarget="${key}" style="cursor:pointer;border:1px solid ${target === key ? C.cyan : C.border};color:${target === key ? C.cyan : C.dim};padding:4px 7px;font-size:8px">${esc(label)}</span>`).join('');
+        const featureButtons = definitions.map(item => `<span data-savedvalidationfeature="${esc(item.key)}" style="cursor:pointer;border:1px solid ${definition && definition.key === item.key ? savedChannelFeatureColor(item.group) : C.border};color:${definition && definition.key === item.key ? savedChannelFeatureColor(item.group) : C.dim};padding:3px 6px;font-size:8px">${esc(item.group === 'together' ? 'both' : item.group)}</span>`).join('');
+        const modelCards = Object.values(scope.models || {}).map(savedValidationModelCard).join('');
+        const joins = (validation.joinSummary || []).map(item => `${esc(item.accountName)} ${item.matchedRows}/${item.privateRows}`).join(' · ');
+        const canonicalKeep = savedValidationScatter(rows, 'keep', row => row.predictions.keepVideoHeldOut, 'Actual keep vs video-held-out keep forecast');
+        const canonicalViews = savedValidationScatter(rows, 'views', row => row.predictions.viewsPublicAxisEnsemble, 'Actual views vs validation-ID-excluded public-axis forecast');
+        const selectedScatter = definition ? savedValidationScatter(rows, target, row => savedValidationPrediction(validation, row, definition, protocol), `${protocolMeta[protocol][0]} · ${definition.group} ${definition.label}`) : '';
+        return `<div style="border:1px solid ${audit.passedForBlindInputs ? C.green : C.red};background:${audit.passedForBlindInputs ? C.green : C.red}0a;padding:10px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:950;color:${C.text}">Tyler + Hafu blind validation</div><div style="font-size:9px;color:${C.mute};line-height:1.5;margin-top:3px">${joins} · ${rows.length} rows in this scope · exact 21 stored outputs plus fold-recomputed inputs</div></div><div style="text-align:right"><div style="font-size:9px;font-weight:900;color:${audit.passedForBlindInputs ? C.green : C.red}">${audit.passedForBlindInputs ? 'BLIND INPUT ARRAY AUDIT PASSED' : 'BLIND INPUT ARRAY AUDIT FAILED'}</div><div style="font-size:7.5px;color:${C.faint}">${artifact.generatedAt ? esc(new Date(artifact.generatedAt).toLocaleString()) : ''} · ${esc(artifact.cacheStatus || 'artifact')}</div><span data-savedvalidationreload style="cursor:pointer;color:${C.accent};font-size:8px">rebuild if sources changed</span></div></div></div>
+          <div style="display:flex;border-bottom:1px solid ${C.border};overflow:auto;margin-bottom:9px">${scopeButton('pooled', 'Pooled')}${scopeButton('tyler', 'Tyler Csatari')}${scopeButton('hafu', 'Hafu Go')}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${protocolButtons}</div>
+          ${note(`<b>${esc(protocolMeta[protocol][0])}:</b> ${esc(protocolMeta[protocol][2])}`, protocolMeta[protocol][1])}
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:7px;margin:10px 0">${modelCards}</div>
+          <div style="font-size:9px;color:${C.mute};line-height:1.5;margin-bottom:10px"><b style="color:${C.text}">How to read this:</b> R² = improvement over always guessing the training mean; 1 is perfect, 0 ties the mean, negative is worse. Rank ρ = whether high predictions order high outcomes; 1 is perfect. MAE is percentage-point error. View error is a multiplicative factor. The account-held-out result is the honest test of transfer to a creator the keep model never saw.</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:10px;margin-bottom:13px">${canonicalKeep}${canonicalViews}</div>
+          <div style="font-size:13px;font-weight:950;color:${C.text};margin:10px 0 3px">Every embedding against its raw outcome</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:7px">Choose an outcome, then click any modality row. The bar is rank correlation (10M uses AUC centered at chance); the text preserves calibration and error so a tidy rank cannot masquerade as an accurate numerical forecast.</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px">${targetButtons}</div>
+          ${savedValidationAccuracyAtlas(scope, protocol, definitions, definition && definition.key)}
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin:8px 0">${featureButtons}</div>
+          ${definition ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(270px,100%),1fr));gap:10px;align-items:start;margin:9px 0 12px"><div>${selectedScatter}</div><div style="background:${C.card2};border-top:2px solid ${savedChannelFeatureColor(definition.group)};padding:10px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase">selected evidence</div><div style="font-size:13px;font-weight:900;color:${C.text};margin:3px 0">${esc(definition.group === 'together' ? 'Both' : definition.group)} · ${esc(definition.label)}</div><div style="font-size:9px;color:${C.dim};line-height:1.6">${esc(savedValidationMetricSummary(selectedMetrics, target))}</div><div style="font-size:8px;color:${C.faint};line-height:1.45;margin-top:7px">Each point is one saved Short joined by YouTube video ID to its private metric. Click a point or title below to open the original 21-output embedding detail.</div></div></div>` : ''}
+          <div style="font-size:13px;font-weight:950;color:${C.text};margin:12px 0 2px">Video-by-video audit trail</div><div style="font-size:9px;color:${C.mute};line-height:1.45">The row keeps actual outcomes, blind forecasts, and the selected embedding side by side. “Show all” exposes every persisted and fold-recomputed input without recalculating the video.</div>
+          ${definition ? savedValidationVideoTable(validation, rows, definition, protocol) : ''}
+          <div style="margin-top:12px">${note(`<b>Known limits:</b> ${(audit.warnings || []).map(esc).join(' ')}`, C.amber)}</div>`;
+    }
     function renderSavedChannelDetail(detail) {
         if (!detail) return '';
         if (detail.loading) return cardc(`<div style="padding:24px;text-align:center;color:${C.cyan}">Loading saved channel…</div>`, 10);
@@ -5275,6 +5514,7 @@ const JarvisRetention = (function () {
         const statusColor = savedChannelStatusColor(detail.status), total = detail.discovered || 0, completed = detail.completed || 0, failed = detail.failed || 0;
         const progress = total ? completed / total * 100 : 0, active = ['queued', 'running', 'stopping'].includes(detail.status);
         const tab = st.savedChannelTab || 'library';
+        const validationSupported = detail.id === 'chd3f5a3dae83f3382' || detail.id === 'ch87ccaa3dd3383515';
         const tabButton = (key, label) => `<span data-savedchanneltab="${key}" style="cursor:pointer;border-bottom:2px solid ${tab === key ? C.accent : 'transparent'};color:${tab === key ? C.text : C.dim};padding:5px 10px;font-size:11px;font-weight:800">${label}</span>`;
         const actionBusy = st.savedChannelActionBusy;
         const unfinished = Math.max(0, total - completed), continueLabel = unfinished ? `continue ${unfinished} unfinished` : detail.status === 'done' ? 'check for new Shorts' : 'resume / retry';
@@ -5282,8 +5522,8 @@ const JarvisRetention = (function () {
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:6px;margin-bottom:8px">${statc('Status', String(detail.status || 'queued'), statusColor)}${statc('Scored', `${completed}/${total}`, C.green)}${statc('Queued', detail.queued || 0, C.cyan)}${statc('Errors', failed, failed ? C.red : C.dim)}</div>
           <div style="height:7px;background:${C.border};border-radius:5px;overflow:hidden;margin-bottom:5px"><span style="display:block;width:${progress.toFixed(1)}%;height:100%;background:${statusColor}"></span></div>
           <div style="font-size:9px;color:${C.dim};margin-bottom:10px">${detail.current ? `Running now: <b style="color:${C.cyan}">${esc(detail.current.title || detail.current.id)}</b> · ${completed + failed + 1} of ${total}` : unfinished ? `Incomplete: <b style="color:${C.orange}">${completed}/${total} stored</b> · ${unfinished} can continue from the server button above` : detail.status === 'done' ? `Finished: ${completed}/${total} scored and stored` : `Phase: ${esc(detail.phase || detail.status || 'queued')}`}</div>
-          <div style="display:flex;border-bottom:1px solid ${C.border};margin-bottom:10px;overflow-x:auto">${tabButton('library', `Library (${total})`)}${tabButton('analysis', 'Prediction analysis')}${tabButton('atlas', 'Relationship atlas (21)')}</div>
-          ${tab === 'analysis' ? renderSavedChannelAnalysis(detail) : tab === 'atlas' ? renderSavedChannelRelationshipAtlas(detail) : renderSavedChannelLibrary(detail)}`, 12);
+          <div style="display:flex;border-bottom:1px solid ${C.border};margin-bottom:10px;overflow-x:auto">${tabButton('library', `Library (${total})`)}${tabButton('analysis', 'Prediction analysis')}${tabButton('atlas', 'Relationship atlas (21)')}${validationSupported ? tabButton('validation', 'Blind validation') : ''}</div>
+          ${tab === 'analysis' ? renderSavedChannelAnalysis(detail) : tab === 'atlas' ? renderSavedChannelRelationshipAtlas(detail) : tab === 'validation' && validationSupported ? renderSavedChannelValidation(detail) : renderSavedChannelLibrary(detail)}`, 12);
     }
     function savedChannelsPanel() {
         const channels = (SAVEDCHANNELS && SAVEDCHANNELS.channels) || [];

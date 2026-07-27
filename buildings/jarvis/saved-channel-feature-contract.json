@@ -30,6 +30,6 @@
 
     { "key": "novelty.keep", "group": "novelty", "target": "keep", "source": "novelty", "label": "Novelty to keep rate", "unit": "percent" },
     { "key": "novelty.ret5", "group": "novelty", "target": "ret5", "source": "novelty", "label": "Novelty to 5s retention", "unit": "percent" },
-    { "key": "novelty.views", "group": "novelty", "target": "views", "source": "novelty", "label": "Novelty to views", "unit": "views" }
+    { "key": "novelty.views", "group": "novelty", "target": "views", "source": "novelty", "label": "Novelty to views", "unit": "log10_views", "displayUnit": "views", "note": "The stored raw value is log10 views; the percentile is the directionally calibrated novelty rank." }
   ]
 }

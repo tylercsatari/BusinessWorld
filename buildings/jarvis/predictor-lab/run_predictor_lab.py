@@ -402,7 +402,7 @@ def novelty_primitives(
 
 def fit_public_axes(
     stores: dict[str, dict[str, Any]],
-    private_ids: set[str],
+    excluded_ids: set[str],
     novelty_models: dict[str, np.ndarray],
 ) -> dict[str, dict[str, Any]]:
     models: dict[str, dict[str, Any]] = {}
@@ -410,7 +410,7 @@ def fit_public_axes(
         public = np.array(
             [
                 not store["mine"][index]
-                and video_id not in private_ids
+                and video_id not in excluded_ids
                 and finite(store["views"][index])
                 and store["views"][index] > 0
                 for index, video_id in enumerate(store["ids"])
@@ -2176,6 +2176,11 @@ def run_keep_track(
         stores,
         public_axes,
     )
+    unseen_account_features = private_inner_oof(
+        eligible,
+        stores,
+        public_axes,
+    )
     full_target = np.asarray([row["keep"] for row in eligible], dtype=float)
     account_groups = [str(row["account"]) for row in eligible]
     centered_target = within_source_center(full_target, account_groups)
@@ -2246,6 +2251,42 @@ def run_keep_track(
             }
             for indices, count in operational["selectionStability"].most_common()
         ],
+        "blindInputs": {
+            "featureNames": PRIVATE_FEATURE_NAMES,
+            "videoHeldOutProtocol": (
+                "Every target-aligned keep, ret5, and realistic-views input is fit "
+                "without the evaluated video. Public views, outlier, and 10M inputs "
+                "are fit on the public corpus after excluding every private and "
+                "saved-channel video ID."
+            ),
+            "accountHeldOutProtocol": (
+                "The evaluated account is absent from keep/ret5 axis fitting and "
+                "percentile calibration. Public axes still exclude every private "
+                "and saved-channel ID."
+            ),
+            "rows": [
+                {
+                    "id": row["id"],
+                    "title": row["title"],
+                    "account": row["account"],
+                    "accountName": row["accountName"],
+                    "publishedAt": clean_number(row.get("publishedAt"), 0),
+                    "actualKeep": clean_number(row.get("keep")),
+                    "actualRet5": clean_number(row.get("ret5")),
+                    "actualViews": clean_number(row.get("views"), 0),
+                    "duration": clean_number(row.get("duration"), 3),
+                    "videoHeldOut": [
+                        clean_number(value)
+                        for value in full_oof_features[index]
+                    ],
+                    "accountHeldOut": [
+                        clean_number(value)
+                        for value in unseen_account_features[index]
+                    ],
+                }
+                for index, row in enumerate(eligible)
+            ],
+        },
         "stressTests": [transfer_stress] + ([temporal_stress] if temporal_stress else []),
         "warning": "The known-account interpolation score is not a pre-upload forecast. The forward-time test uses current frozen public reference axes and historical private labels, while the unseen-account test remains negative; do not claim a universal keep-rate model.",
     }
@@ -2255,12 +2296,13 @@ def channel_outer_predictions(
     rows: list[dict[str, Any]],
     feature_names: list[str],
     candidates: list[tuple[int, ...]],
-) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]], Counter]:
+) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]], Counter, list[dict[str, Any]]]:
     X = np.asarray([row["features"] for row in rows], dtype=float)
     y = np.asarray([row["logViews"] for row in rows], dtype=float)
     channels = sorted(set(row["channel"] for row in rows), key=stable_hash)
     predicted = np.full(len(rows), np.nan)
     fold_results = []
+    points: list[dict[str, Any]] = []
     selected: Counter = Counter()
     for channel_position, channel in enumerate(channels, 1):
         update_status(
@@ -2305,7 +2347,25 @@ def channel_outer_predictions(
                 "metrics": metric,
             }
         )
-    return y, predicted, fold_results, selected
+        for row, truth, estimate in zip(
+            [row for index, row in enumerate(rows) if test[index]],
+            y[test],
+            fold_prediction,
+        ):
+            points.append(
+                {
+                    "id": row["id"],
+                    "title": row["title"],
+                    "channel": row["channel"],
+                    "channelName": row["channelName"],
+                    "actualViews": max(0, round(10**truth - 1)),
+                    "predictedViews": max(0, round(10**estimate - 1)),
+                    "actualLogViews": clean_number(truth),
+                    "predictedLogViews": clean_number(estimate),
+                    "factorError": clean_number(10 ** abs(estimate - truth)),
+                }
+            )
+    return y, predicted, fold_results, selected, points
 
 
 def views_nested_calibration_predictions(
@@ -2673,7 +2733,13 @@ def run_views_track(
     dated_count = sum(finite(row.get("publishedAt")) for row in eligible)
     X = np.asarray([row["features"] for row in eligible], dtype=float)
     y = np.asarray([row["logViews"] for row in eligible], dtype=float)
-    y_transfer, predicted_transfer, transfer_folds, transfer_selected = channel_outer_predictions(
+    (
+        y_transfer,
+        predicted_transfer,
+        transfer_folds,
+        transfer_selected,
+        transfer_points,
+    ) = channel_outer_predictions(
         eligible, feature_names, candidates
     )
     transfer_valid = np.isfinite(predicted_transfer)
@@ -2688,6 +2754,11 @@ def run_views_track(
         "calibration": calibration_bins(y_transfer[transfer_valid], predicted_transfer[transfer_valid]),
         "folds": transfer_folds,
         "sourceSummary": source_level_summary(transfer_folds),
+        "points": sorted(
+            transfer_points,
+            key=lambda point: point["actualViews"],
+            reverse=True,
+        ),
     }
     temporal_stress = run_views_forward_time(eligible, feature_names, candidates)
     update_status(
@@ -3207,11 +3278,19 @@ def main() -> int:
     saved_rows = load_saved_channel_rows(contract)
     private_ids = {row["id"] for row in private_rows}
     saved_ids = {row["id"] for row in saved_rows}
-    axis_corpus_ids = {
+    excluded_axis_ids = private_ids | saved_ids
+    candidate_axis_corpus_ids = {
         video_id
         for store in stores.values()
         for index, video_id in enumerate(store["ids"])
         if not store["mine"][index] and video_id not in private_ids
+    }
+    removed_saved_axis_overlap = sorted(saved_ids & candidate_axis_corpus_ids)
+    axis_corpus_ids = {
+        video_id
+        for store in stores.values()
+        for index, video_id in enumerate(store["ids"])
+        if not store["mine"][index] and video_id not in excluded_axis_ids
     }
     saved_axis_overlap = sorted(saved_ids & axis_corpus_ids)
     if saved_axis_overlap:
@@ -3226,6 +3305,14 @@ def main() -> int:
         "savedChannelVideoCount": len(saved_ids),
         "rawAxisCorpusVideoCount": len(axis_corpus_ids),
         "savedAxisTrainingIdOverlap": len(saved_axis_overlap),
+        "savedAxisCandidateOverlapRemoved": len(removed_saved_axis_overlap),
+        "savedAxisCandidateOverlapRemovedIdsHash": hashlib.sha256(
+            "\n".join(removed_saved_axis_overlap).encode()
+        ).hexdigest(),
+        "publicAxisExcludedVideoCount": len(excluded_axis_ids),
+        "publicAxisExcludedVideoIdHash": hashlib.sha256(
+            "\n".join(sorted(excluded_axis_ids)).encode()
+        ).hexdigest(),
         "savedVideoIdHash": hashlib.sha256(
             "\n".join(sorted(saved_ids)).encode()
         ).hexdigest(),
@@ -3249,7 +3336,7 @@ def main() -> int:
             "scikitLearn": sklearn.__version__,
             "boto3": boto3.__version__,
         },
-        "warning": "Saved-channel rows currently do not persist the exact scorer/model version that generated their 21 outputs. ID disjointness, exact source-content hashes, array alignment, and runtime versions are recorded, but immutable per-video scorer provenance and atomic multi-modality generation IDs must be added before treating future mixed-version rows as one population.",
+        "warning": "Every private and saved-channel video ID is explicitly removed before fitting the replayed public views/outlier/10M axes. Saved-channel rows still do not persist the exact scorer/model version that generated their original 21 stored outputs, so those stored values remain diagnostic until immutable per-video scorer provenance and atomic multi-modality generation IDs exist.",
     }
     keep_candidates = candidate_registry(len(PRIVATE_FEATURE_NAMES))
     views_feature_names = saved_channel_feature_names(contract)
@@ -3259,7 +3346,7 @@ def main() -> int:
             f"candidate registries have keep={len(keep_candidates)} and views={len(views_candidates)}, expected {EXPERIMENT_COUNT}"
         )
     novelty_models = load_novelty_models()
-    public_axes = fit_public_axes(stores, private_ids, novelty_models)
+    public_axes = fit_public_axes(stores, excluded_axis_ids, novelty_models)
     update_status(
         "keep",
         message="Running nested known-account keep search plus unseen-account stress test",

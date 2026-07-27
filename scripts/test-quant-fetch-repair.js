@@ -80,8 +80,8 @@ includes(long, 'connection issue while checking this grind:', 'grind polling fai
 includes(long, 'data-lqxsavedretry', 'saved Long Quant detail failures must expose a retry action');
 includes(shorts, 'if (pj.result && pj.result.error) throw new Error(pj.result.error);', 'Shorts jobs must surface scorer error payloads');
 includes(long, 'if (j.result && j.result.error) throw new Error(j.result.error);', 'Long Quant jobs must surface scorer error payloads');
-assert((server.match(/if \(result && result\.error\) throw new Error\(result\.error\);/g) || []).length >= 2,
-    'upload and montage workers must convert scorer error payloads into failed jobs');
+assert((server.match(/validateRawScoreResult\(JSON\.parse\(await (?:upRunner|monRunner)\(\)\)\)/g) || []).length >= 2,
+    'upload and montage workers must convert scorer error payloads into failed jobs through the shared validator');
 const passiveLongScores = (long.match(/lqxScoreFor\([^\n]+,\s*false\)/g) || []).length;
 const activeLongScores = (long.match(/lqxScoreFor\([^\n]+,\s*true\)/g) || []).length;
 assert(passiveLongScores >= 6, `Long Quant summary cards must never rescore on render (found ${passiveLongScores} passive calls)`);

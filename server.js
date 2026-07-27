@@ -46,6 +46,7 @@ const jarvisMetrics = require('./buildings/jarvis/jarvis-metrics');
 const streamJson = require('./buildings/jarvis/stream-json');
 const viralIdeaEngine = require('./buildings/jarvis/viral-idea-engine');
 const savedChannelAnalysis = require('./buildings/jarvis/saved-channel-analysis');
+const savedChannelValidation = require('./buildings/jarvis/saved-channel-validation');
 const PDFDocument = require('pdfkit');
 const { spawn } = require('child_process');
 const PORT = process.env.PORT || 8002;
@@ -1228,6 +1229,7 @@ function readBody(req) {
 const SAVED_CHANNEL_ROOT = 'raw/saved-channels/';
 const SAVED_CHANNEL_INDEX_KEY = SAVED_CHANNEL_ROOT + 'index.json';
 const SAVED_CHANNEL_REQUEST_ROOT = 'shorts/channel-import/requests/';
+const SAVED_CHANNEL_VALIDATION_KEY = SAVED_CHANNEL_ROOT + 'blind-validation.json';
 
 function savedChannelId(channelUrl) {
     const digest = require('crypto').createHash('sha256').update(String(channelUrl || '').toLowerCase()).digest('hex').slice(0, 16);
@@ -1299,6 +1301,91 @@ async function removeSavedChannelIndex(id) {
     const index = await readSavedChannelIndex();
     index.channels = index.channels.filter(channel => channel.id !== id);
     await writeSavedChannelIndex(index);
+}
+
+async function buildSavedChannelValidationBuffer() {
+    const sourceBuffers = new Map();
+    const predictorBuffer = await cloud.downloadFromR2('raw/predictor-lab/results.json');
+    if (!predictorBuffer) throw new Error('The leakage-safe predictor artifact has not been built.');
+    sourceBuffers.set('raw/predictor-lab/results.json', predictorBuffer);
+    const predictor = JSON.parse(predictorBuffer.toString('utf8'));
+    if (!predictor.targets || !predictor.targets.keep || !predictor.targets.keep.blindInputs) {
+        throw new Error('The predictor artifact predates row-level blind inputs and must be rebuilt.');
+    }
+    const channels = [];
+    for (const definition of savedChannelValidation.SUPPORTED_CHANNELS) {
+        const manifestKey = `${SAVED_CHANNEL_ROOT}${definition.channelId}/manifest.json`;
+        const manifestBuffer = await cloud.downloadFromR2(manifestKey);
+        if (!manifestBuffer) throw new Error(`Saved channel ${definition.accountName} is missing.`);
+        sourceBuffers.set(manifestKey, manifestBuffer);
+        let privateBuffer;
+        if (definition.accountId === 'tyler') {
+            privateBuffer = fs.readFileSync(path.join(__dirname, 'buildings/jarvis/retention-study/retention_table.json'));
+            sourceBuffers.set('local:retention_table.json', privateBuffer);
+        } else {
+            const privateKey = `retention/${definition.accountId}.json`;
+            privateBuffer = await cloud.downloadFromR2(privateKey);
+            if (!privateBuffer) throw new Error(`Private retention data for ${definition.accountName} is missing.`);
+            sourceBuffers.set(privateKey, privateBuffer);
+        }
+        channels.push({
+            ...definition,
+            manifest: JSON.parse(manifestBuffer.toString('utf8')),
+            privateTable: JSON.parse(privateBuffer.toString('utf8')),
+        });
+    }
+    const modulePath = path.join(__dirname, 'buildings/jarvis/saved-channel-validation.js');
+    const moduleBuffer = fs.readFileSync(modulePath);
+    sourceBuffers.set('local:saved-channel-validation.js', moduleBuffer);
+    const contractPath = path.join(__dirname, 'buildings/jarvis/saved-channel-feature-contract.json');
+    sourceBuffers.set('local:saved-channel-feature-contract.json', fs.readFileSync(contractPath));
+    const fingerprintHash = require('crypto').createHash('sha256');
+    for (const [name, buffer] of [...sourceBuffers.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+        fingerprintHash.update(name);
+        fingerprintHash.update('\0');
+        fingerprintHash.update(buffer);
+        fingerprintHash.update('\0');
+    }
+    const fingerprint = fingerprintHash.digest('hex');
+    const cachedBuffer = await cloud.downloadFromR2(SAVED_CHANNEL_VALIDATION_KEY).catch(() => null);
+    if (cachedBuffer) {
+        try {
+            const cached = JSON.parse(cachedBuffer.toString('utf8'));
+            if (cached.sourceFingerprint === fingerprint && cached.version === savedChannelValidation.VERSION) {
+                cached.artifact = {
+                    cacheStatus: 'hit',
+                    persisted: true,
+                    storage: 'R2',
+                    generatedAt: cached.generatedAt,
+                    fingerprint,
+                };
+                return Buffer.from(JSON.stringify(cached));
+            }
+        } catch (e) {}
+    }
+    const validation = savedChannelValidation.buildValidation({
+        channels,
+        predictor,
+        sourceFingerprint: fingerprint,
+    });
+    validation.artifact = {
+        cacheStatus: 'generated',
+        persisted: true,
+        storage: 'R2',
+        generatedAt: validation.generatedAt,
+        fingerprint,
+    };
+    const buffer = Buffer.from(JSON.stringify(validation));
+    const persisted = await cloud.uploadToR2(SAVED_CHANNEL_VALIDATION_KEY, buffer, 'application/json')
+        .then(() => true)
+        .catch(() => false);
+    if (!persisted) {
+        validation.artifact.persisted = false;
+        validation.artifact.storage = 'response only';
+        validation.artifact.note = 'The validation completed, but its durable R2 artifact could not be written.';
+        return Buffer.from(JSON.stringify(validation));
+    }
+    return buffer;
 }
 
 function requestIsLoopback(req) {
@@ -4547,6 +4634,26 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // Saved Shorts channels. The server owns the durable manifest/API while the Mac relay
     // does channel discovery + scoring on a residential IP. Every video record is produced by
     // raw_upload.py, the exact scorer used by "score from link" above.
+    if (pathname === '/api/raw/saved-channel-validation' && req.method === 'GET') {
+        await serveGzCached(
+            req,
+            res,
+            'computed:raw/saved-channel-validation',
+            300e3,
+            buildSavedChannelValidationBuffer,
+            {
+                version: savedChannelValidation.VERSION,
+                status: 'not_ready',
+                message: 'Tyler/Hafu blind validation has not been built yet.',
+            },
+            503,
+            {
+                surfaceSourceErrors: true,
+                sourceErrorMessage: 'The Tyler/Hafu validation sources are temporarily unavailable.',
+            }
+        );
+        return;
+    }
     if (pathname === '/api/raw/saved-channels' && req.method === 'GET') {
         try {
             let index = await readSavedChannelIndex();

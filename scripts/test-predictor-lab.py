@@ -136,6 +136,18 @@ def assert_target_contract(target: dict, target_name: str) -> None:
     for fold in stress["folds"]:
         assert expected_fold_key in fold, "transfer stress folds must name the wholly unseen group"
         assert "heldOutFold" not in fold, "unseen-group stress folds must stay separate from operational folds"
+    if target_name == "keep":
+        blind = target.get("blindInputs")
+        assert isinstance(blind, dict), "keep target must persist row-level leakage-safe inputs"
+        assert blind.get("featureNames") == predictor.PRIVATE_FEATURE_NAMES
+        assert "evaluated video" in blind.get("videoHeldOutProtocol", "")
+        assert "evaluated account" in blind.get("accountHeldOutProtocol", "")
+        assert isinstance(blind.get("rows"), list)
+        for row in blind["rows"]:
+            assert len(row.get("videoHeldOut", [])) == len(predictor.PRIVATE_FEATURE_NAMES)
+            assert len(row.get("accountHeldOut", [])) == len(predictor.PRIVATE_FEATURE_NAMES)
+    else:
+        assert isinstance(stress.get("points"), list), "unseen-channel stress must persist every held-out prediction"
 
 
 def assert_result_contract(result: dict, candidate_hash: str) -> None:
@@ -196,6 +208,9 @@ def assert_result_contract(result: dict, candidate_hash: str) -> None:
 
     provenance = result["provenance"]
     assert provenance["savedAxisTrainingIdOverlap"] == 0
+    assert provenance["publicAxisExcludedVideoCount"] >= coverage["privateRetentionRows"]
+    assert len(provenance["publicAxisExcludedVideoIdHash"]) == 64
+    assert len(provenance["savedAxisCandidateOverlapRemovedIdsHash"]) == 64
     assert len(provenance["featureContractSha256"]) == 64
     assert len(provenance["savedVideoIdHash"]) == 64
     assert len(provenance["rawAxisCorpusIdHash"]) == 64
@@ -438,6 +453,9 @@ assert 0 < permutation_p <= 1
 # functions and are never merged under one headline metric.
 keep_source = inspect.getsource(predictor.run_keep_track)
 views_source = inspect.getsource(predictor.run_views_track)
+main_source = inspect.getsource(predictor.main)
+assert "excluded_axis_ids = private_ids | saved_ids" in main_source
+assert "fit_public_axes(stores, excluded_axis_ids" in main_source
 assert "operational = run_keep_known_video" in keep_source
 assert '"label": "Unseen-account transfer"' in keep_source
 assert '"metrics": operational["metrics"]' in keep_source
@@ -478,7 +496,7 @@ assert "Existing\nin-sample steered keep/ret5 estimates are never used as valida
 def synthetic_target(kind: str) -> dict:
     group_key = "heldOutAccount" if kind == "keep" else "heldOutChannel"
     stress_label = "Unseen-account transfer" if kind == "keep" else "Unseen-channel transfer"
-    return {
+    target = {
         "label": kind,
         "population": "synthetic",
         "primaryValidation": "Retrospective five-fold interpolation within known group",
@@ -512,10 +530,19 @@ def synthetic_target(kind: str) -> dict:
                 "description": "An entire synthetic group is absent.",
                 "metrics": {"n": 2, "r2": -0.2},
                 "folds": [{group_key: "group-a", "trainN": 1, "testN": 1}],
+                "points": [],
             }
         ],
         "warning": "Synthetic contract fixture.",
     }
+    if kind == "keep":
+        target["blindInputs"] = {
+            "featureNames": predictor.PRIVATE_FEATURE_NAMES,
+            "videoHeldOutProtocol": "The evaluated video is excluded from this synthetic fit.",
+            "accountHeldOutProtocol": "The evaluated account is excluded from this synthetic fit.",
+            "rows": [],
+        }
+    return target
 
 
 with tempfile.TemporaryDirectory() as temporary_directory:

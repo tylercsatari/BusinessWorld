@@ -5,9 +5,10 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
+const validationBuilder = require('../buildings/jarvis/saved-channel-validation');
 
 const ROOT = path.resolve(__dirname, '..');
-const ORIGIN = 'http://127.0.0.1:8002';
+const ORIGIN = process.env.EXPERIMENT_LAB_ORIGIN || 'http://127.0.0.1:8002';
 
 async function main() {
     const index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -29,7 +30,7 @@ async function main() {
         await page.route(`${ORIGIN}/__experiment-lab-origin__`, route => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><title>Experiment Lab test origin</title>' }));
         // Establish the local origin without loading Business World's global bundles twice.
         await page.goto(`${ORIGIN}/__experiment-lab-origin__`, { waitUntil: 'domcontentloaded' });
-        const channelId = 'ch0123456789abcdef';
+        const channelId = 'chd3f5a3dae83f3382';
         const videos = Array.from({ length: 20 }, (_, videoIndex) => {
             const id = `vid${String(videoIndex + 1).padStart(8, '0')}`;
             const views = videoIndex === 0 ? 50000000 : videoIndex === 1 ? 1000000 : Math.round(18000000 / (videoIndex + 1));
@@ -120,6 +121,80 @@ async function main() {
                 model: { status: 'ready', targetViews: 10000000, positives: 10, negatives: 10, exhaustiveCandidates: 1561, validation: 'Blind combination selection.', nestedSelected: { rocAuc: .8, prAuc: .77, brierSkill: .31, calibrationError: .07, calibrationBins: [{ n: 10, predicted: .2, observed: .1 }, { n: 10, predicted: .8, observed: .9 }], points: binaryPoints }, chronological: { rocAuc: .74 } },
             },
         };
+        const blindFeatureNames = [
+            ...['visual', 'text', 'together'].flatMap(group =>
+                ['keep', 'ret5', 'views', 'realviews', 'outlier', 'gt10M'].flatMap(target => [
+                    `${group}.${target}.raw`,
+                    `${group}.${target}.percentile`,
+                ])
+            ),
+            'novelty.temporal.raw', 'novelty.temporal.percentile',
+            'novelty.niche.raw', 'novelty.niche.percentile',
+            'novelty.combinatorial.raw', 'novelty.combinatorial.percentile',
+            'text.present', 'duration.log', 'title.words',
+        ];
+        const blindVector = index => blindFeatureNames.map(name => {
+            if (name.endsWith('.percentile')) return Math.min(99, 20 + index * 3);
+            if (name.endsWith('.views.raw') || name.endsWith('.realviews.raw')) return Math.log10(videos[index].views + 1);
+            if (name.endsWith('.keep.raw')) return 58 + index;
+            if (name.endsWith('.ret5.raw')) return 70 + index / 2;
+            if (name.endsWith('.gt10M.raw')) return index % 2 ? .25 : .75;
+            if (name.endsWith('.outlier.raw')) return .4 + index / 20;
+            return 1;
+        });
+        const privateVideos = videos.map((video, index) => ({
+            id: video.id,
+            title: video.title,
+            keep_rate: 57 + index,
+            ret5: 69 + index / 2,
+            avg_retention: 82 - index / 3,
+            views: Math.round(video.views * .92),
+            duration_s: 28 + index / 2,
+            published: `2025${String((index % 12) + 1).padStart(2, '0')}${String((index % 27) + 1).padStart(2, '0')}`,
+        }));
+        const keepPoints = videos.map((video, index) => ({ id: video.id, actual: 57 + index, predicted: 58 + index * .9 }));
+        const viewsPoints = videos.map(video => ({ id: video.id, channel: channelId, channelName: 'Mobile Risk Channel', actualViews: video.views, predictedViews: Math.round(video.views * 1.12) }));
+        const validationArtifact = validationBuilder.buildValidation({
+            channels: [{
+                channelId,
+                accountId: 'tyler',
+                accountName: 'Tyler Csatari',
+                manifest: { videos },
+                privateTable: { videos: privateVideos },
+            }],
+            predictor: {
+                generatedAt: Date.now(),
+                provenance: { savedAxisTrainingIdOverlap: 0, featureScorerVersionPersistedPerVideo: false },
+                targets: {
+                    keep: {
+                        points: keepPoints,
+                        blindInputs: {
+                            featureNames: blindFeatureNames,
+                            videoHeldOutProtocol: 'The evaluated video is excluded.',
+                            accountHeldOutProtocol: 'The evaluated account is excluded.',
+                            rows: videos.map((video, index) => ({
+                                id: video.id,
+                                videoHeldOut: blindVector(index),
+                                accountHeldOut: blindVector(index).map((value, featureIndex) => featureIndex % 2 ? value : value - .5),
+                            })),
+                        },
+                        stressTests: [
+                            { label: 'Unseen-account transfer', points: keepPoints.map(point => ({ ...point, predicted: point.predicted - 1 })) },
+                            { label: 'Forward-time keep-rate transfer', points: keepPoints.slice(5) },
+                        ],
+                    },
+                    views: {
+                        points: viewsPoints,
+                        stressTests: [
+                            { label: 'Unseen-channel transfer', points: viewsPoints.map(point => ({ ...point, predictedViews: Math.round(point.actualViews * .9) })) },
+                            { label: 'Forward-time public-views transfer', points: viewsPoints.slice(5) },
+                        ],
+                    },
+                },
+            },
+            sourceFingerprint: 'ui-fixture',
+        });
+        validationArtifact.artifact = { cacheStatus: 'hit', persisted: true, generatedAt: validationArtifact.generatedAt };
         const replies = {
             '/api/retention/channels': { channels: [], active: 'tyler' },
             '/api/indicators/registry': { indicators: [], meta: { targets: [] } },
@@ -127,6 +202,7 @@ async function main() {
             '/api/raw/saved-channels': { channels: [{ id: channelId, name: 'Mobile Risk Channel', url: 'https://youtube.com/@risk', status: 'partial', discovered: 21, completed: 20, failed: 1 }], featureContract },
             [`/api/raw/saved-channel/${channelId}`]: { id: channelId, name: 'Mobile Risk Channel', url: 'https://youtube.com/@risk', status: 'partial', discovered: 21, completed: 20, failed: 1, queued: 0, videos: videos.concat(unfinishedVideo), featureContract },
             [`/api/raw/saved-channel/${channelId}/analysis`]: riskAnalysis,
+            '/api/raw/saved-channel-validation': validationArtifact,
             [`/api/raw/saved-channel/${channelId}/resume`]: { ok: true },
             '/api/hooks/grind/runs': { runs: [] },
             '/api/hooks/warmup': { ok: true, fired: false },
@@ -211,7 +287,7 @@ async function main() {
             console.error('ANALYSIS PANEL:', (await page.locator('#rtg-exppanel').innerText()).slice(-3000));
             throw error;
         }
-        assert.strictEqual(await page.getByText('≥ 30.00M', { exact: true }).count(), 1, 'risk table must expose literal normal-views embedding thresholds');
+        assert((await page.locator('[data-savedchannelriskthresholdtable]').innerText()).includes('30.00M'), 'risk table must expose literal normal-views embedding thresholds');
         assert.strictEqual(await page.getByText('47–91%', { exact: true }).count(), 1, 'risk table must show confidence rather than a bare hit rate');
         assert.strictEqual(await page.getByText('Blind 10M tail model · combinations and future stability', { exact: true }).count(), 1);
         await page.locator('[data-savedchannelmatrix]').waitFor();
@@ -232,12 +308,30 @@ async function main() {
         await visualViewsButton.click();
         await page.getByText('Indicator playground · visual.views', { exact: true }).waitFor();
         assert((await page.locator('[data-savedchannelindicatorscatter] circle[data-savedchannelvideo]').count()) >= videos.length, 'selected-indicator scatter must expose every underlying video as a drill-down point');
+
+        await page.getByText('Blind validation', { exact: true }).click();
+        await page.getByText('Tyler + Hafu blind validation', { exact: true }).waitFor();
+        assert.strictEqual(await page.getByText('BLIND INPUT ARRAY AUDIT PASSED', { exact: true }).count(), 1);
+        assert.strictEqual(await page.getByText('Every embedding against its raw outcome', { exact: true }).count(), 1);
+        assert.strictEqual(await page.getByText('Video-by-video audit trail', { exact: true }).count(), 1);
+        assert((await page.locator('[data-savedchannelvideo]').count()) >= videos.length, 'blind validation must keep every plotted/video row inspectable');
+        await page.locator('[data-savedvalidationprotocol="account"]').click();
+        assert.strictEqual(await page.getByText('Whole account held out:', { exact: false }).count(), 1);
+        await page.locator('[data-savedvalidationexpand]').first().click();
+        assert.strictEqual(await page.getByText('All 21 stored channel scores · diagnostic replay', { exact: true }).count(), 1);
+        assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), 0, 'validation inspection must never recalculate a stored embedding');
         assert.deepStrictEqual(await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth })), { width: 390, scroll: 390 });
         if (process.env.EXPERIMENT_LAB_SCREENSHOT) {
             fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_SCREENSHOT), { recursive: true });
             await page.screenshot({ path: process.env.EXPERIMENT_LAB_SCREENSHOT, fullPage: false });
         }
-        console.log(JSON.stringify({ ok: true, sharedExperimentControls: 5, desktopWidth: 1280, mobileWidth: 390, mobileScrollTop: await workspace.evaluate(element => element.scrollTop), storedImage: true, exactIndicatorSort: 'text.keep', savedArtifactFetches: 1, resumeRequests: 1, matrixColumns: 21, relationshipCells: 441, trajectoryCharts: 21, riskSignalCharts: riskSignals.length, riskThreshold: '30M' }));
+        if (process.env.EXPERIMENT_LAB_DESKTOP_SCREENSHOT) {
+            await page.setViewportSize({ width: 1280, height: 820 });
+            assert.deepStrictEqual(await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth })), { width: 1280, scroll: 1280 });
+            fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_DESKTOP_SCREENSHOT), { recursive: true });
+            await page.screenshot({ path: process.env.EXPERIMENT_LAB_DESKTOP_SCREENSHOT, fullPage: false });
+        }
+        console.log(JSON.stringify({ ok: true, sharedExperimentControls: 5, desktopWidth: 1280, mobileWidth: 390, mobileScrollTop: await workspace.evaluate(element => element.scrollTop), storedImage: true, exactIndicatorSort: 'text.keep', savedArtifactFetches: 1, resumeRequests: 1, matrixColumns: 21, relationshipCells: 441, trajectoryCharts: 21, riskSignalCharts: riskSignals.length, riskThreshold: '30M', blindValidationRows: videos.length }));
     } finally {
         await browser.close();
     }
