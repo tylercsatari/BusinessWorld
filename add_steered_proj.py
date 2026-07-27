@@ -37,6 +37,9 @@ def r2_get(k):
     try: return s3.get_object(Bucket=BUCKET, Key=k)['Body'].read()
     except Exception: return None
 def r2_put(k, d, ct): s3.put_object(Bucket=BUCKET, Key=k, Body=d, ContentType=ct)
+def r2_delete(k):
+    try: s3.delete_object(Bucket=BUCKET, Key=k)
+    except Exception: pass
 def norm(X): return X / (np.linalg.norm(X, axis=1, keepdims=True) + 1e-9)
 def grid(a):
     a = np.asarray(a, float); q1, q9 = np.nanpercentile(a, 1), np.nanpercentile(a, 99)
@@ -132,13 +135,19 @@ def steer_metric(Vm, mids, lab):
             'est': [round(float(x), 2) for x in est], 'actual': actual}, len(oi)
 
 STEER = {}
+USE_PENDING = os.environ.get('RAW_STEER_USE_PENDING') == '1'
+PENDING_KEYS = []
 for ch in ['visual', 'text', 'together']:
     buf = r2_get(f'raw/{ch}/embeddings.npz')
     if not buf:
         print(f'{ch}: no embeddings yet — skip', flush=True); continue
     z = np.load(io.BytesIO(buf), allow_pickle=True)
     ids = [str(x) for x in z['ids']]; V = norm(np.asarray(z['vecs'], np.float32))
-    mp = json.loads(r2_get(f'raw/{ch}/map.json'))
+    map_key = f'raw/{ch}/map.pending.json' if USE_PENDING else f'raw/{ch}/map.json'
+    map_bytes = r2_get(map_key)
+    if not map_bytes:
+        raise RuntimeError(f'{map_key} is missing; refusing to replace the last complete map')
+    mp = json.loads(map_bytes)
     mids = [str(x) for x in mp['id']]; epos = {v: i for i, v in enumerate(ids)}
     Vm = np.zeros((len(mids), V.shape[1]), np.float32)
     for i, vid in enumerate(mids):
@@ -221,6 +230,7 @@ for ch in ['visual', 'text', 'together']:
     plot = encode_plot_artifact(build_plot_artifact(mp, ch, SHORT_PROJECTIONS))
     r2_put(f'raw/{ch}/plot.json', plot, 'application/json')
     r2_put(f'raw/{ch}/map.json', json.dumps(mp).encode(), 'application/json')
+    if USE_PENDING: PENDING_KEYS.append(f'raw/{ch}/map.pending.json')
     print(f'  saved raw/{ch}/map.json + plot.json ({len(plot):,} bytes; proj keys: {len(mp["proj"])})', flush=True)
 
 # steer_models.npz: per-account view equations (for upload realviews) + Main keep/ret5 (above)
@@ -232,4 +242,7 @@ STEER['PSCOPE'] = (np.array([VIEW_EQ['tyler']['wk'] * VIEW_EQ['tyler']['beta'], 
                    if VIEW_EQ.get('tyler') else np.zeros(4, np.float32))   # back-compat [c_keep,c_ret5,c_logdur,intercept]
 STEER['PSCOPE_durmed'] = np.float32(DUR_MED)
 bio = io.BytesIO(); np.savez_compressed(bio, **STEER); r2_put('raw/steer_models.npz', bio.getvalue(), 'application/octet-stream')
+# Preserve every staged input if any channel or scorer-model upload fails, so a
+# retry can complete the same publication set.
+for pending_key in PENDING_KEYS: r2_delete(pending_key)
 print('done — per-account keep/ret5/realviews projections + owner tags added; steer_models.npz saved', flush=True)

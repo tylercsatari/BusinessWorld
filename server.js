@@ -337,6 +337,186 @@ async function serveR2ObjectForRequest(req, res, key, contentType, opts = {}) {
     return true;
 }
 
+// Experiment score cards only need a small, truthful sample of each projection plus
+// the selected hook's exact nearest-neighbour placement. Sending the complete Raw map
+// used to transfer 15-50MB per channel and then create hundreds of thousands of SVG
+// nodes on phones. Compact plot artifacts retain every id/x/y server-side, but expose
+// at most a few hundred real corpus points to the browser. The full map remains behind
+// /api/raw(-long)/map and is loaded only when someone explicitly opens Raw.
+const QUANT_PLOT_PROJECTIONS = Object.freeze({
+    raw: ['keep', 'ret5', 'views', 'realviews', 'outlier', 'hi10m'],
+    'raw-long': ['ctrviews', 'ctr', 'ret30', 'views', 'realviews', 'hi10m', 'outlier'],
+});
+const _quantPlotCache = new Map();
+const _quantPlotInflight = new Map();
+const QUANT_PLOT_CACHE_MAX = Math.max(1, parseInt(process.env.QUANT_PLOT_CACHE_MAX || '3', 10));
+function finiteNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+}
+function quantPlotSampleIndices(n, limit = 360) {
+    if (!n) return [];
+    if (n <= limit) return Array.from({ length: n }, (_, i) => i);
+    const out = [];
+    for (let i = 0; i < limit; i++) out.push(Math.min(n - 1, Math.floor((i + 0.5) * n / limit)));
+    return out;
+}
+function quantPlotLimitPoints(points, limit) {
+    if (!Array.isArray(points) || points.length <= limit) return Array.isArray(points) ? points : [];
+    return quantPlotSampleIndices(points.length, limit).map(index => points[index]);
+}
+function quantPlotColorValues(map, projection, name) {
+    const n = Math.min((projection.x || []).length, (projection.y || []).length);
+    const values = new Array(n);
+    let colorKind = 'axis';
+    const estimated = Array.isArray(projection.est) ? projection.est : null;
+    const actual = Array.isArray(projection.actual) ? projection.actual : null;
+    if (name === 'hi10m' && Array.isArray(map.views)) {
+        colorKind = 'binary';
+        for (let i = 0; i < n; i++) values[i] = finiteNumber(map.views[i]) == null ? null : (Number(map.views[i]) > 10000000 ? 1 : 0);
+    } else if (name === 'views' && Array.isArray(map.views)) {
+        colorKind = 'views';
+        for (let i = 0; i < n; i++) values[i] = finiteNumber(map.views[i]);
+    } else if (estimated || actual) {
+        colorKind = name === 'realviews' ? 'views' : 'metric';
+        for (let i = 0; i < n; i++) values[i] = finiteNumber(actual && actual[i]) ?? finiteNumber(estimated && estimated[i]);
+    } else if (name === 'outlier' && Array.isArray(map.outlier)) {
+        colorKind = 'outlier';
+        for (let i = 0; i < n; i++) values[i] = finiteNumber(map.outlier[i]);
+    } else {
+        for (let i = 0; i < n; i++) values[i] = finiteNumber(projection.x[i]);
+    }
+    return { values, colorKind };
+}
+function quantPlotBounds(values) {
+    const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+    if (!sorted.length) return [0, 1];
+    const at = p => sorted[Math.max(0, Math.min(sorted.length - 1, Math.round((sorted.length - 1) * p)))];
+    const lo = at(0.01), hi = at(0.99);
+    return [lo, hi === lo ? lo + 1 : hi];
+}
+function buildQuantPlotArtifact(map, domain) {
+    const wanted = QUANT_PLOT_PROJECTIONS[domain] || [];
+    const ids = Array.isArray(map.id) ? map.id.map(String) : [];
+    const plots = {};
+    for (const name of wanted) {
+        const projection = map.proj && map.proj[name];
+        if (!projection || !Array.isArray(projection.x) || !Array.isArray(projection.y)) continue;
+        const n = Math.min(ids.length || projection.x.length, projection.x.length, projection.y.length);
+        const x = projection.x.slice(0, n).map(v => finiteNumber(v));
+        const y = projection.y.slice(0, n).map(v => finiteNumber(v));
+        const { values, colorKind } = quantPlotColorValues(map, projection, name);
+        const [zMin, zMax] = quantPlotBounds(values);
+        const points = quantPlotSampleIndices(n).flatMap(i =>
+            x[i] == null || y[i] == null ? [] : [[x[i], y[i], values[i] == null ? null : values[i]]]);
+        plots[name] = {
+            x, y, points, zMin, zMax, colorKind,
+            cv: finiteNumber(projection.cv), co: finiteNumber(projection.co),
+        };
+    }
+    return { version: 1, channel: String(map.channel || ''), n: ids.length, id: ids, plots };
+}
+function quantPlotCacheSet(key, artifact) {
+    if (_quantPlotCache.has(key)) _quantPlotCache.delete(key);
+    _quantPlotCache.set(key, artifact);
+    while (_quantPlotCache.size > QUANT_PLOT_CACHE_MAX) _quantPlotCache.delete(_quantPlotCache.keys().next().value);
+}
+async function loadQuantPlotArtifact(domain, channel) {
+    const cacheKey = `${domain}:${channel}`;
+    const cached = _quantPlotCache.get(cacheKey);
+    if (cached) {
+        _quantPlotCache.delete(cacheKey);
+        _quantPlotCache.set(cacheKey, cached);
+        return cached;
+    }
+    let pending = _quantPlotInflight.get(cacheKey);
+    if (!pending) {
+        pending = (async () => {
+            const compactKey = `${domain}/${channel}/plot.json`;
+            let buffer = await cloud.downloadFromR2(compactKey).catch(() => null);
+            let artifact = null;
+            if (buffer) artifact = JSON.parse(buffer.toString('utf8'));
+            if (!artifact || !artifact.plots || !Array.isArray(artifact.id)) {
+                buffer = await cloud.downloadFromR2(`${domain}/${channel}/map.json`);
+                if (!buffer) throw new Error(`No ${domain} ${channel} map is stored.`);
+                artifact = buildQuantPlotArtifact(JSON.parse(buffer.toString('utf8')), domain);
+            }
+            artifact._idIndex = new Map((artifact.id || []).map((id, index) => [String(id), index]));
+            quantPlotCacheSet(cacheKey, artifact);
+            return artifact;
+        })().finally(() => _quantPlotInflight.delete(cacheKey));
+        _quantPlotInflight.set(cacheKey, pending);
+    }
+    return pending;
+}
+function parseQuantPlotNeighbors(url) {
+    const raw = url.searchParams.get('neighbors');
+    if (!raw) return [];
+    try {
+        const rows = JSON.parse(raw);
+        if (!Array.isArray(rows)) return [];
+        return rows.slice(0, 20).map(row => ({
+            id: String(row && row.id || '').slice(0, 80),
+            sim: Math.max(0.001, finiteNumber(row && row.sim) || 0.001),
+        })).filter(row => row.id);
+    } catch (e) { return []; }
+}
+function quantPlotMarker(artifact, projection, neighbors, weightPower) {
+    if (!projection || !neighbors.length) return null;
+    let sx = 0, sy = 0, sw = 0;
+    for (const neighbor of neighbors) {
+        const index = artifact._idIndex && artifact._idIndex.get(neighbor.id);
+        if (index == null) continue;
+        const x = finiteNumber(projection.x && projection.x[index]);
+        const y = finiteNumber(projection.y && projection.y[index]);
+        if (x == null || y == null) continue;
+        const weight = Math.pow(neighbor.sim, weightPower);
+        sx += x * weight; sy += y * weight; sw += weight;
+    }
+    if (!sw) return null;
+    const x = sx / sw, y = sy / sw;
+    const xs = (projection.x || []).filter(Number.isFinite);
+    const percentile = xs.length ? xs.reduce((count, value) => count + (value <= x ? 1 : 0), 0) / xs.length * 100 : null;
+    return { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, percentile: percentile == null ? null : Math.round(percentile * 10) / 10 };
+}
+async function serveQuantPlot(req, res, url, domain) {
+    const channel = String(url.searchParams.get('channel') || 'visual').replace(/[^a-z]/g, '');
+    if (!['visual', 'text', 'together'].includes(channel)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid embedding channel.' }));
+        return;
+    }
+    try {
+        const artifact = await loadQuantPlotArtifact(domain, channel);
+        const neighbors = parseQuantPlotNeighbors(url);
+        const requested = String(url.searchParams.get('projections') || '').split(',').map(x => x.replace(/[^a-zA-Z0-9]/g, '')).filter(Boolean);
+        const names = requested.length ? requested : (QUANT_PLOT_PROJECTIONS[domain] || []);
+        const pointLimit = Math.max(40, Math.min(360, parseInt(url.searchParams.get('limit') || '160', 10) || 160));
+        const plots = {};
+        for (const name of names) {
+            const projection = artifact.plots && artifact.plots[name];
+            if (!projection) continue;
+            plots[name] = {
+                points: quantPlotLimitPoints(projection.points, pointLimit),
+                zMin: projection.zMin, zMax: projection.zMax,
+                colorKind: projection.colorKind || 'axis',
+                cv: projection.cv, co: projection.co,
+                marker: quantPlotMarker(artifact, projection, neighbors, domain === 'raw-long' ? 8 : 1),
+            };
+        }
+        sendJsonGz(req, res, {
+            version: 1,
+            channel,
+            n: artifact.n || (artifact.id || []).length,
+            plots,
+            missing: names.filter(name => !plots[name]),
+        }, 200);
+    } catch (error) {
+        res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+        res.end(JSON.stringify({ error: `Compact embedding plots are temporarily unavailable: ${error.message}` }));
+    }
+}
+
 const _limiters = new Map();
 let _serverStopping = false;
 function runLimited(name, limit, fn, front) {
@@ -4255,8 +4435,12 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         await serveR2Gz(req, res, 'raw/fusion/report.json', 300e3, { error: 'no report yet' });
         return;
     }
+    if (pathname === '/api/raw/plot' && req.method === 'GET') {
+        await serveQuantPlot(req, res, url, 'raw');
+        return;
+    }
     if (pathname === '/api/raw/map' && req.method === 'GET') {
-        // 6.6MB per channel — was an R2 download + UNCOMPRESSED send per request; now cached+gzipped (~700KB wire)
+        // Full corpus map for the explicit Raw workspace. Score cards use /api/raw/plot.
         const ch = (url.searchParams.get('channel') || 'visual').replace(/[^a-z]/g, '');
         await serveR2Gz(req, res, `raw/${ch}/map.json`, 300e3, { n: 0, channel: ch }, 200, {
             surfaceSourceErrors: true,
@@ -4325,6 +4509,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
     // Long Quant raw embeddings (title+thumbnail), namespaced raw-long/. Built later by raw_embed_long.py.
+    if (pathname === '/api/raw-long/plot' && req.method === 'GET') {
+        await serveQuantPlot(req, res, url, 'raw-long');
+        return;
+    }
     if (pathname === '/api/raw-long/map' && req.method === 'GET') {
         const ch = (url.searchParams.get('channel') || 'visual').replace(/[^a-z]/g, '');
         await serveR2Gz(req, res, `raw-long/${ch}/map.json`, 300e3, { n: 0, channel: ch }, 200, {
@@ -4642,8 +4830,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             if (ib) idx = JSON.parse(ib.toString('utf8'));
             if (idx && Array.isArray(idx.hooks)) {
                 idx.hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-                res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-                res.end(JSON.stringify({ hooks: idx.hooks, folders: idx.folders || [], indexed: true }));
+                sendJsonGz(req, res, { hooks: idx.hooks, folders: idx.folders || [], indexed: true }, 200);
                 return;
             }
             // Fallback (no index yet): only the most-recent ~80 records so we never time out on a big bank.
@@ -4655,8 +4842,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 if (b) hooks.push(JSON.parse(b.toString('utf8')));
             }
             hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
-            res.end(JSON.stringify({ hooks, folders: [], indexed: false }));
+            sendJsonGz(req, res, { hooks, folders: [], indexed: false }, 200);
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }

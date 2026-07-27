@@ -55,12 +55,30 @@ RAW_MAX = int(os.environ.get('RAW_MAX', '1000000'))    # default: everything sto
 OWNED_JITTER = float(os.environ.get('RAW_OWNED_JITTER', '0'))   # seconds of random pre-download sleep on YouTube pulls (gentle pacing)
 BACKFILL_MODE = os.environ.get('RAW_BACKFILL') == '1'
 CHECKPOINT_EVERY = max(100, int(os.environ.get('RAW_CHECKPOINT_EVERY', '5000' if BACKFILL_MODE else '100')))
-MAP_EVERY = max(0, int(os.environ.get('RAW_MAP_EVERY', '0' if BACKFILL_MODE else '500')))
+# A bare checkpoint map omits the account-specific projections. Keep the last complete
+# published bundle live during embedding and publish map + steering + plot atomically at the end.
+MAP_EVERY = max(0, int(os.environ.get('RAW_MAP_EVERY', '0')))
 STATUS_EVERY = max(10, int(os.environ.get('RAW_STATUS_EVERY', '50')))
 STREAM_R2 = os.environ.get('RAW_STREAM_R2', '1') != '0'
 CREDIT_RETRY_SECONDS = max(15, int(os.environ.get('RAW_CREDIT_RETRY_SECONDS', '60')))
 EMB_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent'
 CHANS = ['visual', 'text', 'together']
+
+def run_steering():
+    """Publish the account projections and compact score-card artifacts after every map rebuild."""
+    try:
+        child_env = dict(os.environ)
+        child_env['RAW_STEER_USE_PENDING'] = '1'
+        subprocess.run(
+            [sys.executable, os.path.join(HERE, 'add_steered_proj.py')],
+            cwd=HERE,
+            env=child_env,
+            timeout=1800,
+            check=True,
+        )
+    except Exception as error:
+        print('steering/artifact publication failed:', str(error)[:180], flush=True)
+        raise
 
 _wlock = threading.Lock(); _wmodel = [None]
 def whisper_text(wav):
@@ -466,7 +484,9 @@ def build_map(c):
                'subs': [float(x) for x in s['subs']], 'id': list(ids), 'title': [str(t)[:60] for t in s['title']],
                'txt': [str(t)[:200] for t in s['txt']], 'mine': mine, 'silent': silent, 'clusters': clusters,
                'nmine': int(sum(mine)), 'nsilent': int(sum(silent))}
-        r2_put(f'raw/{c}/map.json', json.dumps(out).encode(), 'application/json')
+        # Never replace the last complete live map with this unsteered intermediate.
+        # add_steered_proj.py validates and enriches this staged map before publishing.
+        r2_put(f'raw/{c}/map.pending.json', json.dumps(out).encode(), 'application/json')
         print(f"  map[{c}]: n={len(ids)} mine={sum(mine)} silent={sum(silent)} held-out AUC(>10M)={auc} r(views)={r} · " + ' '.join(f"{k}(v{proj[k]['cv']}/o{proj[k]['co']})" for k in proj), flush=True)
     except Exception as e:
         print(f'map[{c}] skipped:', str(e)[:120], flush=True)
@@ -488,8 +508,9 @@ def save_npz(c):
 
 migrate_clean()                # apply the no-voiceover gate to already-embedded data
 if not BACKFILL_MODE:
-    for c in CHANS: save_npz(c)     # persist mine/silent flags + cleaned text/together
-    for c in CHANS: build_map(c)    # immediate maps from whatever's already embedded
+    # Persist cleaned embeddings immediately, but keep the last validated live maps
+    # available until this run has produced complete staged replacements.
+    for c in CHANS: save_npz(c)
 
 
 def work(v):
@@ -567,6 +588,8 @@ if not BACKFILL_MODE:
     # live until the dedicated sampled-map builder refreshes it.
     for c in CHANS:
         build_map(c)
+    if os.environ.get('RAW_SKIP_STEER_REBUILD') != '1':
+        run_steering()
 emit_status('complete', discovered=len(stored), eligible=len(stored), queued=0,
             attempted=cnt[0], processed=completed[0], failed=fails[0],
             complete={c: len(done[c]) for c in CHANS}, ratePerMinute=round(cnt[0] / max(time.time() - t0, 1) * 60, 2),

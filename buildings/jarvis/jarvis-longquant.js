@@ -310,7 +310,7 @@ const JarvisLongQuant = (function () {
         const current = RAW[ch];
         if (!force && current && (current.loading || !current.error)) return;
         RAW[ch] = { loading: 1 };
-        lqxJson('/api/raw-long/map?channel=' + ch, { cache: 'no-store' })
+        lqxJson('/api/raw-long/map?channel=' + ch, { cache: 'default' })
             .then(j => {
                 if (!j || j.error) throw new Error((j && j.error) || 'empty embedding map');
                 RAW[ch] = j;
@@ -319,9 +319,6 @@ const JarvisLongQuant = (function () {
             .catch(e => {
                 RAW[ch] = { n: 0, error: String(e.message || e), at: Date.now() };
                 rtgUpdateRaw(); rtgUpdateGuessesL(); rtgUpdateLqIdeas(); rtgUpdateLqExp();
-                window.setTimeout(() => {
-                    if (RAW[ch] && RAW[ch].error) { delete RAW[ch]; rawEnsure(ch, true); }
-                }, 5000);
             });
     }
     // ── ONE global hook-scoring source: an upload's number on the map IS out.steer (computed
@@ -381,6 +378,7 @@ const JarvisLongQuant = (function () {
         const R = RAW[chan];
         if (!R) { rawEnsure(chan); return head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading ${chan}…</div>`); }
         if (R.loading) return head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading ${chan}…</div>`);
+        if (R.error) return head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.red}">${esc(R.error)}<div><span data-rawretry="${chan}" style="display:inline-block;cursor:pointer;color:${C.cyan};font-weight:800;margin-top:10px">retry ${chan} map</span></div></div>`);
         if (!R.n) return head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No ${chan} embeddings yet — the pipeline is still running (${chan === 'visual' ? 'visual is first' : 'text/together build over ~1.5h'}). Refresh shortly.</div>`);
         const n = R.n, W = 820, H = 520, pad = 16, S = 1000;
         const X = g => pad + g / S * (W - 2 * pad), Yc = g => pad + (1 - g / S) * (H - 2 * pad);
@@ -839,7 +837,7 @@ const JarvisLongQuant = (function () {
         return cardc(`<div style="font-size:15px;font-weight:800;color:${C.text};margin-bottom:4px">🎰 Guesses — what the models generate</div>${statStrip}${selectorsRow}<div style="font-size:11px;color:${C.mute};margin-bottom:8px">Every title the thumbnail model trained on + its generated thumbnails, scored on the CTR+views axis. Click a title to light up its guesses on the map and see them below. Switch the latent space to view the same guesses projected different ways.</div><div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">latent space</span>${projPills}</div>${demo}${body}${detail}`, 14);
     }
     // ═══ 🧪 Long-form Experiment: generate thumbnails with the trained model + score uploads + saved bank ═══
-    const LQTHUMBS = [null], LQIDEARUNS = [null], LQGRINDRUNS = [null], LQGRINDSTATUS = [null], LQGRINDDETAILS = {}, LQIDEAIDX = {}, LQIDEAGRP = {}, LQSCORES = {}, LQDETAILS = {}, LQRAW = {}, LQIMGS = {}, LQGRAPHHTML = {}, LQHOOKEMB = [null], LQHOOKDET = {};
+    const LQTHUMBS = [null], LQIDEARUNS = [null], LQGRINDRUNS = [null], LQGRINDSTATUS = [null], LQGRINDDETAILS = {}, LQIDEAIDX = {}, LQIDEAGRP = {}, LQSCORES = {}, LQDETAILS = {}, LQRAW = {}, LQIMGS = {}, LQGRAPHHTML = {}, LQEXPLOTS = {}, LQHOOKEMB = [null], LQHOOKDET = {};
     const LQ_REFRESH_MS = 15000;
     const LQ_LIVE_REFRESH_MS = 6000;
     let _lqExpPaintAt = 0, _lqExpPaintTimer = null;
@@ -947,6 +945,36 @@ const JarvisLongQuant = (function () {
             return text;
         }
         throw lastErr || new Error('server unavailable');
+    }
+    function lqxPlotKey(score, ch) {
+        const neighbors = score && score.channels && score.channels[ch] && score.channels[ch].neighbors;
+        if (!Array.isArray(neighbors) || !neighbors.length) return '';
+        return ch + ':' + neighbors.slice(0, 20).map(row => `${row.id}:${Number(row.sim || 0).toFixed(5)}`).join('|');
+    }
+    function lqxPlotFor(score, ch) {
+        const key = lqxPlotKey(score, ch);
+        return key ? LQEXPLOTS[key] : null;
+    }
+    function lqxPlotEnsure(score, ch, force) {
+        const key = lqxPlotKey(score, ch);
+        if (!key) return null;
+        const current = LQEXPLOTS[key];
+        if (!force && current && (current.loading || !current.error)) return current;
+        const neighbors = (score.channels[ch].neighbors || []).slice(0, 20).map(row => ({ id: row.id, sim: row.sim }));
+        const pointLimit = window.innerWidth < 700 ? 96 : 180;
+        LQEXPLOTS[key] = { loading: 1, at: Date.now() };
+        lqxJson('/api/raw-long/plot?channel=' + encodeURIComponent(ch) + '&limit=' + pointLimit + '&neighbors=' + encodeURIComponent(JSON.stringify(neighbors)), {
+            cache: 'default',
+        }).then(plot => {
+            LQEXPLOTS[key] = plot;
+            const keys = Object.keys(LQEXPLOTS);
+            while (keys.length > 12) delete LQEXPLOTS[keys.shift()];
+            rtgUpdateLqExp();
+        }).catch(error => {
+            LQEXPLOTS[key] = { error: String(error && (error.message || error) || 'compact plot unavailable'), at: Date.now(), plots: {} };
+            rtgUpdateLqExp();
+        });
+        return LQEXPLOTS[key];
     }
     function lqxFormatBytes(bytes) {
         const n = Number(bytes) || 0;
@@ -1357,22 +1385,12 @@ const JarvisLongQuant = (function () {
     const LQ_COMPARE_METRICS = [['ctrviews', 'CTR + views'], ['ctr', 'CTR'], ['ret30', '30s retention'], ['views', 'views'], ['realviews', 'realistic views'], ['gt10m', '>10M class']];
     const lqxProjName = metric => ({ ctrviews: 'ctrviews', ctr: 'ctr', ret30: 'ret30', views: 'views', realviews: 'realviews', gt10m: 'hi10m' }[metric] || metric);
     function lqxProjectedAxisMetric(score, ch, metric) {
-        const R = RAW[ch], pj = R && R.proj && R.proj[lqxProjName(metric)];
-        const src = score && score.channels && score.channels[ch];
-        if (!R || !pj || !Array.isArray(pj.x) || !src || !Array.isArray(src.neighbors)) return null;
-        const ids = R.id || [], xs = pj.x || [];
-        let sx = 0, sw = 0;
-        for (const nn of src.neighbors) {
-            const idx = ids.indexOf(nn.id);
-            if (idx < 0 || xs[idx] == null) continue;
-            const w = Math.pow(Math.max(0.001, Number(nn.sim) || 0.001), 8);
-            sx += Number(xs[idx]) * w; sw += w;
-        }
-        if (!sw) return null;
-        const axisX = sx / sw, valid = xs.filter(Number.isFinite);
-        if (!valid.length) return null;
-        const pctile = Math.round(1000 * valid.reduce((n, x) => n + (Number(x) <= axisX ? 1 : 0), 0) / valid.length) / 10;
-        return { est: null, pctile, kind: 'neighbor_axis_percentile', axis_x: Math.round(axisX * 100) / 100, projection: lqxProjName(metric) };
+        let bundle = lqxPlotFor(score, ch);
+        if (!bundle) bundle = lqxPlotEnsure(score, ch);
+        const plot = bundle && bundle.plots && bundle.plots[lqxProjName(metric)];
+        const marker = plot && plot.marker;
+        if (!marker || marker.percentile == null) return null;
+        return { est: null, pctile: marker.percentile, kind: 'neighbor_axis_percentile', axis_x: marker.x, projection: lqxProjName(metric) };
     }
     function lqxMetricForChannel(score, ch, metric) {
         const m = score && score.channels && score.channels[ch] && score.channels[ch].metrics && score.channels[ch].metrics[metric];
@@ -1402,7 +1420,6 @@ const JarvisLongQuant = (function () {
         score = lqxNormalizeScore(score);
         if (score && score.error && !score.channels) return `<div style="margin-top:5px;font-size:${compact ? '9px' : '10px'};color:${C.red};border:1px solid ${C.red}44;border-radius:6px;padding:4px 7px">⚠ scoring failed: ${esc(String(score.error).slice(0, 160))}</div>`;
         if (!score || !score.channels) return '';
-        for (const ch of ['visual', 'together']) if (!RAW[ch]) rawEnsure(ch);
         const outputs = {};
         for (const ch of ['visual', 'together']) {
             outputs[ch] = {};
@@ -1427,8 +1444,9 @@ const JarvisLongQuant = (function () {
     function lqxMetricGraph(score, metric, label, ch, cacheId) {
         if (!score || !score.channels || !score.channels[ch]) return '';
         const projName = lqxProjName(metric), m = lqxMetricForChannel(score, ch, metric);
-        if (!RAW[ch]) rawEnsure(ch);
-        const R = RAW[ch], pj = R && R.proj && R.proj[projName];
+        let bundle = lqxPlotFor(score, ch);
+        if (!bundle) bundle = lqxPlotEnsure(score, ch);
+        const plot = bundle && bundle.plots && bundle.plots[projName];
         const pct = m && m.pctile != null ? lqxMetricPct(m) : null;
         const est = lqxMetricEstimate(metric, m);
         const input = ch === 'visual' ? 'thumbnail image only' : ch === 'text' ? 'title text only' : 'thumbnail image + title/idea';
@@ -1436,34 +1454,33 @@ const JarvisLongQuant = (function () {
         const attrs = cacheId ? ` data-lqxraw="${esc(cacheId)}" data-lqxrawchan="${esc(ch)}" data-lqxrawproj="${esc(projName)}"` : '';
         const frame = inner => `<div${attrs} style="cursor:${cacheId ? 'pointer' : 'default'};background:${C.card};border:1px solid ${accent}55;border-radius:8px;padding:10px;min-width:0">${inner}</div>`;
         const heading = `<div style="font-size:10px;color:${accent};font-weight:900;text-transform:uppercase">${esc(ch)} embedding → ${esc(label)}</div><div style="font-size:8.5px;color:${C.faint};margin-top:1px">${esc(input)}</div><div style="font-size:24px;font-weight:900;color:${C.text};line-height:1.1;margin:4px 0">${pct == null ? '—' : pct + 'th'}${est ? ` <span style="font-size:10px;color:${C.mute};font-weight:600">${esc(est)}</span>` : ''}</div>`;
-        if (!R || R.loading || !pj || !Array.isArray(pj.x)) return frame(`${heading}<div style="height:120px;background:${C.card2};border-radius:6px;display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px">loading ${esc(ch)} ${esc(projName)} map…</div>`);
+        if (!bundle || bundle.loading) return frame(`${heading}<div style="height:120px;background:${C.card2};border-radius:6px;display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px">loading compact ${esc(ch)} ${esc(projName)} map…</div>`);
+        if (bundle.error) return frame(`${heading}<div style="height:120px;background:${C.card2};border:1px solid ${C.red}44;border-radius:6px;padding:10px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center;color:${C.red};font-size:10px">${esc(bundle.error)}</div>`);
+        if (!plot) return frame(`${heading}<div style="height:120px;background:${C.card2};border:1px solid ${C.amber}44;border-radius:6px;padding:10px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center;color:${C.amber};font-size:10px">${esc(projName)} projection is being rebuilt</div>`);
         const W = 250, H = 150, pad = 8, S = 1000, X = x => pad + x / S * (W - 2 * pad), Y = y => pad + (1 - y / S) * (H - 2 * pad);
-        const xs = pj.x || [], ys = pj.y || [], n = Math.min(xs.length, ys.length, R.n || xs.length);
-        const step = Math.max(1, Math.ceil(n / 900));
-        let dots = '';
-        const vals = (pj.est || R.views || []).map(v => Number(v));
-        const ok = vals.filter(Number.isFinite), lo = ok.length ? Math.min(...ok) : 0, hi = ok.length ? Math.max(...ok) : 1;
-        const col = i => Number.isFinite(vals[i]) ? rawRamp((vals[i] - lo) / ((hi - lo) || 1)) : '#334155';
-        for (let i = 0; i < n; i += step) if (xs[i] != null && ys[i] != null) dots += `<circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(ys[i]).toFixed(1)}" r="1.5" fill="${col(i)}" opacity="0.58"/>`;
+        const lo0 = Number(plot.zMin), hi0 = Number(plot.zMax), logColor = plot.colorKind === 'views' || projName === 'realviews';
+        const lo = logColor ? Math.log10(Math.max(0, lo0) + 1) : lo0, hi = logColor ? Math.log10(Math.max(0, hi0) + 1) : hi0;
+        const col = z => {
+            if (z == null || !Number.isFinite(Number(z))) return '#334155';
+            if (plot.colorKind === 'binary') return Number(z) >= 0.5 ? '#f87171' : '#334155';
+            const value = logColor ? Math.log10(Math.max(0, Number(z)) + 1) : Number(z);
+            return rawRamp((value - lo) / ((hi - lo) || 1));
+        };
+        const dots = (plot.points || []).map(point => `<circle cx="${X(point[0]).toFixed(1)}" cy="${Y(point[1]).toFixed(1)}" r="1.55" fill="${col(point[2])}" opacity="0.58"/>`).join('');
         let mark = '';
-        const ids = R.id || [], nb = score.channels[ch].neighbors || [];
-        let sx = 0, sy = 0, sw = 0;
-        for (const nn of nb) {
-            const idx = ids.indexOf(nn.id);
-            if (idx < 0 || xs[idx] == null || ys[idx] == null) continue;
-            const w = Math.pow(Math.max(0.001, Number(nn.sim) || 0.001), 8);
-            sx += xs[idx] * w; sy += ys[idx] * w; sw += w;
-        }
-        if (sw > 0) {
-            const hx = X(sx / sw), hy = Y(sy / sw);
+        if (plot.marker && Number.isFinite(Number(plot.marker.x)) && Number.isFinite(Number(plot.marker.y))) {
+            const hx = X(Number(plot.marker.x)), hy = Y(Number(plot.marker.y));
             mark = `<line x1="${hx.toFixed(1)}" y1="${(hy - 9).toFixed(1)}" x2="${hx.toFixed(1)}" y2="${(hy + 9).toFixed(1)}" stroke="${accent}" stroke-width="1"/><line x1="${(hx - 9).toFixed(1)}" y1="${hy.toFixed(1)}" x2="${(hx + 9).toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${accent}" stroke-width="1"/><circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="5" fill="${accent}" stroke="#fff" stroke-width="1.5"/>`;
         }
-        return frame(`${heading}<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block;background:${C.card2};border-radius:6px">${dots}${mark}</svg><div style="font-size:8.5px;color:${C.mute};margin-top:4px">${esc(projName)} projection · ${cacheId ? 'open ' + ch + ' Raw map' : 'nearest-neighbor placement'}</div>`);
+        return frame(`${heading}<svg viewBox="0 0 ${W} ${H}" data-compact-quant-plot="${esc(ch + ':' + projName)}" data-corpus-n="${Number(bundle.n || 0)}" style="width:100%;display:block;background:${C.card2};border-radius:6px">${dots}${mark}</svg><div style="font-size:8.5px;color:${C.mute};margin-top:4px">${esc(projName)} projection · ${cacheId ? 'open ' + ch + ' Raw map' : 'nearest-neighbor placement'} · ${(bundle.n || 0).toLocaleString()} corpus videos</div>`);
     }
     function lqxGraphGrid(score, cacheId) {
         if (!score || score.loading || score.error || !score.channels) return '';
-        for (const ch of ['visual', 'together']) if (!RAW[ch]) rawEnsure(ch);
-        const ready = ['visual', 'together'].every(ch => RAW[ch] && RAW[ch].n && RAW[ch].proj);
+        for (const ch of ['visual', 'together']) if (!lqxPlotFor(score, ch)) lqxPlotEnsure(score, ch);
+        const ready = ['visual', 'together'].every(ch => {
+            const plot = lqxPlotFor(score, ch);
+            return plot && !plot.loading && !plot.error && plot.plots;
+        });
         const sig = ['visual', 'together'].map(ch => {
             const src = score.channels[ch] || {}, metrics = src.metrics || {}, nn = (src.neighbors || [])[0] || {};
             return `${ch}:${LQ_COMPARE_METRICS.map(([k]) => (metrics[k] && metrics[k].pctile) == null ? '' : metrics[k].pctile).join(',')}:${nn.id || ''}:${nn.sim || ''}`;
@@ -4311,6 +4328,7 @@ const JarvisLongQuant = (function () {
         const idt = e.target.closest('[data-ideadot]'); if (idt) { const id = idt.getAttribute('data-ideadot'); st.ideaSel = (st.ideaSel === id ? null : id); rtgUpdateLqIdeas(); return; }
         const ipk = e.target.closest('[data-ideapick]'); if (ipk) { const id = ipk.getAttribute('data-ideapick'); if (id) { st.ideaSel = (st.ideaSel === id ? null : id); rtgUpdateGuessesL(); } return; }
         const lgd = e.target.closest('[data-lgdemo]'); if (lgd) { const inp = window.document.querySelector('[data-lgtitle]'); if (inp) st.lgDemoTitle = inp.value; lgDemo(); return; }
+        const rawRetry = e.target.closest('[data-rawretry]'); if (rawRetry) { const ch = rawRetry.getAttribute('data-rawretry') || st.rawChan || 'visual'; delete RAW[ch]; rawEnsure(ch, true); rtgUpdateRaw(); return; }
         const rp = e.target.closest('[data-rawproj]'); if (rp) { st.rawProj = rp.getAttribute('data-rawproj'); rtgUpdateRaw(); return; }
         const fut = e.target.closest('[data-futarget]'); if (fut) { st.fuTarget = fut.getAttribute('data-futarget'); rtgUpdateFusion(); return; }
         if (e.target.closest('[data-rawbands]')) { st.rawBands = !st.rawBands; rtgUpdateRaw(); return; }
@@ -4463,7 +4481,8 @@ const JarvisLongQuant = (function () {
                     DATA = await loadJSON(base + 'retention_table.json');   // sentinel: throw → retry loop
                     await loadJSON(base + 'retention_study.json').then(x => { S = x; S_MAIN = x; }).catch(() => { S = null; S_MAIN = null; });
                     RAW = {};
-                    // BACKGROUND: the heavy corpus files (novelty ~10MB, rtg_field ~9MB, the raw map…)
+                    // BACKGROUND: analysis files used by research tabs. Raw maps stay on-demand;
+                    // score details use compact plot artifacts instead of booting a full map.
                     // stream in behind the visible tab; each arrival re-renders so its sections light
                     // up. BGPEND drives the header's "still loading…" note.
                     const bg = [
@@ -4476,10 +4495,6 @@ const JarvisLongQuant = (function () {
                         loadJSON(base + 'principles/rtg_field.json').then(x => RTGF = x).catch(() => RTGF = null),
                         loadJSON(base + 'principles/rtg_embedmap.json').then(x => RTGE = x).catch(() => RTGE = null),
                         loadJSON(base + 'principles/rtg_hazard.json').then(x => RTGH = x).catch(() => RTGH = null),
-                        lqxJson('/api/raw-long/map?channel=visual', { cache: 'no-store' }).then(x => RAW.visual = x).catch(e => {
-                            RAW.visual = { n: 0, error: String(e.message || e), at: Date.now() };
-                            window.setTimeout(() => rawEnsure('visual', true), 5000);
-                        }),
                         fetch('/api/rtg/labels').then(r => r.json()).then(x => RTGLABELS = x || {}).catch(() => RTGLABELS = {}),
                     ];
                     BGPEND = bg.length;

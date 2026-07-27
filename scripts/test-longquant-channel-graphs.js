@@ -27,6 +27,14 @@ const rawChannel = {
         hi10m: projection,
     },
 };
+const compactPlots = Object.fromEntries(['ctrviews', 'ctr', 'ret30', 'views', 'realviews', 'hi10m'].map((name, index) => [name, {
+    points: [[100, 120, 1], [500, 520, 2], [900, 920, 3]],
+    zMin: 1,
+    zMax: 3,
+    colorKind: name === 'hi10m' ? 'binary' : 'metric',
+    marker: { x: 350 + index, y: 450, percentile: 61 + index },
+}]));
+const compactBundle = { n: 3, plots: compactPlots };
 const metric = pctile => ({ est: pctile, pctile, kind: 'fixture' });
 const channel = (withCtrViews, missingCalibrated) => ({
     metrics: {
@@ -49,6 +57,8 @@ const context = {
     },
     rawEnsure: () => {},
     rawRamp: () => '#38bdf8',
+    lqxPlotFor: () => compactBundle,
+    lqxPlotEnsure: () => compactBundle,
     esc: value => String(value == null ? '' : value),
     lqxNormalizeScore: score => score,
     lqxMetricPct: m => m && m.pctile == null ? null : Math.round(Number(m.pctile)),
@@ -92,6 +102,7 @@ assert(visualSummary === 6 && togetherSummary === 6, '12-output summary is not g
 assert(compactSummary.includes('12 embedding outputs') && compactSummary.includes('12/12'), 'compact cards do not expose the shared 12-output contract');
 assert(!html.includes('data-lqxrawchan="text"'), 'text channel leaked into the requested 12-graph comparison');
 assert(html.includes('12 independent embedding outputs by input'), '12-output heading missing');
+assert((html.match(/data-compact-quant-plot=/g) || []).length === 12, 'all 12 graphs must use bounded compact plots');
 assert(context.graphApi.lqxGraphGrid(score, 'fixture-thumb') === html, 'ready graph HTML was not cached');
 assert(!source.includes('function lqxMetricHtml('), 'legacy mixed-channel renderer still exists');
 const compactCalls = (source.match(/lqxChannelMetricHtml\([^\n]+, true\)/g) || []).length;

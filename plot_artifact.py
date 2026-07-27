@@ -14,7 +14,7 @@ MAX_SAMPLE_POINTS = 360
 SHORT_PROJECTIONS = ("keep", "ret5", "views", "realviews", "outlier", "hi10m")
 LONG_PROJECTIONS = ("ctrviews", "ctr", "ret30", "views", "realviews", "hi10m", "outlier")
 
-_RAW_VIEWS_PROJECTIONS = frozenset(("views", "hi10m"))
+_RAW_VIEWS_PROJECTIONS = frozenset(("views",))
 _OUTLIER_PROJECTIONS = frozenset(("outlier",))
 _OUTCOME_PROJECTIONS = frozenset(("keep", "ret5", "realviews", "ctrviews", "ctr", "ret30"))
 
@@ -71,16 +71,24 @@ def _color_values(
     x: Sequence[int],
     n: int,
 ) -> tuple[list[Any], str]:
+    if name == "hi10m":
+        views = _aligned_values(full_map.get("views"), n)
+        if views is not None:
+            return [
+                None if _finite_number(value) is None else int(float(value) > 10_000_000)
+                for value in views
+            ], "binary"
     if name in _RAW_VIEWS_PROJECTIONS:
         views = _aligned_values(full_map.get("views"), n)
         if views is not None:
-            return [_finite_number(value) for value in views], "raw views"
+            return [_finite_number(value) for value in views], "views"
     elif name in _OUTLIER_PROJECTIONS:
         outlier = _aligned_values(full_map.get("outlier"), n)
         if outlier is not None:
             return [_finite_number(value) for value in outlier], "outlier"
     elif name in _OUTCOME_PROJECTIONS:
-        return _outcome_colors(projection, x, n)
+        values, kind = _outcome_colors(projection, x, n)
+        return values, "views" if name == "realviews" and kind != "x" else ("metric" if kind != "x" else kind)
     return list(x), "x"
 
 

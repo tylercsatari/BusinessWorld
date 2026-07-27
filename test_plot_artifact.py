@@ -59,11 +59,13 @@ class PlotArtifactTest(unittest.TestCase):
             self.assertEqual(len(plot["points"]), MAX_SAMPLE_POINTS)
             self.assertTrue(all(isinstance(value, int) for value in plot["x"] + plot["y"]))
 
-        self.assertEqual(first["plots"]["keep"]["colorKind"], "actual/est")
-        self.assertEqual(first["plots"]["views"]["colorKind"], "raw views")
-        self.assertEqual(first["plots"]["hi10m"]["colorKind"], "raw views")
+        self.assertEqual(first["plots"]["keep"]["colorKind"], "metric")
+        self.assertEqual(first["plots"]["views"]["colorKind"], "views")
+        self.assertEqual(first["plots"]["hi10m"]["colorKind"], "binary")
         self.assertEqual(first["plots"]["outlier"]["colorKind"], "outlier")
         self.assertEqual(first["plots"]["views"]["zMin"], min(source["views"]))
+        self.assertEqual(first["plots"]["hi10m"]["zMin"], 0)
+        self.assertEqual(first["plots"]["hi10m"]["zMax"], 0)
         self.assertEqual(first["plots"]["outlier"]["zMax"], max(source["outlier"]))
 
         encoded = encode_plot_artifact(first)

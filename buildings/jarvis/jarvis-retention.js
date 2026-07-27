@@ -10,7 +10,7 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', amber: '#f59e0b', accent: '#38bdf8' };
-    let root = null, mountMode = 'full', DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, PREDICTORLAB = null, PREDICTORSTATUS = null, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, SAVEDCHANNELS = null, SAVEDCHANNELDETAIL = {}, SAVEDCHANNELANALYSIS = {}, SAVEDCHANNELVIDEOCACHE = {}, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
+    let root = null, mountMode = 'full', DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, EXPPLOTS = {}, PREDICTORLAB = null, PREDICTORSTATUS = null, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, SAVEDCHANNELS = null, SAVEDCHANNELDETAIL = {}, SAVEDCHANNELANALYSIS = {}, SAVEDCHANNELVIDEOCACHE = {}, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     let PROMISE_UI = null, OPERATIONS_UI = null;
@@ -313,7 +313,7 @@ const JarvisRetention = (function () {
         const current = RAW[ch];
         if (!force && current && (current.loading || !current.error)) return;
         RAW[ch] = { loading: 1 };
-        rtFetchJson('/api/raw/map?channel=' + ch, { cache: 'no-store' }, 4)
+        rtFetchJson('/api/raw/map?channel=' + ch, { cache: 'default' }, 3)
             .then(j => {
                 if (!j || j.error) throw new Error((j && j.error) || 'empty embedding map');
                 RAW[ch] = j;
@@ -322,10 +322,38 @@ const JarvisRetention = (function () {
             .catch(e => {
                 RAW[ch] = { n: 0, error: fetchFail(e), at: Date.now() };
                 rtgUpdateRaw(); rtgUpdateExp();
-                window.setTimeout(() => {
-                    if (RAW[ch] && RAW[ch].error) { delete RAW[ch]; rawEnsure(ch, true); }
-                }, 5000);
             });
+    }
+    function expPlotKey(up, ch) {
+        const neighbors = up && up.channels && up.channels[ch] && up.channels[ch].neighbors;
+        if (!Array.isArray(neighbors) || !neighbors.length) return '';
+        return ch + ':' + neighbors.slice(0, 20).map(row => `${row.id}:${Number(row.sim || 0).toFixed(5)}`).join('|');
+    }
+    function expPlotFor(up, ch) {
+        const key = expPlotKey(up, ch);
+        return key ? EXPPLOTS[key] : null;
+    }
+    function expPlotEnsure(up, ch, force) {
+        const key = expPlotKey(up, ch);
+        if (!key) return null;
+        const current = EXPPLOTS[key];
+        if (!force && current && (current.loading || !current.error)) return current;
+        const neighbors = (up.channels[ch].neighbors || []).slice(0, 20).map(row => ({ id: row.id, sim: row.sim }));
+        const pointLimit = window.innerWidth < 700 ? 96 : 180;
+        EXPPLOTS[key] = { loading: 1, at: Date.now() };
+        rtFetchJson('/api/raw/plot?channel=' + encodeURIComponent(ch) + '&limit=' + pointLimit + '&neighbors=' + encodeURIComponent(JSON.stringify(neighbors)), {
+            _timeoutMs: 45000,
+            _retryDelays: [1000, 2500],
+        }, 3).then(plot => {
+            EXPPLOTS[key] = plot;
+            const keys = Object.keys(EXPPLOTS);
+            while (keys.length > 12) delete EXPPLOTS[keys.shift()];
+            rtgUpdateExp();
+        }).catch(error => {
+            EXPPLOTS[key] = { error: fetchFail(error), at: Date.now(), plots: {} };
+            rtgUpdateExp();
+        });
+        return EXPPLOTS[key];
     }
     // ── ONE global hook-scoring source: an upload's number on the map IS out.steer (computed
     //    server-side, identical to how the map scores every video). The graph marker AND the
@@ -613,6 +641,7 @@ const JarvisRetention = (function () {
         const R = RAW[chan];
         if (!R) { rawEnsure(chan); return viewTabs + head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading ${chan}…</div>`); }
         if (R.loading) return viewTabs + head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">Loading ${chan}…</div>`);
+        if (R.error) return viewTabs + head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.red}">${esc(R.error)}<div><span data-rawretry="${chan}" style="display:inline-block;cursor:pointer;color:${C.cyan};font-weight:800;margin-top:10px">retry ${chan} map</span></div></div>`);
         if (!R.n) return viewTabs + head + tabs + cardc(`<div style="padding:24px;text-align:center;color:${C.dim}">No ${chan} embeddings yet — the pipeline is still running (${chan === 'visual' ? 'visual is first' : 'text/together build over ~1.5h'}). Refresh shortly.</div>`);
         const n = R.n, W = 820, H = 520, pad = 16, S = 1000;
         const X = g => pad + g / S * (W - 2 * pad), Yc = g => pad + (1 - g / S) * (H - 2 * pad);
@@ -1481,7 +1510,7 @@ const JarvisRetention = (function () {
         const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds visual, text, and together when text exists; displayed embedding scores use together first, then text, then visual. Keep-rate can therefore include voiceover words when a coherent first-5-second transcript exists.') + pipelineProgress() + expGenPanel() + grindPanel();
         if (EXPREG === null) { EXPREG = { loading: 1 }; rtFetchJson('/api/indicators/registry', { cache: 'no-store' }, 4).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(e => { EXPREG = { error: fetchFail(e) }; rtgUpdateExp(); }); }
         if (SAVED === null) { SAVED = { loading: 1 }; rtFetchJson('/api/raw/saved-hooks', { cache: 'no-store' }, 4).then(j => { SAVED = j; rtgUpdateExp(); }).catch(e => { SAVED = { hooks: [], error: fetchFail(e) }; rtgUpdateExp(); }); }
-        if (SAVEDCHANNELS === null) { SAVEDCHANNELS = { loading: 1, channels: [] }; refreshSavedChannels(true); }
+        if ((st.savedBank || 'hooks') === 'channels' && SAVEDCHANNELS === null) { SAVEDCHANNELS = { loading: 1, channels: [] }; refreshSavedChannels(true); }
         const CY = '#22d3ee';
         const fr = st.rawFrames || [null, null, null, null, null], nFrames = fr.filter(Boolean).length;
         const modePill = (m, lab) => `<span data-rawbuildmode="${m}" style="cursor:pointer;border:1px solid ${(!!st.rawBuildMode === !!m) ? CY : C.border};background:${(!!st.rawBuildMode === !!m) ? CY + '22' : 'transparent'};color:${(!!st.rawBuildMode === !!m) ? CY : C.dim};border-radius:${m ? '0 6px 6px 0' : '6px 0 0 6px'};padding:4px 10px;font-size:11px;font-weight:700">${lab}</span>`;
@@ -1552,28 +1581,35 @@ const JarvisRetention = (function () {
         // ── 3. per-indicator: the SAME Raw cluster (channel × projection), coloured by
         //    the target, with YOUR hook placed via its neighbours. Click → opens it in Raw. ──
         const chMap = { visual: 'visual', text: 'text', together: 'together', vis: 'visual', txt: 'text', tog: 'together' };
-        ['visual', 'text', 'together'].forEach(c => rawEnsure(c));
         const Nmod = { visual: 'visual', text: 'text', together: 'whole' };
         const idNovCache = {};
         const idNov = ch => { if (idNovCache[ch]) return idNovCache[ch]; const m = {}; try { const g = N && N.hook && N.hook.global && N.hook.global[Nmod[ch]]; if (g) N.videos.forEach((v, i) => { m[v.id] = g.nov[i]; }); } catch (e) {} return (idNovCache[ch] = m); };
         const whatEmbedded = ch => rawInputLabel(up, ch);
         const cluster = (ch, projName, colorMode) => {
-            const R = RAW[ch];
-            if (!R || R.loading) return `<div style="height:150px;display:flex;align-items:center;justify-content:center;background:${C.card2};border-radius:6px;font-size:10px;color:${C.dim}">loading ${ch} cluster…</div>`;
-            const proj = R.proj && R.proj[projName]; if (!proj || !proj.x) return `<div style="height:150px;display:flex;align-items:center;justify-content:center;background:${C.card2};border-radius:6px;font-size:10px;color:${C.faint}">no ${projName} cluster for ${ch}</div>`;
-            const ids = R.id || [], nP = R.n || proj.x.length, S = 1000, W = 250, H = 150, pad = 8, X = g => pad + g / S * (W - 2 * pad), Y = g => pad + (1 - g / S) * (H - 2 * pad);
-            let colf;
-            if (colorMode === 'gt10m') colf = i => (R.views && R.views[i] > 1e7) ? '#f87171' : '#2b3648';
-            else if (colorMode === 'novelty') { const nm = idNov(ch), vs = ids.map(id => nm[id]), ok = vs.filter(v => v != null && isFinite(v)), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => vs[i] == null ? '#2b3648' : rawRamp((vs[i] - lo) / ((hi - lo) || 1)); }
-            else if (colorMode === 'metric' && proj.est && proj.predscope) { const e = proj.est.map(x => Math.log10((+x || 0) + 1)), ok = e.filter(isFinite), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => isFinite(e[i]) ? rawRamp((e[i] - lo) / ((hi - lo) || 1)) : '#2b3648'; }
-            else if (colorMode === 'metric' && proj.est) { const e = proj.est, ac = proj.actual, ok = e.filter(v => v != null && isFinite(v)), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => { const v = (ac && ac[i] != null) ? ac[i] : e[i]; return v == null ? '#2b3648' : rawRamp((v - lo) / ((hi - lo) || 1)); }; }
-            else if (colorMode === 'axis' || colorMode === 'metric') { const xs2 = proj.x, lo = Math.min(...xs2), hi = Math.max(...xs2); colf = i => rawRamp((proj.x[i] - lo) / ((hi - lo) || 1)); }
-            else if (colorMode === 'owned') colf = i => (R.mine && R.mine[i]) ? '#fbbf24' : '#2b3648';
-            else { const v = (R.views || []).map(x => Math.log10((+x || 0) + 1)), ok = v.filter(isFinite), lo = Math.min(...ok), hi = Math.max(...ok); colf = i => rawRamp((v[i] - lo) / ((hi - lo) || 1)); }
-            let s = ''; for (let i = 0; i < nP; i++) s += `<circle cx="${X(proj.x[i]).toFixed(1)}" cy="${Y(proj.y[i]).toFixed(1)}" r="1.5" fill="${colf(i)}" opacity="0.55"/>`;
-            const nb = up.channels[ch] && up.channels[ch].neighbors; let mk = '';
-            if (nb) { let sx = 0, sy = 0, sw = 0; for (const nn of nb) { const idx = ids.indexOf(nn.id); if (idx < 0) continue; const w = Math.max(0.001, nn.sim); sx += proj.x[idx] * w; sy += proj.y[idx] * w; sw += w; } if (sw > 0) { const hx = X(sx / sw).toFixed(1), hy = Y(sy / sw).toFixed(1); mk = `<line x1="${hx}" y1="${(+hy - 9)}" x2="${hx}" y2="${(+hy + 9)}" stroke="${CY}" stroke-width="1"/><line x1="${(+hx - 9)}" y1="${hy}" x2="${(+hx + 9)}" y2="${hy}" stroke="${CY}" stroke-width="1"/><circle cx="${hx}" cy="${hy}" r="5" fill="${CY}" stroke="#fff" stroke-width="1.5"/>`; } }
-            return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:6px">${s}${mk}</svg>`;
+            let bundle = expPlotFor(up, ch);
+            if (!bundle) bundle = expPlotEnsure(up, ch);
+            if (!bundle || bundle.loading) return `<div style="height:150px;display:flex;align-items:center;justify-content:center;background:${C.card2};border-radius:6px;font-size:10px;color:${C.dim}">loading compact ${ch} cluster…</div>`;
+            if (bundle.error) return `<div style="height:150px;display:flex;align-items:center;justify-content:center;background:${C.card2};border:1px solid ${C.red}44;border-radius:6px;padding:10px;box-sizing:border-box;text-align:center;font-size:10px;color:${C.red}">${esc(bundle.error)}</div>`;
+            const plot = bundle.plots && bundle.plots[projName];
+            if (!plot) return `<div style="height:150px;display:flex;align-items:center;justify-content:center;background:${C.card2};border:1px solid ${C.amber}44;border-radius:6px;padding:10px;box-sizing:border-box;text-align:center;font-size:10px;color:${C.amber}">${esc(projName)} projection is being rebuilt for ${esc(ch)}</div>`;
+            const W = 250, H = 150, pad = 8, S = 1000, X = g => pad + Number(g || 0) / S * (W - 2 * pad), Y = g => pad + (1 - Number(g || 0) / S) * (H - 2 * pad);
+            const lo0 = Number(plot.zMin), hi0 = Number(plot.zMax), logColor = plot.colorKind === 'views' || projName === 'realviews';
+            const lo = logColor ? Math.log10(Math.max(0, lo0) + 1) : lo0;
+            const hi = logColor ? Math.log10(Math.max(0, hi0) + 1) : hi0;
+            const col = z => {
+                if (z == null || !isFinite(Number(z))) return '#2b3648';
+                if (plot.colorKind === 'binary' || colorMode === 'gt10m') return Number(z) >= 0.5 ? '#f87171' : '#2b3648';
+                const value = logColor ? Math.log10(Math.max(0, Number(z)) + 1) : Number(z);
+                return rawRamp((value - lo) / ((hi - lo) || 1));
+            };
+            const points = Array.isArray(plot.points) ? plot.points : [];
+            const dots = points.map(point => `<circle cx="${X(point[0]).toFixed(1)}" cy="${Y(point[1]).toFixed(1)}" r="1.55" fill="${col(point[2])}" opacity="0.58"/>`).join('');
+            let marker = '';
+            if (plot.marker && isFinite(plot.marker.x) && isFinite(plot.marker.y)) {
+                const hx = X(plot.marker.x), hy = Y(plot.marker.y);
+                marker = `<line x1="${hx.toFixed(1)}" y1="${(hy - 9).toFixed(1)}" x2="${hx.toFixed(1)}" y2="${(hy + 9).toFixed(1)}" stroke="${CY}" stroke-width="1"/><line x1="${(hx - 9).toFixed(1)}" y1="${hy.toFixed(1)}" x2="${(hx + 9).toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${CY}" stroke-width="1"/><circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="5" fill="${CY}" stroke="#fff" stroke-width="1.5"/>`;
+            }
+            return `<svg viewBox="0 0 ${W} ${H}" data-compact-quant-plot="${esc(ch + ':' + projName)}" data-corpus-n="${Number(bundle.n || 0)}" style="width:100%;background:${C.card2};border-radius:6px">${dots}${marker}</svg>`;
         };
         const projFor = { keep: 'keep', ret5: 'ret5', views: 'views', realviews: 'realviews', gt10M: 'hi10m' };
         const colorFor = { keep: 'metric', ret5: 'metric', views: 'views', realviews: 'metric', gt10M: 'gt10m' };
@@ -3439,7 +3475,7 @@ const JarvisRetention = (function () {
             rawUploadPickerError('The uploader did not initialize. Reload the page and try again.');
             return;
         }
-        upload.pickFiles({ accept: 'video/*', multiple: true, onSelect: files => rtgRawUpload(files), onError: rawUploadPickerError });
+        upload.pickFiles({ accept: 'video/*', multiple: false, onSelect: files => rtgRawUpload(files), onError: rawUploadPickerError });
     }
     function openRawFramePicker(slot) {
         if (rawScoreBusy()) {
@@ -3750,6 +3786,7 @@ const JarvisRetention = (function () {
         const rpp = e.target.closest('[data-predictorpoint]'); if (rpp) { const id = rpp.getAttribute('data-predictorpoint'); st.rawPredictorPoint = st.rawPredictorPoint === id ? null : id; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-predictorpointclose]')) { st.rawPredictorPoint = null; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-predictorrefresh]')) { PREDICTORLAB = null; PREDICTORSTATUS = null; predictorEnsure(true); rtgUpdateRaw(); return; }
+        const rawRetry = e.target.closest('[data-rawretry]'); if (rawRetry) { const ch = rawRetry.getAttribute('data-rawretry') || st.rawChan || 'visual'; delete RAW[ch]; rawEnsure(ch, true); rtgUpdateRaw(); return; }
         const rc = e.target.closest('[data-rawcolor]'); if (rc) { st.rawColor = rc.getAttribute('data-rawcolor'); rtgUpdateRaw(); return; }
         const rk = e.target.closest('[data-rawk]'); if (rk) { st.rawK = rk.getAttribute('data-rawk'); rtgUpdateRaw(); return; }
         const rp = e.target.closest('[data-rawproj]'); if (rp) { st.rawProj = rp.getAttribute('data-rawproj'); rtgUpdateRaw(); return; }
@@ -3782,9 +3819,9 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-savedclose]')) { st.savedSel = null; rtgUpdateExp(); return; }
         const ssort = e.target.closest('[data-savedsort]'); if (ssort) { st.savedSort = ssort.getAttribute('data-savedsort'); rtgUpdateExp(); return; }
         const sfdel = e.target.closest('[data-savedfolderdel]'); if (sfdel) { deleteFolder(sfdel.getAttribute('data-savedfolderdel')); return; }
-        const sfol = e.target.closest('[data-savedfolder]'); if (sfol) { st.savedFolder = sfol.getAttribute('data-savedfolder'); st.savedShow = 60; rtgUpdateExp(); return; }
+        const sfol = e.target.closest('[data-savedfolder]'); if (sfol) { st.savedFolder = sfol.getAttribute('data-savedfolder'); st.savedShow = window.innerWidth < 700 ? 20 : 60; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedfoldernew]')) { createFolder(); return; }
-        if (e.target.closest('[data-savedmore]')) { st.savedShow = (st.savedShow || 60) + 60; rtgUpdateExp(); return; }
+        if (e.target.closest('[data-savedmore]')) { const page = window.innerWidth < 700 ? 20 : 60; st.savedShow = (st.savedShow || page) + page; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedfiltclear]')) { st.savedFilt = {}; rtgUpdateExp(); return; }
         const sopen = e.target.closest('[data-savedopen]'); if (sopen) { openSaved(sopen.getAttribute('data-savedopen')); return; }
         const gvBtn = e.target.closest('[data-guessview]'); if (gvBtn) { st.guessView = gvBtn.getAttribute('data-guessview'); rtgUpdateGuesses(); return; }
@@ -4085,30 +4122,32 @@ const JarvisRetention = (function () {
             let stored = SAVEDDETAIL[id];
             if (!stored) {
                 const rec = await rtFetchJson('/api/raw/saved-hook/' + id, { cache: 'no-store' }, 4);
-                let montage = null, reconstructed = false;
-                if (rec.hasMontage) {
+                stored = SAVEDDETAIL[id] = { rec, montage: null, reconstructed: false };
+                const cachedIds = Object.keys(SAVEDDETAIL);
+                while (cachedIds.length > 8) delete SAVEDDETAIL[cachedIds.shift()];
+            }
+            const rec = stored.rec || {};
+            if (rec && rec.emb_preview && rec.channels) {
+                // Statistics are durable and independent from media delivery. Open them immediately;
+                // the ordinary image URL can load (or fail) without blocking the embedding read-out.
+                const result = { transcript: rec.transcript || rec.text || '', silent: rec.silent, title: rec.title, indicators: rec.indicators, steer: rec.steer, emb_preview: rec.emb_preview, channels: rec.channels, input_manifest: rec.input_manifest || null, source: 'saved', savedId: id, genFrames: rec.frames || [], montageDataUrl: rec.hasMontage ? '/api/raw/saved-montage/' + id : '' };
+                st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
+                st.rawUploads.push(result);
+                st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+            } else {
+                // One legacy record has no durable score. Only that record needs its media fetched
+                // and scored once; complete records above never convert images to base64.
+                let montage = stored.montage;
+                if (!montage && rec.hasMontage) {
                     try { montage = await urlToDataUrl('/api/raw/saved-montage/' + id); } catch (e) {}
                 }
+                let reconstructed = false;
                 if (!montage) {
                     montage = await montageFromFrameIds(rec.frame_imgs || []);
                     reconstructed = true;
                 }
-                stored = SAVEDDETAIL[id] = { rec, montage, reconstructed };
-                if (reconstructed) {
-                    fetch('/api/raw/hook-enrich', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id, montage }),
-                    }).catch(() => {});
-                }
-            }
-            const rec = stored.rec || {}, montage = stored.montage;
-            if (rec && rec.emb_preview && rec.channels) {
-                // INSTANT: full embeddings already stored — build the up-object directly, no re-embed
-                st.rawUploads.push({ montage: montage.split('base64,').pop(), transcript: rec.transcript || rec.text || '', silent: rec.silent, title: rec.title, indicators: rec.indicators, steer: rec.steer, emb_preview: rec.emb_preview, channels: rec.channels, input_manifest: rec.input_manifest || null, source: 'saved', savedId: id, genFrames: rec.frames || [], montageDataUrl: montage });
-                st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-            } else {
-                // fallback while the storage pass is still running: re-score once
+                if (!montage) throw new Error('This legacy hook has no stored montage to rebuild its score.');
+                stored.montage = montage; stored.reconstructed = reconstructed;
                 const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1200);
                 let j;
                 try {
@@ -4117,6 +4156,7 @@ const JarvisRetention = (function () {
                     window.clearInterval(tick);
                 }
                 j.source = 'saved'; j.savedId = id; j.genFrames = rec.frames || []; j.montageDataUrl = montage;
+                st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
                 st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
                 Object.assign(rec, { indicators: j.indicators, steer: j.steer, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest });
                 SAVEDDETAIL[id] = { rec, montage };
@@ -5288,7 +5328,7 @@ const JarvisRetention = (function () {
         if (sortK === 'recent') hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
         else if (sortK === 'oldest') hooks.sort((a, b) => (a.savedAt || 0) - (b.savedAt || 0));
         else hooks.sort((a, b) => ((b.m || {})[sortK] || 0) - ((a.m || {})[sortK] || 0));
-        const SHOW = st.savedShow || 60;
+        const SHOW = st.savedShow || (window.innerWidth < 700 ? 20 : 60);
         const fbar = METRICS.map(([k, lab, mx, u]) => `<div style="display:flex;flex-direction:column;gap:1px;min-width:118px">
             <span style="font-size:9px;color:${C.mute}">${lab} ≥ <b style="color:${thr(k) ? C.accent : C.dim}">${thr(k)}${u}</b></span>
             <input type="range" min="0" max="${mx}" value="${thr(k)}" data-savedfilt="${k}" style="width:118px;accent-color:${C.accent}"/></div>`).join('');
@@ -5322,7 +5362,7 @@ const JarvisRetention = (function () {
           ${savedDetail()}
           <div style="font-size:10px;color:${C.mute};margin-bottom:6px">${hooks.length} ${(anyFilt || curF !== 'all') ? 'match' : 'saved'} · showing ${Math.min(SHOW, hooks.length)}</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">${shown.map(card).join('')}</div>
-          ${hooks.length > SHOW ? `<div style="text-align:center;margin-top:12px"><span data-savedmore style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:8px;padding:6px 18px;font-size:11px;font-weight:700">Load ${Math.min(60, hooks.length - SHOW)} more · ${hooks.length - SHOW} left</span></div>` : ''}`, 12);
+          ${hooks.length > SHOW ? `<div style="text-align:center;margin-top:12px"><span data-savedmore style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:8px;padding:6px 18px;font-size:11px;font-weight:700">Load ${Math.min(window.innerWidth < 700 ? 20 : 60, hooks.length - SHOW)} more · ${hooks.length - SHOW} left</span></div>` : ''}`, 12);
     }
 
     async function mount(el, options) {
@@ -5346,6 +5386,12 @@ const JarvisRetention = (function () {
             }, 60e3);
             root.__rb = true;
         }
+        // The standalone Experiment Lab needs only its registry, saved-hook index, and
+        // on-demand score details. Do not bootstrap retention studies, principles, or Raw maps.
+        if (mountMode === 'experiment') {
+            render();
+            return;
+        }
         if (!DATA && !err) {
             root.innerHTML = `<div style="padding:40px;text-align:center;color:${C.dim}">Loading…</div>`;
             const base = './buildings/jarvis/retention-study/';
@@ -5360,7 +5406,8 @@ const JarvisRetention = (function () {
                     DATA = await loadJSON(base + 'retention_table.json');   // sentinel: throw → retry loop
                     await loadJSON(base + 'retention_study.json').then(x => { S = x; S_MAIN = x; }).catch(() => { S = null; S_MAIN = null; });
                     RAW = {};
-                    // BACKGROUND: the heavy corpus files (novelty ~10MB, rtg_field ~9MB, the raw map…)
+                    // BACKGROUND: analysis files used by the research tabs. Raw maps are strictly
+                    // on-demand so simply opening Shorts Quant cannot allocate a 15MB corpus map.
                     // stream in behind the visible tab; each arrival re-renders so its sections light
                     // up. BGPEND drives the header's "still loading…" note.
                     const bg = [
@@ -5373,10 +5420,6 @@ const JarvisRetention = (function () {
                         loadJSON(base + 'principles/rtg_field.json').then(x => RTGF = x).catch(() => RTGF = null),
                         loadJSON(base + 'principles/rtg_embedmap.json').then(x => RTGE = x).catch(() => RTGE = null),
                         loadJSON(base + 'principles/rtg_hazard.json').then(x => RTGH = x).catch(() => RTGH = null),
-                        rtFetchJson('/api/raw/map?channel=visual', { cache: 'no-store' }, 4).then(x => RAW.visual = x).catch(e => {
-                            RAW.visual = { n: 0, error: fetchFail(e), at: Date.now() };
-                            window.setTimeout(() => rawEnsure('visual', true), 5000);
-                        }),
                         fetch('/api/rtg/labels').then(r => r.json()).then(x => RTGLABELS = x || {}).catch(() => RTGLABELS = {}),
                     ];
                     BGPEND = bg.length;
