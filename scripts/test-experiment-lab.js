@@ -282,6 +282,19 @@ async function main() {
             return image && image.complete && image.naturalWidth > 0;
         });
         assert(await page.locator('#rtg-exppanel').evaluate(panel => panel.textContent.includes('graphs — every channel')), 'stored score must open the complete graph read-out');
+        const parityAfterStoredOpen = await page.evaluate(() => window.BusinessWorldEmbeddingParityAudit(document));
+        assert(parityAfterStoredOpen.ok, `stored card/detail parity failed: ${JSON.stringify(parityAfterStoredOpen.conflicts)}`);
+        const selectedTextKeepValues = await page.locator(`[data-embedding-asset="${channelId}:vid00000002"][data-embedding-id="shorts_raw:stored-production:text_keep"]`).evaluateAll(nodes => nodes.map(node => ({
+            estimate: node.getAttribute('data-embedding-est'),
+            percentile: node.getAttribute('data-embedding-percentile'),
+            sourceKey: node.getAttribute('data-embedding-source-key'),
+        })));
+        assert(selectedTextKeepValues.length >= 2, 'the selected Text.keep embedding must appear on both library and detail surfaces');
+        assert(selectedTextKeepValues.every(value =>
+            value.estimate === String(videos[1].features['text.keep'][0])
+            && value.percentile === String(videos[1].features['text.keep'][1])
+            && value.sourceKey === 'text_keep'
+        ), 'the same Text.keep asset must retain an identical raw estimate, percentile, and source key everywhere');
         await page.locator(`[data-savedchannelvideo="${channelId}:vid00000002"]`).click();
         assert.strictEqual(await page.evaluate(pathname => window.__fetchCounts[pathname], videoPath), 1, 'opening the same saved Short again must use the in-memory stored-artifact cache');
 
@@ -341,7 +354,10 @@ async function main() {
         const storedViewsPoint = page.locator(`circle[data-savedvalidationvideo="${channelId}:vid00000002"][data-savedvalidationpointsource="storedViewsAxis"][data-savedvalidationpointfeature="together.views"]`);
         assert((await storedViewsPoint.locator('title').textContent()).includes('PLOTTED Y (original stored Both.views view-equivalent embedding): 12.00M'), 'the original views graph must plot the exact persisted score-card value');
         assert.strictEqual(await storedViewsPoint.getAttribute('data-savedvalidationpredictedraw'), '12000000', 'the SVG point must retain the unformatted persisted views value');
+        assert.strictEqual(await storedViewsPoint.getAttribute('data-embedding-id'), 'shorts_raw:stored-production:together_views', 'stored validation point must share the production Both.views identity');
+        assert.strictEqual(await storedViewsPoint.getAttribute('data-embedding-est'), '12000000', 'stored validation identity must preserve the exact score-card estimate');
         const blindViewsPoint = page.locator(`circle[data-savedvalidationvideo="${channelId}:vid00000002"][data-savedvalidationpointsource="blindViewsAxis"][data-savedvalidationpointfeature="together.views"]`);
+        assert.strictEqual(await blindViewsPoint.getAttribute('data-embedding-id'), 'shorts_raw:blind-video-held-out:together_views', 'blind rebuilt point must not masquerade as the stored production embedding');
         const blindViewsTooltip = await blindViewsPoint.locator('title').textContent();
         assert(blindViewsTooltip.includes('PLOTTED Y (blind rebuilt Both.views view-equivalent embedding): 1.00M'), 'the rebuilt single-axis estimate must remain separately identified');
         assert(blindViewsTooltip.includes('both 12.00M'), 'the rebuilt-axis hover must still expose the original stored Both.views value');
@@ -353,6 +369,7 @@ async function main() {
         assert(storedViewsContext.includes('exact persisted Both.views output'), 'the clicked detail must explain that no forecast was substituted');
         assert(storedViewsContext.includes('exact raw-value match'), 'the persisted validation row and loaded score card must agree exactly');
         const modelPoint = page.locator(`[data-savedvalidationvideo="${channelId}:vid00000002"][data-savedvalidationpointsource="keepModel"]`);
+        assert.strictEqual(await modelPoint.getAttribute('data-embedding-id'), null, 'multi-input forecast must not masquerade as one embedding');
         const modelTooltip = await modelPoint.locator('title').textContent();
         assert(modelTooltip.includes('PLOTTED Y (nested-selected multi-input OOF forecast): 58.9%'), 'the hover must name and show the exact model forecast');
         assert(modelTooltip.includes(`both ${videos[1].features['together.keep'][0].toFixed(1)}%`), 'the hover must also show the stored Both embedding');
@@ -391,7 +408,9 @@ async function main() {
             fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_DESKTOP_SCREENSHOT), { recursive: true });
             await page.screenshot({ path: process.env.EXPERIMENT_LAB_DESKTOP_SCREENSHOT, fullPage: false });
         }
-        console.log(JSON.stringify({ ok: true, sharedExperimentControls: 5, desktopWidth: 1280, mobileWidth: 390, mobileScrollTop: await workspace.evaluate(element => element.scrollTop), storedImage: true, exactIndicatorSort: 'text.keep', savedArtifactFetches: 1, resumeRequests: 1, matrixColumns: 21, relationshipCells: 441, trajectoryCharts: 21, riskSignalCharts: riskSignals.length, riskThreshold: '30M', blindValidationRows: videos.length }));
+        const finalParity = await page.evaluate(() => window.BusinessWorldEmbeddingParityAudit(document));
+        assert(finalParity.ok, `final rendered embedding parity failed: ${JSON.stringify(finalParity.conflicts)}`);
+        console.log(JSON.stringify({ ok: true, sharedExperimentControls: 5, desktopWidth: 1280, mobileWidth: 390, mobileScrollTop: await workspace.evaluate(element => element.scrollTop), storedImage: true, exactIndicatorSort: 'text.keep', savedArtifactFetches: 1, resumeRequests: 1, matrixColumns: 21, relationshipCells: 441, trajectoryCharts: 21, riskSignalCharts: riskSignals.length, riskThreshold: '30M', blindValidationRows: videos.length, embeddingParity: finalParity }));
     } finally {
         await browser.close();
     }

@@ -11,7 +11,7 @@ to — consistent across all three channels/projections).
 
 Identical montage/whisper/embed to raw_embed.py so the upload's vectors are comparable.
 """
-import os, sys, json, base64, subprocess, tempfile, shutil, io, time, re
+import os, sys, json, base64, subprocess, tempfile, shutil, io, time, re, hashlib
 import numpy as np, boto3, urllib.request, urllib.error
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -546,9 +546,11 @@ def _run():
     # quantile-map onto the corpus distribution; >10M = local >10M rate around the hook's
     # rank. Whatever the graph shows for a video, an upload gets the identical maths.
     steer = {}
+    steer_artifact_sha256 = None
     try:
         sb = r2_get('raw/steer_models.npz')
         if sb:
+            steer_artifact_sha256 = hashlib.sha256(sb).hexdigest()
             SM = np.load(io.BytesIO(sb), allow_pickle=True); keys = set(SM.files)
             for mod, e in {'visual': ev, 'text': et, 'together': eg}.items():
                 if e is None: continue
@@ -589,6 +591,10 @@ def _run():
     input_manifest = {
         'domain': 'shorts_raw',
         'scorer': 'raw_upload.py',
+        'embedding_model': 'gemini-embedding-2',
+        'embedding_dimensions': DIM,
+        'display_contract_version': 2,
+        'steer_artifact_sha256': steer_artifact_sha256,
         'source_window': 'first 5 seconds',
         'display_preference': ['together', 'text', 'visual'],
         'transcript_used': bool(good),

@@ -326,7 +326,33 @@ const JarvisLongQuant = (function () {
     //    Experiment grid both read it through these — change the maths once, both follow. ──
     const STEER_KEY = { views: 'views', rawviews: 'views', realviews: 'realviews', outlier: 'outlier', hi10m: 'gt10M', keep: 'keep', ret5: 'ret5', ctr: 'ctr', ret30: 'ret30', ctrviews: 'ctrviews' };
     function steerOf(up, mod, tn) { const s = up && up.steer; const k = s && s[`${mod}_${tn}`]; return k || null; }   // {est,pctile,kind}
-    function steerBest(up, tn) { for (const m of ['together', 'text', 'visual']) { const k = steerOf(up, m, tn); if (k) return { mod: m, ...k }; } return null; }
+    function steerPreference(up) {
+        const manifest = up && up.input_manifest || {};
+        const requested = Array.isArray(manifest.display_preference) ? manifest.display_preference : [];
+        const domain = String(manifest.domain || '').toLowerCase();
+        const isLong = domain.includes('longquant') || !!(up && (up.lqScore || up.imgUrl || up.source === 'longquant'));
+        const channels = [];
+        for (const channel of requested.concat(isLong ? ['visual', 'together', 'text'] : ['together', 'text', 'visual'])) {
+            if (!['visual', 'text', 'together'].includes(channel) || channels.includes(channel)) continue;
+            channels.push(channel);
+        }
+        return channels;
+    }
+    function steerBest(up, tn) {
+        for (const mod of steerPreference(up)) {
+            const metric = steerOf(up, mod, tn);
+            if (metric && metric.est != null && isFinite(Number(metric.est))) return { mod, sourceKey: `${mod}_${tn}`, ...metric };
+        }
+        return null;
+    }
+    function lqxEmbeddingAttrs(score, ch, metric, value, origin, assetId) {
+        if (!value) return '';
+        const manifest = score && score.input_manifest || {};
+        const domain = String(manifest.domain || 'longquant');
+        const sourceKey = `${ch}_${metric}`;
+        const attr = (name, raw) => raw == null || raw === '' ? '' : ` ${name}="${esc(String(raw))}"`;
+        return `${attr('data-embedding-id', `${domain}:${origin || 'stored-production'}:${sourceKey}`)}${attr('data-embedding-asset', assetId)}${attr('data-embedding-domain', domain)}${attr('data-embedding-origin', origin || 'stored-production')}${attr('data-embedding-channel', ch)}${attr('data-embedding-target', metric)}${attr('data-embedding-source-key', sourceKey)}${attr('data-embedding-est', value.est)}${attr('data-embedding-percentile', value.pctile)}${attr('data-embedding-kind', value.kind)}${attr('data-embedding-model', manifest.embedding_model)}${attr('data-embedding-scorer', manifest.scorer)}`;
+    }
     function steerDisp(tn, v) { if (v == null) return null; return (tn === 'views' || tn === 'realviews') ? fv(+v) : tn === 'outlier' ? (+v).toFixed(1) + '×' : tn === 'gt10M' ? (+v * 100).toFixed(0) + '%' : tn === 'ctrviews' ? (+v).toFixed(2) : (+v).toFixed(0) + '%'; }
     function steerLabel(tn) { return tn === 'realviews' ? 'est. views (your scale)' : tn === 'views' ? 'view-equivalent (corpus quantile)' : tn === 'outlier' ? 'est. outlier' : tn === 'gt10M' ? 'chance >10M' : tn === 'ctr' ? 'est. CTR' : tn === 'ret30' ? 'est. 30s retention' : tn === 'ctrviews' ? 'CTR+views score' : tn === 'keep' ? 'est. keep-rate' : 'est. past-5s'; }
     function rawInputChannel(up, ch) {
@@ -635,7 +661,7 @@ const JarvisLongQuant = (function () {
                   ${U.imgUrl || U.montageDataUrl ? `<img src="${esc(U.imgUrl || U.montageDataUrl)}" style="width:100%;border-radius:6px;background:#000;margin-bottom:8px"/>` : U.montage ? `<img src="data:image/jpeg;base64,${U.montage}" style="width:100%;border-radius:6px;background:#000;margin-bottom:8px"/>` : ''}
                   ${U.silent ? '' : `<div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:2px">transcript (first 5s)</div><div style="font-size:12px;color:${C.text};font-style:italic;margin-bottom:8px;line-height:1.45;background:#0f172a;border-radius:6px;padding:9px 11px">"${esc(U.transcript || '')}"</div>`}
                   ${placed}
-                  ${(() => { const s = U.steer || {}; const row = (tn, lab) => { for (const m of ['together', 'text', 'visual']) { const k = s[`${m}_${tn}`]; if (k) return `<div style="display:flex;justify-content:space-between;gap:10px;font-size:11px"><span style="color:${C.mute}">${lab}</span><span style="color:${C.text};font-weight:700">~${k.est}% <span style="color:${C.mute};font-weight:400">(${k.pctile}th pctile of corpus · via ${m})</span></span></div>`; } return ''; }; const kk = row('keep', 'est. keep-rate') + row('ret5', 'est. past-5s'); return kk ? `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">extrapolated onto your 211's scale</div>${kk}<div style="font-size:9px;color:${C.faint};margin-top:4px">Projected onto the same steered direction as the 11k map, quantile-mapped to your videos' actual outcomes. Open <b>→ keep-rate</b> to see it placed.</div></div>` : ''; })()}
+                  ${(() => { const row = (tn, lab) => { const k = steerBest(U, tn); return k ? `<div${lqxEmbeddingAttrs(U, k.mod, tn, k, 'stored-production', U.embeddingAssetId || (U.savedId ? `saved:${U.savedId}` : ''))} style="display:flex;justify-content:space-between;gap:10px;font-size:11px"><span style="color:${C.mute}">${lab}</span><span style="color:${C.text};font-weight:700">~${k.est}% <span style="color:${C.mute};font-weight:400">(${k.pctile}th corpus percentile · ${k.mod} · ${k.sourceKey})</span></span></div>` : ''; }; const kk = row('keep', 'est. keep-rate') + row('ret5', 'est. past-5s'); return kk ? `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">extrapolated onto your 211's scale</div>${kk}<div style="font-size:9px;color:${C.faint};margin-top:4px">Projected onto the same steered direction as the 11k map, quantile-mapped to your videos' actual outcomes. Open <b>→ keep-rate</b> to see it placed.</div></div>` : ''; })()}
                 </div>`;
         })() : '';
         h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
@@ -1254,9 +1280,9 @@ const JarvisLongQuant = (function () {
         if (!score || score.loading || score.error) return score;
         const visual = score.channels && score.channels.visual;
         const visualMetric = visual && visual.metrics && visual.metrics.ctrviews;
-        const pct = lqxScore01(score.visual_pctile != null ? score.visual_pctile
-            : score.thumbnail_potential != null ? score.thumbnail_potential
-                : visualMetric && visualMetric.pctile != null ? visualMetric.pctile : score.pctile);
+        const pct = lqxScore01(visualMetric && visualMetric.pctile != null ? visualMetric.pctile
+            : score.visual_pctile != null ? score.visual_pctile
+                : score.thumbnail_potential != null ? score.thumbnail_potential : score.pctile);
         const rel = score.relevance == null || !isFinite(Number(score.relevance)) ? null : Number(score.relevance);
         const nn0 = visual && visual.neighbors && visual.neighbors[0];
         const nnRaw = score.nn_cos != null ? score.nn_cos : visual && visual.nn_cos != null ? visual.nn_cos : nn0 && nn0.sim;
@@ -1280,6 +1306,7 @@ const JarvisLongQuant = (function () {
             metrics: (visual && visual.metrics) || score.metrics || null,
             input_manifest: Object.assign({}, im, {
                 embedding_model: 'gemini-embedding-2', embedding_dimensions: 1536,
+                display_contract_version: 2,
                 display_preference: ['visual', 'together', 'text'],
                 primary_score: 'visual image-only ctrviews percentile on the frozen generator-training ladder',
                 threshold_uses: 'visual only',
@@ -1302,6 +1329,7 @@ const JarvisLongQuant = (function () {
             score_text: text,
             embedding_model: 'gemini-embedding-2',
             embedding_dimensions: 1536,
+            display_contract_version: 2,
             display_preference: ['visual', 'together', 'text'],
             primary_score: 'visual image-only ctrviews percentile on the frozen generator-training ladder',
             threshold_uses: 'visual only',
@@ -1334,11 +1362,11 @@ const JarvisLongQuant = (function () {
         const pref = Array.isArray(im.display_preference) ? im.display_preference.join(' > ') : 'visual > together > text';
         return `<div style="margin-top:8px;background:${C.card};border:1px solid ${C.border};border-radius:7px;padding:8px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;font-weight:900;margin-bottom:5px">embedded inputs by channel</div>${rows}<div style="font-size:9px;color:${C.faint};margin-top:5px"><b style="color:${C.cyan}">Threshold and headline: visual only.</b> Metric chips and graph boxes show their source channel; diagnostic fallback order is ${esc(pref)}.</div>${note}${promptNote}</div>`;
     }
-    function lqxScoreContract(score) {
+    function lqxScoreContract(score, assetId) {
         score = lqxNormalizeScore(score);
         if (!score || score.loading || score.error) return '';
         const trace = score.reward_trace || {};
-        const visual = lqxScore01(score.visual_pctile != null ? score.visual_pctile : score.pctile);
+        const visual = lqxPrimaryPct01(score);
         const reward = v => v == null || !isFinite(Number(v)) ? 'not available' : `${(Number(v) * 100).toFixed(1)} / 100`;
         const pass = (v, floor) => v == null ? 'not available' : `${Number(v).toFixed(3)} / ${Number(floor).toFixed(3)} floor`;
         const metricLine = ch => {
@@ -1348,8 +1376,8 @@ const JarvisLongQuant = (function () {
             const xs = defs.map(([k, lab]) => metrics[k] && metrics[k].pctile != null ? `${lab} ${Number(metrics[k].pctile).toFixed(0)}th` : '').filter(Boolean);
             return xs.length ? xs.join(' · ') : 'no calibrated diagnostic metrics';
         };
-        const box = (label, value, detail, color) => `<div style="min-width:170px;flex:1 1 190px;border-left:2px solid ${color};padding:2px 9px"><div style="font-size:9px;color:${C.mute};font-weight:900;text-transform:uppercase">${esc(label)}</div><div style="font-size:18px;color:${color};font-weight:900;margin-top:2px">${esc(value)}</div><div style="font-size:9px;color:${C.faint};line-height:1.35;margin-top:2px">${esc(detail)}</div></div>`;
-        return `<div style="margin-top:8px;border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};padding:9px 0"><div style="font-size:9px;color:${C.cyan};font-weight:900;text-transform:uppercase;margin-bottom:7px">Model-aligned score contract</div><div style="display:flex;gap:8px;flex-wrap:wrap">${box('Thumbnail potential', visual == null ? '—' : `${(visual * 100).toFixed(0)}th`, 'image-only frozen visual CTR+views ladder; grind threshold uses this', C.green)}${box('Idea model reward', reward(score.idea_model_reward), `visual potential minus topical relevance penalty; relevance ${pass(trace.relevance, trace.relevance_floor || LQ_REL_FLOOR)}`, C.accent)}${box('Thumbnail model reward', reward(score.thumbnail_model_reward), `idea reward minus real-thumbnail density penalty; density ${pass(trace.density, trace.density_floor || LQ_DENSITY_FLOOR)}`, C.cyan)}</div><div style="margin-top:8px;font-size:9px;line-height:1.45;color:${C.faint}"><div><b style="color:${C.text}">Title + thumbnail diagnostic:</b> ${esc(metricLine('together'))} · never used for the threshold</div><div style="margin-top:2px"><b style="color:${C.text}">Title-only diagnostic:</b> ${esc(metricLine('text'))} · never used for the threshold</div></div></div>`;
+        const box = (label, value, detail, color, attrs) => `<div${attrs || ''} style="min-width:170px;flex:1 1 190px;border-left:2px solid ${color};padding:2px 9px"><div style="font-size:9px;color:${C.mute};font-weight:900;text-transform:uppercase">${esc(label)}</div><div style="font-size:18px;color:${color};font-weight:900;margin-top:2px">${esc(value)}</div><div style="font-size:9px;color:${C.faint};line-height:1.35;margin-top:2px">${esc(detail)}</div></div>`;
+        return `<div style="margin-top:8px;border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};padding:9px 0"><div style="font-size:9px;color:${C.cyan};font-weight:900;text-transform:uppercase;margin-bottom:7px">Model-aligned score contract</div><div style="display:flex;gap:8px;flex-wrap:wrap">${box('Thumbnail potential', visual == null ? '—' : `${(visual * 100).toFixed(0)}th`, 'image-only frozen visual CTR+views ladder; grind threshold uses this', C.green, lqxPrimaryAttrs(score, assetId))}${box('Idea model reward', reward(score.idea_model_reward), `visual potential minus topical relevance penalty; relevance ${pass(trace.relevance, trace.relevance_floor || LQ_REL_FLOOR)}`, C.accent)}${box('Thumbnail model reward', reward(score.thumbnail_model_reward), `idea reward minus real-thumbnail density penalty; density ${pass(trace.density, trace.density_floor || LQ_DENSITY_FLOOR)}`, C.cyan)}</div><div style="margin-top:8px;font-size:9px;line-height:1.45;color:${C.faint}"><div><b style="color:${C.text}">Title + thumbnail diagnostic:</b> ${esc(metricLine('together'))} · never used for the threshold</div><div style="margin-top:2px"><b style="color:${C.text}">Title-only diagnostic:</b> ${esc(metricLine('text'))} · never used for the threshold</div></div></div>`;
     }
     const LQSCORETRIES = {};
     function lqxScoreFor(cacheId, key, title, idea, localScore, autoScore) {
@@ -1397,6 +1425,10 @@ const JarvisLongQuant = (function () {
         if (m && m.pctile != null) return m;
         return lqxProjectedAxisMetric(score, ch, metric) || m || null;
     }
+    function lqxMetricOrigin(score, ch, metric) {
+        const stored = score && score.channels && score.channels[ch] && score.channels[ch].metrics && score.channels[ch].metrics[metric];
+        return stored && stored.pctile != null ? 'stored-production' : 'derived-neighbor-axis';
+    }
     function lqxStoredOutputCount(score) {
         return ['visual', 'together'].reduce((total, ch) => total + LQ_COMPARE_METRICS.filter(([metric]) => {
             const value = score && score.channels && score.channels[ch] && score.channels[ch].metrics && score.channels[ch].metrics[metric];
@@ -1416,7 +1448,7 @@ const JarvisLongQuant = (function () {
         if (metric === 'gt10m') return `${(n * 100).toFixed(1)}% chance`;
         return n.toFixed(2);
     }
-    function lqxChannelMetricHtml(score, compact) {
+    function lqxChannelMetricHtml(score, compact, assetId) {
         score = lqxNormalizeScore(score);
         if (score && score.error && !score.channels) return `<div style="margin-top:5px;font-size:${compact ? '9px' : '10px'};color:${C.red};border:1px solid ${C.red}44;border-radius:6px;padding:4px 7px">⚠ scoring failed: ${esc(String(score.error).slice(0, 160))}</div>`;
         if (!score || !score.channels) return '';
@@ -1434,8 +1466,9 @@ const JarvisLongQuant = (function () {
             const cells = LQ_COMPARE_METRICS.map(([metric, label]) => {
                 const m = outputs[ch][metric];
                 if (!m) return `<span style="border:1px solid ${C.border};border-radius:6px;padding:${compact ? '2px 5px' : '3px 6px'};background:${C.card};font-size:${compact ? '8px' : '9px'};color:${C.faint}"><b>${esc(label)}</b> loading</span>`;
-                const pct = lqxMetricPct(m), est = lqxMetricEstimate(metric, m);
-                return `<span title="${esc(ch + ' embedding: ' + input)}" style="border:1px solid ${ch === 'visual' ? C.green + '66' : C.accent + '66'};border-radius:6px;padding:${compact ? '2px 5px' : '3px 6px'};background:${C.card};font-size:${compact ? '8px' : '9px'};color:${C.dim}"><b style="color:${C.text}">${esc(label)}</b> ${pct == null ? '—' : pct + 'th'}${!compact && est ? ` · ${esc(est)}` : ''}</span>`;
+                const pct = lqxMetricPct(m), est = lqxMetricEstimate(metric, m), origin = lqxMetricOrigin(score, ch, metric);
+                const sourceLabel = origin === 'stored-production' ? 'exact stored output' : 'derived nearest-neighbor axis placement';
+                return `<span${lqxEmbeddingAttrs(score, ch, metric, m, origin, assetId)} title="${esc(ch + ' embedding: ' + input + ' · ' + sourceLabel)}" style="border:1px solid ${ch === 'visual' ? C.green + '66' : C.accent + '66'};border-radius:6px;padding:${compact ? '2px 5px' : '3px 6px'};background:${C.card};font-size:${compact ? '8px' : '9px'};color:${C.dim}"><b style="color:${C.text}">${esc(label)}</b> ${pct == null ? '—' : pct + 'th'}${origin !== 'stored-production' ? ` <i style="color:${C.amber}">derived</i>` : ''}${!compact && est ? ` · ${esc(est)}` : ''}</span>`;
             }).join('');
             return `<div style="display:grid;grid-template-columns:${compact ? '58px' : '76px'} minmax(0,1fr);gap:${compact ? '5px' : '7px'};align-items:start;margin-top:${compact ? '4px' : '6px'}"><div><div style="font-size:${compact ? '8px' : '9px'};color:${ch === 'visual' ? C.green : C.accent};font-weight:900;text-transform:uppercase">${ch}</div><div style="font-size:${compact ? '7px' : '8px'};color:${C.faint};line-height:1.25">${esc(compact ? (ch === 'visual' ? 'image only' : 'image + title') : input)}</div></div><div style="display:flex;gap:${compact ? '3px' : '4px'};flex-wrap:wrap">${cells}</div></div>`;
         };
@@ -1451,9 +1484,10 @@ const JarvisLongQuant = (function () {
         const est = lqxMetricEstimate(metric, m);
         const input = ch === 'visual' ? 'thumbnail image only' : ch === 'text' ? 'title text only' : 'thumbnail image + title/idea';
         const accent = ch === 'visual' ? C.green : ch === 'text' ? C.purple : C.accent;
-        const attrs = cacheId ? ` data-lqxraw="${esc(cacheId)}" data-lqxrawchan="${esc(ch)}" data-lqxrawproj="${esc(projName)}"` : '';
+        const origin = lqxMetricOrigin(score, ch, metric);
+        const attrs = `${cacheId ? ` data-lqxraw="${esc(cacheId)}" data-lqxrawchan="${esc(ch)}" data-lqxrawproj="${esc(projName)}"` : ''}${lqxEmbeddingAttrs(score, ch, metric, m, origin, cacheId)}`;
         const frame = inner => `<div${attrs} style="cursor:${cacheId ? 'pointer' : 'default'};background:${C.card};border:1px solid ${accent}55;border-radius:8px;padding:10px;min-width:0">${inner}</div>`;
-        const heading = `<div style="font-size:10px;color:${accent};font-weight:900;text-transform:uppercase">${esc(ch)} embedding → ${esc(label)}</div><div style="font-size:8.5px;color:${C.faint};margin-top:1px">${esc(input)}</div><div style="font-size:24px;font-weight:900;color:${C.text};line-height:1.1;margin:4px 0">${pct == null ? '—' : pct + 'th'}${est ? ` <span style="font-size:10px;color:${C.mute};font-weight:600">${esc(est)}</span>` : ''}</div>`;
+        const heading = `<div style="font-size:10px;color:${accent};font-weight:900;text-transform:uppercase">${esc(ch)} embedding → ${esc(label)}</div><div style="font-size:8.5px;color:${C.faint};margin-top:1px">${esc(input)} · ${origin === 'stored-production' ? 'exact stored output' : 'derived nearest-neighbor axis placement'}</div><div style="font-size:24px;font-weight:900;color:${C.text};line-height:1.1;margin:4px 0">${pct == null ? '—' : pct + 'th'}${origin !== 'stored-production' ? ` <span style="font-size:9px;color:${C.amber};font-weight:700">derived</span>` : ''}${est ? ` <span style="font-size:10px;color:${C.mute};font-weight:600">${esc(est)}</span>` : ''}</div>`;
         if (!bundle || bundle.loading) return frame(`${heading}<div style="height:120px;background:${C.card2};border-radius:6px;display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px">loading compact ${esc(ch)} ${esc(projName)} map…</div>`);
         if (bundle.error) return frame(`${heading}<div style="height:120px;background:${C.card2};border:1px solid ${C.red}44;border-radius:6px;padding:10px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center;color:${C.red};font-size:10px">${esc(bundle.error)}</div>`);
         if (!plot) return frame(`${heading}<div style="height:120px;background:${C.card2};border:1px solid ${C.amber}44;border-radius:6px;padding:10px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center;color:${C.amber};font-size:10px">${esc(projName)} projection is being rebuilt</div>`);
@@ -1515,6 +1549,22 @@ const JarvisLongQuant = (function () {
         const n = Number(v);
         return n > 1 ? n / 100 : n;
     }
+    function lqxPrimaryMetric(score) {
+        score = lqxNormalizeScore(score);
+        if (!score || score.loading || score.error) return null;
+        const stored = score.channels && score.channels.visual && score.channels.visual.metrics && score.channels.visual.metrics.ctrviews;
+        if (stored && stored.pctile != null) return stored;
+        const pct = lqxScore01(score.visual_pctile != null ? score.visual_pctile : score.thumbnail_potential != null ? score.thumbnail_potential : score.pctile);
+        return pct == null ? null : { est: null, pctile: pct * 100, kind: 'visual_thumbnail_only_ctrviews' };
+    }
+    function lqxPrimaryPct01(score) {
+        const metric = lqxPrimaryMetric(score);
+        return metric && metric.pctile != null ? lqxPct01(metric.pctile) : null;
+    }
+    function lqxPrimaryAttrs(score, assetId) {
+        const metric = lqxPrimaryMetric(score);
+        return metric ? lqxEmbeddingAttrs(lqxNormalizeScore(score), 'visual', 'ctrviews', metric, 'stored-production', assetId) : '';
+    }
     function lqxSteerFromScore(score) {
         const out = {}, chans = ['visual', 'text', 'together'];
         const pairs = [['views', 'views'], ['realviews', 'realviews'], ['gt10m', 'gt10M'], ['ctr', 'ctr'], ['ret30', 'ret30'], ['ctrviews', 'ctrviews']];
@@ -1532,7 +1582,7 @@ const JarvisLongQuant = (function () {
         const id = 'longquant:' + (cacheId || lqxHash((title || '') + '|' + (img || '')));
         const dataUrl = /^data:image\//.test(String(img || '')) ? img : '';
         const recTitle = title || score.title || 'Long Quant thumbnail';
-        return { _lqxId: id, source: 'longquant', title: recTitle, transcript: recTitle, imgUrl: img || '', montageDataUrl: img || '', montage: dataUrl ? dataUrl.split('base64,').pop() : '', channels: score.channels, emb_preview: score.emb_preview, input_manifest: lqxInputManifest(score, recTitle, img), steer: lqxSteerFromScore(score), lqScore: score };
+        return { _lqxId: id, embeddingAssetId: cacheId || id, source: 'longquant', title: recTitle, transcript: recTitle, imgUrl: img || '', montageDataUrl: img || '', montage: dataUrl ? dataUrl.split('base64,').pop() : '', channels: score.channels, emb_preview: score.emb_preview, input_manifest: lqxInputManifest(score, recTitle, img), steer: lqxSteerFromScore(score), lqScore: score };
     }
     function lqxAttachRaw(cacheId, score, title, img, select) {
         const rec = lqxRawRecord(cacheId, score, title, img); if (!rec) return -1;
@@ -1587,7 +1637,8 @@ const JarvisLongQuant = (function () {
         const score = lqxNormalizeScore(o.score);
         const cacheId = o.cacheId || ('inline:' + lqxHash((o.title || '') + '|' + (o.img || '')));
         const imgSrc = o.img ? (lqxImgData(o.img, cacheId + ':fullimg') || o.img) : '';
-        const p = lqxPct01((score && score.pctile != null) ? score.pctile : (o.pctile != null ? o.pctile : null));
+        const primary = lqxPrimaryPct01(score);
+        const p = primary != null ? primary : lqxPct01(o.pctile);
         const col = p == null ? C.dim : p >= 0.8 ? C.green : p >= 0.7 ? C.amber : C.red;
         if (score && score.loading) return `<div style="font-size:11px;color:${C.cyan};padding:12px">embedding and scoring this thumbnail…</div>`;
         if (score && score.error) return `<div style="font-size:11px;color:${C.red};padding:12px">${esc(score.error)}</div>`;
@@ -1600,7 +1651,7 @@ const JarvisLongQuant = (function () {
             <div style="flex:1;min-width:260px">
               <div style="display:flex;justify-content:space-between;gap:10px;align-items:start"><div style="font-size:13px;font-weight:800;color:${C.text};line-height:1.35">${esc(o.title || (score && score.title) || 'Thumbnail')}</div>${p != null ? `<div style="text-align:right;white-space:nowrap"><div style="font-size:24px;font-weight:900;color:${col}">${(p * 100).toFixed(0)}<span style="font-size:12px">th</span></div><div style="font-size:8px;color:${C.mute};font-weight:900;text-transform:uppercase">thumbnail only</div></div>` : ''}</div>
               ${o.prompt ? `<div style="font-size:10px;color:${C.mute};line-height:1.45;margin-top:5px;max-height:90px;overflow:auto">${esc(o.prompt)}</div>` : ''}
-              ${score ? `${lqxInputSummary(score, o.title || (score && score.title) || '', imgSrc || o.img || '', o.prompt || '')}${lqxScoreContract(score)}${lqxChannelMetricHtml(score)}<div style="font-size:10px;color:${C.faint};margin-top:4px">visual axis projection ${score.proj == null ? '—' : fmtv(score.proj, 3)} · frozen 90th threshold ${score.p90 == null ? '—' : fmtv(score.p90, 3)}</div>${lqxEmbHeat(score)}` : `<div style="font-size:10px;color:${C.mute};margin-top:6px">fast worker score only — opening this card triggers the full raw-long score.</div>`}
+              ${score ? `${lqxInputSummary(score, o.title || (score && score.title) || '', imgSrc || o.img || '', o.prompt || '')}${lqxScoreContract(score, cacheId)}${lqxChannelMetricHtml(score, false, cacheId)}<div style="font-size:10px;color:${C.faint};margin-top:4px">visual axis projection ${score.proj == null ? '—' : fmtv(score.proj, 3)} · frozen 90th threshold ${score.p90 == null ? '—' : fmtv(score.p90, 3)}</div>${lqxEmbHeat(score)}` : `<div style="font-size:10px;color:${C.mute};margin-top:6px">fast worker score only — opening this card triggers the full raw-long score.</div>`}
             </div>
           </div>
           ${lqxGraphGrid(score, cacheId)}
@@ -1822,7 +1873,9 @@ const JarvisLongQuant = (function () {
             gen += `<div style="font-size:10px;color:${C.mute};margin:9px 0 6px">${R.error ? `<span style=\"color:${C.red};font-weight:800\">⚠ ${esc(String(R.error).slice(0, 180))} · </span>` : ''}${R.attempts.length} thumbnails for <b style="color:${C.text}">${esc(R.title || '')}</b> — ranked by trained reward; headline = thumbnail-only potential</div>
               <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px">${R.attempts.map(a => {
                   const fk = rid + '_' + a.k, mk = `longform/guesses/demo/montages/${fk}.jpg`, sc2 = lqxScoreFor('gen:' + fk, mk, R.title || st.lqxTitle || '', R.title || st.lqxTitle || '', a.score, false);
-                  return `<div data-lqxopen="gen:${fk}" style="cursor:pointer;border:1px solid ${a.pctile >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/guesses/montage/demo/${fk}`, `genimg:${fk}`, `width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}`)}<div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;align-items:center;font-size:10px"><span style="font-weight:800;color:${a.pctile >= 0.8 ? C.green : a.pctile >= 0.7 ? C.amber : C.text}">${((a.pctile || 0) * 100).toFixed(0)}th thumbnail</span><span data-lqxsave="${a.k}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === fk ? C.green : C.accent};color:${st.lqxSaveFlash === fk ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-weight:700">${st.lqxSaveFlash === fk ? '✅ Saved' : '💾 Save'}</span></div>${a.status === 'error' || a.error ? `<div style="font-size:9px;color:${C.red};margin-top:4px;border:1px solid ${C.red}44;border-radius:5px;padding:3px 6px">⚠ ${esc(String(a.error || 'render failed').slice(0, 160))}</div>` : ''}${lqxChannelMetricHtml(sc2 || a, true)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">scoring 12 embeddings…</div>` : ''}<div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:40px;overflow:hidden">${esc((a.prompt || '').slice(0, 130))}</div>${lqxRawButton(sc2 || a.score, 'gen:' + fk, R.title || st.lqxTitle || '', `/api/longquant/guesses/montage/demo/${fk}`)}</div></div>`;
+                  const displayScore = sc2 && !sc2.loading && !sc2.error ? sc2 : (a.score || a), primary = lqxPrimaryPct01(displayScore);
+                  const shownPct = primary == null ? lqxPct01(a.pctile) : primary;
+                  return `<div data-lqxopen="gen:${fk}" style="cursor:pointer;border:1px solid ${shownPct >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/guesses/montage/demo/${fk}`, `genimg:${fk}`, `width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}`)}<div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;align-items:center;font-size:10px"><span${lqxPrimaryAttrs(displayScore, 'gen:' + fk)} title="Visual CTR+views · exact image-only thumbnail potential" style="font-weight:800;color:${shownPct >= 0.8 ? C.green : shownPct >= 0.7 ? C.amber : C.text}">${shownPct == null ? '—' : (shownPct * 100).toFixed(0) + 'th'} thumbnail</span><span data-lqxsave="${a.k}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === fk ? C.green : C.accent};color:${st.lqxSaveFlash === fk ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-weight:700">${st.lqxSaveFlash === fk ? '✅ Saved' : '💾 Save'}</span></div>${a.status === 'error' || a.error ? `<div style="font-size:9px;color:${C.red};margin-top:4px;border:1px solid ${C.red}44;border-radius:5px;padding:3px 6px">⚠ ${esc(String(a.error || 'render failed').slice(0, 160))}</div>` : ''}${lqxChannelMetricHtml(sc2 || a, true, 'gen:' + fk)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">scoring 12 embeddings…</div>` : ''}<div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:40px;overflow:hidden">${esc((a.prompt || '').slice(0, 130))}</div>${lqxRawButton(sc2 || a.score, 'gen:' + fk, R.title || st.lqxTitle || '', `/api/longquant/guesses/montage/demo/${fk}`)}</div></div>`;
               }).join('')}</div>`;
             if (st.lqxOpen && String(st.lqxOpen).indexOf('gen:') === 0) {
                 const fk = st.lqxOpen.slice(4), a = R.attempts.find(x => fk === rid + '_' + x.k), mk = `longform/guesses/demo/montages/${fk}.jpg`;
@@ -1851,7 +1904,9 @@ const JarvisLongQuant = (function () {
             grind += `<div style="font-size:10px;color:${C.mute};margin:9px 0 6px">best thumbnail-only <b style="color:${gr.best >= gr.threshold ? C.green : C.text}">${gr.best == null ? '—' : gr.best + 'th'}</b> · visual target ${gr.threshold || st.lqxGrindThreshold || 85}th · next min distance ≥ ${gr.gate || '—'}</div>`;
             grind += grAttempts.slice().reverse().map(a => `<div style="border:1px solid ${a.pct >= (gr.threshold || 85) ? C.green : C.border};border-radius:8px;padding:8px;background:${C.card2};margin-top:8px"><div style="display:flex;justify-content:space-between;gap:10px"><div style="font-size:12px;color:${C.text};font-weight:800">${esc((a.idea || '').slice(0, 140))}</div><div style="font-size:12px;color:${a.pct >= (gr.threshold || 85) ? C.green : C.dim};font-weight:900;white-space:nowrap">${a.pct == null ? '—' : a.pct + 'th'}</div></div><div style="font-size:9px;color:${C.mute};margin:3px 0 6px">seed dist ${a.distSeed == null ? '—' : a.distSeed} · prior dist ${a.distPrior == null ? '—' : a.distPrior} · topical ${a.topic == null ? '—' : a.topic}${a.topicFloor == null ? '' : ' / floor ' + a.topicFloor} · ${esc(a.status || '')}</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">${(a.thumbs || []).map(t => {
                 const cid = t.image || `${a.k}_${t.i}`, key = t.image ? `longform/grind/montages/${t.image}.jpg` : '', sc2 = t.image ? lqxScoreFor('grind:' + cid, key, a.idea || gr.idea || '', a.idea || gr.idea || '', t.score, false) : (t.score || t);
-                return `<div data-lqxopen="grind:${cid}" style="cursor:${t.image ? 'pointer' : 'default'};border:1px solid ${t.pct >= (gr.threshold || 85) ? C.green : C.border};border-radius:7px;overflow:hidden;background:${C.card}">${t.image ? lqxImg(`/api/longquant/grind/img/${t.image}`, `grindimg:${t.image}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000') : `<div style="aspect-ratio:16/9;background:${C.card};display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px">${esc(t.status || 'queued')}</div>`}<div style="padding:5px 6px"><div style="display:flex;justify-content:space-between;gap:4px;align-items:center"><div style="font-size:10px;font-weight:800;color:${t.pct >= (gr.threshold || 85) ? C.green : C.text}">${t.pct == null ? esc(t.status || '') : t.pct + 'th'}</div>${t.image ? `<span data-lqxgrindsave="${cid}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:4px;padding:1px 5px;font-size:8px;font-weight:800">save</span>` : ''}</div>${lqxChannelMetricHtml(sc2 || t, true)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">scoring 12 embeddings…</div>` : ''}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:34px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 110))}</div>${t.image ? lqxRawButton(sc2 || t.score, 'grind:' + cid, a.idea || gr.idea || '', `/api/longquant/grind/img/${t.image}`) : ''}${t.error ? `<div style="font-size:9px;color:${C.red};margin-top:3px">${esc(t.error)}</div>` : ''}</div></div>`;
+                const displayScore = sc2 && !sc2.loading && !sc2.error ? sc2 : (t.score || t), primary = lqxPrimaryPct01(displayScore);
+                const shownPct = primary == null ? (t.pct == null ? null : Number(t.pct) / 100) : primary;
+                return `<div data-lqxopen="grind:${cid}" style="cursor:${t.image ? 'pointer' : 'default'};border:1px solid ${shownPct != null && shownPct * 100 >= (gr.threshold || 85) ? C.green : C.border};border-radius:7px;overflow:hidden;background:${C.card}">${t.image ? lqxImg(`/api/longquant/grind/img/${t.image}`, `grindimg:${t.image}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000') : `<div style="aspect-ratio:16/9;background:${C.card};display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px">${esc(t.status || 'queued')}</div>`}<div style="padding:5px 6px"><div style="display:flex;justify-content:space-between;gap:4px;align-items:center"><div${lqxPrimaryAttrs(displayScore, 'grind:' + cid)} title="Visual CTR+views · exact image-only thumbnail potential" style="font-size:10px;font-weight:800;color:${shownPct != null && shownPct * 100 >= (gr.threshold || 85) ? C.green : C.text}">${shownPct == null ? esc(t.status || '') : (shownPct * 100).toFixed(0) + 'th'}</div>${t.image ? `<span data-lqxgrindsave="${cid}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:4px;padding:1px 5px;font-size:8px;font-weight:800">save</span>` : ''}</div>${lqxChannelMetricHtml(sc2 || t, true, 'grind:' + cid)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">scoring 12 embeddings…</div>` : ''}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:34px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 110))}</div>${t.image ? lqxRawButton(sc2 || t.score, 'grind:' + cid, a.idea || gr.idea || '', `/api/longquant/grind/img/${t.image}`) : ''}${t.error ? `<div style="font-size:9px;color:${C.red};margin-top:3px">${esc(t.error)}</div>` : ''}</div></div>`;
             }).join('')}</div>${a.error ? `<div style="font-size:10px;color:${C.red};margin-top:5px">${esc(a.error)}</div>` : ''}</div>`).join('');
             if (st.lqxOpen && String(st.lqxOpen).indexOf('grind:') === 0) {
                 const cid = st.lqxOpen.slice(6);
@@ -2006,7 +2061,10 @@ const JarvisLongQuant = (function () {
                 const n = Number(v);
                 return Math.round(n <= 1 ? n * 100 : n);
             };
-            const thumbPct = t => t && t.pct != null ? toPct(t.pct) : toPct(t && t.score && t.score.pctile);
+            const thumbPct = t => {
+                const primary = lqxPrimaryPct01(t && (t.score || t));
+                return primary == null ? toPct(t && (t.pct != null ? t.pct : t.score && t.score.pctile)) : Math.round(primary * 100);
+            };
             const pctCol = p => p == null ? C.dim : p >= 90 ? C.green : p >= 75 ? C.amber : C.text;
             const filteredChannelRuns = channelRuns.filter(r => channelRunMatches(r, channelFilter));
             const livePick = liveActive.find(r => r && filteredChannelRuns.find(c => c.rid === r.rid));
@@ -2047,13 +2105,17 @@ const JarvisLongQuant = (function () {
                 const baseline = det.baseline || null;
                 const baselinePct = baseline ? toPct(baseline.pct != null ? baseline.pct : baseline.pctile) : null;
                 const baselineScore = baseline && baseline.score && !baseline.score.error ? baseline.score : null;
-                const baselineHtml = baseline && baseline.image ? `<div style="border:1px solid ${C.border};border-radius:8px;background:${C.card2};overflow:hidden;width:220px;flex:0 0 220px">${lqxImg(`/api/longquant/grind/original/${selRid}`, `grindorig:${selRid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:7px 8px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;font-weight:800">current thumbnail baseline</div><div style="font-size:13px;font-weight:900;color:${pctCol(baselinePct)};margin-top:2px">${baselinePct == null ? '—' : baselinePct + 'th thumbnail-only'}</div>${lqxChannelMetricHtml(baselineScore || baseline, true)}${baselineScore ? lqxRawButton(baselineScore, 'grind-original:' + selRid, runTitle, `/api/longquant/grind/original/${selRid}`) : ''}${baseline.error ? `<div style="font-size:9px;color:${C.red};margin-top:4px">${esc(baseline.error)}</div>` : ''}</div></div>` : '';
+                const baselineDisplayScore = baselineScore || baseline, baselinePrimary = lqxPrimaryPct01(baselineDisplayScore);
+                const baselineShownPct = baselinePrimary == null ? baselinePct : Math.round(baselinePrimary * 100);
+                const baselineHtml = baseline && baseline.image ? `<div style="border:1px solid ${C.border};border-radius:8px;background:${C.card2};overflow:hidden;width:220px;flex:0 0 220px">${lqxImg(`/api/longquant/grind/original/${selRid}`, `grindorig:${selRid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:7px 8px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;font-weight:800">current thumbnail baseline</div><div${lqxPrimaryAttrs(baselineDisplayScore, 'grind-original:' + selRid)} title="Visual CTR+views · exact image-only thumbnail potential" style="font-size:13px;font-weight:900;color:${pctCol(baselineShownPct)};margin-top:2px">${baselineShownPct == null ? '—' : baselineShownPct + 'th thumbnail-only'}</div>${lqxChannelMetricHtml(baselineDisplayScore, true, 'grind-original:' + selRid)}${baselineScore ? lqxRawButton(baselineScore, 'grind-original:' + selRid, runTitle, `/api/longquant/grind/original/${selRid}`) : ''}${baseline.error ? `<div style="font-size:9px;color:${C.red};margin-top:4px">${esc(baseline.error)}</div>` : ''}</div></div>` : '';
                 const thumbGrid = thumbs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px">${thumbs.map((h, idx) => {
                     const t = h.t, a = h.a, cid = t.image, idea = h.idea || runTitle;
                     const pct = thumbPct(t), key = `longform/grind/montages/${cid}.jpg`;
                     const score = lqxScoreFor('grind:' + cid, key, idea, idea, t.score, false);
+                    const displayScore = score && !score.loading && !score.error ? score : (t.score || t), primary = lqxPrimaryPct01(displayScore);
+                    const shownPct = primary == null ? pct : Math.round(primary * 100);
                     const att = a.k != null ? Number(a.k) + 1 : '';
-                    return `<div data-lqxopen="history:${esc(cid)}" style="cursor:pointer;border:1px solid ${pct >= (det.threshold || selected.threshold || 90) ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/grind/img/${cid}`, `grindhist:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:7px 8px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="font-size:10px;font-weight:900;color:${pctCol(pct)}">#${idx + 1} · ${pct == null ? '—' : pct + 'th thumbnail'}</div><span data-lqxhistSave="${esc(cid)}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === cid ? C.green : C.accent};color:${st.lqxSaveFlash === cid ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-size:9px;font-weight:800">${st.lqxSaveFlash === cid ? 'saved' : 'save'}</span></div><div style="font-size:9px;color:${C.mute};margin-top:3px">attempt ${att || '—'}${a.distSeed == null ? '' : ' · seed dist ' + a.distSeed}${a.topic == null ? '' : ' · topical ' + a.topic}</div>${lqxChannelMetricHtml(score || t.score || t, true)}${score && score.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">embedding visual · together…</div>` : ''}<div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.3;max-height:38px;overflow:hidden;margin-top:5px">${esc((idea || '').slice(0, 120))}</div><div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:42px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 150))}</div>${lqxRawButton(score || t.score, 'grind:' + cid, idea, `/api/longquant/grind/img/${cid}`)}${t.error ? `<div style="font-size:9px;color:${C.red};margin-top:3px">${esc(t.error)}</div>` : ''}</div></div>`;
+                    return `<div data-lqxopen="history:${esc(cid)}" style="cursor:pointer;border:1px solid ${shownPct >= (det.threshold || selected.threshold || 90) ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/grind/img/${cid}`, `grindhist:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:7px 8px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div${lqxPrimaryAttrs(displayScore, 'grind:' + cid)} title="Visual CTR+views · exact image-only thumbnail potential" style="font-size:10px;font-weight:900;color:${pctCol(shownPct)}">#${idx + 1} · ${shownPct == null ? '—' : shownPct + 'th thumbnail'}</div><span data-lqxhistSave="${esc(cid)}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === cid ? C.green : C.accent};color:${st.lqxSaveFlash === cid ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-size:9px;font-weight:800">${st.lqxSaveFlash === cid ? 'saved' : 'save'}</span></div><div style="font-size:9px;color:${C.mute};margin-top:3px">attempt ${att || '—'}${a.distSeed == null ? '' : ' · seed dist ' + a.distSeed}${a.topic == null ? '' : ' · topical ' + a.topic}</div>${lqxChannelMetricHtml(score || t.score || t, true, 'grind:' + cid)}${score && score.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">embedding visual · together…</div>` : ''}<div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.3;max-height:38px;overflow:hidden;margin-top:5px">${esc((idea || '').slice(0, 120))}</div><div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:42px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 150))}</div>${lqxRawButton(score || t.score, 'grind:' + cid, idea, `/api/longquant/grind/img/${cid}`)}${t.error ? `<div style="font-size:9px;color:${C.red};margin-top:3px">${esc(t.error)}</div>` : ''}</div></div>`;
                 }).join('')}</div>` : `<div style="font-size:11px;color:${C.dim};padding:16px;background:${C.card2};border:1px solid ${C.border};border-radius:8px">No generated thumbnails are stored for this run yet. If it is still queued or rendering, this fills in as attempts finish.</div>`;
                 if (st.lqxOpen && String(st.lqxOpen).indexOf('history:') === 0) {
                     const imgId = st.lqxOpen.slice(8);
@@ -2095,7 +2157,9 @@ const JarvisLongQuant = (function () {
                     ideaDetail = `<div style="margin-top:10px;border-top:1px solid ${C.border};padding-top:9px"><div style="font-size:13px;color:${C.text};font-weight:800;line-height:1.35">${esc(sel.idea || '')}</div><div style="font-size:10px;color:${C.mute};margin:3px 0 8px">visual ctrviews <b style="color:${C.green}">${((sel.pctile || 0) * 100).toFixed(0)}th</b> · text ${sel.text_pct != null ? (sel.text_pct * 100).toFixed(0) + 'th' : '—'} · novelty ${sel.novelty != null ? sel.novelty.toFixed(2) : '—'}</div>${lqxIdeaMiniGraph(sel, 'bestidea:' + irun + ':' + sel.id)}${G && G.loading ? `<div style="font-size:11px;color:${C.cyan}">loading thumbnails…</div>` : thumbs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px">${thumbs.map(t => {
                         const cid = `${sel.id}_${t.k}`, key = `longform/ideas/${irun}/montages/${cid}.jpg`, cardId = 'idea:' + irun + ':' + cid, sc2 = lqxScoreFor(cardId, key, sel.idea || '', sel.idea || '', t.score, false);
                         const img = lqxImgData(`/api/longquant/ideas/montage/${irun}/${cid}`, `ideaimg:${irun}:${cid}`) || `/api/longquant/ideas/montage/${irun}/${cid}`;
-                        return `<div data-lqxopen="idea:${irun}:${cid}" style="cursor:pointer;border:1px solid ${(t.pctile || 0) >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/ideas/montage/${irun}/${cid}`, `ideaimg:${irun}:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:6px 8px"><div style="font-size:10px;font-weight:800;color:${(t.pctile || 0) >= 0.8 ? C.green : C.text}">${((t.pctile || 0) * 100).toFixed(0)}th · rel ${t.rel != null ? t.rel.toFixed(2) : '—'}</div>${lqxChannelMetricHtml(sc2 || t, true)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">embedding visual · together…</div>` : ''}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:36px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 120))}</div>${lqxRawButton(sc2, cardId, sel.idea || '', img)}</div></div>`;
+                        const displayScore = sc2 && !sc2.loading && !sc2.error ? sc2 : (t.score || t), primary = lqxPrimaryPct01(displayScore);
+                        const shownPct = primary == null ? lqxPct01(t.pctile) : primary;
+                        return `<div data-lqxopen="idea:${irun}:${cid}" style="cursor:pointer;border:1px solid ${shownPct >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/ideas/montage/${irun}/${cid}`, `ideaimg:${irun}:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:6px 8px"><div${lqxPrimaryAttrs(displayScore, cardId)} title="Visual CTR+views · exact image-only thumbnail potential" style="font-size:10px;font-weight:800;color:${shownPct >= 0.8 ? C.green : C.text}">${shownPct == null ? '—' : (shownPct * 100).toFixed(0) + 'th'} · rel ${t.rel != null ? t.rel.toFixed(2) : '—'}</div>${lqxChannelMetricHtml(sc2 || t, true, cardId)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">scoring 12 embeddings…</div>` : ''}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:36px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 120))}</div>${lqxRawButton(sc2, cardId, sel.idea || '', img)}</div></div>`;
                     }).join('')}</div>` : `<div style="font-size:11px;color:${C.dim}">no thumbnail group found for this idea yet</div>`}</div>`;
                     if (st.lqxOpen && String(st.lqxOpen).indexOf('idea:' + irun + ':') === 0) {
                         const cid = st.lqxOpen.split(':').slice(2).join(':'), t = thumbs.find(x => cid === `${sel.id}_${x.k}`);
@@ -2111,10 +2175,12 @@ const JarvisLongQuant = (function () {
                     const cardId = t ? 'idea:' + irun + ':' + cid : 'idea-row:' + irun + ':' + (r.id || '');
                     const key = t ? `longform/ideas/${irun}/montages/${cid}.jpg` : '';
                     const sc2 = t ? lqxScoreFor(cardId, key, r.idea || '', r.idea || '', t.score, false) : null;
-                    const pct = t && t.pctile != null ? t.pctile : r.pctile;
+                    const displayScore = sc2 && !sc2.loading && !sc2.error ? sc2 : (t && (t.score || t));
+                    const primary = displayScore ? lqxPrimaryPct01(displayScore) : null;
+                    const pct = primary == null ? (t && t.pctile != null ? t.pctile : r.pctile) : primary;
                     return `<div data-lqxidea="${esc(r.id || '')}" data-lqxidearun="${esc(irun || '')}" style="cursor:pointer;border:1px solid ${st.lqxIdeaSel === r.id ? C.accent : (pct || 0) >= 0.8 ? C.green : C.border};border-radius:8px;overflow:hidden;background:${st.lqxIdeaSel === r.id ? C.accent + '18' : C.card2};width:220px">
                       ${t ? lqxImg(`/api/longquant/ideas/montage/${irun}/${cid}`, `ideabest:${irun}:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000') : `<div style="width:100%;aspect-ratio:16/9;background:${C.card};display:flex;align-items:center;justify-content:center;color:${G && G.error ? C.red : C.cyan};font-size:10px;text-align:center;padding:8px;box-sizing:border-box">${G && G.error ? 'thumbnail group unavailable' : 'loading thumbnails…'}</div>`}
-                      <div style="padding:7px 8px"><div style="font-size:10px;font-weight:800;color:${(pct || 0) >= 0.8 ? C.green : C.text};margin-bottom:3px">${pct == null ? '—' : (pct * 100).toFixed(0) + 'th'}${t && t.rel != null ? ` · rel ${Number(t.rel).toFixed(2)}` : ''}</div><div style="font-size:11px;color:${C.text};font-weight:800;line-height:1.3;max-height:42px;overflow:hidden">${esc((r.idea || '').slice(0, 105))}</div>${lqxChannelMetricHtml(sc2 || t || {}, true)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">embedding visual · together…</div>` : ''}${sc2 && sc2.channels ? lqxRawButton(sc2, cardId, r.idea || '', `/api/longquant/ideas/montage/${irun}/${cid}`) : ''}</div>
+                      <div style="padding:7px 8px"><div${displayScore ? lqxPrimaryAttrs(displayScore, cardId) : ''} style="font-size:10px;font-weight:800;color:${(pct || 0) >= 0.8 ? C.green : C.text};margin-bottom:3px">${pct == null ? '—' : (pct * 100).toFixed(0) + 'th'}${t && t.rel != null ? ` · rel ${Number(t.rel).toFixed(2)}` : ''}</div><div style="font-size:11px;color:${C.text};font-weight:800;line-height:1.3;max-height:42px;overflow:hidden">${esc((r.idea || '').slice(0, 105))}</div>${lqxChannelMetricHtml(sc2 || t || {}, true, cardId)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">embedding visual · together…</div>` : ''}${sc2 && sc2.channels ? lqxRawButton(sc2, cardId, r.idea || '', `/api/longquant/ideas/montage/${irun}/${cid}`) : ''}</div>
                     </div>`;
                 }).join('');
                 ideas = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💡 Best ideas so far <span style="font-size:10px;color:${C.mute};font-weight:600">— visual cards use the same Long Quant embedding read-out as generated thumbnails</span></div><div style="display:flex;gap:10px;flex-wrap:wrap">${bestCards}</div>${ideaDetail}`, 12);
@@ -2139,9 +2205,11 @@ const JarvisLongQuant = (function () {
           <div style="display:flex;gap:10px;flex-wrap:wrap">${saved.slice(0, show).map(t => {
               const baseScore = t.score || (t.metrics || t.channels ? { metrics: t.metrics, channels: t.channels, emb_preview: t.emb_preview, input_manifest: t.input_manifest, pctile: t.pctile, relevance: t.relevance } : null);
               const score = lqxScoreFor('saved:' + t.id, `longform/saved-thumbs/${t.id}.jpg`, t.title || '', t.title || '', baseScore, false);
-              const sp = lqxPct01(t.pctile != null ? t.pctile : (score && score.pctile));
+              const displayScore = score && !score.loading && !score.error ? score : (baseScore || t);
+              const primary = lqxPrimaryPct01(displayScore);
+              const sp = primary == null ? lqxPct01(t.pctile) : primary;
               const src = t.sourceVideo && t.sourceVideo.title ? `<div style="font-size:8px;color:${C.faint};line-height:1.25;max-height:22px;overflow:hidden;margin-top:3px">${esc(String(t.sourceVideo.title).slice(0, 80))}</div>` : '';
-              return `<div data-lqxsaved="${t.id}" style="cursor:pointer;border:1px solid ${st.lqxSavedSel === t.id ? C.accent : (sp != null && sp >= 0.8) ? C.green : C.border};border-radius:8px;padding:6px;background:${st.lqxSavedSel === t.id ? C.accent + '18' : C.card2};width:210px;position:relative"><span data-lqxdel="${t.id}" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer;z-index:2">✕</span>${lqxImg(`/api/longquant/thumbs/img/${t.id}`, `savedimg:${t.id}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:5px;background:#000')}<div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;margin-top:5px"><div style="font-size:10px;color:${C.text};font-weight:800;max-height:32px;overflow:hidden;line-height:1.3;flex:1">${esc((t.title || '').slice(0, 78))}</div>${sp != null ? `<div style="font-size:10px;font-weight:900;color:${sp >= 0.8 ? C.green : C.dim};white-space:nowrap">${(sp * 100).toFixed(0)}th</div>` : ''}</div>${src}${lqxChannelMetricHtml(score || t, true)}${score && score.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">embedding visual · together…</div>` : ''}${score && score.channels ? lqxRawButton(score, 'saved:' + t.id, t.title || '', `/api/longquant/thumbs/img/${t.id}`) : ''}</div>`;
+              return `<div data-lqxsaved="${t.id}" style="cursor:pointer;border:1px solid ${st.lqxSavedSel === t.id ? C.accent : (sp != null && sp >= 0.8) ? C.green : C.border};border-radius:8px;padding:6px;background:${st.lqxSavedSel === t.id ? C.accent + '18' : C.card2};width:210px;position:relative"><span data-lqxdel="${t.id}" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer;z-index:2">✕</span>${lqxImg(`/api/longquant/thumbs/img/${t.id}`, `savedimg:${t.id}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:5px;background:#000')}<div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;margin-top:5px"><div style="font-size:10px;color:${C.text};font-weight:800;max-height:32px;overflow:hidden;line-height:1.3;flex:1">${esc((t.title || '').slice(0, 78))}</div>${sp != null ? `<div${lqxPrimaryAttrs(displayScore, 'saved:' + t.id)} title="Visual CTR+views · exact image-only thumbnail potential" style="font-size:10px;font-weight:900;color:${sp >= 0.8 ? C.green : C.dim};white-space:nowrap">${(sp * 100).toFixed(0)}th</div>` : ''}</div>${src}${lqxChannelMetricHtml(score || t, true, 'saved:' + t.id)}${score && score.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">embedding visual · together…</div>` : ''}${score && score.channels ? lqxRawButton(score, 'saved:' + t.id, t.title || '', `/api/longquant/thumbs/img/${t.id}`) : ''}</div>`;
           }).join('')}</div>
           ${saved.length > show ? `<div style="text-align:center;margin-top:10px"><span data-lqxmore style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:8px;padding:5px 16px;font-size:11px;font-weight:700">Load 30 more · ${saved.length - show} left</span></div>` : ''}${savedDetail}`, 12) : '';
         // ── 🔤 Title test: text-only embedding on every latent projection ──

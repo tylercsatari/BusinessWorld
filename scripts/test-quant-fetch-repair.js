@@ -89,8 +89,8 @@ assert(activeLongScores === 5, `only five explicitly opened detail surfaces may 
 
 // Force browsers to load the repaired clients instead of pairing new routes
 // with a cached pre-repair module.
-includes(index, 'jarvis-retention.js?v=fetch-repair-2', 'Shorts bundle cache key must be bumped');
-includes(index, 'jarvis-longquant.js?v=fetch-repair-2', 'Long Quant bundle cache key must be bumped');
+includes(index, 'jarvis-retention.js?v=embedding-contract-1', 'Shorts bundle cache key must be bumped');
+includes(index, 'jarvis-longquant.js?v=embedding-contract-1', 'Long Quant bundle cache key must be bumped');
 
 console.log(JSON.stringify({
     ok: true,

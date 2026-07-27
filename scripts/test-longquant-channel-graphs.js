@@ -5,6 +5,16 @@ const path = require('path');
 const vm = require('vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'buildings', 'jarvis', 'jarvis-longquant.js'), 'utf8');
+const normalizeStart = source.indexOf('const LQ_REL_FLOOR');
+const normalizeEnd = source.indexOf('function lqxInputManifest', normalizeStart);
+if (normalizeStart < 0 || normalizeEnd < 0) throw new Error('Long Quant score normalization source not found');
+const normalizeContext = {};
+vm.createContext(normalizeContext);
+vm.runInContext(
+    source.slice(normalizeStart, normalizeEnd)
+        + '\nthis.normalizeApi = { lqxNormalizeScore };',
+    normalizeContext
+);
 const helperStart = source.indexOf('const LQ_COMPARE_METRICS');
 const helperEnd = source.indexOf('function lqxHash', helperStart);
 if (helperStart < 0 || helperEnd < 0) throw new Error('Long Quant channel graph source not found');
@@ -62,17 +72,36 @@ const context = {
     esc: value => String(value == null ? '' : value),
     lqxNormalizeScore: score => score,
     lqxMetricPct: m => m && m.pctile == null ? null : Math.round(Number(m.pctile)),
+    lqxEmbeddingAttrs: (score, channelName, metricName, value, origin, assetId) => [
+        `data-embedding-id="longquant:${origin}:${channelName}_${metricName}"`,
+        `data-embedding-asset="${assetId || ''}"`,
+        `data-embedding-origin="${origin}"`,
+        `data-embedding-source-key="${channelName}_${metricName}"`,
+        value && value.est != null ? `data-embedding-est="${value.est}"` : '',
+        value && value.pctile != null ? `data-embedding-percentile="${value.pctile}"` : '',
+    ].filter(Boolean).join(' ').replace(/^/, ' '),
 };
 vm.createContext(context);
 vm.runInContext(
     source.slice(helperStart, helperEnd)
-        + '\nthis.graphApi = { LQ_COMPARE_METRICS, lqxMetricForChannel, lqxStoredOutputCount, lqxHasTwelveOutputs, lqxChannelMetricHtml, lqxGraphGrid };',
+        + '\nthis.graphApi = { LQ_COMPARE_METRICS, lqxMetricForChannel, lqxMetricOrigin, lqxStoredOutputCount, lqxHasTwelveOutputs, lqxChannelMetricHtml, lqxGraphGrid };',
     context
 );
 
 function assert(condition, message) {
     if (!condition) throw new Error(message);
 }
+
+const normalizedAliasFixture = normalizeContext.normalizeApi.lqxNormalizeScore({
+    pctile: .11,
+    visual_pctile: .22,
+    thumbnail_potential: .33,
+    channels: {
+        visual: { metrics: { ctrviews: { pctile: 91 } } },
+    },
+});
+assert(normalizedAliasFixture.pctile === .91, 'client normalization did not make the exact stored Visual CTR+views metric authoritative');
+assert(normalizedAliasFixture.visual_pctile === .91 && normalizedAliasFixture.thumbnail_potential === .91, 'client aliases did not normalize to the exact Visual CTR+views metric');
 
 const score = {
     channels: {
@@ -84,10 +113,12 @@ const togetherCtrViews = context.graphApi.lqxMetricForChannel(score, 'together',
 const visualCtr = context.graphApi.lqxMetricForChannel(score, 'visual', 'ctr');
 assert(togetherCtrViews && togetherCtrViews.kind === 'neighbor_axis_percentile', 'together CTR+views did not derive from its own projection');
 assert(visualCtr && visualCtr.kind === 'neighbor_axis_percentile', 'missing calibrated visual metric did not derive from its own projection');
+assert(context.graphApi.lqxMetricOrigin(score, 'together', 'ctrviews') === 'derived-neighbor-axis', 'derived output was not labeled as derived');
+assert(context.graphApi.lqxMetricOrigin(score, 'visual', 'ctrviews') === 'stored-production', 'stored output lost its production provenance');
 
 const html = context.graphApi.lqxGraphGrid(score, 'fixture-thumb');
-const summary = context.graphApi.lqxChannelMetricHtml(score);
-const compactSummary = context.graphApi.lqxChannelMetricHtml(score, true);
+const summary = context.graphApi.lqxChannelMetricHtml(score, false, 'fixture-thumb');
+const compactSummary = context.graphApi.lqxChannelMetricHtml(score, true, 'fixture-thumb');
 const visualBindings = (html.match(/data-lqxrawchan="visual"/g) || []).length;
 const togetherBindings = (html.match(/data-lqxrawchan="together"/g) || []).length;
 const visualSummary = (summary.match(/title="visual embedding:/g) || []).length;
@@ -100,12 +131,17 @@ assert(visualBindings === 6, `expected 6 visual graph bindings, got ${visualBind
 assert(togetherBindings === 6, `expected 6 together graph bindings, got ${togetherBindings}`);
 assert(visualSummary === 6 && togetherSummary === 6, '12-output summary is not grouped 6+6 by input');
 assert(compactSummary.includes('12 embedding outputs') && compactSummary.includes('12/12'), 'compact cards do not expose the shared 12-output contract');
+assert((summary.match(/data-embedding-asset="fixture-thumb"/g) || []).length === 12, 'all 12 summary values must bind to the same thumbnail asset');
+assert((html.match(/data-embedding-asset="fixture-thumb"/g) || []).length === 12, 'all 12 graph values must bind to the same thumbnail asset');
+assert(summary.includes('data-embedding-id="longquant:stored-production:visual_ctrviews"'), 'stored visual CTR+views identity missing');
+assert(summary.includes('data-embedding-id="longquant:derived-neighbor-axis:together_ctrviews"'), 'derived together CTR+views identity missing');
+assert(summary.includes('derived nearest-neighbor axis placement'), 'derived output provenance is not visible');
 assert(!html.includes('data-lqxrawchan="text"'), 'text channel leaked into the requested 12-graph comparison');
 assert(html.includes('12 independent embedding outputs by input'), '12-output heading missing');
 assert((html.match(/data-compact-quant-plot=/g) || []).length === 12, 'all 12 graphs must use bounded compact plots');
 assert(context.graphApi.lqxGraphGrid(score, 'fixture-thumb') === html, 'ready graph HTML was not cached');
 assert(!source.includes('function lqxMetricHtml('), 'legacy mixed-channel renderer still exists');
-const compactCalls = (source.match(/lqxChannelMetricHtml\([^\n]+, true\)/g) || []).length;
+const compactCalls = (source.match(/lqxChannelMetricHtml\([^\n]+,\s*true(?:,\s*[^\n)]+)?\)/g) || []).length;
 assert(compactCalls >= 7, `expected shared compact 12-output renderer across thumbnail surfaces, got ${compactCalls}`);
 assert(source.includes('data-lqxscoretitle') && source.includes("lqxJob('/api/longquant/exp/score-upload', { image: st.lqxScoreImg, title, idea: title })"), 'manual scoring does not send the together-channel input through the durable job path');
 

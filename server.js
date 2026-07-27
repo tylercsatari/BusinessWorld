@@ -47,6 +47,11 @@ const streamJson = require('./buildings/jarvis/stream-json');
 const viralIdeaEngine = require('./buildings/jarvis/viral-idea-engine');
 const savedChannelAnalysis = require('./buildings/jarvis/saved-channel-analysis');
 const savedChannelValidation = require('./buildings/jarvis/saved-channel-validation');
+const {
+    SAVED_HOOK_INDEX_VERSION,
+    embeddingSteerSelection,
+    compactSavedHookRecord,
+} = require('./embedding-display-contract');
 const PDFDocument = require('pdfkit');
 const { spawn } = require('child_process');
 const PORT = process.env.PORT || 8002;
@@ -1230,6 +1235,34 @@ const SAVED_CHANNEL_ROOT = 'raw/saved-channels/';
 const SAVED_CHANNEL_INDEX_KEY = SAVED_CHANNEL_ROOT + 'index.json';
 const SAVED_CHANNEL_REQUEST_ROOT = 'shorts/channel-import/requests/';
 const SAVED_CHANNEL_VALIDATION_KEY = SAVED_CHANNEL_ROOT + 'blind-validation.json';
+const SAVED_HOOK_INDEX_KEY = 'raw/saved-hooks/index.json';
+
+async function readSavedHookIndex() {
+    const buffer = await cloud.downloadFromR2(SAVED_HOOK_INDEX_KEY).catch(() => null);
+    if (!buffer) return { version: SAVED_HOOK_INDEX_VERSION, hooks: [], folders: [] };
+    const index = JSON.parse(buffer.toString('utf8'));
+    if (!Array.isArray(index.hooks)) index.hooks = [];
+    if (!Array.isArray(index.folders)) index.folders = [];
+    return index;
+}
+
+async function writeSavedHookIndex(index) {
+    index.version = SAVED_HOOK_INDEX_VERSION;
+    index.updatedAt = Date.now();
+    await cloud.uploadToR2(SAVED_HOOK_INDEX_KEY, Buffer.from(JSON.stringify(index)), 'application/json');
+}
+
+let savedHookIndexQueue = Promise.resolve();
+function updateSavedHookIndex(mutator) {
+    const operation = savedHookIndexQueue.then(async () => {
+        const index = await readSavedHookIndex();
+        await mutator(index);
+        await writeSavedHookIndex(index);
+        return index;
+    });
+    savedHookIndexQueue = operation.catch(() => {});
+    return operation;
+}
 
 function savedChannelId(channelUrl) {
     const digest = require('crypto').createHash('sha256').update(String(channelUrl || '').toLowerCase()).digest('hex').slice(0, 16);
@@ -4883,13 +4916,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             await cloud.uploadToR2(`raw/saved-hooks/${id}.json`, Buffer.from(JSON.stringify(rec)), 'application/json');
             // keep the fast index in sync (compact record) so the Saved bank shows it immediately
             try {
-                let idx = { hooks: [] };
-                try { const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
-                if (!Array.isArray(idx.hooks)) idx.hooks = [];
-                const g = t => (rec.steer && (rec.steer['together_' + t] || rec.steer['visual_' + t])) || {};
-                idx.hooks.push({ id, title: rec.title, kind: rec.kind, hasMontage, savedAt: rec.savedAt, folder: rec.folder, input_manifest: rec.input_manifest, keep: g('keep').pctile, m: { keep: g('keep').pctile, keep_est: g('keep').est, ret5: g('ret5').pctile, views: g('views').est, sviews: g('realviews').est, gt10M: g('gt10M').est, outlier: g('outlier').pctile } });
-                await cloud.uploadToR2('raw/saved-hooks/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
-            } catch (e) {}
+                await updateSavedHookIndex(idx => {
+                    idx.hooks.push(compactSavedHookRecord(rec));
+                });
+            } catch (e) {
+                await cloud.deleteFromR2(`raw/saved-hooks/${id}.json`).catch(() => {});
+                if (hasMontage) await cloud.deleteFromR2(`raw/saved-hooks/${id}.jpg`).catch(() => {});
+                throw new Error(`saved-hook index update failed: ${e.message || e}`);
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, id }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
@@ -4914,17 +4948,16 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             }
             rec.enrichedAt = Date.now();
             await cloud.uploadToR2(key, Buffer.from(JSON.stringify(rec)), 'application/json');
-            if (rec.hasMontage) {
-                const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json').catch(() => null);
-                if (ib) {
-                    const idx = JSON.parse(ib.toString('utf8'));
-                    const row = Array.isArray(idx.hooks) && idx.hooks.find(h => h.id === id);
-                    if (row) {
-                        row.hasMontage = true;
-                        await cloud.uploadToR2('raw/saved-hooks/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
-                    }
+            await updateSavedHookIndex(idx => {
+                const at = idx.hooks.findIndex(h => h.id === id);
+                const compact = compactSavedHookRecord(rec);
+                if (at >= 0) {
+                    compact.folder = idx.hooks[at].folder || compact.folder;
+                    idx.hooks[at] = compact;
+                } else {
+                    idx.hooks.push(compact);
                 }
-            }
+            });
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}');
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
@@ -4933,7 +4966,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         try {
             // Fast path: a prebuilt compact index (one object) — scales to thousands of saved hooks.
             let idx = null;
-            const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json');
+            const ib = await cloud.downloadFromR2(SAVED_HOOK_INDEX_KEY);
             if (ib) idx = JSON.parse(ib.toString('utf8'));
             if (idx && Array.isArray(idx.hooks)) {
                 idx.hooks.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
@@ -4957,26 +4990,28 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if ((pathname === '/api/raw/folder-create' || pathname === '/api/raw/hook-move' || pathname === '/api/raw/folder-delete' || pathname === '/api/raw-long/folder-create' || pathname === '/api/raw-long/hook-move' || pathname === '/api/raw-long/folder-delete') && req.method === 'POST') {
         try {
             const body = (await readBody(req)) || {};
-            let idx = { hooks: [], folders: [] };
-            try { const ib = await cloud.downloadFromR2('raw/saved-hooks/index.json'); if (ib) idx = JSON.parse(ib.toString('utf8')); } catch (e) {}
-            if (!Array.isArray(idx.hooks)) idx.hooks = [];
-            if (!Array.isArray(idx.folders)) idx.folders = [];
             const out = { ok: true };
             if (pathname === '/api/raw/folder-create' || pathname === '/api/raw-long/folder-create') {
                 const name = String(body.name || '').slice(0, 60).trim();
                 if (!name) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no name"}'); return; }
-                let f = idx.folders.find(x => (x.name || '').toLowerCase() === name.toLowerCase());
-                if (!f) { f = { id: 'f' + Date.now().toString(36), name }; idx.folders.push(f); }
-                out.id = f.id; out.name = f.name;
+                await updateSavedHookIndex(idx => {
+                    let f = idx.folders.find(x => (x.name || '').toLowerCase() === name.toLowerCase());
+                    if (!f) { f = { id: 'f' + Date.now().toString(36), name }; idx.folders.push(f); }
+                    out.id = f.id; out.name = f.name;
+                });
             } else if (pathname === '/api/raw/hook-move' || pathname === '/api/raw-long/hook-move') {
                 const id = String(body.id || ''); const folder = body.folder ? String(body.folder).slice(0, 40) : null;
-                const h = idx.hooks.find(x => x.id === id); if (h) h.folder = folder;
+                await updateSavedHookIndex(idx => {
+                    const h = idx.hooks.find(x => x.id === id); if (h) h.folder = folder;
+                });
                 try { const rb = await cloud.downloadFromR2(`raw/saved-hooks/${id}.json`); if (rb) { const rec = JSON.parse(rb.toString('utf8')); rec.folder = folder; await cloud.uploadToR2(`raw/saved-hooks/${id}.json`, Buffer.from(JSON.stringify(rec)), 'application/json'); } } catch (e) {}
             } else {  // folder-delete: drop the folder, unfile its hooks
-                const fid = String(body.id || ''); idx.folders = idx.folders.filter(x => x.id !== fid);
-                idx.hooks.forEach(h => { if (h.folder === fid) h.folder = null; });
+                const fid = String(body.id || '');
+                await updateSavedHookIndex(idx => {
+                    idx.folders = idx.folders.filter(x => x.id !== fid);
+                    idx.hooks.forEach(h => { if (h.folder === fid) h.folder = null; });
+                });
             }
-            await cloud.uploadToR2('raw/saved-hooks/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(out));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
@@ -4985,7 +5020,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         try {
             const body = (await readBody(req)) || {};
             const id = String(body.id || '').replace(/[^a-z0-9]/gi, '');
-            if (id) { await cloud.deleteFromR2(`raw/saved-hooks/${id}.json`).catch(() => {}); await cloud.deleteFromR2(`raw/saved-hooks/${id}.jpg`).catch(() => {}); }
+            if (id) {
+                await updateSavedHookIndex(idx => {
+                    idx.hooks = idx.hooks.filter(hook => hook.id !== id);
+                });
+                await cloud.deleteFromR2(`raw/saved-hooks/${id}.json`).catch(() => {});
+                await cloud.deleteFromR2(`raw/saved-hooks/${id}.jpg`).catch(() => {});
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
@@ -12331,9 +12372,8 @@ async function scoreMontage(buf, text, title) {
 }
 // best-modality percentile for the metric — same preference order as the UI's steerBest
 function grindPct(score, metric) {
-    const s = (score && score.steer) || {};
-    for (const m of ['together', 'text', 'visual']) { const k = s[`${m}_${metric}`]; if (k && k.pctile != null) return Math.round(k.pctile * 10) / 10; }
-    return null;
+    const selected = embeddingSteerSelection(score, metric, 'shorts_raw');
+    return selected && selected.pctile != null ? Math.round(selected.pctile * 10) / 10 : null;
 }
 async function grindProcess(rid, req0) {
     const premise = String(req0.premise || '').trim().slice(0, 500);
@@ -12761,9 +12801,9 @@ function longQuantPublicScore(score) {
     const visual = score.channels && score.channels.visual;
     const visualMetrics = visual && visual.metrics;
     const visualCtrViews = visualMetrics && visualMetrics.ctrviews;
-    const pctRaw = score.visual_pctile != null ? score.visual_pctile
-        : score.thumbnail_potential != null ? score.thumbnail_potential
-            : visualCtrViews && visualCtrViews.pctile != null ? visualCtrViews.pctile
+    const pctRaw = visualCtrViews && visualCtrViews.pctile != null ? visualCtrViews.pctile
+        : score.visual_pctile != null ? score.visual_pctile
+            : score.thumbnail_potential != null ? score.thumbnail_potential
                 : score.pctile;
     const pct = longQuantPct01(pctRaw);
     const relevance = score.relevance == null || !isFinite(Number(score.relevance)) ? null : Number(score.relevance);
@@ -12785,6 +12825,7 @@ function longQuantPublicScore(score) {
         ...(score.input_manifest && typeof score.input_manifest === 'object' ? score.input_manifest : {}),
         embedding_model: 'gemini-embedding-2',
         embedding_dimensions: 1536,
+        display_contract_version: 2,
         display_preference: ['visual', 'together', 'text'],
         primary_score: 'visual image-only ctrviews percentile on the frozen generator-training ladder',
         threshold_uses: 'visual only',
@@ -13358,9 +13399,9 @@ setInterval(() => {
 }, 4000);
 function lqScorePct(score) {
     const visualMetric = score && score.channels && score.channels.visual && score.channels.visual.metrics && score.channels.visual.metrics.ctrviews;
-    const p = score && (score.visual_pctile != null ? score.visual_pctile
-        : score.thumbnail_potential != null ? score.thumbnail_potential
-            : visualMetric && visualMetric.pctile != null ? visualMetric.pctile : score.pctile);
+    const p = score && (visualMetric && visualMetric.pctile != null ? visualMetric.pctile
+        : score.visual_pctile != null ? score.visual_pctile
+            : score.thumbnail_potential != null ? score.thumbnail_potential : score.pctile);
     if (p == null) return null;
     const n = Number(p);
     return n <= 1 ? Math.round(n * 1000) / 10 : Math.round(n * 10) / 10;

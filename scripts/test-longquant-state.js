@@ -140,6 +140,8 @@ async function main() {
 
     const legacyScore = {
         pctile: 0.41,
+        visual_pctile: 0.33,
+        thumbnail_potential: 0.22,
         reward: 0.41,
         relevance: 0.30,
         metrics: { ctr: { pctile: 8 } },
@@ -156,7 +158,8 @@ async function main() {
     const aligned = scoreContext.scoreApi.longQuantPublicScore(legacyScore);
     const expectedIdeaReward = 0.92 - (0.35 - 0.30) * 2;
     const expectedThumbReward = expectedIdeaReward - (0.7598260641098022 - 0.70) * 1.5;
-    assert(Math.abs(aligned.pctile - 0.92) < 1e-9, 'combined score overrode visual thumbnail potential');
+    assert(Math.abs(aligned.pctile - 0.92) < 1e-9, 'stale summary aliases overrode the exact stored Visual CTR+views metric');
+    assert(Math.abs(aligned.visual_pctile - 0.92) < 1e-9 && Math.abs(aligned.thumbnail_potential - 0.92) < 1e-9, 'normalized aliases do not match the exact stored Visual CTR+views metric');
     assert(Math.abs(aligned.idea_model_reward - expectedIdeaReward) < 1e-9, 'idea-model reward does not match training leash');
     assert(Math.abs(aligned.thumbnail_model_reward - expectedThumbReward) < 1e-9, 'thumbnail-model reward does not match training guards');
     assert(aligned.metrics.ctr.pctile === 70, 'default metrics did not stay on the visual channel');

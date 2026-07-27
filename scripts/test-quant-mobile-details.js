@@ -49,13 +49,13 @@ async function main() {
             const neighbors = [{ id: 'video-a', sim: 0.93 }, { id: 'video-b', sim: 0.87 }];
             const metric = (est, pctile) => ({ est, pctile, kind: 'fixture' });
             const steer = {};
-            for (const channel of ['visual', 'text', 'together']) {
-                steer[`${channel}_keep`] = metric(81, 84);
-                steer[`${channel}_ret5`] = metric(74, 77);
-                steer[`${channel}_views`] = metric(12000000, 89);
-                steer[`${channel}_realviews`] = metric(8000000, 82);
-                steer[`${channel}_outlier`] = metric(4.1, 75);
-                steer[`${channel}_gt10M`] = metric(0.63, 88);
+            for (const [channel, offset] of [['visual', -8], ['text', -3], ['together', 0]]) {
+                steer[`${channel}_keep`] = metric(81 + offset, 84 + offset);
+                steer[`${channel}_ret5`] = metric(74 + offset, 77 + offset);
+                steer[`${channel}_views`] = metric(12000000 + offset * 100000, 89 + offset);
+                steer[`${channel}_realviews`] = metric(8000000 + offset * 100000, null);
+                steer[`${channel}_outlier`] = metric(4.1 + offset / 10, 75 + offset);
+                steer[`${channel}_gt10M`] = metric(0.63 + offset / 100, 88 + offset);
             }
             const record = {
                 id: 'saved123',
@@ -72,6 +72,13 @@ async function main() {
                     text: { neighbors },
                     together: { neighbors },
                 },
+                input_manifest: {
+                    domain: 'shorts_raw',
+                    scorer: 'raw_upload.py',
+                    embedding_model: 'gemini-embedding-2',
+                    display_contract_version: 2,
+                    display_preference: ['together', 'text', 'visual'],
+                },
             };
             window.__quantCalls = [];
             window.fetch = async (input, options) => {
@@ -79,7 +86,25 @@ async function main() {
                 window.__quantCalls.push({ path: url.pathname, search: url.search, method: String(options && options.method || 'GET') });
                 let body;
                 if (url.pathname === '/api/indicators/registry') body = { indicators: [], meta: { targets: [] } };
-                else if (url.pathname === '/api/raw/saved-hooks') body = { hooks: [{ id: record.id, title: record.title, hasMontage: true, savedAt: Date.now(), m: {} }], folders: [] };
+                else if (url.pathname === '/api/raw/saved-hooks') body = { hooks: [{
+                    id: record.id,
+                    title: record.title,
+                    hasMontage: true,
+                    savedAt: Date.now(),
+                    m: { keep: 84, keep_est: 81 },
+                    m_identity: {
+                        keep: {
+                            domain: 'shorts_raw',
+                            origin: 'stored-production',
+                            channel: 'together',
+                            target: 'keep',
+                            sourceKey: 'together_keep',
+                            est: 81,
+                            pctile: 84,
+                            kind: 'fixture',
+                        },
+                    },
+                }], folders: [] };
                 else if (url.pathname === '/api/raw/saved-hook/saved123') body = record;
                 else if (url.pathname === '/api/raw/plot') body = window[`__${url.searchParams.get('channel')}Plot`];
                 else if (url.pathname === '/api/hooks/grind/runs') body = { runs: [] };
@@ -111,6 +136,7 @@ async function main() {
             scrollWidth: document.documentElement.scrollWidth,
             clientWidth: document.documentElement.clientWidth,
             scoreText: document.body.innerText.includes('A complete saved hook') && document.body.innerText.toLowerCase().includes('keep rate'),
+            parity: window.BusinessWorldEmbeddingParityAudit(document),
         }));
         assert.strictEqual(result.calls.filter(call => call.path === '/api/raw/map').length, 0, 'score details must never request a complete Raw map');
         assert.strictEqual(result.calls.filter(call => call.path === '/api/raw/plot').length, 3, 'one compact request per embedded input channel');
@@ -121,6 +147,8 @@ async function main() {
         assert(result.domNodes < 10000, `mobile detail DOM is unbounded (${result.domNodes})`);
         assert(result.scrollWidth <= result.clientWidth, 'mobile score detail introduced horizontal overflow');
         assert(result.scoreText, 'the complete score read-out did not render');
+        assert(result.parity.ok, `saved-hook card/detail embedding parity failed: ${JSON.stringify(result.parity.conflicts)}`);
+        assert(result.parity.nodes >= 18, `saved-hook detail exposed only ${result.parity.nodes} machine-readable embedding identities`);
         console.log(JSON.stringify({ ok: true, ...result }, null, 2));
     } finally {
         await browser.close();

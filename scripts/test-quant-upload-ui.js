@@ -172,10 +172,10 @@ async function main() {
             ].includes(r.path)).length === 4);
             const longRequests = await livePage.evaluate(() => window.__quantRequests.filter(r => r.method === 'POST'));
             const longByPath = Object.fromEntries(longRequests.map(request => [request.path, request.body]));
-            assert.deepStrictEqual(longByPath['/api/longquant/exp/generate'], { title: 'Build a submarine out of glass', count: 3 });
+            assert.deepStrictEqual(longByPath['/api/longquant/exp/generate'], { title: 'Build a submarine out of glass', count: 3, renderExact: false });
             assert.strictEqual(longByPath['/api/longquant/exp/score-upload'].title, 'Holding my breath surrounded by sharks');
             assert(longByPath['/api/longquant/exp/score-upload'].image.startsWith('data:image/'));
-            assert.deepStrictEqual(longByPath['/api/longquant/exp/score-title'], { title: 'I Built a Glass Submarine' });
+            assert.deepStrictEqual(longByPath['/api/longquant/exp/score-title'], { title: 'I Built a Glass Submarine', async: true });
             assert.deepStrictEqual(longByPath['/api/longquant/grind/start'], {
                 idea: 'Holding my breath surrounded by sharks', threshold: '91', maxAttempts: '7', count: 3,
             });
