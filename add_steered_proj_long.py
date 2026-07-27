@@ -16,6 +16,7 @@ import numpy as np, boto3
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.model_selection import KFold
 from scipy.stats import spearmanr
+from plot_artifact import LONG_PROJECTIONS, build_plot_artifact, encode_plot_artifact
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 def env(k):
@@ -190,8 +191,10 @@ for ch in ['visual', 'text', 'together']:
         if spearmanr(XYv[:, 0], vmap)[0] < 0: XYv[:, 0] = -XYv[:, 0]
         mp['proj']['rawviews'] = {'x': grid(XYv[:, 0]), 'y': grid(XYv[:, 1]), 'cv': round(cvv, 3), 'co': round(ch10, 3)}
 
+    plot = encode_plot_artifact(build_plot_artifact(mp, ch, LONG_PROJECTIONS))
+    r2_put(f'raw-long/{ch}/plot.json', plot, 'application/json')
     r2_put(f'raw-long/{ch}/map.json', json.dumps(mp).encode(), 'application/json')
-    print(f'  saved raw-long/{ch}/map.json  (proj keys: {len(mp["proj"])})', flush=True)
+    print(f'  saved raw-long/{ch}/map.json + plot.json ({len(plot):,} bytes; proj keys: {len(mp["proj"])})', flush=True)
 
 for a in ACCTS:
     e = VIEW_EQ[a]
