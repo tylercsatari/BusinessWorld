@@ -44,6 +44,7 @@ async function main() {
                             : percentile / 10;
                 return [feature.key, [value, percentile]];
             }));
+            if (videoIndex === 1) features['together.views'] = [12000000, 88];
             return {
                 id,
                 title: videoIndex === 0 ? 'Highest raw views' : videoIndex === 1 ? 'Highest text keep rate' : `Stored Short ${videoIndex + 1}`,
@@ -164,7 +165,14 @@ async function main() {
             }],
             predictor: {
                 generatedAt: Date.now(),
-                provenance: { savedAxisTrainingIdOverlap: 0, featureScorerVersionPersistedPerVideo: false },
+                provenance: {
+                    privateAxisTrainingIdOverlap: 0,
+                    savedAxisTrainingIdOverlap: 0,
+                    validationCreatorAxisTrainingIdOverlap: 0,
+                    validationCreatorVideoCountExcluded: videos.length,
+                    validationCreatorChannelIds: ['UCfixtureTyler'],
+                    featureScorerVersionPersistedPerVideo: false,
+                },
                 targets: {
                     keep: {
                         points: keepPoints,
@@ -312,12 +320,38 @@ async function main() {
         await page.getByText('Blind validation', { exact: true }).click();
         await page.getByText('Tyler + Hafu blind validation', { exact: true }).waitFor();
         assert.strictEqual(await page.getByText('BLIND INPUT ARRAY AUDIT PASSED', { exact: true }).count(), 1);
+        assert((await page.getByText(/1 validation creator · 20 additional creator-resolved videos excluded · 0 creator overlap/).count()) === 1, 'the UI must expose the whole-creator leakage audit');
         assert.strictEqual(await page.getByText('Every embedding against its raw outcome', { exact: true }).count(), 1);
         assert.strictEqual(await page.getByText('Video-by-video audit trail', { exact: true }).count(), 1);
         assert.strictEqual(await page.getByText('ACTUAL OUTCOME', { exact: true }).count(), 1);
-        assert.strictEqual(await page.getByText('ONE EMBEDDING ESTIMATE', { exact: true }).count(), 1);
-        assert.strictEqual(await page.getByText('MODEL FORECAST / ENSEMBLE', { exact: true }).count(), 1);
+        assert.strictEqual(await page.getByText('ORIGINAL STORED EMBEDDING', { exact: true }).count(), 1);
+        assert.strictEqual(await page.getByText('BLIND REBUILT EMBEDDING', { exact: true }).count(), 1);
+        assert.strictEqual(await page.getByText('AXIS ENSEMBLE', { exact: true }).count(), 1);
+        assert.strictEqual(await page.getByText('LEARNED MODEL FORECAST', { exact: true }).count(), 1);
         assert((await page.locator('[data-savedvalidationvideo]').count()) >= videos.length, 'blind validation must keep every plotted/video row inspectable');
+        for (const group of ['visual', 'text']) {
+            const featureKey = `${group}.views`;
+            const point = page.locator(`circle[data-savedvalidationvideo="${channelId}:vid00000002"][data-savedvalidationpointsource="storedViewsAxis"][data-savedvalidationpointfeature="${featureKey}"]`);
+            assert.strictEqual(
+                await point.getAttribute('data-savedvalidationpredictedraw'),
+                String(videos[1].features[featureKey][0]),
+                `${featureKey} must retain its own exact score-card value instead of falling back to Both.views`
+            );
+        }
+        const storedViewsPoint = page.locator(`circle[data-savedvalidationvideo="${channelId}:vid00000002"][data-savedvalidationpointsource="storedViewsAxis"][data-savedvalidationpointfeature="together.views"]`);
+        assert((await storedViewsPoint.locator('title').textContent()).includes('PLOTTED Y (original stored Both.views view-equivalent embedding): 12.00M'), 'the original views graph must plot the exact persisted score-card value');
+        assert.strictEqual(await storedViewsPoint.getAttribute('data-savedvalidationpredictedraw'), '12000000', 'the SVG point must retain the unformatted persisted views value');
+        const blindViewsPoint = page.locator(`circle[data-savedvalidationvideo="${channelId}:vid00000002"][data-savedvalidationpointsource="blindViewsAxis"][data-savedvalidationpointfeature="together.views"]`);
+        const blindViewsTooltip = await blindViewsPoint.locator('title').textContent();
+        assert(blindViewsTooltip.includes('PLOTTED Y (blind rebuilt Both.views view-equivalent embedding): 1.00M'), 'the rebuilt single-axis estimate must remain separately identified');
+        assert(blindViewsTooltip.includes('both 12.00M'), 'the rebuilt-axis hover must still expose the original stored Both.views value');
+        await storedViewsPoint.click();
+        await page.locator('[data-savedvalidationcontext]').waitFor();
+        assert.strictEqual(await page.locator('[data-savedvalidationcontext]').getAttribute('data-plotted-raw'), '12000000', 'the drill-down must preserve the same raw value as its source point');
+        const storedViewsContext = await page.locator('[data-savedvalidationcontext]').innerText();
+        assert(storedViewsContext.includes('12.00M'), 'the clicked stored-axis detail must retain the exact plotted value');
+        assert(storedViewsContext.includes('exact persisted Both.views output'), 'the clicked detail must explain that no forecast was substituted');
+        assert(storedViewsContext.includes('exact raw-value match'), 'the persisted validation row and loaded score card must agree exactly');
         const modelPoint = page.locator(`[data-savedvalidationvideo="${channelId}:vid00000002"][data-savedvalidationpointsource="keepModel"]`);
         const modelTooltip = await modelPoint.locator('title').textContent();
         assert(modelTooltip.includes('PLOTTED Y (nested-selected multi-input OOF forecast): 58.9%'), 'the hover must name and show the exact model forecast');

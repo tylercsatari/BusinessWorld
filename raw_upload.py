@@ -566,7 +566,7 @@ def _run():
                         est = float(yb[max(0, c - w):min(n, c + w)].mean())
                     else:
                         ysort = SM[f'{mod}_{tgt}_ysort']; yv = float(ysort[int(round(rank * (len(ysort) - 1)))])
-                        est = float(10 ** yv) if kind in ('logcount', 'logx') else yv
+                        est = float(max(0.0, 10 ** yv - 1)) if kind in ('logcount', 'logx') else yv
                     steer[f'{mod}_{tgt}'] = {'est': round(est, 4) if est < 100 else round(est), 'pctile': round(rank * 100, 1), 'kind': kind}
             # REALISTIC VIEWS (predict-scope): feed the steered keep/ret5 ests + this video's real
             # duration through the 211's retention→views model → views on Tyler's channel scale.
@@ -579,7 +579,7 @@ def _run():
                 for mod in ('visual', 'text', 'together'):
                     kk = steer.get(f'{mod}_keep'); rr = steer.get(f'{mod}_ret5')
                     if kk and rr:
-                        rv = float(10 ** (PS[0] * kk['est'] + PS[1] * rr['est'] + PS[2] * ld + PS[3]))
+                        rv = float(max(0.0, 10 ** (PS[0] * kk['est'] + PS[1] * rr['est'] + PS[2] * ld + PS[3]) - 1))
                         steer[f'{mod}_realviews'] = {'est': round(rv), 'pctile': None, 'kind': 'realviews', 'dur_s': round(dv), 'dur_assumed': not have_dur}
     except Exception: pass
     def preview(e):

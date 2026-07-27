@@ -93,6 +93,8 @@ const allRows = channels.flatMap(source => source.privateTable.videos.map((row, 
     videoHeldOut: blindVector(index),
     accountHeldOut: blindVector(index).map((value, featureIndex) => featureIndex % 2 ? value : value - 1),
 })));
+const missingAxisRow = allRows.find(row => row.id === 'hafu-0');
+missingAxisRow.videoHeldOut[blindNames.indexOf('text.views.raw')] = null;
 const keepPoints = allRows.map((row, index) => ({
     id: row.id,
     predicted: 49 + (index % 4) * 6,
@@ -107,7 +109,11 @@ const viewsPoints = channels.flatMap(source => source.manifest.videos.map((row, 
 const predictor = {
     generatedAt: 123456,
     provenance: {
+        privateAxisTrainingIdOverlap: 0,
         savedAxisTrainingIdOverlap: 0,
+        validationCreatorAxisTrainingIdOverlap: 0,
+        validationCreatorVideoCountExcluded: 16,
+        validationCreatorChannelIds: ['UCfixtureTyler', 'UCfixtureHafu'],
         featureScorerVersionPersistedPerVideo: false,
     },
     targets: {
@@ -149,6 +155,21 @@ assert.strictEqual(result.joinSummary.reduce((sum, row) => sum + row.matchedRows
 assert(result.leakageAudit.passedForBlindInputs, 'all blind arrays should align to the immutable 45-feature contract');
 assert.strictEqual(result.leakageAudit.privateRowsExcludedFromPublicAxis, true);
 assert.strictEqual(result.leakageAudit.savedRowsExcludedFromPublicAxis, true);
+assert.strictEqual(result.leakageAudit.validationCreatorsExcludedFromPublicAxis, true);
+const leakedResult = validation.buildValidation({
+    channels,
+    predictor: {
+        ...predictor,
+        provenance: {
+            ...predictor.provenance,
+            validationCreatorAxisTrainingIdOverlap: 1,
+        },
+    },
+    generatedAt: 1000,
+    sourceFingerprint: 'fixture-with-creator-leakage',
+});
+assert.strictEqual(leakedResult.leakageAudit.passedForBlindInputs, false, 'creator overlap must fail the blind audit instead of being hard-coded green');
+assert.strictEqual(leakedResult.leakageAudit.validationCreatorsExcludedFromPublicAxis, false);
 assert.strictEqual(result.rows[0].blindFeatureNames.length, 45);
 assert.strictEqual(result.scopes.pooled.storedIndicators.length, 21);
 assert.strictEqual(result.scopes.pooled.blindVideoIndicators.length, 36);
@@ -158,6 +179,9 @@ const firstRow = result.rows.find(row => row.id === 'tyler-0');
 assert(firstRow);
 assert(Math.abs(firstRow.predictions.viewsPublicAxis.visual - 999999) < 1, 'log10 public-axis values must convert back to ordinary views');
 assert(Math.abs(firstRow.predictions.viewsPublicAxisEnsemble - 999999) < 1);
+const incompleteViewsRow = result.rows.find(row => row.id === 'hafu-0');
+assert.strictEqual(incompleteViewsRow.predictions.viewsPublicAxisCount, 2);
+assert.strictEqual(incompleteViewsRow.predictions.viewsPublicAxisEnsemble, null, 'a partial modality set must never be labeled as a 3-axis ensemble');
 
 const blindPercentile = result.scopes.pooled.blindVideoIndicators.find(item => item.key === 'visual.keep.percentile');
 assert(blindPercentile);

@@ -383,36 +383,43 @@ function buildScope(rows, key) {
             keepVideoHeldOut: {
                 label: 'Keep · video held out',
                 tier: 'retrospective_video_oof',
+                kind: 'multi_input_forecast',
                 metrics: modelMetrics(scoped, 'actual.keep', 'predictions.keepVideoHeldOut', false),
             },
             keepAccountHeldOut: {
                 label: 'Keep · entire account held out',
                 tier: 'strict_account_transfer',
+                kind: 'multi_input_forecast',
                 metrics: modelMetrics(scoped, 'actual.keep', 'predictions.keepAccountHeldOut', false),
             },
             keepForwardTime: {
                 label: 'Keep · partial forward-time',
                 tier: 'partial_forward_backtest',
+                kind: 'multi_input_forecast',
                 metrics: modelMetrics(scoped, 'actual.keep', 'predictions.keepForwardTime', false),
             },
             viewsPublicAxisEnsemble: {
-                label: 'Views · all validation IDs excluded from public axes',
+                label: 'Views · validation creators excluded from public axes',
                 tier: 'strict_external_axis',
+                kind: 'axis_ensemble',
                 metrics: modelMetrics(scoped, 'actual.viewsCurrent', 'predictions.viewsPublicAxisEnsemble', true),
             },
             viewsVideoHeldOut: {
                 label: 'Views · video held out',
                 tier: 'diagnostic_upstream_unversioned',
+                kind: 'multi_input_forecast',
                 metrics: modelMetrics(scoped, 'actual.viewsCurrent', 'predictions.viewsVideoHeldOut', true),
             },
             viewsChannelHeldOut: {
                 label: 'Views · entire channel held out',
                 tier: 'diagnostic_upstream_unversioned',
+                kind: 'multi_input_forecast',
                 metrics: modelMetrics(scoped, 'actual.viewsCurrent', 'predictions.viewsChannelHeldOut', true),
             },
             viewsForwardTime: {
                 label: 'Views · partial forward-time',
                 tier: 'partial_forward_backtest',
+                kind: 'multi_input_forecast',
                 metrics: modelMetrics(scoped, 'actual.viewsCurrent', 'predictions.viewsForwardTime', true),
             },
         },
@@ -510,7 +517,8 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
                     ? Math.max(0, 10 ** blindFeatureValue(row, 'together.views.raw', 'video') - 1)
                     : null,
             };
-            row.predictions.viewsPublicAxisEnsemble = externalViewLogs.length
+            row.predictions.viewsPublicAxisCount = externalViewLogs.length;
+            row.predictions.viewsPublicAxisEnsemble = externalViewLogs.length === 3
                 ? Math.max(0, 10 ** average(externalViewLogs) - 1)
                 : null;
             rows.push(row);
@@ -533,6 +541,15 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
         hafu: buildScope(rows, 'hafu'),
     };
     const predictorProvenance = predictor.provenance || {};
+    const privateAxisTrainingIdOverlap = number(predictorProvenance.privateAxisTrainingIdOverlap);
+    const savedAxisTrainingIdOverlap = number(predictorProvenance.savedAxisTrainingIdOverlap);
+    const validationCreatorAxisTrainingIdOverlap = number(predictorProvenance.validationCreatorAxisTrainingIdOverlap);
+    const blindFeatureRowsComplete = rows.length > 0
+        && rows.every(row => row.blindVideoHeldOut.length === blindFeatureNames.length)
+        && rows.every(row => row.blindAccountHeldOut.length === blindFeatureNames.length);
+    const publicAxisLeakageChecksPassed = privateAxisTrainingIdOverlap === 0
+        && savedAxisTrainingIdOverlap === 0
+        && validationCreatorAxisTrainingIdOverlap === 0;
     return {
         version: VERSION,
         generatedAt,
@@ -546,17 +563,22 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
             stored: 'Exact 21 values persisted by the channel scorer. They are shown for diagnosis, never promoted to blind evidence.',
             videoHeldOut: blindInputs.videoHeldOutProtocol || 'The evaluated video is excluded from every target-aligned fit.',
             accountHeldOut: blindInputs.accountHeldOutProtocol || 'The evaluated account is excluded from every target-aligned fit.',
-            publicViewsAxis: 'Raw 1,536D views, outlier, and 10M axes are fit on public corpus videos after excluding every private and saved-channel video ID.',
+            publicViewsAxis: 'The production one-component PLS direction and rank-to-outcome calibration are refit on public corpus videos after excluding private rows, saved rows, and every video from each validation creator.',
             forwardTime: 'Training labels precede test labels, but the present-day representation remains fixed; this is a partial backtest.',
         },
         leakageAudit: {
-            passedForBlindInputs: rows.length > 0
-                && rows.every(row => row.blindVideoHeldOut.length === blindFeatureNames.length)
-                && rows.every(row => row.blindAccountHeldOut.length === blindFeatureNames.length),
-            privateRowsExcludedFromPublicAxis: true,
-            savedRowsExcludedFromPublicAxis: true,
-            savedAxisTrainingIdOverlapReported: number(predictorProvenance.savedAxisTrainingIdOverlap),
+            passedForBlindInputs: blindFeatureRowsComplete && publicAxisLeakageChecksPassed,
+            privateRowsExcludedFromPublicAxis: privateAxisTrainingIdOverlap === 0,
+            savedRowsExcludedFromPublicAxis: savedAxisTrainingIdOverlap === 0,
+            validationCreatorsExcludedFromPublicAxis: validationCreatorAxisTrainingIdOverlap === 0,
+            privateAxisTrainingIdOverlapReported: privateAxisTrainingIdOverlap,
+            savedAxisTrainingIdOverlapReported: savedAxisTrainingIdOverlap,
+            validationCreatorAxisTrainingIdOverlapReported: validationCreatorAxisTrainingIdOverlap,
             savedAxisCandidateOverlapRemoved: number(predictorProvenance.savedAxisCandidateOverlapRemoved),
+            validationCreatorVideoCountExcluded: number(predictorProvenance.validationCreatorVideoCountExcluded),
+            validationCreatorChannelIds: Array.isArray(predictorProvenance.validationCreatorChannelIds)
+                ? predictorProvenance.validationCreatorChannelIds
+                : [],
             scorerVersionPersistedPerVideo: !!predictorProvenance.featureScorerVersionPersistedPerVideo,
             predictorGeneratedAt: number(predictor.generatedAt),
             featureContractVersion: contract.version,

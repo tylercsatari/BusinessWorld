@@ -9,22 +9,22 @@
   "features": [
     { "key": "visual.keep", "group": "visual", "target": "keep", "source": "steer", "sourceKey": "visual_keep", "label": "Keep rate", "unit": "percent" },
     { "key": "visual.ret5", "group": "visual", "target": "ret5", "source": "steer", "sourceKey": "visual_ret5", "label": "5s retention", "unit": "percent" },
-    { "key": "visual.views", "group": "visual", "target": "views", "source": "steer", "sourceKey": "visual_views", "label": "Views (library)", "unit": "views" },
-    { "key": "visual.realviews", "group": "visual", "target": "realviews", "source": "steer", "sourceKey": "visual_realviews", "label": "Views (your scale)", "unit": "views" },
+    { "key": "visual.views", "group": "visual", "target": "views", "source": "steer", "sourceKey": "visual_views", "label": "View-equivalent (corpus quantile)", "unit": "views", "note": "Observed public-view count at this embedding's rank in the reference corpus; not an expected-views forecast." },
+    { "key": "visual.realviews", "group": "visual", "target": "realviews", "source": "steer", "sourceKey": "visual_realviews", "label": "Forecast views (your channel scale)", "unit": "views", "note": "Expected views from the keep-rate, 5-second retention, and duration model; distinct from the corpus-quantile view-equivalent axis." },
     { "key": "visual.outlier", "group": "visual", "target": "outlier", "source": "steer", "sourceKey": "visual_outlier", "label": "Outlier", "unit": "number" },
     { "key": "visual.gt10M", "group": "visual", "target": "gt10M", "source": "steer", "sourceKey": "visual_gt10M", "label": "Chance over 10M", "unit": "probability" },
 
     { "key": "text.keep", "group": "text", "target": "keep", "source": "steer", "sourceKey": "text_keep", "label": "Keep rate", "unit": "percent" },
     { "key": "text.ret5", "group": "text", "target": "ret5", "source": "steer", "sourceKey": "text_ret5", "label": "5s retention", "unit": "percent" },
-    { "key": "text.views", "group": "text", "target": "views", "source": "steer", "sourceKey": "text_views", "label": "Views (library)", "unit": "views" },
-    { "key": "text.realviews", "group": "text", "target": "realviews", "source": "steer", "sourceKey": "text_realviews", "label": "Views (your scale)", "unit": "views" },
+    { "key": "text.views", "group": "text", "target": "views", "source": "steer", "sourceKey": "text_views", "label": "View-equivalent (corpus quantile)", "unit": "views", "note": "Observed public-view count at this embedding's rank in the reference corpus; not an expected-views forecast." },
+    { "key": "text.realviews", "group": "text", "target": "realviews", "source": "steer", "sourceKey": "text_realviews", "label": "Forecast views (your channel scale)", "unit": "views", "note": "Expected views from the keep-rate, 5-second retention, and duration model; distinct from the corpus-quantile view-equivalent axis." },
     { "key": "text.outlier", "group": "text", "target": "outlier", "source": "steer", "sourceKey": "text_outlier", "label": "Outlier", "unit": "number" },
     { "key": "text.gt10M", "group": "text", "target": "gt10M", "source": "steer", "sourceKey": "text_gt10M", "label": "Chance over 10M", "unit": "probability" },
 
     { "key": "together.keep", "group": "together", "target": "keep", "source": "steer", "sourceKey": "together_keep", "label": "Keep rate", "unit": "percent" },
     { "key": "together.ret5", "group": "together", "target": "ret5", "source": "steer", "sourceKey": "together_ret5", "label": "5s retention", "unit": "percent" },
-    { "key": "together.views", "group": "together", "target": "views", "source": "steer", "sourceKey": "together_views", "label": "Views (library)", "unit": "views" },
-    { "key": "together.realviews", "group": "together", "target": "realviews", "source": "steer", "sourceKey": "together_realviews", "label": "Views (your scale)", "unit": "views" },
+    { "key": "together.views", "group": "together", "target": "views", "source": "steer", "sourceKey": "together_views", "label": "View-equivalent (corpus quantile)", "unit": "views", "note": "Observed public-view count at this embedding's rank in the reference corpus; not an expected-views forecast." },
+    { "key": "together.realviews", "group": "together", "target": "realviews", "source": "steer", "sourceKey": "together_realviews", "label": "Forecast views (your channel scale)", "unit": "views", "note": "Expected views from the keep-rate, 5-second retention, and duration model; distinct from the corpus-quantile view-equivalent axis." },
     { "key": "together.outlier", "group": "together", "target": "outlier", "source": "steer", "sourceKey": "together_outlier", "label": "Outlier", "unit": "number" },
     { "key": "together.gt10M", "group": "together", "target": "gt10M", "source": "steer", "sourceKey": "together_gt10M", "label": "Chance over 10M", "unit": "probability" },
 

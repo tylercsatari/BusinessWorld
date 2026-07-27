@@ -16,8 +16,8 @@ assert "'stored image failed: ' + montage_error" in worker_source
 
 with open(os.path.join(ROOT, 'raw_upload.py'), encoding='utf-8') as raw_upload_file:
     raw_upload_source = raw_upload_file.read()
-assert "if 'ffmpeg exited with code 183' not in str(range_error)" in raw_upload_source
-assert "fallback_opts.pop('download_ranges', None)" in raw_upload_source
+assert "should_try_full = 'ffmpeg exited with code 183' in message or bool(auth_options)" in raw_upload_source
+assert "_youtube_download_options(folder, auth_options, ranged=False)" in raw_upload_source
 
 view_record = {}
 worker.append_view_snapshot(view_record, 100, 1000)

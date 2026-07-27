@@ -37,6 +37,7 @@ import numpy as np
 import scipy
 import sklearn
 from scipy.stats import rankdata, spearmanr
+from sklearn.cross_decomposition import PLSRegression
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GroupKFold
@@ -51,6 +52,7 @@ R2_STATUS_KEY = "raw/predictor-lab/status.json"
 EXPERIMENT_COUNT = 50_000
 MODALITIES = ("visual", "text", "together")
 MODALITY_SHORT = {"visual": "vis", "text": "txt", "together": "tog"}
+STRICT_VALIDATION_CREATOR_NAMES = frozenset(("tyler csatari", "hafu go"))
 EPSILON = 1e-9
 READ_PROVENANCE: dict[str, dict[str, Any]] = {}
 
@@ -400,6 +402,83 @@ def novelty_primitives(
     return temporal_distance, niche_distance, combinatorial
 
 
+class QuantileMappedRegressor:
+    """Production-parity latent axis with an outcome-calibrated output scale."""
+
+    def __init__(
+        self,
+        model: PLSRegression,
+        prediction_sorted: np.ndarray,
+        outcome_sorted: np.ndarray,
+    ) -> None:
+        self.model = model
+        self.prediction_sorted = np.asarray(prediction_sorted, dtype=float)
+        self.outcome_sorted = np.asarray(outcome_sorted, dtype=float)
+
+    @classmethod
+    def fit(cls, features: np.ndarray, outcomes: np.ndarray) -> "QuantileMappedRegressor":
+        model = PLSRegression(n_components=1).fit(features, outcomes)
+        train_prediction = np.asarray(model.predict(features), dtype=float).reshape(-1)
+        return cls(model, np.sort(train_prediction), np.sort(np.asarray(outcomes, dtype=float)))
+
+    def ranks(self, features: np.ndarray) -> np.ndarray:
+        prediction = np.asarray(self.model.predict(features), dtype=float).reshape(-1)
+        denominator = max(1, len(self.prediction_sorted) - 1)
+        return np.clip(
+            np.searchsorted(self.prediction_sorted, prediction, side="left") / denominator,
+            0,
+            1,
+        )
+
+    def predict(self, features: np.ndarray) -> np.ndarray:
+        rank = self.ranks(features)
+        indices = np.rint(rank * max(0, len(self.outcome_sorted) - 1)).astype(int)
+        return self.outcome_sorted[np.clip(indices, 0, len(self.outcome_sorted) - 1)]
+
+
+class RankCalibratedBinaryAxis:
+    """Production-parity local class rate along a one-component latent rank."""
+
+    def __init__(
+        self,
+        model: PLSRegression,
+        prediction_sorted: np.ndarray,
+        outcomes_by_prediction: np.ndarray,
+    ) -> None:
+        self.model = model
+        self.prediction_sorted = np.asarray(prediction_sorted, dtype=float)
+        self.outcomes_by_prediction = np.asarray(outcomes_by_prediction, dtype=float)
+
+    @classmethod
+    def fit(cls, features: np.ndarray, outcomes: np.ndarray) -> "RankCalibratedBinaryAxis":
+        model = PLSRegression(n_components=1).fit(features, outcomes)
+        train_prediction = np.asarray(model.predict(features), dtype=float).reshape(-1)
+        order = np.argsort(train_prediction)
+        return cls(model, train_prediction[order], np.asarray(outcomes, dtype=float)[order])
+
+    def predict_proba(self, features: np.ndarray) -> np.ndarray:
+        prediction = np.asarray(self.model.predict(features), dtype=float).reshape(-1)
+        denominator = max(1, len(self.prediction_sorted) - 1)
+        ranks = np.clip(
+            np.searchsorted(self.prediction_sorted, prediction, side="left") / denominator,
+            0,
+            1,
+        )
+        count = len(self.outcomes_by_prediction)
+        radius = max(1, count // 20)
+        probabilities = np.empty(len(ranks), dtype=float)
+        for index, rank in enumerate(ranks):
+            center = int(round(float(rank) * max(0, count - 1)))
+            local = self.outcomes_by_prediction[
+                max(0, center - radius) : min(count, center + radius)
+            ]
+            probabilities[index] = float(local.mean()) if len(local) else float(
+                self.outcomes_by_prediction[center]
+            )
+        probabilities = np.clip(probabilities, 0, 1)
+        return np.column_stack([1 - probabilities, probabilities])
+
+
 def fit_public_axes(
     stores: dict[str, dict[str, Any]],
     excluded_ids: set[str],
@@ -421,13 +500,13 @@ def fit_public_axes(
         views = store["views"][public]
         outlier = store["outlier"][public]
         valid_outlier = np.isfinite(outlier) & (outlier > 0)
-        view_model = Ridge(alpha=100.0, solver="lsqr", tol=1e-3).fit(X, np.log10(views + 1))
-        outlier_model = Ridge(alpha=100.0, solver="lsqr", tol=1e-3).fit(
+        view_model = QuantileMappedRegressor.fit(X, np.log10(views + 1))
+        outlier_model = QuantileMappedRegressor.fit(
             X[valid_outlier], np.log10(outlier[valid_outlier] + 1)
         )
-        binary = (views >= 10_000_000).astype(int)
+        binary = (views > 10_000_000).astype(int)
         if binary.sum() >= 10 and (len(binary) - binary.sum()) >= 10:
-            hit_model = LogisticRegression(C=0.1, max_iter=400, solver="liblinear").fit(X, binary)
+            hit_model = RankCalibratedBinaryAxis.fit(X, binary)
         else:
             hit_model = None
         temporal_novelty, niche_novelty, combinatorial = novelty_primitives(
@@ -441,6 +520,7 @@ def fit_public_axes(
             "novelty_niche": niche_novelty,
             "novelty_combinatorial": combinatorial,
             "trainN": int(public.sum()),
+            "method": "one-component PLS rank mapped to the public outcome distribution",
         }
     return models
 
@@ -2256,8 +2336,9 @@ def run_keep_track(
             "videoHeldOutProtocol": (
                 "Every target-aligned keep, ret5, and realistic-views input is fit "
                 "without the evaluated video. Public views, outlier, and 10M inputs "
-                "are fit on the public corpus after excluding every private and "
-                "saved-channel video ID."
+                "use the production one-component PLS direction and rank-to-outcome "
+                "calibration, refit on the public corpus after excluding every private "
+                "and saved-channel video ID."
             ),
             "accountHeldOutProtocol": (
                 "The evaluated account is absent from keep/ret5 axis fitting and "
@@ -3278,7 +3359,41 @@ def main() -> int:
     saved_rows = load_saved_channel_rows(contract)
     private_ids = {row["id"] for row in private_rows}
     saved_ids = {row["id"] for row in saved_rows}
-    excluded_axis_ids = private_ids | saved_ids
+    validation_channel_names = {
+        str(row.get("channelName") or "").strip().casefold()
+        for row in saved_rows
+        if str(row.get("channelName") or "").strip().casefold()
+        in STRICT_VALIDATION_CREATOR_NAMES
+    }
+    validation_saved_ids = {
+        row["id"]
+        for row in saved_rows
+        if str(row.get("channelName") or "").strip().casefold()
+        in validation_channel_names
+    }
+    validation_youtube_channel_ids = {
+        str(library[video_id].get("channelId"))
+        for video_id in validation_saved_ids
+        if video_id in library and library[video_id].get("channelId")
+    } | {
+        str(video.get("channelId"))
+        for video in library.values()
+        if video.get("channelId")
+        and str(video.get("channel") or "").strip().casefold() in validation_channel_names
+    }
+    validation_saved_channel_count = len(validation_channel_names)
+    if len(validation_youtube_channel_ids) < validation_saved_channel_count:
+        raise RuntimeError(
+            "could not resolve every validation creator YouTube channel ID from "
+            f"saved video IDs or channel names ({len(validation_youtube_channel_ids)}/"
+            f"{validation_saved_channel_count})"
+        )
+    validation_creator_video_ids = {
+        str(video_id)
+        for video_id, video in library.items()
+        if str(video.get("channelId") or "") in validation_youtube_channel_ids
+    }
+    excluded_axis_ids = private_ids | saved_ids | validation_creator_video_ids
     candidate_axis_corpus_ids = {
         video_id
         for store in stores.values()
@@ -3286,6 +3401,9 @@ def main() -> int:
         if not store["mine"][index] and video_id not in private_ids
     }
     removed_saved_axis_overlap = sorted(saved_ids & candidate_axis_corpus_ids)
+    removed_creator_axis_overlap = sorted(
+        validation_creator_video_ids & candidate_axis_corpus_ids
+    )
     axis_corpus_ids = {
         video_id
         for store in stores.values()
@@ -3293,9 +3411,13 @@ def main() -> int:
         if not store["mine"][index] and video_id not in excluded_axis_ids
     }
     saved_axis_overlap = sorted(saved_ids & axis_corpus_ids)
-    if saved_axis_overlap:
+    private_axis_overlap = sorted(private_ids & axis_corpus_ids)
+    creator_axis_overlap = sorted(validation_creator_video_ids & axis_corpus_ids)
+    if saved_axis_overlap or private_axis_overlap or creator_axis_overlap:
         raise RuntimeError(
-            f"saved-channel validation overlaps the raw axis corpus by {len(saved_axis_overlap)} videos"
+            "validation leakage remains in the raw axis corpus "
+            f"(saved={len(saved_axis_overlap)}, private={len(private_axis_overlap)}, "
+            f"creator={len(creator_axis_overlap)})"
         )
     contract_hash = hashlib.sha256(contract_bytes).hexdigest()
     provenance = {
@@ -3304,8 +3426,16 @@ def main() -> int:
         "featureScorerVersionPersistedPerVideo": False,
         "savedChannelVideoCount": len(saved_ids),
         "rawAxisCorpusVideoCount": len(axis_corpus_ids),
+        "privateAxisTrainingIdOverlap": len(private_axis_overlap),
         "savedAxisTrainingIdOverlap": len(saved_axis_overlap),
+        "validationCreatorAxisTrainingIdOverlap": len(creator_axis_overlap),
+        "validationCreatorChannelIds": sorted(validation_youtube_channel_ids),
+        "validationCreatorChannelIdHash": hashlib.sha256(
+            "\n".join(sorted(validation_youtube_channel_ids)).encode()
+        ).hexdigest(),
+        "validationCreatorVideoCountExcluded": len(validation_creator_video_ids),
         "savedAxisCandidateOverlapRemoved": len(removed_saved_axis_overlap),
+        "creatorAxisCandidateOverlapRemoved": len(removed_creator_axis_overlap),
         "savedAxisCandidateOverlapRemovedIdsHash": hashlib.sha256(
             "\n".join(removed_saved_axis_overlap).encode()
         ).hexdigest(),
@@ -3313,6 +3443,11 @@ def main() -> int:
         "publicAxisExcludedVideoIdHash": hashlib.sha256(
             "\n".join(sorted(excluded_axis_ids)).encode()
         ).hexdigest(),
+        "publicAxisEstimator": (
+            "one-component PLS latent direction; prediction rank quantile-mapped "
+            "to the public log-view/outlier outcome distribution; 10M uses the "
+            "production local class rate in a +/-5% rank neighborhood"
+        ),
         "savedVideoIdHash": hashlib.sha256(
             "\n".join(sorted(saved_ids)).encode()
         ).hexdigest(),

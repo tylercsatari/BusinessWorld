@@ -362,7 +362,7 @@ const JarvisRetention = (function () {
     function steerOf(up, mod, tn) { const s = up && up.steer; const k = s && s[`${mod}_${tn}`]; return k || null; }   // {est,pctile,kind}
     function steerBest(up, tn) { for (const m of ['together', 'text', 'visual']) { const k = steerOf(up, m, tn); if (k) return { mod: m, ...k }; } return null; }
     function steerDisp(tn, v) { if (v == null) return null; return (tn === 'views' || tn === 'realviews') ? fv(+v) : tn === 'outlier' ? (+v).toFixed(1) + '×' : tn === 'gt10M' ? (+v * 100).toFixed(0) + '%' : (+v).toFixed(0) + '%'; }
-    function steerLabel(tn) { return tn === 'realviews' ? 'est. views (your scale)' : tn === 'views' ? 'est. views (library scale)' : tn === 'outlier' ? 'est. outlier' : tn === 'gt10M' ? 'chance >10M' : tn === 'keep' ? 'est. keep-rate' : 'est. past-5s'; }
+    function steerLabel(tn) { return tn === 'realviews' ? 'est. views (your scale)' : tn === 'views' ? 'view-equivalent (corpus quantile)' : tn === 'outlier' ? 'est. outlier' : tn === 'gt10M' ? 'chance >10M' : tn === 'keep' ? 'est. keep-rate' : 'est. past-5s'; }
     function rawInputChannel(up, ch) {
         const im = up && up.input_manifest && up.input_manifest.channels && up.input_manifest.channels[ch];
         if (im) return im;
@@ -1622,7 +1622,7 @@ const JarvisRetention = (function () {
         // ── SEVEN independent output boxes: 4 EMBEDDING (steered map estimate + its graph) and
         //    3 NOVELTY (its OWN calibration curve). Novelty is never in the same box as views/>10M,
         //    and is shown ONCE per metric (a curve, not a re-clustered map). ──
-        const metShort = tn => ({ keep: 'keep rate', ret5: '5s retention (rel)', views: 'views (library)', realviews: 'views (your scale)', gt10M: '>10M class' })[tn];
+        const metShort = tn => ({ keep: 'keep rate', ret5: '5s retention (rel)', views: 'view-equivalent (corpus quantile)', realviews: 'forecast views (your channel scale)', gt10M: '>10M class' })[tn];
         const bigNumHTML = (s, sub) => `<div style="font-size:26px;font-weight:900;color:${C.text};line-height:1.1;margin:3px 0">${s}${sub ? ` <span style="font-size:11px;color:${C.mute};font-weight:600">${sub}</span>` : ''}</div>`;
         // EMBEDDING box — the steered cluster + steered estimate (= the marker on that graph).
         // Two view boxes: 'views' = RAW library-scale (10k–1B distribution); 'realviews' = predict-scope
@@ -1663,7 +1663,7 @@ const JarvisRetention = (function () {
         };
         const gcol = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:12px';
         const hasTextUp = !!String(up.transcript || up.text || '').trim() && !up.silent;
-        const metShort2 = tn => ({ keep: 'keep rate', ret5: '5s retention', views: 'views (library)', realviews: 'views (your scale)', outlier: 'outlier ×', gt10M: '>10M class' })[tn] || tn;
+        const metShort2 = tn => ({ keep: 'keep rate', ret5: '5s retention', views: 'view-equivalent (corpus quantile)', realviews: 'forecast views (your channel scale)', outlier: 'outlier ×', gt10M: '>10M class' })[tn] || tn;
         const projFor2 = { keep: 'keep', ret5: 'ret5', views: 'views', realviews: 'realviews', outlier: 'outlier', gt10M: 'hi10m' };
         const colorFor2 = { keep: 'metric', ret5: 'metric', views: 'views', realviews: 'metric', outlier: 'metric', gt10M: 'gt10m' };
         const CH_TARGETS = ['keep', 'ret5', 'views', 'realviews', 'outlier', 'gt10M'];
@@ -3650,7 +3650,7 @@ const JarvisRetention = (function () {
     // 5 outputs × visual always + text/together when a transcript exists = up to 15 (+ novelty set).
     function rawChanGridHtml(U) {
         if (!U || !U.steer) return '';
-        const TARGETS = [['keep', 'keep rate'], ['ret5', 'past-5s'], ['views', 'views (library)'], ['realviews', 'views (yours)'], ['outlier', 'outlier'], ['gt10M', '>10M']];
+        const TARGETS = [['keep', 'keep rate'], ['ret5', 'past-5s'], ['views', 'view-equivalent (corpus quantile)'], ['realviews', 'forecast views (your channel scale)'], ['outlier', 'outlier'], ['gt10M', '>10M']];
         const CHANS = [['visual', '5-frame montage only'], ['text', 'transcript only'], ['together', 'montage + transcript']];
         const hasText = !!String(U.transcript || U.text || '').trim() && !U.silent;
         let found = 0, possible = 0;
@@ -5184,7 +5184,7 @@ const JarvisRetention = (function () {
         const pointTable = signal && evidence ? savedChannelViewsEvidenceTable(analysis, evidence.points, signal.key, target.targetViews, cutoff) : '';
         const riskStat = (label, value, color, subset, selectedCutoff) => `<div ${savedChannelRiskDrillAttrs('threshold', target.targetViews, signal && signal.key, selectedCutoff || cutoff, subset, ` data-savedchannelriskagevalue="${+cohort.minAgeDays || 0}"`)} title="Click to inspect the videos behind this number" style="cursor:pointer;background:${C.card2};border:1px solid ${C.border};border-radius:8px;padding:8px 12px"><div style="font-size:10px;color:${C.mute};text-transform:uppercase">${label}</div><div style="font-size:16px;font-weight:800;color:${color || C.text}">${value}</div><div style="font-size:8px;color:${C.cyan};margin-top:2px">inspect videos →</div></div>`;
         return `<div style="border:1px solid ${C.red}66;background:${C.red}08;border-radius:8px;padding:11px;margin-bottom:14px">
-          <div style="display:flex;justify-content:space-between;gap:8px;align-items:start;flex-wrap:wrap;margin-bottom:5px"><div><div style="font-size:13px;font-weight:900;color:${C.text}">Execution risk · can an embedding score justify making the video?</div><div style="font-size:9px;color:${C.mute};max-width:900px;line-height:1.45">This is separate from the trained “chance over 10M” cluster. It asks whether ordinary views embeddings such as Visual Views, Text Views, or Both Views actually precede a public-view outcome, and reports false-positive risk with uncertainty.</div></div><span style="font-size:9px;color:${C.amber}">observed views snapshot · age controlled below</span></div>
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:start;flex-wrap:wrap;margin-bottom:5px"><div><div style="font-size:13px;font-weight:900;color:${C.text}">Execution risk · can an embedding score justify making the video?</div><div style="font-size:9px;color:${C.mute};max-width:900px;line-height:1.45">This is separate from the trained “chance over 10M” cluster. It asks whether the Visual, Text, or Both view-equivalent corpus-quantile axes actually precede a public-view outcome, and reports false-positive risk with uncertainty.</div></div><span style="font-size:9px;color:${C.amber}">observed views snapshot · age controlled below</span></div>
           ${savedChannelMetricGlossary()}
           ${savedChannelMatchedViewsPanel(risk)}
           <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:8px 0"><b style="font-size:9px;color:${C.mute}">WIN CONDITION</b>${targetButtons}</div>
@@ -5361,7 +5361,7 @@ const JarvisRetention = (function () {
     }
     function savedValidationFormat(value, target) {
         if (value == null || !isFinite(+value)) return '—';
-        if (target === 'views' || target === 'realviews') return fv(+value);
+        if (target === 'views' || target === 'realviews') return fv(Math.round(+value));
         if (target === 'keep' || target === 'ret5') return (+value).toFixed(1) + '%';
         if (target === 'gt10M') return (+value * 100).toFixed(1) + '%';
         return Math.abs(+value) >= 100 ? (+value).toFixed(0) : (+value).toFixed(2);
@@ -5394,7 +5394,14 @@ const JarvisRetention = (function () {
     function savedValidationPointLabel(validation, context) {
         if (!context) return 'validation value';
         if (context.source === 'keepModel') return 'nested-selected multi-input OOF forecast';
-        if (context.source === 'viewsAxis') return 'visual + text + both views-axis ensemble';
+        if (context.source === 'storedViewsAxis' || context.source === 'blindViewsAxis') {
+            const axisDefinition = savedValidationDefinition(validation, context.featureKey || 'together.views');
+            const axisGroup = axisDefinition && axisDefinition.group === 'together' ? 'Both'
+                : axisDefinition ? axisDefinition.group : 'Both';
+            return `${context.source === 'storedViewsAxis' ? 'original stored' : 'blind rebuilt'} ${axisGroup}.views view-equivalent embedding`;
+        }
+        if (context.source === 'viewsAxisEnsemble') return 'blind visual + text + both views-axis ensemble';
+        if (context.source === 'viewsModel') return 'nested-selected multi-input OOF views forecast';
         const definition = savedValidationDefinition(validation, context.featureKey);
         const group = definition ? (definition.group === 'together' ? 'both' : definition.group) : 'selected';
         const protocol = context.protocol === 'stored' ? 'stored production'
@@ -5405,12 +5412,21 @@ const JarvisRetention = (function () {
     function savedValidationPointValue(validation, row, context) {
         if (!row || !context) return null;
         if (context.source === 'keepModel') return row.predictions && row.predictions.keepVideoHeldOut;
-        if (context.source === 'viewsAxis') return row.predictions && row.predictions.viewsPublicAxisEnsemble;
+        if (context.source === 'storedViewsAxis') {
+            return savedValidationPrediction(validation, row, savedValidationDefinition(validation, context.featureKey || 'together.views'), 'stored');
+        }
+        if (context.source === 'blindViewsAxis') {
+            return savedValidationPrediction(validation, row, savedValidationDefinition(validation, context.featureKey || 'together.views'), context.protocol || 'video');
+        }
+        if (context.source === 'viewsAxisEnsemble') return row.predictions && row.predictions.viewsPublicAxisEnsemble;
+        if (context.source === 'viewsModel') return row.predictions && row.predictions.viewsVideoHeldOut;
         const definition = savedValidationDefinition(validation, context.featureKey || `together.${context.target}`);
         return savedValidationPrediction(validation, row, definition, context.protocol || 'video');
     }
-    function savedValidationPointAttributes(row, context) {
-        return `data-savedvalidationvideo="${esc(row.channelId)}:${esc(row.id)}" data-savedvalidationpointsource="${esc(context.source || 'embedding')}" data-savedvalidationpointtarget="${esc(context.target || 'keep')}" data-savedvalidationpointprotocol="${esc(context.protocol || 'video')}" data-savedvalidationpointfeature="${esc(context.featureKey || '')}"`;
+    function savedValidationPointAttributes(row, context, predicted, actual) {
+        const raw = predicted != null && isFinite(+predicted) ? ` data-savedvalidationpredictedraw="${+predicted}"` : '';
+        const observed = actual != null && isFinite(+actual) ? ` data-savedvalidationactualraw="${+actual}"` : '';
+        return `data-savedvalidationvideo="${esc(row.channelId)}:${esc(row.id)}" data-savedvalidationpointsource="${esc(context.source || 'embedding')}" data-savedvalidationpointtarget="${esc(context.target || 'keep')}" data-savedvalidationpointprotocol="${esc(context.protocol || 'video')}" data-savedvalidationpointfeature="${esc(context.featureKey || '')}"${raw}${observed}`;
     }
     function savedValidationPointTooltip(validation, row, context, actual, plotted) {
         const target = context.target || 'keep';
@@ -5439,7 +5455,10 @@ const JarvisRetention = (function () {
         const plotted = savedValidationPointValue(validation, row, context);
         const actual = savedValidationActual(row, target);
         const modalities = savedValidationModalityRows(validation, row, target);
-        const both = modalities.find(item => item.group === 'together');
+        const selectedDefinition = savedValidationDefinition(validation, context.featureKey)
+            || savedValidationDefinition(validation, `together.${target}`);
+        const selectedModality = modalities.find(item => selectedDefinition && item.group === selectedDefinition.group)
+            || modalities.find(item => item.group === 'together');
         const protocolLabels = {
             stored: 'Stored production embedding',
             video: 'Video-held-out embedding',
@@ -5458,20 +5477,48 @@ const JarvisRetention = (function () {
             ['OOF multi-input keep', row.predictions.keepVideoHeldOut, 'keep'],
             ['Account-transfer keep', row.predictions.keepAccountHeldOut, 'keep'],
             ['Forward-time keep', row.predictions.keepForwardTime, 'keep'],
-            ['Strict 3-axis views ensemble', row.predictions.viewsPublicAxisEnsemble, 'views'],
+            ['Blind rebuilt 3-axis views ensemble', row.predictions.viewsPublicAxisEnsemble, 'views'],
             ['OOF multi-input views', row.predictions.viewsVideoHeldOut, 'views'],
             ['Channel-transfer views', row.predictions.viewsChannelHeldOut, 'views'],
             ['Forward-time views', row.predictions.viewsForwardTime, 'views'],
         ].map(([label, value, metric]) => `<div style="border-left:2px solid ${C.green};background:${C.card2};padding:6px 8px"><div style="font-size:7.5px;color:${C.mute}">${label}</div><div style="font-size:12px;font-weight:900;color:${C.text}">${savedValidationFormat(value, metric)}</div></div>`).join('');
-        const shownStored = both ? savedValidationFormat(both.stored, target) : '—';
-        return `<div data-savedvalidationcontext style="border:1px solid ${C.cyan};background:${C.cyan}09;padding:11px;margin-bottom:12px">
+        const storedReference = selectedModality && selectedModality.stored;
+        const shownStored = savedValidationFormat(storedReference, target);
+        const storedReferenceLabel = selectedDefinition
+            ? `${selectedDefinition.group === 'together' ? 'Both' : selectedDefinition.group}.${target}`
+            : `Both.${target}`;
+        const loadedCardCell = selectedDefinition && selectedDefinition.sourceKey && upload.steer
+            ? upload.steer[selectedDefinition.sourceKey]
+            : null;
+        const loadedCardValue = loadedCardCell && loadedCardCell.est != null && isFinite(+loadedCardCell.est)
+            ? +loadedCardCell.est
+            : null;
+        const cardParity = loadedCardValue != null && storedReference != null
+            ? Math.abs(loadedCardValue - storedReference) <= Math.max(1e-9, Math.abs(storedReference) * 1e-12)
+            : null;
+        const outcomeHeading = target === 'views' || target === 'realviews' || target === 'outlier' || target === 'gt10M'
+            ? 'Observed public outcome'
+            : 'Private actual outcome';
+        const comparisonExplanation = context.source === 'storedViewsAxis'
+            ? 'The green value is the exact persisted Both.views output shown on the original score card; no refit, ensemble, or forecast replaced it.'
+            : context.source === 'blindViewsAxis'
+                ? 'The green value uses the same one-component PLS direction and rank-to-public-outcome calibration as production, rebuilt after removing every video from both validation creators. The amber value is the historical scorer output saved when the video was analyzed.'
+                : context.source === 'viewsAxisEnsemble'
+                    ? 'The green value is the geometric mean of three separately rebuilt visual, text, and Both views axes. The amber value is one historical Both.views axis, so they are intentionally different objects.'
+                    : context.source === 'viewsModel'
+                        ? 'The green value is a genuinely held-out expected-views forecast fitted from multiple inputs. The amber value is the historical Both.views corpus-quantile equivalent, so these values answer different questions and are intentionally displayed separately.'
+                    : context.source === 'keepModel'
+                        ? 'The green value is a fold-fitted forecast selected from multiple embedding and control inputs. The amber value is one saved Both.keep embedding axis.'
+                        : 'The green value is the selected single embedding under the displayed validation protocol. The amber value is the historical Both axis saved on the original score card.';
+        return `<div data-savedvalidationcontext data-plotted-raw="${plotted != null && isFinite(+plotted) ? +plotted : ''}" style="border:1px solid ${C.cyan};background:${C.cyan}09;padding:11px;margin-bottom:12px">
           <div style="display:flex;justify-content:space-between;gap:10px;align-items:start"><div><div style="font-size:9px;color:${C.cyan};font-weight:950;text-transform:uppercase">Clicked validation point - same video, every number traced</div><div style="font-size:14px;color:${C.text};font-weight:950;margin-top:2px">${esc(row.title)}</div><div style="font-size:8px;color:${C.mute};margin-top:2px">${esc(row.accountName)} · YouTube ID ${esc(row.id)}</div></div><span data-savedvalidationpointclose style="cursor:pointer;color:${C.dim};font-size:13px" title="close comparison">x</span></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;margin:10px 0">
             <div style="border-top:3px solid ${C.green};background:${C.card2};padding:8px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">The graph plotted</div><div style="font-size:22px;color:${C.green};font-weight:950">${savedValidationFormat(plotted, target)}</div><div style="font-size:8px;color:${C.dim};line-height:1.35">${esc(savedValidationPointLabel(validation, context))}</div></div>
-            <div style="border-top:3px solid ${C.cyan};background:${C.card2};padding:8px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Private actual outcome</div><div style="font-size:22px;color:${C.cyan};font-weight:950">${savedValidationFormat(actual, target)}</div><div style="font-size:8px;color:${C.dim}">observed ${esc(target)}</div></div>
-            <div style="border-top:3px solid ${C.amber};background:${C.card2};padding:8px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Original card's Both axis</div><div style="font-size:22px;color:${C.amber};font-weight:950">${shownStored}</div><div style="font-size:8px;color:${C.dim}">stored single embedding estimate</div></div>
+            <div style="border-top:3px solid ${C.cyan};background:${C.card2};padding:8px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">${outcomeHeading}</div><div style="font-size:22px;color:${C.cyan};font-weight:950">${savedValidationFormat(actual, target)}</div><div style="font-size:8px;color:${C.dim}">observed ${esc(target)}</div></div>
+            <div style="border-top:3px solid ${C.amber};background:${C.card2};padding:8px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Persisted ${esc(storedReferenceLabel)} axis</div><div style="font-size:22px;color:${C.amber};font-weight:950">${shownStored}</div><div style="font-size:8px;color:${C.dim}">validation artifact's original score</div></div>
+            <div style="border-top:3px solid ${cardParity === false ? C.red : C.amber};background:${C.card2};padding:8px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Loaded score card · same field</div><div style="font-size:22px;color:${cardParity === false ? C.red : C.amber};font-weight:950">${savedValidationFormat(loadedCardValue, target)}</div><div style="font-size:8px;color:${cardParity == null ? C.faint : cardParity ? C.green : C.red}">${cardParity == null ? 'source field unavailable' : cardParity ? 'exact raw-value match' : 'MISMATCH - scorer storage drift'}</div></div>
           </div>
-          <div style="font-size:9px;color:${C.dim};line-height:1.55;margin-bottom:9px"><b style="color:${C.text}">Why they can differ:</b> the green value is ${esc(savedValidationPointLabel(validation, context))}. The amber value is one saved <b>Both.${esc(target)}</b> embedding axis. A learned forecast can combine several axis inputs and controls; it is not a renamed embedding. The original 21 graph cards below remain the persisted embedding outputs.</div>
+          <div style="font-size:9px;color:${C.dim};line-height:1.55;margin-bottom:9px"><b style="color:${C.text}">What is being compared:</b> ${esc(comparisonExplanation)} The original 21 graph cards below remain the persisted embedding outputs.</div>
           <div style="font-size:9px;font-weight:950;color:${C.text};margin-bottom:4px">Same target across all three modalities and validation protocols</div>
           <div style="overflow:auto;margin-bottom:10px"><table style="width:100%;min-width:510px;border-collapse:collapse;font-size:8.5px"><thead><tr style="color:${C.mute};text-align:left"><th style="padding:5px">Input</th><th>${protocolLabels.stored}</th><th>${protocolLabels.video}</th><th>${protocolLabels.account}</th></tr></thead><tbody>${modalityCells}</tbody></table></div>
           <div style="font-size:9px;font-weight:950;color:${C.text};margin-bottom:4px">All joined private outcomes</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:4px;margin-bottom:9px">${outcomeCells}</div>
@@ -5535,7 +5582,7 @@ const JarvisRetention = (function () {
         points.forEach(point => {
             const color = point.row.accountId === 'tyler' ? C.cyan : C.purple;
             const context = { source: options.source || 'embedding', target, protocol: options.protocol || 'video', featureKey: options.featureKey || '' };
-            svg += `<circle ${savedValidationPointAttributes(point.row, context)} cx="${X(point.actual).toFixed(1)}" cy="${Y(point.predicted).toFixed(1)}" r="3.6" fill="${color}" opacity=".68" style="cursor:pointer"><title>${esc(savedValidationPointTooltip(SAVEDCHANNELVALIDATION, point.row, context, point.actual, point.predicted))}</title></circle>`;
+            svg += `<circle ${savedValidationPointAttributes(point.row, context, point.predicted, point.actual)} cx="${X(point.actual).toFixed(1)}" cy="${Y(point.predicted).toFixed(1)}" r="3.6" fill="${color}" opacity=".68" style="cursor:pointer"><title>${esc(savedValidationPointTooltip(SAVEDCHANNELVALIDATION, point.row, context, point.actual, point.predicted))}</title></circle>`;
         });
         const lowLabel = logarithmic ? savedValidationFormat(Math.max(0, Math.pow(10, lo) - 1), target) : savedValidationFormat(lo, target);
         const highLabel = logarithmic ? savedValidationFormat(Math.max(0, Math.pow(10, hi) - 1), target) : savedValidationFormat(hi, target);
@@ -5547,8 +5594,9 @@ const JarvisRetention = (function () {
         if (!model) return '';
         const metrics = model.metrics || {}, views = /^Views/.test(model.label || '');
         const color = metrics.r2 != null && metrics.r2 > 0 ? C.green : C.red;
-        const axisEnsemble = /all validation IDs excluded/i.test(model.label || '');
-        const kind = axisEnsemble ? '3-axis embedding ensemble · not one embedding' : 'multi-input model forecast · not one embedding';
+        const kind = model.kind === 'axis_ensemble'
+            ? '3-axis embedding ensemble · not one embedding'
+            : 'multi-input model forecast · not one embedding';
         return `<div style="border-top:2px solid ${color};background:${C.card2};padding:8px;min-width:0"><div style="font-size:7px;font-weight:900;color:${C.green};text-transform:uppercase">${kind}</div><div style="font-size:9px;font-weight:900;color:${C.text};margin-top:2px">${esc(model.label)}</div><div style="font-size:8px;color:${C.mute};margin:2px 0 5px">${esc(String(model.tier || '').replace(/_/g, ' '))}</div><div style="font-size:17px;font-weight:950;color:${color}">R² ${fmtv(metrics.r2, 3)}</div><div style="font-size:8px;color:${C.dim};line-height:1.45">rank ρ ${fmtv(metrics.spearman, 3)} · ${views ? `${fmtv(metrics.medianFactorError, 2)}× median error` : `${fmtv(metrics.mae, 2)} pp MAE`} · n=${metrics.n || 0}</div></div>`;
     }
     function savedValidationExpandedRow(validation, row, protocol) {
@@ -5559,10 +5607,11 @@ const JarvisRetention = (function () {
         }).join('');
         const blindDefinitions = definitions.filter(definition => definition.group !== 'novelty');
         const blind = blindDefinitions.map(definition => `<span style="border:1px solid ${C.border};padding:3px 5px;font-size:8px;color:${C.dim}"><b style="color:${savedChannelFeatureColor(definition.group)}">${esc(definition.key)}</b> ${savedValidationFormat(savedValidationPrediction(validation, row, definition, protocol === 'stored' ? 'video' : protocol), definition.target)}</span>`).join('');
-        return `<tr style="background:${C.card2}"><td colspan="10" style="padding:8px"><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:5px">Actual outcomes</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px">${['keep', 'ret5', 'views', 'outlier', 'gt10M'].map(target => `<span style="font-size:8px;color:${C.dim};border:1px solid ${C.border};padding:3px 5px">${esc(target)} <b style="color:${C.text}">${savedValidationFormat(savedValidationActual(row, target), target)}</b></span>`).join('')}<span style="font-size:8px;color:${C.dim};border:1px solid ${C.border};padding:3px 5px">private views snapshot <b style="color:${C.text}">${savedValidationFormat(row.actual.viewsPrivateSnapshot, 'views')}</b></span></div><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:5px">All 21 stored channel scores · diagnostic replay</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:9px">${stored}</div><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:5px">All 18 ${protocol === 'account' ? 'account-held-out' : 'video-held-out'} target-aligned scores</div><div style="display:flex;gap:4px;flex-wrap:wrap">${blind}</div></td></tr>`;
+        return `<tr style="background:${C.card2}"><td colspan="12" style="padding:8px"><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:5px">Actual outcomes</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px">${['keep', 'ret5', 'views', 'outlier', 'gt10M'].map(target => `<span style="font-size:8px;color:${C.dim};border:1px solid ${C.border};padding:3px 5px">${esc(target)} <b style="color:${C.text}">${savedValidationFormat(savedValidationActual(row, target), target)}</b></span>`).join('')}<span style="font-size:8px;color:${C.dim};border:1px solid ${C.border};padding:3px 5px">private views snapshot <b style="color:${C.text}">${savedValidationFormat(row.actual.viewsPrivateSnapshot, 'views')}</b></span></div><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:5px">All 21 stored channel scores · diagnostic replay</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:9px">${stored}</div><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:5px">All 18 ${protocol === 'account' ? 'account-held-out' : 'video-held-out'} target-aligned scores</div><div style="display:flex;gap:4px;flex-wrap:wrap">${blind}</div></td></tr>`;
     }
     function savedValidationVideoTable(validation, rows, definition, protocol) {
         const target = definition.target;
+        const bothViewsDefinition = savedValidationDefinition(validation, 'together.views');
         const tableRows = rows.map(row => {
             const actual = savedValidationActual(row, target);
             const predicted = savedValidationPrediction(validation, row, definition, protocol);
@@ -5581,12 +5630,21 @@ const JarvisRetention = (function () {
         const body = visible.map(item => {
             const row = item.row, keepError = savedValidationError(row.actual.keep, row.predictions.keepVideoHeldOut, 'keep');
             const viewError = savedValidationError(row.actual.viewsCurrent, row.predictions.viewsPublicAxisEnsemble, 'views');
+            const storedBothViews = savedValidationPrediction(validation, row, bothViewsDefinition, 'stored');
+            const blindBothViews = savedValidationPrediction(validation, row, bothViewsDefinition, 'video');
             const errorLabel = item.error == null ? '—' : (target === 'views' || target === 'realviews' || target === 'outlier' ? item.error.toFixed(2) + '×' : item.error.toFixed(2) + ' pp');
             const expanded = st.savedValidationExpanded === row.id;
             const context = { source: 'embedding', target, protocol, featureKey: definition.key };
-            return `<tr style="border-top:1px solid ${C.border};vertical-align:top"><td style="padding:6px;min-width:210px"><span ${savedValidationPointAttributes(row, context)} style="cursor:pointer;color:${C.text};font-weight:800">${esc(row.title)}</span><div style="font-size:7.5px;color:${row.accountId === 'tyler' ? C.cyan : C.purple};margin-top:2px">${esc(row.accountName)}${row.publishedAt ? ` · ${esc(new Date(row.publishedAt).toLocaleDateString())}` : ''}</div><span data-savedvalidationexpand="${esc(row.id)}" style="display:inline-block;cursor:pointer;color:${C.accent};font-size:8px;margin-top:3px">${expanded ? 'hide all inputs' : 'show all 21 + blind inputs'}</span></td><td>${savedValidationFormat(row.actual.keep, 'keep')}<div style="font-size:7px;color:${C.faint}">private outcome</div></td><td>${savedValidationFormat(row.predictions.keepVideoHeldOut, 'keep')}<div style="font-size:7px;color:${C.faint}">${keepError == null ? 'multi-input OOF' : 'multi-input OOF · ' + keepError.toFixed(1) + ' pp error'}</div></td><td>${savedValidationFormat(row.predictions.keepAccountHeldOut, 'keep')}<div style="font-size:7px;color:${C.faint}">multi-input transfer</div></td><td>${savedValidationFormat(row.actual.ret5, 'ret5')}</td><td>${savedValidationFormat(row.actual.viewsCurrent, 'views')}<div style="font-size:7px;color:${C.faint}">private snapshot ${savedValidationFormat(row.actual.viewsPrivateSnapshot, 'views')}</div></td><td>${savedValidationFormat(row.predictions.viewsPublicAxisEnsemble, 'views')}<div style="font-size:7px;color:${C.faint}">${viewError == null ? '3 direct axes' : '3 direct axes · ' + viewError.toFixed(2) + '× error'}</div></td><td style="color:${savedChannelFeatureColor(definition.group)}">${savedValidationFormat(item.predicted, target)}<div style="font-size:7px;color:${C.faint}">${esc(protocol)} ${esc(definition.key)} axis</div></td><td>${savedValidationFormat(item.actual, target)}</td><td style="color:${item.error != null && item.error > (target === 'views' || target === 'realviews' || target === 'outlier' ? 3 : 10) ? C.red : C.dim}">${errorLabel}</td></tr>${expanded ? savedValidationExpandedRow(validation, row, protocol) : ''}`;
+            const storedViewsContext = { source: 'storedViewsAxis', target: 'views', protocol: 'stored', featureKey: 'together.views' };
+            const blindViewsContext = { source: 'blindViewsAxis', target: 'views', protocol: 'video', featureKey: 'together.views' };
+            const ensembleContext = { source: 'viewsAxisEnsemble', target: 'views', protocol: 'video', featureKey: '' };
+            const storedViewsCell = `<span ${savedValidationPointAttributes(row, storedViewsContext, storedBothViews, row.actual.viewsCurrent)} style="cursor:pointer;color:${C.amber};font-weight:900">${savedValidationFormat(storedBothViews, 'views')}</span>`;
+            const blindViewsCell = `<span ${savedValidationPointAttributes(row, blindViewsContext, blindBothViews, row.actual.viewsCurrent)} style="cursor:pointer;color:${C.purple};font-weight:900">${savedValidationFormat(blindBothViews, 'views')}</span>`;
+            const ensembleCell = `<span ${savedValidationPointAttributes(row, ensembleContext, row.predictions.viewsPublicAxisEnsemble, row.actual.viewsCurrent)} style="cursor:pointer;color:${C.yellow};font-weight:900">${savedValidationFormat(row.predictions.viewsPublicAxisEnsemble, 'views')}</span>`;
+            const selectedCell = `<span ${savedValidationPointAttributes(row, context, item.predicted, item.actual)} style="cursor:pointer;color:${savedChannelFeatureColor(definition.group)};font-weight:900">${savedValidationFormat(item.predicted, target)}</span>`;
+            return `<tr style="border-top:1px solid ${C.border};vertical-align:top"><td style="padding:6px;min-width:210px"><span ${savedValidationPointAttributes(row, context, item.predicted, item.actual)} style="cursor:pointer;color:${C.text};font-weight:800">${esc(row.title)}</span><div style="font-size:7.5px;color:${row.accountId === 'tyler' ? C.cyan : C.purple};margin-top:2px">${esc(row.accountName)}${row.publishedAt ? ` · ${esc(new Date(row.publishedAt).toLocaleDateString())}` : ''}</div><span data-savedvalidationexpand="${esc(row.id)}" style="display:inline-block;cursor:pointer;color:${C.accent};font-size:8px;margin-top:3px">${expanded ? 'hide all inputs' : 'show all 21 + blind inputs'}</span></td><td>${savedValidationFormat(row.actual.keep, 'keep')}<div style="font-size:7px;color:${C.faint}">private outcome</div></td><td>${savedValidationFormat(row.predictions.keepVideoHeldOut, 'keep')}<div style="font-size:7px;color:${C.faint}">${keepError == null ? 'multi-input OOF' : 'multi-input OOF · ' + keepError.toFixed(1) + ' pp error'}</div></td><td>${savedValidationFormat(row.predictions.keepAccountHeldOut, 'keep')}<div style="font-size:7px;color:${C.faint}">multi-input transfer</div></td><td>${savedValidationFormat(row.actual.ret5, 'ret5')}</td><td>${savedValidationFormat(row.actual.viewsCurrent, 'views')}<div style="font-size:7px;color:${C.faint}">private snapshot ${savedValidationFormat(row.actual.viewsPrivateSnapshot, 'views')}</div></td><td>${storedViewsCell}<div style="font-size:7px;color:${C.faint}">original card · Both.views</div></td><td>${blindViewsCell}<div style="font-size:7px;color:${C.faint}">blind rebuilt · Both.views</div></td><td>${ensembleCell}<div style="font-size:7px;color:${C.faint}">${viewError == null ? 'blind 3-axis ensemble' : 'blind 3-axis · ' + viewError.toFixed(2) + '× error'}</div></td><td>${selectedCell}<div style="font-size:7px;color:${C.faint}">${esc(protocol)} ${esc(definition.key)} axis</div></td><td>${savedValidationFormat(item.actual, target)}</td><td style="color:${item.error != null && item.error > (target === 'views' || target === 'realviews' || target === 'outlier' ? 3 : 10) ? C.red : C.dim}">${errorLabel}</td></tr>${expanded ? savedValidationExpandedRow(validation, row, protocol) : ''}`;
         }).join('');
-        return `<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:9px 0 6px"><span style="font-size:8px;color:${C.mute};text-transform:uppercase">sort</span>${buttons}</div><div style="overflow:auto;max-height:650px"><table style="width:100%;min-width:1160px;border-collapse:collapse;font-size:8.5px"><thead style="position:sticky;top:0;background:${C.card};z-index:2"><tr style="color:${C.mute};text-align:left"><th style="padding:6px">Short</th><th>actual keep</th><th>OOF multi-input keep forecast</th><th>account-transfer keep forecast</th><th>actual 5s</th><th>actual views</th><th>strict 3-axis views ensemble</th><th>selected embedding estimate</th><th>selected actual</th><th>selected error</th></tr></thead><tbody>${body}</tbody></table></div>${tableRows.length > limit ? `<div style="text-align:center;margin-top:10px"><span data-savedvalidationmore style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};padding:5px 14px;font-size:9px">show ${Math.min(60, tableRows.length - limit)} more · ${tableRows.length - limit} left</span></div>` : ''}`;
+        return `<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:9px 0 6px"><span style="font-size:8px;color:${C.mute};text-transform:uppercase">sort</span>${buttons}</div><div style="overflow:auto;max-height:650px"><table style="width:100%;min-width:1420px;border-collapse:collapse;font-size:8.5px"><thead style="position:sticky;top:0;background:${C.card};z-index:2"><tr style="color:${C.mute};text-align:left"><th style="padding:6px">Short</th><th>actual keep</th><th>OOF multi-input keep forecast</th><th>account-transfer keep forecast</th><th>actual 5s</th><th>actual views</th><th>original Both.views</th><th>blind rebuilt Both.views</th><th>blind 3-axis views ensemble</th><th>selected embedding estimate</th><th>selected actual</th><th>selected error</th></tr></thead><tbody>${body}</tbody></table></div>${tableRows.length > limit ? `<div style="text-align:center;margin-top:10px"><span data-savedvalidationmore style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};padding:5px 14px;font-size:9px">show ${Math.min(60, tableRows.length - limit)} more · ${tableRows.length - limit} left</span></div>` : ''}`;
     }
     function renderSavedChannelValidation(detail) {
         const validation = SAVEDCHANNELVALIDATION;
@@ -5615,17 +5673,46 @@ const JarvisRetention = (function () {
         const featureButtons = definitions.map(item => `<span data-savedvalidationfeature="${esc(item.key)}" style="cursor:pointer;border:1px solid ${definition && definition.key === item.key ? savedChannelFeatureColor(item.group) : C.border};color:${definition && definition.key === item.key ? savedChannelFeatureColor(item.group) : C.dim};padding:3px 6px;font-size:8px">${esc(item.group === 'together' ? 'both' : item.group)}</span>`).join('');
         const modelCards = Object.values(scope.models || {}).map(savedValidationModelCard).join('');
         const joins = (validation.joinSummary || []).map(item => `${esc(item.accountName)} ${item.matchedRows}/${item.privateRows}`).join(' · ');
+        const validationCreatorCount = (audit.validationCreatorChannelIds || []).length;
+        const creatorAudit = `${validationCreatorCount} validation creator${validationCreatorCount === 1 ? '' : 's'} · ${audit.validationCreatorVideoCountExcluded == null ? '—' : (+audit.validationCreatorVideoCountExcluded).toLocaleString()} additional creator-resolved videos excluded · ${audit.validationCreatorAxisTrainingIdOverlapReported == null ? '—' : audit.validationCreatorAxisTrainingIdOverlapReported} creator overlap`;
         const canonicalKeep = savedValidationScatter(rows, 'keep', row => row.predictions.keepVideoHeldOut, 'Actual keep vs nested-selected multi-input OOF forecast', {
             source: 'keepModel',
             protocol: 'video',
             axisLabel: 'multi-input OOF forecast',
             subtitle: 'Y is a separate fold-fitted predictor selected from 45 candidate embedding/control inputs. It is not the Both.keep embedding shown on the original score card.',
         });
-        const canonicalViews = savedValidationScatter(rows, 'views', row => row.predictions.viewsPublicAxisEnsemble, 'Actual views vs strict three-axis embedding ensemble', {
-            source: 'viewsAxis',
+        const viewAxisDefinitions = ['visual', 'text', 'together'].map(group => savedValidationDefinition(validation, `${group}.views`)).filter(Boolean);
+        const canonicalStoredViews = viewAxisDefinitions.map(axisDefinition => {
+            const groupLabel = axisDefinition.group === 'together' ? 'Both' : axisDefinition.group;
+            return savedValidationScatter(rows, 'views', row => savedValidationPrediction(validation, row, axisDefinition, 'stored'), `Actual views vs original saved ${groupLabel}.views view-equivalent`, {
+                source: 'storedViewsAxis',
+                protocol: 'stored',
+                featureKey: axisDefinition.key,
+                axisLabel: `original ${groupLabel}.views view-equivalent`,
+                subtitle: 'Y is the exact persisted number on the original 21-output score card. A card that says 12M is plotted here at 12M.',
+            });
+        }).join('');
+        const canonicalBlindViews = viewAxisDefinitions.map(axisDefinition => {
+            const groupLabel = axisDefinition.group === 'together' ? 'Both' : axisDefinition.group;
+            return savedValidationScatter(rows, 'views', row => savedValidationPrediction(validation, row, axisDefinition, 'video'), `Actual views vs blind rebuilt ${groupLabel}.views view-equivalent`, {
+                source: 'blindViewsAxis',
+                protocol: 'video',
+                featureKey: axisDefinition.key,
+                axisLabel: `blind rebuilt ${groupLabel}.views view-equivalent`,
+                subtitle: 'Y uses the production PLS latent direction and rank-to-public-outcome calibration, refit after every Tyler/Hafu video was excluded at the creator level.',
+            });
+        }).join('');
+        const canonicalViewsEnsemble = savedValidationScatter(rows, 'views', row => row.predictions.viewsPublicAxisEnsemble, 'Actual views vs blind rebuilt three-axis ensemble', {
+            source: 'viewsAxisEnsemble',
             protocol: 'video',
-            axisLabel: '3-axis embedding ensemble',
-            subtitle: 'Y is the geometric mean of the blind visual, text, and both ordinary-views embedding estimates after every validation video ID was excluded.',
+            axisLabel: 'blind 3-axis ensemble',
+            subtitle: 'Y is the geometric mean of the separately rebuilt visual, text, and Both ordinary-views axes. It is an ensemble, not the original card value.',
+        });
+        const canonicalViewsForecast = savedValidationScatter(rows, 'views', row => row.predictions.viewsVideoHeldOut, 'Actual views vs nested-selected multi-input OOF forecast', {
+            source: 'viewsModel',
+            protocol: 'video',
+            axisLabel: 'multi-input OOF views forecast',
+            subtitle: 'Y is a fold-fitted views model selected from the saved 21-output matrix. It is neither a single embedding nor the three-axis geometric ensemble.',
         });
         const selectedScatter = definition ? savedValidationScatter(rows, target, row => savedValidationPrediction(validation, row, definition, protocol), `${protocolMeta[protocol][0]} · ${definition.group === 'together' ? 'both' : definition.group} ${definition.label}`, {
             source: 'embedding',
@@ -5634,18 +5721,23 @@ const JarvisRetention = (function () {
             axisLabel: `${protocol} ${definition.key} embedding`,
             subtitle: `Y is exactly one ${definition.key} embedding estimate under the ${protocol} protocol - no multi-input forecast is substituted.`,
         }) : '';
-        return `<div style="border:1px solid ${audit.passedForBlindInputs ? C.green : C.red};background:${audit.passedForBlindInputs ? C.green : C.red}0a;padding:10px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:950;color:${C.text}">Tyler + Hafu blind validation</div><div style="font-size:9px;color:${C.mute};line-height:1.5;margin-top:3px">${joins} · ${rows.length} rows in this scope · exact 21 stored outputs plus fold-recomputed inputs</div></div><div style="text-align:right"><div style="font-size:9px;font-weight:900;color:${audit.passedForBlindInputs ? C.green : C.red}">${audit.passedForBlindInputs ? 'BLIND INPUT ARRAY AUDIT PASSED' : 'BLIND INPUT ARRAY AUDIT FAILED'}</div><div style="font-size:7.5px;color:${C.faint}">${artifact.generatedAt ? esc(new Date(artifact.generatedAt).toLocaleString()) : ''} · ${esc(artifact.cacheStatus || 'artifact')}</div><span data-savedvalidationreload style="cursor:pointer;color:${C.accent};font-size:8px">rebuild if sources changed</span></div></div></div>
+        return `<div style="border:1px solid ${audit.passedForBlindInputs ? C.green : C.red};background:${audit.passedForBlindInputs ? C.green : C.red}0a;padding:10px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:950;color:${C.text}">Tyler + Hafu blind validation</div><div style="font-size:9px;color:${C.mute};line-height:1.5;margin-top:3px">${joins} · ${rows.length} rows in this scope · exact 21 stored outputs plus fold-recomputed inputs</div><div style="font-size:8px;color:${audit.validationCreatorsExcludedFromPublicAxis ? C.green : C.red};line-height:1.45;margin-top:2px">${esc(creatorAudit)}</div></div><div style="text-align:right"><div style="font-size:9px;font-weight:900;color:${audit.passedForBlindInputs ? C.green : C.red}">${audit.passedForBlindInputs ? 'BLIND INPUT ARRAY AUDIT PASSED' : 'BLIND INPUT ARRAY AUDIT FAILED'}</div><div style="font-size:7.5px;color:${C.faint}">${artifact.generatedAt ? esc(new Date(artifact.generatedAt).toLocaleString()) : ''} · ${esc(artifact.cacheStatus || 'artifact')}</div><span data-savedvalidationreload style="cursor:pointer;color:${C.accent};font-size:8px">rebuild if sources changed</span></div></div></div>
           <div style="display:flex;border-bottom:1px solid ${C.border};overflow:auto;margin-bottom:9px">${scopeButton('pooled', 'Pooled')}${scopeButton('tyler', 'Tyler Csatari')}${scopeButton('hafu', 'Hafu Go')}</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${protocolButtons}</div>
+          <div style="font-size:8px;color:${C.faint};text-transform:uppercase;margin-bottom:4px">Atlas and selected-embedding controls · fixed comparison charts below name their own protocol</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${protocolButtons}</div>
           ${note(`<b>${esc(protocolMeta[protocol][0])}:</b> ${esc(protocolMeta[protocol][2])}`, protocolMeta[protocol][1])}
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px;margin:10px 0">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:6px;margin:10px 0">
             <div style="border-top:3px solid ${C.cyan};background:${C.card2};padding:8px"><div style="font-size:9px;font-weight:950;color:${C.cyan}">ACTUAL OUTCOME</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:3px">Private YouTube Studio keep/retention, or current public views. This is X on each scatter.</div></div>
-            <div style="border-top:3px solid ${C.amber};background:${C.card2};padding:8px"><div style="font-size:9px;font-weight:950;color:${C.amber}">ONE EMBEDDING ESTIMATE</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:3px">One visual, text, or both latent direction. These are the numbers and maps on the original 21-output score card.</div></div>
-            <div style="border-top:3px solid ${C.green};background:${C.card2};padding:8px"><div style="font-size:9px;font-weight:950;color:${C.green}">MODEL FORECAST / ENSEMBLE</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:3px">A separate calculation combining several inputs. It can differ from every single embedding without either value being wrong.</div></div>
+            <div style="border-top:3px solid ${C.amber};background:${C.card2};padding:8px"><div style="font-size:9px;font-weight:950;color:${C.amber}">ORIGINAL STORED EMBEDDING</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:3px">The exact visual, text, or Both number and map saved on the original 21-output score card.</div></div>
+            <div style="border-top:3px solid ${C.purple};background:${C.card2};padding:8px"><div style="font-size:9px;font-weight:950;color:${C.purple}">BLIND REBUILT EMBEDDING</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:3px">The same axis and calibration method refit after all videos from both validation creators were removed.</div></div>
+            <div style="border-top:3px solid ${C.yellow};background:${C.card2};padding:8px"><div style="font-size:9px;font-weight:950;color:${C.yellow}">AXIS ENSEMBLE</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:3px">The geometric mean exists only when Visual, Text, and Both are all present. It is not one embedding.</div></div>
+            <div style="border-top:3px solid ${C.green};background:${C.card2};padding:8px"><div style="font-size:9px;font-weight:950;color:${C.green}">LEARNED MODEL FORECAST</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:3px">A fold-fitted model can combine embedding and control inputs. It is always labeled as a forecast.</div></div>
           </div>
           <div style="font-size:10px;font-weight:950;color:${C.text};margin:10px 0 4px">Forecast and ensemble validation - separate from the single-embedding atlas</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:7px;margin-bottom:10px">${modelCards}</div>
           <div style="font-size:9px;color:${C.mute};line-height:1.5;margin-bottom:10px"><b style="color:${C.text}">How to read this:</b> R² = improvement over always guessing the training mean; 1 is perfect, 0 ties the mean, negative is worse. Rank ρ = whether high predictions order high outcomes; 1 is perfect. MAE is percentage-point error. View error is a multiplicative factor. The account-held-out result is the honest test of transfer to a creator the keep model never saw.</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:10px;margin-bottom:13px">${canonicalKeep}${canonicalViews}</div>
+          <div style="font-size:11px;font-weight:950;color:${C.amber};margin:12px 0 3px">Original production view-equivalent embeddings · exact saved score-card values</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(330px,100%),1fr));gap:10px;margin-bottom:13px">${canonicalStoredViews}</div>
+          <div style="font-size:11px;font-weight:950;color:${C.purple};margin:12px 0 3px">Blind rebuilt view-equivalent embeddings · production method with validation creators removed</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(330px,100%),1fr));gap:10px;margin-bottom:13px">${canonicalBlindViews}</div>
+          <div style="font-size:11px;font-weight:950;color:${C.yellow};margin:12px 0 3px">Axis ensemble · requires all three direct views axes</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(330px,100%),1fr));gap:10px;margin-bottom:13px">${canonicalViewsEnsemble}</div>
+          <div style="font-size:11px;font-weight:950;color:${C.green};margin:12px 0 3px">Learned forecasts · separate multi-input models</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(330px,100%),1fr));gap:10px;margin-bottom:13px">${canonicalKeep}${canonicalViewsForecast}</div>
           <div style="font-size:13px;font-weight:950;color:${C.text};margin:10px 0 3px">Every embedding against its raw outcome</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:7px">Choose an outcome, then click any modality row. The bar is rank correlation (10M uses AUC centered at chance); the text preserves calibration and error so a tidy rank cannot masquerade as an accurate numerical forecast.</div>
           <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px">${targetButtons}</div>
           ${savedValidationAccuracyAtlas(scope, protocol, definitions, definition && definition.key)}

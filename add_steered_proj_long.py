@@ -162,7 +162,7 @@ for ch in ['visual', 'text', 'together']:
             ce = np.array(mp['proj'][f'ctr__{acct}']['est'], float)
             r3 = np.array(mp['proj'][f'ret30__{acct}']['est'], float)
             ld = np.array([np.log10(LIBDUR.get(vid, eq['durmed']) + 1) for vid in mids])
-            rvlog = eq_logviews(eq, ce, r3, ld); rv = np.power(10.0, rvlog)
+            rvlog = eq_logviews(eq, ce, r3, ld); rv = np.maximum(0.0, np.power(10.0, rvlog) - 1)
             mask = np.abs(Vm).sum(1) > 1e-6
             Vmk = Vm[mask]; rvk = rvlog[mask]
             oofr = np.full(int(mask.sum()), np.nan)

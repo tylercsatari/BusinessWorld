@@ -25,6 +25,9 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNNER_PATH = ROOT / "buildings" / "jarvis" / "predictor-lab" / "run_predictor_lab.py"
 RESULT_PATH = ROOT / "buildings" / "jarvis" / "predictor-lab" / "results.json"
 RAW_EMBED_PATH = ROOT / "raw_embed.py"
+RAW_UPLOAD_PATH = ROOT / "raw_upload.py"
+SHORT_STEER_PATH = ROOT / "add_steered_proj.py"
+LONG_STEER_PATH = ROOT / "add_steered_proj_long.py"
 
 os.environ.setdefault("AWS_EC2_METADATA_DISABLED", "true")
 spec = importlib.util.spec_from_file_location("predictor_lab_under_test", RUNNER_PATH)
@@ -207,7 +210,13 @@ def assert_result_contract(result: dict, candidate_hash: str) -> None:
     assert sum(registry["targets"]["views"]["subsetSizes"].values()) == 50_000
 
     provenance = result["provenance"]
+    assert provenance["privateAxisTrainingIdOverlap"] == 0
     assert provenance["savedAxisTrainingIdOverlap"] == 0
+    assert provenance["validationCreatorAxisTrainingIdOverlap"] == 0
+    assert isinstance(provenance["validationCreatorChannelIds"], list)
+    assert provenance["validationCreatorChannelIds"]
+    assert len(provenance["validationCreatorChannelIdHash"]) == 64
+    assert provenance["validationCreatorVideoCountExcluded"] >= 0
     assert provenance["publicAxisExcludedVideoCount"] >= coverage["privateRetentionRows"]
     assert len(provenance["publicAxisExcludedVideoIdHash"]) == 64
     assert len(provenance["savedAxisCandidateOverlapRemovedIdsHash"]) == 64
@@ -215,6 +224,7 @@ def assert_result_contract(result: dict, candidate_hash: str) -> None:
     assert len(provenance["savedVideoIdHash"]) == 64
     assert len(provenance["rawAxisCorpusIdHash"]) == 64
     assert provenance["featureScorerVersionPersistedPerVideo"] is False
+    assert "rank quantile-mapped" in provenance["publicAxisEstimator"]
     assert "scorer/model version" in provenance["warning"]
     assert provenance["sourceArtifacts"]
     assert set(provenance["rawStoreShape"]) == {"visual", "text", "together"}
@@ -263,6 +273,8 @@ assert candidate_hash == "a3d4ad284c40c669", "the deterministic experiment regis
 library_fixture = {
     "science-a": {
         "videoId": "science-a",
+        "channel": "Tyler Csatari",
+        "channelId": "UCfixtureCreatorA",
         "stored": True,
         "width": 1080,
         "height": 1920,
@@ -270,6 +282,8 @@ library_fixture = {
     },
     "science-b": {
         "videoId": "science-b",
+        "channel": "Hafu Go",
+        "channelId": "UCfixtureCreatorB",
         "stored": True,
         "width": 720,
         "height": 1280,
@@ -379,6 +393,77 @@ factor_metrics = predictor.log_view_metrics(
 assert factor_metrics["medianFactorError"] == 10.0
 assert factor_metrics["geometricMeanFactorError"] == 10.0
 
+# A direct high-dimensional regression shrinks view predictions toward the mean.
+# The production scorer instead uses latent rank and maps that rank back onto the
+# observed outcome distribution. The blind refit must preserve that output scale
+# without seeing any validation-row outcomes.
+axis_features = predictor.np.column_stack(
+    [
+        predictor.np.linspace(-2, 2, 80),
+        predictor.np.linspace(-2, 2, 80) ** 2,
+        predictor.np.sin(predictor.np.linspace(-2, 2, 80)),
+    ]
+)
+axis_outcomes = predictor.np.linspace(4.7, 8.1, 80)
+quantile_axis = predictor.QuantileMappedRegressor.fit(axis_features, axis_outcomes)
+axis_prediction = quantile_axis.predict(axis_features)
+assert axis_prediction.min() == axis_outcomes.min()
+assert axis_prediction.max() == axis_outcomes.max()
+assert predictor.np.all((quantile_axis.ranks(axis_features) >= 0) & (quantile_axis.ranks(axis_features) <= 1))
+
+binary_outcomes = (axis_outcomes >= 7).astype(int)
+binary_axis = predictor.RankCalibratedBinaryAxis.fit(axis_features, binary_outcomes)
+binary_probability = binary_axis.predict_proba(axis_features)
+assert binary_probability.shape == (len(axis_features), 2)
+assert predictor.np.allclose(binary_probability.sum(axis=1), 1)
+assert predictor.np.all((binary_probability >= 0) & (binary_probability <= 1))
+
+# An excluded validation outcome must have zero influence on every rebuilt
+# public axis. This catches accidental inclusion more directly than checking
+# only array lengths or provenance labels.
+rng = predictor.np.random.default_rng(17)
+leak_ids = [f"public-{index}" for index in range(120)] + ["validation-video"]
+leak_vectors = predictor.normalized(rng.normal(size=(len(leak_ids), 12)))
+leak_views = predictor.np.geomspace(25_000, 120_000_000, len(leak_ids))
+leak_outlier = predictor.np.geomspace(0.05, 50, len(leak_ids))
+
+def leakage_store(validation_views: float) -> dict:
+    views = leak_views.copy()
+    views[-1] = validation_views
+    return {
+        "ids": leak_ids,
+        "index": {video_id: index for index, video_id in enumerate(leak_ids)},
+        "vectors": leak_vectors,
+        "views": views,
+        "outlier": leak_outlier,
+        "subs": predictor.np.ones(len(leak_ids)),
+        "titles": leak_ids,
+        "texts": leak_ids,
+        "mine": predictor.np.zeros(len(leak_ids), dtype=bool),
+        "silent": predictor.np.zeros(len(leak_ids), dtype=bool),
+    }
+
+axes_before = predictor.fit_public_axes(
+    {modality: leakage_store(1) for modality in predictor.MODALITIES},
+    {"validation-video"},
+    {},
+)
+axes_after = predictor.fit_public_axes(
+    {modality: leakage_store(1_000_000_000_000) for modality in predictor.MODALITIES},
+    {"validation-video"},
+    {},
+)
+probe = leak_vectors[-1:]
+for modality in predictor.MODALITIES:
+    assert predictor.np.array_equal(
+        axes_before[modality]["views"].predict(probe),
+        axes_after[modality]["views"].predict(probe),
+    ), f"excluded {modality} validation outcome changed the blind views axis"
+    assert predictor.np.array_equal(
+        axes_before[modality]["hit10m"].predict_proba(probe),
+        axes_after[modality]["hit10m"].predict_proba(probe),
+    ), f"excluded {modality} validation outcome changed the blind 10M axis"
+
 tail_rows = predictor.threshold_diagnostics(
     predictor.np.asarray([50_000, 250_000, 2_000_000, 20_000_000], dtype=float),
     predictor.np.log10(
@@ -454,8 +539,12 @@ assert 0 < permutation_p <= 1
 keep_source = inspect.getsource(predictor.run_keep_track)
 views_source = inspect.getsource(predictor.run_views_track)
 main_source = inspect.getsource(predictor.main)
-assert "excluded_axis_ids = private_ids | saved_ids" in main_source
+public_axis_source = inspect.getsource(predictor.fit_public_axes)
+assert "excluded_axis_ids = private_ids | saved_ids | validation_creator_video_ids" in main_source
 assert "fit_public_axes(stores, excluded_axis_ids" in main_source
+assert "QuantileMappedRegressor.fit" in public_axis_source
+assert "RankCalibratedBinaryAxis.fit" in public_axis_source
+assert "(views > 10_000_000).astype(int)" in public_axis_source
 assert "operational = run_keep_known_video" in keep_source
 assert '"label": "Unseen-account transfer"' in keep_source
 assert '"metrics": operational["metrics"]' in keep_source
@@ -490,6 +579,17 @@ assert "selection_folds = within_group_folds(" in tail_source
 assert "search_with_sparse_alpha(" in tail_source
 runner_doc = predictor.__doc__ or ""
 assert "Existing\nin-sample steered keep/ret5 estimates are never used as validation features." in runner_doc
+
+# All three serving/training paths fit log10(value + 1), so inversion must
+# subtract one exactly once. A raw view count must never drift between the score
+# card and validation graph.
+raw_upload_source = RAW_UPLOAD_PATH.read_text(encoding="utf-8")
+short_steer_source = SHORT_STEER_PATH.read_text(encoding="utf-8")
+long_steer_source = LONG_STEER_PATH.read_text(encoding="utf-8")
+assert "10 ** yv - 1" in raw_upload_source
+assert re.search(r"10 \*\* \(PS\[0\].*PS\[3\]\) - 1", raw_upload_source)
+assert "np.maximum(0.0, np.power(10.0, rvlog) - 1)" in short_steer_source
+assert "np.maximum(0.0, np.power(10.0, rvlog) - 1)" in long_steer_source
 
 
 # Exercise the real main-result assembly without touching production data or R2.
@@ -561,9 +661,9 @@ with tempfile.TemporaryDirectory() as temporary_directory:
             predictor,
             "load_saved_channel_rows",
             lambda contract: [
-                {"id": "saved-1", "channel": "c1"},
-                {"id": "saved-2", "channel": "c1"},
-                {"id": "saved-3", "channel": "c2"},
+                {"id": "saved-1", "channel": "c1", "channelName": "Tyler Csatari"},
+                {"id": "saved-2", "channel": "c1", "channelName": "Tyler Csatari"},
+                {"id": "saved-3", "channel": "c2", "channelName": "Hafu Go"},
             ],
         ),
         mock.patch.object(predictor, "load_novelty_models", lambda: {}),
