@@ -314,7 +314,33 @@ async function main() {
         assert.strictEqual(await page.getByText('BLIND INPUT ARRAY AUDIT PASSED', { exact: true }).count(), 1);
         assert.strictEqual(await page.getByText('Every embedding against its raw outcome', { exact: true }).count(), 1);
         assert.strictEqual(await page.getByText('Video-by-video audit trail', { exact: true }).count(), 1);
-        assert((await page.locator('[data-savedchannelvideo]').count()) >= videos.length, 'blind validation must keep every plotted/video row inspectable');
+        assert.strictEqual(await page.getByText('ACTUAL OUTCOME', { exact: true }).count(), 1);
+        assert.strictEqual(await page.getByText('ONE EMBEDDING ESTIMATE', { exact: true }).count(), 1);
+        assert.strictEqual(await page.getByText('MODEL FORECAST / ENSEMBLE', { exact: true }).count(), 1);
+        assert((await page.locator('[data-savedvalidationvideo]').count()) >= videos.length, 'blind validation must keep every plotted/video row inspectable');
+        const modelPoint = page.locator(`[data-savedvalidationvideo="${channelId}:vid00000002"][data-savedvalidationpointsource="keepModel"]`);
+        const modelTooltip = await modelPoint.locator('title').textContent();
+        assert(modelTooltip.includes('PLOTTED Y (nested-selected multi-input OOF forecast): 58.9%'), 'the hover must name and show the exact model forecast');
+        assert(modelTooltip.includes(`both ${videos[1].features['together.keep'][0].toFixed(1)}%`), 'the hover must also show the stored Both embedding');
+        await page.locator(`[data-savedvalidationvideo="${channelId}:vid00000001"][data-savedvalidationpointsource="keepModel"]`).click();
+        await page.locator('[data-savedvalidationcontext]').waitFor();
+        assert((await page.locator('[data-savedvalidationcontext]').innerText()).includes('Highest raw views'), 'clicked validation context must follow the exact plotted video');
+        await modelPoint.click();
+        const validationContext = page.locator('[data-savedvalidationcontext]');
+        await validationContext.waitFor();
+        const contextText = await validationContext.innerText();
+        assert(contextText.includes('Highest text keep rate'), 'an older cached score must replace the newer selected score when clicked');
+        assert(contextText.includes('58.9%'), 'the detail must preserve the plotted multi-input forecast');
+        assert(contextText.includes(`${videos[1].features['together.keep'][0].toFixed(1)}%`), 'the detail must show the different stored Both embedding beside the forecast');
+        await page.waitForFunction(id => {
+            const image = document.querySelector('#rtg-exppanel img[style*="width:260px"]');
+            return image && image.src.includes(id);
+        }, 'vid00000002');
+        if (process.env.EXPERIMENT_LAB_CONTEXT_SCREENSHOT) {
+            fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_CONTEXT_SCREENSHOT), { recursive: true });
+            await validationContext.screenshot({ path: process.env.EXPERIMENT_LAB_CONTEXT_SCREENSHOT });
+        }
+        assert.strictEqual(await page.evaluate(pathname => window.__fetchCounts[pathname], videoPath), 1, 'reopening an older cached validation video must not fetch or recompute it again');
         await page.locator('[data-savedvalidationprotocol="account"]').click();
         assert.strictEqual(await page.getByText('Whole account held out:', { exact: false }).count(), 1);
         await page.locator('[data-savedvalidationexpand]').first().click();
