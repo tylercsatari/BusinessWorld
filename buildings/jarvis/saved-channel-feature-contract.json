@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "pipeline": {
     "sourceWindow": "first 5 seconds",
     "embeddingModel": "gemini-embedding-2",
@@ -9,6 +9,40 @@
     "togetherInput": "The same five-frame montage and transcript embedded together.",
     "artifact": "raw/steer_models.npz",
     "scorer": "raw_upload.py"
+  },
+  "coordinateIdentity": {
+    "shortsStoredPattern": "shorts.stored.{feature.key}",
+    "shortsVideoHeldoutPattern": "shorts.video-heldout.{feature.key}",
+    "shortsAccountHeldoutPattern": "shorts.account-heldout.{feature.key}",
+    "shortsObservedPattern": "shorts.observed.{outcome.key}",
+    "shortsVideoForecastPattern": "shorts.video-forecast.{outcome.key}",
+    "shortsAccountForecastPattern": "shorts.account-forecast.{outcome.key}",
+    "relationshipRule": "A relationship is identified by scoreCoordinateId plus observedOutcomeId. It never creates another score.",
+    "percentileRule": "A percentile is a view of its score coordinate and remains in the same ledger cell.",
+    "parityRule": "The same input fingerprint and scorer/model/artifact revision must resolve to the same stored coordinate values."
+  },
+  "crossDomainInventory": {
+    "shorts": {
+      "storedOutputs": 21,
+      "groups": ["visual", "text", "together", "novelty"],
+      "mapProjections": ["both", "views", "rawviews", "realviews", "outlier", "hi10m", "hiout", "keep", "ret5", "swipe", "umap", "pca"],
+      "projectionRule": "Map projections are alternate visualizations of registered values, not additional scores."
+    },
+    "longQuant": {
+      "groups": ["visual", "together"],
+      "metrics": [
+        { "key": "ctrviews", "label": "CTR + views", "unit": "percentile", "target": "ctrviews" },
+        { "key": "ctr", "label": "Click-through rate", "unit": "percent", "target": "ctr" },
+        { "key": "ret30", "label": "30-second retention", "unit": "percent", "target": "ret30" },
+        { "key": "views", "label": "View-equivalent (corpus quantile)", "unit": "views", "target": "views" },
+        { "key": "realviews", "label": "Forecast views (channel scale)", "unit": "views", "target": "realviews" },
+        { "key": "gt10m", "label": "Chance over 10M", "unit": "probability", "target": "gt10m" }
+      ],
+      "scalarOutputs": 12,
+      "coordinatePattern": "long.output.{group}.{metric.key}",
+      "mapProjections": ["both", "views", "rawviews", "realviews", "outlier", "hi10m", "hiout", "ctr", "ret30", "ctrviews", "umap", "pca"],
+      "projectionRule": "Map projections are alternate visualizations of registered values, not additional scores."
+    }
   },
   "provenanceByTarget": {
     "keep": {

@@ -2,7 +2,8 @@
 
 const contract = require('./saved-channel-feature-contract.json');
 
-const VERSION = 2;
+const VERSION = 3;
+const LEDGER_VERSION = 1;
 const CURVE_SECONDS = Object.freeze(Array.from({ length: 21 }, (_, second) => second));
 const SUPPORTED_CHANNELS = Object.freeze([
     { channelId: 'chd3f5a3dae83f3382', accountId: 'tyler', accountName: 'Tyler Csatari' },
@@ -323,6 +324,225 @@ const OUTCOME_DEFINITIONS = Object.freeze([
     { key: 'drop20', label: 'Observed drop by 20s', unit: 'percentage_points', accessor: row => curveValue(row, 'drop', 20), derived: 'observed opening retention - observed retention at 20s' },
 ]);
 
+const LONG_QUANT_METRICS = Object.freeze(
+    (contract.crossDomainInventory && contract.crossDomainInventory.longQuant
+        && contract.crossDomainInventory.longQuant.metrics || []).map(metric => Object.freeze({ ...metric }))
+);
+
+const LEGACY_DIAGNOSTIC_COORDINATES = Object.freeze([
+    {
+        key: 'keep-video-heldout-model',
+        label: 'Legacy multi-input keep forecast · video held out',
+        target: 'keep',
+        unit: 'percent',
+        path: ['predictions', 'keepVideoHeldOut'],
+        replacement: 'shorts.video-forecast.keep',
+    },
+    {
+        key: 'keep-account-heldout-model',
+        label: 'Legacy multi-input keep forecast · account held out',
+        target: 'keep',
+        unit: 'percent',
+        path: ['predictions', 'keepAccountHeldOut'],
+        replacement: 'shorts.account-forecast.keep',
+    },
+    {
+        key: 'keep-forward-time-model',
+        label: 'Legacy multi-input keep forecast · forward time',
+        target: 'keep',
+        unit: 'percent',
+        path: ['predictions', 'keepForwardTime'],
+    },
+    {
+        key: 'views-public-axis-ensemble',
+        label: 'Creator-excluded visual + text + both views-axis ensemble',
+        target: 'views',
+        unit: 'views',
+        path: ['predictions', 'viewsPublicAxisEnsemble'],
+        replacement: 'shorts.video-forecast.views',
+    },
+    {
+        key: 'views-video-heldout-model',
+        label: 'Legacy multi-input views forecast · video held out',
+        target: 'views',
+        unit: 'views',
+        path: ['predictions', 'viewsVideoHeldOut'],
+        replacement: 'shorts.video-forecast.views',
+    },
+    {
+        key: 'views-account-heldout-model',
+        label: 'Legacy multi-input views forecast · account held out',
+        target: 'views',
+        unit: 'views',
+        path: ['predictions', 'viewsChannelHeldOut'],
+        replacement: 'shorts.account-forecast.views',
+    },
+    {
+        key: 'views-forward-time-model',
+        label: 'Legacy multi-input views forecast · forward time',
+        target: 'views',
+        unit: 'views',
+        path: ['predictions', 'viewsForwardTime'],
+    },
+]);
+
+function displayTargetForOutcome(key) {
+    if (key === 'hit10M') return 'gt10M';
+    if (key === 'views') return 'views';
+    if (key === 'outlier') return 'outlier';
+    return key;
+}
+
+function buildCoordinateRegistry() {
+    const observed = OUTCOME_DEFINITIONS.map(definition => ({
+        id: `shorts.observed.${definition.key}`,
+        family: 'observed',
+        protocol: 'observed',
+        group: 'outcome',
+        key: definition.key,
+        target: displayTargetForOutcome(definition.key),
+        label: definition.label,
+        unit: definition.unit,
+        transform: definition.transform || null,
+        derived: definition.derived || null,
+        status: 'canonical',
+        description: 'Measured outcome joined to the scored video. This is truth on the X axis, not an embedding score.',
+    }));
+    const stored = contract.features.map(definition => ({
+        id: `shorts.stored.${definition.key}`,
+        family: 'stored',
+        protocol: 'stored',
+        group: definition.group,
+        key: definition.key,
+        target: definition.target,
+        label: `${definition.group === 'together' ? 'Both' : definition.group} · ${definition.label}`,
+        unit: definition.displayUnit || definition.unit,
+        storageUnit: definition.unit,
+        sourceKey: definition.sourceKey || definition.key,
+        percentileAvailable: true,
+        status: 'canonical',
+        description: 'Exact production score persisted when the video was analyzed. The estimate and percentile are one registered coordinate.',
+    }));
+    const direct = ['video', 'account'].flatMap(protocol => (
+        contract.features.filter(definition => definition.group !== 'novelty').map(definition => ({
+            id: `shorts.${protocol}-heldout.${definition.key}`,
+            family: `${protocol}Heldout`,
+            protocol,
+            group: definition.group,
+            key: definition.key,
+            target: definition.target,
+            label: `${protocol === 'video' ? 'Video-held-out' : 'Account-held-out'} ${definition.group === 'together' ? 'Both' : definition.group} · ${definition.label}`,
+            unit: definition.displayUnit || definition.unit,
+            storageUnit: 'blind_model_coordinate',
+            sourceKey: `${definition.key}.raw`,
+            percentileAvailable: false,
+            status: 'canonical',
+            description: protocol === 'video'
+                ? 'The evaluated video was excluded from the target-aligned reconstruction.'
+                : 'The evaluated creator account was excluded from the target-aligned reconstruction.',
+        }))
+    ));
+    const forecasts = ['video', 'account'].flatMap(protocol => (
+        OUTCOME_DEFINITIONS.map(definition => ({
+            id: `shorts.${protocol}-forecast.${definition.key}`,
+            family: `${protocol}Forecast`,
+            protocol,
+            group: 'combined',
+            key: definition.key,
+            target: displayTargetForOutcome(definition.key),
+            label: `${protocol === 'video' ? 'Video-held-out' : 'Account-held-out'} combined forecast · ${definition.label}`,
+            unit: definition.unit,
+            percentileAvailable: false,
+            status: 'canonical',
+            description: 'Fold-fitted forecast from the nine creator-excluded public views, outlier, and 10M coordinates. It is not an additional embedding axis.',
+        }))
+    ));
+    const legacy = LEGACY_DIAGNOSTIC_COORDINATES.map(definition => ({
+        id: `shorts.legacy.${definition.key}`,
+        family: 'legacy',
+        protocol: 'legacy',
+        group: 'legacy',
+        key: definition.key,
+        target: definition.target,
+        label: definition.label,
+        unit: definition.unit,
+        percentileAvailable: false,
+        status: 'legacy_diagnostic',
+        replacement: definition.replacement || null,
+        description: 'Registered for audit compatibility. It is not used as the canonical score-card value.',
+    }));
+    const columns = [...observed, ...stored, ...direct, ...forecasts, ...legacy];
+    const familyMeta = [
+        ['observed', 'Observed outcomes', 'Measured truth; never an embedding.'],
+        ['stored', 'Stored production scores', 'The exact 21 score-card coordinates.'],
+        ['videoHeldout', 'Video-held-out direct scores', '18 direct coordinates rebuilt without the evaluated video.'],
+        ['accountHeldout', 'Account-held-out direct scores', '18 direct coordinates rebuilt without the evaluated account.'],
+        ['videoForecast', 'Video-held-out combined forecasts', '13 outcomes forecast from nine creator-excluded public axes.'],
+        ['accountForecast', 'Account-held-out combined forecasts', '13 account-transfer outcome forecasts.'],
+        ['legacy', 'Legacy diagnostics', 'Registered for traceability, visibly deprecated, and never substituted for a production score.'],
+    ].map(([key, label, description]) => ({
+        key,
+        label,
+        description,
+        count: columns.filter(column => column.family === key).length,
+    }));
+    const longQuantColumns = ['visual', 'together'].flatMap(group => LONG_QUANT_METRICS.map(metric => ({
+        id: `long.output.${group}.${metric.key}`,
+        family: 'longStored',
+        protocol: 'stored',
+        group,
+        key: `${group}.${metric.key}`,
+        target: metric.target,
+        label: `${group === 'together' ? 'Both' : 'Visual'} · ${metric.label}`,
+        unit: metric.unit,
+        status: 'canonical',
+        description: 'Current Long Quant score output. Historical rows can identify stored-production or derived-neighbor-axis origin separately.',
+    })));
+    return {
+        version: LEDGER_VERSION,
+        rules: [
+            'Every displayed scalar must resolve to one coordinate ID in this registry.',
+            'A relationship graph pairs one score-coordinate ID with one observed-outcome ID; it never creates a new score.',
+            'Stored production, held-out reconstruction, combined forecast, and observed truth are different families and may not substitute for one another.',
+            'Percentiles belong to their coordinate cell; they are not new estimates.',
+            'Re-scoring parity is defined by identical input fingerprint plus scorer, model, and artifact revisions.',
+        ],
+        columns,
+        families: familyMeta,
+        totals: {
+            shortsRowColumns: columns.length,
+            shortsCanonicalColumns: columns.filter(column => column.status === 'canonical').length,
+            shortsLegacyDiagnostics: legacy.length,
+            shortsStoredProduction: stored.length,
+            shortsDirectHeldout: direct.length,
+            shortsCombinedForecasts: forecasts.length,
+            shortsObservedOutcomes: observed.length,
+            longStoredOutputs: longQuantColumns.length,
+        },
+        curves: {
+            seconds: CURVE_SECONDS.slice(),
+            series: [
+                { id: 'shorts.curve.observed.raw', label: 'Raw observed YouTube retention', type: 'measured' },
+                { id: 'shorts.curve.observed.normalized', label: 'Observed retention normalized to its opening value', type: 'derived_observed' },
+                { id: 'shorts.curve.video-forecast', label: 'Video-held-out normalized retention forecast', type: 'forecast' },
+                { id: 'shorts.curve.video-baseline', label: 'Video-fold training mean', type: 'evaluation_reference' },
+                { id: 'shorts.curve.account-forecast', label: 'Account-held-out normalized retention forecast', type: 'forecast' },
+                { id: 'shorts.curve.account-baseline', label: 'Account-fold training mean', type: 'evaluation_reference' },
+            ],
+        },
+        longQuant: {
+            columns: longQuantColumns,
+            scalarOutputCount: longQuantColumns.length,
+            mapProjections: contract.crossDomainInventory.longQuant.mapProjections.slice(),
+            note: 'Map projections are alternate visualizations of registered data. They do not create additional per-video scores.',
+        },
+        shortsMapProjections: {
+            keys: contract.crossDomainInventory.shorts.mapProjections.slice(),
+            note: 'Map projections are alternate visualizations of registered data. They do not create additional per-video scores.',
+        },
+    };
+}
+
 function transformOutcome(value, definition) {
     if (!finite(value)) return null;
     if (definition && definition.transform === 'log10(views + 1)') return Math.log10(Math.max(0, Number(value)) + 1);
@@ -416,6 +636,103 @@ function blindFeatureValue(row, featureName, protocol) {
     if (index < 0) return null;
     const values = protocol === 'account' ? row.blindAccountHeldOut : row.blindVideoHeldOut;
     return values && finite(values[index]) ? Number(values[index]) : null;
+}
+
+function featureDisplayValue(row, definition, protocol) {
+    if (!row || !definition) return null;
+    if (protocol === 'stored') {
+        const index = contract.features.findIndex(feature => feature.key === definition.key);
+        const value = index >= 0 ? number(row.storedRaw[index]) : null;
+        return definition.unit === 'log10_views' && finite(value)
+            ? Math.max(0, 10 ** Number(value) - 1)
+            : value;
+    }
+    const value = blindFeatureValue(row, `${definition.key}.raw`, protocol);
+    if (!finite(value)) return null;
+    return ['views', 'realviews', 'outlier'].includes(definition.target)
+        ? Math.max(0, 10 ** Number(value) - 1)
+        : Number(value);
+}
+
+function readPath(value, path) {
+    return path.reduce((current, key) => current == null ? null : current[key], value);
+}
+
+function ledgerValue(row, column) {
+    if (column.family === 'observed') {
+        const definition = OUTCOME_DEFINITIONS.find(outcome => outcome.key === column.key);
+        return definition ? number(definition.accessor(row)) : null;
+    }
+    if (column.family === 'stored') {
+        return featureDisplayValue(row, contract.features.find(feature => feature.key === column.key), 'stored');
+    }
+    if (column.family === 'videoHeldout' || column.family === 'accountHeldout') {
+        const definition = contract.features.find(feature => feature.key === column.key);
+        return featureDisplayValue(row, definition, column.family === 'videoHeldout' ? 'video' : 'account');
+    }
+    if (column.family === 'videoForecast' || column.family === 'accountForecast') {
+        const protocol = column.family === 'videoForecast' ? 'video' : 'account';
+        return number(row.predictions && row.predictions.score21 && row.predictions.score21[protocol]
+            && row.predictions.score21[protocol][column.key]);
+    }
+    if (column.family === 'legacy') {
+        const definition = LEGACY_DIAGNOSTIC_COORDINATES.find(item => item.key === column.key);
+        return definition ? number(readPath(row, definition.path)) : null;
+    }
+    return null;
+}
+
+function ledgerPercentile(row, column) {
+    if (column.family !== 'stored') return null;
+    const index = contract.features.findIndex(feature => feature.key === column.key);
+    return index >= 0 ? number(row.storedPercentile[index]) : null;
+}
+
+function attachCoordinateLedger(rows, registry) {
+    for (const row of rows) {
+        const values = registry.columns.map(column => number(ledgerValue(row, column)));
+        const percentiles = registry.columns.map(column => number(ledgerPercentile(row, column)));
+        row.scoreLedger = {
+            version: registry.version,
+            values,
+            percentiles,
+            available: values.filter(finite).length,
+        };
+    }
+    const ids = registry.columns.map(column => column.id);
+    const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
+    const rowLengthMismatches = rows.filter(row => (
+        !row.scoreLedger
+        || row.scoreLedger.values.length !== registry.columns.length
+        || row.scoreLedger.percentiles.length !== registry.columns.length
+    )).map(row => row.id);
+    const storedParityMismatches = [];
+    const storedColumns = registry.columns.filter(column => column.family === 'stored');
+    for (const row of rows) {
+        for (const column of storedColumns) {
+            const ledgerIndex = registry.columns.findIndex(item => item.id === column.id);
+            const featureIndex = contract.features.findIndex(feature => feature.key === column.key);
+            const definition = contract.features[featureIndex];
+            const expected = definition && definition.unit === 'log10_views' && finite(row.storedRaw[featureIndex])
+                ? Math.max(0, 10 ** Number(row.storedRaw[featureIndex]) - 1)
+                : number(row.storedRaw[featureIndex]);
+            const actual = row.scoreLedger.values[ledgerIndex];
+            if (finite(expected) !== finite(actual)
+                || (finite(expected) && Math.abs(Number(expected) - Number(actual)) > Math.max(1e-4, Math.abs(Number(expected)) * 1e-5))) {
+                storedParityMismatches.push(`${row.id}:${column.key}`);
+            }
+        }
+    }
+    return {
+        passed: duplicateIds.length === 0 && rowLengthMismatches.length === 0 && storedParityMismatches.length === 0,
+        registryVersion: registry.version,
+        columns: registry.columns.length,
+        rows: rows.length,
+        duplicateIds,
+        rowLengthMismatches,
+        storedParityMismatches: storedParityMismatches.slice(0, 50),
+        relationshipRule: 'A plot is identified by scoreCoordinateId + observedOutcomeId. Its point value must be read from that exact ledger column.',
+    };
 }
 
 function actualForTarget(row, target) {
@@ -1236,6 +1553,8 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
 
     rows.sort((left, right) => (right.publishedAt || 0) - (left.publishedAt || 0) || left.id.localeCompare(right.id));
     const score21Model = attachScore21Forecasts(rows);
+    const coordinateRegistry = buildCoordinateRegistry();
+    const ledgerAudit = attachCoordinateLedger(rows, coordinateRegistry);
     const scopes = {
         pooled: buildScope(rows, 'pooled'),
         tyler: buildScope(rows, 'tyler'),
@@ -1261,6 +1580,8 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
         rows,
         scopes,
         score21Model,
+        coordinateRegistry,
+        ledgerAudit,
         outcomeDefinitions: OUTCOME_DEFINITIONS.map(definition => (
             Object.fromEntries(Object.entries(definition).filter(([key]) => key !== 'accessor'))
         )),
@@ -1272,9 +1593,12 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
             forwardTime: 'Training labels precede test labels, but the present-day representation remains fixed; this is a partial backtest.',
             outcomeMatrix: 'Every one of the 21 exact stored upload outputs is compared with every available observed outcome. Blind matrices expose the 18 direct Visual/Text/Both analogs; unavailable novelty rebuilds remain visibly unavailable.',
             retentionCurve: 'Observed YouTube retention is interpolated from its native percent-of-duration curve to exact seconds 0 through 20, then divided by that video\'s observed opening value. Forecasts use only nine public axes rebuilt after both validation creators were excluded.',
+            coordinateLedger: 'Every displayed scalar is resolved by canonical coordinate ID. A relationship graph is only a score-coordinate/outcome pairing and cannot mint a new score.',
         },
         leakageAudit: {
             passedForBlindInputs: blindFeatureRowsComplete && publicAxisLeakageChecksPassed,
+            coordinateLedgerPassed: ledgerAudit.passed,
+            coordinateLedgerVersion: coordinateRegistry.version,
             privateRowsExcludedFromPublicAxis: privateAxisTrainingIdOverlap === 0,
             savedRowsExcludedFromPublicAxis: savedAxisTrainingIdOverlap === 0,
             validationCreatorsExcludedFromPublicAxis: validationCreatorAxisTrainingIdOverlap === 0,
@@ -1310,4 +1634,5 @@ module.exports = {
     regressionMetrics,
     binaryMetrics,
     featureCell,
+    buildCoordinateRegistry,
 };

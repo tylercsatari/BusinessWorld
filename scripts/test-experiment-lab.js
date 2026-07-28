@@ -315,6 +315,23 @@ async function main() {
         await page.locator(`[data-savedchannelresume="${channelId}"]`).click();
         const resumePath = `/api/raw/saved-channel/${channelId}/resume`;
         await page.waitForFunction(pathname => window.__fetchCounts[pathname] === 1, resumePath);
+        await page.getByText('Score ledger', { exact: true }).click();
+        await page.getByText('Canonical score ledger', { exact: true }).waitFor();
+        assert.strictEqual(await page.getByText('LEDGER PARITY AUDIT PASSED', { exact: true }).count(), 1);
+        assert.strictEqual(await page.locator('[data-savedledgercolumn]').count(), 21, 'the default ledger family must be the exact 21 stored score-card coordinates');
+        assert.strictEqual(await page.locator('[data-savedledgercolumn="shorts.stored.text.keep"]').count(), 1);
+        await page.locator('[data-savedledgerfamily="all"]').click();
+        assert.strictEqual(await page.locator('[data-savedledgercolumn]').count(), 103, 'the full ledger must expose every registered observed, stored, held-out, forecast, and legacy scalar');
+        assert((await page.locator('[data-savedledger]').innerText()).includes('Long Quant outputs'), 'the registry summary must include the 12 Long Quant outputs');
+        const ledgerDownloadPromise = page.waitForEvent('download');
+        await page.locator('[data-savedledgerexport]').click();
+        const ledgerDownload = await ledgerDownloadPromise;
+        assert.strictEqual(ledgerDownload.suggestedFilename(), `${channelId}-canonical-score-ledger.csv`);
+        if (process.env.EXPERIMENT_LAB_LEDGER_SCREENSHOT) {
+            fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_LEDGER_SCREENSHOT), { recursive: true });
+            await page.locator('[data-savedledger]').screenshot({ path: process.env.EXPERIMENT_LAB_LEDGER_SCREENSHOT });
+        }
+        await page.locator('[data-savedledgerfamily="stored"]').click();
         await page.getByText('Prediction analysis', { exact: true }).click();
         try {
             await page.getByText('Execution risk · can an embedding score justify making the video?', { exact: true }).waitFor();
@@ -355,6 +372,26 @@ async function main() {
         assert.strictEqual(await page.locator('[data-savedvalidationtarget]').count(), 13, 'all observed outcomes and curve checkpoints must be selectable');
         assert.strictEqual(await page.locator('[data-savedvalidationfeature]').count(), 21, 'the matrix must preserve all 21 upload scores');
         assert((await page.locator('circle[data-savedvalidationrow]').count()) >= videos.length, 'selected relationship plot must expose every matched video');
+        await page.locator('[data-savedvalidationprotocol="stored"]').click();
+        await page.locator('[data-savedvalidationtarget="keep"]').click();
+        await page.locator('[data-savedvalidationfeature="text.ret5"]').click();
+        await page.getByText('text.ret5 → Stayed to watch', { exact: true }).waitFor();
+        const crossTargetPoint = page.locator('circle[data-savedvalidationrow="vid00000002"]').first();
+        const crossTargetTooltip = await crossTargetPoint.locator('title').textContent();
+        assert(crossTargetTooltip.includes('text.ret5:'), 'cross-target hover must name the plotted score coordinate');
+        assert(crossTargetTooltip.includes('Actual Stayed to watch:'), 'cross-target hover must name the independent outcome');
+        assert(crossTargetTooltip.includes('Y coordinate ID: shorts.stored.text.ret5'));
+        assert(crossTargetTooltip.includes('X outcome ID: shorts.observed.keep'));
+        await crossTargetPoint.click();
+        const crossTargetContext = page.locator('[data-savedvalidationcontext]');
+        await crossTargetContext.waitFor();
+        assert.strictEqual(await crossTargetContext.getAttribute('data-coordinate-id'), 'shorts.stored.text.ret5');
+        assert.strictEqual(await crossTargetContext.getAttribute('data-coordinate-target'), 'ret5');
+        assert.strictEqual(await crossTargetContext.getAttribute('data-outcome-id'), 'shorts.observed.keep');
+        assert.strictEqual(await crossTargetContext.getAttribute('data-plotted-raw'), String(videos[1].features['text.ret5'][0]));
+        assert.strictEqual(await crossTargetContext.getAttribute('data-stored-reference-raw'), String(videos[1].features['text.ret5'][0]));
+        assert((await crossTargetContext.innerText()).toLowerCase().includes('5s retention'), 'the plotted percentage must be labeled as 5-second retention rather than keep rate');
+        await page.locator('[data-savedvalidationprotocol="video"]').click();
         await page.locator('[data-savedvalidationtarget="views"]').click();
         await page.locator('[data-savedvalidationfeature="together.views"]').click();
         await page.getByText('together.views → Current lifetime views', { exact: true }).waitFor();

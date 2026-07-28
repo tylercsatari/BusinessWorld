@@ -5,7 +5,7 @@ const assert = require('assert');
 const validation = require('../buildings/jarvis/saved-channel-validation');
 
 assert.strictEqual(validation.contract.features.length, 21);
-assert.strictEqual(validation.contract.version, 2);
+assert.strictEqual(validation.contract.version, 3);
 assert.strictEqual(validation.contract.pipeline.embeddingModel, 'gemini-embedding-2');
 assert.strictEqual(
     validation.contract.features.find(feature => feature.key === 'novelty.views').unit,
@@ -187,6 +187,16 @@ assert.deepStrictEqual(result.score21Model.inputs.excludedStoredNovelty, [
     'novelty.ret5',
     'novelty.views',
 ]);
+assert.strictEqual(result.coordinateRegistry.version, 1);
+assert.strictEqual(result.coordinateRegistry.totals.shortsStoredProduction, 21);
+assert.strictEqual(result.coordinateRegistry.totals.shortsDirectHeldout, 36);
+assert.strictEqual(result.coordinateRegistry.totals.shortsCombinedForecasts, 26);
+assert.strictEqual(result.coordinateRegistry.totals.shortsObservedOutcomes, 13);
+assert.strictEqual(result.coordinateRegistry.totals.shortsLegacyDiagnostics, 7);
+assert.strictEqual(result.coordinateRegistry.totals.shortsRowColumns, 103);
+assert.strictEqual(result.coordinateRegistry.totals.longStoredOutputs, 12);
+assert.strictEqual(new Set(result.coordinateRegistry.columns.map(column => column.id)).size, 103);
+assert(result.ledgerAudit.passed, JSON.stringify(result.ledgerAudit));
 assert.strictEqual(result.outcomeDefinitions.some(outcome => outcome.key === 'drop20'), true);
 assert.strictEqual(result.scopes.pooled.outcomeMatrix.stored.keep.features.length, 21);
 assert.strictEqual(result.scopes.pooled.outcomeMatrix.video.views.features.length, 21);
@@ -201,6 +211,18 @@ assert.strictEqual(
 
 const firstRow = result.rows.find(row => row.id === 'tyler-0');
 assert(firstRow);
+assert.strictEqual(firstRow.scoreLedger.values.length, result.coordinateRegistry.columns.length);
+assert.strictEqual(firstRow.scoreLedger.percentiles.length, result.coordinateRegistry.columns.length);
+const storedTextKeepIndex = result.coordinateRegistry.columns.findIndex(column => column.id === 'shorts.stored.text.keep');
+assert.strictEqual(firstRow.scoreLedger.values[storedTextKeepIndex], firstRow.storedRaw[6]);
+assert.strictEqual(firstRow.scoreLedger.percentiles[storedTextKeepIndex], firstRow.storedPercentile[6]);
+const videoRet5Index = result.coordinateRegistry.columns.findIndex(column => column.id === 'shorts.video-heldout.text.ret5');
+assert.strictEqual(
+    firstRow.scoreLedger.values[videoRet5Index],
+    firstRow.blindVideoHeldOut[firstRow.blindFeatureNames.indexOf('text.ret5.raw')],
+);
+const observedKeepIndex = result.coordinateRegistry.columns.findIndex(column => column.id === 'shorts.observed.keep');
+assert.strictEqual(firstRow.scoreLedger.values[observedKeepIndex], firstRow.actual.keep);
 assert.strictEqual(firstRow.actual.retentionCurve.seconds.length, 21);
 assert.strictEqual(firstRow.actual.retentionCurve.observed[0], 118);
 assert.strictEqual(firstRow.actual.retentionCurve.normalized[0], 100);

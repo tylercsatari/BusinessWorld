@@ -11,7 +11,7 @@ to — consistent across all three channels/projections).
 
 Identical montage/whisper/embed to raw_embed.py so the upload's vectors are comparable.
 """
-import os, sys, json, base64, subprocess, tempfile, shutil, io, time, re, hashlib
+import os, sys, json, base64, subprocess, tempfile, shutil, io, time, re, hashlib, unicodedata
 import numpy as np, boto3, urllib.request, urllib.error
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -26,7 +26,20 @@ KEY = env('GEMINI_API_KEY'); BUCKET = env('R2_BUCKET_NAME') or 'business-world-v
 s3 = boto3.client('s3', endpoint_url=f"https://{env('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com",
                   aws_access_key_id=env('R2_ACCESS_KEY_ID'), aws_secret_access_key=env('R2_SECRET_ACCESS_KEY'), region_name='auto')
 DIM = 1536
-EMB_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent'
+EMBEDDING_MODEL = 'gemini-embedding-2'
+TRANSCRIPTION_MODEL = 'gemini-flash-latest'
+EMB_URL = f'https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL}:embedContent'
+SCORE_CACHE_VERSION = 1
+SCORE_CACHE_PREFIX = (env('RAW_SCORE_CACHE_PREFIX') or 'raw/score-cache/v1').strip('/')
+SCORE_REVISION_KEYS = (
+    'raw/steer_models.npz',
+    'raw/indicators/weights.npz',
+    'raw/indicators/registry.json',
+    'raw/novelty_models.npz',
+    'raw/visual/embeddings.npz',
+    'raw/text/embeddings.npz',
+    'raw/together/embeddings.npz',
+)
 
 ENGWORDS = set()
 try:
@@ -44,6 +57,206 @@ def coherent(txt):
 def r2_get(key):
     try: return s3.get_object(Bucket=BUCKET, Key=key)['Body'].read()
     except Exception: return None
+
+def _canonical_json(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
+
+def normalize_transcript(value):
+    """Canonicalize only representation, not meaning, before both hashing and embedding."""
+    return re.sub(r'\s+', ' ', unicodedata.normalize('NFKC', str(value or ''))).strip()
+
+def _duration_milliseconds(value):
+    try:
+        number = float(value)
+        return int(round(number * 1000)) if np.isfinite(number) and number > 0 else None
+    except Exception:
+        return None
+
+def _score_input_state(montage_b64, transcript, transcript_used, duration_s):
+    montage_bytes = base64.b64decode(montage_b64)
+    used = bool(transcript_used and transcript)
+    return {
+        'schema': 'shorts-score-input-v1',
+        'montage_sha256': hashlib.sha256(montage_bytes).hexdigest(),
+        'transcript': normalize_transcript(transcript),
+        'duration_ms': _duration_milliseconds(duration_s),
+        'channels': {
+            'visual': '5-frame-montage',
+            'text': 'normalized-transcript' if used else 'absent',
+            'together': '5-frame-montage+normalized-transcript' if used else '5-frame-montage',
+        },
+    }
+
+def _score_input_fingerprint(montage_b64, transcript, transcript_used, duration_s):
+    state = _score_input_state(montage_b64, transcript, transcript_used, duration_s)
+    return hashlib.sha256(_canonical_json(state)).hexdigest(), state
+
+def _r2_error_code(error):
+    try:
+        return str((error.response or {}).get('Error', {}).get('Code') or '')
+    except Exception:
+        return 'NoSuchKey' if isinstance(error, KeyError) else ''
+
+def _object_revision(key):
+    try:
+        head = s3.head_object(Bucket=BUCKET, Key=key)
+        return {
+            'state': 'present',
+            'etag': str(head.get('ETag') or '').strip('"'),
+            'version_id': str(head.get('VersionId') or ''),
+            'size': int(head.get('ContentLength') or 0),
+        }
+    except Exception as error:
+        if _r2_error_code(error) in ('404', 'NoSuchKey', 'NotFound'):
+            return {'state': 'missing'}
+        return {'state': 'unavailable', 'error': f'{type(error).__name__}: {str(error)[:160]}'}
+
+def _score_code_sha256():
+    try:
+        return hashlib.sha256(open(__file__, 'rb').read()).hexdigest()
+    except Exception:
+        return None
+
+def _score_revisions():
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=len(SCORE_REVISION_KEYS)) as executor:
+        artifact_rows = list(executor.map(_object_revision, SCORE_REVISION_KEYS))
+    return {
+        'schema': 'shorts-score-revisions-v1',
+        'scorer': {
+            'name': 'raw_upload.py',
+            'sha256': _score_code_sha256(),
+        },
+        'models': {
+            'embedding': {
+                'name': EMBEDDING_MODEL,
+                'dimensions': DIM,
+                'endpoint': EMB_URL,
+            },
+            'transcription': {
+                'name': TRANSCRIPTION_MODEL,
+                'decoding': 'temperature=0,topP=1,topK=1',
+            },
+        },
+        'runtime': {
+            'python': f'{sys.version_info.major}.{sys.version_info.minor}',
+            'numpy': np.__version__,
+        },
+        'artifacts': dict(zip(SCORE_REVISION_KEYS, artifact_rows)),
+    }
+
+def _revision_fingerprint(revisions):
+    return hashlib.sha256(_canonical_json(revisions)).hexdigest()
+
+def _score_cache_key(input_fingerprint, revision_fingerprint):
+    digest = hashlib.sha256(_canonical_json({
+        'version': SCORE_CACHE_VERSION,
+        'input': input_fingerprint,
+        'revisions': revision_fingerprint,
+    })).hexdigest()
+    return f'{SCORE_CACHE_PREFIX}/{digest}.json'
+
+def _score_output_fingerprint(score):
+    return hashlib.sha256(_canonical_json(score)).hexdigest()
+
+def _score_cache_read(key, input_fingerprint, revision_fingerprint):
+    try:
+        raw = s3.get_object(Bucket=BUCKET, Key=key)['Body'].read()
+        payload = json.loads(raw)
+        score = payload.get('score')
+        output_fingerprint = payload.get('output_fingerprint')
+        valid = (
+            payload.get('schema') == 'shorts-score-replay-v1'
+            and int(payload.get('version') or 0) == SCORE_CACHE_VERSION
+            and payload.get('input_fingerprint') == input_fingerprint
+            and payload.get('revision_fingerprint') == revision_fingerprint
+            and isinstance(score, dict)
+            and all(isinstance(score.get(field), dict) for field in ('indicators', 'steer', 'emb_preview', 'channels'))
+            and output_fingerprint == _score_output_fingerprint(score)
+        )
+        if not valid:
+            return None, 'invalid', 'cached score failed schema or integrity validation'
+        return score, 'hit', None
+    except Exception as error:
+        if _r2_error_code(error) in ('404', 'NoSuchKey', 'NotFound'):
+            return None, 'miss', None
+        return None, 'read_error', f'{type(error).__name__}: {str(error)[:160]}'
+
+def _score_cache_write(key, input_fingerprint, revision_fingerprint, revisions, score):
+    output_fingerprint = _score_output_fingerprint(score)
+    payload = {
+        'schema': 'shorts-score-replay-v1',
+        'version': SCORE_CACHE_VERSION,
+        'created_at_ms': int(time.time() * 1000),
+        'input_fingerprint': input_fingerprint,
+        'revision_fingerprint': revision_fingerprint,
+        'output_fingerprint': output_fingerprint,
+        'revisions': revisions,
+        'score': score,
+    }
+    try:
+        s3.put_object(
+            Bucket=BUCKET,
+            Key=key,
+            Body=_canonical_json(payload),
+            ContentType='application/json',
+            CacheControl='no-store',
+        )
+        return 'stored', None, output_fingerprint
+    except Exception as error:
+        return 'write_error', f'{type(error).__name__}: {str(error)[:160]}', output_fingerprint
+
+def _score_replay_prepare(montage_b64, transcript, transcript_used, duration_s, revisions=None):
+    input_fingerprint, input_state = _score_input_fingerprint(
+        montage_b64, transcript, transcript_used, duration_s)
+    revisions = revisions or _score_revisions()
+    revision_fingerprint = _revision_fingerprint(revisions)
+    unavailable = [
+        key for key, value in (revisions.get('artifacts') or {}).items()
+        if value.get('state') == 'unavailable'
+    ]
+    cache_key = _score_cache_key(input_fingerprint, revision_fingerprint)
+    disabled = str(env('RAW_SCORE_CACHE_DISABLED') or '').lower() in ('1', 'true', 'yes')
+    meta = {
+        'cache_version': SCORE_CACHE_VERSION,
+        'cache_key': cache_key,
+        'cache_status': 'disabled' if disabled else 'disabled_revision_unavailable' if unavailable else 'miss',
+        'cache_write_status': 'not_attempted',
+        'input_fingerprint': input_fingerprint,
+        'revision_fingerprint': revision_fingerprint,
+        'output_fingerprint': None,
+        'scorer_revisions': revisions,
+        'input_state': input_state,
+    }
+    if disabled or unavailable:
+        if unavailable:
+            meta['cache_error'] = 'revision lookup unavailable for: ' + ', '.join(unavailable)
+        return {'score': None, 'meta': meta}
+    score, status, error = _score_cache_read(cache_key, input_fingerprint, revision_fingerprint)
+    meta['cache_status'] = status
+    if error:
+        meta['cache_error'] = error
+    if score is not None:
+        meta['output_fingerprint'] = _score_output_fingerprint(score)
+    return {'score': score, 'meta': meta}
+
+def _score_replay_store(replay, score):
+    meta = replay['meta']
+    if meta.get('cache_status') in ('disabled', 'disabled_revision_unavailable'):
+        meta['output_fingerprint'] = _score_output_fingerprint(score)
+        return meta
+    status, error, output_fingerprint = _score_cache_write(
+        meta['cache_key'],
+        meta['input_fingerprint'],
+        meta['revision_fingerprint'],
+        meta['scorer_revisions'],
+        score,
+    )
+    meta['cache_write_status'] = status
+    meta['output_fingerprint'] = output_fingerprint
+    if error:
+        meta['cache_error'] = '; '.join(filter(None, (meta.get('cache_error'), error)))
+    return meta
 
 def embed(parts, tries=3):
     # bounded so 3 sequential embeds can't blow past the server's 240s kill (was 5×60s=300s PER call,
@@ -86,7 +299,7 @@ def gemini_transcribe(wav):
     if not KEY:
         raise RuntimeError('GEMINI_API_KEY is not configured for transcription')
     data = base64.b64encode(open(wav, 'rb').read()).decode()
-    url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent'
+    url = f'https://generativelanguage.googleapis.com/v1beta/models/{TRANSCRIPTION_MODEL}:generateContent'
     body = json.dumps({'contents': [{'parts': [
         {'inlineData': {'mimeType': 'audio/wav', 'data': data}},
         {'text': 'Transcribe ONLY the spoken words in this short audio, verbatim. If there is no speech (music or ambient noise only), reply with exactly: NO_SPEECH'}]}],
@@ -431,6 +644,72 @@ def neighbors(c, vec, k=12):
     r = _NBR[c]
     return r if r is None else r[:k]
 
+def _score_input_manifest(txt, good, dur_s, score, replay_meta):
+    input_manifest = {
+        'domain': 'shorts_raw',
+        'scorer': 'raw_upload.py',
+        'embedding_model': EMBEDDING_MODEL,
+        'embedding_dimensions': DIM,
+        'display_contract_version': 3,
+        'canonical_output_contract': {
+            'total': 21,
+            'steer_coordinates': 18,
+            'novelty_coordinates': 3,
+            'novelty_derivation': 'cached indicator state + revision-pinned indicator registry',
+        },
+        'steer_artifact_sha256': score.get('steer_artifact_sha256'),
+        'source_window': 'first 5 seconds',
+        'display_preference': ['together', 'text', 'visual'],
+        'transcript_used': bool(good),
+        'duration_s': round(float(dur_s), 3) if dur_s else None,
+        'cache_version': replay_meta.get('cache_version'),
+        'cache_key': replay_meta.get('cache_key'),
+        'cache_status': replay_meta.get('cache_status'),
+        'cache_write_status': replay_meta.get('cache_write_status'),
+        'input_fingerprint': replay_meta.get('input_fingerprint'),
+        'revision_fingerprint': replay_meta.get('revision_fingerprint'),
+        'output_fingerprint': replay_meta.get('output_fingerprint'),
+        'scorer_revisions': replay_meta.get('scorer_revisions'),
+        'channels': {
+            'visual': {
+                'present': True,
+                'input': '5-frame montage only',
+                'image': 'five frames sampled from the first 5 seconds and stitched left to right',
+                'text': '',
+            },
+            'text': {
+                'present': bool(good),
+                'input': 'first-5-second normalized transcript only',
+                'image': '',
+                'text': txt if good else '',
+            },
+            'together': {
+                'present': True,
+                'input': '5-frame montage plus first-5-second normalized transcript' if good else '5-frame montage only because no coherent voiceover was detected',
+                'image': 'five frames sampled from the first 5 seconds and stitched left to right',
+                'text': txt if good else '',
+            },
+        },
+    }
+    if replay_meta.get('cache_error'):
+        input_manifest['cache_error'] = replay_meta['cache_error']
+    return input_manifest
+
+def _score_output(extra, title, b64, txt, good, dur_s, score, replay_meta):
+    return {
+        **extra,
+        'montage': b64,
+        'transcript': txt,
+        'silent': (not good),
+        'dur_s': dur_s,
+        'title': title,
+        'indicators': score.get('indicators') or {},
+        'steer': score.get('steer') or {},
+        'emb_preview': score.get('emb_preview') or {},
+        'input_manifest': _score_input_manifest(txt, good, dur_s, score, replay_meta),
+        'channels': score.get('channels') or {},
+    }
+
 def _run():
     args = {}
     a = sys.argv[1:]
@@ -498,6 +777,15 @@ def _run():
                                    capture_output=True, text=True, timeout=20)
                 dur_s = float(r.stdout.strip()) if r.stdout.strip() else None
             except Exception: dur_s = None
+    txt = normalize_transcript(txt)
+    good = bool(good and txt)
+    replay = _score_replay_prepare(b64, txt, good, dur_s)
+    if replay.get('score') is not None:
+        print(json.dumps(_score_output(
+            extra, args.get('title', 'My hook'), b64, txt, good, dur_s,
+            replay['score'], replay['meta'])))
+        return
+
     ev = embed([img_part(b64)])
     et = embed([{'text': txt}]) if good else None
     eg = embed([img_part(b64)] + ([{'text': txt}] if good else []))
@@ -588,56 +876,21 @@ def _run():
         if e is None: return None
         a = np.asarray(e, float)
         return [round(float(x), 3) for x in (a[:1536].reshape(48, 32).mean(1) if len(a) >= 1536 else a)]
-    input_manifest = {
-        'domain': 'shorts_raw',
-        'scorer': 'raw_upload.py',
-        'embedding_model': 'gemini-embedding-2',
-        'embedding_dimensions': DIM,
-        'display_contract_version': 2,
-        'steer_artifact_sha256': steer_artifact_sha256,
-        'source_window': 'first 5 seconds',
-        'display_preference': ['together', 'text', 'visual'],
-        'transcript_used': bool(good),
-        'duration_s': round(float(dur_s), 3) if dur_s else None,
-        'channels': {
-            'visual': {
-                'present': ev is not None,
-                'input': '5-frame montage only',
-                'image': 'five frames sampled from the first 5 seconds and stitched left to right',
-                'text': '',
-            },
-            'text': {
-                'present': bool(good and et is not None),
-                'input': 'first-5-second transcript only',
-                'image': '',
-                'text': txt if good else '',
-            },
-            'together': {
-                'present': eg is not None,
-                'input': '5-frame montage plus first-5-second transcript' if good else '5-frame montage only because no coherent voiceover was detected',
-                'image': 'five frames sampled from the first 5 seconds and stitched left to right',
-                'text': txt if good else '',
-            },
-        },
-    }
-    out = {
-        **extra,
-        'montage': b64,
-        'transcript': txt,                                 # kept even when low-confidence so the UI can show the guess for correction
-        'silent': (not good),
-        'dur_s': dur_s,
-        'title': args.get('title', 'My hook'),
+    score = {
         'indicators': indicators,
         'steer': steer,
         'emb_preview': {'visual': preview(ev), 'text': preview(et), 'together': preview(eg)},
-        'input_manifest': input_manifest,
+        'steer_artifact_sha256': steer_artifact_sha256,
         'channels': {
             'visual': {'neighbors': neighbors('visual', ev)} if ev is not None else None,
             'text': ({'neighbors': neighbors('text', et)} if (good and et is not None) else None),
             'together': {'neighbors': neighbors('together', eg)} if eg is not None else None,
         },
     }
-    print(json.dumps(out))
+    replay_meta = _score_replay_store(replay, score)
+    print(json.dumps(_score_output(
+        extra, args.get('title', 'My hook'), b64, txt, good, dur_s,
+        score, replay_meta)))
 
 def main():
     if '--prewarm' in sys.argv:   # server boot: fill the neighbour caches before anyone uploads

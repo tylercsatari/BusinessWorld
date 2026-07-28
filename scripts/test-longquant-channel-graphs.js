@@ -5,6 +5,7 @@ const path = require('path');
 const vm = require('vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'buildings', 'jarvis', 'jarvis-longquant.js'), 'utf8');
+const sharedContract = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'buildings', 'jarvis', 'saved-channel-feature-contract.json'), 'utf8'));
 const normalizeStart = source.indexOf('const LQ_REL_FLOOR');
 const normalizeEnd = source.indexOf('function lqxInputManifest', normalizeStart);
 if (normalizeStart < 0 || normalizeEnd < 0) throw new Error('Long Quant score normalization source not found');
@@ -124,6 +125,12 @@ const togetherBindings = (html.match(/data-lqxrawchan="together"/g) || []).lengt
 const visualSummary = (summary.match(/title="visual embedding:/g) || []).length;
 const togetherSummary = (summary.match(/title="together embedding:/g) || []).length;
 assert(context.graphApi.LQ_COMPARE_METRICS.length === 6, 'expected six metrics per channel');
+assert(
+    JSON.stringify(Array.from(context.graphApi.LQ_COMPARE_METRICS, row => row[0]))
+        === JSON.stringify(sharedContract.crossDomainInventory.longQuant.metrics.map(metricDefinition => metricDefinition.key)),
+    'Long Quant UI metrics drifted from the canonical cross-domain score registry',
+);
+assert(source.includes("attr('data-coordinate-id', `long.output.${ch}.${metric}`)"), 'Long Quant outputs do not expose their canonical coordinate IDs');
 assert(context.graphApi.lqxStoredOutputCount(score) < 12 && !context.graphApi.lqxHasTwelveOutputs(score), 'partial stored score was mistaken for 12/12');
 const completeScore = { channels: { visual: channel(true), together: channel(true) } };
 assert(context.graphApi.lqxStoredOutputCount(completeScore) === 12 && context.graphApi.lqxHasTwelveOutputs(completeScore), 'complete stored score was not recognized');
