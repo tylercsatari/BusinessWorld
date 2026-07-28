@@ -5,6 +5,8 @@ const assert = require('assert');
 const validation = require('../buildings/jarvis/saved-channel-validation');
 
 assert.strictEqual(validation.contract.features.length, 21);
+assert.strictEqual(validation.contract.version, 2);
+assert.strictEqual(validation.contract.pipeline.embeddingModel, 'gemini-embedding-2');
 assert.strictEqual(
     validation.contract.features.find(feature => feature.key === 'novelty.views').unit,
     'log10_views',
@@ -55,7 +57,7 @@ function savedFeatures(index) {
 }
 
 const channels = validation.SUPPORTED_CHANNELS.map((definition, channelIndex) => {
-    const videos = Array.from({ length: 4 }, (_, index) => {
+    const videos = Array.from({ length: 24 }, (_, index) => {
         const id = `${definition.accountId}-${index}`;
         return {
             id,
@@ -79,6 +81,9 @@ const channels = validation.SUPPORTED_CHANNELS.map((definition, channelIndex) =>
                 avg_retention: 82 - index,
                 views: video.views * .8,
                 duration_s: 24 + index,
+                curve: Array.from({ length: 101 }, (_, curveIndex) => (
+                    1.18 - curveIndex * (0.0045 + index * 0.00002) + channelIndex * 0.01
+                )),
                 published: video.published,
             })),
         },
@@ -147,11 +152,11 @@ const result = validation.buildValidation({
     sourceFingerprint: 'fixture',
 });
 
-assert.strictEqual(result.rows.length, 8);
-assert.strictEqual(result.scopes.pooled.n, 8);
-assert.strictEqual(result.scopes.tyler.n, 4);
-assert.strictEqual(result.scopes.hafu.n, 4);
-assert.strictEqual(result.joinSummary.reduce((sum, row) => sum + row.matchedRows, 0), 8);
+assert.strictEqual(result.rows.length, 48);
+assert.strictEqual(result.scopes.pooled.n, 48);
+assert.strictEqual(result.scopes.tyler.n, 24);
+assert.strictEqual(result.scopes.hafu.n, 24);
+assert.strictEqual(result.joinSummary.reduce((sum, row) => sum + row.matchedRows, 0), 48);
 assert(result.leakageAudit.passedForBlindInputs, 'all blind arrays should align to the immutable 45-feature contract');
 assert.strictEqual(result.leakageAudit.privateRowsExcludedFromPublicAxis, true);
 assert.strictEqual(result.leakageAudit.savedRowsExcludedFromPublicAxis, true);
@@ -174,9 +179,40 @@ assert.strictEqual(result.rows[0].blindFeatureNames.length, 45);
 assert.strictEqual(result.scopes.pooled.storedIndicators.length, 21);
 assert.strictEqual(result.scopes.pooled.blindVideoIndicators.length, 36);
 assert.strictEqual(result.scopes.pooled.blindAccountIndicators.length, 36);
+assert.strictEqual(result.score21Model.inputs.count, 9);
+assert.strictEqual(result.score21Model.inputs.directScoresAvailableForAssociation, 18);
+assert.strictEqual(result.score21Model.inputs.excludedPrivateLabelAlignedScores.length, 9);
+assert.deepStrictEqual(result.score21Model.inputs.excludedStoredNovelty, [
+    'novelty.keep',
+    'novelty.ret5',
+    'novelty.views',
+]);
+assert.strictEqual(result.outcomeDefinitions.some(outcome => outcome.key === 'drop20'), true);
+assert.strictEqual(result.scopes.pooled.outcomeMatrix.stored.keep.features.length, 21);
+assert.strictEqual(result.scopes.pooled.outcomeMatrix.video.views.features.length, 21);
+assert.strictEqual(
+    result.scopes.pooled.outcomeMatrix.video.keep.features.find(feature => feature.key === 'novelty.keep').available,
+    false,
+);
+assert.strictEqual(
+    result.scopes.pooled.outcomeMatrix.stored.keep.features.find(feature => feature.key === 'novelty.keep').available,
+    true,
+);
 
 const firstRow = result.rows.find(row => row.id === 'tyler-0');
 assert(firstRow);
+assert.strictEqual(firstRow.actual.retentionCurve.seconds.length, 21);
+assert.strictEqual(firstRow.actual.retentionCurve.observed[0], 118);
+assert.strictEqual(firstRow.actual.retentionCurve.normalized[0], 100);
+assert.strictEqual(firstRow.actual.swipe, 50);
+assert.strictEqual(firstRow.predictions.score21.video.retentionCurve.length, 21);
+assert.strictEqual(firstRow.predictions.score21.account.retentionCurve.length, 21);
+assert(Number.isFinite(firstRow.predictions.score21.video.drop20));
+assert.strictEqual(result.scopes.pooled.retentionForecasts.video.bySecond.length, 21);
+assert(result.scopes.pooled.retentionForecasts.video.curves > 0);
+assert(Number.isFinite(result.scopes.pooled.score21Forecasts.video.keep.mae));
+assert(Number.isFinite(result.scopes.pooled.score21Forecasts.video.drop20.mae));
+assert(Number.isFinite(result.scopes.pooled.outcomeMatrix.video.hit10M.features.find(feature => feature.available).metrics.withinAccountAuc));
 assert(Math.abs(firstRow.predictions.viewsPublicAxis.visual - 999999) < 1, 'log10 public-axis values must convert back to ordinary views');
 assert(Math.abs(firstRow.predictions.viewsPublicAxisEnsemble - 999999) < 1);
 const incompleteViewsRow = result.rows.find(row => row.id === 'hafu-0');
@@ -195,5 +231,7 @@ console.log(JSON.stringify({
     joined: result.rows.length,
     storedIndicators: result.scopes.pooled.storedIndicators.length,
     blindIndicators: result.scopes.pooled.blindVideoIndicators.length,
+    matrixOutcomes: Object.keys(result.scopes.pooled.outcomeMatrix.video).length,
+    curveForecasts: result.scopes.pooled.retentionForecasts.video.curves,
     strictViews: firstRow.predictions.viewsPublicAxisEnsemble,
 }));

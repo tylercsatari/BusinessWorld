@@ -151,6 +151,7 @@ async function main() {
             avg_retention: 82 - index / 3,
             views: Math.round(video.views * .92),
             duration_s: 28 + index / 2,
+            curve: Array.from({ length: 101 }, (_, curveIndex) => 1.2 - curveIndex * (0.004 + index * 0.00003)),
             published: `2025${String((index % 12) + 1).padStart(2, '0')}${String((index % 27) + 1).padStart(2, '0')}`,
         }));
         const keepPoints = videos.map((video, index) => ({ id: video.id, actual: 57 + index, predicted: 58 + index * .9 }));
@@ -224,7 +225,15 @@ async function main() {
                 steer: Object.fromEntries(featureContract.features.filter(feature => feature.source === 'steer').map(feature => [feature.sourceKey, { est: video.features[feature.key][0], pctile: video.features[feature.key][1] }])),
                 emb_preview: { visual: [0.1, 0.2], text: [0.2, 0.3], together: [0.3, 0.4] },
                 channels: { visual: { neighbors: [] }, text: { neighbors: [] }, together: { neighbors: [] } },
-                input_manifest: { domain: 'shorts_raw', source_window: 'first 5 seconds', display_preference: ['together', 'text', 'visual'] },
+                input_manifest: {
+                    domain: 'shorts_raw',
+                    scorer: 'raw_upload.py',
+                    embedding_model: 'gemini-embedding-2',
+                    embedding_dimensions: 1536,
+                    steer_artifact_sha256: '0123456789abcdef',
+                    source_window: 'first 5 seconds',
+                    display_preference: ['together', 'text', 'visual'],
+                },
             };
         });
         await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><base href="${ORIGIN}/"><link rel="stylesheet" href="/buildings/experimentlab/experimentlab.css"><style>html,body,#root{margin:0;width:100%;height:100%;overflow:hidden;background:#080d14}</style></head><body><main id="root"></main>
@@ -282,6 +291,11 @@ async function main() {
             return image && image.complete && image.naturalWidth > 0;
         });
         assert(await page.locator('#rtg-exppanel').evaluate(panel => panel.textContent.includes('graphs — every channel')), 'stored score must open the complete graph read-out');
+        await page.getByText('Exactly what the 21 graphs mean', { exact: true }).waitFor();
+        const lineageText = await page.locator('#rtg-exppanel').innerText();
+        assert(lineageText.includes("Tyler Csatari private Shorts with observed stayed-to-watch labels"), 'score detail must expose the keep-axis fitting population');
+        assert(lineageText.includes('Public Shorts embedding corpus'), 'score detail must expose the public-axis fitting population');
+        assert(lineageText.includes('artifact 0123456789ab'), 'score detail must expose the exact persisted steer artifact');
         const parityAfterStoredOpen = await page.evaluate(() => window.BusinessWorldEmbeddingParityAudit(document));
         assert(parityAfterStoredOpen.ok, `stored card/detail parity failed: ${JSON.stringify(parityAfterStoredOpen.conflicts)}`);
         const selectedTextKeepValues = await page.locator(`[data-embedding-asset="${channelId}:vid00000002"][data-embedding-id="shorts_raw:stored-production:text_keep"]`).evaluateAll(nodes => nodes.map(node => ({
@@ -334,55 +348,36 @@ async function main() {
         await page.getByText('Tyler + Hafu blind validation', { exact: true }).waitFor();
         assert.strictEqual(await page.getByText('BLIND INPUT ARRAY AUDIT PASSED', { exact: true }).count(), 1);
         assert((await page.getByText(/1 validation creator · 20 additional creator-resolved videos excluded · 0 creator overlap/).count()) === 1, 'the UI must expose the whole-creator leakage audit');
-        assert.strictEqual(await page.getByText('Every embedding against its raw outcome', { exact: true }).count(), 1);
+        assert.strictEqual(await page.getByText('21 scores × every observed outcome', { exact: true }).count(), 1);
         assert.strictEqual(await page.getByText('Video-by-video audit trail', { exact: true }).count(), 1);
-        assert.strictEqual(await page.getByText('ACTUAL OUTCOME', { exact: true }).count(), 1);
-        assert.strictEqual(await page.getByText('ORIGINAL STORED EMBEDDING', { exact: true }).count(), 1);
-        assert.strictEqual(await page.getByText('BLIND REBUILT EMBEDDING', { exact: true }).count(), 1);
-        assert.strictEqual(await page.getByText('AXIS ENSEMBLE', { exact: true }).count(), 1);
-        assert.strictEqual(await page.getByText('LEARNED MODEL FORECAST', { exact: true }).count(), 1);
-        assert((await page.locator('[data-savedvalidationvideo]').count()) >= videos.length, 'blind validation must keep every plotted/video row inspectable');
-        for (const group of ['visual', 'text']) {
-            const featureKey = `${group}.views`;
-            const point = page.locator(`circle[data-savedvalidationvideo="${channelId}:vid00000002"][data-savedvalidationpointsource="storedViewsAxis"][data-savedvalidationpointfeature="${featureKey}"]`);
-            assert.strictEqual(
-                await point.getAttribute('data-savedvalidationpredictedraw'),
-                String(videos[1].features[featureKey][0]),
-                `${featureKey} must retain its own exact score-card value instead of falling back to Both.views`
-            );
-        }
-        const storedViewsPoint = page.locator(`circle[data-savedvalidationvideo="${channelId}:vid00000002"][data-savedvalidationpointsource="storedViewsAxis"][data-savedvalidationpointfeature="together.views"]`);
-        assert((await storedViewsPoint.locator('title').textContent()).includes('PLOTTED Y (original stored Both.views view-equivalent embedding): 12.00M'), 'the original views graph must plot the exact persisted score-card value');
-        assert.strictEqual(await storedViewsPoint.getAttribute('data-savedvalidationpredictedraw'), '12000000', 'the SVG point must retain the unformatted persisted views value');
-        assert.strictEqual(await storedViewsPoint.getAttribute('data-embedding-id'), 'shorts_raw:stored-production:together_views', 'stored validation point must share the production Both.views identity');
-        assert.strictEqual(await storedViewsPoint.getAttribute('data-embedding-est'), '12000000', 'stored validation identity must preserve the exact score-card estimate');
-        const blindViewsPoint = page.locator(`circle[data-savedvalidationvideo="${channelId}:vid00000002"][data-savedvalidationpointsource="blindViewsAxis"][data-savedvalidationpointfeature="together.views"]`);
-        assert.strictEqual(await blindViewsPoint.getAttribute('data-embedding-id'), 'shorts_raw:blind-video-held-out:together_views', 'blind rebuilt point must not masquerade as the stored production embedding');
+        assert.strictEqual(await page.getByText('Where this number came from', { exact: true }).count(), 1);
+        assert.strictEqual(await page.getByText('Retention path · every measured second through 20', { exact: true }).count(), 1);
+        assert.strictEqual(await page.locator('[data-savedvalidationtarget]').count(), 13, 'all observed outcomes and curve checkpoints must be selectable');
+        assert.strictEqual(await page.locator('[data-savedvalidationfeature]').count(), 21, 'the matrix must preserve all 21 upload scores');
+        assert((await page.locator('circle[data-savedvalidationrow]').count()) >= videos.length, 'selected relationship plot must expose every matched video');
+        await page.locator('[data-savedvalidationtarget="views"]').click();
+        await page.locator('[data-savedvalidationfeature="together.views"]').click();
+        await page.getByText('together.views → Current lifetime views', { exact: true }).waitFor();
+        const blindViewsPoint = page.locator('circle[data-savedvalidationrow="vid00000002"]').first();
         const blindViewsTooltip = await blindViewsPoint.locator('title').textContent();
-        assert(blindViewsTooltip.includes('PLOTTED Y (blind rebuilt Both.views view-equivalent embedding): 1.00M'), 'the rebuilt single-axis estimate must remain separately identified');
-        assert(blindViewsTooltip.includes('both 12.00M'), 'the rebuilt-axis hover must still expose the original stored Both.views value');
-        await storedViewsPoint.click();
-        await page.locator('[data-savedvalidationcontext]').waitFor();
-        assert.strictEqual(await page.locator('[data-savedvalidationcontext]').getAttribute('data-plotted-raw'), '12000000', 'the drill-down must preserve the same raw value as its source point');
-        const storedViewsContext = await page.locator('[data-savedvalidationcontext]').innerText();
-        assert(storedViewsContext.includes('12.00M'), 'the clicked stored-axis detail must retain the exact plotted value');
-        assert(storedViewsContext.includes('exact persisted Both.views output'), 'the clicked detail must explain that no forecast was substituted');
-        assert(storedViewsContext.includes('exact raw-value match'), 'the persisted validation row and loaded score card must agree exactly');
-        const modelPoint = page.locator(`[data-savedvalidationvideo="${channelId}:vid00000002"][data-savedvalidationpointsource="keepModel"]`);
-        assert.strictEqual(await modelPoint.getAttribute('data-embedding-id'), null, 'multi-input forecast must not masquerade as one embedding');
-        const modelTooltip = await modelPoint.locator('title').textContent();
-        assert(modelTooltip.includes('PLOTTED Y (nested-selected multi-input OOF forecast): 58.9%'), 'the hover must name and show the exact model forecast');
-        assert(modelTooltip.includes(`both ${videos[1].features['together.keep'][0].toFixed(1)}%`), 'the hover must also show the stored Both embedding');
-        await page.locator(`[data-savedvalidationvideo="${channelId}:vid00000001"][data-savedvalidationpointsource="keepModel"]`).click();
-        await page.locator('[data-savedvalidationcontext]').waitFor();
-        assert((await page.locator('[data-savedvalidationcontext]').innerText()).includes('Highest raw views'), 'clicked validation context must follow the exact plotted video');
-        await modelPoint.click();
+        assert(blindViewsTooltip.includes('together.views:'), 'the hover must name the exact selected coordinate');
+        assert(blindViewsTooltip.includes('Actual Current lifetime views:'), 'the hover must name the independently observed outcome');
+        await blindViewsPoint.click();
+        await page.getByText('Raw observed curve', { exact: true }).waitFor();
+        assert.strictEqual(await page.getByText('Same video · normalized actual vs prediction', { exact: true }).count(), 1);
+        await page.locator('[data-savedvalidationprotocol="stored"]').click();
+        const storedViewsTooltip = await page.locator('circle[data-savedvalidationrow="vid00000002"]').first().locator('title').textContent();
+        assert(storedViewsTooltip.includes('together.views: 12.00M'), 'stored matrix plot must preserve the exact score-card view-equivalent');
+        const auditVideo = page.locator(`span[data-savedvalidationrow="vid00000002"]`).first().locator('xpath=ancestor::tr');
+        await auditVideo.locator('[data-savedvalidationvideo]').click();
         const validationContext = page.locator('[data-savedvalidationcontext]');
         await validationContext.waitFor();
         const contextText = await validationContext.innerText();
-        assert(contextText.includes('Highest text keep rate'), 'an older cached score must replace the newer selected score when clicked');
-        assert(contextText.includes('58.9%'), 'the detail must preserve the plotted multi-input forecast');
-        assert(contextText.includes(`${videos[1].features['together.keep'][0].toFixed(1)}%`), 'the detail must show the different stored Both embedding beside the forecast');
+        assert.strictEqual(await validationContext.getAttribute('data-stored-reference-raw'), '12000000', 'the context panel must select the same persisted Both.views coordinate as the clicked point');
+        assert.strictEqual(await validationContext.getAttribute('data-loaded-card-raw'), '12000000', 'the loaded card must expose the same raw Both.views coordinate');
+        assert.strictEqual(await validationContext.getAttribute('data-card-parity'), 'match', 'parity may only be labeled exact when the raw values actually match');
+        assert(contextText.includes('12.00M'), 'opening the original graph must retain the exact stored Both.views score');
+        assert(contextText.includes('exact raw-value match'), 'the validation artifact and stored score card must agree exactly');
         await page.waitForFunction(id => {
             const image = document.querySelector('#rtg-exppanel img[style*="width:260px"]');
             return image && image.src.includes(id);
@@ -393,7 +388,7 @@ async function main() {
         }
         assert.strictEqual(await page.evaluate(pathname => window.__fetchCounts[pathname], videoPath), 1, 'reopening an older cached validation video must not fetch or recompute it again');
         await page.locator('[data-savedvalidationprotocol="account"]').click();
-        assert.strictEqual(await page.getByText('Whole account held out:', { exact: false }).count(), 1);
+        assert.strictEqual(await page.getByText('18 direct scores · account external:', { exact: false }).count(), 1);
         await page.locator('[data-savedvalidationexpand]').first().click();
         assert.strictEqual(await page.getByText('All 21 stored channel scores · diagnostic replay', { exact: true }).count(), 1);
         assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), 0, 'validation inspection must never recalculate a stored embedding');

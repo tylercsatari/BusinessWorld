@@ -1,5 +1,59 @@
 {
-  "version": 1,
+  "version": 2,
+  "pipeline": {
+    "sourceWindow": "first 5 seconds",
+    "embeddingModel": "gemini-embedding-2",
+    "embeddingDimensions": 1536,
+    "visualInput": "Five frames sampled across the first five seconds and stitched left to right.",
+    "textInput": "Voiceover transcript from the first five seconds. The text channel is absent when coherent speech is not recovered.",
+    "togetherInput": "The same five-frame montage and transcript embedded together.",
+    "artifact": "raw/steer_models.npz",
+    "scorer": "raw_upload.py"
+  },
+  "provenanceByTarget": {
+    "keep": {
+      "axisFitPopulation": "Tyler Csatari private Shorts with observed stayed-to-watch labels (211 videos in the current steer artifact).",
+      "calibrationPopulation": "The same Tyler private label distribution is used for rank-to-percent calibration.",
+      "observedOutcome": "Private YouTube Studio stayed-to-watch percentage.",
+      "warning": "Tyler stored scores are in-sample diagnostics. Hafu is account-external. Use video-held-out or account-held-out results for validation claims."
+    },
+    "ret5": {
+      "axisFitPopulation": "Tyler Csatari private Shorts with observed five-second retention labels (211 videos in the current steer artifact).",
+      "calibrationPopulation": "The same Tyler private five-second-retention distribution is used for rank-to-percent calibration.",
+      "observedOutcome": "Private YouTube Studio retention at five seconds.",
+      "warning": "Tyler stored scores are in-sample diagnostics. Hafu is account-external. Use video-held-out or account-held-out results for validation claims."
+    },
+    "views": {
+      "axisFitPopulation": "Public Shorts embedding corpus. Blind validation refits the axis after excluding every Tyler and Hafu video.",
+      "calibrationPopulation": "Public lifetime-view distribution at the embedding's corpus rank.",
+      "observedOutcome": "Current public lifetime views.",
+      "warning": "This is a view-equivalent coordinate, not a guaranteed expected-view forecast; video age and creator scale remain confounds."
+    },
+    "realviews": {
+      "axisFitPopulation": "Tyler Csatari private retention-to-views model using projected keep, projected five-second retention, and duration.",
+      "calibrationPopulation": "Tyler channel-scale views.",
+      "observedOutcome": "Current public lifetime views.",
+      "warning": "This is channel-scale and is not creator-portable until account-held-out validation supports it."
+    },
+    "outlier": {
+      "axisFitPopulation": "Public Shorts embedding corpus. Blind validation excludes every Tyler and Hafu video.",
+      "calibrationPopulation": "Public views divided by channel subscribers.",
+      "observedOutcome": "Current public views divided by the saved subscriber snapshot.",
+      "warning": "Subscriber snapshots and lifetime views are time-varying."
+    },
+    "gt10M": {
+      "axisFitPopulation": "Public Shorts embedding corpus. Blind validation excludes every Tyler and Hafu video.",
+      "calibrationPopulation": "Local observed over-10M rate in a plus/minus five-percent rank window.",
+      "observedOutcome": "Whether current public lifetime views are at least 10,000,000.",
+      "warning": "Read this as a probability and validate with AUC and Brier score; a percentile is not a probability."
+    },
+    "novelty": {
+      "axisFitPopulation": "Saved Shorts embedding corpus centroids, recent direction, and PCA reconstruction models.",
+      "calibrationPopulation": "Target-specific novelty calibration saved by the channel worker.",
+      "observedOutcome": "Compared independently with every available private or public outcome.",
+      "warning": "The current blind artifact exposes temporal, niche, and combinatorial novelty inputs, not exact held-out rebuilds of the three stored target-specific novelty scores."
+    }
+  },
   "groups": [
     { "key": "visual", "label": "Visual", "description": "5-frame montage only" },
     { "key": "text", "label": "Text", "description": "First-5-second transcript only" },
