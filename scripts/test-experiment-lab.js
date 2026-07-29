@@ -334,6 +334,42 @@ async function main() {
         }));
         const keepPoints = videos.map((video, index) => ({ id: video.id, actual: 57 + index, predicted: 58 + index * .9 }));
         const viewsPoints = videos.map(video => ({ id: video.id, channel: channelId, channelName: 'Mobile Risk Channel', actualViews: video.views, predictedViews: Math.round(video.views * 1.12) }));
+        const visualKeepPoints = [
+            ...videos.map((video, index) => ({
+                id: video.id,
+                title: video.title,
+                account: 'tyler',
+                accountName: 'Tyler Csatari',
+                actual: 57 + index,
+                predicted: 58 + index * .82,
+                baseline: 66,
+                error: 1 - index * .18,
+                fold: String(index % 5 + 1),
+            })),
+            ...hafuVideos.map((video, index) => ({
+                id: video.id,
+                title: video.title,
+                account: 'hafu',
+                accountName: 'Hafu Go',
+                actual: 57 + index,
+                predicted: 63 + index * .18,
+                baseline: 66,
+                error: 6 - index * .82,
+                fold: String(index % 5 + 1),
+            })),
+        ];
+        const visualAccountMetrics = [
+            { account: 'tyler', name: 'Tyler Csatari', n: 20, r2: .42, spearman: .64, mae: 4.8, actualRange: 19, predictedRange: 15.6, rangeRatio: .82, protocolBaselineR2: .31, baselineMae: 6.9 },
+            { account: 'hafu', name: 'Hafu Go', n: 20, r2: .01, spearman: .08, mae: 7.7, actualRange: 19, predictedRange: 3.4, rangeRatio: .18, protocolBaselineR2: -.08, baselineMae: 7.1 },
+        ];
+        const visualProtocol = (key, label, baselineSkill) => ({
+            key,
+            label,
+            description: `${label} fixture description with a frozen test protocol.`,
+            metrics: { n: 40, r2: .24, spearman: .41, mae: 6.2, baselineMae: 7.0, actualRange: 19, predictedRange: 15.6, rangeRatio: .82, protocolBaselineR2: baselineSkill, perAccount: visualAccountMetrics },
+            points: visualKeepPoints,
+            candidateRegistry: { count: 45, selectionMetric: 'inner-fold RMSE' },
+        });
         let validationArtifact;
         try {
             validationArtifact = validationBuilder.buildValidation({
@@ -395,6 +431,35 @@ async function main() {
                 targets: {
                     keep: {
                         points: keepPoints,
+                        visualOnlyStudy: {
+                            schemaVersion: 1,
+                            label: 'Visual-only keep-rate predictor',
+                            input: 'Only the canonical visual opening montage embedding enters the predictor.',
+                            population: {
+                                n: 40,
+                                accounts: [
+                                    { id: 'tyler', name: 'Tyler Csatari', n: 20 },
+                                    { id: 'hafu', name: 'Hafu Go', n: 20 },
+                                ],
+                                embeddingModel: 'gemini-embedding-2',
+                                embeddingDimensions: 1536,
+                            },
+                            protocols: {
+                                videoHoldout: visualProtocol('known_account_video_holdout', 'Known creator · balanced video holdout', .22),
+                                forwardTime: visualProtocol('forward_time', 'Future upload simulation', -.04),
+                                accountHoldout: visualProtocol('unseen_account', 'Entire creator held out', -.31),
+                            },
+                            formula: {
+                                selected: { pooledAlpha: 1, accountAlpha: .1, accountWeight: .75 },
+                                pooled: { coefficients: Array.from({ length: 1536 }, () => 0) },
+                            },
+                            promotion: {
+                                promoted: false,
+                                status: 'research_only_not_validated_for_pre_upload_decisions',
+                                plainEnglish: 'Retrospective structure exists, but future and unseen-creator transfer do not clear the honest baselines.',
+                                rule: 'Both strict protocols must beat their legitimate null.',
+                            },
+                        },
                         blindInputs: {
                             featureNames: blindFeatureNames,
                             videoHeldOutProtocol: 'The evaluated video is excluded.',
@@ -668,6 +733,17 @@ async function main() {
         await canonicalValidation.waitFor();
         assert.strictEqual(await canonicalValidation.getAttribute('data-coordinate-count'), '103');
         assert.strictEqual(await canonicalValidation.getAttribute('data-outcome-count'), '13');
+        const visualKeepStudy = page.locator('[data-savedvisualkeep-study]');
+        await visualKeepStudy.waitFor();
+        assert((await visualKeepStudy.innerText()).includes('Best tested visual-only keep-rate predictor'));
+        assert((await visualKeepStudy.innerText()).includes('RESEARCH ONLY'));
+        assert.strictEqual(await visualKeepStudy.locator('[data-savedvisualkeepprotocol]').count(), 3);
+        assert.strictEqual(await visualKeepStudy.locator('[data-savedvisualkeep-scatter] circle').count(), 40);
+        await visualKeepStudy.locator('[data-savedvisualkeepprotocol="forwardTime"]').click();
+        assert((await visualKeepStudy.innerText()).includes('Future upload simulation'));
+        await visualKeepStudy.locator('[data-savedvisualkeepaccount="hafu"]').click();
+        assert.strictEqual(await visualKeepStudy.locator('[data-savedvisualkeep-scatter] circle').count(), 20);
+        await visualKeepStudy.locator('[data-savedvisualkeepprotocol="videoHoldout"]').click();
         assert.strictEqual(await page.getByText('What predicts performance?', { exact: true }).count(), 1);
         assert.strictEqual(await page.getByText(/103 ledger columns do not mean 103 independent embeddings/).count(), 1);
         assert.strictEqual(await page.getByText(/Leakage audit passed.*does not mean the predictor is accurate/).count(), 1);
@@ -689,9 +765,15 @@ async function main() {
         assert(selectedTextRet5.includes('shorts.stored.text.ret5'));
         assert(selectedTextRet5.includes('Text input only'));
         assert(selectedTextRet5.includes('Five-second retention score'));
-        const crossTargetPoint = page.locator('circle[data-savedvalidationrow="vid00000002"]').first();
+        const relationshipScatter = page.locator('[data-savedvalidation-scatter]');
+        assert.strictEqual(await relationshipScatter.getAttribute('data-plot-mode'), 'oof');
+        assert((await relationshipScatter.innerText()).includes('Held-out predicted Stayed to watch vs observed Stayed to watch'));
+        assert((await relationshipScatter.innerText()).includes('same calculation'));
+        assert((await relationshipScatter.innerText()).includes('transformed-span coverage'));
+        const crossTargetPoint = relationshipScatter.locator('circle[data-savedvalidationrow="vid00000002"]').first();
         const crossTargetTooltip = await crossTargetPoint.locator('title').textContent();
         assert(crossTargetTooltip.includes('5s retention:'), 'cross-target hover must name the plotted score coordinate');
+        assert(crossTargetTooltip.includes('Held-out predicted Stayed to watch:'), 'hover must expose the exact calibrated prediction used by OOF metrics');
         assert(crossTargetTooltip.includes('Actual Stayed to watch:'), 'cross-target hover must name the independent outcome');
         assert(crossTargetTooltip.includes('Coordinate: shorts.stored.text.ret5'));
         await crossTargetPoint.dispatchEvent('click');
@@ -700,6 +782,11 @@ async function main() {
         assert((await crossTargetDetail.innerText()).includes('shorts.stored.text.ret5'));
         assert((await crossTargetDetail.innerText()).includes('shorts.observed.keep'));
         assert((await crossTargetDetail.innerText()).includes('saved score + private outcomes'));
+        await relationshipScatter.locator('[data-savedvalidationplotmode="raw"]').dispatchEvent('click');
+        assert.strictEqual(await page.locator('[data-savedvalidation-scatter]').getAttribute('data-plot-mode'), 'raw');
+        assert((await page.locator('[data-savedvalidation-scatter]').innerText()).includes('not a percentage prediction'));
+        await page.locator('[data-savedvalidation-scatter] [data-savedvalidationplotmode="oof"]').dispatchEvent('click');
+        assert.strictEqual(await page.locator('[data-savedvalidation-scatter]').getAttribute('data-plot-mode'), 'oof');
         await page.locator('[data-savedvalidationcell][data-savedvalidationcoordinate="shorts.video-heldout.text.realviews"][data-savedvalidationoutcome="views"]').click();
         const selectedRealViews = await page.locator('[data-savedvalidation-selected]').innerText();
         assert(selectedRealViews.includes('Text input only'));
@@ -708,7 +795,7 @@ async function main() {
         await page.locator('[data-savedvalidationcell][data-savedvalidationcoordinate="shorts.video-heldout.together.views"][data-savedvalidationoutcome="views"]').click();
         await page.locator('[data-savedvalidation-selected]').waitFor();
         assert((await page.locator('[data-savedvalidation-selected]').innerText()).includes('shorts.video-heldout.together.views'));
-        const blindViewsPoint = page.locator('circle[data-savedvalidationrow="vid00000002"]').first();
+        const blindViewsPoint = page.locator('[data-savedvalidation-scatter] circle[data-savedvalidationrow="vid00000002"]').first();
         const blindViewsTooltip = await blindViewsPoint.locator('title').textContent();
         assert(blindViewsTooltip.includes('Coordinate: shorts.video-heldout.together.views'), 'the hover must name the exact selected coordinate');
         assert(blindViewsTooltip.includes('Actual Current lifetime views:'), 'the hover must name the independently observed outcome');
@@ -728,7 +815,7 @@ async function main() {
         }
         assert.strictEqual(await page.evaluate(pathname => window.__fetchCounts[pathname], videoPath), 1, 'reopening an older cached validation video must not fetch or recompute it again');
         assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), 0, 'validation inspection must never recalculate a stored embedding');
-        const lineageDetails = page.locator('[data-savedvalidation-canonical] details').first();
+        const lineageDetails = page.locator('[data-savedvalidation-canonical] details').filter({ hasText: 'show the complete raw-input' }).first();
         await lineageDetails.locator(':scope > summary').click();
         const validationLineageText = await lineageDetails.innerText();
         for (const stage of ['Raw inputs', 'Representation', 'Fit dataset', 'Fit target', 'Algorithm / rotation', 'Calibration', 'Validation / holdout', 'Frozen artifact']) {

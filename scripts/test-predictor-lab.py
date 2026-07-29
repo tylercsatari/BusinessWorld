@@ -149,6 +149,21 @@ def assert_target_contract(target: dict, target_name: str) -> None:
         for row in blind["rows"]:
             assert len(row.get("videoHeldOut", [])) == len(predictor.PRIVATE_FEATURE_NAMES)
             assert len(row.get("accountHeldOut", [])) == len(predictor.PRIVATE_FEATURE_NAMES)
+        visual_study = target.get("visualOnlyStudy")
+        if visual_study is not None:
+            assert visual_study.get("schemaVersion") == 1
+            assert set(visual_study.get("protocols", {})) == {
+                "videoHoldout",
+                "forwardTime",
+                "accountHoldout",
+            }
+            assert visual_study.get("promotion", {}).get("status")
+            assert visual_study.get("formula", {}).get("input")
+            for protocol in visual_study["protocols"].values():
+                assert isinstance(protocol.get("metrics"), dict)
+                assert isinstance(protocol.get("points"), list)
+                assert "rangeRatio" in protocol["metrics"]
+                assert "protocolBaselineR2" in protocol["metrics"]
     else:
         assert isinstance(stress.get("points"), list), "unseen-channel stress must persist every held-out prediction"
 
@@ -266,6 +281,57 @@ assert subset_sizes == {1: 45, 2: 990, 3: 14190, 4: 34775}
 assert set(first_registry[:45]) == set(itertools.combinations(range(45), 1))
 candidate_hash = hashlib.sha256(json.dumps(first_registry).encode()).hexdigest()[:16]
 assert candidate_hash == "a3d4ad284c40c669", "the deterministic experiment registry changed"
+
+
+# The visual-only study preserves three genuinely different claims. Its plotted
+# point predictions and range diagnostics are persisted rather than recomputed
+# by the browser.
+visual_rows = []
+visual_vectors = []
+for account_index, account in enumerate(("alpha", "beta", "gamma", "delta")):
+    for video_index in range(20):
+        phase = video_index / 19
+        vector = predictor.np.asarray([
+            phase,
+            predictor.math.sin(video_index / 3),
+            predictor.math.cos(video_index / 4),
+            account_index / 3,
+            phase * phase,
+            (video_index % 3) / 2,
+            (account_index + video_index % 2) / 4,
+            1,
+        ], dtype=float)
+        visual_vectors.append(vector)
+        visual_rows.append({
+            "id": f"{account}-{video_index}",
+            "title": f"{account} fixture {video_index}",
+            "account": account,
+            "accountName": account.title(),
+            "publishedAt": 1_700_000_000_000 + account_index * 10_000_000 + video_index * 86_400_000,
+            "keep": 48 + 24 * phase + 4 * predictor.math.sin(video_index / 3) + account_index,
+        })
+visual_store = {
+    "vectors": predictor.np.asarray(visual_vectors, dtype=float),
+    "index": {row["id"]: index for index, row in enumerate(visual_rows)},
+}
+visual_study_fixture = predictor.run_visual_keep_study(
+    visual_rows,
+    {"visual": visual_store},
+)
+assert visual_study_fixture["population"]["n"] == len(visual_rows)
+assert visual_study_fixture["population"]["embeddingDimensions"] == 8
+assert len(visual_study_fixture["formula"]["pooled"]["coefficients"]) == 8
+assert set(visual_study_fixture["protocols"]) == {
+    "videoHoldout",
+    "forwardTime",
+    "accountHoldout",
+}
+for visual_protocol in visual_study_fixture["protocols"].values():
+    assert visual_protocol["points"]
+    assert visual_protocol["metrics"]["actualRange"] > 0
+    assert visual_protocol["metrics"]["predictedRange"] >= 0
+    assert visual_protocol["metrics"]["rangeRatio"] is not None
+    assert visual_protocol["metrics"]["protocolBaselineR2"] is not None
 
 
 # Coverage counts only stored vertical Science Center Shorts, while totals retain

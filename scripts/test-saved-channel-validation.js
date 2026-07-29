@@ -388,6 +388,13 @@ const predictor = {
     targets: {
         keep: {
             points: keepPoints,
+            visualOnlyStudy: {
+                schemaVersion: 1,
+                label: 'Fixture visual-only keep study',
+                population: { n: 632, accounts: [], embeddingDimensions: 1536 },
+                protocols: {},
+                promotion: { promoted: false, status: 'fixture' },
+            },
             blindInputs: {
                 featureNames: blindNames,
                 videoHeldOutProtocol: 'synthetic video holdout',
@@ -416,7 +423,8 @@ const result = validation.buildValidation({
     sourceFingerprint: fixtureSha256('fixture'),
 });
 
-assert.strictEqual(result.version, 5);
+assert.strictEqual(result.version, validation.VERSION);
+assert.strictEqual(result.visualKeepStudy, predictor.targets.keep.visualOnlyStudy);
 assert.strictEqual(result.rows.length, 48);
 assert.strictEqual(result.validationRows.length, 632);
 assert(result.validationRows.every(row => row.scoreLedger && row.scoreLedger.values.length === 103));
@@ -1106,12 +1114,41 @@ assert.strictEqual(fullBlindKeep.coverage.calibrationMode, 'video_5fold');
 assert.strictEqual(fullBlindKeep.coverage.trainingTestOverlapN, 0);
 assert.strictEqual(fullBlindKeep.coverage.duplicateTestPredictionN, 0);
 assert.strictEqual(fullBlindKeep.validationTier, 'video_held_out_coordinate_plus_video_5fold_calibration');
+assert.strictEqual(fullBlindKeep.calibration.mode, 'video_5fold');
+assert.strictEqual(fullBlindKeep.calibration.folds.length, 5);
+assert(fullBlindKeep.calibration.folds.every(fold => fold.parameters && fold.parameters.kind === 'linear'));
+assert(Number.isFinite(fullBlindKeep.calibration.diagnostics.actualRange));
+assert(Number.isFinite(fullBlindKeep.calibration.diagnostics.predictedRange));
+assert(Number.isFinite(fullBlindKeep.calibration.diagnostics.rangeRatio));
+const fullBlindKeepColumnIndex = result.coordinateRegistry.columns.findIndex(
+    column => column.id === 'shorts.video-heldout.visual.keep'
+);
+const directFullBlindKeepOof = validation._singleCoordinateOof(
+    result.validationRows.map(row => ({
+        id: row.id,
+        accountId: row.accountId,
+        predicted: row.scoreLedger.values[fullBlindKeepColumnIndex],
+        actual: row.actual.keep,
+    })),
+    { key: 'keep', unit: 'percent' },
+    'video_5fold',
+);
+assert.deepStrictEqual(
+    fullBlindKeep.calibration.folds.map(fold => [fold.fold, fold.parameters]),
+    directFullBlindKeepOof.audit.folds.map(fold => [fold.fold, fold.calibration]),
+    'the UI calibration registry must persist the exact parameters used by OOF metrics',
+);
+const directPredictionRange = Math.max(...directFullBlindKeepOof.predictions.map(point => point.calibrated))
+    - Math.min(...directFullBlindKeepOof.predictions.map(point => point.calibrated));
+assert(Math.abs(directPredictionRange - fullBlindKeep.calibration.diagnostics.predictedRange) < 1e-4);
 const accountBlindKeep = matrixEntry('keep', 'shorts.account-heldout.visual.keep');
 assert.strictEqual(accountBlindKeep.metrics.n, 632);
 assert.strictEqual(accountBlindKeep.metrics.oofN, 632);
 assert.strictEqual(accountBlindKeep.coverage.calibrationMode, 'leave_account_out');
 assert.strictEqual(accountBlindKeep.coverage.heldOutAccountLeakageN, 0);
 assert.strictEqual(accountBlindKeep.validationTier, 'account_held_out_coordinate_plus_leave_account_out_calibration');
+assert.strictEqual(accountBlindKeep.calibration.mode, 'leave_account_out');
+assert(accountBlindKeep.calibration.folds.every(fold => fold.parameters && fold.parameters.kind === 'linear'));
 const tylerAccountBlindKeep = result.scopes.tyler.ledgerOutcomeMatrix.keep.coordinates.find(
     entry => entry.coordinateId === 'shorts.account-heldout.visual.keep'
 );
@@ -1161,6 +1198,8 @@ assert.match(result.validationContract.videoHeldOut, /five-fold calibration/i);
 assert.match(result.validationContract.accountHeldOut, /leave-account-out calibration/i);
 assert.match(result.validationContract.glossary.outcomeNotPredictor, /excluded/i);
 assert.match(result.validationContract.glossary.qValue, /full eligible 103-coordinate by 13-outcome/i);
+assert.match(result.validationContract.glossary.predictionRange, /narrow ratio/i);
+assert.match(result.validationContract.glossary.plotModes, /exact fold-specific calibration/i);
 assert.strictEqual(Object.prototype.hasOwnProperty.call(result.scopes.pooled, 'outcomeMatrix'), false);
 
 const firstRow = result.rows.find(row => row.id === 'tyler-0');

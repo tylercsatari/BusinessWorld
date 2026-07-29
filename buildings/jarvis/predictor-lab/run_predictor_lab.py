@@ -2197,6 +2197,802 @@ def run_keep_forward_time(
     }
 
 
+def visual_keep_metrics(
+    rows: list[dict[str, Any]],
+    actual: np.ndarray,
+    predicted: np.ndarray,
+    baseline: np.ndarray,
+) -> dict[str, Any]:
+    valid = np.isfinite(actual) & np.isfinite(predicted) & np.isfinite(baseline)
+    actual = np.asarray(actual[valid], dtype=float)
+    predicted = np.asarray(predicted[valid], dtype=float)
+    baseline = np.asarray(baseline[valid], dtype=float)
+    scoped_rows = [row for row, keep in zip(rows, valid) if keep]
+    metrics = regression_metrics(actual, predicted)
+    baseline_sse = float(np.sum((actual - baseline) ** 2))
+    model_sse = float(np.sum((actual - predicted) ** 2))
+    actual_range = float(np.ptp(actual)) if len(actual) else None
+    predicted_range = float(np.ptp(predicted)) if len(predicted) else None
+    metrics.update(
+        {
+            "actualMin": clean_number(actual.min() if len(actual) else None),
+            "actualMax": clean_number(actual.max() if len(actual) else None),
+            "predictedMin": clean_number(predicted.min() if len(predicted) else None),
+            "predictedMax": clean_number(predicted.max() if len(predicted) else None),
+            "actualRange": clean_number(actual_range),
+            "predictedRange": clean_number(predicted_range),
+            "rangeRatio": clean_number(
+                predicted_range / actual_range
+                if actual_range and predicted_range is not None
+                else None
+            ),
+            "protocolBaselineR2": clean_number(
+                1 - model_sse / baseline_sse if baseline_sse > EPSILON else None
+            ),
+            "baselineMae": clean_number(float(np.mean(np.abs(actual - baseline)))),
+            "baselineRmse": clean_number(float(np.sqrt(np.mean((actual - baseline) ** 2)))),
+        }
+    )
+    per_account = []
+    for account in sorted({str(row["account"]) for row in scoped_rows}, key=stable_hash):
+        mask = np.asarray([str(row["account"]) == account for row in scoped_rows])
+        account_actual = actual[mask]
+        account_predicted = predicted[mask]
+        account_baseline = baseline[mask]
+        account_sse = float(np.sum((account_actual - account_predicted) ** 2))
+        account_baseline_sse = float(np.sum((account_actual - account_baseline) ** 2))
+        account_metrics = regression_metrics(account_actual, account_predicted)
+        account_actual_range = float(np.ptp(account_actual)) if len(account_actual) else None
+        account_predicted_range = (
+            float(np.ptp(account_predicted)) if len(account_predicted) else None
+        )
+        account_metrics.update(
+            {
+                "account": account,
+                "name": next(
+                    str(row.get("accountName") or account)
+                    for row in scoped_rows
+                    if str(row["account"]) == account
+                ),
+                "actualMin": clean_number(
+                    account_actual.min() if len(account_actual) else None
+                ),
+                "actualMax": clean_number(
+                    account_actual.max() if len(account_actual) else None
+                ),
+                "predictedMin": clean_number(
+                    account_predicted.min() if len(account_predicted) else None
+                ),
+                "predictedMax": clean_number(
+                    account_predicted.max() if len(account_predicted) else None
+                ),
+                "actualRange": clean_number(account_actual_range),
+                "predictedRange": clean_number(account_predicted_range),
+                "rangeRatio": clean_number(
+                    account_predicted_range / account_actual_range
+                    if account_actual_range and account_predicted_range is not None
+                    else None
+                ),
+                "protocolBaselineR2": clean_number(
+                    1 - account_sse / account_baseline_sse
+                    if account_baseline_sse > EPSILON
+                    else None
+                ),
+                "baselineMae": clean_number(
+                    float(np.mean(np.abs(account_actual - account_baseline)))
+                ),
+            }
+        )
+        per_account.append(account_metrics)
+    metrics["perAccount"] = per_account
+    return metrics
+
+
+def visual_keep_candidate_registry() -> list[dict[str, float]]:
+    return [
+        {
+            "pooledAlpha": pooled_alpha,
+            "accountAlpha": account_alpha,
+            "accountWeight": account_weight,
+        }
+        for pooled_alpha in (0.1, 1.0, 10.0)
+        for account_alpha in (0.1, 1.0, 10.0)
+        for account_weight in (0.0, 0.25, 0.5, 0.75, 1.0)
+    ]
+
+
+def fit_visual_keep_candidate(
+    features: np.ndarray,
+    outcomes: np.ndarray,
+    accounts: np.ndarray,
+    train_indices: np.ndarray,
+    test_indices: np.ndarray,
+    candidate: dict[str, float],
+    return_models: bool = False,
+) -> tuple[np.ndarray, dict[str, Any] | None]:
+    pooled_model = Ridge(
+        alpha=float(candidate["pooledAlpha"]),
+        solver="lsqr",
+        tol=1e-6,
+    ).fit(features[train_indices], outcomes[train_indices])
+    pooled_prediction = np.asarray(
+        pooled_model.predict(features[test_indices]),
+        dtype=float,
+    )
+    prediction = pooled_prediction.copy()
+    account_models = {}
+    account_weight = float(candidate["accountWeight"])
+    if account_weight > 0:
+        for account in sorted(set(accounts[test_indices]), key=stable_hash):
+            local_train = train_indices[accounts[train_indices] == account]
+            local_test_positions = np.flatnonzero(accounts[test_indices] == account)
+            if len(local_train) < 8 or not len(local_test_positions):
+                continue
+            local_model = Ridge(
+                alpha=float(candidate["accountAlpha"]),
+                solver="lsqr",
+                tol=1e-6,
+            ).fit(features[local_train], outcomes[local_train])
+            local_prediction = local_model.predict(
+                features[test_indices[local_test_positions]]
+            )
+            prediction[local_test_positions] = (
+                (1 - account_weight) * pooled_prediction[local_test_positions]
+                + account_weight * local_prediction
+            )
+            account_models[str(account)] = local_model
+    if not return_models:
+        return prediction, None
+    return prediction, {
+        "pooled": pooled_model,
+        "accounts": account_models,
+        "candidate": candidate,
+    }
+
+
+def visual_keep_oof_predictions(
+    rows: list[dict[str, Any]],
+    features: np.ndarray,
+    outcomes: np.ndarray,
+    accounts: np.ndarray,
+    folds: np.ndarray,
+    candidate: dict[str, float],
+) -> np.ndarray:
+    predictions = np.full(len(rows), np.nan, dtype=float)
+    for fold in sorted(set(int(value) for value in folds)):
+        train_indices = np.flatnonzero(folds != fold)
+        test_indices = np.flatnonzero(folds == fold)
+        if len(train_indices) < 8 or not len(test_indices):
+            continue
+        predictions[test_indices], _ = fit_visual_keep_candidate(
+            features,
+            outcomes,
+            accounts,
+            train_indices,
+            test_indices,
+            candidate,
+        )
+    return predictions
+
+
+def choose_visual_keep_candidate(
+    rows: list[dict[str, Any]],
+    features: np.ndarray,
+    outcomes: np.ndarray,
+    accounts: np.ndarray,
+    candidates: list[dict[str, float]],
+    requested_folds: int = 4,
+) -> tuple[dict[str, float], list[dict[str, Any]], np.ndarray]:
+    folds = within_group_folds(rows, "account", requested_folds)
+    leaderboard = []
+    predictions_by_key = {}
+    for candidate in candidates:
+        predictions = visual_keep_oof_predictions(
+            rows,
+            features,
+            outcomes,
+            accounts,
+            folds,
+            candidate,
+        )
+        valid = np.isfinite(predictions)
+        score = (
+            float(np.mean((outcomes[valid] - predictions[valid]) ** 2))
+            if valid.any()
+            else float("inf")
+        )
+        key = (
+            float(candidate["pooledAlpha"]),
+            float(candidate["accountAlpha"]),
+            float(candidate["accountWeight"]),
+        )
+        predictions_by_key[key] = predictions
+        leaderboard.append(
+            {
+                **candidate,
+                "rmse": clean_number(math.sqrt(score) if finite(score) else None),
+            }
+        )
+    leaderboard.sort(
+        key=lambda row: (
+            float(row["rmse"]) if finite(row.get("rmse")) else float("inf"),
+            float(row["pooledAlpha"]),
+            float(row["accountAlpha"]),
+            float(row["accountWeight"]),
+        )
+    )
+    best = {
+        key: float(leaderboard[0][key])
+        for key in ("pooledAlpha", "accountAlpha", "accountWeight")
+    }
+    best_key = (
+        best["pooledAlpha"],
+        best["accountAlpha"],
+        best["accountWeight"],
+    )
+    return best, leaderboard[:10], predictions_by_key[best_key]
+
+
+def visual_keep_protocol_points(
+    rows: list[dict[str, Any]],
+    actual: np.ndarray,
+    predicted: np.ndarray,
+    baseline: np.ndarray,
+    folds: list[str],
+) -> list[dict[str, Any]]:
+    points = []
+    for row, truth, estimate, null, fold in zip(
+        rows,
+        actual,
+        predicted,
+        baseline,
+        folds,
+    ):
+        if not (finite(truth) and finite(estimate) and finite(null)):
+            continue
+        points.append(
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "account": row["account"],
+                "accountName": row["accountName"],
+                "publishedAt": clean_number(row.get("publishedAt"), 0),
+                "actual": clean_number(truth),
+                "predicted": clean_number(estimate),
+                "baseline": clean_number(null),
+                "error": clean_number(float(estimate) - float(truth)),
+                "fold": str(fold),
+            }
+        )
+    return points
+
+
+def run_visual_keep_video_holdout(
+    rows: list[dict[str, Any]],
+    features: np.ndarray,
+    outcomes: np.ndarray,
+    accounts: np.ndarray,
+    candidates: list[dict[str, float]],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    outer_folds = within_group_folds(rows, "account", 5)
+    predictions = np.full(len(rows), np.nan, dtype=float)
+    baselines = np.full(len(rows), np.nan, dtype=float)
+    fold_labels = [""] * len(rows)
+    fold_results = []
+    for fold in sorted(set(int(value) for value in outer_folds)):
+        train_indices = np.flatnonzero(outer_folds != fold)
+        test_indices = np.flatnonzero(outer_folds == fold)
+        train_rows = [rows[index] for index in train_indices]
+        best, leaderboard, inner_prediction = choose_visual_keep_candidate(
+            train_rows,
+            features[train_indices],
+            outcomes[train_indices],
+            accounts[train_indices],
+            candidates,
+            requested_folds=4,
+        )
+        predictions[test_indices], _ = fit_visual_keep_candidate(
+            features,
+            outcomes,
+            accounts,
+            train_indices,
+            test_indices,
+            best,
+        )
+        training_means = {
+            account: float(np.mean(outcomes[train_indices][accounts[train_indices] == account]))
+            for account in set(accounts[train_indices])
+        }
+        global_mean = float(np.mean(outcomes[train_indices]))
+        baselines[test_indices] = [
+            training_means.get(account, global_mean)
+            for account in accounts[test_indices]
+        ]
+        residuals = outcomes[train_indices] - inner_prediction
+        fold_results.append(
+            {
+                "fold": int(fold) + 1,
+                "trainN": len(train_indices),
+                "testN": len(test_indices),
+                "selected": best,
+                "candidateLeaderboard": leaderboard,
+                "innerResidualP10": clean_number(quantile(residuals, 0.1)),
+                "innerResidualP90": clean_number(quantile(residuals, 0.9)),
+            }
+        )
+        for index in test_indices:
+            fold_labels[index] = str(int(fold) + 1)
+    metrics = visual_keep_metrics(rows, outcomes, predictions, baselines)
+    full_best, final_leaderboard, _ = choose_visual_keep_candidate(
+        rows,
+        features,
+        outcomes,
+        accounts,
+        candidates,
+        requested_folds=5,
+    )
+    _, final_models = fit_visual_keep_candidate(
+        features,
+        outcomes,
+        accounts,
+        np.arange(len(rows)),
+        np.arange(len(rows)),
+        full_best,
+        return_models=True,
+    )
+    pooled_model = final_models["pooled"]
+    formula = {
+        "input": "L2-normalized 1,536D visual embedding of the canonical five-frame opening montage",
+        "outputUnit": "keep-rate percentage points",
+        "selected": full_best,
+        "pooled": {
+            "intercept": clean_number(pooled_model.intercept_),
+            "coefficients": [
+                clean_number(value)
+                for value in np.asarray(pooled_model.coef_).reshape(-1)
+            ],
+        },
+        "accounts": {},
+        "fallback": "Use the pooled formula when the creator has fewer than eight labeled training videos. This fallback is not validated as universal transfer.",
+    }
+    for account, model in final_models["accounts"].items():
+        combined_coefficients = (
+            (1 - full_best["accountWeight"]) * np.asarray(pooled_model.coef_)
+            + full_best["accountWeight"] * np.asarray(model.coef_)
+        )
+        combined_intercept = (
+            (1 - full_best["accountWeight"]) * float(pooled_model.intercept_)
+            + full_best["accountWeight"] * float(model.intercept_)
+        )
+        formula["accounts"][account] = {
+            "intercept": clean_number(combined_intercept),
+            "coefficients": [
+                clean_number(value)
+                for value in combined_coefficients.reshape(-1)
+            ],
+            "trainingN": int(np.sum(accounts == account)),
+        }
+    protocol = {
+        "key": "known_account_video_holdout",
+        "label": "Known creator · balanced video holdout",
+        "claim": "Retrospective interpolation among videos from creators that already have labeled history.",
+        "description": "Each test video is excluded. Pooled and creator-specific ridge strength plus their blend are selected again inside four inner folds. Other videos from the same creator remain available, so this is not a future-upload or unseen-creator test.",
+        "metrics": metrics,
+        "folds": fold_results,
+        "points": visual_keep_protocol_points(
+            rows,
+            outcomes,
+            predictions,
+            baselines,
+            fold_labels,
+        ),
+        "candidateRegistry": {
+            "count": len(candidates),
+            "selectionMetric": "inner-fold RMSE",
+            "topFinalCandidates": final_leaderboard,
+        },
+    }
+    return protocol, formula
+
+
+def visual_time_windows(
+    rows: list[dict[str, Any]],
+) -> list[tuple[str, np.ndarray, np.ndarray, str]]:
+    accounts = np.asarray([str(row["account"]) for row in rows])
+    published = np.asarray(
+        [
+            float(row["publishedAt"])
+            if finite(row.get("publishedAt"))
+            else np.nan
+            for row in rows
+        ],
+        dtype=float,
+    )
+    windows = []
+    for account in sorted(set(accounts), key=stable_hash):
+        account_indices = np.flatnonzero(
+            (accounts == account) & np.isfinite(published)
+        )
+        account_indices = account_indices[np.argsort(published[account_indices])]
+        start = max(8, len(account_indices) // 2)
+        boundaries = sorted(
+            set(
+                int(value)
+                for value in np.linspace(start, len(account_indices), 5)
+            )
+        )
+        for left, right in zip(boundaries[:-1], boundaries[1:]):
+            test_indices = account_indices[left:right]
+            if not len(test_indices):
+                continue
+            cutoff = float(np.min(published[test_indices]))
+            train_indices = account_indices[published[account_indices] < cutoff]
+            if len(train_indices) < 8:
+                continue
+            windows.append(
+                (
+                    account,
+                    train_indices,
+                    test_indices,
+                    f"{account}:{left}-{right}",
+                )
+            )
+    return windows
+
+
+def predict_visual_time_candidate(
+    features: np.ndarray,
+    outcomes: np.ndarray,
+    train_indices: np.ndarray,
+    test_indices: np.ndarray,
+    candidate: dict[str, Any],
+) -> np.ndarray:
+    recent_n = min(int(candidate["recentN"]), len(train_indices))
+    recent_indices = train_indices[-recent_n:]
+    if candidate["kind"] == "mean":
+        return np.repeat(float(np.mean(outcomes[recent_indices])), len(test_indices))
+    model = Ridge(
+        alpha=float(candidate["alpha"]),
+        solver="lsqr",
+        tol=1e-6,
+    ).fit(features[recent_indices], outcomes[recent_indices])
+    return np.asarray(model.predict(features[test_indices]), dtype=float)
+
+
+def choose_visual_time_candidate(
+    features: np.ndarray,
+    outcomes: np.ndarray,
+    train_indices: np.ndarray,
+    candidates: list[dict[str, Any]],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    train_indices = np.asarray(train_indices, dtype=int)
+    start = max(8, len(train_indices) // 2)
+    boundaries = sorted(
+        set(int(value) for value in np.linspace(start, len(train_indices), 4))
+    )
+    leaderboard = []
+    for candidate in candidates:
+        actual = []
+        predicted = []
+        for left, right in zip(boundaries[:-1], boundaries[1:]):
+            inner_train = train_indices[:left]
+            inner_test = train_indices[left:right]
+            if len(inner_train) < 8 or not len(inner_test):
+                continue
+            estimate = predict_visual_time_candidate(
+                features,
+                outcomes,
+                inner_train,
+                inner_test,
+                candidate,
+            )
+            actual.extend(outcomes[inner_test].tolist())
+            predicted.extend(estimate.tolist())
+        rmse = (
+            float(np.sqrt(np.mean((np.asarray(actual) - np.asarray(predicted)) ** 2)))
+            if actual
+            else float("inf")
+        )
+        leaderboard.append({**candidate, "rmse": clean_number(rmse)})
+    leaderboard.sort(
+        key=lambda row: (
+            float(row["rmse"]) if finite(row.get("rmse")) else float("inf"),
+            str(row["kind"]),
+            int(row["recentN"]),
+            float(row.get("alpha") or 0),
+        )
+    )
+    return {
+        key: value
+        for key, value in leaderboard[0].items()
+        if key != "rmse"
+    }, leaderboard[:10]
+
+
+def run_visual_keep_forward_time(
+    rows: list[dict[str, Any]],
+    features: np.ndarray,
+    outcomes: np.ndarray,
+    accounts: np.ndarray,
+) -> dict[str, Any]:
+    candidates = [
+        {"kind": "mean", "recentN": recent_n}
+        for recent_n in (10, 20, 40, 80)
+    ] + [
+        {"kind": "ridge", "recentN": recent_n, "alpha": alpha}
+        for recent_n in (20, 40, 80, 160)
+        for alpha in (0.1, 1.0, 10.0)
+    ]
+    predictions = np.full(len(rows), np.nan, dtype=float)
+    baselines = np.full(len(rows), np.nan, dtype=float)
+    fold_labels = [""] * len(rows)
+    windows = []
+    for account, train_indices, test_indices, label in visual_time_windows(rows):
+        best, leaderboard = choose_visual_time_candidate(
+            features,
+            outcomes,
+            train_indices,
+            candidates,
+        )
+        predictions[test_indices] = predict_visual_time_candidate(
+            features,
+            outcomes,
+            train_indices,
+            test_indices,
+            best,
+        )
+        recent_baseline = train_indices[-min(20, len(train_indices)) :]
+        baselines[test_indices] = float(np.mean(outcomes[recent_baseline]))
+        for index in test_indices:
+            fold_labels[index] = label
+        windows.append(
+            {
+                "window": label,
+                "account": account,
+                "trainN": len(train_indices),
+                "testN": len(test_indices),
+                "selected": best,
+                "candidateLeaderboard": leaderboard,
+                "trainingCutoff": clean_number(
+                    max(
+                        float(rows[index]["publishedAt"])
+                        for index in train_indices
+                    ),
+                    0,
+                ),
+                "testStart": clean_number(
+                    min(
+                        float(rows[index]["publishedAt"])
+                        for index in test_indices
+                    ),
+                    0,
+                ),
+            }
+        )
+    return {
+        "key": "forward_time",
+        "label": "Future upload simulation",
+        "claim": "Partial prospective backtest for creators that already have labeled history.",
+        "description": "For every creator, only earlier videos can fit or select the model for a later test window. Candidate selection uses still-earlier windows. The null is that creator's trailing-20-video mean. The present-day embedding model is reused, so this remains a partial rather than historical end-to-end replay.",
+        "metrics": visual_keep_metrics(
+            rows,
+            outcomes,
+            predictions,
+            baselines,
+        ),
+        "folds": windows,
+        "points": visual_keep_protocol_points(
+            rows,
+            outcomes,
+            predictions,
+            baselines,
+            fold_labels,
+        ),
+        "candidateRegistry": {
+            "count": len(candidates),
+            "selectionMetric": "earlier-window RMSE",
+        },
+    }
+
+
+def run_visual_keep_account_holdout(
+    rows: list[dict[str, Any]],
+    features: np.ndarray,
+    outcomes: np.ndarray,
+    accounts: np.ndarray,
+) -> dict[str, Any]:
+    alphas = (0.1, 1.0, 10.0, 100.0, 1000.0)
+    predictions = np.full(len(rows), np.nan, dtype=float)
+    baselines = np.full(len(rows), np.nan, dtype=float)
+    fold_labels = [""] * len(rows)
+    folds = []
+    for held_account in sorted(set(accounts), key=stable_hash):
+        train_indices = np.flatnonzero(accounts != held_account)
+        test_indices = np.flatnonzero(accounts == held_account)
+        leaderboard = []
+        for alpha in alphas:
+            inner_predictions = np.full(len(train_indices), np.nan, dtype=float)
+            training_accounts = accounts[train_indices]
+            for inner_account in sorted(set(training_accounts), key=stable_hash):
+                inner_train_positions = np.flatnonzero(
+                    training_accounts != inner_account
+                )
+                inner_test_positions = np.flatnonzero(
+                    training_accounts == inner_account
+                )
+                model = Ridge(
+                    alpha=alpha,
+                    solver="lsqr",
+                    tol=1e-6,
+                ).fit(
+                    features[train_indices[inner_train_positions]],
+                    outcomes[train_indices[inner_train_positions]],
+                )
+                inner_predictions[inner_test_positions] = model.predict(
+                    features[train_indices[inner_test_positions]]
+                )
+            leaderboard.append(
+                {
+                    "alpha": alpha,
+                    "rmse": clean_number(
+                        float(
+                            np.sqrt(
+                                np.mean(
+                                    (
+                                        outcomes[train_indices]
+                                        - inner_predictions
+                                    )
+                                    ** 2
+                                )
+                            )
+                        )
+                    ),
+                }
+            )
+        leaderboard.sort(key=lambda row: (row["rmse"], row["alpha"]))
+        best_alpha = float(leaderboard[0]["alpha"])
+        model = Ridge(
+            alpha=best_alpha,
+            solver="lsqr",
+            tol=1e-6,
+        ).fit(features[train_indices], outcomes[train_indices])
+        predictions[test_indices] = model.predict(features[test_indices])
+        baselines[test_indices] = float(np.mean(outcomes[train_indices]))
+        for index in test_indices:
+            fold_labels[index] = str(held_account)
+        folds.append(
+            {
+                "heldOutAccount": str(held_account),
+                "heldOutName": rows[test_indices[0]]["accountName"],
+                "trainN": len(train_indices),
+                "testN": len(test_indices),
+                "selectedAlpha": best_alpha,
+                "candidateLeaderboard": leaderboard,
+            }
+        )
+    return {
+        "key": "unseen_account",
+        "label": "Entire creator held out",
+        "claim": "Cold-start transfer to a creator whose keep-rate labels never fit the model.",
+        "description": "The held-out creator is absent from representation fitting, model selection, calibration, and baseline estimation. Alpha is selected by leaving each remaining training creator out in turn.",
+        "metrics": visual_keep_metrics(
+            rows,
+            outcomes,
+            predictions,
+            baselines,
+        ),
+        "folds": folds,
+        "points": visual_keep_protocol_points(
+            rows,
+            outcomes,
+            predictions,
+            baselines,
+            fold_labels,
+        ),
+        "candidateRegistry": {
+            "count": len(alphas),
+            "selectionMetric": "inner leave-creator-out RMSE",
+        },
+    }
+
+
+def run_visual_keep_study(
+    rows: list[dict[str, Any]],
+    stores: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    visual_store = stores["visual"]
+    eligible = [
+        row
+        for row in rows
+        if row["id"] in visual_store["index"] and finite(row.get("keep"))
+    ]
+    features = np.asarray(
+        [
+            visual_store["vectors"][visual_store["index"][row["id"]]]
+            for row in eligible
+        ],
+        dtype=float,
+    )
+    outcomes = np.asarray([row["keep"] for row in eligible], dtype=float)
+    accounts = np.asarray([str(row["account"]) for row in eligible])
+    candidates = visual_keep_candidate_registry()
+    video_holdout, formula = run_visual_keep_video_holdout(
+        eligible,
+        features,
+        outcomes,
+        accounts,
+        candidates,
+    )
+    forward_time = run_visual_keep_forward_time(
+        eligible,
+        features,
+        outcomes,
+        accounts,
+    )
+    account_holdout = run_visual_keep_account_holdout(
+        eligible,
+        features,
+        outcomes,
+        accounts,
+    )
+    forward_skill = (forward_time.get("metrics") or {}).get("protocolBaselineR2")
+    account_skill = (account_holdout.get("metrics") or {}).get("protocolBaselineR2")
+    promoted = bool(
+        finite(forward_skill)
+        and finite(account_skill)
+        and forward_skill > 0
+        and account_skill > 0
+    )
+    return {
+        "schemaVersion": 1,
+        "label": "Visual-only keep-rate predictor",
+        "input": "Only the canonical visual opening montage embedding; no title, transcript, views, duration, or audience outcome enters the predictor.",
+        "population": {
+            "n": len(eligible),
+            "accounts": [
+                {
+                    "id": account,
+                    "name": next(
+                        row["accountName"]
+                        for row in eligible
+                        if row["account"] == account
+                    ),
+                    "n": int(np.sum(accounts == account)),
+                }
+                for account in sorted(set(accounts), key=stable_hash)
+            ],
+            "embeddingModel": "gemini-embedding-2",
+            "embeddingDimensions": int(features.shape[1]),
+        },
+        "protocols": {
+            "videoHoldout": video_holdout,
+            "forwardTime": forward_time,
+            "accountHoldout": account_holdout,
+        },
+        "formula": formula,
+        "promotion": {
+            "promoted": promoted,
+            "status": (
+                "validated_for_future_and_unseen_creators"
+                if promoted
+                else "research_only_not_validated_for_pre_upload_decisions"
+            ),
+            "rule": "Promotion requires positive error reduction versus each protocol's legitimate null in both the forward-time and whole-creator holdouts.",
+            "plainEnglish": (
+                "The visual representation beat both future and unseen-creator baselines."
+                if promoted
+                else "The random video split finds retrospective structure, but that is not enough. Until future uploads and entirely unseen creators both beat their honest baselines, this score remains a diagnostic rather than a dependable pre-upload forecast."
+            ),
+        },
+        "validationNotes": [
+            "R-squared is reported together with MAE, rank correlation, predicted range, observed range, and range ratio.",
+            "A narrow prediction range is not expanded by force. Quantile stretching was rejected because it worsened held-out error.",
+            "Creator-held-out and forward-time results take precedence over random video holdout when judging production use.",
+            "Only four independent creators currently have private keep labels. More videos from the same creator cannot replace more independent creators for universal-transfer evidence.",
+        ],
+    }
+
+
 def run_keep_track(
     rows: list[dict[str, Any]],
     stores: dict[str, dict[str, Any]],
@@ -2294,6 +3090,7 @@ def run_keep_track(
     )
     operational = run_keep_known_video(eligible, stores, public_axes, candidates)
     temporal_stress = run_keep_forward_time(eligible, stores, public_axes, candidates)
+    visual_only_study = run_visual_keep_study(eligible, stores)
     full_oof_features = private_fold_oof(
         eligible,
         within_group_folds(eligible, "account", 5),
@@ -2375,6 +3172,7 @@ def run_keep_track(
             }
             for indices, count in operational["selectionStability"].most_common()
         ],
+        "visualOnlyStudy": visual_only_study,
         "blindInputs": {
             "featureNames": PRIVATE_FEATURE_NAMES,
             "videoHeldOutProtocol": (

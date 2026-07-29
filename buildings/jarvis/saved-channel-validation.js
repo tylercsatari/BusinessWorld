@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const contract = require('./saved-channel-feature-contract.json');
 
-const VERSION = 5;
+const VERSION = 6;
 const LEDGER_VERSION = 2;
 const CURVE_SECONDS = Object.freeze(Array.from({ length: 21 }, (_, second) => second));
 const SUPPORTED_CHANNELS = Object.freeze([
@@ -3489,6 +3489,11 @@ function fitLinearSingleCalibration(points) {
     const intercept = yMean - slope * xMean;
     return {
         baseline: yMean,
+        parameters: {
+            kind: 'linear',
+            slope: round(slope, 10),
+            intercept: round(intercept, 10),
+        },
         predict(value) {
             return intercept + slope * Number(value);
         },
@@ -3534,6 +3539,13 @@ function fitLogisticSingleCalibration(points) {
     }
     return {
         baseline,
+        parameters: {
+            kind: 'logistic',
+            xMean: round(xMean, 10),
+            xScale: round(xScale, 10),
+            intercept: round(intercept, 10),
+            slope: round(slope, 10),
+        },
         predict(value) {
             const x = (Number(value) - xMean) / xScale;
             return 1 / (1 + Math.exp(-clamp(intercept + slope * x, -30, 30)));
@@ -3582,6 +3594,7 @@ function singleCoordinateOof(points, outcome, foldMode) {
             trainingTestOverlapN: overlap.length,
             trainingAccounts,
             testingAccounts,
+            calibration: calibrator.parameters,
             heldOutAccountLeakageN: mode === 'leave_account_out'
                 ? testingAccounts.filter(account => trainingAccounts.includes(account)).length
                 : null,
@@ -3615,6 +3628,71 @@ function singleCoordinateOof(points, outcome, foldMode) {
             duplicateTestPredictionN: Object.values(predictionCounts).filter(count => count !== 1).length,
             predictedN: predictions.length,
         },
+    };
+}
+
+function oofCoordinateDiagnostics(oof, outcome) {
+    if (!oof || !oof.predictions.length) return null;
+    const points = oof.predictions.map(point => ({
+        id: point.id,
+        accountId: point.accountId,
+        actual: point.actual,
+        predicted: point.calibrated,
+        baseline: point.baseline,
+    }));
+    const regression = regressionMetrics(points, {
+        total: oof.eligibleN,
+        logScale: !!outcome.transform,
+    });
+    const actualRange = finite(regression.actualMin) && finite(regression.actualMax)
+        ? Number(regression.actualMax) - Number(regression.actualMin)
+        : null;
+    const predictedRange = finite(regression.predictedMin) && finite(regression.predictedMax)
+        ? Number(regression.predictedMax) - Number(regression.predictedMin)
+        : null;
+    const perAccount = [...new Set(points.map(point => point.accountId))].sort().map(accountId => {
+        const account = regressionMetrics(
+            points.filter(point => point.accountId === accountId),
+            { logScale: !!outcome.transform }
+        );
+        const accountActualRange = finite(account.actualMin) && finite(account.actualMax)
+            ? Number(account.actualMax) - Number(account.actualMin)
+            : null;
+        const accountPredictedRange = finite(account.predictedMin) && finite(account.predictedMax)
+            ? Number(account.predictedMax) - Number(account.predictedMin)
+            : null;
+        return {
+            accountId,
+            n: account.n || 0,
+            r2: number(account.r2),
+            spearman: number(account.spearman),
+            mae: number(account.mae),
+            actualMin: number(account.actualMin),
+            actualMax: number(account.actualMax),
+            predictedMin: number(account.predictedMin),
+            predictedMax: number(account.predictedMax),
+            actualRange: round(accountActualRange),
+            predictedRange: round(accountPredictedRange),
+            rangeRatio: accountActualRange > 0
+                ? round(accountPredictedRange / accountActualRange)
+                : null,
+        };
+    });
+    return {
+        scale: outcome.transform || 'identity',
+        n: regression.n || 0,
+        actualMin: number(regression.actualMin),
+        actualMax: number(regression.actualMax),
+        predictedMin: number(regression.predictedMin),
+        predictedMax: number(regression.predictedMax),
+        actualRange: round(actualRange),
+        predictedRange: round(predictedRange),
+        rangeRatio: actualRange > 0 ? round(predictedRange / actualRange) : null,
+        calibrationSlope: number(regression.calibrationSlope),
+        calibrationIntercept: number(regression.calibrationIntercept),
+        bias: number(regression.bias),
+        rmse: number(regression.rmse),
+        perAccount,
     };
 }
 
@@ -3827,6 +3905,19 @@ function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey, calibratio
                     heldOutAccountLeakageN: oof ? oof.audit.heldOutAccountLeakageN : null,
                     duplicateTestPredictionN: oof ? oof.audit.duplicateTestPredictionN : 0,
                 },
+                calibration: oof ? {
+                    mode: oof.mode,
+                    outputScale: outcome.transform || 'identity',
+                    folds: oof.audit.folds.map(fold => ({
+                        fold: fold.fold,
+                        trainingN: fold.trainingN,
+                        testingN: fold.testingN,
+                        trainingAccounts: fold.trainingAccounts,
+                        testingAccounts: fold.testingAccounts,
+                        parameters: fold.calibration,
+                    })),
+                    diagnostics: oofCoordinateDiagnostics(oof, outcome),
+                } : null,
                 metrics,
                 _pValue: isOutcome ? null : raw.pValue,
             };
@@ -4733,6 +4824,7 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
         ),
         scopes,
         score21Model,
+        visualKeepStudy: keepTarget.visualOnlyStudy || null,
         coordinateRegistry,
         ledgerAudit,
         outcomeDefinitions: OUTCOME_DEFINITIONS.map(definition => (
@@ -4744,6 +4836,7 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
             accountHeldOut: `${blindInputs.accountHeldOutProtocol || 'The evaluated account is excluded from every target-aligned fit.'} In the canonical validation matrix, leave-account-out calibration trains on every other creator and predicts the omitted creator. No outcome from the test creator enters that fold's calibration.`,
             publicViewsAxis: 'The production one-component PLS direction and rank-to-outcome calibration are refit on public corpus videos after excluding private rows, saved rows, and every video from each validation creator.',
             forwardTime: 'Training labels precede test labels, but the present-day representation remains fixed; this is a partial backtest.',
+            visualKeepStudy: 'A separate visual-only study fits directly from the canonical 1,536-dimensional opening montage embedding. It reports nested video holdout, forward-time, and whole-creator holdout as separate claims; the stricter protocols determine whether the model may be promoted.',
             ledgerOutcomeMatrix: 'The single canonical 103-coordinate by 13-outcome validation matrix. Coordinates remain in score-ledger order and are never renamed or re-created for a chart.',
             retentionCurve: 'Observed YouTube retention is interpolated from its native percent-of-duration curve to exact seconds 0 through 20, then divided by that video\'s observed opening value. Forecasts use only nine public axes rebuilt after both validation creators were excluded.',
             coordinateLedger: 'Every displayed scalar is resolved by canonical coordinate ID. A relationship graph is only a score-coordinate/outcome pairing and cannot mint a new score.',
@@ -4758,6 +4851,8 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
                 oofSpearman: 'Rank agreement between calibrated held-out predictions and outcomes. 1 is perfect ordering, 0 is no monotonic ordering, and -1 is reversed.',
                 oofAuc: 'For over-10M classification, the chance that a randomly selected hit receives a higher held-out prediction than a miss. 0.5 is chance.',
                 oofBrier: 'Mean squared probability error for held-out over-10M predictions. Lower is better; zero is perfect.',
+                predictionRange: 'The maximum held-out prediction minus the minimum held-out prediction. Range ratio divides that span by the observed span. A narrow ratio exposes regression-to-the-mean even when R-squared looks favorable.',
+                plotModes: 'Held-out prediction plots apply the exact fold-specific calibration used by the reported OOF metrics. Raw-coordinate plots show the uncalibrated embedding-axis coordinate and are association diagnostics only.',
                 qValue: 'Global Benjamini-Hochberg false-discovery-rate adjustment across the full eligible 103-coordinate by 13-outcome exploratory family. Evidence and ranking use this global q-value because the UI can surface the best result across outcomes.',
                 outcomeNotPredictor: 'The 13 measured-outcome columns stay in the ledger for traceability but are excluded from predictive rankings, calibration, and evidence claims.',
                 coverage: 'Counts are explicit because not every artifact contains every truth field. Blind-only rows add real keep, ret5, and views labels, but never receive fabricated stored scores, average retention, outlier, or retention curves.',
