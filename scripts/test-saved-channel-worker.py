@@ -59,7 +59,18 @@ registry_revision = {
     'bytes': 1234,
     'etag': 'registry-etag',
 }
-record = {'steer': steer, 'indicators': indicators}
+visual_keep_forecast = {
+    'coordinate_id': 'shorts.visual-keep-forecast.v1',
+    'raw': 72.345,
+    'est': 72.345,
+    'calibration_scope': 'pooled_global',
+    'model_artifact_sha256': 'visual-keep-model-sha256',
+}
+record = {
+    'steer': steer,
+    'indicators': indicators,
+    'visual_keep_forecast': visual_keep_forecast,
+}
 features, novelty_provenance = worker.compact_feature_bundle(
     record, registry, registry_revision
 )
@@ -102,10 +113,12 @@ video_update = worker.scored_video_update(
 )
 assert video_update['input_manifest'] is raw_input_manifest
 assert video_update['novelty_provenance'] is novelty_provenance
+assert video_update['visual_keep_forecast'] is visual_keep_forecast
 assert video_update['scoredAt'] == 2000
 persisted_video_update = json.loads(json.dumps(video_update))
 assert persisted_video_update['input_manifest'] == raw_input_manifest
 assert persisted_video_update['novelty_provenance'] == novelty_provenance
+assert persisted_video_update['visual_keep_forecast'] == visual_keep_forecast
 
 registry_bytes = json.dumps(registry, separators=(',', ':')).encode()
 class FakeS3:

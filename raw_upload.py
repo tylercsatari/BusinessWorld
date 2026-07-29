@@ -6,7 +6,8 @@ not the projection models, so a new vector is placed among the hooks it's most s
 to — consistent across all three channels/projections).
 
   args: --file <path> [--title <name>]
-  stdout: JSON {montage (b64 jpeg), transcript, silent, channels:{visual,text,together}}
+  stdout: JSON {montage (b64 jpeg), transcript, silent, channels:{visual,text,together},
+                visual_keep_forecast:{raw, coordinate_id, model_artifact_sha256}}
           each channel = {neighbors:[{id,sim}]} (text=null when no real voiceover)
 
 Identical montage/whisper/embed to raw_embed.py so the upload's vectors are comparable.
@@ -31,11 +32,15 @@ TRANSCRIPTION_MODEL = 'gemini-flash-latest'
 EMB_URL = f'https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL}:embedContent'
 SCORE_CACHE_VERSION = 1
 SCORE_CACHE_PREFIX = (env('RAW_SCORE_CACHE_PREFIX') or 'raw/score-cache/v1').strip('/')
+VISUAL_KEEP_MODEL_KEY = 'raw/predictor-lab/visual-keep-model-v1.json'
+VISUAL_KEEP_MODEL_MANIFEST_KEY = 'raw/predictor-lab/visual-keep-model-v1.manifest.json'
+VISUAL_KEEP_COORDINATE_ID = 'shorts.visual-keep-forecast.v1'
 SCORE_REVISION_KEYS = (
     'raw/steer_models.npz',
     'raw/indicators/weights.npz',
     'raw/indicators/registry.json',
     'raw/novelty_models.npz',
+    VISUAL_KEEP_MODEL_MANIFEST_KEY,
     'raw/visual/embeddings.npz',
     'raw/text/embeddings.npz',
     'raw/together/embeddings.npz',
@@ -57,6 +62,117 @@ def coherent(txt):
 def r2_get(key):
     try: return s3.get_object(Bucket=BUCKET, Key=key)['Body'].read()
     except Exception: return None
+
+_VISUAL_KEEP_MODEL_CACHE = None
+
+def _exact_sha256(value):
+    return bool(re.fullmatch(r'[a-f0-9]{64}', str(value or '').lower()))
+
+def _visual_keep_forecast_from_payload(
+    embedding,
+    payload,
+    artifact_sha256,
+    artifact_key=None,
+    manifest_sha256=None,
+):
+    if not isinstance(payload, dict):
+        raise RuntimeError('visual keep predictor artifact is invalid')
+    if payload.get('coordinateId') != VISUAL_KEEP_COORDINATE_ID:
+        raise RuntimeError('visual keep predictor coordinate does not match the scorer contract')
+    formula = payload.get('formula') or {}
+    pooled = formula.get('pooled') or {}
+    if formula.get('scope') != 'pooled_global' or formula.get('accounts'):
+        raise RuntimeError('visual keep predictor must contain one pooled-global formula')
+    coefficients = np.asarray(pooled.get('coefficients') or [], dtype=float)
+    vector = np.asarray(embedding, dtype=float).reshape(-1)
+    if len(coefficients) != DIM or len(vector) != DIM:
+        raise RuntimeError(
+            f'visual keep predictor expects {DIM} dimensions '
+            f'(model={len(coefficients)}, input={len(vector)})'
+        )
+    vector = vector / (np.linalg.norm(vector) + 1e-9)
+    raw_prediction = float(pooled.get('intercept')) + float(vector @ coefficients)
+    if not np.isfinite(raw_prediction):
+        raise RuntimeError('visual keep predictor returned a non-finite value')
+    return {
+        'coordinate_id': VISUAL_KEEP_COORDINATE_ID,
+        'est': round(raw_prediction, 6),
+        'raw': round(raw_prediction, 6),
+        'pctile': None,
+        'kind': 'keep_rate_percent',
+        'unit': 'percent',
+        'calibration_scope': 'pooled_global',
+        'account_model': None,
+        'model_artifact_sha256': artifact_sha256,
+        'model_artifact_key': artifact_key,
+        'model_artifact_canonical_key': VISUAL_KEEP_MODEL_KEY,
+        'model_manifest_key': VISUAL_KEEP_MODEL_MANIFEST_KEY,
+        'model_manifest_sha256': manifest_sha256,
+        'producer_source_sha256': payload.get('producerSourceSha256'),
+        'feature_contract_version': payload.get('featureContractVersion'),
+        'feature_contract_sha256': payload.get('featureContractSha256'),
+        'model_generated_at': payload.get('generatedAt'),
+        'model_status': payload.get('status'),
+        'input': payload.get('input'),
+        'source': 'live_frozen_model_score',
+    }
+
+def visual_keep_forecast(embedding):
+    global _VISUAL_KEEP_MODEL_CACHE
+    if _VISUAL_KEEP_MODEL_CACHE is None:
+        manifest_bytes = r2_get(VISUAL_KEEP_MODEL_MANIFEST_KEY)
+        if not manifest_bytes:
+            raise RuntimeError('visual keep predictor release manifest is unavailable')
+        try:
+            manifest = json.loads(manifest_bytes)
+        except Exception as error:
+            raise RuntimeError('visual keep predictor release manifest is not valid JSON') from error
+        artifact_sha256 = str(manifest.get('artifactSha256') or '').lower()
+        artifact_key = str(manifest.get('archiveKey') or '')
+        expected_archive_key = (
+            'raw/predictor-lab/visual-keep-model/by-sha256/'
+            f'{artifact_sha256}.json'
+        )
+        if (
+            manifest.get('coordinateId') != VISUAL_KEEP_COORDINATE_ID
+            or manifest.get('canonicalKey') != VISUAL_KEEP_MODEL_KEY
+            or not _exact_sha256(artifact_sha256)
+            or artifact_key != expected_archive_key
+            or not _exact_sha256(manifest.get('producerSourceSha256'))
+            or not _exact_sha256(manifest.get('featureContractSha256'))
+        ):
+            raise RuntimeError('visual keep predictor release manifest failed integrity validation')
+        payload_bytes = r2_get(artifact_key)
+        if not payload_bytes:
+            raise RuntimeError('visual keep predictor immutable artifact is unavailable')
+        actual_sha256 = hashlib.sha256(payload_bytes).hexdigest()
+        if actual_sha256 != artifact_sha256:
+            raise RuntimeError('visual keep predictor immutable artifact hash does not match its manifest')
+        try:
+            payload = json.loads(payload_bytes)
+        except Exception as error:
+            raise RuntimeError('visual keep predictor artifact is not valid JSON') from error
+        if (
+            payload.get('coordinateId') != VISUAL_KEEP_COORDINATE_ID
+            or payload.get('producerSourceSha256') != manifest.get('producerSourceSha256')
+            or payload.get('featureContractVersion') != manifest.get('featureContractVersion')
+            or payload.get('featureContractSha256') != manifest.get('featureContractSha256')
+        ):
+            raise RuntimeError('visual keep predictor artifact provenance does not match its release manifest')
+        _VISUAL_KEEP_MODEL_CACHE = {
+            'payload': payload,
+            'artifact_sha256': artifact_sha256,
+            'artifact_key': artifact_key,
+            'manifest_sha256': hashlib.sha256(manifest_bytes).hexdigest(),
+        }
+    cached = _VISUAL_KEEP_MODEL_CACHE
+    return _visual_keep_forecast_from_payload(
+        embedding,
+        cached['payload'],
+        cached['artifact_sha256'],
+        cached['artifact_key'],
+        cached['manifest_sha256'],
+    )
 
 def _canonical_json(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
@@ -171,7 +287,13 @@ def _score_cache_read(key, input_fingerprint, revision_fingerprint):
             and payload.get('input_fingerprint') == input_fingerprint
             and payload.get('revision_fingerprint') == revision_fingerprint
             and isinstance(score, dict)
-            and all(isinstance(score.get(field), dict) for field in ('indicators', 'steer', 'emb_preview', 'channels'))
+            and all(isinstance(score.get(field), dict) for field in (
+                'indicators',
+                'steer',
+                'visual_keep_forecast',
+                'emb_preview',
+                'channels',
+            ))
             and output_fingerprint == _score_output_fingerprint(score)
         )
         if not valid:
@@ -666,11 +788,13 @@ def _score_input_manifest(txt, good, dur_s, score, replay_meta):
         'scorer': 'raw_upload.py',
         'embedding_model': EMBEDDING_MODEL,
         'embedding_dimensions': DIM,
-        'display_contract_version': 4,
+        'display_contract_version': 5,
         'canonical_output_contract': {
-            'total': 21,
+            'total': 22,
             'steer_coordinates': 18,
             'novelty_coordinates': 3,
+            'frozen_model_forecasts': 1,
+            'visual_keep_forecast_coordinate_id': VISUAL_KEEP_COORDINATE_ID,
             'novelty_derivation': 'cached indicator state + revision-pinned indicator registry',
         },
         'steer_artifact_sha256': score.get('steer_artifact_sha256'),
@@ -724,6 +848,7 @@ def _score_output(extra, title, b64, txt, good, dur_s, score, replay_meta):
         'title': title,
         'indicators': score.get('indicators') or {},
         'steer': score.get('steer') or {},
+        'visual_keep_forecast': score.get('visual_keep_forecast') or None,
         'emb_preview': score.get('emb_preview') or {},
         'input_manifest': _score_input_manifest(txt, good, dur_s, score, replay_meta),
         'channels': score.get('channels') or {},
@@ -916,9 +1041,11 @@ def _run():
         if e is None: return None
         a = np.asarray(e, float)
         return [round(float(x), 3) for x in (a[:1536].reshape(48, 32).mean(1) if len(a) >= 1536 else a)]
+    visual_keep = visual_keep_forecast(ev)
     score = {
         'indicators': indicators,
         'steer': steer,
+        'visual_keep_forecast': visual_keep,
         'emb_preview': {'visual': preview(ev), 'text': preview(et), 'together': preview(eg)},
         'steer_artifact_sha256': steer_artifact_sha256,
         'steer_artifact_archive_key': steer_artifact_archive_key,

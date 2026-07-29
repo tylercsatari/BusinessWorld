@@ -22,7 +22,7 @@ const fixtureSnakePopulation = (label, rowCount = 24) => ({
 });
 
 assert.strictEqual(validation.contract.features.length, 21);
-assert.strictEqual(validation.contract.version, 4);
+assert.strictEqual(validation.contract.version, 5);
 assert.strictEqual(validation.contract.pipeline.embeddingModel, 'gemini-embedding-2');
 assert.strictEqual(
     validation.contract.features.find(feature => feature.key === 'novelty.views').unit,
@@ -84,6 +84,16 @@ const channels = validation.SUPPORTED_CHANNELS.map((definition, channelIndex) =>
             subscribers: channelIndex ? 200000 : 100000,
             views: 10 ** (5.8 + index * .2 + channelIndex * .05),
             features: savedFeatures(index),
+            visual_keep_forecast: index < 2 ? {
+                coordinate_id: 'shorts.visual-keep-forecast.v1',
+                raw: index === 0 ? 91.25 : 99.75,
+                est: index === 0 ? 91.25 : 99.75,
+                calibration_scope: 'pooled_global',
+                account_model: null,
+                model_artifact_sha256: index === 0
+                    ? fixtureSha256('visual-keep-model')
+                    : fixtureSha256('stale-visual-keep-model'),
+            } : null,
         };
     });
     return {
@@ -389,10 +399,37 @@ const predictor = {
         keep: {
             points: keepPoints,
             visualOnlyStudy: {
-                schemaVersion: 1,
+                schemaVersion: 2,
                 label: 'Fixture visual-only keep study',
+                coordinateId: 'shorts.visual-keep-forecast.v1',
                 population: { n: 632, accounts: [], embeddingDimensions: 1536 },
                 protocols: {},
+                formula: {
+                    selected: { pooledAlpha: 1, accountAlpha: 1, accountWeight: .75 },
+                },
+                production: {
+                    fitPopulation: {
+                        n: blindArtifactRows.length,
+                        videoIdSha256: fixtureSha256('visual-keep-fit-population'),
+                        byAccount: {
+                            tyler: fixturePopulation('visual-keep-fit-tyler', blindArtifactRows.filter(row => row.account === 'tyler').length),
+                            hafu: fixturePopulation('visual-keep-fit-hafu', blindArtifactRows.filter(row => row.account === 'hafu').length),
+                        },
+                    },
+                    points: blindArtifactRows.map((row, index) => ({
+                        id: row.id,
+                        predicted: 45 + index % 40,
+                        pooledPrediction: 45 + index % 40,
+                        calibrationScope: 'pooled_global',
+                    })),
+                },
+                modelArtifact: {
+                    artifactSha256: fixtureSha256('visual-keep-model'),
+                    canonicalKey: 'raw/predictor-lab/visual-keep-model-v1.json',
+                    archiveKey: `raw/predictor-lab/visual-keep-model/by-sha256/${fixtureSha256('visual-keep-model')}.json`,
+                    producerSourceSha256: fixtureSha256('visual-keep-producer'),
+                    generatedAt: 123456,
+                },
                 promotion: { promoted: false, status: 'fixture' },
             },
             blindInputs: {
@@ -427,7 +464,7 @@ assert.strictEqual(result.version, validation.VERSION);
 assert.strictEqual(result.visualKeepStudy, predictor.targets.keep.visualOnlyStudy);
 assert.strictEqual(result.rows.length, 48);
 assert.strictEqual(result.validationRows.length, 632);
-assert(result.validationRows.every(row => row.scoreLedger && row.scoreLedger.values.length === 103));
+assert(result.validationRows.every(row => row.scoreLedger && row.scoreLedger.values.length === 104));
 assert(result.validationRows.every(row => !Object.prototype.hasOwnProperty.call(row, 'blindVideoHeldOut')));
 assert(result.validationRows.every(row => !Object.prototype.hasOwnProperty.call(row, 'blindAccountHeldOut')));
 assert.strictEqual(result.scopes.pooled.n, 48);
@@ -564,17 +601,18 @@ assert.deepStrictEqual(result.score21Model.inputs.excludedStoredNovelty, [
     'novelty.ret5',
     'novelty.views',
 ]);
-assert.strictEqual(result.coordinateRegistry.version, 2);
+assert.strictEqual(result.coordinateRegistry.version, 3);
 assert.strictEqual(result.coordinateRegistry.totals.shortsStoredProduction, 21);
+assert.strictEqual(result.coordinateRegistry.totals.shortsVisualKeepForecasts, 1);
 assert.strictEqual(result.coordinateRegistry.totals.shortsDirectHeldout, 36);
 assert.strictEqual(result.coordinateRegistry.totals.shortsCombinedForecasts, 26);
 assert.strictEqual(result.coordinateRegistry.totals.shortsObservedOutcomes, 13);
 assert.strictEqual(result.coordinateRegistry.totals.shortsLegacyDiagnostics, 7);
-assert.strictEqual(result.coordinateRegistry.totals.shortsRowColumns, 103);
+assert.strictEqual(result.coordinateRegistry.totals.shortsRowColumns, 104);
 assert.strictEqual(result.coordinateRegistry.totals.shortsBlindColumns, 62);
 assert.strictEqual(result.coordinateRegistry.totals.shortsBlindUniquePredictions, 53);
 assert.strictEqual(result.coordinateRegistry.totals.shortsBlindAliasColumns, 9);
-assert.strictEqual(result.coordinateRegistry.totals.shortsDiagnosticColumns, 28);
+assert.strictEqual(result.coordinateRegistry.totals.shortsDiagnosticColumns, 29);
 assert.strictEqual(result.coordinateRegistry.totals.shortsOutcomeColumns, 13);
 assert.deepStrictEqual(result.coordinateRegistry.classification.blind, {
     columns: 62,
@@ -583,15 +621,15 @@ assert.deepStrictEqual(result.coordinateRegistry.classification.blind, {
     families: ['videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast'],
     meaning: 'Coordinates eligible for blind validation. Nine creator-excluded public direct axes appear in both protocol views but identify the same fitted prediction.',
 });
-assert.strictEqual(result.coordinateRegistry.classification.diagnostics.columns, 28);
+assert.strictEqual(result.coordinateRegistry.classification.diagnostics.columns, 29);
 assert.strictEqual(result.coordinateRegistry.classification.outcomes.columns, 13);
 assert.strictEqual(result.coordinateRegistry.totals.longStoredOutputs, 12);
-assert.strictEqual(new Set(result.coordinateRegistry.columns.map(column => column.id)).size, 103);
+assert.strictEqual(new Set(result.coordinateRegistry.columns.map(column => column.id)).size, 104);
 
 const expectedValueClassCounts = {
     direct_embedding_axis: 45,
     embedding_derived_transform: 12,
-    combined_forecast: 26,
+    combined_forecast: 27,
     observed_outcome: 13,
     legacy_diagnostic: 7,
 };
@@ -759,7 +797,7 @@ assert(
     && result.coordinateRegistry.lineageAudit.passed === true,
     JSON.stringify(result.coordinateRegistry.lineageAudit),
 );
-assert.strictEqual(result.coordinateRegistry.lineageAudit.columnsChecked, 103);
+assert.strictEqual(result.coordinateRegistry.lineageAudit.columnsChecked, 104);
 assert.strictEqual(result.coordinateRegistry.lineageAudit.unclassifiedColumns.length, 0);
 assert.strictEqual(result.coordinateRegistry.lineageAudit.incompleteLineages.length, 0);
 assert.strictEqual(result.coordinateRegistry.lineageAudit.unresolvedReferences.length, 0);
@@ -1068,12 +1106,12 @@ const expectedMetricKeys = [
 outcomeKeys.forEach(outcomeKey => {
     const matrixRow = ledgerOutcomeMatrix[outcomeKey];
     assert(matrixRow.outcome && matrixRow.outcome.key === outcomeKey);
-    assert.strictEqual(matrixRow.outcome.qValueFamily, 'global_all_eligible_103x13');
+    assert.strictEqual(matrixRow.outcome.qValueFamily, 'global_all_eligible_104x13');
     assert(
-        matrixRow.outcome.qValueEligibleTests > 103,
+        matrixRow.outcome.qValueEligibleTests > 104,
         'the BH family must span eligible tests across outcomes, not one outcome at a time',
     );
-    assert.strictEqual(matrixRow.coordinates.length, 103);
+    assert.strictEqual(matrixRow.coordinates.length, 104);
     assert.deepStrictEqual(
         matrixRow.coordinates.map(entry => entry.coordinateId),
         canonicalCoordinateIds,
@@ -1197,13 +1235,36 @@ outcomeKeys.forEach(outcomeKey => {
 assert.match(result.validationContract.videoHeldOut, /five-fold calibration/i);
 assert.match(result.validationContract.accountHeldOut, /leave-account-out calibration/i);
 assert.match(result.validationContract.glossary.outcomeNotPredictor, /excluded/i);
-assert.match(result.validationContract.glossary.qValue, /full eligible 103-coordinate by 13-outcome/i);
+assert.match(result.validationContract.glossary.qValue, /full eligible 104-coordinate by 13-outcome/i);
 assert.match(result.validationContract.glossary.predictionRange, /narrow ratio/i);
 assert.match(result.validationContract.glossary.plotModes, /exact fold-specific calibration/i);
 assert.strictEqual(Object.prototype.hasOwnProperty.call(result.scopes.pooled, 'outcomeMatrix'), false);
 
 const firstRow = result.rows.find(row => row.id === 'tyler-0');
 assert(firstRow);
+const staleVisualKeepRow = result.rows.find(row => row.id === 'tyler-1');
+assert(staleVisualKeepRow);
+assert.strictEqual(
+    firstRow.predictions.visualKeepForecast,
+    91.25,
+    'a persisted scalar is canonical only when its coordinate, scope, and artifact revision match',
+);
+assert.strictEqual(firstRow.predictions.visualKeepForecastSource, 'persisted_score_artifact');
+assert.strictEqual(
+    staleVisualKeepRow.predictions.visualKeepForecast,
+    predictor.targets.keep.visualOnlyStudy.production.points.find(
+        point => point.id === staleVisualKeepRow.id
+    ).predicted,
+    'a stale persisted model revision must be replaced by the current frozen-model backfill',
+);
+assert.strictEqual(
+    staleVisualKeepRow.predictions.visualKeepForecastSource,
+    'current_frozen_model_training_population_backfill',
+);
+assert.strictEqual(
+    staleVisualKeepRow.predictions.visualKeepForecastRejectedRevision,
+    fixtureSha256('stale-visual-keep-model'),
+);
 assert.strictEqual(firstRow.scoreLedger.values.length, result.coordinateRegistry.columns.length);
 assert.strictEqual(firstRow.scoreLedger.percentiles.length, result.coordinateRegistry.columns.length);
 const storedTextKeepIndex = result.coordinateRegistry.columns.findIndex(column => column.id === 'shorts.stored.text.keep');
@@ -1227,10 +1288,31 @@ assert.strictEqual(
 );
 const observedKeepIndex = result.coordinateRegistry.columns.findIndex(column => column.id === 'shorts.observed.keep');
 assert.strictEqual(firstRow.scoreLedger.values[observedKeepIndex], firstRow.actual.keep);
+const visualKeepForecastIndex = result.coordinateRegistry.columns.findIndex(
+    column => column.id === 'shorts.visual-keep-forecast.v1'
+);
+assert(visualKeepForecastIndex >= 0);
+assert.strictEqual(
+    firstRow.scoreLedger.values[visualKeepForecastIndex],
+    91.25,
+);
+const visualKeepColumn = result.coordinateRegistry.columns[visualKeepForecastIndex];
+assert.strictEqual(visualKeepColumn.valueClass, 'combined_forecast');
+assert.strictEqual(
+    visualKeepColumn.lineage.artifactId,
+    'artifact.shorts.visual-keep-model.v1',
+);
+assert.strictEqual(
+    result.coordinateRegistry.lineageCatalog.artifacts[
+        'artifact.shorts.visual-keep-model.v1'
+    ].artifactSha256,
+    fixtureSha256('visual-keep-model'),
+);
 const blindOnlyRow = result.validationRows.find(
     row => row.validationSource === 'predictor_blind_inputs_only'
 );
 assert(blindOnlyRow, 'the expanded blind cohort must be returned for UI plots');
+assert(Number.isFinite(blindOnlyRow.scoreLedger.values[visualKeepForecastIndex]));
 const storedVisualKeepIndex = result.coordinateRegistry.columns.findIndex(
     column => column.id === 'shorts.stored.visual.keep'
 );

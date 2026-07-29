@@ -929,6 +929,16 @@ function validateRawScoreResult(result) {
         const output = result.steer && result.steer[key];
         return !output || !Number.isFinite(Number(output.est));
     })) missing.push('complete visual + combined steered outputs');
+    const visualKeepForecast = result.visual_keep_forecast;
+    if (!visualKeepForecast
+        || visualKeepForecast.coordinate_id !== 'shorts.visual-keep-forecast.v1'
+        || visualKeepForecast.calibration_scope !== 'pooled_global'
+        || visualKeepForecast.account_model != null
+        || !exactSha256(visualKeepForecast.model_artifact_sha256)
+        || !exactSha256(visualKeepForecast.model_manifest_sha256)
+        || !Number.isFinite(Number(visualKeepForecast.raw))) {
+        missing.push('frozen visual keep forecast');
+    }
     if (!result.channels || !validPlacement(result.channels.visual)) missing.push('visual map placement');
     if (!result.channels || !validPlacement(result.channels.together)) missing.push('combined map placement');
     if (missing.length) {
@@ -1236,6 +1246,124 @@ const SAVED_CHANNEL_INDEX_KEY = SAVED_CHANNEL_ROOT + 'index.json';
 const SAVED_CHANNEL_REQUEST_ROOT = 'shorts/channel-import/requests/';
 const SAVED_CHANNEL_VALIDATION_KEY = SAVED_CHANNEL_ROOT + 'blind-validation.json';
 const SAVED_HOOK_INDEX_KEY = 'raw/saved-hooks/index.json';
+const VISUAL_KEEP_MODEL_KEY = 'raw/predictor-lab/visual-keep-model-v1.json';
+const VISUAL_KEEP_MODEL_MANIFEST_KEY = 'raw/predictor-lab/visual-keep-model-v1.manifest.json';
+const VISUAL_KEEP_COORDINATE_ID = 'shorts.visual-keep-forecast.v1';
+let visualKeepModelCache = null;
+
+function exactSha256(value) {
+    return /^[a-f0-9]{64}$/i.test(String(value || ''));
+}
+
+async function readVisualKeepReleaseManifest() {
+    const manifestBuffer = await cloud.downloadFromR2(VISUAL_KEEP_MODEL_MANIFEST_KEY);
+    if (!manifestBuffer) throw new Error('The frozen visual keep model release manifest is not available.');
+    const manifest = JSON.parse(manifestBuffer.toString('utf8'));
+    const artifactSha256 = String(manifest.artifactSha256 || '').toLowerCase();
+    const expectedArchiveKey = `raw/predictor-lab/visual-keep-model/by-sha256/${artifactSha256}.json`;
+    if (
+        manifest.coordinateId !== VISUAL_KEEP_COORDINATE_ID
+        || manifest.canonicalKey !== VISUAL_KEEP_MODEL_KEY
+        || !exactSha256(artifactSha256)
+        || manifest.archiveKey !== expectedArchiveKey
+        || !exactSha256(manifest.producerSourceSha256)
+        || !exactSha256(manifest.featureContractSha256)
+    ) {
+        throw new Error('The frozen visual keep model release manifest failed integrity validation.');
+    }
+    return {
+        manifest,
+        manifestBuffer,
+        manifestSha256: require('crypto').createHash('sha256').update(manifestBuffer).digest('hex'),
+        artifactSha256,
+        artifactKey: manifest.archiveKey,
+    };
+}
+
+async function readVisualKeepModel(forceRefresh = false, pinnedRelease = null) {
+    // Always read the small release pointer before accepting the cache. This
+    // prevents an old cached model plus an old persisted score from appearing
+    // current after a new release has been published.
+    const release = pinnedRelease || await readVisualKeepReleaseManifest();
+    if (
+        !forceRefresh
+        && visualKeepModelCache
+        && visualKeepModelCache.artifactSha256 === release.artifactSha256
+        && visualKeepModelCache.manifestSha256 === release.manifestSha256
+    ) {
+        return visualKeepModelCache;
+    }
+    const buffer = await cloud.downloadFromR2(release.artifactKey);
+    if (!buffer) throw new Error('The frozen visual keep model immutable artifact is not available.');
+    const actualSha256 = require('crypto').createHash('sha256').update(buffer).digest('hex');
+    if (actualSha256 !== release.artifactSha256) {
+        throw new Error('The frozen visual keep model immutable artifact does not match its manifest.');
+    }
+    const model = JSON.parse(buffer.toString('utf8'));
+    if (
+        model.coordinateId !== VISUAL_KEEP_COORDINATE_ID
+        || model.producerSourceSha256 !== release.manifest.producerSourceSha256
+        || model.featureContractVersion !== release.manifest.featureContractVersion
+        || model.featureContractSha256 !== release.manifest.featureContractSha256
+        || !model.formula
+        || model.formula.scope !== 'pooled_global'
+        || model.formula.accounts
+    ) {
+        throw new Error('The frozen visual keep model provenance is incompatible with its release manifest.');
+    }
+    visualKeepModelCache = {
+        loadedAt: Date.now(),
+        artifactSha256: release.artifactSha256,
+        artifactKey: release.artifactKey,
+        artifactBuffer: buffer,
+        manifestSha256: release.manifestSha256,
+        manifestBuffer: release.manifestBuffer,
+        manifest: release.manifest,
+        model,
+        byVideoId: new Map((model.trainingPredictions || []).map(point => [String(point.id), point])),
+    };
+    return visualKeepModelCache;
+}
+
+function visualKeepForecastMatchesRelease(value, cached) {
+    return !!(
+        value
+        && typeof value === 'object'
+        && value.coordinate_id === VISUAL_KEEP_COORDINATE_ID
+        && value.calibration_scope === 'pooled_global'
+        && value.account_model == null
+        && value.model_artifact_sha256 === cached.artifactSha256
+        && Number.isFinite(Number(value.raw != null ? value.raw : value.est))
+    );
+}
+
+async function backfilledVisualKeepForecast(videoId, modelCache = null) {
+    const cached = modelCache || await readVisualKeepModel();
+    const point = cached.byVideoId.get(String(videoId));
+    if (!point || !Number.isFinite(Number(point.predicted))) return null;
+    return {
+        coordinate_id: VISUAL_KEEP_COORDINATE_ID,
+        est: Number(point.predicted),
+        raw: Number(point.predicted),
+        pctile: null,
+        kind: 'keep_rate_percent',
+        unit: 'percent',
+        calibration_scope: 'pooled_global',
+        account_model: null,
+        model_artifact_sha256: cached.artifactSha256,
+        model_artifact_key: cached.artifactKey,
+        model_artifact_canonical_key: VISUAL_KEEP_MODEL_KEY,
+        model_manifest_key: VISUAL_KEEP_MODEL_MANIFEST_KEY,
+        model_manifest_sha256: cached.manifestSha256,
+        producer_source_sha256: cached.model.producerSourceSha256 || null,
+        feature_contract_version: cached.model.featureContractVersion || null,
+        feature_contract_sha256: cached.model.featureContractSha256 || null,
+        model_generated_at: cached.model.generatedAt || null,
+        model_status: cached.model.status || null,
+        input: cached.model.input || null,
+        source: 'final_model_training_population_backfill',
+    };
+}
 
 async function readSavedHookIndex() {
     const buffer = await cloud.downloadFromR2(SAVED_HOOK_INDEX_KEY).catch(() => null);
@@ -1336,11 +1464,14 @@ async function removeSavedChannelIndex(id) {
     await writeSavedChannelIndex(index);
 }
 
-function savedChannelValidationCacheIsCompatible(cached, contractSha256) {
+function savedChannelValidationCacheIsCompatible(cached, contractSha256, visualKeepRelease) {
     const registry = cached && cached.coordinateRegistry;
     const runtimeArtifact = registry && registry.lineageCatalog
         && registry.lineageCatalog.artifacts
         && registry.lineageCatalog.artifacts['artifact.runtime.shorts.blind-predictor.v1'];
+    const visualKeepArtifact = registry && registry.lineageCatalog
+        && registry.lineageCatalog.artifacts
+        && registry.lineageCatalog.artifacts['artifact.shorts.visual-keep-model.v1'];
     return !!(
         cached
         && cached.version === savedChannelValidation.VERSION
@@ -1349,6 +1480,15 @@ function savedChannelValidationCacheIsCompatible(cached, contractSha256) {
         && runtimeArtifact
         && runtimeArtifact.scoredWithContractSha256 === contractSha256
         && runtimeArtifact.displayedLineageContractSha256 === contractSha256
+        && visualKeepArtifact
+        && visualKeepRelease
+        && exactSha256(visualKeepRelease.artifactSha256)
+        && exactSha256(visualKeepRelease.manifestSha256)
+        && visualKeepArtifact.artifactSha256 === visualKeepRelease.artifactSha256
+        && visualKeepArtifact.manifestSha256 === visualKeepRelease.manifestSha256
+        && visualKeepArtifact.runtimeRevision
+        && visualKeepArtifact.runtimeRevision.artifactSha256 === visualKeepRelease.artifactSha256
+        && visualKeepArtifact.runtimeRevision.manifestSha256 === visualKeepRelease.manifestSha256
     );
 }
 
@@ -1362,10 +1502,18 @@ async function buildSavedChannelValidationBuffer() {
     if (cachedBuffer) {
         try { cached = JSON.parse(cachedBuffer.toString('utf8')); } catch (e) {}
     }
+    // The release pointer is required even for fallback. Serving a cached
+    // ledger whose model revision cannot be compared with the current pointer
+    // would make the ledger and click-through disagree silently.
+    const visualKeepRelease = await readVisualKeepReleaseManifest();
     try {
-        return await buildFreshSavedChannelValidationBuffer();
+        return await buildFreshSavedChannelValidationBuffer(visualKeepRelease);
     } catch (error) {
-        if (!savedChannelValidationCacheIsCompatible(cached, contractSha256)) throw error;
+        if (!savedChannelValidationCacheIsCompatible(
+            cached,
+            contractSha256,
+            visualKeepRelease
+        )) throw error;
         cached.artifact = {
             ...(cached.artifact || {}),
             cacheStatus: 'source-unavailable-hit',
@@ -1379,7 +1527,7 @@ async function buildSavedChannelValidationBuffer() {
     }
 }
 
-async function buildFreshSavedChannelValidationBuffer() {
+async function buildFreshSavedChannelValidationBuffer(visualKeepRelease) {
     const sourceBuffers = new Map();
     const predictorBuffer = await cloud.downloadFromR2('raw/predictor-lab/results.json');
     if (!predictorBuffer) throw new Error('The leakage-safe predictor artifact has not been built.');
@@ -1405,7 +1553,40 @@ async function buildFreshSavedChannelValidationBuffer() {
             : null,
         artifactGeneratedAt: predictor.generatedAt || null,
     };
+    const predictorVisualKeepArtifact = predictor
+        && predictor.targets
+        && predictor.targets.keep
+        && predictor.targets.keep.visualOnlyStudy
+        && predictor.targets.keep.visualOnlyStudy.modelArtifact
+        || predictor.provenance.visualKeepModelArtifact
+        || null;
+    if (
+        !predictorVisualKeepArtifact
+        || predictorVisualKeepArtifact.artifactSha256 !== visualKeepRelease.artifactSha256
+        || predictorVisualKeepArtifact.archiveKey !== visualKeepRelease.artifactKey
+        || predictorVisualKeepArtifact.producerSourceSha256
+            !== visualKeepRelease.manifest.producerSourceSha256
+        || predictor.provenance.featureContractVersion
+            !== visualKeepRelease.manifest.featureContractVersion
+        || predictor.provenance.featureContractSha256
+            !== visualKeepRelease.manifest.featureContractSha256
+    ) {
+        throw new Error(
+            'The predictor results and frozen visual keep release pointer are not on the same immutable revision.'
+        );
+    }
+    const visualKeepModel = await readVisualKeepModel(false, visualKeepRelease);
+    sourceBuffers.set(VISUAL_KEEP_MODEL_MANIFEST_KEY, visualKeepRelease.manifestBuffer);
+    sourceBuffers.set(visualKeepRelease.artifactKey, visualKeepModel.artifactBuffer);
     const runtimeManifests = {};
+    runtimeManifests.visualKeepModelRelease = {
+        key: VISUAL_KEEP_MODEL_MANIFEST_KEY,
+        artifactSha256: visualKeepRelease.artifactSha256,
+        manifestSha256: visualKeepRelease.manifestSha256,
+        archiveKey: visualKeepRelease.artifactKey,
+        producerSourceSha256: visualKeepRelease.manifest.producerSourceSha256,
+        featureContractSha256: visualKeepRelease.manifest.featureContractSha256,
+    };
     for (const [name, key] of [
         ['shortsSteer', 'raw/steer_manifest.json'],
         ['shortsVisualMap', 'raw/visual/map.manifest.json'],
@@ -4889,8 +5070,28 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if (savedChannelVideo && req.method === 'GET') {
         try {
             const buffer = await cloud.downloadFromR2(`${SAVED_CHANNEL_ROOT}${savedChannelVideo[1]}/videos/${savedChannelVideo[2]}.json`);
+            let record = null;
+            if (buffer) {
+                record = JSON.parse(buffer.toString('utf8'));
+                let modelCache = null;
+                try {
+                    modelCache = await readVisualKeepModel();
+                } catch (error) {
+                    record.visual_keep_forecast = null;
+                    record.visual_keep_forecast_error = (
+                        `Current frozen visual keep release could not be verified: `
+                        + String(error && error.message || error).slice(0, 180)
+                    );
+                }
+                if (modelCache && !visualKeepForecastMatchesRelease(record.visual_keep_forecast, modelCache)) {
+                    record.visual_keep_forecast = await backfilledVisualKeepForecast(savedChannelVideo[2], modelCache).catch(() => null);
+                    if (!record.visual_keep_forecast) {
+                        record.visual_keep_forecast_error = 'This historical video is outside the current frozen model training population; re-score it to persist the current raw value.';
+                    }
+                }
+            }
             res.writeHead(buffer ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=86400' });
-            res.end(buffer ? buffer.toString('utf8') : JSON.stringify({ error: 'Scored video record not found.' }));
+            res.end(record ? JSON.stringify(record) : JSON.stringify({ error: 'Scored video record not found.' }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
@@ -5029,6 +5230,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 hasMontage,
                 indicators: (body.indicators && typeof body.indicators === 'object') ? body.indicators : null,
                 steer: (body.steer && typeof body.steer === 'object') ? body.steer : null,
+                visual_keep_forecast: (body.visual_keep_forecast && typeof body.visual_keep_forecast === 'object') ? body.visual_keep_forecast : null,
                 channels: (body.channels && typeof body.channels === 'object') ? body.channels : null,
                 emb_preview: (body.emb_preview && typeof body.emb_preview === 'object') ? body.emb_preview : null,
                 input_manifest: (body.input_manifest && typeof body.input_manifest === 'object') ? body.input_manifest : null,
@@ -5057,7 +5259,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const existing = await cloud.downloadFromR2(key).catch(() => null);
             if (!existing) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"saved hook not found"}'); return; }
             const rec = JSON.parse(existing.toString('utf8'));
-            for (const field of ['indicators', 'steer', 'channels', 'emb_preview', 'input_manifest']) {
+            for (const field of ['indicators', 'steer', 'visual_keep_forecast', 'channels', 'emb_preview', 'input_manifest']) {
                 if (body[field] && typeof body[field] === 'object') rec[field] = body[field];
             }
             if (typeof body.montage === 'string' && body.montage.indexOf('base64,') >= 0) {

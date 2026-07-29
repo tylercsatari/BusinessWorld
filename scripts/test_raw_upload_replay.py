@@ -2,7 +2,8 @@
 """Focused deterministic replay tests for raw_upload.py.
 
 No network, Gemini, ffmpeg, or real R2 credentials are used. The fake score has the
-same 18 steer + 3 novelty-coordinate inputs as the production 21-output contract.
+same 18 steer + 3 novelty coordinates plus the frozen visual keep forecast as the
+production 22-output contract.
 """
 import base64
 import importlib.util
@@ -81,6 +82,20 @@ def canonical_score(seed=1):
     return {
         'indicators': indicators,
         'steer': steer,
+        'visual_keep_forecast': {
+            'coordinate_id': RAW.VISUAL_KEEP_COORDINATE_ID,
+            'est': 65.0 + seed,
+            'raw': 65.0 + seed,
+            'pctile': None,
+            'kind': 'keep_rate_percent',
+            'unit': 'percent',
+            'calibration_scope': 'pooled_global',
+            'account_model': None,
+            'model_artifact_sha256': f'visual-keep-artifact-{seed}',
+            'model_artifact_key': f'raw/predictor-lab/visual-keep-model/by-sha256/{seed:064x}.json',
+            'model_artifact_canonical_key': RAW.VISUAL_KEEP_MODEL_KEY,
+            'model_manifest_key': RAW.VISUAL_KEEP_MODEL_MANIFEST_KEY,
+        },
         'emb_preview': {
             'visual': [0.1, 0.2],
             'text': [0.3, 0.4],
@@ -139,7 +154,9 @@ def test_cache_hit_skips_all_embedding_calls():
     assert manifest['revision_fingerprint'] == replay_meta['revision_fingerprint']
     assert manifest['output_fingerprint'] == replay_meta['output_fingerprint']
     assert manifest['scorer_revisions'] == revision_state
-    assert manifest['canonical_output_contract']['total'] == 21
+    assert manifest['canonical_output_contract']['total'] == 22
+    assert manifest['canonical_output_contract']['frozen_model_forecasts'] == 1
+    assert output['visual_keep_forecast'] == first_score['visual_keep_forecast']
     assert manifest['steer_artifact_archive_key'].endswith('steer-artifact-1.npz')
     assert manifest['steer_lineage_manifest_sha256'] == 'steer-lineage-1'
     assert manifest['steer_lineage_schema_version'] == 1
@@ -213,6 +230,55 @@ def test_production_lookup_precedes_embedding():
     assert lookup < return_on_hit < first_embedding
 
 
+def test_visual_keep_formula_replays_the_frozen_raw_coordinate():
+    embedding = RAW.np.zeros(RAW.DIM, dtype=float)
+    embedding[0] = 3
+    embedding[1] = 4
+    pooled_coefficients = [0.0] * RAW.DIM
+    pooled_coefficients[0] = 10
+    pooled_coefficients[1] = 20
+    payload = {
+        'coordinateId': RAW.VISUAL_KEEP_COORDINATE_ID,
+        'generatedAt': 123456,
+        'status': 'research_only_not_validated_for_pre_upload_decisions',
+        'input': 'fixture visual embedding',
+        'formula': {
+            'scope': 'pooled_global',
+            'pooled': {
+                'intercept': 5,
+                'coefficients': pooled_coefficients,
+            },
+        },
+    }
+    artifact_sha256 = 'a' * 64
+    artifact_key = (
+        'raw/predictor-lab/visual-keep-model/by-sha256/'
+        f'{artifact_sha256}.json'
+    )
+    pooled = RAW._visual_keep_forecast_from_payload(
+        embedding,
+        payload,
+        artifact_sha256,
+        artifact_key,
+        'b' * 64,
+    )
+    assert pooled['raw'] == 27.0
+    assert pooled['calibration_scope'] == 'pooled_global'
+    assert pooled['account_model'] is None
+    replayed = RAW._visual_keep_forecast_from_payload(
+        embedding,
+        payload,
+        artifact_sha256,
+        artifact_key,
+        'b' * 64,
+    )
+    assert replayed['raw'] == pooled['raw']
+    assert replayed['coordinate_id'] == RAW.VISUAL_KEEP_COORDINATE_ID
+    assert replayed['model_artifact_sha256'] == artifact_sha256
+    assert replayed['model_artifact_key'] == artifact_key
+    assert replayed['model_manifest_sha256'] == 'b' * 64
+
+
 if __name__ == '__main__':
     original_s3 = RAW.s3
     try:
@@ -221,6 +287,7 @@ if __name__ == '__main__':
         test_cache_failures_fall_through_without_hiding_scores()
         test_corrupt_cache_is_an_integrity_miss()
         test_production_lookup_precedes_embedding()
+        test_visual_keep_formula_replays_the_frozen_raw_coordinate()
     finally:
         RAW.s3 = original_s3
     print('raw_upload deterministic replay: PASS')

@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "pipeline": {
     "sourceWindow": "first 5 seconds",
     "embeddingModel": "gemini-embedding-2",
@@ -15,18 +15,20 @@
     "contractId": "jarvis.coordinate-lineage.v1",
     "purpose": "Static, machine-readable lineage for every canonical Shorts ledger family and every exposed Long Quant output family. Runtime materializations may add artifact hashes, row counts, fit counts, and exclusion-set hashes, but may not replace these identities.",
     "inventorySemantics": {
-      "shortsLedgerColumns": 103,
+      "shortsLedgerColumns": 104,
+      "shortsVisualKeepForecasts": 1,
       "shortsDirectAxisColumns": 45,
       "shortsDistinctDirectEmbeddingAxes": 36,
       "shortsDirectAxisAliasColumns": 9,
       "shortsEmbeddingDerivedTransforms": 12,
       "shortsCombinedForecasts": 26,
+      "shortsForecastColumns": 27,
       "shortsObservedOutcomes": 13,
       "shortsLegacyDiagnostics": 7,
       "longScalarOutputs": 12,
       "longFrozenDirectAxes": 1,
       "longNeighborDerivedOutputs": 11,
-      "warning": "A ledger column is not necessarily an embedding space. The 45 direct-axis columns contain 36 distinct fitted axes because the same nine creator-excluded public axes are exposed under both evaluation-protocol views. Observed outcomes, embedding-derived transforms, combined forecasts, and legacy diagnostics must never be described as direct embedding axes."
+      "warning": "A ledger column is not necessarily an embedding space. The 45 direct-axis columns contain 36 distinct fitted axes because the same nine creator-excluded public axes are exposed under both evaluation-protocol views. The frozen visual keep forecast is one derived scalar from the existing visual representation, not a new embedding space. Observed outcomes, embedding-derived transforms, combined forecasts, and legacy diagnostics must never be described as direct embedding axes."
     },
     "identityRules": [
       "A coordinate identity is the tuple of coordinate ID, raw input set, representation, fit dataset, target, algorithm, calibration, artifact revision, and evaluation protocol.",
@@ -434,6 +436,18 @@
             "artifactRevision"
           ]
         },
+        "dataset.shorts.visual-keep-final-fit.v1": {
+          "domain": "shorts",
+          "role": "final frozen visual keep forecast fit",
+          "baseDatasetId": "dataset.shorts.private-blind-population.v1",
+          "selectionRule": "Every private row with a canonical 1,536-dimensional visual opening embedding and a finite stayed-to-watch label. Nested training-only folds select the pooled Ridge setting before one final pooled formula is fit once on every eligible labeled row.",
+          "runtimeProvenanceRequired": [
+            "rowCount",
+            "videoIdHash",
+            "byAccount",
+            "artifactRevision"
+          ]
+        },
         "dataset.shorts.video-forecast-folds.v1": {
           "domain": "shorts",
           "role": "combined forecast validation",
@@ -643,6 +657,17 @@
           },
           "fit": "Cross-fit keep and ret5 inside the permitted training data, then fit log10 views from out-of-fold keep, out-of-fold ret5, and log10 duration.",
           "formula": "log10(realviews + 1) = Ridge([oof_keep, oof_ret5, log10(duration + 1)])",
+          "sourceCode": "buildings/jarvis/predictor-lab/run_predictor_lab.py"
+        },
+        "algorithm.shorts.visual-keep-pooled-ridge.v1": {
+          "domain": "shorts",
+          "kind": "combined_forecast",
+          "inputs": [
+            "L2-normalized 1,536D visual opening embedding"
+          ],
+          "estimator": "sklearn.linear_model.Ridge",
+          "fit": "Nested training-only folds select the pooled alpha. The frozen production artifact then refits one pooled Ridge formula on every permitted labeled row.",
+          "scalarFormula": "intercept + dot(L2-normalized visual embedding, 1,536 persisted coefficients). Creator identity is not an input, so an identical vector receives an identical scalar in every scoring route.",
           "sourceCode": "buildings/jarvis/predictor-lab/run_predictor_lab.py"
         },
         "algorithm.shorts.nested-multitarget-ridge.v1": {
@@ -1053,6 +1078,31 @@
           "runtimeRevisionRequiredFields": [
             "registrySha256",
             "weightsSha256"
+          ]
+        },
+        "artifact.shorts.visual-keep-model.v1": {
+          "domain": "shorts",
+          "path": "raw/predictor-lab/visual-keep-model-v1.json",
+          "manifestPath": "raw/predictor-lab/visual-keep-model-v1.manifest.json",
+          "archivePathPattern": "raw/predictor-lab/visual-keep-model/by-sha256/{artifactSha256}.json",
+          "producer": "buildings/jarvis/predictor-lab/run_predictor_lab.py",
+          "consumer": [
+            "raw_upload.py",
+            "server.js"
+          ],
+          "contains": [
+            "coordinate ID",
+            "one pooled 1,536-dimensional coefficient vector and intercept",
+            "selected pooled Ridge setting",
+            "training-population ID hash",
+            "per-training-video final-model predictions",
+            "separate held-out validation summary"
+          ],
+          "runtimeRevisionRequired": true,
+          "runtimeRevisionRequiredFields": [
+            "artifactSha256",
+            "archiveKey",
+            "producerSourceSha256"
           ]
         },
         "artifact.shorts.live-score-runtime.v1": {
@@ -1693,6 +1743,29 @@
           "artifact.shorts.embeddings.together.v1"
         ],
         "visualizationMapIds": []
+      },
+      {
+        "id": "family.shorts.visual-keep-production.v1",
+        "coordinatePattern": "shorts.visual-keep-forecast.v1",
+        "expansion": {
+          "count": 1
+        },
+        "valueClass": "combined_forecast",
+        "rawInputSetIds": [
+          "input.shorts.first5-montage.v1"
+        ],
+        "representationId": "representation.shorts.visual.gemini1536.v1",
+        "fitDatasetId": "dataset.shorts.visual-keep-final-fit.v1",
+        "target": "observed stayed-to-watch percentage",
+        "algorithmId": "algorithm.shorts.visual-keep-pooled-ridge.v1",
+        "calibrationId": "calibration.identity-target-units.v1",
+        "artifactIds": [
+          "artifact.shorts.visual-keep-model.v1"
+        ],
+        "visualizationMapIds": [
+          "map.shorts.keep.v1"
+        ],
+        "evaluationWarning": "The frozen production value is in-sample for rows used in the final fit. Video, forward-time, and account-holdout predictions are separate validation evidence and are never substituted for this coordinate."
       },
       {
         "id": "family.shorts.video-heldout.private-axis.v1",

@@ -72,11 +72,22 @@ async function main() {
                     text: { neighbors },
                     together: { neighbors },
                 },
+                visual_keep_forecast: {
+                    coordinate_id: 'shorts.visual-keep-forecast.v1',
+                    est: 76.4,
+                    raw: 76.4,
+                    kind: 'keep_rate_percent',
+                    unit: 'percent',
+                    calibration_scope: 'pooled_global',
+                    account_model: null,
+                    model_artifact_sha256: 'visualkeepfixture0123456789',
+                    model_artifact_key: 'raw/predictor-lab/visual-keep-model-v1.json',
+                },
                 input_manifest: {
                     domain: 'shorts_raw',
                     scorer: 'raw_upload.py',
                     embedding_model: 'gemini-embedding-2',
-                    display_contract_version: 2,
+                    display_contract_version: 5,
                     display_preference: ['together', 'text', 'visual'],
                 },
             };
@@ -136,6 +147,7 @@ async function main() {
             scrollWidth: document.documentElement.scrollWidth,
             clientWidth: document.documentElement.clientWidth,
             scoreText: document.body.innerText.includes('A complete saved hook') && document.body.innerText.toLowerCase().includes('keep rate'),
+            frozenForecastText: document.querySelector('[data-visual-keep-forecast]')?.textContent || '',
             parity: window.BusinessWorldEmbeddingParityAudit(document),
         }));
         assert.strictEqual(result.calls.filter(call => call.path === '/api/raw/map').length, 0, 'score details must never request a complete Raw map');
@@ -147,6 +159,7 @@ async function main() {
         assert(result.domNodes < 10000, `mobile detail DOM is unbounded (${result.domNodes})`);
         assert(result.scrollWidth <= result.clientWidth, 'mobile score detail introduced horizontal overflow');
         assert(result.scoreText, 'the complete score read-out did not render');
+        assert(result.frozenForecastText.includes('76.4%'), 'the frozen visual keep raw value is missing from the normal score detail');
         assert(result.parity.ok, `saved-hook card/detail embedding parity failed: ${JSON.stringify(result.parity.conflicts)}`);
         assert(result.parity.nodes >= 18, `saved-hook detail exposed only ${result.parity.nodes} machine-readable embedding identities`);
         console.log(JSON.stringify({ ok: true, ...result }, null, 2));

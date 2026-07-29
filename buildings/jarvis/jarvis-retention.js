@@ -364,6 +364,12 @@ const JarvisRetention = (function () {
     //    Experiment grid both read it through these — change the maths once, both follow. ──
     const STEER_KEY = { views: 'views', rawviews: 'views', realviews: 'realviews', outlier: 'outlier', hi10m: 'gt10M', keep: 'keep', ret5: 'ret5' };
     function steerOf(up, mod, tn) { const s = up && up.steer; const k = s && s[`${mod}_${tn}`]; return k || null; }   // {est,pctile,kind}
+    function visualKeepForecastOf(up) {
+        const value = up && up.visual_keep_forecast;
+        if (!value || value.coordinate_id !== 'shorts.visual-keep-forecast.v1') return null;
+        const raw = value.raw != null ? +value.raw : +value.est;
+        return isFinite(raw) ? { ...value, raw, est: raw } : null;
+    }
     function steerPreference(up) {
         const requested = up && up.input_manifest && Array.isArray(up.input_manifest.display_preference)
             ? up.input_manifest.display_preference
@@ -523,7 +529,12 @@ const JarvisRetention = (function () {
               <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Displayed unit calibrated on:</b> ${esc(row.calibrationPopulation || 'not documented')}</div>
               <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Truth it represents:</b> ${esc(row.observedOutcome || 'not documented')}</div>
             </div>`;
-        }).join('');
+        }).join('') + `<div style="display:grid;grid-template-columns:minmax(105px,.55fr) minmax(220px,1.35fr) minmax(190px,1.1fr) minmax(160px,1fr);gap:8px;padding:7px;border-top:1px solid ${C.border};align-items:start">
+          <div><div style="font-size:9px;color:${C.green};font-weight:950">Frozen visual keep forecast</div><div style="font-size:7.5px;color:${C.faint}">1 derived production output</div></div>
+          <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Input:</b> the complete L2-normalized 1,536D visual montage embedding.</div>
+          <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Formula:</b> one immutable pooled Ridge. Creator identity is never an input.</div>
+          <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Output:</b> raw stayed-to-watch percentage. It reuses the visual embedding and is not a new embedding space.</div>
+        </div>`;
         const hash = manifest.steer_artifact_sha256
             ? String(manifest.steer_artifact_sha256).slice(0, 12)
             : 'not persisted on this historical score';
@@ -533,7 +544,7 @@ const JarvisRetention = (function () {
         const inputFingerprint = manifest.input_fingerprint ? String(manifest.input_fingerprint).slice(0, 12) : 'unavailable';
         const revisionFingerprint = manifest.revision_fingerprint ? String(manifest.revision_fingerprint).slice(0, 12) : 'unavailable';
         const pipeline = SCORECONTRACT.pipeline || {};
-        return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap;margin-bottom:6px"><div><div style="font-size:12px;font-weight:950;color:${C.text}">Exactly what the 21 graphs mean</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-top:2px">The input changes across Visual, Text, and Both; the target coordinate and its fitting population do not. A production score is a coordinate on that trained axis, not automatically a held-out prediction.</div></div><div style="font-size:8px;color:${C.faint};text-align:right">${esc(manifest.embedding_model || pipeline.embeddingModel || 'gemini-embedding-2')} · ${Number(manifest.embedding_dimensions || pipeline.embeddingDimensions || 1536).toLocaleString()}D<br>${esc(manifest.scorer || pipeline.scorer || 'raw_upload.py')} · artifact ${esc(hash)}</div></div>
+        return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap;margin-bottom:6px"><div><div style="font-size:12px;font-weight:950;color:${C.text}">Exactly what the 22 stored outputs mean</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-top:2px">The original 21 coordinates remain unchanged. The additional frozen visual forecast is one derived scalar from the existing visual vector, not a 22nd embedding space. A production score is not automatically a held-out prediction.</div></div><div style="font-size:8px;color:${C.faint};text-align:right">${esc(manifest.embedding_model || pipeline.embeddingModel || 'gemini-embedding-2')} · ${Number(manifest.embedding_dimensions || pipeline.embeddingDimensions || 1536).toLocaleString()}D<br>${esc(manifest.scorer || pipeline.scorer || 'raw_upload.py')} · artifact ${esc(hash)}</div></div>
           <div style="overflow:auto"><div style="min-width:760px;border:1px solid ${C.border}">${targetRows}</div></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:5px;margin-top:7px"><div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Deterministic replay</div><div style="font-size:9px;color:${manifest.cache_status === 'hit' ? C.green : C.text};font-weight:900">${esc(replayStatus)}</div></div><div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Input fingerprint</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(inputFingerprint)}</div></div><div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Scorer + model + artifact revision</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(revisionFingerprint)}</div></div></div>
           <div style="font-size:8px;color:${C.amber};line-height:1.5;margin-top:7px"><b>Critical distinction:</b> Keep and 5-second axes were fitted and calibrated on the exact modality-specific Tyler rows recorded in the current artifact manifest. Their stored Tyler values are in-sample diagnostics; Hafu is account-external. Public views, outlier, and 10M axes use their separately recorded public fit populations. “Forecast views” is a separate Tyler-channel retention-to-views model. The Blind validation tab rebuilds eligible axes with video/account exclusion and reports the actual error.</div>`, 10);
@@ -1022,6 +1033,16 @@ const JarvisRetention = (function () {
         const upDetail = (st.rawUpSel != null && ups[st.rawUpSel]) ? (() => {
             const i = st.rawUpSel, U = ups[i], col = upColor(i);
             const montageSrc = U.montageDataUrl || (U.montage ? 'data:image/jpeg;base64,' + U.montage : '');
+            const frozenVisualKeep = visualKeepForecastOf(U);
+            const frozenVisualKeepOrigin = frozenVisualKeep
+                && frozenVisualKeep.source === 'final_model_training_population_backfill'
+                ? 'Current frozen-model backfill'
+                : 'Persisted raw forecast';
+            const frozenVisualKeepHtml = frozenVisualKeep ? `<div data-visual-keep-raw-map-value style="border-left:3px solid ${C.green};background:${C.green}0d;padding:8px 9px;margin:8px 0">
+                <div style="font-size:8px;color:${C.green};font-weight:950;text-transform:uppercase">${esc(frozenVisualKeepOrigin)} · raw ledger value</div>
+                <div style="font-size:22px;color:${C.text};font-weight:950;line-height:1.15;margin-top:2px">${fmtv(frozenVisualKeep.raw, 1)}%</div>
+                <div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:3px">The marker above is this opening's normal visual embedding placement. The percentage applies one immutable pooled full-vector Ridge formula to that same 1,536D vector; it is stored as <b>${esc(frozenVisualKeep.coordinate_id)}</b> · pooled globally · artifact ${esc(String(frozenVisualKeep.model_artifact_sha256 || 'unavailable').slice(0, 12))}.</div>
+            </div>` : `<div data-visual-keep-raw-map-value style="border-left:3px solid ${C.amber};background:${C.amber}0d;padding:8px 9px;margin:8px 0;font-size:8px;color:${C.dim}">${esc(U.visual_keep_forecast_error || 'This stored score predates shorts.visual-keep-forecast.v1. Re-score it once to persist the frozen raw forecast.')}</div>`;
             const uc = U.channels ? U.channels[chan] : null, pos = upPos(U);
             const nbrTitles = (uc && uc.neighbors ? uc.neighbors.slice(0, 4) : []).map(nb => {
                 const idx = (R.id || []).indexOf(nb.id);
@@ -1051,6 +1072,7 @@ const JarvisRetention = (function () {
                         <div style="font-size:8.5px;color:${C.faint};margin-top:4px">Re-embeds the SAME 5-frame montage with your text: visual stays identical, text + together are recomputed, and every steered output updates.</div>
                       </div>`;
                   })()}
+                  ${frozenVisualKeepHtml}
                   ${placed}
                   ${(() => { const row = (tn, lab) => { const k = steerBest(U, tn); return k ? `<div${embeddingDataAttrs(U, k.mod, tn, 'stored-production', rawEmbeddingAssetId(U), k)} style="display:flex;justify-content:space-between;gap:10px;font-size:11px"><span style="color:${C.mute}">${lab}</span><span style="color:${C.text};font-weight:700">~${k.est}% <span style="color:${C.mute};font-weight:400">(${k.pctile}th corpus percentile · ${k.mod} · ${k.sourceKey})</span></span></div>` : ''; }; const kk = row('keep', 'est. keep-rate') + row('ret5', 'est. past-5s'); return kk ? `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">extrapolated onto the registered private-fit scale</div>${kk}<div style="font-size:9px;color:${C.faint};margin-top:4px">Projected onto the same artifact-pinned direction as the map, then quantile-mapped to the exact target population listed in its lineage. Open <b>→ keep-rate</b> to see it placed.</div></div>` : ''; })()}
                   ${rawChanGridHtml(U)}
@@ -1814,6 +1836,33 @@ const JarvisRetention = (function () {
             };
             return cardc(`<div${embeddingIdentityAttrs(identity, rawEmbeddingAssetId(up))}><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML((dispV(tn, est) || '—') + star, pc != null ? `${(pc * 100).toFixed(0)}th pctile novel` : '')}${novCurve(d, sc)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${d.name.replace('nov_', '')} (R=${Rof(d).toFixed(2)}) — novelty→${metShort(tn)} curve, your hook ◆</div></div>`, 12);
         };
+        const visualForecastBox = () => {
+            const forecast = visualKeepForecastOf(up);
+            if (!forecast) {
+                const reason = up.visual_keep_forecast_error || 'This score artifact predates the frozen model.';
+                return cardc(`<div data-visual-keep-forecast><div style="font-size:11px;color:${C.green};font-weight:800;text-transform:uppercase">Frozen visual model → keep rate</div>${bigNumHTML('—', 'current raw value unavailable')}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${esc(reason)} ${up.visual_keep_forecast_error ? '' : 'Re-score this opening once to persist the canonical raw forecast.'}</div></div>`, 12);
+            }
+            const identity = {
+                domain: 'shorts_raw',
+                origin: 'frozen-model-forecast',
+                channel: 'visual',
+                target: 'keep',
+                sourceKey: 'visual_keep_forecast',
+                coordinateId: forecast.coordinate_id,
+                est: forecast.raw,
+                pctile: null,
+                kind: forecast.kind,
+                embeddingModel: up.input_manifest && up.input_manifest.embedding_model,
+                scorer: up.input_manifest && up.input_manifest.scorer,
+            };
+            const scope = forecast.calibration_scope === 'pooled_global'
+                ? 'pooled globally'
+                : 'non-canonical historical scope';
+            const revision = forecast.model_artifact_sha256
+                ? String(forecast.model_artifact_sha256).slice(0, 12)
+                : 'revision unavailable';
+            return cardc(`<div data-visual-keep-forecast data-expgo="visual:keep"${embeddingIdentityAttrs(identity, rawEmbeddingAssetId(up))} style="cursor:pointer"><div style="font-size:11px;color:${C.green};font-weight:800;text-transform:uppercase">Frozen visual model → keep rate</div>${bigNumHTML(`${fmtv(forecast.raw, 1)}%`, 'raw model value')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">Full 1,536D visual vector → immutable Ridge · ${esc(scope)} · model ${esc(revision)}.<br>This reuses the <b>visual · keep rate</b> map below; the percentage is the separate frozen-model scalar stored as <b>${esc(forecast.coordinate_id)}</b>. <span style="color:${C.amber}">Research-only until unseen-creator transfer validates.</span> · <span style="color:${C.accent}">open normal embedding →</span></div></div>`, 12);
+        };
         const gcol = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:12px';
         const hasTextUp = !!String(up.transcript || up.text || '').trim() && !up.silent;
         const metShort2 = tn => ({ keep: 'keep rate', ret5: '5s retention', views: 'view-equivalent (corpus quantile)', realviews: 'forecast views (your channel scale)', outlier: 'outlier ×', gt10M: '>10M class' })[tn] || tn;
@@ -1832,9 +1881,11 @@ const JarvisRetention = (function () {
             if (ch !== 'visual' && !hasTextUp) return `<div style="border:1px dashed ${C.border};border-radius:8px;padding:10px;margin-bottom:12px;font-size:10px;color:${C.dim}"><b style="color:${col};text-transform:uppercase">${ch}</b> — locked: no transcript detected. Fix the transcript in the trace card above and these ${CH_TARGETS.length} graphs unlock.</div>`;
             return `<div style="display:flex;justify-content:space-between;align-items:end;gap:10px;margin:2px 0 5px"><div><span style="font-size:10px;color:${col};font-weight:800;text-transform:uppercase">${ch}</span> <span style="font-size:9px;color:${C.faint}">${input}</span></div><span style="font-size:9px;color:${C.faint};font-weight:800">${CH_TARGETS.length} graphs</span></div><div style="${gcol};margin-bottom:12px">${CH_TARGETS.map(tn => chanBox(ch, tn)).join('')}</div>`;
         };
-        const nGraphs = CH_TARGETS.length * (hasTextUp ? 3 : 1) + 3;
+        const nGraphs = CH_TARGETS.length * (hasTextUp ? 3 : 1) + 4;
         const boxes = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">${nGraphs} graphs — every channel × every output, plus novelty</div>
-            <div style="font-size:9px;color:${C.mute};margin-bottom:8px">Each tile is that channel's OWN latent map with your hook's marker — the number is the steered estimate the graph shows (click → full graph). <b style="color:${C.purple}">Novelty</b> uses its own calibration curves.</div>
+            <div style="font-size:9px;color:${C.mute};margin-bottom:8px">The original channel tiles are unchanged. The frozen visual model adds one raw forecast from the same visual vector; it does not mint another embedding space. <b style="color:${C.purple}">Novelty</b> uses its own calibration curves.</div>
+            <div style="font-size:10px;color:${C.green};font-weight:800;text-transform:uppercase;margin-bottom:5px">Frozen full-vector forecast — 1 derived output</div>
+            <div style="${gcol};margin-bottom:12px">${visualForecastBox()}</div>
             ${chanSection('visual')}${chanSection('together')}${chanSection('text')}
             <div style="font-size:10px;color:${C.purple};font-weight:800;text-transform:uppercase;margin-bottom:5px">Novelty — 3 boxes (independent)</div>
             <div style="${gcol}">${['keep', 'ret5', 'views'].map(novBox).join('')}</div>`, 12);
@@ -3556,7 +3607,10 @@ const JarvisRetention = (function () {
         if (!root) return;
         if (mountMode === 'experiment') {
             const bgNote = BGPEND > 0 ? `<div style="font-size:10px;color:${C.cyan};margin:0 0 8px;font-weight:600">Loading corpus context (${BGPEND} file${BGPEND > 1 ? 's' : ''} left)</div>` : '';
-            root.innerHTML = `<div style="background:${C.bg};padding:14px;color:${C.text};font-family:'Nunito',sans-serif">${bgNote}<div id="rtg-exppanel">${renderExperiment()}</div></div>`;
+            const body = st.sec === 'raw'
+                ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><button type="button" data-experiment-raw-back style="cursor:pointer;border:1px solid ${C.border};background:${C.card2};color:${C.text};padding:6px 10px;font:inherit;font-size:10px;font-weight:900">← Back to experiments</button><span style="font-size:9px;color:${C.dim}">Canonical Shorts Quant embedding view</span></div><div id="rtg-rawpanel">${renderRaw()}</div>`
+                : `<div id="rtg-exppanel">${renderExperiment()}</div>`;
+            root.innerHTML = `<div style="background:${C.bg};padding:14px;color:${C.text};font-family:'Nunito',sans-serif">${bgNote}${body}</div>`;
             try { rtgAfterRender(); } catch (e) { }
             return;
         }
@@ -3851,6 +3905,7 @@ const JarvisRetention = (function () {
         render();
     }
     function onClick(e) {
+        if (e.target.closest('[data-experiment-raw-back]')) { st.sec = 'experiment'; render(); return; }
         if (e.target.closest('#shorts-operations-panel') && operationsUI() && operationsUI().handleClick(e)) return;
         if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleClick(e)) return;
         if (e.target.closest('[data-rawytgo]')) { rtgScoreYoutube(); return; }
@@ -3937,7 +3992,7 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-savedchannelclear]')) { st.savedChannelMinPct = 0; st.savedChannelMinViews = 0; st.savedChannelQuery = ''; st.savedChannelShow = 60; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedchannelmore]')) { st.savedChannelShow = (st.savedChannelShow || 60) + 60; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedchannelanalysisreload]')) { if (st.savedChannelSel) loadSavedChannelAnalysis(st.savedChannelSel, true); return; }
-        const scvideo = e.target.closest('[data-savedchannelvideo]'); if (scvideo) { const parts = scvideo.getAttribute('data-savedchannelvideo').split(':'); openSavedChannelVideo(parts[0], parts[1]); return; }
+        const scvideo = e.target.closest('[data-savedchannelvideo]'); if (scvideo) { const parts = scvideo.getAttribute('data-savedchannelvideo').split(':'); openSavedChannelVideo(parts[0], parts[1], scvideo.getAttribute('data-savedchannelvideo-embedding')); return; }
         const rtt = e.target.closest('[data-rawtitleedit]'); if (rtt) {
             const idx = parseInt(rtt.getAttribute('data-rawtitleedit'), 10);
             st.rawTitleEdit = { idx, text: ((st.rawUploads || [])[idx] || {}).title || '' };
@@ -4041,7 +4096,7 @@ const JarvisRetention = (function () {
         const gsa = e.target.closest('[data-grindsave]'); if (gsa) { grindSave(+gsa.getAttribute('data-grindsave')); return; }
         const gsc = e.target.closest('[data-genscore]'); if (gsc) { if (!st.rawUploading) { const k = +gsc.getAttribute('data-genscore'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) scoreGenerated(k, a.frame_imgs || [], a.premise || a.caption || ''); } return; }
         const gsv = e.target.closest('[data-gensave]'); if (gsv) { const k = +gsv.getAttribute('data-gensave'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) saveHook({ kind: 'idea', source: 'generated', title: (a.premise || a.caption || 'idea').slice(0, 80), text: a.premise || a.caption || '', frames: a.frames || [], frame_imgs: a.frame_imgs || [], cohesion_mode: a.cohesion_mode || '' }); return; }
-        if (e.target.closest('[data-savescored]')) { const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0]; if (up) saveHook({ kind: 'scored', source: up.source || 'scored', title: up.title || (up.transcript || 'Scored hook').slice(0, 60), text: up.transcript || '', montage: up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : ''), frames: up.genFrames || [], frame_imgs: up.genFrameImgs || [], indicators: up.indicators || null, steer: up.steer || null, channels: up.channels || null, emb_preview: up.emb_preview || null, input_manifest: up.input_manifest || rawInputManifestData(up) }); return; }
+        if (e.target.closest('[data-savescored]')) { const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0]; if (up) saveHook({ kind: 'scored', source: up.source || 'scored', title: up.title || (up.transcript || 'Scored hook').slice(0, 60), text: up.transcript || '', montage: up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : ''), frames: up.genFrames || [], frame_imgs: up.genFrameImgs || [], indicators: up.indicators || null, steer: up.steer || null, visual_keep_forecast: up.visual_keep_forecast || null, channels: up.channels || null, emb_preview: up.emb_preview || null, input_manifest: up.input_manifest || rawInputManifestData(up) }); return; }
         const sdel = e.target.closest('[data-savedel]'); if (sdel) { deleteSaved(sdel.getAttribute('data-savedel')); return; }
         if (e.target.closest('[data-savedclose]')) { st.savedSel = null; rtgUpdateExp(); return; }
         const ssort = e.target.closest('[data-savedsort]'); if (ssort) { st.savedSort = ssort.getAttribute('data-savedsort'); rtgUpdateExp(); return; }
@@ -4381,10 +4436,10 @@ const JarvisRetention = (function () {
                 while (cachedIds.length > 8) delete SAVEDDETAIL[cachedIds.shift()];
             }
             const rec = stored.rec || {};
-            if (rec && rec.emb_preview && rec.channels) {
+            if (rec && rec.emb_preview && rec.channels && rec.visual_keep_forecast) {
                 // Statistics are durable and independent from media delivery. Open them immediately;
                 // the ordinary image URL can load (or fail) without blocking the embedding read-out.
-                const result = { transcript: rec.transcript || rec.text || '', silent: rec.silent, title: rec.title, indicators: rec.indicators, steer: rec.steer, emb_preview: rec.emb_preview, channels: rec.channels, input_manifest: rec.input_manifest || null, source: 'saved', savedId: id, genFrames: rec.frames || [], montageDataUrl: rec.hasMontage ? '/api/raw/saved-montage/' + id : '' };
+                const result = { transcript: rec.transcript || rec.text || '', silent: rec.silent, title: rec.title, indicators: rec.indicators, steer: rec.steer, visual_keep_forecast: rec.visual_keep_forecast || null, emb_preview: rec.emb_preview, channels: rec.channels, input_manifest: rec.input_manifest || null, source: 'saved', savedId: id, genFrames: rec.frames || [], montageDataUrl: rec.hasMontage ? '/api/raw/saved-montage/' + id : '' };
                 st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
                 st.rawUploads.push(result);
                 st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
@@ -4412,9 +4467,9 @@ const JarvisRetention = (function () {
                 j.source = 'saved'; j.savedId = id; j.genFrames = rec.frames || []; j.montageDataUrl = montage;
                 st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
                 st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-                Object.assign(rec, { indicators: j.indicators, steer: j.steer, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest });
+                Object.assign(rec, { indicators: j.indicators, steer: j.steer, visual_keep_forecast: j.visual_keep_forecast, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest });
                 SAVEDDETAIL[id] = { rec, montage };
-                fetch('/api/raw/hook-enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, montage, indicators: j.indicators, steer: j.steer, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest }) }).catch(() => {});
+                fetch('/api/raw/hook-enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, montage, indicators: j.indicators, steer: j.steer, visual_keep_forecast: j.visual_keep_forecast, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest }) }).catch(() => {});
             }
         } catch (e) { st.rawUpErr = fetchFail(e); }
         st.rawUploading = false; st.rawUpStage = 0; rtgUpdateExp();
@@ -4525,18 +4580,55 @@ const JarvisRetention = (function () {
         }
         rtgUpdateExp();
     }
-    async function openSavedChannelVideo(channelId, videoId) {
+    async function openSavedChannelVideo(channelId, videoId, embeddingTarget) {
         if (!channelId || !videoId || st.savedChannelVideoBusy) return;
-        const existingIndex = (st.rawUploads || []).findIndex(upload => upload && upload.savedChannelId === channelId && upload.savedChannelVideoId === videoId);
-        if (existingIndex >= 0) {
-            st.rawUpSel = existingIndex; st.rawSel = null; st.rawUpErr = null; rtgUpdateExp();
+        const currentVisualKeepArtifactSha = SAVEDCHANNELVALIDATION
+            && SAVEDCHANNELVALIDATION.visualKeepStudy
+            && SAVEDCHANNELVALIDATION.visualKeepStudy.modelArtifact
+            && SAVEDCHANNELVALIDATION.visualKeepStudy.modelArtifact.artifactSha256
+            || null;
+        const visualKeepRevisionMatches = record => !currentVisualKeepArtifactSha || (
+            record
+            && record.visual_keep_forecast
+            && record.visual_keep_forecast.model_artifact_sha256 === currentVisualKeepArtifactSha
+        );
+        const showLoadedVideo = () => {
+            if (embeddingTarget) {
+                const [channel, projection] = String(embeddingTarget).split(':');
+                st.sec = 'raw';
+                st.rawView = 'map';
+                st.rawChan = channel || 'visual';
+                st.rawProj = projection || 'keep';
+                st.rawColor = projection === 'hi10m' ? 'views' : 'cluster';
+                render();
+                window.setTimeout(() => {
+                    const panel = window.document.getElementById('rtg-rawpanel');
+                    if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 80);
+                return;
+            }
+            rtgUpdateExp();
             window.setTimeout(() => { const el = window.document.getElementById('exp-scoreout'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
+        };
+        let existingIndex = (st.rawUploads || []).findIndex(upload => upload && upload.savedChannelId === channelId && upload.savedChannelVideoId === videoId);
+        if (existingIndex >= 0 && !visualKeepRevisionMatches(st.rawUploads[existingIndex])) {
+            st.rawUploads.splice(existingIndex, 1);
+            existingIndex = -1;
+        }
+        if (existingIndex >= 0) {
+            st.rawUpSel = existingIndex; st.rawSel = null; st.rawUpErr = null;
+            showLoadedVideo();
             return;
         }
         st.savedChannelVideoBusy = videoId; st.rawUpErr = null; rtgUpdateExp();
+        let opened = false;
         try {
             const cacheKey = savedChannelMontageKey(channelId, videoId);
             let record = SAVEDCHANNELVIDEOCACHE[cacheKey];
+            if (record && !visualKeepRevisionMatches(record)) {
+                delete SAVEDCHANNELVIDEOCACHE[cacheKey];
+                record = null;
+            }
             if (!record) {
                 record = await rtFetchJson(`/api/raw/saved-channel/${channelId}/video/${videoId}`, { cache: 'no-store' }, 4);
                 record.montageDataUrl = `/api/raw/saved-channel/${channelId}/montage/${videoId}`;
@@ -4545,9 +4637,11 @@ const JarvisRetention = (function () {
             }
             st.rawUploads = st.rawUploads || []; st.rawUploads.push(record);
             st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+            opened = true;
         } catch (e) { st.rawUpErr = 'Saved channel: ' + (e.message || e); }
-        st.savedChannelVideoBusy = null; rtgUpdateExp();
-        window.setTimeout(() => { const el = window.document.getElementById('exp-scoreout'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
+        st.savedChannelVideoBusy = null;
+        if (opened) showLoadedVideo();
+        else rtgUpdateExp();
     }
     function savedChannelContract(detail) {
         return (detail && detail.featureContract) || (SAVEDCHANNELS && SAVEDCHANNELS.featureContract) || { groups: [], features: [] };
@@ -5461,7 +5555,7 @@ const JarvisRetention = (function () {
           <div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">Every indicator · every kind of evidence</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:6px">Green means the displayed metric is above its neutral point; red means below. Click an indicator label to inspect every underlying Short. This heatmap does not combine unlike metrics into one arbitrary score.</div>${savedChannelEvidenceHeatmap(analysis, tailByKey)}
           ${savedChannelSignalMatrix(analysis)}
           ${renderSavedChannelIndicatorExplorer(analysis)}
-          <div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">All 21 score trajectories</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:6px">Each mini-map bins Shorts from low to high on one indicator and plots median actual views. The red guide is 10M. Click any map to load it into the full playground above.</div>${savedChannelProfileAtlas(analysis)}
+          <div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">All 21 embedding and novelty trajectories</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:6px">These are the original 21 direct/derived score-card coordinates. The frozen full-vector visual forecast is registered separately in Blind validation and the canonical ledger. Each mini-map bins Shorts from low to high on one indicator and plots median actual views. The red guide is 10M.</div>${savedChannelProfileAtlas(analysis)}
           <div style="font-size:13px;font-weight:900;color:${C.text};margin:14px 0 3px">Indicator redundancy · 21 × 21</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:6px">Pairwise Spearman correlation of the exact values used by the models. Bright teal means two indicators move together; bright red means they move in opposite directions; dark cells are comparatively independent. Hover any cell for Pearson, Spearman, and sample size.</div>${savedChannelRelationshipHeatmap(analysis)}
           ${predictionDiagnostics}
           <div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:3px">21-indicator evidence matrix</div><div style="font-size:9px;color:${C.mute};line-height:1.4;margin-bottom:5px">Continuous correlation, held-out prediction, and actual 10M discrimination are shown side by side. Negative OOF R² means the indicator predicts unseen Shorts worse than the channel mean; it is evidence of noise, not a hidden positive score.</div>
@@ -5872,7 +5966,10 @@ const JarvisRetention = (function () {
             const predictedOutput = savedValidationModelOutput(point.calibrated, outcome.key);
             const title = `${point.row.accountName} · ${point.row.title}\nRaw ${column.label}: ${savedLedgerFormat(point.score, column)}\nHeld-out predicted ${outcome.label}: ${savedValidationOutcomeFormat(predictedOutput, outcome.key, outcome.unit === 'binary')}\nActual ${outcome.label}: ${savedValidationOutcomeFormat(point.actual, outcome.key)}\nCoordinate: ${column.id}`;
             const selected = st.savedValidationCurveVideo === point.row.id;
-            svg += `<circle data-savedvalidationrow="${esc(point.row.id)}" cx="${X(point.x).toFixed(1)}" cy="${Y(point.y).toFixed(1)}" r="${selected ? 6 : 3.4}" fill="${color}" stroke="${selected ? C.text : 'none'}" stroke-width="1.5" opacity="${selected ? 1 : .68}" style="cursor:pointer"><title>${esc(title)}</title></circle>`;
+            const pointAction = column.id === 'shorts.visual-keep-forecast.v1' && point.row.channelId
+                ? `data-savedchannelvideo="${esc(point.row.channelId)}:${esc(point.row.id)}" data-savedchannelvideo-embedding="visual:keep"`
+                : `data-savedvalidationrow="${esc(point.row.id)}"`;
+            svg += `<circle ${pointAction} cx="${X(point.x).toFixed(1)}" cy="${Y(point.y).toFixed(1)}" r="${selected ? 6 : 3.4}" fill="${color}" stroke="${selected ? C.text : 'none'}" stroke-width="1.5" opacity="${selected ? 1 : .68}" style="cursor:pointer"><title>${esc(title)}</title></circle>`;
         });
         const xLog = ['views', 'outlier'].includes(outcome.key) ? ' · log scale' : '';
         const yLog = plotMode === 'oof'
@@ -5882,7 +5979,7 @@ const JarvisRetention = (function () {
         svg += `<text x="${W / 2}" y="${H - 7}" text-anchor="middle" fill="${C.mute}" font-size="9">observed ${esc(outcome.label)}${xLog}</text><text x="11" y="${H / 2}" transform="rotate(-90 11 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">${esc(yLabel)}${yLog}</text>`;
         const selectedPoint = points.find(point => point.row.id === st.savedValidationCurveVideo);
         const selectedPrediction = selectedPoint && savedValidationModelOutput(selectedPoint.calibrated, outcome.key);
-        const pointDetail = selectedPoint ? `<div data-savedvalidation-point-detail style="border-left:3px solid ${savedValidationAccountColor(selectedPoint.row.accountId)};background:${C.card2};padding:8px;margin-top:7px"><div style="font-size:9px;color:${C.text};font-weight:950">${esc(selectedPoint.row.title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">raw ${esc(column.id)} = <b style="color:${C.text}">${esc(savedLedgerFormat(selectedPoint.score, column))}</b><br>held-out calibrated prediction = <b style="color:${C.cyan}">${esc(savedValidationOutcomeFormat(selectedPrediction, outcome.key, outcome.unit === 'binary'))}</b><br>shorts.observed.${esc(outcome.key)} = <b style="color:${C.text}">${esc(savedValidationOutcomeFormat(selectedPoint.actual, outcome.key))}</b><br>${esc(selectedPoint.row.accountName)} · fold ${esc((savedValidationCalibrationFold(entry, selectedPoint.row) || {}).fold || '—')} · ${esc(selectedPoint.row.validationSource === 'predictor_blind_inputs_only' ? 'blind-only private row' : 'saved score + private outcomes')}</div>${selectedPoint.row.channelId ? `<span data-savedchannelvideo="${esc(selectedPoint.row.channelId)}:${esc(selectedPoint.row.id)}" style="display:inline-block;cursor:pointer;color:${C.accent};font-size:8px;margin-top:5px">open the original saved 21-map score card</span>` : ''}</div>` : `<div style="font-size:7.5px;color:${C.faint};margin-top:5px">Click a point to pin its raw coordinate, exact held-out prediction, fold, and measured outcome.</div>`;
+        const pointDetail = selectedPoint ? `<div data-savedvalidation-point-detail style="border-left:3px solid ${savedValidationAccountColor(selectedPoint.row.accountId)};background:${C.card2};padding:8px;margin-top:7px"><div style="font-size:9px;color:${C.text};font-weight:950">${esc(selectedPoint.row.title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">raw ${esc(column.id)} = <b style="color:${C.text}">${esc(savedLedgerFormat(selectedPoint.score, column))}</b><br>held-out calibrated prediction = <b style="color:${C.cyan}">${esc(savedValidationOutcomeFormat(selectedPrediction, outcome.key, outcome.unit === 'binary'))}</b><br>shorts.observed.${esc(outcome.key)} = <b style="color:${C.text}">${esc(savedValidationOutcomeFormat(selectedPoint.actual, outcome.key))}</b><br>${esc(selectedPoint.row.accountName)} · fold ${esc((savedValidationCalibrationFold(entry, selectedPoint.row) || {}).fold || '—')} · ${esc(selectedPoint.row.validationSource === 'predictor_blind_inputs_only' ? 'blind-only private row' : 'saved score + private outcomes')}</div>${selectedPoint.row.channelId ? `<span data-savedchannelvideo="${esc(selectedPoint.row.channelId)}:${esc(selectedPoint.row.id)}"${column.id === 'shorts.visual-keep-forecast.v1' ? ' data-savedchannelvideo-embedding="visual:keep"' : ''} style="display:inline-block;cursor:pointer;color:${C.accent};font-size:8px;margin-top:5px">${column.id === 'shorts.visual-keep-forecast.v1' ? 'open normal visual keep embedding' : 'open the normal 22-output score card'}</span>` : ''}</div>` : `<div style="font-size:7.5px;color:${C.faint};margin-top:5px">Click a point to pin its raw coordinate, exact held-out prediction, fold, and measured outcome.</div>`;
         const diagnostics = entry && entry.calibration && entry.calibration.diagnostics || {};
         const actualMinimum = savedValidationModelOutput(diagnostics.actualMin, outcome.key);
         const actualMaximum = savedValidationModelOutput(diagnostics.actualMax, outcome.key);
@@ -5895,13 +5992,30 @@ const JarvisRetention = (function () {
             : `Raw ${column.label} vs observed ${outcome.label}`;
         const explanation = plotMode === 'oof'
             ? 'Every dot applies the exact calibration fitted without that video outcome; account-held-out coordinates also exclude every label from the test creator. The plotted values, tooltip, range, and OOF metrics are now the same calculation.'
-            : 'This view shows the uncalibrated scalar coordinate. It is useful for inspecting geometry, but it is not a percentage prediction and must not be compared numerically with the OOF metrics.';
+            : (column.id === 'shorts.visual-keep-forecast.v1'
+                ? 'This is the frozen pooled raw keep-rate percentage stored in the ledger. It is a production diagnostic, not the held-out protocol prediction used by the OOF metrics.'
+                : 'This view shows the uncalibrated scalar coordinate. It is useful for inspecting geometry, but it is not a percentage prediction and must not be compared numerically with the OOF metrics.');
         return `<div data-savedvalidation-scatter data-plot-mode="${plotMode}" style="border:1px solid ${C.border};background:${C.card};padding:10px;min-width:0"><div style="display:flex;justify-content:space-between;gap:8px;align-items:start;flex-wrap:wrap"><div><div style="font-size:12px;color:${C.text};font-weight:950">${esc(headline)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin:3px 0 2px;max-width:780px">${esc(explanation)}</div></div><div style="display:flex;border-bottom:1px solid ${C.border}">${toggle}</div></div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin:0 0 2px">${esc(savedValidationMetricLine(entry, outcome))}</div><div style="font-size:7.5px;color:${C.mute};line-height:1.45;margin-bottom:6px">${esc(rangeLine)}</div><svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">${svg}</svg>${pointDetail}</div>`;
     }
-    function savedVisualKeepStudyScatter(protocol, accountKey) {
+    function savedVisualKeepStudyScatter(protocol, accountKey, validation) {
         const allPoints = protocol && protocol.points || [];
         const points = allPoints.filter(point => accountKey === 'all' || point.account === accountKey);
         if (!points.length) return note('No held-out predictions exist for this protocol and creator.', C.amber);
+        const validationRows = validation && validation.validationRows || [];
+        const rowById = new Map(validationRows.map(row => [String(row.id), row]));
+        const visualCoordinateIndex = (
+            validation
+            && validation.coordinateRegistry
+            && validation.coordinateRegistry.columns || []
+        ).findIndex(column => column.id === 'shorts.visual-keep-forecast.v1');
+        const rawForecast = point => {
+            const row = rowById.get(String(point.id));
+            const value = row
+                && row.scoreLedger
+                && row.scoreLedger.values
+                && row.scoreLedger.values[visualCoordinateIndex];
+            return value == null || !isFinite(+value) ? null : +value;
+        };
         const W = 640, H = 380, left = 55, right = 16, top = 16, bottom = 45;
         const values = points.flatMap(point => [+point.actual, +point.predicted]).filter(Number.isFinite);
         const low = Math.min(0, Math.floor(Math.min(...values) / 10) * 10);
@@ -5917,12 +6031,26 @@ const JarvisRetention = (function () {
         points.forEach(point => {
             const color = savedValidationAccountColor(point.account);
             const selected = st.savedValidationCurveVideo === point.id;
-            const title = `${savedVisualKeepAccountName(point.account, point.accountName)} · ${point.title}\nPredicted keep: ${fmtv(point.predicted, 1)}%\nActual keep: ${fmtv(point.actual, 1)}%\nError: ${point.error >= 0 ? '+' : ''}${fmtv(point.error, 1)} pp\nProtocol null: ${fmtv(point.baseline, 1)}%`;
-            svg += `<circle data-savedvalidationrow="${esc(point.id)}" cx="${X(point.actual).toFixed(1)}" cy="${Y(point.predicted).toFixed(1)}" r="${selected ? 6 : 3.6}" fill="${color}" stroke="${selected ? C.text : 'none'}" stroke-width="1.5" opacity="${selected ? 1 : .72}" style="cursor:pointer"><title>${esc(title)}</title></circle>`;
+            const row = rowById.get(String(point.id));
+            const raw = rawForecast(point);
+            const clickAttribute = row && row.channelId
+                ? `data-savedchannelvideo="${esc(row.channelId)}:${esc(point.id)}" data-savedchannelvideo-embedding="visual:keep"`
+                : `data-savedvalidationrow="${esc(point.id)}"`;
+            const title = `${savedVisualKeepAccountName(point.account, point.accountName)} · ${point.title}\nHeld-out protocol prediction: ${fmtv(point.predicted, 1)}%\nFrozen-model raw ledger value: ${raw == null ? 'unavailable' : `${fmtv(raw, 1)}%`}\nActual keep: ${fmtv(point.actual, 1)}%\nError: ${point.error >= 0 ? '+' : ''}${fmtv(point.error, 1)} pp\nProtocol null: ${fmtv(point.baseline, 1)}%${row && row.channelId ? '\nClick to open the normal stored embedding score card.' : ''}`;
+            const cx = X(point.actual).toFixed(1), cy = Y(point.predicted).toFixed(1);
+            svg += `<circle ${clickAttribute} cx="${cx}" cy="${cy}" r="10" fill="${color}" fill-opacity=".001" pointer-events="all" style="cursor:pointer"><title>${esc(title)}</title></circle><circle cx="${cx}" cy="${cy}" r="${selected ? 6 : 3.6}" fill="${color}" stroke="${selected ? C.text : 'none'}" stroke-width="1.5" opacity="${selected ? 1 : .72}" pointer-events="none"/>`;
         });
         svg += `<text x="${W / 2}" y="${H - 7}" text-anchor="middle" fill="${C.mute}" font-size="9">actual stayed-to-watch</text><text x="11" y="${H / 2}" transform="rotate(-90 11 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">visual-only predicted stayed-to-watch</text>`;
         const selected = points.find(point => point.id === st.savedValidationCurveVideo);
-        const detail = selected ? `<div style="border-left:3px solid ${savedValidationAccountColor(selected.account)};background:${C.card2};padding:8px;margin-top:7px"><div style="font-size:9px;color:${C.text};font-weight:950">${esc(selected.title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">visual-only prediction <b style="color:${C.cyan}">${fmtv(selected.predicted, 1)}%</b> · actual <b style="color:${C.text}">${fmtv(selected.actual, 1)}%</b> · miss <b style="color:${Math.abs(selected.error) <= 5 ? C.green : C.amber}">${selected.error >= 0 ? '+' : ''}${fmtv(selected.error, 1)} pp</b><br>legitimate protocol null ${fmtv(selected.baseline, 1)}% · fold ${esc(selected.fold)} · ${esc(savedVisualKeepAccountName(selected.account, selected.accountName))}</div></div>` : `<div style="font-size:7.5px;color:${C.faint};margin-top:5px">Click a point to inspect its exact prediction, truth, error, null prediction, creator, and fold.</div>`;
+        const selectedRaw = selected && rawForecast(selected);
+        const selectedRow = selected && rowById.get(String(selected.id));
+        const selectedForecastSource = selectedRow
+            && selectedRow.predictions
+            && selectedRow.predictions.visualKeepForecastSource;
+        const selectedRawLabel = selectedForecastSource === 'persisted_score_artifact'
+            ? 'persisted raw forecast'
+            : 'current frozen-model backfill';
+        const detail = selected ? `<div style="border-left:3px solid ${savedValidationAccountColor(selected.account)};background:${C.card2};padding:8px;margin-top:7px"><div style="font-size:9px;color:${C.text};font-weight:950">${esc(selected.title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">held-out protocol prediction <b style="color:${C.cyan}">${fmtv(selected.predicted, 1)}%</b> · ${esc(selectedRawLabel)} <b style="color:${C.green}">${selectedRaw == null ? '—' : `${fmtv(selectedRaw, 1)}%`}</b> · actual <b style="color:${C.text}">${fmtv(selected.actual, 1)}%</b><br>held-out miss <b style="color:${Math.abs(selected.error) <= 5 ? C.green : C.amber}">${selected.error >= 0 ? '+' : ''}${fmtv(selected.error, 1)} pp</b> · legitimate protocol null ${fmtv(selected.baseline, 1)}% · fold ${esc(selected.fold)}<br><span style="color:${C.faint}">These two predictions differ by design: one excludes the test outcome; the raw ledger value applies the frozen final pooled model.</span></div>${selectedRow && selectedRow.channelId ? `<span data-savedchannelvideo="${esc(selectedRow.channelId)}:${esc(selected.id)}" data-savedchannelvideo-embedding="visual:keep" style="display:inline-block;cursor:pointer;color:${C.accent};font-size:8px;margin-top:5px">open normal embedding and raw value →</span>` : ''}</div>` : `<div style="font-size:7.5px;color:${C.faint};margin-top:5px">Click a stored-video point to open its normal visual keep embedding with the frozen raw ledger value. Blind-only points pin their exact protocol prediction, raw ledger value, truth, null, creator, and fold here.</div>`;
         return `<div data-savedvisualkeep-scatter style="min-width:0"><svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">${svg}</svg>${detail}</div>`;
     }
     function savedVisualKeepStudyHtml(validation) {
@@ -5977,8 +6105,8 @@ const JarvisRetention = (function () {
           <div style="display:flex;gap:4px;overflow:auto;margin:8px 0;-webkit-overflow-scrolling:touch">${accountButtons}</div>
           <div style="font-size:7.5px;color:${C.mute};margin-bottom:5px">Metrics below are for ${esc(scopeName)} under this exact protocol.</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:7px">${cards}</div>
-          <div style="display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:10px;align-items:start;margin-top:10px"><div>${savedVisualKeepStudyScatter(protocol, accountKey)}</div><div style="min-width:0"><div style="font-size:9px;color:${C.text};font-weight:950;margin-bottom:5px">Creator-by-creator evidence</div><div style="overflow:auto"><table style="width:100%;min-width:480px;border-collapse:collapse;font-size:7.5px"><thead><tr style="text-align:left;color:${C.mute}"><th style="padding:5px">Creator</th><th>n</th><th>vs null</th><th>R²</th><th>ρ</th><th>MAE</th><th>range</th></tr></thead><tbody>${perAccountRows}</tbody></table></div><div style="border-left:3px solid ${promotionColor};padding:8px;margin-top:9px;background:${promotionColor}08"><div style="font-size:8px;color:${promotionColor};font-weight:950">Decision</div><div style="font-size:7.5px;color:${C.dim};line-height:1.45;margin-top:2px">${esc(promotion.plainEnglish || '')}</div><div style="font-size:7px;color:${C.faint};line-height:1.4;margin-top:4px">${esc(promotion.rule || '')}</div></div></div></div>
-          <details style="margin-top:9px"><summary style="cursor:pointer;color:${C.cyan};font-size:8px;font-weight:900">show model selection and reproducibility details</summary><div style="font-size:7.5px;color:${C.dim};line-height:1.5;padding:8px 0">Candidate family: nested Ridge over the full visual vector. ${protocol.candidateRegistry && protocol.candidateRegistry.count || 0} candidate settings; selected only inside training data by ${esc(protocol.candidateRegistry && protocol.candidateRegistry.selectionMetric || 'held-out error')}. Final known-creator formula: pooled α ${fmtv(selected.pooledAlpha, 2)}, creator α ${fmtv(selected.accountAlpha, 2)}, creator weight ${fmtv(selected.accountWeight, 2)}. No title, transcript, views, duration, or outcome-derived feature enters the input. The complete ${formula.pooled && formula.pooled.coefficients && formula.pooled.coefficients.length || 0}-coefficient formula is persisted in the predictor artifact.${validationNotes ? `<ul style="margin:7px 0 0;padding-left:17px">${validationNotes}</ul>` : ''}</div></details>
+          <div data-savedvisualkeep-layout style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:10px;align-items:start;margin-top:10px"><div style="min-width:0">${savedVisualKeepStudyScatter(protocol, accountKey, validation)}</div><div style="min-width:0"><div style="font-size:9px;color:${C.text};font-weight:950;margin-bottom:5px">Creator-by-creator evidence</div><div style="overflow:auto"><table style="width:100%;min-width:480px;border-collapse:collapse;font-size:7.5px"><thead><tr style="text-align:left;color:${C.mute}"><th style="padding:5px">Creator</th><th>n</th><th>vs null</th><th>R²</th><th>ρ</th><th>MAE</th><th>range</th></tr></thead><tbody>${perAccountRows}</tbody></table></div><div style="border-left:3px solid ${promotionColor};padding:8px;margin-top:9px;background:${promotionColor}08"><div style="font-size:8px;color:${promotionColor};font-weight:950">Decision</div><div style="font-size:7.5px;color:${C.dim};line-height:1.45;margin-top:2px">${esc(promotion.plainEnglish || '')}</div><div style="font-size:7px;color:${C.faint};line-height:1.4;margin-top:4px">${esc(promotion.rule || '')}</div></div></div></div>
+          <details style="margin-top:9px"><summary style="cursor:pointer;color:${C.cyan};font-size:8px;font-weight:900">show model selection and reproducibility details</summary><div style="font-size:7.5px;color:${C.dim};line-height:1.5;padding:8px 0">Candidate family: nested Ridge over the full visual vector. ${protocol.candidateRegistry && protocol.candidateRegistry.count || 0} candidate settings; selected only inside training data by ${esc(protocol.candidateRegistry && protocol.candidateRegistry.selectionMetric || 'held-out error')}. Final ledger formula: one pooled Ridge with α ${fmtv(selected.pooledAlpha, 2)}. Creator-specific candidates remain research comparisons inside the held-out protocols but cannot change the canonical score. No creator identity, title, transcript, views, duration, or outcome-derived feature enters the production input. The complete ${formula.pooled && formula.pooled.coefficients && formula.pooled.coefficients.length || 0}-coefficient formula is persisted in the immutable predictor artifact.${validationNotes ? `<ul style="margin:7px 0 0;padding-left:17px">${validationNotes}</ul>` : ''}</div></details>
         </section>`;
     }
     function savedValidationCoordinateFilter(column, entry, filter) {
@@ -6006,7 +6134,7 @@ const JarvisRetention = (function () {
     function renderSavedChannelValidation(detail) {
         const validation = SAVEDCHANNELVALIDATION;
         if (!validation) { window.setTimeout(() => loadSavedChannelValidation(), 0); return `<div style="padding:28px;text-align:center;color:${C.dim}">Preparing the canonical ledger validation…</div>`; }
-        if (validation.loading) return `<div style="padding:28px;text-align:center;color:${C.cyan}">Joining the 103-coordinate ledger to measured outcomes…</div>`;
+        if (validation.loading) return `<div style="padding:28px;text-align:center;color:${C.cyan}">Joining the canonical coordinate ledger to measured outcomes…</div>`;
         if (validation.error) return `<div style="padding:18px;color:${C.red}">${esc(validation.error)} <span data-savedvalidationreload style="cursor:pointer;text-decoration:underline;color:${C.accent}">retry</span></div>`;
         const registry = validation.coordinateRegistry || {}, allColumns = registry.columns || [];
         const totals = registry.totals || {};
@@ -6020,7 +6148,7 @@ const JarvisRetention = (function () {
         const outcomeMap = new Map(outcomes.map(item => [item.key, item]));
         const heatmapOutcomes = outcomes;
         const selectedMatrix = savedValidationLedgerMatrix(scope, outcome.key);
-        if (!selectedMatrix) return note('This validation artifact predates the canonical 103-coordinate matrix. Rebuild it from the current sources.', C.amber);
+        if (!selectedMatrix) return note('This validation artifact predates the current canonical coordinate matrix. Rebuild it from the current sources.', C.amber);
         const selectedEntries = savedValidationLedgerEntries(scope, outcome.key);
         let selectedEntry = selectedEntries.find(entry => (entry.coordinateId || entry.id || entry.key) === st.savedValidationFeature);
         if (!selectedEntry || selectedEntry.available === false) {
@@ -6036,7 +6164,7 @@ const JarvisRetention = (function () {
         const filter = st.savedValidationFamily || 'all';
         const query = String(st.savedValidationQuery || '').trim().toLowerCase();
         const filterOptions = [
-            ['all', 'All 103'],
+            ['all', `All ${allColumns.length}`],
             ['strict', 'Blind predictors'],
             ['video', 'Video held out'],
             ['account', 'Account held out'],
@@ -6065,7 +6193,7 @@ const JarvisRetention = (function () {
         const blindColumnCount = allColumns.filter(column => strictFamilies.has(column.family)).length;
         const aliasColumnCount = totals.shortsDirectAxisAliasColumns == null ? 0 : +totals.shortsDirectAxisAliasColumns;
         const uniqueBlindPredictionCount = Math.max(0, blindColumnCount - aliasColumnCount);
-        const diagnosticCount = allColumns.filter(column => ['stored', 'legacy'].includes(column.family)).length;
+        const diagnosticCount = allColumns.filter(column => ['stored', 'visualKeepForecast', 'legacy'].includes(column.family)).length;
         const observedCount = allColumns.filter(column => column.family === 'observed').length;
         const summaryCards = SAVED_VALIDATION_PRIMARY_OUTCOMES.map(outcomeKey => {
             const candidateOutcome = outcomeMap.get(outcomeKey);
@@ -6158,9 +6286,9 @@ const JarvisRetention = (function () {
           <div style="border:1px solid ${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red};background:${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red}09;padding:11px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:14px;color:${C.text};font-weight:950">What predicts performance?</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:3px">One canonical ledger. ${allColumns.length} registered columns × ${outcomes.length} independently defined outcomes. Every graph is exactly one coordinate ID versus one observed outcome ID.</div><div data-savedvalidation-ledger-classification style="font-size:8px;color:${C.cyan};font-weight:900;margin-top:4px">${blindColumnCount} blind columns · ${uniqueBlindPredictionCount} unique blind predictions · ${aliasColumnCount} alias columns · ${diagnosticCount} diagnostics · ${observedCount} actual outcomes</div></div><div style="text-align:right"><div style="font-size:9px;color:${ledgerAudit.passed ? C.green : C.red};font-weight:950">${ledgerAudit.passed ? 'LEDGER PARITY PASSED' : 'LEDGER PARITY FAILED'}</div><div style="font-size:7px;color:${C.faint}">${rows.length} videos in this scope · ${scope.validationAccounts && scope.validationAccounts.length || scope.accounts && scope.accounts.length || 0} creator accounts · ${esc(validation.artifact && validation.artifact.cacheStatus || 'artifact')}</div><span data-savedvalidationreload style="cursor:pointer;color:${C.accent};font-size:8px">rebuild from current sources</span></div></div></div>
           <div style="display:flex;border-bottom:1px solid ${C.border};overflow:auto;margin-bottom:10px">${scopeButtons}</div>
           ${visualKeepStudy}
-          ${note('<b>Read this first:</b> 103 ledger columns do not mean 103 independent embeddings. Direct axes, derived formulas, forecasts, measured outcomes, aliases, and legacy diagnostics are all kept in one ledger so names cannot drift. “Leakage audit passed” means the recorded train/test IDs do not overlap; it does not mean the predictor is accurate. Observed outcomes are shown but blocked from predictor rankings.', C.cyan)}
+          ${note(`<b>Read this first:</b> ${allColumns.length} ledger columns do not mean ${allColumns.length} independent embeddings. The frozen visual forecast reuses the existing 1,536D visual embedding. Direct axes, derived formulas, forecasts, measured outcomes, aliases, and legacy diagnostics are all kept in one ledger so names cannot drift. “Leakage audit passed” means the recorded train/test IDs do not overlap; it does not mean the predictor is accurate.`, C.cyan)}
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:7px;margin-bottom:12px">${summaryCards}</div>
-          <div style="font-size:12px;color:${C.text};font-weight:950;margin:12px 0 4px">All 103 coordinates × all 13 observed outcomes</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-bottom:7px">Each of the ${allColumns.length * outcomes.length} cells reports the exact registered coordinate against one independently defined outcome. Scroll sideways for retention-curve checkpoints; click any cell to see its scatter, definition, videos, coverage, and lineage.</div>
+          <div style="font-size:12px;color:${C.text};font-weight:950;margin:12px 0 4px">All ${allColumns.length} coordinates × all ${outcomes.length} observed outcomes</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-bottom:7px">Each of the ${allColumns.length * outcomes.length} cells reports the exact registered coordinate against one independently defined outcome. Scroll sideways for retention-curve checkpoints; click any cell to see its scatter, definition, videos, coverage, and lineage.</div>
           <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px">${familyButtons}<input data-savedvalidationquery value="${esc(st.savedValidationQuery || '')}" placeholder="find text, real views, keep…" style="margin-left:auto;min-width:190px;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:5px 7px;font-size:8px"/></div>
           <div data-savedvalidation-heatmap style="overflow:auto;max-height:720px;border:1px solid ${C.border};-webkit-overflow-scrolling:touch"><table style="border-collapse:collapse;font-size:8px;min-width:850px;width:100%"><thead style="position:sticky;top:0;background:${C.card};z-index:3"><tr style="text-align:left;color:${C.mute}"><th style="position:sticky;left:0;z-index:4;background:${C.card};padding:7px;min-width:265px">Canonical coordinate</th>${heatmapHeader}</tr></thead><tbody>${heatmapRows}</tbody></table></div>
           <div style="font-size:12px;color:${C.text};font-weight:950;margin:14px 0 4px">Inspect one exact relationship</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">${outcomeButtons}</div>
@@ -6275,7 +6403,7 @@ const JarvisRetention = (function () {
     const SAVED_LEDGER_CLASS_META = [
         { key: 'direct_embedding_axis', label: 'Direct-axis columns', totalKeys: ['shortsDirectAxisColumns', 'shortsDirectEmbeddingAxes', 'directEmbeddingAxes'], expected: 45, color: C.cyan },
         { key: 'embedding_derived_transform', label: 'Embedding-derived transforms', totalKeys: ['shortsEmbeddingDerivedTransforms', 'embeddingDerivedTransforms'], expected: 12, color: C.purple },
-        { key: 'combined_forecast', label: 'Combined forecasts', totalKeys: ['shortsCombinedForecasts', 'shortsForecastColumns', 'combinedForecasts'], expected: 26, color: C.amber },
+        { key: 'combined_forecast', label: 'Forecast columns', totalKeys: ['shortsForecastColumns', 'shortsCombinedForecasts', 'combinedForecasts'], expected: 27, color: C.amber },
         { key: 'observed_outcome', label: 'Observed outcomes', totalKeys: ['shortsObservedOutcomes', 'shortsObservedColumns', 'observedOutcomes'], expected: 13, color: C.green },
         { key: 'legacy_diagnostic', label: 'Legacy diagnostics', totalKeys: ['shortsLegacyDiagnostics', 'shortsLegacyColumns', 'legacyDiagnostics'], expected: 7, color: C.orange },
     ];
@@ -6718,8 +6846,8 @@ const JarvisRetention = (function () {
         return `<div data-savedledger data-selected-coordinate-id="${esc(selectedColumn && selectedColumn.id || '')}" style="min-width:0">
           <div style="border:1px solid ${audit && !audit.passed ? C.red : C.green};background:${audit && !audit.passed ? C.red : C.green}0a;padding:10px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:950;color:${C.text}">Canonical score ledger</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:2px">One row per Short. One stable ID per interpretation. A graph may compare two IDs, but it cannot create a third number.</div></div><div style="text-align:right"><div style="font-size:9px;color:${audit && !audit.passed ? C.red : C.green};font-weight:950">${audit ? audit.passed ? 'LEDGER PARITY AUDIT PASSED' : 'LEDGER PARITY AUDIT FAILED' : '21 STORED COORDINATES AVAILABLE'}</div><div style="font-size:7px;color:${C.faint}">${audit ? `${audit.rows} matched rows · ${audit.columns} registered scalar columns` : `${model.rows.length} scored rows`}</div></div></div></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:6px;margin-bottom:10px">${classSummaryCards}</div>
-          <div style="background:${C.card2};border-left:3px solid ${C.amber};padding:9px;margin-bottom:8px;font-size:8.8px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">103 columns are not 103 embedding spaces.</b> The registry separates <b style="color:${C.cyan}">${classCounts.find(item => item.key === 'direct_embedding_axis').count} direct-axis columns representing ${registry.totals && registry.totals.shortsDistinctDirectEmbeddingAxes || 36} distinct fitted axes</b> (${registry.totals && registry.totals.shortsDirectAxisAliasColumns || 9} public-axis aliases appear in both holdout views), <b style="color:${C.purple}">${classCounts.find(item => item.key === 'embedding_derived_transform').count} embedding-derived transforms</b>, <b style="color:${C.amber}">${classCounts.find(item => item.key === 'combined_forecast').count} combined forecasts</b>, <b style="color:${C.green}">${classCounts.find(item => item.key === 'observed_outcome').count} observed outcomes</b>, and <b style="color:${C.orange}">${classCounts.find(item => item.key === 'legacy_diagnostic').count} legacy diagnostics</b>.</div>
-          <div style="background:${C.card2};border-left:3px solid ${C.cyan};padding:8px;margin-bottom:9px;font-size:8.5px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">Identity rule:</b> ${esc(registry && registry.rules && registry.rules[1] || 'A relationship plot pairs a score coordinate with an observed outcome; it never creates a new score.')} ${registry ? `Shorts and Long Quant expose ${(totals.shortsStoredProduction || 0) + (totals.longStoredOutputs || 0)} current persisted score outputs total; map projections are views of those data, not new scores.` : ''}</div>
+          <div style="background:${C.card2};border-left:3px solid ${C.amber};padding:9px;margin-bottom:8px;font-size:8.8px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">${totals.shortsRowColumns || model.columns.length} columns are not ${totals.shortsRowColumns || model.columns.length} embedding spaces.</b> The registry separates <b style="color:${C.cyan}">${classCounts.find(item => item.key === 'direct_embedding_axis').count} direct-axis columns representing ${registry.totals && registry.totals.shortsDistinctDirectEmbeddingAxes || 36} distinct fitted axes</b> (${registry.totals && registry.totals.shortsDirectAxisAliasColumns || 9} public-axis aliases appear in both holdout views), <b style="color:${C.purple}">${classCounts.find(item => item.key === 'embedding_derived_transform').count} embedding-derived transforms</b>, <b style="color:${C.amber}">${classCounts.find(item => item.key === 'combined_forecast').count} combined forecasts</b>, <b style="color:${C.green}">${classCounts.find(item => item.key === 'observed_outcome').count} observed outcomes</b>, and <b style="color:${C.orange}">${classCounts.find(item => item.key === 'legacy_diagnostic').count} legacy diagnostics</b>. The visual keep forecast is one combined forecast derived from the existing visual vector.</div>
+          <div style="background:${C.card2};border-left:3px solid ${C.cyan};padding:8px;margin-bottom:9px;font-size:8.5px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">Identity rule:</b> ${esc(registry && registry.rules && registry.rules[1] || 'A relationship plot pairs a score coordinate with an observed outcome; it never creates a new score.')} ${registry ? `Shorts and Long Quant expose ${(totals.shortsStoredProduction || 0) + (totals.shortsVisualKeepForecasts || 0) + (totals.longStoredOutputs || 0)} current persisted or frozen production outputs total; map projections are views of those data, not new scores.` : ''}</div>
           <div style="background:${C.card2};border-left:3px solid ${C.purple};padding:8px;margin-bottom:9px;font-size:8.5px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">Evidence rule:</b> Exact row counts, video-ID hashes, exclusions, artifact hashes, and revisions are displayed when they were persisted. A historical fit manifest that was never saved is labeled unknown; this screen does not infer a training population from a newer map revision. <b style="color:${C.green}">${rowProvenance.exactScorerManifestRows || 0}</b> rows have exact scorer manifests and <b style="color:${C.green}">${rowProvenance.exactNoveltySelectionRows || 0}</b> pin all three novelty selections; ${rowProvenance.historicalOrIncompleteScorerManifestRows || 0} / ${rowProvenance.historicalOrIncompleteNoveltySelectionRows || 0} historical rows remain explicitly incomplete.</div>
           <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px">${familyButtons}<input data-savedledgerquery value="${esc(st.savedLedgerQuery || '')}" placeholder="filter videos…" style="margin-left:auto;min-width:160px;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:5px 7px;font-size:9px"/><span data-savedledgerexport title="Exports every registered coordinate value, regardless of the visible family filter" style="cursor:pointer;border:1px solid ${C.green};color:${C.green};padding:4px 8px;font-size:8px;font-weight:900">download value CSV</span><span data-savedledger-provenance-export title="Exports every coordinate and its complete resolved lineage" style="cursor:pointer;border:1px solid ${C.purple};color:${C.purple};padding:4px 8px;font-size:8px;font-weight:900">download provenance CSV</span></div>
           ${renderSavedLedgerPipeline(selectedColumn, registry)}

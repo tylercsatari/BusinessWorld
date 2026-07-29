@@ -151,7 +151,8 @@ def assert_target_contract(target: dict, target_name: str) -> None:
             assert len(row.get("accountHeldOut", [])) == len(predictor.PRIVATE_FEATURE_NAMES)
         visual_study = target.get("visualOnlyStudy")
         if visual_study is not None:
-            assert visual_study.get("schemaVersion") == 1
+            assert visual_study.get("schemaVersion") == 2
+            assert visual_study.get("coordinateId") == predictor.VISUAL_KEEP_COORDINATE_ID
             assert set(visual_study.get("protocols", {})) == {
                 "videoHoldout",
                 "forwardTime",
@@ -159,6 +160,25 @@ def assert_target_contract(target: dict, target_name: str) -> None:
             }
             assert visual_study.get("promotion", {}).get("status")
             assert visual_study.get("formula", {}).get("input")
+            production = visual_study.get("production")
+            assert isinstance(production, dict)
+            assert production.get("coordinateId") == predictor.VISUAL_KEEP_COORDINATE_ID
+            assert production.get("fitPopulation", {}).get("n") == visual_study["population"]["n"]
+            assert len(production.get("fitPopulation", {}).get("videoIdSha256", "")) == 64
+            assert sum(
+                int(account.get("rowCount") or 0)
+                for account in production.get("fitPopulation", {}).get("byAccount", {}).values()
+            ) == visual_study["population"]["n"]
+            assert len(production.get("points", [])) == visual_study["population"]["n"]
+            assert all(
+                point.get("calibrationScope") == "pooled_global"
+                and point.get("predicted") == point.get("pooledPrediction")
+                for point in production.get("points", [])
+            )
+            model_artifact = visual_study.get("modelArtifact")
+            assert isinstance(model_artifact, dict)
+            assert len(model_artifact.get("artifactSha256", "")) == 64
+            assert model_artifact.get("canonicalKey") == predictor.R2_VISUAL_KEEP_MODEL_KEY
             for protocol in visual_study["protocols"].values():
                 assert isinstance(protocol.get("metrics"), dict)
                 assert isinstance(protocol.get("points"), list)
@@ -244,6 +264,11 @@ def assert_result_contract(result: dict, candidate_hash: str) -> None:
     assert provenance["sourceArtifacts"]
     assert set(provenance["rawStoreShape"]) == {"visual", "text", "together"}
     assert provenance["runtime"]["scikitLearn"]
+    assert len(provenance["visualKeepModelArtifact"]["artifactSha256"]) == 64
+    assert (
+        provenance["visualKeepModelArtifact"]["canonicalKey"]
+        == predictor.R2_VISUAL_KEEP_MODEL_KEY
+    )
 
     rules = result["validationRules"]
     assert isinstance(rules, list) and len(rules) >= 8
@@ -319,8 +344,22 @@ visual_study_fixture = predictor.run_visual_keep_study(
     {"visual": visual_store},
 )
 assert visual_study_fixture["population"]["n"] == len(visual_rows)
+assert visual_study_fixture["schemaVersion"] == 2
+assert visual_study_fixture["coordinateId"] == predictor.VISUAL_KEEP_COORDINATE_ID
 assert visual_study_fixture["population"]["embeddingDimensions"] == 8
 assert len(visual_study_fixture["formula"]["pooled"]["coefficients"]) == 8
+assert len(visual_study_fixture["production"]["points"]) == len(visual_rows)
+assert all(
+    point["calibrationScope"] == "pooled_global"
+    and point["predicted"] == point["pooledPrediction"]
+    for point in visual_study_fixture["production"]["points"]
+)
+assert visual_study_fixture["production"]["fitPopulation"]["n"] == len(visual_rows)
+assert len(visual_study_fixture["production"]["fitPopulation"]["videoIdSha256"]) == 64
+assert sum(
+    int(account["rowCount"])
+    for account in visual_study_fixture["production"]["fitPopulation"]["byAccount"].values()
+) == len(visual_rows)
 assert set(visual_study_fixture["protocols"]) == {
     "videoHoldout",
     "forwardTime",
@@ -702,6 +741,7 @@ def synthetic_target(kind: str) -> dict:
         "warning": "Synthetic contract fixture.",
     }
     if kind == "keep":
+        target["visualOnlyStudy"] = json.loads(json.dumps(visual_study_fixture))
         target["blindInputs"] = {
             "featureNames": predictor.PRIVATE_FEATURE_NAMES,
             "videoHeldOutProtocol": "The evaluated video is excluded from this synthetic fit.",
@@ -713,8 +753,14 @@ def synthetic_target(kind: str) -> dict:
 
 with tempfile.TemporaryDirectory() as temporary_directory:
     temporary_result = Path(temporary_directory) / "results.json"
+    temporary_visual_model = Path(temporary_directory) / "visual-keep-model-v1.json"
     with (
         mock.patch.object(predictor, "LOCAL_RESULT", temporary_result),
+        mock.patch.object(
+            predictor,
+            "LOCAL_VISUAL_KEEP_MODEL",
+            temporary_visual_model,
+        ),
         mock.patch.object(predictor, "update_status", lambda *args, **kwargs: None),
         mock.patch.object(predictor, "load_library", lambda: library_fixture),
         mock.patch.object(predictor, "load_raw", lambda: stores_fixture),
@@ -753,6 +799,25 @@ with tempfile.TemporaryDirectory() as temporary_directory:
         assert predictor.main() == 0
     assembled_result = json.loads(temporary_result.read_text(encoding="utf-8"))
     assert_result_contract(assembled_result, candidate_hash)
+    assembled_visual_model = json.loads(
+        temporary_visual_model.read_text(encoding="utf-8")
+    )
+    assert assembled_visual_model["coordinateId"] == predictor.VISUAL_KEEP_COORDINATE_ID
+    assert assembled_visual_model["formula"]["scope"] == "pooled_global"
+    assert "accounts" not in assembled_visual_model["formula"]
+    assert len(assembled_visual_model["trainingPredictions"]) == len(visual_rows)
+    assert all(
+        point["calibrationScope"] == "pooled_global"
+        and point["predicted"] == point["pooledPrediction"]
+        for point in assembled_visual_model["trainingPredictions"]
+    )
+    assert len(assembled_visual_model["formula"]["pooled"]["coefficients"]) == 8
+    assert (
+        assembled_result["targets"]["keep"]["visualOnlyStudy"]["modelArtifact"][
+            "artifactSha256"
+        ]
+        == hashlib.sha256(temporary_visual_model.read_bytes()).hexdigest()
+    )
 
 
 # When a local production artifact exists, validate its complete live target

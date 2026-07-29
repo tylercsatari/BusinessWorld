@@ -50,6 +50,12 @@ LOCAL_RESULT = HERE / "results.json"
 R2_RESULT_KEY = "raw/predictor-lab/results.json"
 R2_RESULT_MANIFEST_KEY = "raw/predictor-lab/results.manifest.json"
 R2_STATUS_KEY = "raw/predictor-lab/status.json"
+LOCAL_VISUAL_KEEP_MODEL = HERE / "visual-keep-model-v1.json"
+R2_VISUAL_KEEP_MODEL_KEY = "raw/predictor-lab/visual-keep-model-v1.json"
+R2_VISUAL_KEEP_MODEL_MANIFEST_KEY = (
+    "raw/predictor-lab/visual-keep-model-v1.manifest.json"
+)
+VISUAL_KEEP_COORDINATE_ID = "shorts.visual-keep-forecast.v1"
 EXPERIMENT_COUNT = 50_000
 MODALITIES = ("visual", "text", "together")
 MODALITY_SHORT = {"visual": "vis", "text": "txt", "together": "tog"}
@@ -2943,9 +2949,44 @@ def run_visual_keep_study(
         and forward_skill > 0
         and account_skill > 0
     )
+    pooled = formula["pooled"]
+    pooled_coefficients = np.asarray(pooled["coefficients"], dtype=float)
+    production_points = []
+    for row, feature in zip(eligible, features):
+        account = str(row["account"])
+        pooled_prediction = (
+            float(pooled["intercept"])
+            + float(np.asarray(feature, dtype=float) @ pooled_coefficients)
+        )
+        production_points.append(
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "account": account,
+                "accountName": row["accountName"],
+                "publishedAt": clean_number(row.get("publishedAt"), 0),
+                "predicted": clean_number(pooled_prediction),
+                "pooledPrediction": clean_number(pooled_prediction),
+                "calibrationScope": "pooled_global",
+            }
+        )
+    training_ids = sorted(str(row["id"]) for row in eligible)
+    training_ids_by_account: dict[str, list[str]] = defaultdict(list)
+    for row in eligible:
+        training_ids_by_account[str(row["account"])].append(str(row["id"]))
+    fit_population_by_account = {
+        account: {
+            "rowCount": len(account_ids),
+            "videoIdSha256": hashlib.sha256(
+                "\n".join(sorted(account_ids)).encode()
+            ).hexdigest(),
+        }
+        for account, account_ids in sorted(training_ids_by_account.items())
+    }
     return {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "label": "Visual-only keep-rate predictor",
+        "coordinateId": VISUAL_KEEP_COORDINATE_ID,
         "input": "Only the canonical visual opening montage embedding; no title, transcript, views, duration, or audience outcome enters the predictor.",
         "population": {
             "n": len(eligible),
@@ -2970,6 +3011,19 @@ def run_visual_keep_study(
             "accountHoldout": account_holdout,
         },
         "formula": formula,
+        "production": {
+            "coordinateId": VISUAL_KEEP_COORDINATE_ID,
+            "valueDefinition": "Raw keep-rate percentage predicted by one frozen pooled visual-only model. Creator identity is not an input, so identical visual embeddings receive identical values in every scoring route.",
+            "evaluationWarning": "These final-model values are in-sample diagnostics on the fitting population. The separate protocol predictions are the leakage-controlled evidence and must not be substituted for this raw coordinate.",
+            "fitPopulation": {
+                "n": len(training_ids),
+                "videoIdSha256": hashlib.sha256(
+                    "\n".join(training_ids).encode()
+                ).hexdigest(),
+                "byAccount": fit_population_by_account,
+            },
+            "points": production_points,
+        },
         "promotion": {
             "promoted": promoted,
             "status": (
@@ -4354,6 +4408,88 @@ def main() -> int:
         name: READ_PROVENANCE[name]
         for name in sorted(READ_PROVENANCE)
     }
+    result_generated_at = int(time.time() * 1000)
+    visual_keep_study = keep.get("visualOnlyStudy") or {}
+    visual_keep_model = {
+        "schemaVersion": 1,
+        "coordinateId": VISUAL_KEEP_COORDINATE_ID,
+        "generatedAt": result_generated_at,
+        "status": (visual_keep_study.get("promotion") or {}).get("status"),
+        "input": visual_keep_study.get("input"),
+        "population": visual_keep_study.get("population"),
+        "fitPopulation": (
+            visual_keep_study.get("production") or {}
+        ).get("fitPopulation"),
+        "trainingPredictions": [
+            {
+                "id": point.get("id"),
+                "predicted": point.get("predicted"),
+                "pooledPrediction": point.get("pooledPrediction"),
+                "calibrationScope": point.get("calibrationScope"),
+                "account": point.get("account"),
+            }
+            for point in (
+                (visual_keep_study.get("production") or {}).get("points") or []
+            )
+        ],
+        "formula": {
+            "scope": "pooled_global",
+            "input": (visual_keep_study.get("formula") or {}).get("input"),
+            "pooled": (visual_keep_study.get("formula") or {}).get("pooled"),
+        },
+        "validationSummary": {
+            key: {
+                "key": (protocol or {}).get("key"),
+                "label": (protocol or {}).get("label"),
+                "metrics": (protocol or {}).get("metrics"),
+            }
+            for key, protocol in (
+                visual_keep_study.get("protocols") or {}
+            ).items()
+        },
+        "promotion": visual_keep_study.get("promotion"),
+        "producer": "buildings/jarvis/predictor-lab/run_predictor_lab.py",
+        "producerSourceSha256": provenance["producerSourceSha256"],
+        "featureContractVersion": provenance["featureContractVersion"],
+        "featureContractSha256": provenance["featureContractSha256"],
+        "sourceArtifacts": provenance["sourceArtifacts"],
+    }
+    visual_keep_model_bytes = json.dumps(
+        visual_keep_model,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode()
+    visual_keep_model_sha256 = hashlib.sha256(
+        visual_keep_model_bytes
+    ).hexdigest()
+    visual_keep_model_archive_key = (
+        "raw/predictor-lab/visual-keep-model/by-sha256/"
+        f"{visual_keep_model_sha256}.json"
+    )
+    visual_keep_model_manifest = {
+        "schemaVersion": 1,
+        "coordinateId": VISUAL_KEEP_COORDINATE_ID,
+        "artifactSha256": visual_keep_model_sha256,
+        "canonicalKey": R2_VISUAL_KEEP_MODEL_KEY,
+        "archiveKey": visual_keep_model_archive_key,
+        "producer": visual_keep_model["producer"],
+        "producerSourceSha256": provenance["producerSourceSha256"],
+        "featureContractVersion": provenance["featureContractVersion"],
+        "featureContractSha256": provenance["featureContractSha256"],
+        "generatedAt": result_generated_at,
+        "fitPopulation": visual_keep_model["fitPopulation"],
+    }
+    visual_keep_study["modelArtifact"] = {
+        "artifactSha256": visual_keep_model_sha256,
+        "canonicalKey": R2_VISUAL_KEEP_MODEL_KEY,
+        "archiveKey": visual_keep_model_archive_key,
+        "manifestKey": R2_VISUAL_KEEP_MODEL_MANIFEST_KEY,
+        "producerSourceSha256": provenance["producerSourceSha256"],
+        "generatedAt": result_generated_at,
+    }
+    provenance["visualKeepModelArtifact"] = dict(
+        visual_keep_study["modelArtifact"]
+    )
     coverage = coverage_payload(stores, library, private_rows, saved_rows)
     artifact_complete = bool(
         corpus is not None
@@ -4363,7 +4499,7 @@ def main() -> int:
     )
     result = {
         "version": 2,
-        "generatedAt": int(time.time() * 1000),
+        "generatedAt": result_generated_at,
         "elapsedSeconds": round(time.time() - started, 1),
         "coverage": coverage,
         "artifactState": {
@@ -4443,13 +4579,37 @@ def main() -> int:
         "sourceArtifacts": provenance["sourceArtifacts"],
     }
     LOCAL_RESULT.write_text(pretty_result, encoding="utf-8")
+    LOCAL_VISUAL_KEEP_MODEL.write_bytes(visual_keep_model_bytes)
     if not args.local_only:
-        put_bytes(R2_RESULT_KEY, artifact_bytes, "application/json")
+        put_bytes(
+            visual_keep_model_archive_key,
+            visual_keep_model_bytes,
+            "application/json",
+        )
+        put_json(
+            (
+                "raw/predictor-lab/visual-keep-model/by-sha256/"
+                f"{visual_keep_model_sha256}.manifest.json"
+            ),
+            visual_keep_model_manifest,
+        )
         put_bytes(archive_key, artifact_bytes, "application/json")
-        put_json(R2_RESULT_MANIFEST_KEY, artifact_manifest)
         put_json(
             f"raw/predictor-lab/by-sha256/{artifact_sha256}.manifest.json",
             artifact_manifest,
+        )
+        put_bytes(R2_RESULT_KEY, artifact_bytes, "application/json")
+        put_json(R2_RESULT_MANIFEST_KEY, artifact_manifest)
+        put_bytes(
+            R2_VISUAL_KEEP_MODEL_KEY,
+            visual_keep_model_bytes,
+            "application/json",
+        )
+        # This manifest is the release pointer. Publish it only after every
+        # immutable model/result object and canonical compatibility artifact.
+        put_json(
+            R2_VISUAL_KEEP_MODEL_MANIFEST_KEY,
+            visual_keep_model_manifest,
         )
     update_status(
         "complete" if artifact_complete else "partial",
