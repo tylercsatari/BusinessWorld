@@ -1011,10 +1011,10 @@ const JarvisRetention = (function () {
         const fr = st.rawFrames || [null, null, null, null, null];
         const nFrames = fr.filter(Boolean).length;
         const builder = st.rawBuildMode ? `<div style="border:1px solid ${C.border};border-radius:10px;padding:10px;margin-bottom:8px;background:${C.card2}">
-              <div style="font-size:10px;color:${C.mute};margin-bottom:6px">Build a hook from photos — drop in up to 5 frames (any image type, auto-fit to 9:16) and set the spoken text. It's embedded the same way and added as a marker to compare.</div>
+              <div style="font-size:10px;color:${C.mute};margin-bottom:6px">Build a hook from photos — drop in up to 5 frames (any image type, auto-fit to 9:16), or upload ONE strip photo that already holds all 5, and set the spoken text. It's embedded the same way and added as a marker to compare.</div>
               <div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:8px">${[0, 1, 2, 3, 4].map(i => fr[i]
             ? `<div style="position:relative"><img src="${fr[i]}" style="width:48px;height:85px;object-fit:cover;border-radius:5px;border:1px solid ${C.border}"/><span data-rawframedel="${i}" style="position:absolute;top:-7px;right:-7px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:10px;cursor:pointer">✕</span><div style="text-align:center;font-size:8px;color:${C.mute}">${i + 1}</div></div>`
-            : `<div data-rawframe="${i}" style="width:48px;height:85px;border:1px dashed ${C.border};border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋<span>frame ${i + 1}</span></div>`).join('')}</div>
+            : `<div data-rawframe="${i}" style="width:48px;height:85px;border:1px dashed ${C.border};border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋<span>frame ${i + 1}</span></div>`).join('')}<span data-rawstrip="1" title="upload ONE photo that already holds all 5 frames side by side (or stacked) — it's sliced into the 5 slots" style="cursor:pointer;border:1px dashed ${C.border};color:${C.dim};border-radius:6px;padding:5px 10px;font-size:10px;font-weight:700;white-space:nowrap;align-self:center">⬆ 1-photo strip</span></div>
               <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="optional — type the hook's spoken text (drives Text + Together)…" style="width:100%;box-sizing:border-box;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:12px;margin-bottom:8px"/>
               <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CYAN : C.border};background:${nFrames ? CYAN + '22' : 'transparent'};color:${nFrames ? CYAN : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Place this hook${nFrames ? ` (${nFrames}/5 frames)` : ''}</span>
             </div>` : '';
@@ -1664,6 +1664,7 @@ const JarvisRetention = (function () {
         const builder = st.rawBuildMode ? `<div style="margin-top:8px;display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">${[0, 1, 2, 3, 4].map(i => fr[i]
             ? `<div style="position:relative"><img src="${fr[i]}" style="width:42px;height:75px;object-fit:cover;border-radius:5px;border:1px solid ${C.border}"/><span data-rawframedel="${i}" style="position:absolute;top:-7px;right:-7px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:15px;height:15px;line-height:13px;text-align:center;font-size:9px;cursor:pointer">✕</span></div>`
             : `<div data-rawframe="${i}" style="width:42px;height:75px;border:1px dashed ${C.border};border-radius:5px;display:flex;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋${i + 1}</div>`).join('')}
+            <span data-rawstrip="1" title="upload ONE photo that already holds all 5 frames side by side (or stacked) — it's sliced into the 5 slots" style="cursor:pointer;border:1px dashed ${C.border};color:${C.dim};border-radius:6px;padding:5px 10px;font-size:10px;font-weight:700;white-space:nowrap">⬆ 1-photo strip</span>
             <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="hook text…" style="flex:1;min-width:160px;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:12px"/>
             <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CY : C.border};background:${nFrames ? CY + '22' : 'transparent'};color:${nFrames ? CY : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Score this hook</span></div>${genFramesPanel()}` : '';
         const controls = cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, '🖼 5 frames + text')}${!st.rawBuildMode ? `<span ${st.rawUploading ? 'aria-disabled="true"' : 'data-rawupload="1"'} style="cursor:${st.rawUploading ? 'not-allowed' : 'pointer'};opacity:${st.rawUploading ? '.45' : '1'};border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ ${st.rawUploading ? 'Video in progress' : 'Upload video'}</span><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;max-width:100%"><input data-rawyturl value="${esc(st.rawYtUrl || '')}" placeholder="or paste a YouTube link…" style="width:220px;max-width:100%;box-sizing:border-box;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 9px;font-size:11px"/><span data-rawytgo style="cursor:pointer;border:1px solid ${st.rawYtBusy ? C.amber : CY};background:${st.rawYtBusy ? C.amber + '18' : CY + '18'};color:${st.rawYtBusy ? C.amber : CY};border-radius:6px;padding:4px 11px;font-size:11px;font-weight:800;white-space:nowrap">${st.rawYtBusy ? '⏳ downloading + embedding…' : '⬇ score from link'}</span></span>` : ''}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red};line-height:1.4;max-width:560px">${esc(String(st.rawUpErr).slice(0, 320))}</span>` : ''}</div>${builder}`, 12);
@@ -3648,6 +3649,18 @@ const JarvisRetention = (function () {
         st.rawFrameSlot = slot;
         upload.pickFiles({ accept: 'image/jpeg,image/png,image/webp', onSelect: files => files[0] ? rtgFrameFile(files[0], slot) : null, onError: rawUploadPickerError });
     }
+    function openRawStripPicker() {
+        if (rawScoreBusy()) {
+            rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before changing frames.');
+            return;
+        }
+        const upload = window.JarvisUpload;
+        if (!upload || typeof upload.pickFiles !== 'function') {
+            rawUploadPickerError('The uploader did not initialize. Reload the page and try again.');
+            return;
+        }
+        upload.pickFiles({ accept: 'image/jpeg,image/png,image/webp', onSelect: files => files[0] ? rtgStripFile(files[0]) : null, onError: rawUploadPickerError });
+    }
     // async scoring job: POST returns {jobId} instantly (no Render 100s proxy ceiling),
     // poll until done; if a redeploy loses the job, resubmit up to twice.
     // ── upload black box ── every upload stage is journaled to localStorage, which survives
@@ -4051,6 +4064,7 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-rawupclear]')) { st.rawUploads = []; st.rawUpSel = null; st.rawUpErr = null; rtgUpdateRaw(); return; }
         const bm = e.target.closest('[data-rawbuildmode]'); if (bm) { st.rawBuildMode = bm.getAttribute('data-rawbuildmode') === '1'; st.rawUpErr = null; rtgUpdateRaw(); return; }
         const rfr = e.target.closest('[data-rawframe]'); if (rfr) { openRawFramePicker(+rfr.getAttribute('data-rawframe')); return; }
+        if (e.target.closest('[data-rawstrip]')) { openRawStripPicker(); return; }
         const rfd = e.target.closest('[data-rawframedel]'); if (rfd) { st.rawFrames[+rfd.getAttribute('data-rawframedel')] = null; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-rawplace]')) { rtgPlaceHook(); return; }
         if (e.target.closest('[data-libreload]')) { Promise.all([
@@ -4227,6 +4241,30 @@ const JarvisRetention = (function () {
                 const s = Math.max(FRAME_W / im.width, FRAME_H / im.height), w = im.width * s, hh = im.height * s;  // cover-fit
                 x.drawImage(im, (FRAME_W - w) / 2, (FRAME_H - hh) / 2, w, hh);
                 st.rawFrames[slot] = c.toDataURL('image/jpeg', 0.9); st.rawUpErr = null; rtgUpdateRaw();
+            };
+            im.onerror = () => { st.rawUpErr = 'could not read that image (HEIC may be unsupported — try JPG/PNG)'; rtgUpdateRaw(); };
+            im.src = fr.result;
+        };
+        fr.onerror = () => { st.rawUpErr = 'could not read file'; rtgUpdateRaw(); };
+        fr.readAsDataURL(file);
+    }
+    // one photo that already holds all 5 frames (a strip/montage) → slice into 5 equal cells
+    // and fill every slot; wider-than-tall = side-by-side columns, taller = stacked rows
+    function rtgStripFile(file) {
+        const fr = new window.FileReader();
+        fr.onload = () => {
+            const im = new window.Image();
+            im.onload = () => {
+                const horiz = im.width >= im.height;
+                const cw = horiz ? im.width / 5 : im.width, ch = horiz ? im.height : im.height / 5;
+                for (let i = 0; i < 5; i++) {
+                    const c = window.document.createElement('canvas'); c.width = FRAME_W; c.height = FRAME_H;
+                    const x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, FRAME_W, FRAME_H);
+                    const s = Math.max(FRAME_W / cw, FRAME_H / ch), w = cw * s, hh = ch * s;  // cover-fit each cell
+                    x.drawImage(im, horiz ? i * cw : 0, horiz ? 0 : i * ch, cw, ch, (FRAME_W - w) / 2, (FRAME_H - hh) / 2, w, hh);
+                    st.rawFrames[i] = c.toDataURL('image/jpeg', 0.9);
+                }
+                st.rawUpErr = null; rtgUpdateRaw();
             };
             im.onerror = () => { st.rawUpErr = 'could not read that image (HEIC may be unsupported — try JPG/PNG)'; rtgUpdateRaw(); };
             im.src = fr.result;
