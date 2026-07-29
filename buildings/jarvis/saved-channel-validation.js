@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const contract = require('./saved-channel-feature-contract.json');
 
-const VERSION = 4;
+const VERSION = 5;
 const LEDGER_VERSION = 2;
 const CURVE_SECONDS = Object.freeze(Array.from({ length: 21 }, (_, second) => second));
 const SUPPORTED_CHANNELS = Object.freeze([
@@ -3078,6 +3078,19 @@ function buildCoordinateRegistry(options = {}) {
     const distinctDirectAxisCount = new Set(
         directAxisColumns.map(column => column.coordinateIdentity.axisFingerprint),
     ).size;
+    const blindColumns = columns.filter(column => (
+        column.family === 'videoHeldout'
+        || column.family === 'accountHeldout'
+        || column.family === 'videoForecast'
+        || column.family === 'accountForecast'
+    ));
+    const blindUniquePredictionCount = new Set(
+        blindColumns.map(column => column.coordinateIdentity.axisFingerprint),
+    ).size;
+    const diagnosticColumns = columns.filter(column => (
+        column.family === 'stored' || column.family === 'legacy'
+    ));
+    const outcomeColumns = columns.filter(column => column.family === 'observed');
     return {
         version: LEDGER_VERSION,
         contractVersion: contract.version,
@@ -3091,6 +3104,25 @@ function buildCoordinateRegistry(options = {}) {
         ],
         columns,
         families: familyMeta,
+        classification: {
+            blind: {
+                columns: blindColumns.length,
+                uniquePredictions: blindUniquePredictionCount,
+                aliasColumns: blindColumns.length - blindUniquePredictionCount,
+                families: ['videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast'],
+                meaning: 'Coordinates eligible for blind validation. Nine creator-excluded public direct axes appear in both protocol views but identify the same fitted prediction.',
+            },
+            diagnostics: {
+                columns: diagnosticColumns.length,
+                families: ['stored', 'legacy'],
+                meaning: 'Stored production outputs and legacy comparisons. They can be evaluated but are not promoted to strict blind evidence.',
+            },
+            outcomes: {
+                columns: outcomeColumns.length,
+                families: ['observed'],
+                meaning: 'Measured truth. These columns are audit-visible but always excluded from predictor ranking.',
+            },
+        },
         lineageCatalog,
         lineageAudit,
         totals: {
@@ -3106,6 +3138,11 @@ function buildCoordinateRegistry(options = {}) {
             shortsDirectAxisColumns: valueClassCounts.direct_embedding_axis || 0,
             shortsDistinctDirectEmbeddingAxes: distinctDirectAxisCount,
             shortsDirectAxisAliasColumns: directAxisColumns.length - distinctDirectAxisCount,
+            shortsBlindColumns: blindColumns.length,
+            shortsBlindUniquePredictions: blindUniquePredictionCount,
+            shortsBlindAliasColumns: blindColumns.length - blindUniquePredictionCount,
+            shortsDiagnosticColumns: diagnosticColumns.length,
+            shortsOutcomeColumns: outcomeColumns.length,
             shortsEmbeddingDerivedTransforms: valueClassCounts.embedding_derived_transform || 0,
             shortsForecastColumns: valueClassCounts.combined_forecast || 0,
             shortsObservedColumns: valueClassCounts.observed_outcome || 0,
@@ -3139,14 +3176,6 @@ function transformOutcome(value, definition) {
     if (!finite(value)) return null;
     if (definition && definition.transform === 'log10(views + 1)') return Math.log10(Math.max(0, Number(value)) + 1);
     if (definition && definition.transform === 'log10(value + 1)') return Math.log10(Math.max(0, Number(value)) + 1);
-    return Number(value);
-}
-
-function transformFeature(value, definition) {
-    if (!finite(value)) return null;
-    if (definition.unit === 'views') return Math.log10(Math.max(0, Number(value)) + 1);
-    if (definition.unit === 'log10_views') return Number(value);
-    if (definition.target === 'outlier') return Math.log10(Math.max(0, Number(value)) + 1);
     return Number(value);
 }
 
@@ -3195,16 +3224,6 @@ function centeredCorrelation(points, rankFirst) {
         });
     }
     return pearson(actual, predicted);
-}
-
-function adjustBenjaminiHochberg(items) {
-    const eligible = items.filter(item => finite(item.metrics && item.metrics.pValue))
-        .sort((left, right) => left.metrics.pValue - right.metrics.pValue);
-    let running = 1;
-    for (let index = eligible.length - 1; index >= 0; index--) {
-        running = Math.min(running, eligible[index].metrics.pValue * eligible.length / (index + 1));
-        eligible[index].metrics.qValue = round(running, 8);
-    }
 }
 
 function pointMap(points, sourceKey, sourceValue) {
@@ -3389,105 +3408,464 @@ function normalizePrediction(value, target, definition) {
     return Number(value);
 }
 
-function matrixFeatureValue(row, definition, index, protocol) {
-    if (protocol === 'stored') return transformFeature(row.storedRaw[index], definition);
-    if (definition.group === 'novelty') return null;
-    const value = blindFeatureValue(row, `${definition.key}.raw`, protocol);
+const LEDGER_OUTCOME_METRIC_KEYS = Object.freeze([
+    'spearman',
+    'withinAccountSpearman',
+    'auc',
+    'oofR2',
+    'oofSpearman',
+    'oofMae',
+    'oofMedianFactorError',
+    'oofAuc',
+    'oofBrier',
+    'n',
+    'oofN',
+    'qValue',
+    'evidence',
+]);
+
+function coordinateModelValue(row, column) {
+    const value = ledgerValue(row, column);
     if (!finite(value)) return null;
-    if (definition.target === 'views' || definition.target === 'realviews') return Number(value);
-    if (definition.target === 'outlier') return Number(value);
+    if (column.unit === 'views' || column.target === 'views' || column.target === 'realviews') {
+        return Math.log10(Math.max(0, Number(value)) + 1);
+    }
+    if (column.target === 'outlier') {
+        return Math.log10(Math.max(0, Number(value)) + 1);
+    }
     return Number(value);
 }
 
-function associationMetrics(points, outcome, scopeKey) {
+function coordinateFoldMode(column) {
+    if (!column || column.valueClass === 'observed_outcome') return 'outcome_not_predictor';
+    if (column.protocol === 'account'
+        || column.family === 'accountHeldout'
+        || column.family === 'accountForecast') {
+        return 'leave_account_out';
+    }
+    return 'video_5fold';
+}
+
+function coordinateValidationTier(column) {
+    if (!column || column.valueClass === 'observed_outcome') return 'outcome_not_predictor';
+    if (column.family === 'accountHeldout') return 'account_held_out_coordinate_plus_leave_account_out_calibration';
+    if (column.family === 'accountForecast') return 'account_held_out_forecast_plus_leave_account_out_calibration';
+    if (column.family === 'videoHeldout') return 'video_held_out_coordinate_plus_video_5fold_calibration';
+    if (column.family === 'videoForecast') return 'video_held_out_forecast_plus_video_5fold_calibration';
+    if (column.family === 'stored') return 'stored_coordinate_plus_video_5fold_calibration';
+    if (column.family === 'legacy') return 'legacy_diagnostic_plus_video_5fold_calibration';
+    return 'video_5fold_calibration';
+}
+
+function coordinatePlainEnglish(column, outcome) {
+    if (column.valueClass === 'observed_outcome') {
+        return `${column.label} is measured truth, not a candidate predictor. It is present so every score-ledger column remains auditable, but it is excluded from ranking and calibration against ${outcome.label}.`;
+    }
+    const protocol = coordinateFoldMode(column) === 'leave_account_out'
+        ? 'The one-coordinate calibration is trained on other creator accounts and then tested on the creator account that was left out.'
+        : 'The one-coordinate calibration is trained on four deterministic video folds and tested on the fifth, so a video outcome never calibrates its own prediction.';
+    const upstream = column.family === 'stored'
+        ? 'This is the exact production value stored with the scored video; the calibration is held out, but the upstream production axis may still be in-sample for its original training account.'
+        : (column.family === 'legacy'
+            ? 'This is a legacy diagnostic retained only for comparison and is never promoted to a canonical production score.'
+            : column.description);
+    return `${upstream} This cell tests whether that exact coordinate predicts ${outcome.label}. ${protocol}`;
+}
+
+function fitLinearSingleCalibration(points) {
+    if (!points.length) return null;
+    const xMean = average(points.map(point => point.predicted));
+    const yMean = average(points.map(point => point.actual));
+    const denominator = points.reduce(
+        (sum, point) => sum + (point.predicted - xMean) ** 2,
+        0,
+    );
+    const slope = denominator > 1e-12
+        ? points.reduce(
+            (sum, point) => sum + (point.predicted - xMean) * (point.actual - yMean),
+            0,
+        ) / denominator
+        : 0;
+    const intercept = yMean - slope * xMean;
+    return {
+        baseline: yMean,
+        predict(value) {
+            return intercept + slope * Number(value);
+        },
+    };
+}
+
+function fitLogisticSingleCalibration(points) {
+    if (!points.length) return null;
+    const xMean = average(points.map(point => point.predicted));
+    const variance = average(points.map(point => (point.predicted - xMean) ** 2));
+    const xScale = finite(variance) && Number(variance) > 1e-12 ? Math.sqrt(variance) : 1;
+    const positives = points.reduce((sum, point) => sum + (point.actual >= 0.5 ? 1 : 0), 0);
+    const baseline = (positives + 0.5) / (points.length + 1);
+    let intercept = Math.log(baseline / (1 - baseline));
+    let slope = 0;
+    for (let iteration = 0; iteration < 50; iteration++) {
+        let gradientIntercept = 0, gradientSlope = 0;
+        let hessianIntercept = 1e-8, hessianCross = 0, hessianSlope = 1e-6;
+        for (const point of points) {
+            const x = (point.predicted - xMean) / xScale;
+            const y = point.actual >= 0.5 ? 1 : 0;
+            const linear = clamp(intercept + slope * x, -30, 30);
+            const probability = 1 / (1 + Math.exp(-linear));
+            const residual = y - probability;
+            const weight = Math.max(1e-8, probability * (1 - probability));
+            gradientIntercept += residual;
+            gradientSlope += residual * x;
+            hessianIntercept += weight;
+            hessianCross += weight * x;
+            hessianSlope += weight * x * x;
+        }
+        const determinant = hessianIntercept * hessianSlope - hessianCross * hessianCross;
+        if (Math.abs(determinant) < 1e-12) break;
+        const interceptStep = (
+            gradientIntercept * hessianSlope - gradientSlope * hessianCross
+        ) / determinant;
+        const slopeStep = (
+            gradientSlope * hessianIntercept - gradientIntercept * hessianCross
+        ) / determinant;
+        intercept += interceptStep;
+        slope += slopeStep;
+        if (Math.max(Math.abs(interceptStep), Math.abs(slopeStep)) < 1e-8) break;
+    }
+    return {
+        baseline,
+        predict(value) {
+            const x = (Number(value) - xMean) / xScale;
+            return 1 / (1 + Math.exp(-clamp(intercept + slope * x, -30, 30)));
+        },
+    };
+}
+
+function singleCoordinateOof(points, outcome, foldMode) {
+    const eligible = (points || []).filter(point => (
+        point && point.id && point.accountId
+        && finite(point.actual) && finite(point.predicted)
+    )).map(point => ({
+        id: String(point.id),
+        accountId: String(point.accountId),
+        actual: Number(point.actual),
+        predicted: Number(point.predicted),
+    }));
+    const mode = foldMode === 'leave_account_out' ? 'leave_account_out' : 'video_5fold';
+    const folds = mode === 'leave_account_out'
+        ? [...new Set(eligible.map(point => point.accountId))].sort()
+        : [0, 1, 2, 3, 4];
+    const predictions = [];
+    const foldAudit = [];
+    for (const fold of folds) {
+        const inTest = point => mode === 'leave_account_out'
+            ? point.accountId === fold
+            : stableHash(`ledger-oof:${point.id}`) % 5 === fold;
+        const training = eligible.filter(point => !inTest(point));
+        const testing = eligible.filter(inTest);
+        if (!testing.length || !training.length) continue;
+        const calibrator = outcome.unit === 'binary'
+            ? fitLogisticSingleCalibration(training)
+            : fitLinearSingleCalibration(training);
+        if (!calibrator) continue;
+        const trainingIds = new Set(training.map(point => point.id));
+        const testingIds = new Set(testing.map(point => point.id));
+        const overlap = [...testingIds].filter(id => trainingIds.has(id));
+        const trainingAccounts = [...new Set(training.map(point => point.accountId))].sort();
+        const testingAccounts = [...new Set(testing.map(point => point.accountId))].sort();
+        foldAudit.push({
+            fold: String(fold),
+            trainingN: training.length,
+            testingN: testing.length,
+            trainingVideoIdSha256: sha256Ids(training.map(point => point.id)),
+            testingVideoIdSha256: sha256Ids(testing.map(point => point.id)),
+            trainingTestOverlapN: overlap.length,
+            trainingAccounts,
+            testingAccounts,
+            heldOutAccountLeakageN: mode === 'leave_account_out'
+                ? testingAccounts.filter(account => trainingAccounts.includes(account)).length
+                : null,
+        });
+        for (const point of testing) {
+            predictions.push({
+                ...point,
+                baseline: calibrator.baseline,
+                calibrated: calibrator.predict(point.predicted),
+                fold: String(fold),
+            });
+        }
+    }
+    const predictionCounts = predictions.reduce((counts, point) => {
+        counts[point.id] = (counts[point.id] || 0) + 1;
+        return counts;
+    }, {});
+    return {
+        mode,
+        eligibleN: eligible.length,
+        predictions,
+        audit: {
+            mode,
+            requestedFolds: folds.length,
+            completedFolds: foldAudit.length,
+            folds: foldAudit,
+            trainingTestOverlapN: foldAudit.reduce((sum, fold) => sum + fold.trainingTestOverlapN, 0),
+            heldOutAccountLeakageN: mode === 'leave_account_out'
+                ? foldAudit.reduce((sum, fold) => sum + fold.heldOutAccountLeakageN, 0)
+                : null,
+            duplicateTestPredictionN: Object.values(predictionCounts).filter(count => count !== 1).length,
+            predictedN: predictions.length,
+        },
+    };
+}
+
+function rawCoordinateAssociation(points, outcome, scopeKey) {
     const observed = points.filter(point => finite(point.actual) && finite(point.predicted))
         .map(point => ({
+            id: point.id,
             accountId: point.accountId,
             actual: Number(point.actual),
             predicted: Number(point.predicted),
         }));
-    if (observed.length < 3) return { n: observed.length };
     const actual = observed.map(point => point.actual);
     const predicted = observed.map(point => point.predicted);
-    const linear = pearson(actual, predicted);
-    const rank = spearman(actual, predicted);
-    const withinLinear = centeredCorrelation(observed, false);
-    const withinRank = centeredCorrelation(observed, true);
-    const binary = outcome.unit === 'binary';
-    const auc = binary ? rocAuc(actual.map(value => value >= 0.5 ? 1 : 0), predicted) : null;
-    const withinAuc = binary ? aucInference(observed, true) : null;
-    const selectedAuc = binary && scopeKey === 'pooled' ? withinAuc.auc : auc;
-    const primary = binary
-        ? (finite(selectedAuc) ? (Number(selectedAuc) - 0.5) * 2 : null)
-        : (scopeKey === 'pooled' ? withinRank : rank);
-    const inference = binary
-        ? aucInference(observed, scopeKey === 'pooled')
+    const rawSpearman = observed.length >= 3 ? spearman(actual, predicted) : null;
+    const within = observed.length >= 3 ? centeredCorrelation(observed, true) : null;
+    const rawAuc = outcome.unit === 'binary' && observed.length >= 3
+        ? rocAuc(actual.map(value => value >= 0.5 ? 1 : 0), predicted)
+        : null;
+    const primary = outcome.unit === 'binary'
+        ? rawAuc
+        : (scopeKey === 'pooled' && finite(within) ? within : rawSpearman);
+    const inference = outcome.unit === 'binary'
+        ? aucInference(observed, false)
         : correlationInference(primary, observed.length);
     return {
         n: observed.length,
-        pearson: round(linear),
-        spearman: round(rank),
-        withinAccountPearson: round(withinLinear),
-        withinAccountSpearman: round(withinRank),
-        auc: round(auc),
-        withinAccountAuc: round(withinAuc && withinAuc.auc),
-        aucPairs: binary ? inference.pairs : null,
-        primary: round(primary),
-        direction: !finite(primary) ? 'unknown' : Number(primary) >= 0 ? 'higher score -> higher outcome' : 'higher score -> lower outcome',
+        spearman: round(rawSpearman),
+        withinAccountSpearman: round(within),
+        auc: round(rawAuc),
         pValue: inference.p,
-        qValue: null,
-        ci95: inference.ci95,
-        inference: 'Exploratory row-level Fisher-z interval. With only two creators, it is not creator-level population inference.',
     };
 }
 
-function evidenceLabel(metrics) {
-    if (!metrics || metrics.n < 30 || !finite(metrics.primary)) return 'insufficient';
-    const magnitude = Math.abs(Number(metrics.primary));
-    if (finite(metrics.qValue) && Number(metrics.qValue) <= 0.05 && magnitude >= 0.15) return 'row_level_signal';
-    if ((finite(metrics.qValue) && Number(metrics.qValue) <= 0.1 && magnitude >= 0.1) || magnitude >= 0.2) return 'directional';
-    return 'not_supported';
-}
-
-function buildOutcomeMatrix(rows, protocol, scopeKey) {
-    const matrix = {};
-    for (const outcome of OUTCOME_DEFINITIONS) {
-        const entries = contract.features.map((definition, index) => {
-            const points = rows.map(row => ({
-                accountId: row.accountId,
-                actual: transformOutcome(outcome.accessor(row), outcome),
-                predicted: matrixFeatureValue(row, definition, index, protocol),
-            }));
-            return {
-                key: definition.key,
-                group: definition.group,
-                target: definition.target,
-                label: definition.label,
-                unit: definition.unit,
-                available: protocol === 'stored' || definition.group !== 'novelty',
-                availabilityNote: protocol !== 'stored' && definition.group === 'novelty'
-                    ? 'No exact held-out rebuild exists for this stored target-specific novelty score.'
-                    : null,
-                provenance: contract.provenanceByTarget[
-                    definition.group === 'novelty' ? 'novelty' : definition.target
-                ] || null,
-                metrics: associationMetrics(points, outcome, scopeKey),
-            };
-        });
-        adjustBenjaminiHochberg(entries);
-        entries.forEach(entry => { entry.metrics.evidence = evidenceLabel(entry.metrics); });
-        entries.sort((left, right) => (
-            Math.abs(number(right.metrics.primary) || 0) - Math.abs(number(left.metrics.primary) || 0)
-            || left.key.localeCompare(right.key)
-        ));
-        matrix[outcome.key] = {
-            ...Object.fromEntries(Object.entries(outcome).filter(([key]) => key !== 'accessor')),
-            protocol,
-            n: rows.filter(row => finite(outcome.accessor(row))).length,
-            features: entries,
+function oofCoordinateMetrics(oof, outcome) {
+    if (!oof || !oof.predictions.length) {
+        return {
+            oofR2: null,
+            oofSpearman: null,
+            oofMae: null,
+            oofMedianFactorError: null,
+            oofAuc: null,
+            oofBrier: null,
+            oofN: 0,
         };
     }
+    if (outcome.unit === 'binary') {
+        const binary = binaryMetrics(oof.predictions.map(point => ({
+            actual: point.actual,
+            predicted: point.calibrated,
+        })), oof.eligibleN);
+        return {
+            oofR2: null,
+            oofSpearman: null,
+            oofMae: null,
+            oofMedianFactorError: null,
+            oofAuc: number(binary.auc),
+            oofBrier: number(binary.brier),
+            oofN: binary.n || 0,
+        };
+    }
+    const transformedOutcome = !!outcome.transform;
+    const regression = regressionMetrics(oof.predictions.map(point => ({
+        id: point.id,
+        accountId: point.accountId,
+        actual: point.actual,
+        predicted: point.calibrated,
+        baseline: point.baseline,
+    })), {
+        total: oof.eligibleN,
+        logScale: transformedOutcome,
+    });
+    return {
+        oofR2: number(regression.r2),
+        oofSpearman: number(regression.spearman),
+        oofMae: transformedOutcome ? null : number(regression.mae),
+        oofMedianFactorError: transformedOutcome ? number(regression.medianFactorError) : null,
+        oofAuc: null,
+        oofBrier: null,
+        oofN: regression.n || 0,
+    };
+}
+
+function ledgerEvidence(metrics, column) {
+    if (column.valueClass === 'observed_outcome') return 'outcome_not_predictor';
+    if (!metrics || metrics.n < 20 || metrics.oofN < 20) return 'insufficient_evidence';
+    const diagnosticOnly = column.family === 'stored' || column.family === 'legacy';
+    if (finite(metrics.oofAuc)) {
+        if (finite(metrics.qValue) && metrics.qValue <= 0.05 && metrics.oofAuc >= 0.65) {
+            return diagnosticOnly ? 'strong_diagnostic_signal_not_blind' : 'strong_blind_signal';
+        }
+        if (metrics.oofAuc >= 0.6) {
+            return diagnosticOnly ? 'directional_diagnostic_signal_not_blind' : 'directional_blind_signal';
+        }
+        return 'not_predictive';
+    }
+    const rank = Math.abs(number(metrics.oofSpearman) || 0);
+    if (finite(metrics.qValue) && metrics.qValue <= 0.05 && rank >= 0.3 && number(metrics.oofR2) > 0) {
+        return diagnosticOnly ? 'strong_diagnostic_signal_not_blind' : 'strong_blind_signal';
+    }
+    if (rank >= 0.2) {
+        return diagnosticOnly ? 'directional_diagnostic_signal_not_blind' : 'directional_blind_signal';
+    }
+    return 'not_predictive';
+}
+
+function adjustLedgerQValues(entries) {
+    const eligible = entries.filter(entry => finite(entry._pValue))
+        .sort((left, right) => left._pValue - right._pValue);
+    let running = 1;
+    for (let index = eligible.length - 1; index >= 0; index--) {
+        running = Math.min(running, eligible[index]._pValue * eligible.length / (index + 1));
+        eligible[index].metrics.qValue = round(running, 8);
+    }
+    entries.forEach(entry => { delete entry._pValue; });
+}
+
+function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey, calibrationRows = rows) {
+    const matrix = {};
+    for (const outcome of OUTCOME_DEFINITIONS) {
+        const outcomeRows = rows.filter(row => finite(outcome.accessor(row))).length;
+        const coordinates = coordinateRegistry.columns.map(column => {
+            const points = rows.map(row => ({
+                id: row.id,
+                accountId: row.accountId,
+                actual: transformOutcome(outcome.accessor(row), outcome),
+                predicted: coordinateModelValue(row, column),
+                validationSource: row.validationSource || 'saved_channel_join',
+            }));
+            const raw = rawCoordinateAssociation(points, outcome, scopeKey);
+            const foldMode = coordinateFoldMode(column);
+            const isOutcome = column.valueClass === 'observed_outcome';
+            const evaluationIds = new Set(points.map(point => point.id));
+            const calibrationPoints = calibrationRows.map(row => ({
+                id: row.id,
+                accountId: row.accountId,
+                actual: transformOutcome(outcome.accessor(row), outcome),
+                predicted: coordinateModelValue(row, column),
+                validationSource: row.validationSource || 'saved_channel_join',
+            }));
+            const fullOof = isOutcome
+                ? null
+                : singleCoordinateOof(calibrationPoints, outcome, foldMode);
+            const oof = fullOof ? {
+                ...fullOof,
+                eligibleN: raw.n,
+                predictions: fullOof.predictions.filter(point => evaluationIds.has(point.id)),
+            } : null;
+            const oofMetrics = oofCoordinateMetrics(oof, outcome);
+            const coordinateRows = points.filter(point => finite(point.predicted)).length;
+            const pairedRows = raw.n;
+            const pairedBlindOnlyRows = points.filter(point => (
+                point.validationSource === 'predictor_blind_inputs_only'
+                && finite(point.actual) && finite(point.predicted)
+            )).length;
+            const available = !isOutcome && pairedRows >= 3;
+            let availabilityNote = null;
+            if (isOutcome) {
+                availabilityNote = 'outcome_not_predictor: measured outcomes are never ranked or calibrated as predictors.';
+            } else if (!pairedRows) {
+                availabilityNote = 'No row has both this coordinate and this observed outcome.';
+            } else if (pairedRows < 3) {
+                availabilityNote = 'Fewer than three paired rows; association and calibration are not estimable.';
+            } else if (!oofMetrics.oofN) {
+                availabilityNote = foldMode === 'leave_account_out'
+                    ? 'Raw association is available, but this scope does not contain another creator account for leave-account-out calibration.'
+                    : 'Raw association is available, but no complete held-out calibration fold could be fit.';
+            }
+            const metrics = {
+                spearman: isOutcome ? null : raw.spearman,
+                withinAccountSpearman: isOutcome ? null : raw.withinAccountSpearman,
+                auc: isOutcome ? null : raw.auc,
+                oofR2: isOutcome ? null : oofMetrics.oofR2,
+                oofSpearman: isOutcome ? null : oofMetrics.oofSpearman,
+                oofMae: isOutcome ? null : oofMetrics.oofMae,
+                oofMedianFactorError: isOutcome ? null : oofMetrics.oofMedianFactorError,
+                oofAuc: isOutcome ? null : oofMetrics.oofAuc,
+                oofBrier: isOutcome ? null : oofMetrics.oofBrier,
+                n: pairedRows,
+                oofN: isOutcome ? 0 : oofMetrics.oofN,
+                qValue: null,
+                evidence: null,
+            };
+            const entry = {
+                coordinateId: column.id,
+                label: column.label,
+                family: column.family,
+                protocol: column.protocol,
+                valueClass: column.valueClass,
+                target: column.target,
+                group: column.group,
+                unit: column.unit,
+                available,
+                availabilityNote,
+                validationTier: coordinateValidationTier(column),
+                plainEnglish: coordinatePlainEnglish(column, outcome),
+                coverage: {
+                    cohortRows: rows.length,
+                    outcomeRows,
+                    coordinateRows,
+                    pairedRows,
+                    pairedFraction: rows.length ? round(pairedRows / rows.length) : 0,
+                    pairedBlindOnlyRows,
+                    accountCount: new Set(points.filter(point => (
+                        finite(point.actual) && finite(point.predicted)
+                    )).map(point => point.accountId)).size,
+                    calibrationMode: foldMode,
+                    requestedFolds: oof ? oof.audit.requestedFolds : 0,
+                    completedFolds: oof ? oof.audit.completedFolds : 0,
+                    trainingTestOverlapN: oof ? oof.audit.trainingTestOverlapN : 0,
+                    heldOutAccountLeakageN: oof ? oof.audit.heldOutAccountLeakageN : null,
+                    duplicateTestPredictionN: oof ? oof.audit.duplicateTestPredictionN : 0,
+                },
+                metrics,
+                _pValue: isOutcome ? null : raw.pValue,
+            };
+            return entry;
+        });
+        matrix[outcome.key] = {
+            outcome: {
+                ...Object.fromEntries(Object.entries(outcome).filter(([key]) => key !== 'accessor')),
+                observedRows: outcomeRows,
+                cohortRows: rows.length,
+                plainEnglish: `Measured ${outcome.label}. Every canonical score-ledger coordinate is tested against this same outcome definition.`,
+            },
+            coordinates,
+        };
+    }
+    const columnsById = new Map(coordinateRegistry.columns.map(column => [column.id, column]));
+    const globalFamily = Object.values(matrix).flatMap(result => result.coordinates);
+    adjustLedgerQValues(globalFamily);
+    const globallyEligibleTests = globalFamily.filter(entry => finite(entry.metrics.qValue)).length;
+    Object.values(matrix).forEach(result => {
+        result.outcome.qValueFamily = 'global_all_eligible_103x13';
+        result.outcome.qValueEligibleTests = globallyEligibleTests;
+    });
+    globalFamily.forEach(entry => {
+        entry.metrics.evidence = ledgerEvidence(
+            entry.metrics,
+            columnsById.get(entry.coordinateId),
+        );
+        assertLedgerMetricSchema(entry.metrics);
+    });
     return matrix;
+}
+
+function assertLedgerMetricSchema(metrics) {
+    const keys = Object.keys(metrics);
+    if (keys.length !== LEDGER_OUTCOME_METRIC_KEYS.length
+        || LEDGER_OUTCOME_METRIC_KEYS.some(key => !Object.prototype.hasOwnProperty.call(metrics, key))) {
+        throw new Error(`Ledger outcome metric schema mismatch: ${keys.join(', ')}`);
+    }
 }
 
 function indicatorMetrics(rows, definition, accessor) {
@@ -3960,8 +4338,11 @@ function retentionForecastMetrics(rows, protocol) {
     };
 }
 
-function buildScope(rows, key) {
+function buildScope(rows, validationRows, key, coordinateRegistry) {
     const scoped = key === 'pooled' ? rows : rows.filter(row => row.accountId === key);
+    const validationScoped = key === 'pooled'
+        ? validationRows
+        : validationRows.filter(row => row.accountId === key);
     const score21Forecasts = {
         video: score21ForecastMetrics(scoped, 'video'),
         account: score21ForecastMetrics(scoped, 'account'),
@@ -3990,14 +4371,25 @@ function buildScope(rows, key) {
     }));
     const blindVideo = buildBlindIndicatorMetrics(scoped, 'video');
     const blindAccount = buildBlindIndicatorMetrics(scoped, 'account');
+    const ledgerOutcomeMatrix = buildLedgerOutcomeMatrix(
+        validationScoped,
+        coordinateRegistry,
+        key,
+        validationRows,
+    );
     return {
         key,
         n: scoped.length,
+        validationN: validationScoped.length,
         accounts: [...new Set(scoped.map(row => row.accountId))],
+        validationAccounts: [...new Set(validationScoped.map(row => row.accountId))],
         joinedCoverage: {
             privateRows: scoped.length,
             storedRows: scoped.filter(row => row.storedRaw.some(finite)).length,
-            blindRows: scoped.filter(row => row.blindVideoHeldOut.some(finite)).length,
+            blindRows: validationScoped.filter(row => row.blindVideoHeldOut.some(finite)).length,
+            blindOnlyRows: validationScoped.filter(
+                row => row.validationSource === 'predictor_blind_inputs_only'
+            ).length,
         },
         models: {
             score21KeepVideoHeldOut: {
@@ -4082,13 +4474,79 @@ function buildScope(rows, key) {
         storedIndicators,
         blindVideoIndicators: blindVideo,
         blindAccountIndicators: blindAccount,
-        outcomeMatrix: {
-            stored: buildOutcomeMatrix(scoped, 'stored', key),
-            video: buildOutcomeMatrix(scoped, 'video', key),
-            account: buildOutcomeMatrix(scoped, 'account', key),
-        },
+        ledgerOutcomeMatrix,
         score21Forecasts,
         retentionForecasts,
+    };
+}
+
+function buildValidationCohort(joinedRows, blindInputs, blindFeatureNames) {
+    const joinedIds = new Set(joinedRows.map(row => String(row.id)));
+    const blindOnlyRows = [];
+    for (const source of (blindInputs && blindInputs.rows) || []) {
+        const id = String(source && source.id || '');
+        if (!id || joinedIds.has(id)) continue;
+        const keep = number(source.actualKeep);
+        const views = number(source.actualViews);
+        blindOnlyRows.push({
+            id,
+            channelId: null,
+            accountId: String(source.account || source.accountId || 'unknown'),
+            accountName: String(source.accountName || source.account || 'Unknown account'),
+            title: String(source.title || id),
+            publishedAt: number(source.publishedAt),
+            duration: number(source.duration),
+            subscribers: null,
+            transcript: '',
+            inputManifest: null,
+            noveltyProvenance: null,
+            storedRaw: contract.features.map(() => null),
+            storedPercentile: contract.features.map(() => null),
+            blindFeatureNames,
+            blindVideoHeldOut: Array.isArray(source.videoHeldOut) ? source.videoHeldOut : [],
+            blindAccountHeldOut: Array.isArray(source.accountHeldOut) ? source.accountHeldOut : [],
+            validationSource: 'predictor_blind_inputs_only',
+            actual: {
+                keep,
+                swipe: finite(keep) ? round(100 - Number(keep)) : null,
+                ret5: number(source.actualRet5),
+                averageRetention: null,
+                retentionCurve: null,
+                viewsPrivateSnapshot: views,
+                viewsCurrent: views,
+                outlierCurrent: null,
+                hit10MCurrent: finite(views) ? (Number(views) > 10000000 ? 1 : 0) : null,
+                privateObservedAt: null,
+                currentObservedAt: null,
+            },
+            predictions: {},
+        });
+    }
+    const cohort = [...joinedRows, ...blindOnlyRows];
+    cohort.sort((left, right) => (
+        (right.publishedAt || 0) - (left.publishedAt || 0)
+        || left.id.localeCompare(right.id)
+    ));
+    return {
+        rows: cohort,
+        joinedRows: joinedRows.length,
+        blindOnlyRows: blindOnlyRows.length,
+        totalRows: cohort.length,
+        byAccount: Object.fromEntries(
+            [...new Set(cohort.map(row => row.accountId))].sort().map(accountId => [
+                accountId,
+                cohort.filter(row => row.accountId === accountId).length,
+            ]),
+        ),
+        availableOutcomes: {
+            keep: cohort.filter(row => finite(row.actual.keep)).length,
+            ret5: cohort.filter(row => finite(row.actual.ret5)).length,
+            views: cohort.filter(row => finite(row.actual.viewsCurrent)).length,
+            averageRetention: cohort.filter(row => finite(row.actual.averageRetention)).length,
+            outlier: cohort.filter(row => finite(row.actual.outlierCurrent)).length,
+            retentionCurve: cohort.filter(row => row.actual.retentionCurve).length,
+        },
+        rule: 'Blind-only rows contribute only outcomes actually persisted in predictor.targets.keep.blindInputs.rows: keep, ret5, views, duration, and the directly derived swipe and over-10M labels. Stored coordinates, average retention, outlier, and retention curves remain null.',
     };
 }
 
@@ -4211,6 +4669,7 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
 
     rows.sort((left, right) => (right.publishedAt || 0) - (left.publishedAt || 0) || left.id.localeCompare(right.id));
     const score21Model = attachScore21Forecasts(rows);
+    const validationCohort = buildValidationCohort(rows, blindInputs, blindFeatureNames);
     const predictorProvenance = predictor.provenance || {};
     const coordinateRegistry = buildCoordinateRegistry({
         rows,
@@ -4229,21 +4688,37 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
         error.lineageAudit = audit;
         throw error;
     }
-    const ledgerAudit = attachCoordinateLedger(rows, coordinateRegistry);
+    const ledgerAudit = attachCoordinateLedger(validationCohort.rows, coordinateRegistry);
     const scopes = {
-        pooled: buildScope(rows, 'pooled'),
-        tyler: buildScope(rows, 'tyler'),
-        hafu: buildScope(rows, 'hafu'),
+        pooled: buildScope(rows, validationCohort.rows, 'pooled', coordinateRegistry),
+        tyler: buildScope(rows, validationCohort.rows, 'tyler', coordinateRegistry),
+        hafu: buildScope(rows, validationCohort.rows, 'hafu', coordinateRegistry),
     };
     const privateAxisTrainingIdOverlap = number(predictorProvenance.privateAxisTrainingIdOverlap);
     const savedAxisTrainingIdOverlap = number(predictorProvenance.savedAxisTrainingIdOverlap);
     const validationCreatorAxisTrainingIdOverlap = number(predictorProvenance.validationCreatorAxisTrainingIdOverlap);
-    const blindFeatureRowsComplete = rows.length > 0
-        && rows.every(row => row.blindVideoHeldOut.length === blindFeatureNames.length)
-        && rows.every(row => row.blindAccountHeldOut.length === blindFeatureNames.length);
+    const blindFeatureRowsComplete = validationCohort.rows.length > 0
+        && validationCohort.rows.every(row => row.blindVideoHeldOut.length === blindFeatureNames.length)
+        && validationCohort.rows.every(row => row.blindAccountHeldOut.length === blindFeatureNames.length);
     const publicAxisLeakageChecksPassed = privateAxisTrainingIdOverlap === 0
         && savedAxisTrainingIdOverlap === 0
         && validationCreatorAxisTrainingIdOverlap === 0;
+    const validationAccountCount = new Set(
+        validationCohort.rows.filter(row => finite(row.actual.keep)).map(row => row.accountId)
+    ).size;
+    const savedDrilldownAccountCount = new Set(rows.map(row => row.accountId)).size;
+    const validationRows = validationCohort.rows.map(row => ({
+        id: row.id,
+        channelId: row.channelId,
+        accountId: row.accountId,
+        accountName: row.accountName,
+        title: row.title,
+        publishedAt: row.publishedAt,
+        duration: row.duration,
+        validationSource: row.validationSource || 'saved_channel_join',
+        actual: row.actual,
+        scoreLedger: row.scoreLedger,
+    }));
     return {
         version: VERSION,
         generatedAt,
@@ -4252,6 +4727,10 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
         channels: SUPPORTED_CHANNELS,
         joinSummary,
         rows,
+        validationRows,
+        validationCohort: Object.fromEntries(
+            Object.entries(validationCohort).filter(([key]) => key !== 'rows')
+        ),
         scopes,
         score21Model,
         coordinateRegistry,
@@ -4261,13 +4740,28 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
         )),
         validationContract: {
             stored: 'Exact 21 values persisted by the channel scorer. They are shown for diagnosis, never promoted to blind evidence.',
-            videoHeldOut: blindInputs.videoHeldOutProtocol || 'The evaluated video is excluded from every target-aligned fit.',
-            accountHeldOut: blindInputs.accountHeldOutProtocol || 'The evaluated account is excluded from every target-aligned fit.',
+            videoHeldOut: `${blindInputs.videoHeldOutProtocol || 'The evaluated video is excluded from every target-aligned fit.'} In the canonical validation matrix, a separate deterministic five-fold calibration trains on four video folds and predicts the fifth. The test video's outcome is never used to fit its own calibration.`,
+            accountHeldOut: `${blindInputs.accountHeldOutProtocol || 'The evaluated account is excluded from every target-aligned fit.'} In the canonical validation matrix, leave-account-out calibration trains on every other creator and predicts the omitted creator. No outcome from the test creator enters that fold's calibration.`,
             publicViewsAxis: 'The production one-component PLS direction and rank-to-outcome calibration are refit on public corpus videos after excluding private rows, saved rows, and every video from each validation creator.',
             forwardTime: 'Training labels precede test labels, but the present-day representation remains fixed; this is a partial backtest.',
-            outcomeMatrix: 'Every one of the 21 exact stored upload outputs is compared with every available observed outcome. Each blind protocol exposes 15 direct Visual/Text/Both axes plus 3 derived realistic-views transforms; unavailable novelty rebuilds remain visibly unavailable.',
+            ledgerOutcomeMatrix: 'The single canonical 103-coordinate by 13-outcome validation matrix. Coordinates remain in score-ledger order and are never renamed or re-created for a chart.',
             retentionCurve: 'Observed YouTube retention is interpolated from its native percent-of-duration curve to exact seconds 0 through 20, then divided by that video\'s observed opening value. Forecasts use only nine public axes rebuilt after both validation creators were excluded.',
             coordinateLedger: 'Every displayed scalar is resolved by canonical coordinate ID. A relationship graph is only a score-coordinate/outcome pairing and cannot mint a new score.',
+            glossary: {
+                rawAssociation: 'Spearman measures whether higher coordinate values generally accompany higher outcomes without fitting a calibration. withinAccountSpearman removes each creator\'s level before measuring that rank relationship. AUC is the analogous ranking measure for the binary over-10M outcome.',
+                video5Fold: 'Videos are deterministically assigned to five folds by video ID. For each fold, the one-coordinate calibration is fit on the other four folds and then frozen before it predicts the held-out fold.',
+                leaveAccountOut: 'One creator account is the complete test fold. The calibration sees outcomes from other creators only, then predicts every eligible video from the omitted creator.',
+                oof: 'Out-of-fold. Every reported OOF prediction was made by a calibration that did not train on that test video outcome; account-held-out OOF also excludes every outcome from the test creator.',
+                oofR2: 'Improvement over the training-fold mean on the held-out rows. Zero matches that baseline; negative is worse; positive is better.',
+                oofMae: 'Average absolute held-out error in the outcome unit, such as percentage points.',
+                oofMedianFactorError: 'For log-scaled views or outlier outcomes, the median multiplicative miss. 1.0 is perfect; 2.0 means a typical two-fold error.',
+                oofSpearman: 'Rank agreement between calibrated held-out predictions and outcomes. 1 is perfect ordering, 0 is no monotonic ordering, and -1 is reversed.',
+                oofAuc: 'For over-10M classification, the chance that a randomly selected hit receives a higher held-out prediction than a miss. 0.5 is chance.',
+                oofBrier: 'Mean squared probability error for held-out over-10M predictions. Lower is better; zero is perfect.',
+                qValue: 'Global Benjamini-Hochberg false-discovery-rate adjustment across the full eligible 103-coordinate by 13-outcome exploratory family. Evidence and ranking use this global q-value because the UI can surface the best result across outcomes.',
+                outcomeNotPredictor: 'The 13 measured-outcome columns stay in the ledger for traceability but are excluded from predictive rankings, calibration, and evidence claims.',
+                coverage: 'Counts are explicit because not every artifact contains every truth field. Blind-only rows add real keep, ret5, and views labels, but never receive fabricated stored scores, average retention, outlier, or retention curves.',
+            },
         },
         leakageAudit: {
             passedForBlindInputs: blindFeatureRowsComplete && publicAxisLeakageChecksPassed,
@@ -4276,6 +4770,8 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
             privateRowsExcludedFromPublicAxis: privateAxisTrainingIdOverlap === 0,
             savedRowsExcludedFromPublicAxis: savedAxisTrainingIdOverlap === 0,
             validationCreatorsExcludedFromPublicAxis: validationCreatorAxisTrainingIdOverlap === 0,
+            validationAccountCount,
+            savedDrilldownAccountCount,
             privateAxisTrainingIdOverlapReported: privateAxisTrainingIdOverlap,
             savedAxisTrainingIdOverlapReported: savedAxisTrainingIdOverlap,
             validationCreatorAxisTrainingIdOverlapReported: validationCreatorAxisTrainingIdOverlap,
@@ -4291,7 +4787,7 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
                 'Tyler stored keep/ret5 values are in-sample because the upload scorer was fit on Tyler labels.',
                 'Stored saved-channel rows do not persist an immutable scorer generation, so their 21 values remain diagnostics even when the video ID was excluded later.',
                 'Current public views are lifetime snapshots, not fixed-horizon outcomes; publication age can still confound view error.',
-                'Only two supported channels have both saved embeddings and private keep-rate truth, so pooled uncertainty has two independent creator units.',
+                `${validationAccountCount} creator account${validationAccountCount === 1 ? '' : 's'} contribute persisted blind-input truth to the expanded matrix; ${savedDrilldownAccountCount} have joined saved score cards and richer private outcomes. Creator-level confidence is bounded by the former count, while original-card drilldown is bounded by the latter.`,
                 'Swipe-away is the exact inverse of stayed-to-watch and is not a second independent label.',
                 'The combined forecasts use only nine creator-excluded public views/outlier/10M axes. Private-label-aligned keep, ret5, and realistic-views coordinates remain visible in the single-score matrix but are not stacked into the forecast.',
                 'The 20-second curve forecast is evaluated only where the observed video and retention curve reach that second.',
@@ -4309,4 +4805,5 @@ module.exports = {
     binaryMetrics,
     featureCell,
     buildCoordinateRegistry,
+    _singleCoordinateOof: singleCoordinateOof,
 };

@@ -664,73 +664,79 @@ async function main() {
         assert((await page.locator('[data-savedchannelindicatorscatter] circle[data-savedchannelvideo]').count()) >= videos.length, 'selected-indicator scatter must expose every underlying video as a drill-down point');
 
         await page.getByText('Blind validation', { exact: true }).click();
-        await page.getByText('Tyler + Hafu blind validation', { exact: true }).waitFor();
-        assert.strictEqual(await page.getByText('BLIND INPUT ARRAY AUDIT PASSED', { exact: true }).count(), 1);
-        assert((await page.getByText(/1 validation creator · 20 additional creator-resolved videos excluded · 0 creator overlap/).count()) === 1, 'the UI must expose the whole-creator leakage audit');
-        assert.strictEqual(await page.getByText('21 scores × every observed outcome', { exact: true }).count(), 1);
-        assert.strictEqual(await page.getByText('Video-by-video audit trail', { exact: true }).count(), 1);
-        assert.strictEqual(await page.getByText('Where this number came from', { exact: true }).count(), 1);
-        assert.strictEqual(await page.getByText('Retention path · every measured second through 20', { exact: true }).count(), 1);
+        const canonicalValidation = page.locator('[data-savedvalidation-canonical]');
+        await canonicalValidation.waitFor();
+        assert.strictEqual(await canonicalValidation.getAttribute('data-coordinate-count'), '103');
+        assert.strictEqual(await canonicalValidation.getAttribute('data-outcome-count'), '13');
+        assert.strictEqual(await page.getByText('What predicts performance?', { exact: true }).count(), 1);
+        assert.strictEqual(await page.getByText(/103 ledger columns do not mean 103 independent embeddings/).count(), 1);
+        assert.strictEqual(await page.getByText(/Leakage audit passed.*does not mean the predictor is accurate/).count(), 1);
+        assert.strictEqual(await page.locator('[data-savedvalidation-ledger-classification]').innerText(), '62 blind columns · 53 unique blind predictions · 9 alias columns · 28 diagnostics · 13 actual outcomes');
         assert.strictEqual(await page.locator('[data-savedvalidationtarget]').count(), 13, 'all observed outcomes and curve checkpoints must be selectable');
-        assert.strictEqual(await page.locator('[data-savedvalidationfeature]').count(), 21, 'the matrix must preserve all 21 upload scores');
-        assert((await page.locator('circle[data-savedvalidationrow]').count()) >= videos.length, 'selected relationship plot must expose every matched video');
-        await page.locator('[data-savedvalidationprotocol="stored"]').click();
-        await page.locator('[data-savedvalidationtarget="keep"]').click();
-        await page.locator('[data-savedvalidationfeature="text.ret5"]').click();
-        await page.getByText('text.ret5 → Stayed to watch', { exact: true }).waitFor();
+        assert.strictEqual(await page.locator('[data-savedvalidationfeature]').count(), 103, 'the heatmap must preserve the canonical 103-column ledger');
+        assert.strictEqual(await page.getByText('All 103 coordinates × all 13 observed outcomes', { exact: true }).count(), 1);
+        assert.strictEqual(await page.locator('[data-savedvalidationcell]').count(), 103 * 13, 'every ledger coordinate must be compared with every observed outcome');
+        assert.strictEqual(await page.locator('[data-savedvalidationfeature="shorts.observed.keep"] [data-savedvalidationcell]').first().innerText(), 'TRUTH\nnot predictor', 'actual outcomes must be visibly blocked from predictor use');
+        for (const term of ['Stored', 'Video held out', 'Account held out', 'Direct axis', 'Derived score', 'Forecast', 'Alias', 'Observed outcome', 'OOF R²', 'MAE / factor error', 'Global q']) {
+            assert.strictEqual(await page.getByText(term, { exact: true }).count(), 1, `plain-English glossary is missing ${term}`);
+        }
+        await page.locator('[data-savedvalidationfamily="strict"]').click();
+        assert.strictEqual(await page.locator('[data-savedvalidationfeature]').count(), 62, 'blind predictor filter must contain exactly the registered held-out coordinates and forecasts');
+        await page.locator('[data-savedvalidationfamily="all"]').click();
+        await page.locator('[data-savedvalidationcell][data-savedvalidationcoordinate="shorts.stored.text.ret5"][data-savedvalidationoutcome="keep"]').click();
+        await page.locator('[data-savedvalidation-selected]').waitFor();
+        const selectedTextRet5 = await page.locator('[data-savedvalidation-selected]').innerText();
+        assert(selectedTextRet5.includes('shorts.stored.text.ret5'));
+        assert(selectedTextRet5.includes('Text input only'));
+        assert(selectedTextRet5.includes('Five-second retention score'));
         const crossTargetPoint = page.locator('circle[data-savedvalidationrow="vid00000002"]').first();
         const crossTargetTooltip = await crossTargetPoint.locator('title').textContent();
-        assert(crossTargetTooltip.includes('text.ret5:'), 'cross-target hover must name the plotted score coordinate');
+        assert(crossTargetTooltip.includes('5s retention:'), 'cross-target hover must name the plotted score coordinate');
         assert(crossTargetTooltip.includes('Actual Stayed to watch:'), 'cross-target hover must name the independent outcome');
-        assert(crossTargetTooltip.includes('Y coordinate ID: shorts.stored.text.ret5'));
-        assert(crossTargetTooltip.includes('X outcome ID: shorts.observed.keep'));
-        await crossTargetPoint.click();
-        const crossTargetContext = page.locator('[data-savedvalidationcontext]');
-        await crossTargetContext.waitFor();
-        assert.strictEqual(await crossTargetContext.getAttribute('data-coordinate-id'), 'shorts.stored.text.ret5');
-        assert.strictEqual(await crossTargetContext.getAttribute('data-coordinate-target'), 'ret5');
-        assert.strictEqual(await crossTargetContext.getAttribute('data-outcome-id'), 'shorts.observed.keep');
-        assert.strictEqual(await crossTargetContext.getAttribute('data-plotted-raw'), String(videos[1].features['text.ret5'][0]));
-        assert.strictEqual(await crossTargetContext.getAttribute('data-stored-reference-raw'), String(videos[1].features['text.ret5'][0]));
-        assert((await crossTargetContext.innerText()).toLowerCase().includes('5s retention'), 'the plotted percentage must be labeled as 5-second retention rather than keep rate');
-        await page.locator('[data-savedvalidationprotocol="video"]').click();
-        await page.locator('[data-savedvalidationtarget="views"]').click();
-        await page.locator('[data-savedvalidationfeature="together.views"]').click();
-        await page.getByText('together.views → Current lifetime views', { exact: true }).waitFor();
+        assert(crossTargetTooltip.includes('Coordinate: shorts.stored.text.ret5'));
+        await crossTargetPoint.dispatchEvent('click');
+        const crossTargetDetail = page.locator('[data-savedvalidation-point-detail]');
+        await crossTargetDetail.waitFor();
+        assert((await crossTargetDetail.innerText()).includes('shorts.stored.text.ret5'));
+        assert((await crossTargetDetail.innerText()).includes('shorts.observed.keep'));
+        assert((await crossTargetDetail.innerText()).includes('saved score + private outcomes'));
+        await page.locator('[data-savedvalidationcell][data-savedvalidationcoordinate="shorts.video-heldout.text.realviews"][data-savedvalidationoutcome="views"]').click();
+        const selectedRealViews = await page.locator('[data-savedvalidation-selected]').innerText();
+        assert(selectedRealViews.includes('Text input only'));
+        assert(selectedRealViews.includes('combines predicted keep, predicted five-second retention, and duration'));
+        assert(selectedRealViews.includes('derived, not a new embedding direction'));
+        await page.locator('[data-savedvalidationcell][data-savedvalidationcoordinate="shorts.video-heldout.together.views"][data-savedvalidationoutcome="views"]').click();
+        await page.locator('[data-savedvalidation-selected]').waitFor();
+        assert((await page.locator('[data-savedvalidation-selected]').innerText()).includes('shorts.video-heldout.together.views'));
         const blindViewsPoint = page.locator('circle[data-savedvalidationrow="vid00000002"]').first();
         const blindViewsTooltip = await blindViewsPoint.locator('title').textContent();
-        assert(blindViewsTooltip.includes('together.views:'), 'the hover must name the exact selected coordinate');
+        assert(blindViewsTooltip.includes('Coordinate: shorts.video-heldout.together.views'), 'the hover must name the exact selected coordinate');
         assert(blindViewsTooltip.includes('Actual Current lifetime views:'), 'the hover must name the independently observed outcome');
-        await blindViewsPoint.click();
-        await page.getByText('Raw observed curve', { exact: true }).waitFor();
-        assert.strictEqual(await page.getByText('Same video · normalized actual vs prediction', { exact: true }).count(), 1);
-        await page.locator('[data-savedvalidationprotocol="stored"]').click();
-        const storedViewsTooltip = await page.locator('circle[data-savedvalidationrow="vid00000002"]').first().locator('title').textContent();
-        assert(storedViewsTooltip.includes('together.views: 12.00M'), 'stored matrix plot must preserve the exact score-card view-equivalent');
-        const auditVideo = page.locator(`span[data-savedvalidationrow="vid00000002"]`).first().locator('xpath=ancestor::tr');
-        await auditVideo.locator('[data-savedvalidationvideo]').click();
-        const validationContext = page.locator('[data-savedvalidationcontext]');
-        await validationContext.waitFor();
-        const contextText = await validationContext.innerText();
-        assert.strictEqual(await validationContext.getAttribute('data-stored-reference-raw'), '12000000', 'the context panel must select the same persisted Both.views coordinate as the clicked point');
-        assert.strictEqual(await validationContext.getAttribute('data-loaded-card-raw'), '12000000', 'the loaded card must expose the same raw Both.views coordinate');
-        assert.strictEqual(await validationContext.getAttribute('data-card-parity'), 'match', 'parity may only be labeled exact when the raw values actually match');
-        assert(contextText.includes('12.00M'), 'opening the original graph must retain the exact stored Both.views score');
-        assert(contextText.includes('exact raw-value match'), 'the validation artifact and stored score card must agree exactly');
+        await blindViewsPoint.dispatchEvent('click');
+        const selectedPointDetail = page.locator('[data-savedvalidation-point-detail]');
+        await selectedPointDetail.waitFor();
+        assert((await selectedPointDetail.innerText()).includes('shorts.video-heldout.together.views'));
+        assert.strictEqual(await selectedPointDetail.locator('[data-savedchannelvideo]').count(), 1, 'matched points must drill into the original saved score card without recomputation');
+        await selectedPointDetail.locator('[data-savedchannelvideo]').click();
         await page.waitForFunction(id => {
             const image = document.querySelector('#rtg-exppanel img[style*="width:260px"]');
             return image && image.src.includes(id);
         }, 'vid00000002');
         if (process.env.EXPERIMENT_LAB_CONTEXT_SCREENSHOT) {
             fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_CONTEXT_SCREENSHOT), { recursive: true });
-            await validationContext.screenshot({ path: process.env.EXPERIMENT_LAB_CONTEXT_SCREENSHOT });
+            await page.locator('#rtg-exppanel').screenshot({ path: process.env.EXPERIMENT_LAB_CONTEXT_SCREENSHOT });
         }
         assert.strictEqual(await page.evaluate(pathname => window.__fetchCounts[pathname], videoPath), 1, 'reopening an older cached validation video must not fetch or recompute it again');
-        await page.locator('[data-savedvalidationprotocol="account"]').click();
-        assert.strictEqual(await page.getByText('15 direct axes + 3 derived scores · account external:', { exact: false }).count(), 1);
-        await page.locator('[data-savedvalidationexpand]').first().click();
-        assert.strictEqual(await page.getByText('All 21 stored channel scores · diagnostic replay', { exact: true }).count(), 1);
         assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), 0, 'validation inspection must never recalculate a stored embedding');
+        const lineageDetails = page.locator('[data-savedvalidation-canonical] details').first();
+        await lineageDetails.locator(':scope > summary').click();
+        const validationLineageText = await lineageDetails.innerText();
+        for (const stage of ['Raw inputs', 'Representation', 'Fit dataset', 'Fit target', 'Algorithm / rotation', 'Calibration', 'Validation / holdout', 'Frozen artifact']) {
+            assert(validationLineageText.includes(stage), `canonical coordinate lineage is missing ${stage}`);
+        }
+        await page.locator('[data-savedvalidationfamily="outcome"]').click();
+        assert.strictEqual(await page.locator('[data-savedvalidationfeature]').count(), 13, 'outcomes filter must expose the 13 measured truth fields without treating them as predictors');
+        await page.locator('[data-savedvalidationfamily="all"]').click();
         assert.deepStrictEqual(await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth })), { width: 390, scroll: 390 });
         if (process.env.EXPERIMENT_LAB_SCREENSHOT) {
             fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_SCREENSHOT), { recursive: true });
@@ -744,7 +750,7 @@ async function main() {
         }
         const finalParity = await page.evaluate(() => window.BusinessWorldEmbeddingParityAudit(document));
         assert(finalParity.ok, `final rendered embedding parity failed: ${JSON.stringify(finalParity.conflicts)}`);
-        console.log(JSON.stringify({ ok: true, sharedExperimentControls: 5, desktopWidth: 1280, mobileWidth: 390, mobileScrollTop: await workspace.evaluate(element => element.scrollTop), storedImage: true, exactIndicatorSort: 'text.keep', savedArtifactFetches: 1, resumeRequests: 1, matrixColumns: 21, relationshipCells: 441, trajectoryCharts: 21, riskSignalCharts: riskSignals.length, riskThreshold: '30M', blindValidationRows: videos.length, embeddingParity: finalParity }));
+        console.log(JSON.stringify({ ok: true, sharedExperimentControls: 5, desktopWidth: 1280, mobileWidth: 390, mobileScrollTop: await workspace.evaluate(element => element.scrollTop), storedImage: true, exactIndicatorSort: 'text.keep', savedArtifactFetches: 1, resumeRequests: 1, matrixColumns: 21, relationshipCells: 441, trajectoryCharts: 21, riskSignalCharts: riskSignals.length, riskThreshold: '30M', blindValidationCoordinates: 103, blindValidationOutcomes: 13, embeddingParity: finalParity }));
     } finally {
         await browser.close();
     }

@@ -122,23 +122,27 @@ const allRows = channels.flatMap(source => source.privateTable.videos.map((row, 
 })));
 const blindArtifactRows = [
     ...allRows,
-    {
-        id: 'creating-anything-artifact-only',
-        title: 'Artifact-only CreatingAnything row',
-        account: 'creating_anything',
-        accountName: 'CreatingAnything',
-        videoHeldOut: blindVector(2),
-        accountHeldOut: blindVector(2),
-    },
-    {
-        id: 'brush-labs-artifact-only',
-        title: 'Artifact-only BrushLabs row',
-        account: 'brush_labs',
-        accountName: 'BrushLabs',
-        videoHeldOut: blindVector(3),
-        accountHeldOut: blindVector(3),
-    },
+    ...Array.from({ length: 632 - allRows.length }, (_, index) => {
+        const account = index % 2 ? 'creatinganything' : 'brushlabs';
+        const signal = index % 24;
+        return {
+            id: `${account}-artifact-only-${index}`,
+            title: `Artifact-only ${account} row ${index}`,
+            account,
+            accountName: account === 'creatinganything' ? 'CreatingAnything' : 'BrushLabs',
+            publishedAt: Date.UTC(2024, index % 12, 1 + index % 27),
+            actualKeep: 44 + signal * 2.1 + (account === 'creatinganything' ? 2 : 0),
+            actualRet5: 61 + signal * 1.7,
+            actualViews: 10 ** (5.1 + signal * 0.11),
+            duration: 18 + signal,
+            videoHeldOut: blindVector(signal),
+            accountHeldOut: blindVector(signal).map((value, featureIndex) => (
+                featureIndex % 2 ? value : value - 0.5
+            )),
+        };
+    }),
 ];
+assert.strictEqual(blindArtifactRows.length, 632);
 const missingAxisRow = allRows.find(row => row.id === 'hafu-0');
 missingAxisRow.videoHeldOut[blindNames.indexOf('text.views.raw')] = null;
 const keepPoints = allRows.map((row, index) => ({
@@ -412,8 +416,18 @@ const result = validation.buildValidation({
     sourceFingerprint: fixtureSha256('fixture'),
 });
 
+assert.strictEqual(result.version, 5);
 assert.strictEqual(result.rows.length, 48);
+assert.strictEqual(result.validationRows.length, 632);
+assert(result.validationRows.every(row => row.scoreLedger && row.scoreLedger.values.length === 103));
+assert(result.validationRows.every(row => !Object.prototype.hasOwnProperty.call(row, 'blindVideoHeldOut')));
+assert(result.validationRows.every(row => !Object.prototype.hasOwnProperty.call(row, 'blindAccountHeldOut')));
 assert.strictEqual(result.scopes.pooled.n, 48);
+assert.strictEqual(result.scopes.pooled.validationN, 632);
+assert.strictEqual(result.validationCohort.totalRows, 632);
+assert.strictEqual(result.validationCohort.blindOnlyRows, 584);
+assert.strictEqual(result.leakageAudit.validationAccountCount, 4);
+assert.strictEqual(result.leakageAudit.savedDrilldownAccountCount, 2);
 assert.strictEqual(result.scopes.tyler.n, 24);
 assert.strictEqual(result.scopes.hafu.n, 24);
 assert.strictEqual(result.joinSummary.reduce((sum, row) => sum + row.matchedRows, 0), 48);
@@ -549,6 +563,20 @@ assert.strictEqual(result.coordinateRegistry.totals.shortsCombinedForecasts, 26)
 assert.strictEqual(result.coordinateRegistry.totals.shortsObservedOutcomes, 13);
 assert.strictEqual(result.coordinateRegistry.totals.shortsLegacyDiagnostics, 7);
 assert.strictEqual(result.coordinateRegistry.totals.shortsRowColumns, 103);
+assert.strictEqual(result.coordinateRegistry.totals.shortsBlindColumns, 62);
+assert.strictEqual(result.coordinateRegistry.totals.shortsBlindUniquePredictions, 53);
+assert.strictEqual(result.coordinateRegistry.totals.shortsBlindAliasColumns, 9);
+assert.strictEqual(result.coordinateRegistry.totals.shortsDiagnosticColumns, 28);
+assert.strictEqual(result.coordinateRegistry.totals.shortsOutcomeColumns, 13);
+assert.deepStrictEqual(result.coordinateRegistry.classification.blind, {
+    columns: 62,
+    uniquePredictions: 53,
+    aliasColumns: 9,
+    families: ['videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast'],
+    meaning: 'Coordinates eligible for blind validation. Nine creator-excluded public direct axes appear in both protocol views but identify the same fitted prediction.',
+});
+assert.strictEqual(result.coordinateRegistry.classification.diagnostics.columns, 28);
+assert.strictEqual(result.coordinateRegistry.classification.outcomes.columns, 13);
 assert.strictEqual(result.coordinateRegistry.totals.longStoredOutputs, 12);
 assert.strictEqual(new Set(result.coordinateRegistry.columns.map(column => column.id)).size, 103);
 
@@ -590,7 +618,7 @@ assert.strictEqual(blindArtifact.displayedLineageContractSha256, featureContract
 assert.strictEqual(blindArtifact.contractAlignment, 'exact feature-contract file hash match');
 const privateBlindDataset = lineageCatalog.datasets['dataset.shorts.private-blind-population.v1'];
 const observedJoinedDataset = lineageCatalog.datasets['dataset.runtime.shorts.observed-joined.v1'];
-assert.strictEqual(privateBlindDataset.runtimeSnapshot.rowCount, 50);
+assert.strictEqual(privateBlindDataset.runtimeSnapshot.rowCount, 632);
 assert.strictEqual(Object.keys(privateBlindDataset.runtimeSnapshot.byAccount).length, 4);
 assert.strictEqual(observedJoinedDataset.rowCount, 48);
 assert.notStrictEqual(
@@ -1006,16 +1034,134 @@ assert.match(
 
 assert(result.ledgerAudit.passed, JSON.stringify(result.ledgerAudit));
 assert.strictEqual(result.outcomeDefinitions.some(outcome => outcome.key === 'drop20'), true);
-assert.strictEqual(result.scopes.pooled.outcomeMatrix.stored.keep.features.length, 21);
-assert.strictEqual(result.scopes.pooled.outcomeMatrix.video.views.features.length, 21);
+const ledgerOutcomeMatrix = result.scopes.pooled.ledgerOutcomeMatrix;
+const outcomeKeys = Object.keys(ledgerOutcomeMatrix);
+assert.strictEqual(outcomeKeys.length, 13);
+assert.deepStrictEqual(
+    new Set(outcomeKeys),
+    new Set(result.outcomeDefinitions.map(outcome => outcome.key)),
+);
+const canonicalCoordinateIds = result.coordinateRegistry.columns.map(column => column.id);
+const expectedMetricKeys = [
+    'spearman',
+    'withinAccountSpearman',
+    'auc',
+    'oofR2',
+    'oofSpearman',
+    'oofMae',
+    'oofMedianFactorError',
+    'oofAuc',
+    'oofBrier',
+    'n',
+    'oofN',
+    'qValue',
+    'evidence',
+];
+outcomeKeys.forEach(outcomeKey => {
+    const matrixRow = ledgerOutcomeMatrix[outcomeKey];
+    assert(matrixRow.outcome && matrixRow.outcome.key === outcomeKey);
+    assert.strictEqual(matrixRow.outcome.qValueFamily, 'global_all_eligible_103x13');
+    assert(
+        matrixRow.outcome.qValueEligibleTests > 103,
+        'the BH family must span eligible tests across outcomes, not one outcome at a time',
+    );
+    assert.strictEqual(matrixRow.coordinates.length, 103);
+    assert.deepStrictEqual(
+        matrixRow.coordinates.map(entry => entry.coordinateId),
+        canonicalCoordinateIds,
+        `${outcomeKey} must remain in canonical score-ledger order`,
+    );
+    matrixRow.coordinates.forEach(entry => {
+        [
+            'coordinateId',
+            'label',
+            'family',
+            'protocol',
+            'valueClass',
+            'target',
+            'group',
+            'unit',
+            'available',
+            'availabilityNote',
+            'validationTier',
+            'plainEnglish',
+            'coverage',
+            'metrics',
+        ].forEach(key => assert(Object.prototype.hasOwnProperty.call(entry, key), `${outcomeKey}:${entry.coordinateId}:${key}`));
+        assert.deepStrictEqual(Object.keys(entry.metrics), expectedMetricKeys);
+    });
+});
+const matrixEntry = (outcomeKey, coordinateId) => {
+    const entry = ledgerOutcomeMatrix[outcomeKey].coordinates.find(
+        coordinate => coordinate.coordinateId === coordinateId
+    );
+    assert(entry, `missing ${outcomeKey} x ${coordinateId}`);
+    return entry;
+};
+const fullBlindKeep = matrixEntry('keep', 'shorts.video-heldout.visual.keep');
+assert.strictEqual(fullBlindKeep.metrics.n, 632);
+assert.strictEqual(fullBlindKeep.metrics.oofN, 632);
+assert.strictEqual(fullBlindKeep.coverage.pairedBlindOnlyRows, 584);
+assert.strictEqual(fullBlindKeep.coverage.calibrationMode, 'video_5fold');
+assert.strictEqual(fullBlindKeep.coverage.trainingTestOverlapN, 0);
+assert.strictEqual(fullBlindKeep.coverage.duplicateTestPredictionN, 0);
+assert.strictEqual(fullBlindKeep.validationTier, 'video_held_out_coordinate_plus_video_5fold_calibration');
+const accountBlindKeep = matrixEntry('keep', 'shorts.account-heldout.visual.keep');
+assert.strictEqual(accountBlindKeep.metrics.n, 632);
+assert.strictEqual(accountBlindKeep.metrics.oofN, 632);
+assert.strictEqual(accountBlindKeep.coverage.calibrationMode, 'leave_account_out');
+assert.strictEqual(accountBlindKeep.coverage.heldOutAccountLeakageN, 0);
+assert.strictEqual(accountBlindKeep.validationTier, 'account_held_out_coordinate_plus_leave_account_out_calibration');
+const tylerAccountBlindKeep = result.scopes.tyler.ledgerOutcomeMatrix.keep.coordinates.find(
+    entry => entry.coordinateId === 'shorts.account-heldout.visual.keep'
+);
+assert.strictEqual(tylerAccountBlindKeep.metrics.oofN, 24);
 assert.strictEqual(
-    result.scopes.pooled.outcomeMatrix.video.keep.features.find(feature => feature.key === 'novelty.keep').available,
-    false,
+    tylerAccountBlindKeep.coverage.heldOutAccountLeakageN,
+    0,
+    'account-specific scope predictions must still be calibrated on the other accounts',
 );
 assert.strictEqual(
-    result.scopes.pooled.outcomeMatrix.stored.keep.features.find(feature => feature.key === 'novelty.keep').available,
-    true,
+    matrixEntry('keep', 'shorts.stored.visual.keep').metrics.n,
+    48,
+    'blind-only rows must never receive fabricated stored coordinates',
 );
+assert.strictEqual(
+    matrixEntry('averageRetention', 'shorts.video-heldout.visual.keep').metrics.n,
+    48,
+    'blind-only rows must never receive fabricated average-retention outcomes',
+);
+assert.strictEqual(
+    matrixEntry('outlier', 'shorts.video-heldout.visual.keep').metrics.n,
+    48,
+    'blind-only rows must never receive fabricated outlier outcomes',
+);
+assert.strictEqual(
+    matrixEntry('survival20', 'shorts.video-heldout.visual.keep').metrics.n,
+    48,
+    'blind-only rows must never receive fabricated retention curves',
+);
+const observedColumns = result.coordinateRegistry.columns.filter(
+    column => column.valueClass === 'observed_outcome'
+);
+assert.strictEqual(observedColumns.length, 13);
+outcomeKeys.forEach(outcomeKey => {
+    observedColumns.forEach(column => {
+        const entry = matrixEntry(outcomeKey, column.id);
+        assert.strictEqual(entry.available, false);
+        assert.strictEqual(entry.validationTier, 'outcome_not_predictor');
+        assert.strictEqual(entry.metrics.evidence, 'outcome_not_predictor');
+        assert.strictEqual(entry.metrics.qValue, null);
+        assert.strictEqual(entry.metrics.oofN, 0);
+        assert.strictEqual(entry.metrics.oofR2, null);
+        assert.strictEqual(entry.metrics.oofAuc, null);
+    });
+});
+assert.match(result.validationContract.videoHeldOut, /five-fold calibration/i);
+assert.match(result.validationContract.accountHeldOut, /leave-account-out calibration/i);
+assert.match(result.validationContract.glossary.outcomeNotPredictor, /excluded/i);
+assert.match(result.validationContract.glossary.qValue, /full eligible 103-coordinate by 13-outcome/i);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(result.scopes.pooled, 'outcomeMatrix'), false);
 
 const firstRow = result.rows.find(row => row.id === 'tyler-0');
 assert(firstRow);
@@ -1042,6 +1188,31 @@ assert.strictEqual(
 );
 const observedKeepIndex = result.coordinateRegistry.columns.findIndex(column => column.id === 'shorts.observed.keep');
 assert.strictEqual(firstRow.scoreLedger.values[observedKeepIndex], firstRow.actual.keep);
+const blindOnlyRow = result.validationRows.find(
+    row => row.validationSource === 'predictor_blind_inputs_only'
+);
+assert(blindOnlyRow, 'the expanded blind cohort must be returned for UI plots');
+const storedVisualKeepIndex = result.coordinateRegistry.columns.findIndex(
+    column => column.id === 'shorts.stored.visual.keep'
+);
+const videoVisualKeepIndex = result.coordinateRegistry.columns.findIndex(
+    column => column.id === 'shorts.video-heldout.visual.keep'
+);
+const observedAverageRetentionIndex = result.coordinateRegistry.columns.findIndex(
+    column => column.id === 'shorts.observed.averageRetention'
+);
+const observedOutlierIndex = result.coordinateRegistry.columns.findIndex(
+    column => column.id === 'shorts.observed.outlier'
+);
+const observedSurvival20Index = result.coordinateRegistry.columns.findIndex(
+    column => column.id === 'shorts.observed.survival20'
+);
+assert.strictEqual(blindOnlyRow.scoreLedger.values[storedVisualKeepIndex], null);
+assert(Number.isFinite(blindOnlyRow.scoreLedger.values[videoVisualKeepIndex]));
+assert.strictEqual(blindOnlyRow.scoreLedger.values[observedAverageRetentionIndex], null);
+assert.strictEqual(blindOnlyRow.scoreLedger.values[observedOutlierIndex], null);
+assert.strictEqual(blindOnlyRow.scoreLedger.values[observedSurvival20Index], null);
+assert.strictEqual(result.ledgerAudit.rows, 632);
 assert.strictEqual(firstRow.actual.retentionCurve.seconds.length, 21);
 assert.strictEqual(firstRow.actual.retentionCurve.observed[0], 118);
 assert.strictEqual(firstRow.actual.retentionCurve.normalized[0], 100);
@@ -1053,7 +1224,9 @@ assert.strictEqual(result.scopes.pooled.retentionForecasts.video.bySecond.length
 assert(result.scopes.pooled.retentionForecasts.video.curves > 0);
 assert(Number.isFinite(result.scopes.pooled.score21Forecasts.video.keep.mae));
 assert(Number.isFinite(result.scopes.pooled.score21Forecasts.video.drop20.mae));
-assert(Number.isFinite(result.scopes.pooled.outcomeMatrix.video.hit10M.features.find(feature => feature.available).metrics.withinAccountAuc));
+assert(Number.isFinite(
+    matrixEntry('hit10M', 'shorts.video-heldout.visual.gt10M').metrics.oofAuc
+));
 assert(Math.abs(firstRow.predictions.viewsPublicAxis.visual - 999999) < 1, 'log10 public-axis values must convert back to ordinary views');
 assert(Math.abs(firstRow.predictions.viewsPublicAxisEnsemble - 999999) < 1);
 const incompleteViewsRow = result.rows.find(row => row.id === 'hafu-0');
@@ -1067,12 +1240,78 @@ assert.strictEqual(typeof blindPercentile.metrics.spearman, 'number');
 assert(result.scopes.tyler.storedIndicators.find(item => item.key === 'visual.keep').warning.includes('in-sample'));
 assert(result.scopes.hafu.storedIndicators.find(item => item.key === 'visual.keep').warning.includes('account-external'));
 
+const continuousOutcome = { key: 'keep', unit: 'percent' };
+const videoFoldPoints = Array.from({ length: 40 }, (_, index) => ({
+    id: `video-fold-proof-${index}`,
+    accountId: index % 2 ? 'account-a' : 'account-b',
+    predicted: index,
+    actual: 12 + index * 1.75,
+}));
+const videoProofTarget = videoFoldPoints[7];
+const videoOofOriginal = validation._singleCoordinateOof(
+    videoFoldPoints,
+    continuousOutcome,
+    'video_5fold',
+);
+const videoOofPoisoned = validation._singleCoordinateOof(
+    videoFoldPoints.map(point => (
+        point.id === videoProofTarget.id ? { ...point, actual: point.actual + 1000000 } : point
+    )),
+    continuousOutcome,
+    'video_5fold',
+);
+const videoPrediction = resultSet => resultSet.predictions.find(
+    point => point.id === videoProofTarget.id
+).calibrated;
+assert.strictEqual(
+    videoPrediction(videoOofOriginal),
+    videoPrediction(videoOofPoisoned),
+    'changing a test video outcome must not change that video\'s OOF prediction',
+);
+assert.strictEqual(videoOofOriginal.audit.trainingTestOverlapN, 0);
+assert.strictEqual(videoOofOriginal.audit.duplicateTestPredictionN, 0);
+
+const accountFoldPoints = ['account-a', 'account-b', 'account-c'].flatMap(
+    (accountId, accountIndex) => Array.from({ length: 12 }, (_, index) => ({
+        id: `${accountId}-${index}`,
+        accountId,
+        predicted: index + accountIndex * 0.25,
+        actual: 20 + index * 2 + accountIndex,
+    }))
+);
+const accountOofOriginal = validation._singleCoordinateOof(
+    accountFoldPoints,
+    continuousOutcome,
+    'leave_account_out',
+);
+const accountOofPoisoned = validation._singleCoordinateOof(
+    accountFoldPoints.map(point => (
+        point.accountId === 'account-c' ? { ...point, actual: point.actual + 1000000 } : point
+    )),
+    continuousOutcome,
+    'leave_account_out',
+);
+const accountPredictions = resultSet => resultSet.predictions
+    .filter(point => point.accountId === 'account-c')
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map(point => point.calibrated);
+assert.deepStrictEqual(
+    accountPredictions(accountOofOriginal),
+    accountPredictions(accountOofPoisoned),
+    'changing every outcome in a held-out account must not change that account\'s predictions',
+);
+assert.strictEqual(accountOofOriginal.audit.trainingTestOverlapN, 0);
+assert.strictEqual(accountOofOriginal.audit.heldOutAccountLeakageN, 0);
+assert.strictEqual(accountOofOriginal.audit.duplicateTestPredictionN, 0);
+
 console.log(JSON.stringify({
     ok: true,
     joined: result.rows.length,
+    validationRows: result.validationRows.length,
     storedIndicators: result.scopes.pooled.storedIndicators.length,
     blindIndicators: result.scopes.pooled.blindVideoIndicators.length,
-    matrixOutcomes: Object.keys(result.scopes.pooled.outcomeMatrix.video).length,
+    matrixOutcomes: Object.keys(result.scopes.pooled.ledgerOutcomeMatrix).length,
+    matrixCoordinatesPerOutcome: result.scopes.pooled.ledgerOutcomeMatrix.keep.coordinates.length,
     curveForecasts: result.scopes.pooled.retentionForecasts.video.curves,
     strictViews: firstRow.predictions.viewsPublicAxisEnsemble,
 }));

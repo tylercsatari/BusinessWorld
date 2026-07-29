@@ -16,7 +16,10 @@ const JarvisRetention = (function () {
     let PROMISE_UI = null, OPERATIONS_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationProtocol: 'video', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationSort: 'selectedError', savedValidationShow: 60, savedValidationExpanded: null, savedValidationPoint: null, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationShow: 60, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '' };
+    st.savedValidationFeature = 'shorts.video-heldout.together.keep';
+    st.savedValidationFamily = 'all';
+    st.savedValidationQuery = '';
     st.savedValidationCurveVideo = null;
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
@@ -1834,7 +1837,7 @@ const JarvisRetention = (function () {
             ${chanSection('visual')}${chanSection('together')}${chanSection('text')}
             <div style="font-size:10px;color:${C.purple};font-weight:800;text-transform:uppercase;margin-bottom:5px">Novelty — 3 boxes (independent)</div>
             <div style="${gcol}">${['keep', 'ret5', 'views'].map(novBox).join('')}</div>`, 12);
-        return head + controls + '<div id="exp-scoreout"></div>' + savedValidationContextPanel(up) + trace + rawScoreProvenanceHtml(up) + boxes + savedBank();
+        return head + controls + '<div id="exp-scoreout"></div>' + trace + rawScoreProvenanceHtml(up) + boxes + savedBank();
     }
     function rtgUpdateFusion() { try { const el = window.document.getElementById('rtg-fusionpanel'); if (el) el.innerHTML = renderFusion(); } catch (e) { } }
     function fuHeat(v) { // -1..1 correlation → blue(neg)…grey…red(pos)
@@ -3887,17 +3890,20 @@ const JarvisRetention = (function () {
             return;
         }
         const scvalidationscope = e.target.closest('[data-savedvalidationscope]'); if (scvalidationscope) { st.savedValidationScope = scvalidationscope.getAttribute('data-savedvalidationscope'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
-        const scvalidationprotocol = e.target.closest('[data-savedvalidationprotocol]'); if (scvalidationprotocol) { st.savedValidationProtocol = scvalidationprotocol.getAttribute('data-savedvalidationprotocol'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
+        const scvalidationfamily = e.target.closest('[data-savedvalidationfamily]'); if (scvalidationfamily) { st.savedValidationFamily = scvalidationfamily.getAttribute('data-savedvalidationfamily'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
+        const scvalidationcell = e.target.closest('[data-savedvalidationcell]'); if (scvalidationcell) {
+            st.savedValidationFeature = scvalidationcell.getAttribute('data-savedvalidationcoordinate');
+            st.savedValidationTarget = scvalidationcell.getAttribute('data-savedvalidationoutcome');
+            st.savedValidationShow = 60; rtgUpdateExp(); return;
+        }
         const scvalidationtarget = e.target.closest('[data-savedvalidationtarget]'); if (scvalidationtarget) {
             st.savedValidationTarget = scvalidationtarget.getAttribute('data-savedvalidationtarget');
             st.savedValidationFeature = null; st.savedValidationShow = 60; rtgUpdateExp(); return;
         }
         const scvalidationfeature = e.target.closest('[data-savedvalidationfeature]'); if (scvalidationfeature) { st.savedValidationFeature = scvalidationfeature.getAttribute('data-savedvalidationfeature'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
-        const scvalidationrow = e.target.closest('[data-savedvalidationrow]'); if (scvalidationrow && !scvalidationrow.hasAttribute('data-savedvalidationvideo')) { st.savedValidationCurveVideo = scvalidationrow.getAttribute('data-savedvalidationrow'); rtgUpdateExp(); return; }
-        const scvalidationsort = e.target.closest('[data-savedvalidationsort]'); if (scvalidationsort) { st.savedValidationSort = scvalidationsort.getAttribute('data-savedvalidationsort'); rtgUpdateExp(); return; }
+        const scvalidationrow = e.target.closest('[data-savedvalidationrow]'); if (scvalidationrow) { st.savedValidationCurveVideo = scvalidationrow.getAttribute('data-savedvalidationrow'); rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedvalidationmore]')) { st.savedValidationShow = (st.savedValidationShow || 60) + 60; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedvalidationreload]')) { loadSavedChannelValidation(true); return; }
-        const scvalidationexpand = e.target.closest('[data-savedvalidationexpand]'); if (scvalidationexpand) { const id = scvalidationexpand.getAttribute('data-savedvalidationexpand'); st.savedValidationExpanded = st.savedValidationExpanded === id ? null : id; rtgUpdateExp(); return; }
         const scatlasscale = e.target.closest('[data-savedchannelatlasscale]'); if (scatlasscale) { st.savedChannelAtlasScale = scatlasscale.getAttribute('data-savedchannelatlasscale'); rtgUpdateExp(); return; }
         const scgroup = e.target.closest('[data-savedchannelgroup]'); if (scgroup) { st.savedChannelGroup = scgroup.getAttribute('data-savedchannelgroup'); st.savedChannelFeature = null; st.savedChannelMinPct = 0; st.savedChannelSort = st.savedChannelGroup === 'views' ? 'views' : 'feature'; st.savedChannelShow = 60; rtgUpdateExp(); return; }
         const scfeature = e.target.closest('[data-savedchannelfeature]'); if (scfeature) { st.savedChannelFeature = scfeature.getAttribute('data-savedchannelfeature'); st.savedChannelSort = 'feature'; st.savedChannelShow = 60; rtgUpdateExp(); return; }
@@ -3915,22 +3921,7 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-savedchannelclear]')) { st.savedChannelMinPct = 0; st.savedChannelMinViews = 0; st.savedChannelQuery = ''; st.savedChannelShow = 60; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedchannelmore]')) { st.savedChannelShow = (st.savedChannelShow || 60) + 60; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedchannelanalysisreload]')) { if (st.savedChannelSel) loadSavedChannelAnalysis(st.savedChannelSel, true); return; }
-        if (e.target.closest('[data-savedvalidationpointclose]')) { st.savedValidationPoint = null; rtgUpdateExp(); return; }
-        const scvalidationvideo = e.target.closest('[data-savedvalidationvideo]'); if (scvalidationvideo) {
-            const parts = scvalidationvideo.getAttribute('data-savedvalidationvideo').split(':');
-            st.savedValidationCurveVideo = parts[1];
-            openSavedChannelVideo(parts[0], parts[1], {
-                source: scvalidationvideo.getAttribute('data-savedvalidationpointsource') || 'embedding',
-                target: scvalidationvideo.getAttribute('data-savedvalidationpointoutcome') || scvalidationvideo.getAttribute('data-savedvalidationpointtarget') || 'keep',
-                outcomeKey: scvalidationvideo.getAttribute('data-savedvalidationpointoutcome') || scvalidationvideo.getAttribute('data-savedvalidationpointtarget') || 'keep',
-                coordinateTarget: scvalidationvideo.getAttribute('data-savedvalidationpointcoordinatetarget') || '',
-                coordinateId: scvalidationvideo.getAttribute('data-savedvalidationpointcoordinateid') || '',
-                protocol: scvalidationvideo.getAttribute('data-savedvalidationpointprotocol') || 'video',
-                featureKey: scvalidationvideo.getAttribute('data-savedvalidationpointfeature') || '',
-            });
-            return;
-        }
-        const scvideo = e.target.closest('[data-savedchannelvideo]'); if (scvideo) { const parts = scvideo.getAttribute('data-savedchannelvideo').split(':'); openSavedChannelVideo(parts[0], parts[1], null); return; }
+        const scvideo = e.target.closest('[data-savedchannelvideo]'); if (scvideo) { const parts = scvideo.getAttribute('data-savedchannelvideo').split(':'); openSavedChannelVideo(parts[0], parts[1]); return; }
         const rtt = e.target.closest('[data-rawtitleedit]'); if (rtt) {
             const idx = parseInt(rtt.getAttribute('data-rawtitleedit'), 10);
             st.rawTitleEdit = { idx, text: ((st.rawUploads || [])[idx] || {}).title || '' };
@@ -4082,6 +4073,7 @@ const JarvisRetention = (function () {
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedchannelurl')) { st.savedChannelUrl = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedchannelquery')) { st.savedChannelQuery = e.target.value; window.clearTimeout(st._scFilterT); st._scFilterT = window.setTimeout(rtgUpdateExp, 180); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedledgerquery')) { st.savedLedgerQuery = e.target.value; st.savedLedgerShow = 40; window.clearTimeout(st._scLedgerT); st._scLedgerT = window.setTimeout(rtgUpdateExp, 180); return; }
+        if (e.target.hasAttribute && e.target.hasAttribute('data-savedvalidationquery')) { st.savedValidationQuery = e.target.value; st.savedValidationShow = 60; window.clearTimeout(st._scValidationT); st._scValidationT = window.setTimeout(rtgUpdateExp, 180); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedchannelminviews')) { st.savedChannelMinViews = Math.max(0, +e.target.value || 0); window.clearTimeout(st._scFilterT); st._scFilterT = window.setTimeout(rtgUpdateExp, 180); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedchannelminpct')) { st.savedChannelMinPct = +e.target.value || 0; window.clearTimeout(st._scFilterT); st._scFilterT = window.setTimeout(rtgUpdateExp, 100); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedchannelriskwin')) { st.savedChannelRiskWin = Math.max(0, +e.target.value || 0); window.clearTimeout(st._scRiskT); st._scRiskT = window.setTimeout(rtgUpdateExp, 120); return; }
@@ -4492,9 +4484,8 @@ const JarvisRetention = (function () {
         }
         rtgUpdateExp();
     }
-    async function openSavedChannelVideo(channelId, videoId, validationPoint) {
+    async function openSavedChannelVideo(channelId, videoId) {
         if (!channelId || !videoId || st.savedChannelVideoBusy) return;
-        st.savedValidationPoint = validationPoint ? { ...validationPoint, channelId, videoId } : null;
         const existingIndex = (st.rawUploads || []).findIndex(upload => upload && upload.savedChannelId === channelId && upload.savedChannelVideoId === videoId);
         if (existingIndex >= 0) {
             st.rawUpSel = existingIndex; st.rawSel = null; st.rawUpErr = null; rtgUpdateExp();
@@ -5509,46 +5500,9 @@ const JarvisRetention = (function () {
           <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:stretch">${page.map(card).join('')}</div>
           ${shown.length > limit ? `<div style="text-align:center;margin-top:12px"><span data-savedchannelmore style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:7px;padding:5px 16px;font-size:10px;font-weight:800">Load ${Math.min(60, shown.length - limit)} more · ${shown.length - limit} left</span></div>` : ''}`;
     }
-    function savedValidationActual(row, target) {
-        const actual = row && row.actual || {};
-        if (target === 'keep') return actual.keep;
-        if (target === 'ret5') return actual.ret5;
-        if (target === 'views' || target === 'realviews') return actual.viewsCurrent;
-        if (target === 'outlier') return actual.outlierCurrent;
-        if (target === 'gt10M') return actual.hit10MCurrent;
-        return null;
-    }
-    function savedValidationDefinitions(validation, protocol, target) {
-        const definitions = validation && validation.featureContract && validation.featureContract.features || [];
-        return definitions.filter(definition => definition.target === target && (protocol === 'stored' || definition.group !== 'novelty'));
-    }
     function savedValidationRows(validation, scope) {
-        const rows = validation && validation.rows || [];
+        const rows = validation && (validation.validationRows || validation.rows) || [];
         return scope === 'pooled' ? rows : rows.filter(row => row.accountId === scope);
-    }
-    function savedValidationStoredCell(validation, row, key) {
-        const definitions = validation && validation.featureContract && validation.featureContract.features || [];
-        const index = definitions.findIndex(definition => definition.key === key);
-        return index < 0 ? { value: null, percentile: null } : {
-            value: row.storedRaw && row.storedRaw[index],
-            percentile: row.storedPercentile && row.storedPercentile[index],
-        };
-    }
-    function savedValidationPrediction(validation, row, definition, protocol) {
-        if (!row || !definition) return null;
-        if (protocol === 'stored') {
-            const value = savedValidationStoredCell(validation, row, definition.key).value;
-            if (value == null || !isFinite(+value)) return null;
-            return definition.unit === 'log10_views' ? Math.max(0, Math.pow(10, +value) - 1) : +value;
-        }
-        const featureName = definition.key + '.raw';
-        const index = (row.blindFeatureNames || []).indexOf(featureName);
-        const values = protocol === 'account' ? row.blindAccountHeldOut : row.blindVideoHeldOut;
-        const value = index >= 0 && values && values[index] != null ? +values[index] : null;
-        if (value == null || !isFinite(value)) return null;
-        return definition.target === 'views' || definition.target === 'realviews' || definition.target === 'outlier'
-            ? Math.max(0, Math.pow(10, value) - 1)
-            : value;
     }
     function savedValidationFormat(value, target) {
         if (value == null || !isFinite(+value)) return '—';
@@ -5557,340 +5511,9 @@ const JarvisRetention = (function () {
         if (target === 'gt10M') return (+value * 100).toFixed(1) + '%';
         return Math.abs(+value) >= 100 ? (+value).toFixed(0) : (+value).toFixed(2);
     }
-    function savedValidationError(actual, predicted, target) {
-        if (actual == null || predicted == null || !isFinite(+actual) || !isFinite(+predicted)) return null;
-        if (target === 'views' || target === 'realviews' || target === 'outlier') {
-            const low = Math.max(1e-9, Math.min(+actual + (target === 'outlier' ? 1e-9 : 1), +predicted + (target === 'outlier' ? 1e-9 : 1)));
-            const high = Math.max(+actual + (target === 'outlier' ? 1e-9 : 1), +predicted + (target === 'outlier' ? 1e-9 : 1));
-            return high / low;
-        }
-        return Math.abs(+predicted - +actual);
-    }
-    function savedValidationDefinition(validation, key) {
-        return (validation && validation.featureContract && validation.featureContract.features || [])
-            .find(definition => definition.key === key) || null;
-    }
-    function savedValidationModalityRows(validation, row, target) {
-        return ['visual', 'text', 'together'].map(group => {
-            const definition = savedValidationDefinition(validation, `${group}.${target}`);
-            return {
-                group,
-                definition,
-                stored: savedValidationPrediction(validation, row, definition, 'stored'),
-                video: savedValidationPrediction(validation, row, definition, 'video'),
-                account: savedValidationPrediction(validation, row, definition, 'account'),
-            };
-        }).filter(item => item.definition);
-    }
-    function savedValidationOutcomeKey(context) {
-        return context && (context.outcomeKey || context.target) || 'keep';
-    }
-    function savedValidationCoordinateDefinition(validation, context) {
-        if (!context) return null;
-        return savedValidationDefinition(validation, context.featureKey)
-            || savedValidationDefinition(validation, `together.${context.coordinateTarget || context.target || 'keep'}`);
-    }
-    function savedValidationCoordinateTarget(validation, context) {
-        const definition = savedValidationCoordinateDefinition(validation, context);
-        return context && context.coordinateTarget || definition && definition.target || savedValidationOutcomeKey(context);
-    }
-    function savedValidationCoordinateId(validation, context) {
-        if (!context) return 'shorts.unknown';
-        if (context.coordinateId) return context.coordinateId;
-        if (context.source === 'keepModel') return 'shorts.legacy.keep-video-heldout-model';
-        if (context.source === 'viewsAxisEnsemble') return 'shorts.legacy.views-public-axis-ensemble';
-        if (context.source === 'viewsModel') return 'shorts.legacy.views-video-heldout-model';
-        const definition = savedValidationCoordinateDefinition(validation, context);
-        if (!definition) return 'shorts.unknown';
-        const protocol = context.source === 'storedViewsAxis' || context.protocol === 'stored'
-            ? 'stored'
-            : context.protocol === 'account' ? 'account-heldout' : 'video-heldout';
-        return `shorts.${protocol}.${definition.key}`;
-    }
-    function savedValidationPointLabel(validation, context) {
-        if (!context) return 'validation value';
-        const coordinateId = savedValidationCoordinateId(validation, context);
-        if (context.source === 'keepModel') return `nested-selected multi-input OOF forecast · ${coordinateId}`;
-        if (context.source === 'storedViewsAxis' || context.source === 'blindViewsAxis') {
-            const axisDefinition = savedValidationDefinition(validation, context.featureKey || 'together.views');
-            const axisGroup = axisDefinition && axisDefinition.group === 'together' ? 'Both'
-                : axisDefinition ? axisDefinition.group : 'Both';
-            return `${context.source === 'storedViewsAxis' ? 'original stored' : 'blind rebuilt'} ${axisGroup}.views view-equivalent embedding · ${coordinateId}`;
-        }
-        if (context.source === 'viewsAxisEnsemble') return `blind visual + text + both views-axis ensemble · ${coordinateId}`;
-        if (context.source === 'viewsModel') return `nested-selected multi-input OOF views forecast · ${coordinateId}`;
-        const definition = savedValidationCoordinateDefinition(validation, context);
-        const group = definition ? (definition.group === 'together' ? 'both' : definition.group) : 'selected';
-        const protocol = context.protocol === 'stored' ? 'stored production'
-            : context.protocol === 'account' ? 'account-held-out'
-                : 'video-held-out';
-        return `${protocol} ${group} ${definition ? definition.label : 'embedding'} coordinate · ${coordinateId}`;
-    }
-    function savedValidationPointValue(validation, row, context) {
-        if (!row || !context) return null;
-        if (context.source === 'keepModel') return row.predictions && row.predictions.keepVideoHeldOut;
-        if (context.source === 'storedViewsAxis') {
-            return savedValidationPrediction(validation, row, savedValidationDefinition(validation, context.featureKey || 'together.views'), 'stored');
-        }
-        if (context.source === 'blindViewsAxis') {
-            return savedValidationPrediction(validation, row, savedValidationDefinition(validation, context.featureKey || 'together.views'), context.protocol || 'video');
-        }
-        if (context.source === 'viewsAxisEnsemble') return row.predictions && row.predictions.viewsPublicAxisEnsemble;
-        if (context.source === 'viewsModel') return row.predictions && row.predictions.viewsVideoHeldOut;
-        const definition = savedValidationDefinition(validation, context.featureKey || `together.${context.target}`);
-        return savedValidationPrediction(validation, row, definition, context.protocol || 'video');
-    }
-    function savedValidationPointAttributes(validation, row, context, predicted, actual) {
-        const raw = predicted != null && isFinite(+predicted) ? ` data-savedvalidationpredictedraw="${+predicted}"` : '';
-        const observed = actual != null && isFinite(+actual) ? ` data-savedvalidationactualraw="${+actual}"` : '';
-        const source = context.source || 'embedding';
-        const outcomeKey = savedValidationOutcomeKey(context);
-        const coordinateTarget = savedValidationCoordinateTarget(validation, context);
-        const coordinateId = savedValidationCoordinateId(validation, context);
-        let embedding = '';
-        if (!['keepModel', 'viewsModel'].includes(source) && predicted != null && isFinite(+predicted)) {
-            const definition = savedValidationDefinition(validation, context.featureKey || `together.${context.target || 'keep'}`);
-            const sourceKey = source === 'viewsAxisEnsemble'
-                ? 'visual_text_together_views_ensemble'
-                : definition && (definition.sourceKey || definition.key);
-            const origin = source === 'storedViewsAxis' || context.protocol === 'stored'
-                ? 'stored-production'
-                : source === 'viewsAxisEnsemble'
-                    ? 'blind-axis-ensemble'
-                    : context.protocol === 'account'
-                        ? 'blind-account-held-out'
-                        : 'blind-video-held-out';
-            if (sourceKey) {
-                const channel = source === 'viewsAxisEnsemble' ? 'ensemble' : definition && definition.group;
-                const identity = {
-                    domain: 'shorts_raw',
-                    origin,
-                    channel,
-                    target: context.coordinateTarget || (definition && definition.target) || context.target || 'keep',
-                    sourceKey,
-                    coordinateId,
-                    est: +predicted,
-                };
-                embedding = embeddingIdentityAttrs(identity, `${row.channelId}:${row.id}`);
-            }
-        }
-        return `data-savedvalidationvideo="${esc(row.channelId)}:${esc(row.id)}" data-savedvalidationpointsource="${esc(source)}" data-savedvalidationpointtarget="${esc(outcomeKey)}" data-savedvalidationpointoutcome="${esc(outcomeKey)}" data-savedvalidationpointcoordinatetarget="${esc(coordinateTarget)}" data-savedvalidationpointcoordinateid="${esc(coordinateId)}" data-savedvalidationpointprotocol="${esc(context.protocol || 'video')}" data-savedvalidationpointfeature="${esc(context.featureKey || '')}"${raw}${observed}${embedding}`;
-    }
-    function savedValidationPointTooltip(validation, row, context, actual, plotted) {
-        const outcomeKey = savedValidationOutcomeKey(context);
-        const coordinateTarget = savedValidationCoordinateTarget(validation, context);
-        const outcome = savedValidationOutcomeDefinition(validation, outcomeKey);
-        const lines = [
-            `${row.accountName} - ${row.title}`,
-            `PLOTTED Y (${savedValidationPointLabel(validation, context)}): ${savedValidationFormat(plotted, coordinateTarget)}`,
-            `OBSERVED X (${outcome.label} · shorts.observed.${outcomeKey}): ${savedValidationOutcomeFormat(actual, outcomeKey)}`,
-        ];
-        const modalities = savedValidationModalityRows(validation, row, coordinateTarget);
-        if (modalities.length) {
-            const list = (key, label) => `${label}: ${modalities.map(item => `${item.group === 'together' ? 'both' : item.group} ${savedValidationFormat(item[key], coordinateTarget)}`).join(' | ')}`;
-            lines.push(list('stored', 'Stored embedding estimates'));
-            lines.push(list('video', 'Video-held-out embedding estimates'));
-            lines.push(list('account', 'Account-held-out embedding estimates'));
-        }
-        lines.push('Click to open this exact comparison plus the original embedding maps.');
-        return lines.join('\n');
-    }
-    function savedValidationContextPanel(upload) {
-        const validation = SAVEDCHANNELVALIDATION, context = st.savedValidationPoint;
-        if (!validation || validation.loading || validation.error || !context || !upload) return '';
-        if (upload.savedChannelId !== context.channelId || upload.savedChannelVideoId !== context.videoId) return '';
-        const row = (validation.rows || []).find(item => item.channelId === context.channelId && item.id === context.videoId);
-        if (!row) return '';
-        const outcomeKey = savedValidationOutcomeKey(context);
-        const outcome = savedValidationOutcomeDefinition(validation, outcomeKey);
-        const coordinateTarget = savedValidationCoordinateTarget(validation, context);
-        const coordinateId = savedValidationCoordinateId(validation, context);
-        const plotted = savedValidationPointValue(validation, row, context);
-        const actual = savedValidationOutcomeValue(row, outcomeKey);
-        const modalities = savedValidationModalityRows(validation, row, coordinateTarget);
-        const selectedDefinition = savedValidationCoordinateDefinition(validation, context);
-        const selectedModality = modalities.find(item => selectedDefinition && item.group === selectedDefinition.group)
-            || modalities.find(item => item.group === 'together');
-        const protocolLabels = {
-            stored: 'Stored production embedding',
-            video: 'Video-held-out embedding',
-            account: 'Account-held-out embedding',
-        };
-        const modalityCells = modalities.map(item => `<tr style="border-top:1px solid ${C.border}"><td style="padding:5px;color:${savedChannelFeatureColor(item.group)};font-weight:900">${item.group === 'together' ? 'Both' : item.group}</td><td>${savedValidationFormat(item.stored, coordinateTarget)}</td><td>${savedValidationFormat(item.video, coordinateTarget)}</td><td>${savedValidationFormat(item.account, coordinateTarget)}</td></tr>`).join('');
-        const outcomeCells = (validation.outcomeDefinitions || []).map(definition => {
-            const value = savedValidationOutcomeValue(row, definition.key);
-            return `<div style="border-left:2px solid ${C.cyan};background:${C.card2};padding:6px 8px"><div style="font-size:7.5px;color:${C.mute}">${esc(definition.label)} · shorts.observed.${esc(definition.key)}</div><div style="font-size:12px;font-weight:900;color:${C.text}">${savedValidationOutcomeFormat(value, definition.key)}</div></div>`;
-        }).join('');
-        const forecastCells = ['video', 'account'].flatMap(protocol => {
-            const forecast = row.predictions && row.predictions.score21 && row.predictions.score21[protocol] || {};
-            return (validation.outcomeDefinitions || []).map(definition => `<div style="border-left:2px solid ${protocol === 'video' ? C.green : C.purple};background:${C.card2};padding:6px 8px"><div style="font-size:7.5px;color:${C.mute}">${protocol === 'video' ? 'Video-held-out' : 'Account-held-out'} · shorts.${protocol}-forecast.${esc(definition.key)}</div><div style="font-size:12px;font-weight:900;color:${C.text}">${savedValidationOutcomeFormat(forecast[definition.key], definition.key, true)}</div></div>`);
-        }).join('');
-        const storedReference = selectedModality && selectedModality.stored;
-        const shownStored = savedValidationFormat(storedReference, coordinateTarget);
-        const storedReferenceLabel = selectedDefinition
-            ? `${selectedDefinition.group === 'together' ? 'Both' : selectedDefinition.group}.${selectedDefinition.target}`
-            : `Both.${coordinateTarget}`;
-        const loadedCardCell = selectedDefinition && selectedDefinition.sourceKey && upload.steer
-            ? upload.steer[selectedDefinition.sourceKey]
-            : null;
-        const loadedCardValue = loadedCardCell && loadedCardCell.est != null && isFinite(+loadedCardCell.est)
-            ? +loadedCardCell.est
-            : null;
-        const cardParity = loadedCardValue != null && storedReference != null
-            ? Math.abs(loadedCardValue - storedReference) <= Math.max(1e-9, Math.abs(storedReference) * 1e-12)
-            : null;
-        const outcomeHeading = ['views', 'outlier', 'hit10M'].includes(outcomeKey)
-            ? 'Observed public outcome'
-            : 'Private actual outcome';
-        const comparisonExplanation = context.source === 'storedViewsAxis'
-            ? 'The green value is the exact persisted Both.views output shown on the original score card; no refit, ensemble, or forecast replaced it.'
-            : context.source === 'blindViewsAxis'
-                ? 'The green value uses the same one-component PLS direction and rank-to-public-outcome calibration as production, rebuilt after removing every video from both validation creators. The amber value is the historical scorer output saved when the video was analyzed.'
-                : context.source === 'viewsAxisEnsemble'
-                    ? 'The green value is the geometric mean of three separately rebuilt visual, text, and Both views axes. The amber value is one historical Both.views axis, so they are intentionally different objects.'
-                    : context.source === 'viewsModel'
-                        ? 'The green value is a genuinely held-out expected-views forecast fitted from multiple inputs. The amber value is the historical Both.views corpus-quantile equivalent, so these values answer different questions and are intentionally displayed separately.'
-                    : context.source === 'keepModel'
-                        ? 'The green value is a fold-fitted forecast selected from multiple embedding and control inputs. The amber value is one saved Both.keep embedding axis.'
-                        : 'The green value is the selected single embedding under the displayed validation protocol. The amber value is the historical Both axis saved on the original score card.';
-        return `<div data-savedvalidationcontext data-coordinate-id="${esc(coordinateId)}" data-coordinate-target="${esc(coordinateTarget)}" data-outcome-id="shorts.observed.${esc(outcomeKey)}" data-plotted-raw="${plotted != null && isFinite(+plotted) ? +plotted : ''}" data-stored-reference-raw="${storedReference != null && isFinite(+storedReference) ? +storedReference : ''}" data-loaded-card-raw="${loadedCardValue != null && isFinite(+loadedCardValue) ? +loadedCardValue : ''}" data-card-parity="${cardParity == null ? 'unavailable' : cardParity ? 'match' : 'mismatch'}" style="border:1px solid ${C.cyan};background:${C.cyan}09;padding:11px;margin-bottom:12px">
-          <div style="display:flex;justify-content:space-between;gap:10px;align-items:start"><div><div style="font-size:9px;color:${C.cyan};font-weight:950;text-transform:uppercase">Clicked validation point - same video, every number traced</div><div style="font-size:14px;color:${C.text};font-weight:950;margin-top:2px">${esc(row.title)}</div><div style="font-size:8px;color:${C.mute};margin-top:2px">${esc(row.accountName)} · YouTube ID ${esc(row.id)}</div></div><span data-savedvalidationpointclose style="cursor:pointer;color:${C.dim};font-size:13px" title="close comparison">x</span></div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;margin:10px 0">
-            <div style="border-top:3px solid ${C.green};background:${C.card2};padding:8px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Y · exact score coordinate</div><div style="font-size:22px;color:${C.green};font-weight:950">${savedValidationFormat(plotted, coordinateTarget)}</div><div style="font-size:8px;color:${C.dim};line-height:1.35">${esc(savedValidationPointLabel(validation, context))}</div></div>
-            <div style="border-top:3px solid ${C.cyan};background:${C.card2};padding:8px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">X · ${outcomeHeading}</div><div style="font-size:22px;color:${C.cyan};font-weight:950">${savedValidationOutcomeFormat(actual, outcomeKey)}</div><div style="font-size:8px;color:${C.dim}">${esc(outcome.label)} · shorts.observed.${esc(outcomeKey)}</div></div>
-            <div style="border-top:3px solid ${C.amber};background:${C.card2};padding:8px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Persisted ${esc(storedReferenceLabel)} axis</div><div style="font-size:22px;color:${C.amber};font-weight:950">${shownStored}</div><div style="font-size:8px;color:${C.dim}">validation artifact's original score</div></div>
-            <div style="border-top:3px solid ${cardParity === false ? C.red : C.amber};background:${C.card2};padding:8px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Loaded score card · same field</div><div style="font-size:22px;color:${cardParity === false ? C.red : C.amber};font-weight:950">${savedValidationFormat(loadedCardValue, coordinateTarget)}</div><div style="font-size:8px;color:${cardParity == null ? C.faint : cardParity ? C.green : C.red}">${cardParity == null ? 'source field unavailable' : cardParity ? 'exact raw-value match' : 'MISMATCH - scorer storage drift'}</div></div>
-          </div>
-          <div style="font-size:9px;color:${C.dim};line-height:1.55;margin-bottom:9px"><b style="color:${C.text}">What is being compared:</b> ${esc(comparisonExplanation)} The original 21 graph cards below remain the persisted embedding outputs.</div>
-          <div style="font-size:9px;font-weight:950;color:${C.text};margin-bottom:4px">Same score target (${esc(coordinateTarget)}) across all three modalities and protocols</div>
-          <div style="overflow:auto;margin-bottom:10px"><table style="width:100%;min-width:510px;border-collapse:collapse;font-size:8.5px"><thead><tr style="color:${C.mute};text-align:left"><th style="padding:5px">Input</th><th>${protocolLabels.stored}</th><th>${protocolLabels.video}</th><th>${protocolLabels.account}</th></tr></thead><tbody>${modalityCells}</tbody></table></div>
-          <div style="font-size:9px;font-weight:950;color:${C.text};margin-bottom:4px">All joined private outcomes</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:4px;margin-bottom:9px">${outcomeCells}</div>
-          <div style="font-size:9px;font-weight:950;color:${C.text};margin-bottom:4px">All canonical combined forecasts · separately registered from score coordinates</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:4px">${forecastCells}</div>
-        </div>`;
-    }
-    function savedValidationMetricFor(scope, protocol, featureKey) {
-        if (!scope) return null;
-        if (protocol === 'stored') {
-            const entry = (scope.storedIndicators || []).find(item => item.key === featureKey);
-            return entry && entry.metrics && entry.metrics.raw;
-        }
-        const list = protocol === 'account' ? scope.blindAccountIndicators : scope.blindVideoIndicators;
-        const entry = (list || []).find(item => item.key === featureKey + '.raw');
-        return entry && entry.metrics;
-    }
-    function savedValidationMetricSummary(metrics, target) {
-        if (!metrics || !metrics.n) return 'no matched outcomes';
-        if (target === 'gt10M') return `AUC ${fmtv(metrics.auc, 3)} · Brier ${fmtv(metrics.brier, 3)} · n=${metrics.n}`;
-        const error = target === 'views' || target === 'realviews' || target === 'outlier'
-            ? `${fmtv(metrics.medianFactorError, 2)}× median error`
-            : `${fmtv(metrics.mae, 2)} pp MAE`;
-        return `ρ ${fmtv(metrics.spearman, 3)} · R² ${fmtv(metrics.r2, 3)} · ${error} · n=${metrics.n}`;
-    }
-    function savedValidationAccuracyAtlas(scope, protocol, definitions, selectedKey) {
-        if (!scope || !definitions.length) return '';
-        const rows = definitions.map(definition => {
-            const metrics = savedValidationMetricFor(scope, protocol, definition.key) || {};
-            const binary = definition.target === 'gt10M';
-            const displayed = binary ? metrics.auc : metrics.spearman;
-            const signed = displayed == null ? null : (binary ? (+displayed - .5) * 2 : +displayed);
-            const width = signed == null ? 0 : Math.min(50, Math.abs(signed) * 50);
-            const left = signed == null || signed >= 0 ? 50 : 50 - width;
-            const color = signed == null ? C.border2 : signed >= 0 ? C.green : C.red;
-            const selected = selectedKey === definition.key;
-            return `<div data-savedvalidationfeature="${esc(definition.key)}" style="cursor:pointer;display:grid;grid-template-columns:minmax(118px,1.05fr) minmax(125px,1fr) minmax(150px,1.25fr);gap:8px;align-items:center;padding:6px 7px;border:1px solid ${selected ? C.cyan : C.border};background:${selected ? C.cyan + '0d' : C.card2}">
-              <div style="min-width:0"><div style="font-size:9px;font-weight:900;color:${savedChannelFeatureColor(definition.group)};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(definition.group === 'together' ? 'both' : definition.group)} · ${esc(definition.label)}</div><div style="font-size:7.5px;color:${C.faint}">${metrics.n || 0} matched</div></div>
-              <div style="position:relative;height:13px;background:${C.card};border:1px solid ${C.border};overflow:hidden"><span style="position:absolute;left:50%;top:0;bottom:0;border-left:1px solid ${C.mute}"></span>${signed != null ? `<span style="position:absolute;left:${left}%;width:${width}%;top:2px;bottom:2px;background:${color}"></span>` : ''}</div>
-              <div style="font-size:8px;color:${C.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(savedValidationMetricSummary(metrics, definition.target))}</div></div>`;
-        }).join('');
-        return `<div style="overflow:auto"><div style="min-width:520px;display:grid;gap:3px">${rows}</div></div>`;
-    }
-    function savedValidationScatter(rows, target, prediction, title, options) {
-        options = options || {};
-        const points = (rows || []).map(row => ({
-            row,
-            actual: savedValidationActual(row, target),
-            predicted: prediction(row),
-        })).filter(point => point.actual != null && point.predicted != null && isFinite(+point.actual) && isFinite(+point.predicted));
-        if (!points.length) return note('No matched actual/predicted pairs are available for this view.', C.amber);
-        const logarithmic = target === 'views' || target === 'realviews' || target === 'outlier';
-        const coordinate = value => logarithmic ? Math.log10(Math.max(0, +value) + 1) : +value;
-        const values = points.flatMap(point => [coordinate(point.actual), coordinate(point.predicted)]);
-        let lo = Math.min(...values), hi = Math.max(...values);
-        if (lo === hi) { lo -= 1; hi += 1; }
-        const margin = (hi - lo) * .05; lo -= margin; hi += margin;
-        const W = 520, H = 310, left = 48, right = 15, top = 17, bottom = 39;
-        const X = value => left + (coordinate(value) - lo) / (hi - lo) * (W - left - right);
-        const Y = value => H - bottom - (coordinate(value) - lo) / (hi - lo) * (H - top - bottom);
-        let svg = `<rect x="${left}" y="${top}" width="${W - left - right}" height="${H - top - bottom}" fill="${C.card2}"/><line x1="${X(logarithmic ? Math.max(0, Math.pow(10, lo) - 1) : lo)}" y1="${Y(logarithmic ? Math.max(0, Math.pow(10, lo) - 1) : lo)}" x2="${X(logarithmic ? Math.max(0, Math.pow(10, hi) - 1) : hi)}" y2="${Y(logarithmic ? Math.max(0, Math.pow(10, hi) - 1) : hi)}" stroke="${C.mute}" stroke-dasharray="4 3"/>`;
-        points.forEach(point => {
-            const color = point.row.accountId === 'tyler' ? C.cyan : C.purple;
-            const context = { source: options.source || 'embedding', target, protocol: options.protocol || 'video', featureKey: options.featureKey || '' };
-            svg += `<circle ${savedValidationPointAttributes(SAVEDCHANNELVALIDATION, point.row, context, point.predicted, point.actual)} cx="${X(point.actual).toFixed(1)}" cy="${Y(point.predicted).toFixed(1)}" r="3.6" fill="${color}" opacity=".68" style="cursor:pointer"><title>${esc(savedValidationPointTooltip(SAVEDCHANNELVALIDATION, point.row, context, point.actual, point.predicted))}</title></circle>`;
-        });
-        const lowLabel = logarithmic ? savedValidationFormat(Math.max(0, Math.pow(10, lo) - 1), target) : savedValidationFormat(lo, target);
-        const highLabel = logarithmic ? savedValidationFormat(Math.max(0, Math.pow(10, hi) - 1), target) : savedValidationFormat(hi, target);
-        const axisLabel = options.axisLabel || (options.source === 'embedding' ? 'embedding estimate' : 'forecast');
-        svg += `<text x="${left}" y="${H - 24}" fill="${C.faint}" font-size="8">${esc(lowLabel)}</text><text x="${W - right}" y="${H - 24}" text-anchor="end" fill="${C.faint}" font-size="8">${esc(highLabel)}</text><text x="${W / 2}" y="${H - 5}" text-anchor="middle" fill="${C.mute}" font-size="9">actual ${esc(target)}${logarithmic ? ' · log scale' : ''}</text><text x="11" y="${H / 2}" transform="rotate(-90 11 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">${esc(axisLabel)}${logarithmic ? ' · log scale' : ''}</text>`;
-        return `<div><div style="font-size:10px;font-weight:900;color:${C.text};margin-bottom:2px">${esc(title)}</div>${options.subtitle ? `<div style="font-size:8px;color:${C.dim};line-height:1.4;margin-bottom:4px">${esc(options.subtitle)}</div>` : ''}<div style="font-size:8px;color:${C.mute};margin-bottom:4px"><span style="color:${C.cyan}">● Tyler</span> · <span style="color:${C.purple}">● Hafu</span> · dashed = Y equals actual X · click any point for every source value</div><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:${C.card2};border:1px solid ${C.border}">${svg}</svg></div>`;
-    }
-    function savedValidationModelCard(model) {
-        if (!model) return '';
-        const metrics = model.metrics || {}, views = /^Views/.test(model.label || '');
-        const color = metrics.r2 != null && metrics.r2 > 0 ? C.green : C.red;
-        const kind = model.kind === 'axis_ensemble'
-            ? '3-axis embedding ensemble · not one embedding'
-            : 'multi-input model forecast · not one embedding';
-        return `<div style="border-top:2px solid ${color};background:${C.card2};padding:8px;min-width:0"><div style="font-size:7px;font-weight:900;color:${C.green};text-transform:uppercase">${kind}</div><div style="font-size:9px;font-weight:900;color:${C.text};margin-top:2px">${esc(model.label)}</div><div style="font-size:8px;color:${C.mute};margin:2px 0 5px">${esc(String(model.tier || '').replace(/_/g, ' '))}</div><div style="font-size:17px;font-weight:950;color:${color}">R² ${fmtv(metrics.r2, 3)}</div><div style="font-size:8px;color:${C.dim};line-height:1.45">rank ρ ${fmtv(metrics.spearman, 3)} · ${views ? `${fmtv(metrics.medianFactorError, 2)}× median error` : `${fmtv(metrics.mae, 2)} pp MAE`} · n=${metrics.n || 0}</div></div>`;
-    }
-    function savedValidationExpandedRow(validation, row, protocol) {
-        const definitions = validation.featureContract && validation.featureContract.features || [];
-        const stored = definitions.map(definition => {
-            const cell = savedValidationStoredCell(validation, row, definition.key);
-            return `<span style="border:1px solid ${C.border};padding:3px 5px;font-size:8px;color:${C.dim}"><b style="color:${savedChannelFeatureColor(definition.group)}">${esc(definition.key)}</b> ${savedValidationFormat(definition.unit === 'log10_views' && cell.value != null ? Math.max(0, Math.pow(10, cell.value) - 1) : cell.value, definition.target)}${cell.percentile != null ? ` · ${(+cell.percentile).toFixed(0)}th` : ''}</span>`;
-        }).join('');
-        const blindDefinitions = definitions.filter(definition => definition.group !== 'novelty');
-        const blind = blindDefinitions.map(definition => `<span style="border:1px solid ${C.border};padding:3px 5px;font-size:8px;color:${C.dim}"><b style="color:${savedChannelFeatureColor(definition.group)}">${esc(definition.key)}</b> ${savedValidationFormat(savedValidationPrediction(validation, row, definition, protocol === 'stored' ? 'video' : protocol), definition.target)}</span>`).join('');
-        return `<tr style="background:${C.card2}"><td colspan="12" style="padding:8px"><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:5px">Actual outcomes</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px">${['keep', 'ret5', 'views', 'outlier', 'gt10M'].map(target => `<span style="font-size:8px;color:${C.dim};border:1px solid ${C.border};padding:3px 5px">${esc(target)} <b style="color:${C.text}">${savedValidationFormat(savedValidationActual(row, target), target)}</b></span>`).join('')}<span style="font-size:8px;color:${C.dim};border:1px solid ${C.border};padding:3px 5px">private views snapshot <b style="color:${C.text}">${savedValidationFormat(row.actual.viewsPrivateSnapshot, 'views')}</b></span></div><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:5px">All 21 stored channel scores · diagnostic replay</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:9px">${stored}</div><div style="font-size:9px;font-weight:900;color:${C.text};margin-bottom:5px">All 18 ${protocol === 'account' ? 'account-held-out' : 'video-held-out'} target-aligned scores</div><div style="display:flex;gap:4px;flex-wrap:wrap">${blind}</div></td></tr>`;
-    }
-    function savedValidationVideoTable(validation, rows, definition, protocol) {
-        const target = definition.target;
-        const bothViewsDefinition = savedValidationDefinition(validation, 'together.views');
-        const tableRows = rows.map(row => {
-            const actual = savedValidationActual(row, target);
-            const predicted = savedValidationPrediction(validation, row, definition, protocol);
-            return { row, actual, predicted, error: savedValidationError(actual, predicted, target) };
-        });
-        const sort = st.savedValidationSort || 'selectedError';
-        tableRows.sort((left, right) => {
-            if (sort === 'actualViews') return (+right.row.actual.viewsCurrent || 0) - (+left.row.actual.viewsCurrent || 0);
-            if (sort === 'actualKeep') return (+right.row.actual.keep || -Infinity) - (+left.row.actual.keep || -Infinity);
-            if (sort === 'predicted') return (+right.predicted || -Infinity) - (+left.predicted || -Infinity);
-            if (sort === 'recent') return (+right.row.publishedAt || 0) - (+left.row.publishedAt || 0);
-            return (+right.error || -Infinity) - (+left.error || -Infinity);
-        });
-        const limit = st.savedValidationShow || 60, visible = tableRows.slice(0, limit);
-        const buttons = [['selectedError', 'largest selected error'], ['actualViews', 'actual views'], ['actualKeep', 'actual keep'], ['predicted', 'selected embedding estimate'], ['recent', 'newest']].map(([key, label]) => `<span data-savedvalidationsort="${key}" style="cursor:pointer;border:1px solid ${sort === key ? C.cyan : C.border};color:${sort === key ? C.cyan : C.dim};padding:3px 7px;font-size:8px">${esc(label)}</span>`).join('');
-        const body = visible.map(item => {
-            const row = item.row, keepError = savedValidationError(row.actual.keep, row.predictions.keepVideoHeldOut, 'keep');
-            const viewError = savedValidationError(row.actual.viewsCurrent, row.predictions.viewsPublicAxisEnsemble, 'views');
-            const storedBothViews = savedValidationPrediction(validation, row, bothViewsDefinition, 'stored');
-            const blindBothViews = savedValidationPrediction(validation, row, bothViewsDefinition, 'video');
-            const errorLabel = item.error == null ? '—' : (target === 'views' || target === 'realviews' || target === 'outlier' ? item.error.toFixed(2) + '×' : item.error.toFixed(2) + ' pp');
-            const expanded = st.savedValidationExpanded === row.id;
-            const context = { source: 'embedding', target, protocol, featureKey: definition.key };
-            const storedViewsContext = { source: 'storedViewsAxis', target: 'views', protocol: 'stored', featureKey: 'together.views' };
-            const blindViewsContext = { source: 'blindViewsAxis', target: 'views', protocol: 'video', featureKey: 'together.views' };
-            const ensembleContext = { source: 'viewsAxisEnsemble', target: 'views', protocol: 'video', featureKey: '' };
-            const storedViewsCell = `<span ${savedValidationPointAttributes(validation, row, storedViewsContext, storedBothViews, row.actual.viewsCurrent)} style="cursor:pointer;color:${C.amber};font-weight:900">${savedValidationFormat(storedBothViews, 'views')}</span>`;
-            const blindViewsCell = `<span ${savedValidationPointAttributes(validation, row, blindViewsContext, blindBothViews, row.actual.viewsCurrent)} style="cursor:pointer;color:${C.purple};font-weight:900">${savedValidationFormat(blindBothViews, 'views')}</span>`;
-            const ensembleCell = `<span ${savedValidationPointAttributes(validation, row, ensembleContext, row.predictions.viewsPublicAxisEnsemble, row.actual.viewsCurrent)} style="cursor:pointer;color:${C.yellow};font-weight:900">${savedValidationFormat(row.predictions.viewsPublicAxisEnsemble, 'views')}</span>`;
-            const selectedCell = `<span ${savedValidationPointAttributes(validation, row, context, item.predicted, item.actual)} style="cursor:pointer;color:${savedChannelFeatureColor(definition.group)};font-weight:900">${savedValidationFormat(item.predicted, target)}</span>`;
-            return `<tr style="border-top:1px solid ${C.border};vertical-align:top"><td style="padding:6px;min-width:210px"><span ${savedValidationPointAttributes(validation, row, context, item.predicted, item.actual)} style="cursor:pointer;color:${C.text};font-weight:800">${esc(row.title)}</span><div style="font-size:7.5px;color:${row.accountId === 'tyler' ? C.cyan : C.purple};margin-top:2px">${esc(row.accountName)}${row.publishedAt ? ` · ${esc(new Date(row.publishedAt).toLocaleDateString())}` : ''}</div><span data-savedvalidationexpand="${esc(row.id)}" style="display:inline-block;cursor:pointer;color:${C.accent};font-size:8px;margin-top:3px">${expanded ? 'hide all inputs' : 'show all 21 + blind inputs'}</span></td><td>${savedValidationFormat(row.actual.keep, 'keep')}<div style="font-size:7px;color:${C.faint}">private outcome</div></td><td>${savedValidationFormat(row.predictions.keepVideoHeldOut, 'keep')}<div style="font-size:7px;color:${C.faint}">${keepError == null ? 'multi-input OOF' : 'multi-input OOF · ' + keepError.toFixed(1) + ' pp error'}</div></td><td>${savedValidationFormat(row.predictions.keepAccountHeldOut, 'keep')}<div style="font-size:7px;color:${C.faint}">multi-input transfer</div></td><td>${savedValidationFormat(row.actual.ret5, 'ret5')}</td><td>${savedValidationFormat(row.actual.viewsCurrent, 'views')}<div style="font-size:7px;color:${C.faint}">private snapshot ${savedValidationFormat(row.actual.viewsPrivateSnapshot, 'views')}</div></td><td>${storedViewsCell}<div style="font-size:7px;color:${C.faint}">original card · Both.views</div></td><td>${blindViewsCell}<div style="font-size:7px;color:${C.faint}">blind rebuilt · Both.views</div></td><td>${ensembleCell}<div style="font-size:7px;color:${C.faint}">${viewError == null ? 'blind 3-axis ensemble' : 'blind 3-axis · ' + viewError.toFixed(2) + '× error'}</div></td><td>${selectedCell}<div style="font-size:7px;color:${C.faint}">${esc(protocol)} ${esc(definition.key)} axis</div></td><td>${savedValidationFormat(item.actual, target)}</td><td style="color:${item.error != null && item.error > (target === 'views' || target === 'realviews' || target === 'outlier' ? 3 : 10) ? C.red : C.dim}">${errorLabel}</td></tr>${expanded ? savedValidationExpandedRow(validation, row, protocol) : ''}`;
-        }).join('');
-        return `<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:9px 0 6px"><span style="font-size:8px;color:${C.mute};text-transform:uppercase">sort</span>${buttons}</div><div style="overflow:auto;max-height:650px"><table style="width:100%;min-width:1420px;border-collapse:collapse;font-size:8.5px"><thead style="position:sticky;top:0;background:${C.card};z-index:2"><tr style="color:${C.mute};text-align:left"><th style="padding:6px">Short</th><th>actual keep</th><th>OOF multi-input keep forecast</th><th>account-transfer keep forecast</th><th>actual 5s</th><th>actual views</th><th>original Both.views</th><th>blind rebuilt Both.views</th><th>blind 3-axis views ensemble</th><th>selected embedding estimate</th><th>selected actual</th><th>selected error</th></tr></thead><tbody>${body}</tbody></table></div>${tableRows.length > limit ? `<div style="text-align:center;margin-top:10px"><span data-savedvalidationmore style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};padding:5px 14px;font-size:9px">show ${Math.min(60, tableRows.length - limit)} more · ${tableRows.length - limit} left</span></div>` : ''}`;
-    }
     function savedValidationOutcomeDefinition(validation, key) {
-        return (validation.outcomeDefinitions || []).find(outcome => outcome.key === key) || { key, label: key, unit: 'number' };
+        return (validation.outcomeDefinitions || []).find(outcome => outcome.key === key)
+            || { key, label: key, unit: 'number' };
     }
     function savedValidationCurveValue(row, field, second) {
         const curve = row && row.actual && row.actual.retentionCurve;
@@ -5919,277 +5542,409 @@ const JarvisRetention = (function () {
         if (String(outcomeKey).startsWith('drop')) return fmtv(value, 1) + ' pp';
         return fmtv(value, 1) + '%';
     }
-    function savedValidationOutcomeCoordinate(value, outcome) {
-        if (value == null || !isFinite(+value)) return null;
-        if (outcome && outcome.transform === 'log10(views + 1)') return Math.log10(Math.max(0, +value) + 1);
-        if (outcome && outcome.transform === 'log10(value + 1)') return Math.log10(Math.max(0, +value) + 1);
-        return +value;
+    const SAVED_VALIDATION_PRIMARY_OUTCOMES = Object.freeze(['keep', 'ret5', 'averageRetention', 'views']);
+    function savedValidationLedgerMatrix(scope, outcomeKey) {
+        return scope && scope.ledgerOutcomeMatrix && scope.ledgerOutcomeMatrix[outcomeKey] || null;
     }
-    function savedValidationFeatureCoordinate(validation, row, definition, protocol) {
-        if (!definition) return null;
-        if (protocol === 'stored') {
-            const value = savedValidationStoredCell(validation, row, definition.key).value;
-            if (value == null || !isFinite(+value)) return null;
-            if (definition.unit === 'views') return Math.log10(Math.max(0, +value) + 1);
-            if (definition.unit === 'log10_views') return +value;
-            if (definition.target === 'outlier') return Math.log10(Math.max(0, +value) + 1);
-            return +value;
+    function savedValidationLedgerEntries(scope, outcomeKey) {
+        const matrix = savedValidationLedgerMatrix(scope, outcomeKey);
+        return matrix && (matrix.coordinates || matrix.features) || [];
+    }
+    function savedValidationLedgerColumn(validation, coordinateId) {
+        return validation && validation.coordinateRegistry
+            && (validation.coordinateRegistry.columns || []).find(column => column.id === coordinateId) || null;
+    }
+    function savedValidationLedgerEntry(scope, outcomeKey, coordinateId) {
+        return savedValidationLedgerEntries(scope, outcomeKey).find(entry => (
+            (entry.coordinateId || entry.id || entry.key) === coordinateId
+        )) || null;
+    }
+    function savedValidationFamilyMeta(column) {
+        const family = column && column.family || 'unknown';
+        const definitions = {
+            stored: {
+                label: 'Stored score',
+                color: C.amber,
+                summary: 'The exact number saved when this Short was originally scored.',
+                claim: 'Useful for replay and diagnosis. It is not blind proof when its fitted axis used labels from the same creator.',
+            },
+            videoHeldout: {
+                label: 'Video held out',
+                color: C.green,
+                summary: 'The deterministic fold containing this video was removed before fitting and calibration; other videos from the same creator may remain.',
+                claim: 'Tests a genuinely unseen video from known creator populations. This is not a chronological or unseen-creator test.',
+            },
+            accountHeldout: {
+                label: 'Account held out',
+                color: C.purple,
+                summary: 'Every video from this creator was removed before fitting and calibration.',
+                claim: 'Tests transfer to a creator the fitted private axis did not see. This is stricter, but creator-level certainty is limited by the number of accounts.',
+            },
+            videoForecast: {
+                label: 'Video-held-out forecast',
+                color: C.green,
+                summary: 'A calibrated model combines prior held-out coordinates while the evaluated video remains outside the fit.',
+                claim: 'A forecast, not another embedding direction.',
+            },
+            accountForecast: {
+                label: 'Account-held-out forecast',
+                color: C.purple,
+                summary: 'A calibrated model combines coordinates while the evaluated creator remains outside the fit.',
+                claim: 'The strictest transfer forecast currently available.',
+            },
+            observed: {
+                label: 'Observed outcome',
+                color: C.cyan,
+                summary: 'Measured truth joined to the video, such as actual keep rate or views.',
+                claim: 'This is an outcome to predict, never evidence that may predict itself.',
+            },
+            legacy: {
+                label: 'Legacy diagnostic',
+                color: C.faint,
+                summary: 'A historical calculation retained only so old screens and exports remain auditable.',
+                claim: 'Never use this as the canonical decision score.',
+            },
+        };
+        return definitions[family] || { label: family, color: C.faint, summary: 'Registered coordinate.', claim: '' };
+    }
+    function savedValidationInputMeaning(column) {
+        const meanings = {
+            visual: 'Visual input only: the sampled opening frames are embedded; transcript text is excluded.',
+            text: 'Text input only: the opening transcript is embedded; image pixels are excluded.',
+            together: 'Visual + text input: opening frames and transcript are embedded together.',
+            novelty: 'Novelty transform: distance or rarity is calculated from registered reference embeddings.',
+            combined: 'Combined model: multiple registered coordinates enter a separate calibrated forecast.',
+            outcome: 'Observed data: this value comes from measured channel performance, not an embedding.',
+            legacy: 'Legacy calculation retained for audit compatibility.',
+        };
+        return meanings[column && column.group] || 'The exact input is listed in the coordinate lineage below.';
+    }
+    function savedValidationTargetMeaning(column) {
+        const meanings = {
+            keep: 'Stayed-to-watch score: estimates the percentage of feed impressions that choose to keep watching.',
+            swipe: 'Swipe-away score: 100 minus stayed-to-watch.',
+            ret5: 'Five-second retention score: estimates the percentage still watching after five seconds.',
+            averageRetention: 'Average percentage viewed score: estimates how much of the full Short is watched on average.',
+            views: 'View-equivalent score: places the input on the public-corpus views direction and expresses its calibrated location in view units.',
+            realviews: 'Channel-scale forecast views: combines predicted keep, predicted five-second retention, and duration. It is derived, not a new embedding direction.',
+            outlier: 'Outlier score: estimates views relative to the creator or reference scale.',
+            gt10M: 'Over-10M score: estimates probability or class position for exceeding ten million views.',
+            hit10M: 'Over-10M outcome: whether measured views exceeded ten million.',
+            survival5: 'Observed normalized retention remaining at five seconds.',
+            survival10: 'Observed normalized retention remaining at ten seconds.',
+            survival20: 'Observed normalized retention remaining at twenty seconds.',
+            drop5: 'Observed percentage-point retention loss by five seconds.',
+            drop10: 'Observed percentage-point retention loss by ten seconds.',
+            drop20: 'Observed percentage-point retention loss by twenty seconds.',
+            outlierCurrent: 'Observed current views divided by subscribers.',
+        };
+        return meanings[column && column.target] || 'The registered target and formula are shown in the coordinate lineage.';
+    }
+    function savedValidationClassMeaning(column) {
+        const meanings = {
+            direct_embedding_axis: 'Direct embedding axis: a high-dimensional representation is projected onto one fitted direction.',
+            embedding_derived_transform: 'Derived score: a deterministic formula combines existing coordinates or metadata; this is not an additional embedding fit.',
+            combined_forecast: 'Forecast: an out-of-fold calibration model combines registered coordinates to predict an outcome.',
+            observed_outcome: 'Observed outcome: measured truth and therefore not a predictor.',
+            legacy_diagnostic: 'Legacy diagnostic: historical and excluded from canonical ranking.',
+        };
+        return meanings[column && column.valueClass] || 'Registered scalar coordinate.';
+    }
+    function savedValidationPlainMeaning(column, entry) {
+        const supplied = entry && entry.plainEnglish;
+        if (typeof supplied === 'string' && supplied.trim()) {
+            return `${savedValidationInputMeaning(column)} ${savedValidationTargetMeaning(column)} ${supplied} ${savedValidationClassMeaning(column)}`;
         }
-        if (definition.group === 'novelty') return null;
-        const index = (row.blindFeatureNames || []).indexOf(definition.key + '.raw');
-        const values = protocol === 'account' ? row.blindAccountHeldOut : row.blindVideoHeldOut;
-        const value = index >= 0 && values && values[index] != null ? +values[index] : null;
-        if (value == null || !isFinite(value)) return null;
-        return value;
+        if (supplied && typeof supplied === 'object') {
+            return [
+                savedValidationInputMeaning(column),
+                savedValidationTargetMeaning(column),
+                supplied.input,
+                supplied.signal,
+                supplied.validation,
+                supplied.classification,
+                savedValidationClassMeaning(column),
+            ].filter(Boolean).join(' ');
+        }
+        const family = savedValidationFamilyMeta(column);
+        return `${savedValidationInputMeaning(column)} ${savedValidationTargetMeaning(column)} ${family.summary} ${savedValidationClassMeaning(column)}`;
     }
-    function savedValidationMatrix(scope, protocol, outcomeKey) {
-        return scope && scope.outcomeMatrix && scope.outcomeMatrix[protocol] && scope.outcomeMatrix[protocol][outcomeKey];
+    function savedValidationMetricValue(metrics, key) {
+        if (!metrics) return null;
+        const value = metrics[key];
+        return value == null || !isFinite(+value) ? null : +value;
     }
-    function savedValidationEvidenceColor(value) {
-        if (value === 'row_level_signal') return C.green;
-        if (value === 'directional') return C.amber;
-        if (value === 'insufficient') return C.faint;
-        return C.red;
+    function savedValidationPredictiveMetric(entry, outcome) {
+        const metrics = entry && entry.metrics || {};
+        if (outcome && outcome.unit === 'binary') {
+            const auc = savedValidationMetricValue(metrics, 'oofAuc');
+            return { key: 'AUC', value: auc, strength: auc == null ? null : (auc - .5) * 2 };
+        }
+        const r2 = savedValidationMetricValue(metrics, 'oofR2');
+        return { key: 'R²', value: r2, strength: r2 };
     }
-    function savedValidationAssociationScatter(validation, rows, definition, protocol, outcome, metrics) {
+    function savedValidationMetricLine(entry, outcome) {
+        if (!entry || entry.available === false) return entry && entry.availabilityNote || 'Unavailable for this cohort.';
+        const metrics = entry.metrics || {};
+        if (entry.validationTier === 'outcome_not_predictor' || entry.predictorEligible === false) return 'Outcome only · not a predictor';
+        const q = metrics.qValue == null ? 'q —' : `global q ${fmtv(metrics.qValue, 4)}`;
+        if (outcome && outcome.unit === 'binary') {
+            return `OOF AUC ${fmtv(metrics.oofAuc, 3)} · Brier ${fmtv(metrics.oofBrier, 3)} · raw AUC ${fmtv(metrics.auc, 3)} · ${q} · n=${metrics.oofN || metrics.n || 0}`;
+        }
+        const error = outcome && (outcome.key === 'views' || outcome.key === 'outlier')
+            ? `${fmtv(metrics.oofMedianFactorError, 2)}× median error`
+            : `${fmtv(metrics.oofMae, 2)} pp MAE`;
+        return `OOF R² ${fmtv(metrics.oofR2, 3)} · OOF ρ ${fmtv(metrics.oofSpearman, 3)} · raw ρ ${fmtv(metrics.spearman, 3)} · ${error} · ${q} · n=${metrics.oofN || metrics.n || 0}`;
+    }
+    function savedValidationEvidenceMeta(entry, outcome) {
+        if (!entry || entry.available === false) return { label: 'unavailable', color: C.faint };
+        if (entry.validationTier === 'outcome_not_predictor' || entry.predictorEligible === false) return { label: 'truth, not predictor', color: C.cyan };
+        if (entry.family === 'stored') return { label: 'historical diagnostic, not blind', color: C.amber };
+        if (entry.family === 'legacy') return { label: 'deprecated diagnostic', color: C.faint };
+        const metric = savedValidationPredictiveMetric(entry, outcome);
+        if (metric.value == null) return { label: 'not enough data', color: C.faint };
+        if (outcome && outcome.unit === 'binary') {
+            if (metric.value >= .7) return { label: 'useful blind ranking', color: C.green };
+            if (metric.value >= .6) return { label: 'weak blind ranking', color: C.amber };
+            return { label: 'not predictive', color: C.red };
+        }
+        if (metric.value > .1) return { label: 'adds blind predictive value', color: C.green };
+        if (metric.value > 0) return { label: 'weak blind value', color: C.amber };
+        return { label: 'worse than baseline', color: C.red };
+    }
+    function savedValidationCoordinateValue(validation, row, coordinateId) {
+        const columns = validation && validation.coordinateRegistry && validation.coordinateRegistry.columns || [];
+        const index = columns.findIndex(column => column.id === coordinateId);
+        const values = row && row.scoreLedger && row.scoreLedger.values;
+        return index >= 0 && values && values[index] != null && isFinite(+values[index]) ? +values[index] : null;
+    }
+    function savedValidationPlotCoordinate(value, target) {
+        if (value == null || !isFinite(+value)) return null;
+        return ['views', 'realviews', 'outlier'].includes(target)
+            ? Math.log10(Math.max(0, +value) + 1)
+            : +value;
+    }
+    function savedValidationLedgerScatter(validation, rows, column, entry, outcome) {
         const points = rows.map(row => {
-            const rawActual = savedValidationOutcomeValue(row, outcome.key);
+            const score = savedValidationCoordinateValue(validation, row, column.id);
+            const actual = savedValidationOutcomeValue(row, outcome.key);
             return {
                 row,
-                rawActual,
-                x: savedValidationOutcomeCoordinate(rawActual, outcome),
-                y: savedValidationFeatureCoordinate(validation, row, definition, protocol),
-                displayedFeature: savedValidationPrediction(validation, row, definition, protocol),
+                score,
+                actual,
+                x: savedValidationPlotCoordinate(actual, outcome.key),
+                y: savedValidationPlotCoordinate(score, column.target),
             };
-        }).filter(point => point.x != null && point.y != null && isFinite(point.x) && isFinite(point.y));
-        if (!points.length) return note('No matched values are available for this exact feature and protocol.', C.amber);
+        }).filter(point => point.x != null && point.y != null);
+        if (!points.length) return note('No videos contain both this exact ledger coordinate and this observed outcome.', C.amber);
         let x0 = Math.min(...points.map(point => point.x)), x1 = Math.max(...points.map(point => point.x));
         let y0 = Math.min(...points.map(point => point.y)), y1 = Math.max(...points.map(point => point.y));
         if (x0 === x1) { x0 -= 1; x1 += 1; }
         if (y0 === y1) { y0 -= 1; y1 += 1; }
-        const xp = (x1 - x0) * .05, yp = (y1 - y0) * .08; x0 -= xp; x1 += xp; y0 -= yp; y1 += yp;
-        const W = 560, H = 320, left = 53, right = 16, top = 16, bottom = 42;
+        const xp = Math.max(.001, (x1 - x0) * .06), yp = Math.max(.001, (y1 - y0) * .08);
+        x0 -= xp; x1 += xp; y0 -= yp; y1 += yp;
+        const W = 600, H = 340, left = 58, right = 16, top = 17, bottom = 45;
         const X = value => left + (value - x0) / (x1 - x0) * (W - left - right);
         const Y = value => H - bottom - (value - y0) / (y1 - y0) * (H - top - bottom);
         let svg = `<rect x="${left}" y="${top}" width="${W - left - right}" height="${H - top - bottom}" fill="${C.card2}"/>`;
         for (let tick = 0; tick <= 4; tick++) {
             const x = left + tick / 4 * (W - left - right), y = top + tick / 4 * (H - top - bottom);
-            svg += `<line x1="${x}" y1="${top}" x2="${x}" y2="${H - bottom}" stroke="${C.border}" opacity=".6"/><line x1="${left}" y1="${y}" x2="${W - right}" y2="${y}" stroke="${C.border}" opacity=".6"/>`;
+            svg += `<line x1="${x}" y1="${top}" x2="${x}" y2="${H - bottom}" stroke="${C.border}"/><line x1="${left}" y1="${y}" x2="${W - right}" y2="${y}" stroke="${C.border}"/>`;
+            const xCoordinate = x0 + tick / 4 * (x1 - x0);
+            const yCoordinate = y1 - tick / 4 * (y1 - y0);
+            const xRaw = ['views', 'outlier'].includes(outcome.key) ? Math.max(0, 10 ** xCoordinate - 1) : xCoordinate;
+            const yRaw = ['views', 'realviews', 'outlier'].includes(column.target) ? Math.max(0, 10 ** yCoordinate - 1) : yCoordinate;
+            svg += `<text x="${x}" y="${H - bottom + 14}" text-anchor="${tick === 0 ? 'start' : tick === 4 ? 'end' : 'middle'}" fill="${C.faint}" font-size="7">${esc(savedValidationOutcomeFormat(xRaw, outcome.key))}</text>`;
+            svg += `<text x="${left - 5}" y="${y + 2.5}" text-anchor="end" fill="${C.faint}" font-size="7">${esc(savedLedgerFormat(yRaw, column))}</text>`;
         }
         points.forEach(point => {
+            const color = point.row.accountId === 'tyler' ? C.cyan : point.row.accountId === 'hafu' ? C.purple : C.amber;
+            const title = `${point.row.accountName} · ${point.row.title}\n${column.label}: ${savedLedgerFormat(point.score, column)}\nActual ${outcome.label}: ${savedValidationOutcomeFormat(point.actual, outcome.key)}\nCoordinate: ${column.id}`;
             const selected = st.savedValidationCurveVideo === point.row.id;
-            const color = point.row.accountId === 'tyler' ? C.cyan : C.purple;
-            const tooltip = `${point.row.accountName} · ${point.row.title}\nActual ${outcome.label}: ${savedValidationOutcomeFormat(point.rawActual, outcome.key)}\n${definition.key}: ${savedValidationFormat(point.displayedFeature, definition.target)}\nClick to inspect its observed and predicted retention curve.`;
-            const context = {
-                source: 'embedding',
-                target: outcome.key,
-                outcomeKey: outcome.key,
-                coordinateTarget: definition.target,
-                protocol,
-                featureKey: definition.key,
-            };
-            svg += `<circle data-savedvalidationrow="${esc(point.row.id)}" ${savedValidationPointAttributes(validation, point.row, context, point.displayedFeature, point.rawActual)} cx="${X(point.x).toFixed(1)}" cy="${Y(point.y).toFixed(1)}" r="${selected ? 6 : 3.7}" fill="${color}" stroke="${selected ? C.text : 'none'}" stroke-width="1.5" opacity="${selected ? 1 : .66}" style="cursor:pointer"><title>${esc(tooltip + `\nY coordinate ID: ${savedValidationCoordinateId(validation, context)}\nX outcome ID: shorts.observed.${outcome.key}`)}</title></circle>`;
+            svg += `<circle data-savedvalidationrow="${esc(point.row.id)}" cx="${X(point.x).toFixed(1)}" cy="${Y(point.y).toFixed(1)}" r="${selected ? 6 : 3.4}" fill="${color}" stroke="${selected ? C.text : 'none'}" stroke-width="1.5" opacity="${selected ? 1 : .68}" style="cursor:pointer"><title>${esc(title)}</title></circle>`;
         });
-        const transformNote = outcome.transform ? ` · X uses ${outcome.transform}` : outcome.derived ? ` · ${outcome.derived}` : '';
-        svg += `<text x="${W / 2}" y="${H - 6}" text-anchor="middle" fill="${C.mute}" font-size="9">observed ${esc(outcome.label)}${esc(transformNote)}</text><text x="11" y="${H / 2}" transform="rotate(-90 11 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">${esc(definition.key)} analysis coordinate</text>`;
-        const pooled = new Set(rows.map(row => row.accountId)).size > 1;
-        const selectedAuc = pooled && metrics.withinAccountAuc != null ? metrics.withinAccountAuc : metrics.auc;
-        const primary = outcome.unit === 'binary' ? `${pooled ? 'within-account ' : ''}AUC ${fmtv(selectedAuc, 3)}` : `ρ ${fmtv(metrics.primary, 3)}`;
-        return `<div style="border:1px solid ${C.border};background:${C.card};padding:10px"><div style="font-size:12px;font-weight:950;color:${C.text}">${esc(definition.key)} → ${esc(outcome.label)}</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin:3px 0 6px">${primary} · within-account ρ ${fmtv(metrics.withinAccountSpearman, 3)} · q ${fmtv(metrics.qValue, 4)} · n=${metrics.n || 0}. No equality line is drawn because the axes use different units.</div><div style="font-size:8px;color:${C.mute};margin-bottom:4px"><span style="color:${C.cyan}">● Tyler</span> · <span style="color:${C.purple}">● Hafu</span> · click a point</div><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${svg}</svg></div>`;
+        const xLog = ['views', 'outlier'].includes(outcome.key) ? ' · log scale' : '';
+        const yLog = ['views', 'realviews', 'outlier'].includes(column.target) ? ' · log scale' : '';
+        svg += `<text x="${W / 2}" y="${H - 7}" text-anchor="middle" fill="${C.mute}" font-size="9">observed ${esc(outcome.label)}${xLog}</text><text x="11" y="${H / 2}" transform="rotate(-90 11 ${H / 2})" text-anchor="middle" fill="${C.mute}" font-size="9">${esc(column.label)}${yLog}</text>`;
+        const selectedPoint = points.find(point => point.row.id === st.savedValidationCurveVideo);
+        const pointDetail = selectedPoint ? `<div data-savedvalidation-point-detail style="border-left:3px solid ${selectedPoint.row.accountId === 'tyler' ? C.cyan : C.purple};background:${C.card2};padding:8px;margin-top:7px"><div style="font-size:9px;color:${C.text};font-weight:950">${esc(selectedPoint.row.title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">${esc(column.id)} = <b style="color:${C.text}">${esc(savedLedgerFormat(selectedPoint.score, column))}</b><br>shorts.observed.${esc(outcome.key)} = <b style="color:${C.text}">${esc(savedValidationOutcomeFormat(selectedPoint.actual, outcome.key))}</b><br>${esc(selectedPoint.row.accountName)} · ${esc(selectedPoint.row.validationSource === 'predictor_blind_inputs_only' ? 'blind-only private row' : 'saved score + private outcomes')}</div>${selectedPoint.row.channelId ? `<span data-savedchannelvideo="${esc(selectedPoint.row.channelId)}:${esc(selectedPoint.row.id)}" style="display:inline-block;cursor:pointer;color:${C.accent};font-size:8px;margin-top:5px">open the original saved 21-map score card</span>` : ''}</div>` : `<div style="font-size:7.5px;color:${C.faint};margin-top:5px">Click a point to pin its exact coordinate value and measured outcome.</div>`;
+        return `<div data-savedvalidation-scatter style="border:1px solid ${C.border};background:${C.card};padding:10px;min-width:0"><div style="font-size:12px;color:${C.text};font-weight:950">Raw ${esc(column.label)} vs observed ${esc(outcome.label)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin:3px 0 2px">Dots show the uncalibrated ledger coordinate against measured truth. The statistics below evaluate the separately fitted held-out calibration, so they need not equal the raw point coordinates.</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin:0 0 6px">${esc(savedValidationMetricLine(entry, outcome))}</div><svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">${svg}</svg>${pointDetail}</div>`;
     }
-    function savedValidationCurveSvg(series, title, subtitle) {
-        const W = 620, H = 290, left = 48, right = 16, top = 18, bottom = 38;
-        const finiteValues = series.flatMap(line => (line.values || []).filter(value => value != null && isFinite(+value)).map(Number));
-        if (!finiteValues.length) return note('No retention curve is available for this selection.', C.amber);
-        let low = Math.min(...finiteValues), high = Math.max(...finiteValues);
-        const padding = Math.max(3, (high - low) * .12); low -= padding; high += padding;
-        if (low === high) { low -= 5; high += 5; }
-        const X = second => left + second / 20 * (W - left - right);
-        const Y = value => H - bottom - (+value - low) / (high - low) * (H - top - bottom);
-        let svg = `<rect x="${left}" y="${top}" width="${W - left - right}" height="${H - top - bottom}" fill="${C.card2}"/>`;
-        [0, 5, 10, 15, 20].forEach(second => {
-            svg += `<line x1="${X(second)}" y1="${top}" x2="${X(second)}" y2="${H - bottom}" stroke="${C.border}"/><text x="${X(second)}" y="${H - 20}" text-anchor="middle" fill="${C.faint}" font-size="8">${second}s</text>`;
-        });
-        for (let tick = 0; tick <= 4; tick++) {
-            const value = low + (high - low) * tick / 4, y = Y(value);
-            svg += `<line x1="${left}" y1="${y}" x2="${W - right}" y2="${y}" stroke="${C.border}" opacity=".7"/><text x="${left - 5}" y="${y + 3}" text-anchor="end" fill="${C.faint}" font-size="8">${value.toFixed(0)}%</text>`;
+    function savedValidationCoordinateFilter(column, entry, filter) {
+        if (filter === 'all') return true;
+        if (filter === 'strict') return ['videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast'].includes(column.family);
+        if (filter === 'stored') return column.family === 'stored';
+        if (filter === 'video') return ['videoHeldout', 'videoForecast'].includes(column.family);
+        if (filter === 'account') return ['accountHeldout', 'accountForecast'].includes(column.family);
+        if (filter === 'derived') return column.valueClass === 'embedding_derived_transform';
+        if (filter === 'forecast') return column.valueClass === 'combined_forecast';
+        if (filter === 'outcome') return column.family === 'observed';
+        if (filter === 'legacy') return column.family === 'legacy';
+        return entry && entry.validationTier === filter;
+    }
+    function savedValidationHeatCell(entry, outcome, coordinateId) {
+        if (entry && (entry.validationTier === 'outcome_not_predictor' || entry.predictorEligible === false)) {
+            return `<td data-savedvalidationcell data-savedvalidationcoordinate="${esc(coordinateId)}" data-savedvalidationoutcome="${esc(outcome.key)}" style="padding:6px;border-left:1px solid ${C.border};background:${C.cyan}09;color:${C.cyan};cursor:pointer;font-weight:900">TRUTH<div style="font-size:6.5px;color:${C.dim}">not predictor</div></td>`;
         }
-        series.forEach(line => {
-            let path = '', drawing = false;
-            (line.values || []).forEach((value, second) => {
-                if (value == null || !isFinite(+value)) { drawing = false; return; }
-                path += `${drawing ? 'L' : 'M'}${X(second).toFixed(1)},${Y(value).toFixed(1)} `;
-                drawing = true;
-            });
-            svg += `<path d="${path}" fill="none" stroke="${line.color}" stroke-width="${line.width || 2.2}" ${line.dash ? `stroke-dasharray="${line.dash}"` : ''}/>`;
-        });
-        const legend = series.map(line => `<span style="color:${line.color}">${line.dash ? '┄' : '●'} ${esc(line.label)}</span>`).join(' · ');
-        return `<div style="border:1px solid ${C.border};background:${C.card};padding:9px"><div style="font-size:11px;font-weight:950;color:${C.text}">${esc(title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.4;margin:2px 0">${esc(subtitle || '')}</div><div style="font-size:8px;color:${C.mute};margin-bottom:4px">${legend}</div><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${svg}</svg></div>`;
-    }
-    function savedValidationAverageCurve(rows, accessor) {
-        return Array.from({ length: 21 }, (_, second) => {
-            const values = rows.map(row => accessor(row, second)).filter(value => value != null && isFinite(+value)).map(Number);
-            return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
-        });
-    }
-    function savedValidationRetentionPanel(rows, scope, protocol) {
-        const summary = scope && scope.retentionForecasts && scope.retentionForecasts[protocol] || {};
-        const actualMean = savedValidationAverageCurve(rows, (row, second) => savedValidationCurveValue(row, 'normalized', second));
-        const predictedMean = savedValidationAverageCurve(rows, (row, second) => {
-            const curve = row.predictions && row.predictions.score21 && row.predictions.score21[protocol] && row.predictions.score21[protocol].retentionCurve;
-            return curve && curve[second];
-        });
-        const baselineMean = savedValidationAverageCurve(rows, (row, second) => {
-            const curve = row.predictions && row.predictions.score21Baseline && row.predictions.score21Baseline[protocol] && row.predictions.score21Baseline[protocol].retentionCurve;
-            return curve && curve[second];
-        });
-        const eligibleRows = rows.filter(row => row.actual && row.actual.retentionCurve);
-        let selected = eligibleRows.find(row => row.id === st.savedValidationCurveVideo);
-        if (!selected) selected = eligibleRows[0];
-        if (selected) st.savedValidationCurveVideo = selected.id;
-        const selectedForecast = selected && selected.predictions && selected.predictions.score21 && selected.predictions.score21[protocol];
-        const selectedBaseline = selected && selected.predictions && selected.predictions.score21Baseline && selected.predictions.score21Baseline[protocol];
-        const checkpoints = [5, 10, 20].map(second => {
-            const metric = (summary.bySecond || []).find(item => +item.second === second);
-            return `<div style="background:${C.card2};border-top:2px solid ${C.green};padding:8px"><div style="font-size:8px;color:${C.mute}">${second}s normalized survival</div><div style="font-size:16px;font-weight:950;color:${C.text}">${metric ? fmtv(metric.metrics.mae, 1) + ' pp MAE' : '—'}</div><div style="font-size:8px;color:${C.dim}">R² ${metric ? fmtv(metric.metrics.r2, 3) : '—'} · ρ ${metric ? fmtv(metric.metrics.spearman, 3) : '—'} · n=${metric ? metric.metrics.n || 0 : 0}</div></div>`;
-        }).join('');
-        const aggregate = savedValidationCurveSvg([
-            { label: 'mean observed normalized curve', values: actualMean, color: C.cyan },
-            { label: 'mean held-out prediction', values: predictedMean, color: C.green },
-            { label: 'training-fold mean baseline', values: baselineMean, color: C.mute, dash: '5 4' },
-        ], 'Observed versus predicted retention · aggregate', 'Each observed curve is divided by its own opening value. The model is evaluated only at seconds the source video actually reaches.');
-        let selectedCharts = '';
-        if (selected) {
-            selectedCharts = `<div style="margin:12px 0 5px"><div style="font-size:12px;font-weight:950;color:${C.text}">${esc(selected.title)}</div><div style="font-size:8px;color:${C.mute}">${esc(selected.accountName)} · opening retention ${fmtv(selected.actual.retentionCurve.opening, 1)}% · ${selected.actual.retentionCurve.sourcePoints} source points over ${fmtv(selected.actual.retentionCurve.sourceDuration, 1)}s</div></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr));gap:9px">
-              ${savedValidationCurveSvg([{ label: 'raw observed YouTube curve', values: selected.actual.retentionCurve.observed, color: C.cyan }], 'Raw observed curve', 'This includes replay inflation. It is measured data, not a prediction.')}
-              ${savedValidationCurveSvg([
-                  { label: 'observed normalized', values: selected.actual.retentionCurve.normalized, color: C.cyan },
-                  { label: `${protocol} held-out prediction`, values: selectedForecast && selectedForecast.retentionCurve, color: C.green },
-                  { label: 'training-fold mean baseline', values: selectedBaseline && selectedBaseline.retentionCurve, color: C.mute, dash: '5 4' },
-              ], 'Same video · normalized actual vs prediction', 'The prediction uses only the 9 creator-excluded public views, outlier, and 10M axes. No observed point from this video is fed into its forecast.')}
-            </div>`;
-        }
-        return `<div style="font-size:13px;font-weight:950;color:${C.text};margin:14px 0 3px">Retention path · every measured second through 20</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-bottom:8px">This answers “how much retention will drop?” directly. It preserves the raw observed curve, then separately normalizes replay inflation so actual and forecast both begin at 100. ${esc(summary.actualDefinition || '')}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:7px;margin-bottom:9px"><div style="background:${C.card2};border-top:2px solid ${C.cyan};padding:8px"><div style="font-size:8px;color:${C.mute}">complete curves</div><div style="font-size:17px;font-weight:950;color:${C.text}">${summary.curves || 0}</div><div style="font-size:8px;color:${C.dim}">through 20 seconds</div></div><div style="background:${C.card2};border-top:2px solid ${C.green};padding:8px"><div style="font-size:8px;color:${C.mute}">all-second error</div><div style="font-size:17px;font-weight:950;color:${C.text}">${fmtv(summary.meanAbsolutePointError, 1)} pp</div><div style="font-size:8px;color:${C.dim}">${(summary.pointComparisons || 0).toLocaleString()} observed point comparisons</div></div>${checkpoints}</div>${aggregate}${selectedCharts}`;
-    }
-    function savedValidationLineage(validation, scopeKey, protocol, definition, outcome, rows) {
-        const pipeline = validation.featureContract && validation.featureContract.pipeline || {};
-        const provenanceKey = definition && definition.group === 'novelty' ? 'novelty' : definition && definition.target;
-        const provenance = validation.featureContract && validation.featureContract.provenanceByTarget && validation.featureContract.provenanceByTarget[provenanceKey] || {};
-        const hashes = [...new Set(rows.map(row => row.inputManifest && row.inputManifest.steer_artifact_sha256).filter(Boolean))];
-        const artifactLabel = hashes.length === 1 ? hashes[0].slice(0, 12) : hashes.length ? `${hashes.length} historical hashes` : 'not persisted on matched rows';
-        const cards = [
-            ['1 · input', `${pipeline.sourceWindow || 'first 5 seconds'} · visual montage, transcript, and both are independent channels`],
-            ['2 · representation', `${pipeline.embeddingModel || 'gemini-embedding-2'} · ${(pipeline.embeddingDimensions || 1536).toLocaleString()} dimensions`],
-            ['3 · score coordinate', `${definition ? definition.key : 'select a score'} · ${provenance.axisFitPopulation || 'provenance unavailable'} Calibration: ${provenance.calibrationPopulation || 'unavailable'} Artifact: ${artifactLabel}.`],
-            ['4 · test outcome', `${outcome.label} · ${scopeKey === 'pooled' ? 'Tyler and Hafu shown together, with within-account association reported' : scopeKey + ' only'} · ${protocol === 'stored' ? 'historical stored diagnostic' : protocol === 'video' ? 'video-held-out reconstruction' : 'rowwise account-held-out reconstruction'}`],
-        ];
-        return `<div style="font-size:12px;font-weight:950;color:${C.text};margin:12px 0 5px">Where this number came from</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:7px">${cards.map(([label, body]) => `<div style="background:${C.card2};border-top:2px solid ${C.cyan};padding:9px"><div style="font-size:8px;font-weight:950;color:${C.cyan};text-transform:uppercase">${esc(label)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px">${esc(body)}</div></div>`).join('')}</div>${provenance.warning ? `<div style="font-size:8px;color:${C.amber};line-height:1.45;margin-top:6px">${esc(provenance.warning)}</div>` : ''}`;
+        if (!entry || entry.available === false) return `<td data-savedvalidationcell data-savedvalidationcoordinate="${esc(coordinateId)}" data-savedvalidationoutcome="${esc(outcome.key)}" style="padding:6px;border-left:1px solid ${C.border};color:${C.faint};cursor:pointer">—<div style="font-size:6.5px">no matched values</div></td>`;
+        const evidence = savedValidationEvidenceMeta(entry, outcome);
+        const metric = savedValidationPredictiveMetric(entry, outcome);
+        const rawRho = entry.metrics && entry.metrics.spearman;
+        return `<td data-savedvalidationcell data-savedvalidationcoordinate="${esc(coordinateId)}" data-savedvalidationoutcome="${esc(outcome.key)}" style="padding:6px;border-left:1px solid ${C.border};background:${evidence.color}09;cursor:pointer"><div style="font-size:10px;color:${evidence.color};font-weight:950">${metric.value == null ? '—' : `${metric.key} ${fmtv(metric.value, 2)}`}</div><div style="font-size:6.8px;color:${C.dim}">ρ ${fmtv(rawRho, 2)} · n=${entry.metrics && (entry.metrics.oofN || entry.metrics.n) || 0}</div></td>`;
     }
     function renderSavedChannelValidation(detail) {
         const validation = SAVEDCHANNELVALIDATION;
-        if (!validation) { window.setTimeout(() => loadSavedChannelValidation(), 0); return `<div style="padding:28px;text-align:center;color:${C.dim}">Preparing Tyler + Hafu leakage audit…</div>`; }
-        if (validation.loading) return `<div style="padding:28px;text-align:center;color:${C.cyan}">Joining private outcomes to saved embeddings and loading blind folds…</div>`;
+        if (!validation) { window.setTimeout(() => loadSavedChannelValidation(), 0); return `<div style="padding:28px;text-align:center;color:${C.dim}">Preparing the canonical ledger validation…</div>`; }
+        if (validation.loading) return `<div style="padding:28px;text-align:center;color:${C.cyan}">Joining the 103-coordinate ledger to measured outcomes…</div>`;
         if (validation.error) return `<div style="padding:18px;color:${C.red}">${esc(validation.error)} <span data-savedvalidationreload style="cursor:pointer;text-decoration:underline;color:${C.accent}">retry</span></div>`;
-        const scopes = validation.scopes || {}, scopeKey = scopes[st.savedValidationScope] ? st.savedValidationScope : 'pooled', scope = scopes[scopeKey];
-        const protocol = ['stored', 'video', 'account'].includes(st.savedValidationProtocol) ? st.savedValidationProtocol : 'video';
+        const registry = validation.coordinateRegistry || {}, allColumns = registry.columns || [];
+        const totals = registry.totals || {};
+        const scopes = validation.scopes || {};
+        const scopeKey = scopes[st.savedValidationScope] ? st.savedValidationScope : 'pooled';
+        const scope = scopes[scopeKey] || {};
         const rows = savedValidationRows(validation, scopeKey);
         const outcomes = validation.outcomeDefinitions || [];
-        const target = outcomes.some(outcome => outcome.key === st.savedValidationTarget) ? st.savedValidationTarget : 'keep';
-        const outcome = savedValidationOutcomeDefinition(validation, target);
-        const matrix = savedValidationMatrix(scope, protocol, target) || { features: [] };
-        let matrixEntry = (matrix.features || []).find(item => item.key === st.savedValidationFeature && item.available);
-        if (!matrixEntry) matrixEntry = (matrix.features || []).find(item => item.key === `together.${target}` && item.available)
-            || (matrix.features || []).find(item => item.available && item.metrics && item.metrics.n);
-        const definition = matrixEntry && savedValidationDefinition(validation, matrixEntry.key);
-        if (definition) st.savedValidationFeature = definition.key;
-        const artifact = validation.artifact || {}, audit = validation.leakageAudit || {};
-        const scopeButton = (key, label) => `<span data-savedvalidationscope="${key}" style="cursor:pointer;border-bottom:2px solid ${scopeKey === key ? C.cyan : 'transparent'};color:${scopeKey === key ? C.text : C.dim};padding:5px 10px;font-size:10px;font-weight:900">${label} <b style="color:${scopeKey === key ? C.cyan : C.faint}">${(scopes[key] && scopes[key].n) || 0}</b></span>`;
-        const protocolMeta = {
-            stored: ['Stored 21 · diagnostic', C.amber, 'The exact 21 values shown when each video was scored. Tyler keep and 5-second axes used Tyler labels, so this view describes historical scores but cannot prove generalization.'],
-            video: ['15 direct axes + 3 derived scores · video held out', C.green, 'The evaluated video is removed from target-aligned fitting. Keep, ret5, views, outlier, and 10M are direct axes per modality; realistic views is derived from held-out keep, ret5, and duration. The three stored novelty outputs stay visibly unavailable.'],
-            account: ['15 direct axes + 3 derived scores · account external', C.purple, 'Each row uses private target axes built without its account; the three public axes per modality are shared creator-excluded fits, and realistic views is derived. With only two evaluation creators, this remains a transfer stress test rather than a creator-population estimate.'],
-        };
-        const protocolButtons = Object.entries(protocolMeta).map(([key, meta]) => `<span data-savedvalidationprotocol="${key}" style="cursor:pointer;border:1px solid ${protocol === key ? meta[1] : C.border};background:${protocol === key ? meta[1] + '14' : 'transparent'};color:${protocol === key ? meta[1] : C.dim};padding:5px 8px;font-size:9px;font-weight:800">${esc(meta[0])}</span>`).join('');
-        const targetButtons = outcomes.map(item => `<span data-savedvalidationtarget="${esc(item.key)}" title="${esc(item.derived || item.transform || item.label)}" style="cursor:pointer;border:1px solid ${target === item.key ? C.cyan : C.border};background:${target === item.key ? C.cyan + '12' : 'transparent'};color:${target === item.key ? C.cyan : C.dim};padding:4px 7px;font-size:8px">${esc(item.label)}</span>`).join('');
-        const joins = (validation.joinSummary || []).map(item => `${esc(item.accountName)} ${item.matchedRows}/${item.privateRows}`).join(' · ');
-        const validationCreatorCount = (audit.validationCreatorChannelIds || []).length;
-        const creatorAudit = `${validationCreatorCount} validation creator${validationCreatorCount === 1 ? '' : 's'} · ${audit.validationCreatorVideoCountExcluded == null ? '—' : (+audit.validationCreatorVideoCountExcluded).toLocaleString()} additional creator-resolved videos excluded · ${audit.validationCreatorAxisTrainingIdOverlapReported == null ? '—' : audit.validationCreatorAxisTrainingIdOverlapReported} creator overlap`;
-        const forecast = scope.score21Forecasts && scope.score21Forecasts[protocol] || {};
-        const forecastMetric = forecast[target];
-        const forecastSummary = !forecastMetric ? 'No direct fold-fitted forecast for this derived checkpoint.'
-            : target === 'hit10M'
-                ? `AUC ${fmtv(forecastMetric.auc, 3)} · Brier ${fmtv(forecastMetric.brier, 3)} · n=${forecastMetric.n || 0}`
-                : `${target === 'views' || target === 'outlier' ? fmtv(forecastMetric.medianFactorError, 2) + '× median error' : fmtv(forecastMetric.mae, 1) + ' pp MAE'} · R² ${fmtv(forecastMetric.r2, 3)} · ρ ${fmtv(forecastMetric.spearman, 3)} · n=${forecastMetric.n || 0}`;
-        const bestEntries = ['keep', 'ret5', 'averageRetention', 'views', 'hit10M', 'drop20'].map(key => {
-            const candidateMatrix = savedValidationMatrix(scope, protocol, key);
-            const candidate = candidateMatrix && (candidateMatrix.features || []).find(item => item.available && item.metrics && item.metrics.n);
-            const candidateOutcome = savedValidationOutcomeDefinition(validation, key);
-            const metrics = candidate && candidate.metrics || {};
-            const color = savedValidationEvidenceColor(metrics.evidence);
-            const statistic = candidateOutcome.unit === 'binary'
-                ? `${scopeKey === 'pooled' ? 'within AUC' : 'AUC'} ${fmtv(scopeKey === 'pooled' ? metrics.withinAccountAuc : metrics.auc, 3)}`
-                : `ρ ${fmtv(metrics.primary, 3)}`;
-            return `<div style="background:${C.card2};border-top:3px solid ${color};padding:9px;min-width:0"><div style="font-size:8px;color:${C.mute};text-transform:uppercase">${esc(candidateOutcome.label)}</div><div style="font-size:17px;color:${color};font-weight:950;margin-top:2px">${statistic}</div><div style="font-size:8px;color:${C.text};font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${candidate ? esc(candidate.key) : 'no available score'}</div><div style="font-size:7.5px;color:${C.dim};line-height:1.4;margin-top:3px">${candidate ? esc(String(metrics.evidence || '').replace(/_/g, ' ')) + ` · q ${fmtv(metrics.qValue, 4)} · n=${metrics.n || 0}` : '—'}</div></div>`;
+        const outcome = savedValidationOutcomeDefinition(validation, outcomes.some(item => item.key === st.savedValidationTarget) ? st.savedValidationTarget : 'keep');
+        const outcomeMap = new Map(outcomes.map(item => [item.key, item]));
+        const heatmapOutcomes = outcomes;
+        const selectedMatrix = savedValidationLedgerMatrix(scope, outcome.key);
+        if (!selectedMatrix) return note('This validation artifact predates the canonical 103-coordinate matrix. Rebuild it from the current sources.', C.amber);
+        const selectedEntries = savedValidationLedgerEntries(scope, outcome.key);
+        let selectedEntry = selectedEntries.find(entry => (entry.coordinateId || entry.id || entry.key) === st.savedValidationFeature);
+        if (!selectedEntry || selectedEntry.available === false) {
+            selectedEntry = selectedEntries.find(entry => (
+                ['videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast'].includes(entry.family)
+                && entry.available !== false
+            )) || selectedEntries.find(entry => entry.available !== false);
+        }
+        const selectedId = selectedEntry && (selectedEntry.coordinateId || selectedEntry.id || selectedEntry.key);
+        const selectedColumn = savedValidationLedgerColumn(validation, selectedId);
+        if (selectedId) st.savedValidationFeature = selectedId;
+        const audit = validation.leakageAudit || {}, ledgerAudit = validation.ledgerAudit || {};
+        const filter = st.savedValidationFamily || 'all';
+        const query = String(st.savedValidationQuery || '').trim().toLowerCase();
+        const filterOptions = [
+            ['all', 'All 103'],
+            ['strict', 'Blind predictors'],
+            ['video', 'Video held out'],
+            ['account', 'Account held out'],
+            ['stored', 'Stored'],
+            ['derived', 'Derived'],
+            ['forecast', 'Forecasts'],
+            ['outcome', 'Outcomes'],
+            ['legacy', 'Legacy'],
+        ];
+        const selectedById = new Map(selectedEntries.map(entry => [entry.coordinateId || entry.id || entry.key, entry]));
+        const axisAddresses = new Map();
+        allColumns.forEach(column => {
+            const fingerprint = column.coordinateIdentity && column.coordinateIdentity.axisFingerprint;
+            if (!fingerprint || column.valueClass !== 'direct_embedding_axis') return;
+            if (!axisAddresses.has(fingerprint)) axisAddresses.set(fingerprint, []);
+            axisAddresses.get(fingerprint).push(column.id);
+        });
+        const visibleColumns = allColumns.filter(column => {
+            const entry = selectedById.get(column.id);
+            if (!savedValidationCoordinateFilter(column, entry, filter)) return false;
+            if (!query) return true;
+            return [column.id, column.label, column.family, column.group, column.target, savedValidationPlainMeaning(column, entry)]
+                .join(' ').toLowerCase().includes(query);
+        });
+        const strictFamilies = new Set(['videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast']);
+        const blindColumnCount = allColumns.filter(column => strictFamilies.has(column.family)).length;
+        const aliasColumnCount = totals.shortsDirectAxisAliasColumns == null ? 0 : +totals.shortsDirectAxisAliasColumns;
+        const uniqueBlindPredictionCount = Math.max(0, blindColumnCount - aliasColumnCount);
+        const diagnosticCount = allColumns.filter(column => ['stored', 'legacy'].includes(column.family)).length;
+        const observedCount = allColumns.filter(column => column.family === 'observed').length;
+        const summaryCards = SAVED_VALIDATION_PRIMARY_OUTCOMES.map(outcomeKey => {
+            const candidateOutcome = outcomeMap.get(outcomeKey);
+            const candidates = savedValidationLedgerEntries(scope, outcomeKey).filter(entry => (
+                strictFamilies.has(entry.family) && entry.available !== false && entry.predictorEligible !== false
+            ));
+            candidates.sort((left, right) => {
+                const a = savedValidationPredictiveMetric(left, candidateOutcome).strength;
+                const b = savedValidationPredictiveMetric(right, candidateOutcome).strength;
+                return (b == null ? -Infinity : b) - (a == null ? -Infinity : a);
+            });
+            const best = candidates[0], metric = best && savedValidationPredictiveMetric(best, candidateOutcome);
+            const evidence = savedValidationEvidenceMeta(best, candidateOutcome);
+            return `<div style="border-top:3px solid ${evidence.color};background:${C.card2};padding:9px;min-width:0"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">${esc(candidateOutcome && candidateOutcome.label || outcomeKey)}</div><div style="font-size:18px;color:${evidence.color};font-weight:950">${best && metric.value != null ? `${metric.key} ${fmtv(metric.value, 3)}` : 'not enough data'}</div><div style="font-size:8px;color:${C.text};font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${best ? esc(best.label || best.coordinateId) : '—'}</div><div style="font-size:7px;color:${C.dim};margin-top:2px">${best ? esc(best.coordinateId) : ''}</div></div>`;
         }).join('');
-        const matrixRows = (matrix.features || []).map(entry => {
-            const metrics = entry.metrics || {}, selected = definition && definition.key === entry.key;
-            const primary = metrics.primary, width = primary == null ? 0 : Math.min(50, Math.abs(+primary) * 50);
-            const left = primary == null || primary >= 0 ? 50 : 50 - width;
-            const color = savedValidationEvidenceColor(metrics.evidence);
-            const statistic = outcome.unit === 'binary'
-                ? `${scopeKey === 'pooled' ? 'within AUC' : 'AUC'} ${fmtv(scopeKey === 'pooled' ? metrics.withinAccountAuc : metrics.auc, 3)}`
-                : `ρ ${fmtv(metrics.primary, 3)}`;
-            return `<div data-savedvalidationfeature="${esc(entry.key)}" style="cursor:${entry.available ? 'pointer' : 'default'};display:grid;grid-template-columns:minmax(145px,1.15fr) minmax(120px,.9fr) minmax(120px,.8fr) minmax(170px,1.2fr);gap:8px;align-items:center;padding:7px;border:1px solid ${selected ? C.cyan : C.border};background:${selected ? C.cyan + '0c' : C.card2};opacity:${entry.available ? 1 : .55}">
-              <div style="min-width:0"><div style="font-size:9px;color:${savedChannelFeatureColor(entry.group)};font-weight:950;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(entry.key)}</div><div style="font-size:7.5px;color:${C.faint}">${entry.available ? esc(entry.label) : esc(entry.availabilityNote || 'unavailable')}</div></div>
-              <div style="position:relative;height:14px;background:${C.card};border:1px solid ${C.border};overflow:hidden"><span style="position:absolute;left:50%;top:0;bottom:0;border-left:1px solid ${C.mute}"></span>${primary != null ? `<span style="position:absolute;left:${left}%;width:${width}%;top:2px;bottom:2px;background:${primary >= 0 ? C.green : C.red}"></span>` : ''}</div>
-              <div><div style="font-size:11px;font-weight:950;color:${color}">${statistic}</div><div style="font-size:7.5px;color:${C.dim}">within ρ ${fmtv(metrics.withinAccountSpearman, 3)} · n=${metrics.n || 0}</div></div>
-              <div style="font-size:7.5px;color:${C.dim};line-height:1.4"><b style="color:${color}">${esc(String(metrics.evidence || 'unavailable').replace(/_/g, ' '))}</b> · q ${fmtv(metrics.qValue, 4)}<br>${esc(metrics.direction || entry.availabilityNote || '')}</div></div>`;
+        const familyButtons = filterOptions.map(([key, label]) => {
+            const count = allColumns.filter(column => savedValidationCoordinateFilter(column, selectedById.get(column.id), key)).length;
+            return `<span data-savedvalidationfamily="${key}" style="cursor:pointer;border:1px solid ${filter === key ? C.cyan : C.border};background:${filter === key ? C.cyan + '12' : 'transparent'};color:${filter === key ? C.cyan : C.dim};padding:4px 7px;font-size:8px;font-weight:850;white-space:nowrap">${esc(label)} <b>${count}</b></span>`;
         }).join('');
-        const selectedScatter = definition && matrixEntry
-            ? savedValidationAssociationScatter(validation, rows, definition, protocol, outcome, matrixEntry.metrics || {})
-            : note('Select an available score from the matrix.', C.amber);
-        const provenanceKey = definition && (definition.group === 'novelty' ? 'novelty' : definition.target);
-        const provenance = validation.featureContract && validation.featureContract.provenanceByTarget && validation.featureContract.provenanceByTarget[provenanceKey] || {};
-        const selectedEvidence = definition ? `<div style="background:${C.card2};border-top:3px solid ${savedChannelFeatureColor(definition.group)};padding:11px"><div style="font-size:8px;color:${C.mute};text-transform:uppercase">selected score · exact meaning</div><div style="font-size:15px;font-weight:950;color:${C.text};margin:3px 0">${esc(definition.key)}</div><div style="font-size:9px;color:${C.dim};line-height:1.55">${esc(definition.note || definition.label)}<br><b style="color:${C.text}">Axis fit:</b> ${esc(provenance.axisFitPopulation || 'not documented')}<br><b style="color:${C.text}">Calibration:</b> ${esc(provenance.calibrationPopulation || 'not documented')}<br><b style="color:${C.text}">Compared here with:</b> ${esc(outcome.label)}${outcome.transform || outcome.derived ? ` using ${esc(outcome.transform || outcome.derived)}` : ''}</div><div style="font-size:8px;color:${C.amber};line-height:1.45;margin-top:7px">${esc(provenance.warning || '')}</div></div>` : '';
-        const pairCoordinateId = definition ? savedValidationCoordinateId(validation, { protocol, featureKey: definition.key }) : 'shorts.unknown';
-        const selectedPair = definition ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:7px;margin:8px 0"><div style="border-left:3px solid ${savedChannelFeatureColor(definition.group)};background:${C.card2};padding:9px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Y · score coordinate being plotted</div><div style="font-size:11px;color:${C.text};font-weight:950;word-break:break-all">${esc(pairCoordinateId)}</div><div style="font-size:8px;color:${C.dim};margin-top:2px">${esc(definition.label)} · formatted as ${esc(definition.target)}</div></div><div style="border-left:3px solid ${C.cyan};background:${C.card2};padding:9px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">X · independently observed outcome</div><div style="font-size:11px;color:${C.text};font-weight:950;word-break:break-all">shorts.observed.${esc(outcome.key)}</div><div style="font-size:8px;color:${C.dim};margin-top:2px">${esc(outcome.label)}${outcome.transform || outcome.derived ? ` · ${esc(outcome.transform || outcome.derived)}` : ''}</div></div></div>` : '';
-        const auditRows = rows.slice().sort((left, right) => (+right.actual.viewsCurrent || 0) - (+left.actual.viewsCurrent || 0));
-        const limit = st.savedValidationShow || 60;
-        const auditBody = auditRows.slice(0, limit).map(row => {
-            const selectedValue = definition ? savedValidationPrediction(validation, row, definition, protocol) : null;
-            const actualValue = savedValidationOutcomeValue(row, target);
-            const rowForecast = row.predictions && row.predictions.score21 && row.predictions.score21[protocol] || {};
-            const curveActual = savedValidationCurveValue(row, 'normalized', 20);
-            const curvePredicted = rowForecast.retentionCurve && rowForecast.retentionCurve[20];
-            const expanded = st.savedValidationExpanded === row.id;
-            const openAttrs = definition ? savedValidationPointAttributes(validation, row, {
-                source: 'embedding',
-                target,
-                outcomeKey: target,
-                coordinateTarget: definition.target,
-                protocol,
-                featureKey: definition.key,
-            }, selectedValue, actualValue) : '';
-            return `<tr style="border-top:1px solid ${C.border};vertical-align:top"><td style="padding:7px;min-width:210px"><span data-savedvalidationrow="${esc(row.id)}" style="cursor:pointer;color:${C.text};font-weight:900">${esc(row.title)}</span><div style="font-size:7.5px;color:${row.accountId === 'tyler' ? C.cyan : C.purple};margin-top:2px">${esc(row.accountName)} · click title for curve</div><div style="display:flex;gap:7px;margin-top:3px"><span ${openAttrs} style="cursor:pointer;color:${C.accent};font-size:8px">open original 21 graphs</span><span data-savedvalidationexpand="${esc(row.id)}" style="cursor:pointer;color:${C.dim};font-size:8px">${expanded ? 'hide all values' : 'show all 21 + blind values'}</span></div></td><td>${savedValidationOutcomeFormat(actualValue, target)}</td><td><b style="color:${savedChannelFeatureColor(definition && definition.group)}">${definition ? savedValidationFormat(selectedValue, definition.target) : '—'}</b><div style="font-size:7px;color:${C.faint}">${definition ? esc(definition.key) : ''}</div></td><td>${savedValidationFormat(row.actual.keep, 'keep')} → ${savedValidationFormat(rowForecast.keep, 'keep')}</td><td>${savedValidationFormat(row.actual.ret5, 'ret5')} → ${savedValidationFormat(rowForecast.ret5, 'ret5')}</td><td>${savedValidationFormat(row.actual.averageRetention, 'keep')} → ${savedValidationFormat(rowForecast.averageRetention, 'keep')}</td><td>${savedValidationFormat(row.actual.viewsCurrent, 'views')} → ${savedValidationFormat(rowForecast.views, 'views')}</td><td>${savedValidationOutcomeFormat(curveActual, 'survival20')} → ${savedValidationOutcomeFormat(curvePredicted, 'survival20')}</td></tr>${expanded ? savedValidationExpandedRow(validation, row, protocol) : ''}`;
+        const outcomeButtons = outcomes.map(item => `<span data-savedvalidationtarget="${esc(item.key)}" title="${esc(item.derived || item.transform || item.label)}" style="cursor:pointer;border:1px solid ${outcome.key === item.key ? C.cyan : C.border};background:${outcome.key === item.key ? C.cyan + '12' : 'transparent'};color:${outcome.key === item.key ? C.cyan : C.dim};padding:4px 7px;font-size:8px">${esc(item.label)}</span>`).join('');
+        const heatmapHeader = heatmapOutcomes.map(item => `<th style="padding:7px;min-width:130px;text-align:left"><div>${esc(item.label)}</div><div style="font-size:6.5px;color:${C.faint};font-weight:500">shorts.observed.${esc(item.key)}</div></th>`).join('');
+        const heatmapRows = visibleColumns.map(column => {
+            const entry = selectedById.get(column.id);
+            const family = savedValidationFamilyMeta(column);
+            const selected = selectedId === column.id;
+            const fingerprint = column.coordinateIdentity && column.coordinateIdentity.axisFingerprint;
+            const aliases = fingerprint && axisAddresses.get(fingerprint) || [];
+            const aliasLabel = aliases.length > 1 ? ` · shared-axis alias (${aliases.length} ledger addresses)` : '';
+            return `<tr data-savedvalidationfeature="${esc(column.id)}" style="border-top:1px solid ${selected ? family.color : C.border};background:${selected ? family.color + '09' : 'transparent'}"><td style="position:sticky;left:0;z-index:1;background:${selected ? C.card2 : C.card};padding:7px;min-width:265px;cursor:pointer"><div style="font-size:9px;color:${savedChannelFeatureColor(column.group)};font-weight:950">${esc(column.label)}</div><div style="font-size:6.8px;color:${C.faint};word-break:break-all;margin-top:2px">${esc(column.id)}</div><div style="font-size:6.8px;color:${family.color};margin-top:2px">${esc(family.label)} · ${esc(savedLedgerClassMeta(column.valueClass).label)}${esc(aliasLabel)}</div></td>${heatmapOutcomes.map(item => savedValidationHeatCell(savedValidationLedgerEntry(scope, item.key, column.id), item, column.id)).join('')}</tr>`;
         }).join('');
-        const auditTable = `<div style="overflow:auto;max-height:680px"><table style="width:100%;min-width:1060px;border-collapse:collapse;font-size:8.5px"><thead style="position:sticky;top:0;background:${C.card};z-index:2"><tr style="color:${C.mute};text-align:left"><th style="padding:7px">Short</th><th>selected actual</th><th>selected score</th><th>actual → forecast keep</th><th>actual → forecast 5s</th><th>actual → forecast avg retention</th><th>actual → forecast views</th><th>actual → forecast survival 20s</th></tr></thead><tbody>${auditBody}</tbody></table></div>${auditRows.length > limit ? `<div style="text-align:center;margin-top:10px"><span data-savedvalidationmore style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};padding:5px 14px;font-size:9px">show ${Math.min(60, auditRows.length - limit)} more · ${auditRows.length - limit} left</span></div>` : ''}`;
-        return `<div style="border:1px solid ${audit.passedForBlindInputs ? C.green : C.red};background:${audit.passedForBlindInputs ? C.green : C.red}0a;padding:10px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:950;color:${C.text}">Tyler + Hafu blind validation</div><div style="font-size:9px;color:${C.mute};line-height:1.5;margin-top:3px">${joins} · ${rows.length} rows in this scope · exact 21 stored outputs plus fold-recomputed inputs</div><div style="font-size:8px;color:${audit.validationCreatorsExcludedFromPublicAxis ? C.green : C.red};line-height:1.45;margin-top:2px">${esc(creatorAudit)}</div></div><div style="text-align:right"><div style="font-size:9px;font-weight:900;color:${audit.passedForBlindInputs ? C.green : C.red}">${audit.passedForBlindInputs ? 'BLIND INPUT ARRAY AUDIT PASSED' : 'BLIND INPUT ARRAY AUDIT FAILED'}</div><div style="font-size:7.5px;color:${C.faint}">${artifact.generatedAt ? esc(new Date(artifact.generatedAt).toLocaleString()) : ''} · ${esc(artifact.cacheStatus || 'artifact')}</div><span data-savedvalidationreload style="cursor:pointer;color:${C.accent};font-size:8px">rebuild if sources changed</span></div></div></div>
-          <div style="display:flex;border-bottom:1px solid ${C.border};overflow:auto;margin-bottom:9px">${scopeButton('pooled', 'Pooled')}${scopeButton('tyler', 'Tyler Csatari')}${scopeButton('hafu', 'Hafu Go')}</div>
-          <div style="font-size:8px;color:${C.faint};text-transform:uppercase;margin-bottom:4px">evidence protocol</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${protocolButtons}</div>
-          ${note(`<b>${esc(protocolMeta[protocol][0])}:</b> ${esc(protocolMeta[protocol][2])}`, protocolMeta[protocol][1])}
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:5px;margin-bottom:10px">${[['ρ','Do high scores rank high outcomes? +1 perfect, 0 no rank relation, -1 inverse.'],['R²','Does a numerical forecast beat its training-fold mean? 1 perfect; below 0 is worse than the baseline.'],['MAE','Typical absolute numerical miss: percentage points for retention, a multiplicative factor for views.'],['AUC','For 10M classification: 0.5 chance, 1 perfect ranking.'],['q','Multiple-test-adjusted row-level evidence. Below .05 is a lead, not creator-level proof.']].map(([label, body]) => `<div style="background:${C.card2};padding:7px"><div style="font-size:11px;font-weight:950;color:${C.cyan}">${label}</div><div style="font-size:7.5px;color:${C.dim};line-height:1.4">${body}</div></div>`).join('')}</div>
-          <div style="font-size:13px;font-weight:950;color:${C.text};margin:12px 0 3px">What currently carries signal?</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:7px">These are the strongest single coordinates for six outcomes under the selected evidence protocol. “Directional” is a lead, not a validated predictor. The pooled statistic removes each creator's mean before ranking so creator scale cannot manufacture the result.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px">${bestEntries}</div>
-          <div style="font-size:13px;font-weight:950;color:${C.text};margin:14px 0 3px">21 scores × every observed outcome</div><div style="font-size:9px;color:${C.mute};line-height:1.5;margin-bottom:7px">Every embedding against its raw outcome is retained, but the matrix now also tests every score against every other available outcome: stayed-to-watch, swipe-away, 5-second retention, average retention, views, outlier, 10M, and retention survival/drop checkpoints. Choose the outcome first, then a score row.</div>
-          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px">${targetButtons}</div>
-          <div style="overflow:auto"><div style="min-width:650px;display:grid;gap:3px">${matrixRows}</div></div>
+        const selectedFamily = savedValidationFamilyMeta(selectedColumn);
+        const selectedEvidence = savedValidationEvidenceMeta(selectedEntry, outcome);
+        const selectedMetrics = selectedEntry && selectedEntry.metrics || {};
+        const selectedMeaning = selectedColumn ? savedValidationPlainMeaning(selectedColumn, selectedEntry) : '';
+        const selectedPair = selectedColumn ? `<div data-savedvalidation-selected style="border:1px solid ${selectedFamily.color};background:${selectedFamily.color}08;padding:11px;margin:12px 0">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:8px;color:${selectedFamily.color};font-weight:950;text-transform:uppercase">${esc(selectedFamily.label)} · ${esc(savedLedgerClassMeta(selectedColumn.valueClass).label)}</div><div style="font-size:15px;color:${C.text};font-weight:950;margin-top:2px">${esc(selectedColumn.label)}</div><div style="font-size:7px;color:${C.faint};word-break:break-all">${esc(selectedColumn.id)}</div></div><div style="text-align:right"><div style="font-size:8px;color:${C.mute}">Prediction verdict for ${esc(outcome.label)}</div><div style="font-size:14px;color:${selectedEvidence.color};font-weight:950">${esc(selectedEvidence.label)}</div></div></div>
+          <div style="font-size:9px;color:${C.dim};line-height:1.55;margin-top:8px">${esc(selectedMeaning)}</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:6px;margin-top:9px">
+            <div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">OOF PREDICTION</div><div style="font-size:15px;color:${selectedEvidence.color};font-weight:950">${esc(savedValidationMetricLine(selectedEntry, outcome))}</div></div>
+            <div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">RAW ASSOCIATION</div><div style="font-size:15px;color:${C.text};font-weight:950">ρ ${fmtv(selectedMetrics.spearman, 3)}</div><div style="font-size:7px;color:${C.dim}">relationship only; not calibrated accuracy</div></div>
+            <div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">COVERAGE</div><div style="font-size:15px;color:${C.text};font-weight:950">${selectedMetrics.oofN || selectedMetrics.n || 0} videos</div><div style="font-size:7px;color:${C.dim}">${fmtv(selectedEntry && selectedEntry.coverage && selectedEntry.coverage.pairedFraction != null ? selectedEntry.coverage.pairedFraction * 100 : null, 1)}% of eligible scope · ${selectedEntry && selectedEntry.coverage && selectedEntry.coverage.accountCount || 0} creator accounts</div></div>
+            <div style="background:${C.card2};padding:8px"><div style="font-size:7px;color:${C.mute}">VALIDATION CLAIM</div><div style="font-size:8px;color:${selectedFamily.color};font-weight:900;line-height:1.4">${esc(selectedFamily.claim)}</div></div>
+          </div>
+        </div>` : '';
+        const selectedScatter = selectedColumn && selectedEntry
+            ? savedValidationLedgerScatter(validation, rows, selectedColumn, selectedEntry, outcome)
+            : note('Choose a coordinate with matched values.', C.amber);
+        const selectedRows = selectedColumn ? rows.map(row => ({
+            row,
+            score: savedValidationCoordinateValue(validation, row, selectedColumn.id),
+            actual: savedValidationOutcomeValue(row, outcome.key),
+        })).filter(item => item.score != null && item.actual != null).sort((left, right) => right.score - left.score) : [];
+        const rowLimit = st.savedValidationShow || 60;
+        const rowTable = selectedColumn ? `<div data-savedvalidation-video-table style="overflow:auto;max-height:620px"><table style="width:100%;min-width:680px;border-collapse:collapse;font-size:8.5px"><thead style="position:sticky;top:0;background:${C.card};z-index:2"><tr style="text-align:left;color:${C.mute}"><th style="padding:6px">Video</th><th>${esc(selectedColumn.label)}</th><th>Actual ${esc(outcome.label)}</th><th>Account</th><th>Availability</th></tr></thead><tbody>${selectedRows.slice(0, rowLimit).map(item => {
+            const blindOnly = item.row.validationSource === 'predictor_blind_inputs_only';
+            return `<tr style="border-top:1px solid ${C.border}"><td data-savedvalidationrow="${esc(item.row.id)}" style="padding:6px;color:${C.text};font-weight:850;cursor:pointer">${esc(item.row.title)}<div style="font-size:6.8px;color:${C.faint}">${esc(item.row.id)}</div></td><td style="color:${selectedFamily.color};font-weight:900">${savedLedgerFormat(item.score, selectedColumn)}</td><td>${savedValidationOutcomeFormat(item.actual, outcome.key)}</td><td>${esc(item.row.accountName)}</td><td style="color:${blindOnly ? C.amber : C.green}">${blindOnly ? 'blind-only private row' : 'saved score + private outcomes'}</td></tr>`;
+        }).join('')}</tbody></table></div>${selectedRows.length > rowLimit ? `<div style="text-align:center;margin-top:9px"><span data-savedvalidationmore style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};padding:5px 12px;font-size:8px">show ${Math.min(60, selectedRows.length - rowLimit)} more</span></div>` : ''}` : '';
+        const glossary = [
+            ['Stored', 'Exact historical score. Good for replay; not automatically blind.'],
+            ['Video held out', 'The video’s deterministic fold is excluded before fitting; other videos from the same creator may remain. Tests a new video within known creator populations. This is not a forward-time test.'],
+            ['Account held out', 'Every video from that creator is excluded before fitting. Tests transfer to an unseen creator; certainty depends on how many independent creator accounts are available.'],
+            ['Direct axis', 'One fitted direction through the embedding space.'],
+            ['Derived score', 'A formula over prior coordinates or metadata, not a new embedding.'],
+            ['Forecast', 'A calibrated model that combines coordinates; still separately held out.'],
+            ['Alias', 'A second ledger address for the exact same fitted axis. It is visible for protocol traceability but does not count as independent evidence.'],
+            ['Observed outcome', 'Independent measured truth. It cannot be used as a predictor of itself.'],
+            ['OOF R²', 'Out-of-fold predictive value versus the training-fold mean. Above 0 helps; below 0 hurts.'],
+            ['ρ', 'Spearman rank correlation. It says whether higher scores tend to rank higher outcomes, not whether the numeric prediction is accurate.'],
+            ['MAE / factor error', 'Typical held-out miss: percentage points for retention, multiplicative factor for views.'],
+            ['Global q', 'False-discovery-rate adjustment across every eligible coordinate × outcome test on this screen. It prevents the best-looking result among many searches from receiving an easy significance claim.'],
+        ].map(([label, body]) => `<div style="padding:7px 0;border-top:1px solid ${C.border}"><b style="font-size:8px;color:${C.text}">${esc(label)}</b><div style="font-size:7.5px;color:${C.dim};line-height:1.4">${esc(body)}</div></div>`).join('');
+        const scopeButtons = [
+            ['pooled', `All validation videos (${scopes.pooled && (scopes.pooled.validationN || scopes.pooled.n) || 0})`],
+            ['tyler', `Tyler (${scopes.tyler && (scopes.tyler.validationN || scopes.tyler.n) || 0})`],
+            ['hafu', `Hafu (${scopes.hafu && (scopes.hafu.validationN || scopes.hafu.n) || 0})`],
+        ].map(([key, label]) => `<span data-savedvalidationscope="${key}" style="cursor:pointer;border-bottom:2px solid ${scopeKey === key ? C.cyan : 'transparent'};color:${scopeKey === key ? C.text : C.dim};padding:5px 9px;font-size:9px;font-weight:900;white-space:nowrap">${esc(label)}</span>`).join('');
+        return `<div data-savedvalidation-canonical data-coordinate-count="${allColumns.length}" data-outcome-count="${outcomes.length}" style="min-width:0">
+          <div style="border:1px solid ${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red};background:${ledgerAudit.passed && audit.passedForBlindInputs ? C.green : C.red}09;padding:11px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:14px;color:${C.text};font-weight:950">What predicts performance?</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:3px">One canonical ledger. ${allColumns.length} registered columns × ${outcomes.length} independently defined outcomes. Every graph is exactly one coordinate ID versus one observed outcome ID.</div><div data-savedvalidation-ledger-classification style="font-size:8px;color:${C.cyan};font-weight:900;margin-top:4px">${blindColumnCount} blind columns · ${uniqueBlindPredictionCount} unique blind predictions · ${aliasColumnCount} alias columns · ${diagnosticCount} diagnostics · ${observedCount} actual outcomes</div></div><div style="text-align:right"><div style="font-size:9px;color:${ledgerAudit.passed ? C.green : C.red};font-weight:950">${ledgerAudit.passed ? 'LEDGER PARITY PASSED' : 'LEDGER PARITY FAILED'}</div><div style="font-size:7px;color:${C.faint}">${rows.length} videos in this scope · ${scope.validationAccounts && scope.validationAccounts.length || scope.accounts && scope.accounts.length || 0} creator accounts · ${esc(validation.artifact && validation.artifact.cacheStatus || 'artifact')}</div><span data-savedvalidationreload style="cursor:pointer;color:${C.accent};font-size:8px">rebuild from current sources</span></div></div></div>
+          <div style="display:flex;border-bottom:1px solid ${C.border};overflow:auto;margin-bottom:10px">${scopeButtons}</div>
+          ${note('<b>Read this first:</b> 103 ledger columns do not mean 103 independent embeddings. Direct axes, derived formulas, forecasts, measured outcomes, aliases, and legacy diagnostics are all kept in one ledger so names cannot drift. “Leakage audit passed” means the recorded train/test IDs do not overlap; it does not mean the predictor is accurate. Observed outcomes are shown but blocked from predictor rankings.', C.cyan)}
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:7px;margin-bottom:12px">${summaryCards}</div>
+          <div style="font-size:12px;color:${C.text};font-weight:950;margin:12px 0 4px">All 103 coordinates × all 13 observed outcomes</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-bottom:7px">Each of the ${allColumns.length * outcomes.length} cells reports the exact registered coordinate against one independently defined outcome. Scroll sideways for retention-curve checkpoints; click any cell to see its scatter, definition, videos, coverage, and lineage.</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px">${familyButtons}<input data-savedvalidationquery value="${esc(st.savedValidationQuery || '')}" placeholder="find text, real views, keep…" style="margin-left:auto;min-width:190px;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:5px 7px;font-size:8px"/></div>
+          <div data-savedvalidation-heatmap style="overflow:auto;max-height:720px;border:1px solid ${C.border};-webkit-overflow-scrolling:touch"><table style="border-collapse:collapse;font-size:8px;min-width:850px;width:100%"><thead style="position:sticky;top:0;background:${C.card};z-index:3"><tr style="text-align:left;color:${C.mute}"><th style="position:sticky;left:0;z-index:4;background:${C.card};padding:7px;min-width:265px">Canonical coordinate</th>${heatmapHeader}</tr></thead><tbody>${heatmapRows}</tbody></table></div>
+          <div style="font-size:12px;color:${C.text};font-weight:950;margin:14px 0 4px">Inspect one exact relationship</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">${outcomeButtons}</div>
           ${selectedPair}
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr));gap:9px;align-items:start;margin:10px 0">${selectedScatter}${selectedEvidence}</div>
-          <div style="background:${C.card2};border-left:3px solid ${C.green};padding:9px;margin:8px 0"><div style="font-size:8px;color:${C.mute};text-transform:uppercase">combined 9-public-axis forecast for ${esc(outcome.label)}</div><div style="font-size:10px;color:${C.text};font-weight:900;margin-top:2px">${esc(forecastSummary)}</div><div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:3px">This is a separate fold-fitted forecast, not the selected single embedding. It uses only Visual/Text/Both views, outlier, and 10M axes rebuilt after excluding both validation creators. Keep, 5-second retention, realistic-views, and novelty coordinates remain visible for single-score diagnosis but are not stacked into this forecast.</div></div>
-          ${savedValidationLineage(validation, scopeKey, protocol, definition, outcome, rows)}
-          ${protocol === 'stored' ? note('Retention-curve forecasts require held-out inputs. Switch to “video held out” or “account external” to see actual-versus-predicted curves.', C.amber) : savedValidationRetentionPanel(rows, scope, protocol)}
-          <div style="font-size:13px;font-weight:950;color:${C.text};margin:14px 0 2px">Video-by-video audit trail</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-bottom:7px">Every row keeps the selected score, observed outcomes, combined forecasts, and 20-second survival together. Click a title to inspect its curve; open the original 21 graphs to inspect the persisted maps without recomputation.</div>
-          ${auditTable}
-          <div style="margin-top:12px">${note(`<b>Known limits:</b> ${(audit.warnings || []).map(esc).join(' ')}`, C.amber)}</div>`;
+          <div style="display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:10px;align-items:start">${selectedScatter}<div style="background:${C.card2};padding:10px"><div style="font-size:10px;color:${C.text};font-weight:950;margin-bottom:3px">Terms used on this screen</div>${glossary}</div></div>
+          <div style="font-size:12px;color:${C.text};font-weight:950;margin:14px 0 4px">Every video behind this relationship</div>${rowTable}
+          ${selectedColumn ? `<details style="margin-top:12px"><summary style="cursor:pointer;color:${C.purple};font-size:9px;font-weight:900">show the complete raw-input → embedding → fit population → rotation → calibration lineage</summary>${renderSavedLedgerPipeline(selectedColumn, registry)}</details>` : ''}
+          <div style="margin-top:12px">${note(`<b>Known limits:</b> ${(audit.warnings || []).map(esc).join(' ')}`, C.amber)}</div>
+        </div>`;
     }
     function savedLedgerStoredValue(detail, video, column) {
         const contract = savedChannelContract(detail);
