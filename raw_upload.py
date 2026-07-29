@@ -16,6 +16,22 @@ import os, sys, json, base64, subprocess, tempfile, shutil, io, time, re, hashli
 import numpy as np, boto3, urllib.request, urllib.error
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+DISPLAY_CONTRACT_PATH = os.path.join(
+    HERE,
+    'buildings',
+    'jarvis',
+    'saved-channel-feature-contract.json',
+)
+
+def _load_display_contract_version():
+    with open(DISPLAY_CONTRACT_PATH, encoding='utf-8') as handle:
+        version = json.load(handle).get('version')
+    if not isinstance(version, int) or version < 1:
+        raise RuntimeError(
+            'saved-channel feature contract must declare a positive integer version'
+        )
+    return version
+
 def env(k):
     v = os.environ.get(k)
     if v: return v
@@ -31,6 +47,7 @@ EMBEDDING_MODEL = 'gemini-embedding-2'
 TRANSCRIPTION_MODEL = 'gemini-flash-latest'
 EMB_URL = f'https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL}:embedContent'
 SCORE_CACHE_VERSION = 1
+DISPLAY_CONTRACT_VERSION = _load_display_contract_version()
 SCORE_CACHE_PREFIX = (env('RAW_SCORE_CACHE_PREFIX') or 'raw/score-cache/v1').strip('/')
 VISUAL_KEEP_MODEL_KEY = 'raw/predictor-lab/visual-keep-model-v1.json'
 VISUAL_KEEP_MODEL_MANIFEST_KEY = 'raw/predictor-lab/visual-keep-model-v1.manifest.json'
@@ -788,13 +805,19 @@ def _score_input_manifest(txt, good, dur_s, score, replay_meta):
         'scorer': 'raw_upload.py',
         'embedding_model': EMBEDDING_MODEL,
         'embedding_dimensions': DIM,
-        'display_contract_version': 5,
+        'display_contract_version': DISPLAY_CONTRACT_VERSION,
         'canonical_output_contract': {
-            'total': 22,
+            'canonical_embedding_outputs': 21,
+            'universal_raw_scorer_total': 22,
+            'creator_profile_enriched_maximum': 23,
             'steer_coordinates': 18,
             'novelty_coordinates': 3,
+            'derived_forecasts_total': 2,
             'frozen_model_forecasts': 1,
+            'conditional_creator_forecasts': 1,
             'visual_keep_forecast_coordinate_id': VISUAL_KEEP_COORDINATE_ID,
+            'creator_adaptive_keep_forecast_coordinate_id': 'shorts.creator-adaptive-keep.v1',
+            'creator_adaptive_availability': 'registered known creator with at least eight strictly earlier labeled uploads; unavailable in anonymous raw scoring',
             'novelty_derivation': 'cached indicator state + revision-pinned indicator registry',
         },
         'steer_artifact_sha256': score.get('steer_artifact_sha256'),

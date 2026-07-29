@@ -87,7 +87,7 @@ async function main() {
                     domain: 'shorts_raw',
                     scorer: 'raw_upload.py',
                     embedding_model: 'gemini-embedding-2',
-                    display_contract_version: 5,
+                    display_contract_version: 8,
                     display_preference: ['together', 'text', 'visual'],
                 },
             };

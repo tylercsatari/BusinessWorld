@@ -5,9 +5,10 @@ const fs = require('fs');
 const path = require('path');
 const contract = require('./saved-channel-feature-contract.json');
 
-const VERSION = 7;
-const LEDGER_VERSION = 3;
+const VERSION = 9;
+const LEDGER_VERSION = 6;
 const VISUAL_KEEP_COORDINATE_ID = 'shorts.visual-keep-forecast.v1';
+const CREATOR_ADAPTIVE_KEEP_COORDINATE_ID = 'shorts.creator-adaptive-keep.v1';
 const CURVE_SECONDS = Object.freeze(Array.from({ length: 21 }, (_, second) => second));
 const SUPPORTED_CHANNELS = Object.freeze([
     { channelId: 'chd3f5a3dae83f3382', accountId: 'tyler', accountName: 'Tyler Csatari' },
@@ -111,6 +112,12 @@ function regressionMetrics(points, options = {}) {
         const baseline = finite(point.baseline) ? point.baseline : actualMean;
         return sum + (point.actual - baseline) ** 2;
     }, 0);
+    const baselineAbsoluteErrors = observed.map(point => Math.abs(
+        point.actual
+        - (finite(point.baseline) ? point.baseline : actualMean)
+    ));
+    const modelMae = average(residual.map(Math.abs));
+    const baselineMae = average(baselineAbsoluteErrors);
     const fit = calibration(actual, predicted);
     const metrics = {
         n: observed.length,
@@ -118,7 +125,12 @@ function regressionMetrics(points, options = {}) {
         r2: baselineSse > 0 ? 1 - sse / baselineSse : null,
         pearson: pearson(actual, predicted),
         spearman: spearman(actual, predicted),
-        mae: average(residual.map(Math.abs)),
+        mae: modelMae,
+        baselineMae,
+        maeImprovementVsBaseline: finite(modelMae) && finite(baselineMae)
+            ? baselineMae - modelMae
+            : null,
+        protocolBaselineR2: baselineSse > 0 ? 1 - sse / baselineSse : null,
         rmse: Math.sqrt(sse / observed.length),
         bias: average(residual),
         calibrationSlope: fit.slope,
@@ -492,6 +504,7 @@ function lineageRuntimeContext(
     predictorPrivateRows,
     forecastModel,
     visualKeepStudy,
+    creatorAdaptiveStudy,
     validationSourceFingerprint,
     validationGeneratedAt
 ) {
@@ -574,6 +587,46 @@ function lineageRuntimeContext(
                 manifestSha256: predictorProvenance.runtimeManifests
                     && predictorProvenance.runtimeManifests.visualKeepModelRelease
                     && predictorProvenance.runtimeManifests.visualKeepModelRelease.manifestSha256
+                    || null,
+            },
+        } : null,
+        creatorAdaptiveKeepModel: creatorAdaptiveStudy ? {
+            coordinateId: creatorAdaptiveStudy.coordinateId
+                || CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
+            selected: creatorAdaptiveStudy.selection
+                && creatorAdaptiveStudy.selection.selected || null,
+            candidateRegistrySha256: creatorAdaptiveStudy.selection
+                && creatorAdaptiveStudy.selection.candidateRegistrySha256 || null,
+            candidateCountWithAllAccounts: creatorAdaptiveStudy.selection
+                && creatorAdaptiveStudy.selection.candidateCountWithAllAccounts || null,
+            population: creatorAdaptiveStudy.population || null,
+            formula: creatorAdaptiveStudy.formula || null,
+            status: creatorAdaptiveStudy.status || null,
+            evaluationTarget: creatorAdaptiveStudy.evaluation
+                && creatorAdaptiveStudy.evaluation.target || null,
+            honestHistoryBaseline: creatorAdaptiveStudy.evaluation
+                && creatorAdaptiveStudy.evaluation.target
+                && creatorAdaptiveStudy.evaluation.target.baseline || null,
+            predictorEligibility: creatorAdaptiveStudy.status
+                && {
+                    state: creatorAdaptiveStudy.status.state || null,
+                    promoted: creatorAdaptiveStudy.status.promoted === true,
+                    predictorEligible:
+                        creatorAdaptiveStudy.status.predictorEligible === true,
+                    promotionBlocker:
+                        creatorAdaptiveStudy.status.promotionBlocker || null,
+                },
+            artifact: {
+                ...(creatorAdaptiveStudy.modelArtifact
+                    || predictorProvenance.creatorAdaptiveKeepModelArtifact
+                    || {}),
+                manifestKey: predictorProvenance.runtimeManifests
+                    && predictorProvenance.runtimeManifests.creatorAdaptiveKeepModelRelease
+                    && predictorProvenance.runtimeManifests.creatorAdaptiveKeepModelRelease.key
+                    || null,
+                manifestSha256: predictorProvenance.runtimeManifests
+                    && predictorProvenance.runtimeManifests.creatorAdaptiveKeepModelRelease
+                    && predictorProvenance.runtimeManifests.creatorAdaptiveKeepModelRelease.manifestSha256
                     || null,
             },
         } : null,
@@ -1104,6 +1157,12 @@ function buildCanonicalLineageCatalog(runtime) {
         fitDatasetId: 'dataset.shorts.visual-keep-final-fit.v1',
         selectionRule: 'The pooled Ridge setting is selected inside training-only folds, then one pooled formula is frozen on every eligible labeled training row. Its production value is diagnostic on those fitting rows; leakage-controlled protocol predictions remain separate evidence.',
     };
+    families['family.shorts.creator-adaptive-keep.v1'] = {
+        id: 'family.shorts.creator-adaptive-keep.v1',
+        label: 'Creator-adaptive next-upload keep forecast',
+        fitDatasetId: 'dataset.shorts.creator-adaptive-keep-prequential.v1',
+        selectionRule: 'A 43,360-candidate staged registry is selected only on each creator’s chronological 50%-80% window. The locked 50/50 visual+together mixture is then evaluated on the final 20% with equal timestamps batched and only strictly earlier outcomes available.',
+    };
 
     inputSets['input.runtime.shorts.nine-blind-axes.v1'] = {
         domain: 'shorts',
@@ -1190,6 +1249,28 @@ function buildCanonicalLineageCatalog(runtime) {
                 && runtime.visualKeepModel.artifact.artifactSha256 || null,
         } : null,
     };
+    datasets['dataset.shorts.creator-adaptive-keep-prequential.v1'] = {
+        ...(datasets['dataset.shorts.creator-adaptive-keep-prequential.v1'] || {}),
+        id: 'dataset.shorts.creator-adaptive-keep-prequential.v1',
+        domain: 'shorts',
+        role: 'known-creator causal next-upload evaluation',
+        selectionRule: 'The per-creator 50%-80% chronological window selects one global candidate from a fixed 43,360-candidate registry. The final 20% is replayed causally, with every equal-timestamp batch predicted before any outcome in that batch is revealed. The matched null is the mean of at most 30 strictly earlier same-creator labels.',
+        runtimeSnapshot: runtime.creatorAdaptiveKeepModel ? {
+            population: runtime.creatorAdaptiveKeepModel.population,
+            selected: runtime.creatorAdaptiveKeepModel.selected,
+            candidateRegistrySha256:
+                runtime.creatorAdaptiveKeepModel.candidateRegistrySha256,
+            candidateCountWithAllAccounts:
+                runtime.creatorAdaptiveKeepModel.candidateCountWithAllAccounts,
+            evaluationTarget: runtime.creatorAdaptiveKeepModel.evaluationTarget,
+            honestHistoryBaseline:
+                runtime.creatorAdaptiveKeepModel.honestHistoryBaseline,
+            predictorEligibility:
+                runtime.creatorAdaptiveKeepModel.predictorEligibility,
+            artifactRevision: runtime.creatorAdaptiveKeepModel.artifact
+                && runtime.creatorAdaptiveKeepModel.artifact.artifactSha256 || null,
+        } : null,
+    };
     algorithms['algorithm.shorts.visual-keep-pooled-ridge.v1'] = {
         ...(algorithms['algorithm.shorts.visual-keep-pooled-ridge.v1'] || {}),
         id: 'algorithm.shorts.visual-keep-pooled-ridge.v1',
@@ -1202,6 +1283,16 @@ function buildCanonicalLineageCatalog(runtime) {
             && {
                 pooledAlpha: runtime.visualKeepModel.selected.pooledAlpha,
             } || null,
+    };
+    algorithms['algorithm.shorts.creator-adaptive-causal-mixture.v1'] = {
+        ...(algorithms['algorithm.shorts.creator-adaptive-causal-mixture.v1'] || {}),
+        id: 'algorithm.shorts.creator-adaptive-causal-mixture.v1',
+        domain: 'shorts',
+        kind: 'causal known-creator combined forecast',
+        fit: 'Select one staged causal formula on the 50%-80% window, then lock it before the final tail. Creator centering, residual corrections, gates, and interval residuals update only after an entire equal-time batch.',
+        scalarFormula: 'clip(0.5 × centered-together pooled residual analog + 0.5 × visual+together semantic stack, 0, 100)',
+        selectedHyperparameters: runtime.creatorAdaptiveKeepModel
+            && runtime.creatorAdaptiveKeepModel.selected || null,
     };
     datasets['dataset.runtime.shorts.legacy.v1'] = {
         domain: 'shorts',
@@ -1611,7 +1702,54 @@ function buildCanonicalLineageCatalog(runtime) {
                 && runtime.visualKeepModel.artifact.producerSourceSha256 || null,
         },
     };
-    artifacts['artifact.runtime.saved-channel-validation.v2'] = {
+    artifacts['artifact.shorts.creator-adaptive-keep-model.v1'] = {
+        ...(artifacts['artifact.shorts.creator-adaptive-keep-model.v1'] || {}),
+        id: 'artifact.shorts.creator-adaptive-keep-model.v1',
+        domain: 'shorts',
+        location: runtime.creatorAdaptiveKeepModel
+            && runtime.creatorAdaptiveKeepModel.artifact
+            && runtime.creatorAdaptiveKeepModel.artifact.canonicalKey
+            || 'raw/predictor-lab/creator-adaptive-keep-model-v1.json',
+        artifactSha256: runtime.creatorAdaptiveKeepModel
+            && runtime.creatorAdaptiveKeepModel.artifact
+            && runtime.creatorAdaptiveKeepModel.artifact.artifactSha256 || null,
+        archiveKey: runtime.creatorAdaptiveKeepModel
+            && runtime.creatorAdaptiveKeepModel.artifact
+            && runtime.creatorAdaptiveKeepModel.artifact.archiveKey || null,
+        manifestKey: runtime.creatorAdaptiveKeepModel
+            && runtime.creatorAdaptiveKeepModel.artifact
+            && runtime.creatorAdaptiveKeepModel.artifact.manifestKey || null,
+        manifestSha256: runtime.creatorAdaptiveKeepModel
+            && runtime.creatorAdaptiveKeepModel.artifact
+            && runtime.creatorAdaptiveKeepModel.artifact.manifestSha256 || null,
+        generatedAt: runtime.creatorAdaptiveKeepModel
+            && runtime.creatorAdaptiveKeepModel.artifact
+            && runtime.creatorAdaptiveKeepModel.artifact.generatedAt || null,
+        coordinateId: runtime.creatorAdaptiveKeepModel
+            && runtime.creatorAdaptiveKeepModel.coordinateId
+            || CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
+        runtimeRevisionRequired: true,
+        runtimeRevisionRequiredFields: [
+            'artifactSha256',
+            'archiveKey',
+            'producerSourceSha256',
+        ],
+        runtimeRevision: {
+            artifactSha256: runtime.creatorAdaptiveKeepModel
+                && runtime.creatorAdaptiveKeepModel.artifact
+                && runtime.creatorAdaptiveKeepModel.artifact.artifactSha256 || null,
+            archiveKey: runtime.creatorAdaptiveKeepModel
+                && runtime.creatorAdaptiveKeepModel.artifact
+                && runtime.creatorAdaptiveKeepModel.artifact.archiveKey || null,
+            manifestSha256: runtime.creatorAdaptiveKeepModel
+                && runtime.creatorAdaptiveKeepModel.artifact
+                && runtime.creatorAdaptiveKeepModel.artifact.manifestSha256 || null,
+            producerSourceSha256: runtime.creatorAdaptiveKeepModel
+                && runtime.creatorAdaptiveKeepModel.artifact
+                && runtime.creatorAdaptiveKeepModel.artifact.producerSourceSha256 || null,
+        },
+    };
+    artifacts['artifact.runtime.saved-channel-validation.v6'] = {
         domain: 'shorts',
         location: 'buildings/jarvis/saved-channel-validation.js',
         coordinateRegistryVersion: LEDGER_VERSION,
@@ -2202,7 +2340,7 @@ function lineageForForecast(definition, protocol) {
         validationProtocolId: protocol === 'video'
             ? 'family.shorts.video-forecast.v1'
             : 'family.shorts.account-forecast.v1',
-        artifactId: 'artifact.runtime.saved-channel-validation.v2',
+        artifactId: 'artifact.runtime.saved-channel-validation.v6',
         sourceCode: ['buildings/jarvis/saved-channel-validation.js:attachScore21Forecasts'],
         visualizationId: 'map.runtime.none.v1',
         usesEmbedding: true,
@@ -2239,6 +2377,40 @@ function lineageForVisualKeepForecast() {
     };
 }
 
+function lineageForCreatorAdaptiveKeepForecast() {
+    return {
+        rawInputIds: [
+            'input.shorts.first5-montage-transcript.v1',
+            'input.shorts.private-outcomes.v1',
+        ],
+        representationId: [
+            'representation.shorts.visual.gemini1536.v1',
+            'representation.shorts.together.gemini1536.v1',
+        ],
+        fitDatasetId: 'dataset.shorts.creator-adaptive-keep-prequential.v1',
+        fitDataset: [{
+            id: 'dataset.shorts.creator-adaptive-keep-prequential.v1',
+            role: 'For each evaluated upload, use only the same creator profile and its strictly earlier measured keep outcomes.',
+        }],
+        targetField: 'observed stayed-to-watch percentage',
+        algorithmId: 'algorithm.shorts.creator-adaptive-causal-mixture.v1',
+        scalarProjection: 'Return a 50/50 mixture of the selection-locked centered-together residual analog and visual+together causal semantic stack, using up to 30 strictly earlier creator labels as the baseline.',
+        calibrationId: 'calibration.identity-target-units.v1',
+        validationProtocolId: 'family.shorts.creator-adaptive-keep.v1',
+        artifactId: 'artifact.shorts.creator-adaptive-keep-model.v1',
+        sourceCode: [
+            'buildings/jarvis/predictor-lab/run_predictor_lab.py:run_creator_adaptive_keep_study',
+            'scripts/benchmark-causal-keep-mixture.py',
+        ],
+        visualizationId: 'map.runtime.none.v1',
+        usesEmbedding: true,
+        reproducibility: {
+            status: 'causal-prequential-artifact-pinned',
+            warning: 'Valid only for an explicit known creator profile with sufficient earlier labeled history. It is multimodal, has no single native 2D embedding plane, and is not a cold-start or anonymous-upload forecast.',
+        },
+    };
+}
+
 function lineageForObserved(definition) {
     const curveOutcome = /^(survival|drop)/.test(definition.key);
     return {
@@ -2256,7 +2428,7 @@ function lineageForObserved(definition) {
         scalarProjection: definition.derived || definition.transform || 'Identity: return the joined observed value.',
         calibrationId: 'calibration.identity-target-units.v1',
         validationProtocolId: 'family.shorts.observed.v1',
-        artifactId: 'artifact.runtime.saved-channel-validation.v2',
+        artifactId: 'artifact.runtime.saved-channel-validation.v6',
         sourceCode: ['buildings/jarvis/saved-channel-validation.js:OUTCOME_DEFINITIONS'],
         visualizationId: 'map.runtime.none.v1',
         usesEmbedding: false,
@@ -3079,10 +3251,16 @@ function buildCoordinateRegistry(options = {}) {
         options.predictorPrivateRows || [],
         options.forecastModel || null,
         options.visualKeepStudy || null,
+        options.creatorAdaptiveStudy || null,
         options.sourceFingerprint || null,
         options.generatedAt || null
     );
     const lineageCatalog = buildCanonicalLineageCatalog(runtime);
+    const creatorAdaptiveStatus = options.creatorAdaptiveStudy
+        && options.creatorAdaptiveStudy.status || {};
+    const creatorAdaptivePredictorEligible = (
+        creatorAdaptiveStatus.predictorEligible === true
+    );
     const observed = OUTCOME_DEFINITIONS.map(definition => ({
         id: `shorts.observed.${definition.key}`,
         family: 'observed',
@@ -3135,6 +3313,27 @@ function buildCoordinateRegistry(options = {}) {
         lineageId: 'lineage.shorts.visual-keep-forecast.v1',
         lineage: lineageForVisualKeepForecast(),
         description: 'One raw keep-rate percentage from the immutable full-vector visual Ridge model. It is a derived forecast from the existing visual embedding, not another embedding space.',
+    }];
+    const creatorAdaptiveKeepForecast = [{
+        id: CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
+        family: 'creatorAdaptiveKeepForecast',
+        protocol: 'prequential',
+        group: 'multimodal',
+        key: 'creatorAdaptiveKeepForecast',
+        target: 'keep',
+        label: 'Visual + both · causal next-upload keep mixture',
+        unit: 'percent',
+        percentileAvailable: false,
+        status: creatorAdaptivePredictorEligible
+            ? 'canonical'
+            : 'research_diagnostic',
+        predictorEligible: creatorAdaptivePredictorEligible,
+        valueClass: 'combined_forecast',
+        lineageId: 'lineage.shorts.creator-adaptive-keep.v1',
+        lineage: lineageForCreatorAdaptiveKeepForecast(),
+        description: creatorAdaptivePredictorEligible
+            ? 'One raw keep-rate percentage from the canonical visual and together embeddings plus an explicit creator profile’s strictly earlier measured uploads. It is unavailable for cold start.'
+            : 'Retrospective research coordinate from the canonical visual and together embeddings plus strictly earlier creator history. It clears the historical account-level 10-point MAE target but stays excluded from blind-predictor rankings until prospective confirmation.',
     }];
     const direct = ['video', 'account'].flatMap(protocol => (
         contract.features.filter(definition => definition.group !== 'novelty').map(definition => ({
@@ -3195,11 +3394,20 @@ function buildCoordinateRegistry(options = {}) {
         lineage: lineageForLegacy(definition),
         description: 'Registered for audit compatibility. It is not used as the canonical score-card value.',
     }));
-    const columns = [...observed, ...stored, ...visualKeepForecast, ...direct, ...forecasts, ...legacy];
+    const columns = [
+        ...observed,
+        ...stored,
+        ...visualKeepForecast,
+        ...creatorAdaptiveKeepForecast,
+        ...direct,
+        ...forecasts,
+        ...legacy,
+    ];
     const familyMeta = [
         ['observed', 'Observed outcomes', 'Measured truth; never an embedding.'],
         ['stored', 'Stored production scores', 'The exact 21 score-card coordinates.'],
         ['visualKeepForecast', 'Frozen visual keep forecast', 'One derived full-vector forecast from the existing visual embedding; not a new embedding space.'],
+        ['creatorAdaptiveKeepForecast', 'Creator-adaptive keep forecast', 'One causal next-upload forecast from the existing visual and together embeddings plus explicit prior creator history.'],
         ['videoHeldout', 'Video-held-out scores', '15 direct axes plus 3 derived realistic-views transforms rebuilt without the evaluated video.'],
         ['accountHeldout', 'Account-held-out scores', '15 direct axes plus 3 derived realistic-views transforms rebuilt without the evaluated account.'],
         ['videoForecast', 'Video-held-out combined forecasts', '13 outcomes forecast from nine creator-excluded public axes.'],
@@ -3242,10 +3450,14 @@ function buildCoordinateRegistry(options = {}) {
         directAxisColumns.map(column => column.coordinateIdentity.axisFingerprint),
     ).size;
     const blindColumns = columns.filter(column => (
-        column.family === 'videoHeldout'
-        || column.family === 'accountHeldout'
-        || column.family === 'videoForecast'
-        || column.family === 'accountForecast'
+        (
+            column.family === 'videoHeldout'
+            || column.family === 'accountHeldout'
+            || column.family === 'videoForecast'
+            || column.family === 'accountForecast'
+            || column.family === 'creatorAdaptiveKeepForecast'
+        )
+        && column.predictorEligible !== false
     ));
     const blindUniquePredictionCount = new Set(
         blindColumns.map(column => column.coordinateIdentity.axisFingerprint),
@@ -3254,6 +3466,7 @@ function buildCoordinateRegistry(options = {}) {
         column.family === 'stored'
         || column.family === 'visualKeepForecast'
         || column.family === 'legacy'
+        || column.predictorEligible === false
     ));
     const outcomeColumns = columns.filter(column => column.family === 'observed');
     return {
@@ -3265,7 +3478,7 @@ function buildCoordinateRegistry(options = {}) {
             'Stored production, held-out reconstruction, combined forecast, and observed truth are different families and may not substitute for one another.',
             'Percentiles belong to their coordinate cell; they are not new estimates.',
             'Re-scoring parity is defined by identical input fingerprint plus scorer, model, and artifact revisions.',
-            'The 104 Shorts row columns are not 104 embedding spaces: 45 are direct-axis columns representing 36 distinct fitted axes because nine shared public axes appear under both protocol views; the frozen visual forecast reuses the existing 1,536D visual embedding, and transforms, forecasts, observations, and legacy diagnostics are counted separately.',
+            `The ${columns.length} Shorts row columns are not ${columns.length} embedding spaces: ${directAxisColumns.length} are direct-axis columns representing ${distinctDirectAxisCount} distinct fitted axes because shared public axes appear under both protocol views; the frozen visual and creator-adaptive forecasts reuse existing embeddings, and transforms, forecasts, observations, and diagnostics are counted separately.`,
         ],
         columns,
         families: familyMeta,
@@ -3274,13 +3487,13 @@ function buildCoordinateRegistry(options = {}) {
                 columns: blindColumns.length,
                 uniquePredictions: blindUniquePredictionCount,
                 aliasColumns: blindColumns.length - blindUniquePredictionCount,
-                families: ['videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast'],
-                meaning: 'Coordinates eligible for blind validation. Nine creator-excluded public direct axes appear in both protocol views but identify the same fitted prediction.',
+                families: [...new Set(blindColumns.map(column => column.family))],
+                meaning: 'Coordinates currently eligible for leakage-controlled predictor ranking. Shared creator-excluded public direct axes can appear in both protocol views but identify the same fitted prediction.',
             },
             diagnostics: {
                 columns: diagnosticColumns.length,
-                families: ['stored', 'visualKeepForecast', 'legacy'],
-                meaning: 'Stored production outputs, the frozen final visual forecast, and legacy comparisons. They can be evaluated but are not promoted to strict blind evidence on their fitting rows.',
+                families: [...new Set(diagnosticColumns.map(column => column.family))],
+                meaning: 'Stored production outputs, frozen fitting-population forecasts, research-only candidates, and legacy comparisons. They remain auditable but are excluded from strict predictor rankings.',
             },
             outcomes: {
                 columns: outcomeColumns.length,
@@ -3296,8 +3509,11 @@ function buildCoordinateRegistry(options = {}) {
             shortsLegacyDiagnostics: legacy.length,
             shortsStoredProduction: stored.length,
             shortsVisualKeepForecasts: visualKeepForecast.length,
+            shortsCreatorAdaptiveKeepForecasts: creatorAdaptiveKeepForecast.length,
             shortsDirectHeldout: direct.length,
-            shortsCombinedForecasts: forecasts.length,
+            shortsCombinedForecasts: (
+                forecasts.length + creatorAdaptiveKeepForecast.length
+            ),
             shortsObservedOutcomes: observed.length,
             longStoredOutputs: longQuantColumns.length,
             shortsDirectEmbeddingAxes: distinctDirectAxisCount,
@@ -3446,6 +3662,9 @@ function ledgerValue(row, column) {
     if (column.family === 'visualKeepForecast') {
         return number(row.predictions && row.predictions.visualKeepForecast);
     }
+    if (column.family === 'creatorAdaptiveKeepForecast') {
+        return number(row.predictions && row.predictions.creatorAdaptiveKeepForecast);
+    }
     if (column.family === 'videoHeldout' || column.family === 'accountHeldout') {
         const definition = contract.features.find(feature => feature.key === column.key);
         return featureDisplayValue(row, definition, column.family === 'videoHeldout' ? 'video' : 'account');
@@ -3462,13 +3681,23 @@ function ledgerValue(row, column) {
     return null;
 }
 
+function ledgerBaselineValue(row, column) {
+    if (column.family === 'creatorAdaptiveKeepForecast') {
+        return number(
+            row.predictions
+            && row.predictions.creatorAdaptiveKeepBaseline
+        );
+    }
+    return null;
+}
+
 function ledgerPercentile(row, column) {
     if (column.family !== 'stored') return null;
     const index = contract.features.findIndex(feature => feature.key === column.key);
     return index >= 0 ? number(row.storedPercentile[index]) : null;
 }
 
-function attachCoordinateLedger(rows, registry) {
+function attachCoordinateLedger(rows, registry, creatorAdaptiveStudy = null) {
     for (const row of rows) {
         const values = registry.columns.map(column => number(ledgerValue(row, column)));
         const percentiles = registry.columns.map(column => number(ledgerPercentile(row, column)));
@@ -3501,6 +3730,90 @@ function attachCoordinateLedger(rows, registry) {
                 || (finite(expected) && Math.abs(Number(expected) - Number(actual)) > Math.max(1e-4, Math.abs(Number(expected)) * 1e-5))) {
                 storedParityMismatches.push(`${row.id}:${column.key}`);
             }
+        }
+    }
+    const creatorAdaptiveParityMismatches = [];
+    const creatorCoordinateIndex = registry.columns.findIndex(
+        column => column.id === CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
+    );
+    const creatorArtifactSha256 = creatorAdaptiveStudy
+        && creatorAdaptiveStudy.modelArtifact
+        && creatorAdaptiveStudy.modelArtifact.artifactSha256
+        || null;
+    const creatorMinimumHistory = number(
+        creatorAdaptiveStudy
+        && creatorAdaptiveStudy.formula
+        && creatorAdaptiveStudy.formula.minimumHistoryN
+    );
+    const creatorPoints = pointMap(
+        creatorAdaptiveStudy
+        && creatorAdaptiveStudy.evaluation
+        && creatorAdaptiveStudy.evaluation.points
+    );
+    const rowsById = new Map(rows.map(row => [String(row.id), row]));
+    for (const [id, expected] of creatorPoints) {
+        const row = rowsById.get(id);
+        if (!row) {
+            creatorAdaptiveParityMismatches.push(`${id}:missing-ledger-row`);
+            continue;
+        }
+        const predicted = row.predictions || {};
+        const actual = creatorCoordinateIndex >= 0
+            && row.scoreLedger
+            && row.scoreLedger.values
+            && row.scoreLedger.values[creatorCoordinateIndex];
+        if (!finite(expected.predicted)
+            || !finite(actual)
+            || Math.abs(Number(expected.predicted) - Number(actual)) > 1e-6) {
+            creatorAdaptiveParityMismatches.push(`${id}:prediction`);
+        }
+        if (String(expected.account || '') !== String(row.accountId || '')) {
+            creatorAdaptiveParityMismatches.push(`${id}:account`);
+        }
+        if (!finite(expected.baseline)
+            || !finite(predicted.creatorAdaptiveKeepBaseline)
+            || Math.abs(
+                Number(expected.baseline)
+                - Number(predicted.creatorAdaptiveKeepBaseline)
+            ) > 1e-6) {
+            creatorAdaptiveParityMismatches.push(`${id}:baseline`);
+        }
+        if (number(expected.historyN) !== number(predicted.creatorAdaptiveKeepHistoryN)
+            || (finite(creatorMinimumHistory)
+                && Number(expected.historyN) < Number(creatorMinimumHistory))) {
+            creatorAdaptiveParityMismatches.push(`${id}:history`);
+        }
+        if (number(expected.historyEnd) !== number(predicted.creatorAdaptiveKeepHistoryEnd)) {
+            creatorAdaptiveParityMismatches.push(`${id}:history-cutoff`);
+        }
+        if (number(expected.componentA)
+            !== number(predicted.creatorAdaptiveKeepComponentA)) {
+            creatorAdaptiveParityMismatches.push(`${id}:component-a`);
+        }
+        if (number(expected.componentB)
+            !== number(predicted.creatorAdaptiveKeepComponentB)) {
+            creatorAdaptiveParityMismatches.push(`${id}:component-b`);
+        }
+        if (sha256Json(
+            (expected.historyVideoIds || []).map(String)
+        ) !== sha256Json(
+            (predicted.creatorAdaptiveKeepHistoryVideoIds || []).map(String)
+        )) {
+            creatorAdaptiveParityMismatches.push(`${id}:history-video-ids`);
+        }
+        if (creatorArtifactSha256
+            && predicted.creatorAdaptiveKeepArtifactSha256 !== creatorArtifactSha256) {
+            creatorAdaptiveParityMismatches.push(`${id}:artifact-revision`);
+        }
+    }
+    for (const row of rows) {
+        if (creatorPoints.has(String(row.id))) continue;
+        const actual = creatorCoordinateIndex >= 0
+            && row.scoreLedger
+            && row.scoreLedger.values
+            && row.scoreLedger.values[creatorCoordinateIndex];
+        if (finite(actual)) {
+            creatorAdaptiveParityMismatches.push(`${row.id}:outside-evaluation`);
         }
     }
     const exactHash = value => /^[a-f0-9]{64}$/i.test(String(value || ''));
@@ -3539,6 +3852,7 @@ function attachCoordinateLedger(rows, registry) {
         passed: duplicateIds.length === 0
             && rowLengthMismatches.length === 0
             && storedParityMismatches.length === 0
+            && creatorAdaptiveParityMismatches.length === 0
             && (!registry.lineageAudit || registry.lineageAudit.passed),
         registryVersion: registry.version,
         columns: registry.columns.length,
@@ -3546,6 +3860,7 @@ function attachCoordinateLedger(rows, registry) {
         duplicateIds,
         rowLengthMismatches,
         storedParityMismatches: storedParityMismatches.slice(0, 50),
+        creatorAdaptiveParityMismatches: creatorAdaptiveParityMismatches.slice(0, 50),
         lineagePassed: !registry.lineageAudit || registry.lineageAudit.passed,
         lineageMissing: registry.lineageAudit ? registry.lineageAudit.missing : [],
         lineageBrokenReferences: registry.lineageAudit ? registry.lineageAudit.unresolvedReferences : [],
@@ -3584,6 +3899,9 @@ const LEDGER_OUTCOME_METRIC_KEYS = Object.freeze([
     'oofR2',
     'oofSpearman',
     'oofMae',
+    'oofBaselineMae',
+    'oofMaeImprovementVsBaseline',
+    'oofProtocolBaselineR2',
     'oofMedianFactorError',
     'oofAuc',
     'oofBrier',
@@ -3612,6 +3930,7 @@ function coordinateFoldMode(column) {
         || column.family === 'accountForecast') {
         return 'leave_account_out';
     }
+    if (column.family === 'creatorAdaptiveKeepForecast') return 'prequential_time';
     return 'video_5fold';
 }
 
@@ -3623,6 +3942,7 @@ function coordinateValidationTier(column) {
     if (column.family === 'videoForecast') return 'video_held_out_forecast_plus_video_5fold_calibration';
     if (column.family === 'stored') return 'stored_coordinate_plus_video_5fold_calibration';
     if (column.family === 'visualKeepForecast') return 'frozen_final_model_diagnostic_plus_video_5fold_calibration';
+    if (column.family === 'creatorAdaptiveKeepForecast') return 'creator_prequential_next_upload';
     if (column.family === 'legacy') return 'legacy_diagnostic_plus_video_5fold_calibration';
     return 'video_5fold_calibration';
 }
@@ -3631,16 +3951,21 @@ function coordinatePlainEnglish(column, outcome) {
     if (column.valueClass === 'observed_outcome') {
         return `${column.label} is measured truth, not a candidate predictor. It is present so every score-ledger column remains auditable, but it is excluded from ranking and calibration against ${outcome.label}.`;
     }
-    const protocol = coordinateFoldMode(column) === 'leave_account_out'
+    const foldMode = coordinateFoldMode(column);
+    const protocol = foldMode === 'leave_account_out'
         ? 'The one-coordinate calibration is trained on other creator accounts and then tested on the creator account that was left out.'
-        : 'The one-coordinate calibration is trained on four deterministic video folds and tested on the fifth, so a video outcome never calibrates its own prediction.';
+        : (foldMode === 'prequential_time'
+            ? 'The raw coordinate already is a causal prequential prediction: the final chronological window was scored one upload at a time from strictly earlier same-creator history, with no second calibration.'
+            : 'The one-coordinate calibration is trained on four deterministic video folds and tested on the fifth, so a video outcome never calibrates its own prediction.');
     const upstream = column.family === 'stored'
         ? 'This is the exact production value stored with the scored video; the calibration is held out, but the upstream production axis may still be in-sample for its original training account.'
         : (column.family === 'visualKeepForecast'
             ? 'This is the exact raw percentage from the frozen final full-vector visual model. Its fitting-population values are in-sample diagnostics; only the separately displayed protocol predictions are blind evidence.'
-            : (column.family === 'legacy'
+            : (column.family === 'creatorAdaptiveKeepForecast'
+                ? 'This is the exact raw percentage produced for the known creator’s next upload from its visual and together embeddings plus at most 30 strictly earlier labels. It is intentionally null outside the registered causal evaluation rows or an explicit live profile.'
+                : (column.family === 'legacy'
                 ? 'This is a legacy diagnostic retained only for comparison and is never promoted to a canonical production score.'
-                : column.description));
+                : column.description)));
     return `${upstream} This cell tests whether that exact coordinate predicts ${outcome.label}. ${protocol}`;
 }
 
@@ -3734,7 +4059,30 @@ function singleCoordinateOof(points, outcome, foldMode) {
         accountId: String(point.accountId),
         actual: Number(point.actual),
         predicted: Number(point.predicted),
+        baseline: finite(point.baseline) ? Number(point.baseline) : null,
     }));
+    if (foldMode === 'prequential_time') {
+        return {
+            mode: 'prequential_time',
+            eligibleN: eligible.length,
+            predictions: eligible.map(point => ({
+                ...point,
+                calibrated: point.predicted,
+                fold: 'causal-final-window',
+            })),
+            audit: {
+                mode: 'prequential_time',
+                requestedFolds: 1,
+                completedFolds: eligible.length ? 1 : 0,
+                folds: [],
+                trainingTestOverlapN: 0,
+                heldOutAccountLeakageN: 0,
+                duplicateTestPredictionN: 0,
+                predictedN: eligible.length,
+                rule: 'Use the already prequential raw forecast without a second outcome-fitted calibration.',
+            },
+        };
+    }
     const mode = foldMode === 'leave_account_out' ? 'leave_account_out' : 'video_5fold';
     const folds = mode === 'leave_account_out'
         ? [...new Set(eligible.map(point => point.accountId))].sort()
@@ -3837,8 +4185,13 @@ function oofCoordinateDiagnostics(oof, outcome) {
             accountId,
             n: account.n || 0,
             r2: number(account.r2),
+            protocolBaselineR2: number(account.protocolBaselineR2),
             spearman: number(account.spearman),
             mae: number(account.mae),
+            baselineMae: number(account.baselineMae),
+            maeImprovementVsBaseline: number(
+                account.maeImprovementVsBaseline
+            ),
             actualMin: number(account.actualMin),
             actualMax: number(account.actualMax),
             predictedMin: number(account.predictedMin),
@@ -3864,6 +4217,11 @@ function oofCoordinateDiagnostics(oof, outcome) {
         calibrationIntercept: number(regression.calibrationIntercept),
         bias: number(regression.bias),
         rmse: number(regression.rmse),
+        baselineMae: number(regression.baselineMae),
+        maeImprovementVsBaseline: number(
+            regression.maeImprovementVsBaseline
+        ),
+        protocolBaselineR2: number(regression.protocolBaselineR2),
         perAccount,
     };
 }
@@ -3904,6 +4262,9 @@ function oofCoordinateMetrics(oof, outcome) {
             oofR2: null,
             oofSpearman: null,
             oofMae: null,
+            oofBaselineMae: null,
+            oofMaeImprovementVsBaseline: null,
+            oofProtocolBaselineR2: null,
             oofMedianFactorError: null,
             oofAuc: null,
             oofBrier: null,
@@ -3919,6 +4280,9 @@ function oofCoordinateMetrics(oof, outcome) {
             oofR2: null,
             oofSpearman: null,
             oofMae: null,
+            oofBaselineMae: null,
+            oofMaeImprovementVsBaseline: null,
+            oofProtocolBaselineR2: null,
             oofMedianFactorError: null,
             oofAuc: number(binary.auc),
             oofBrier: number(binary.brier),
@@ -3940,6 +4304,13 @@ function oofCoordinateMetrics(oof, outcome) {
         oofR2: number(regression.r2),
         oofSpearman: number(regression.spearman),
         oofMae: transformedOutcome ? null : number(regression.mae),
+        oofBaselineMae: transformedOutcome
+            ? null
+            : number(regression.baselineMae),
+        oofMaeImprovementVsBaseline: transformedOutcome
+            ? null
+            : number(regression.maeImprovementVsBaseline),
+        oofProtocolBaselineR2: number(regression.protocolBaselineR2),
         oofMedianFactorError: transformedOutcome ? number(regression.medianFactorError) : null,
         oofAuc: null,
         oofBrier: null,
@@ -3952,7 +4323,8 @@ function ledgerEvidence(metrics, column) {
     if (!metrics || metrics.n < 20 || metrics.oofN < 20) return 'insufficient_evidence';
     const diagnosticOnly = column.family === 'stored'
         || column.family === 'visualKeepForecast'
-        || column.family === 'legacy';
+        || column.family === 'legacy'
+        || column.predictorEligible === false;
     if (finite(metrics.oofAuc)) {
         if (finite(metrics.qValue) && metrics.qValue <= 0.05 && metrics.oofAuc >= 0.65) {
             return diagnosticOnly ? 'strong_diagnostic_signal_not_blind' : 'strong_blind_signal';
@@ -3993,6 +4365,7 @@ function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey, calibratio
                 accountId: row.accountId,
                 actual: transformOutcome(outcome.accessor(row), outcome),
                 predicted: coordinateModelValue(row, column),
+                baseline: ledgerBaselineValue(row, column),
                 validationSource: row.validationSource || 'saved_channel_join',
             }));
             const raw = rawCoordinateAssociation(points, outcome, scopeKey);
@@ -4004,11 +4377,32 @@ function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey, calibratio
                 accountId: row.accountId,
                 actual: transformOutcome(outcome.accessor(row), outcome),
                 predicted: coordinateModelValue(row, column),
+                baseline: ledgerBaselineValue(row, column),
                 validationSource: row.validationSource || 'saved_channel_join',
             }));
+            const prequentialTargetCompatible = foldMode !== 'prequential_time'
+                || outcome.key === 'keep'
+                || outcome.key === 'swipe';
+            const targetCompatibleCalibrationPoints = (
+                foldMode === 'prequential_time' && outcome.key === 'swipe'
+            ) ? calibrationPoints.map(point => ({
+                ...point,
+                predicted: finite(point.predicted)
+                    ? 100 - Number(point.predicted)
+                    : null,
+                baseline: finite(point.baseline)
+                    ? 100 - Number(point.baseline)
+                    : null,
+            })) : calibrationPoints;
             const fullOof = isOutcome
                 ? null
-                : singleCoordinateOof(calibrationPoints, outcome, foldMode);
+                : (prequentialTargetCompatible
+                    ? singleCoordinateOof(
+                        targetCompatibleCalibrationPoints,
+                        outcome,
+                        foldMode
+                    )
+                    : null);
             const oof = fullOof ? {
                 ...fullOof,
                 eligibleN: raw.n,
@@ -4029,6 +4423,8 @@ function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey, calibratio
                 availabilityNote = 'No row has both this coordinate and this observed outcome.';
             } else if (pairedRows < 3) {
                 availabilityNote = 'Fewer than three paired rows; association and calibration are not estimable.';
+            } else if (!prequentialTargetCompatible) {
+                availabilityNote = 'Association only: this causal scalar predicts keep rate, so it is not reused as a numerical prediction in another outcome unit.';
             } else if (!oofMetrics.oofN) {
                 availabilityNote = foldMode === 'leave_account_out'
                     ? 'Raw association is available, but this scope does not contain another creator account for leave-account-out calibration.'
@@ -4041,6 +4437,13 @@ function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey, calibratio
                 oofR2: isOutcome ? null : oofMetrics.oofR2,
                 oofSpearman: isOutcome ? null : oofMetrics.oofSpearman,
                 oofMae: isOutcome ? null : oofMetrics.oofMae,
+                oofBaselineMae: isOutcome ? null : oofMetrics.oofBaselineMae,
+                oofMaeImprovementVsBaseline: isOutcome
+                    ? null
+                    : oofMetrics.oofMaeImprovementVsBaseline,
+                oofProtocolBaselineR2: isOutcome
+                    ? null
+                    : oofMetrics.oofProtocolBaselineR2,
                 oofMedianFactorError: isOutcome ? null : oofMetrics.oofMedianFactorError,
                 oofAuc: isOutcome ? null : oofMetrics.oofAuc,
                 oofBrier: isOutcome ? null : oofMetrics.oofBrier,
@@ -4059,6 +4462,7 @@ function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey, calibratio
                 group: column.group,
                 unit: column.unit,
                 available,
+                predictorEligible: column.predictorEligible !== false,
                 availabilityNote,
                 validationTier: coordinateValidationTier(column),
                 plainEnglish: coordinatePlainEnglish(column, outcome),
@@ -4815,13 +5219,96 @@ function buildValidationCohort(joinedRows, blindInputs, blindFeatureNames) {
     };
 }
 
-function buildValidation({ channels, predictor, generatedAt = Date.now(), sourceFingerprint = null }) {
+function creatorAdaptiveModelAuthority(study, suppliedModel) {
+    if (!study) return null;
+    const model = suppliedModel && (suppliedModel.model || suppliedModel);
+    if (!model) return study;
+    const comparableSelection = value => {
+        const selection = value && value.selection || {};
+        return {
+            protocol: selection.protocol || null,
+            candidateCount: number(selection.candidateCount),
+            candidateRegistrySha256: selection.candidateRegistrySha256 || null,
+            candidateCountWithAllAccounts: number(
+                selection.candidateCountWithAllAccounts
+            ),
+            selected: selection.selected || null,
+        };
+    };
+    const comparableBatch = value => {
+        const batch = value && value.batchFreezeStress || {};
+        return {
+            protocol: batch.protocol || null,
+            metrics: batch.metrics || null,
+        };
+    };
+    const comparable = value => ({
+        coordinateId: value && value.coordinateId || null,
+        input: value && value.input || null,
+        valueDefinition: value && value.valueDefinition || null,
+        population: value && value.population || null,
+        selection: comparableSelection(value),
+        evaluation: value && value.evaluation || null,
+        batchFreezeStress: comparableBatch(value),
+        formula: value && value.formula || null,
+        status: value && value.status || null,
+    });
+    if (sha256Json(comparable(study)) !== sha256Json(comparable(model))) {
+        const error = new Error(
+            'Predictor results disagree with the immutable creator-adaptive keep model.'
+        );
+        error.code = 'CREATOR_ADAPTIVE_MODEL_PARITY_MISMATCH';
+        throw error;
+    }
+    const artifactSha256 = suppliedModel.artifactSha256
+        || study.modelArtifact && study.modelArtifact.artifactSha256
+        || null;
+    return {
+        ...study,
+        ...(model.input !== undefined ? { input: model.input } : {}),
+        ...(model.valueDefinition !== undefined
+            ? { valueDefinition: model.valueDefinition }
+            : {}),
+        population: model.population,
+        selection: {
+            ...(study.selection || {}),
+            ...(model.selection || {}),
+        },
+        evaluation: model.evaluation,
+        ...(model.batchFreezeStress || study.batchFreezeStress
+            ? {
+                batchFreezeStress: {
+                    ...(study.batchFreezeStress || {}),
+                    ...(model.batchFreezeStress || {}),
+                },
+            }
+            : {}),
+        formula: model.formula,
+        status: model.status,
+        modelArtifact: {
+            ...(study.modelArtifact || {}),
+            ...(artifactSha256 ? { artifactSha256 } : {}),
+        },
+    };
+}
+
+function buildValidation({
+    channels,
+    predictor,
+    creatorAdaptiveKeepModel = null,
+    generatedAt = Date.now(),
+    sourceFingerprint = null,
+}) {
     if (!predictor || !predictor.targets || !predictor.targets.keep) {
         throw new Error('Predictor artifact is missing the keep target.');
     }
     const keepTarget = predictor.targets.keep || {};
     const viewsTarget = predictor.targets.views || {};
     const visualKeepStudy = keepTarget.visualOnlyStudy || null;
+    const creatorAdaptiveStudy = creatorAdaptiveModelAuthority(
+        keepTarget.creatorAdaptiveStudy || null,
+        creatorAdaptiveKeepModel
+    );
     const predictorProvenance = predictor.provenance || {};
     const visualKeepModelArtifact = visualKeepStudy
         && visualKeepStudy.modelArtifact
@@ -4835,6 +5322,11 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
         visualKeepStudy
         && visualKeepStudy.production
         && visualKeepStudy.production.points
+    );
+    const creatorAdaptiveEvaluation = pointMap(
+        creatorAdaptiveStudy
+        && creatorAdaptiveStudy.evaluation
+        && creatorAdaptiveStudy.evaluation.points
     );
     const keepKnown = pointMap(keepTarget.points);
     const keepUnseen = pointMap(predictorStress(keepTarget, 'Unseen-account transfer').points);
@@ -4866,6 +5358,7 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
             const unseenViews = viewsUnseen.get(id) || {};
             const forwardViews = viewsForward.get(id) || {};
             const frozenVisualKeep = visualKeepProduction.get(id) || {};
+            const creatorAdaptiveKeep = creatorAdaptiveEvaluation.get(id) || {};
             const persistedVisualKeep = saved.visual_keep_forecast
                 && typeof saved.visual_keep_forecast === 'object'
                 ? saved.visual_keep_forecast
@@ -4963,6 +5456,35 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
                             ? persistedVisualKeep.model_artifact_sha256 || 'unversioned'
                             : null
                     ),
+                    creatorAdaptiveKeepForecast: number(
+                        creatorAdaptiveKeep.predicted
+                    ),
+                    creatorAdaptiveKeepForecastSource: finite(
+                        creatorAdaptiveKeep.predicted
+                    ) ? 'causal_final20_prequential' : null,
+                    creatorAdaptiveKeepBaseline: number(
+                        creatorAdaptiveKeep.baseline
+                    ),
+                    creatorAdaptiveKeepHistoryN: number(
+                        creatorAdaptiveKeep.historyN
+                    ),
+                    creatorAdaptiveKeepHistoryEnd: number(
+                        creatorAdaptiveKeep.historyEnd
+                    ),
+                    creatorAdaptiveKeepComponentA: number(
+                        creatorAdaptiveKeep.componentA
+                    ),
+                    creatorAdaptiveKeepComponentB: number(
+                        creatorAdaptiveKeep.componentB
+                    ),
+                    creatorAdaptiveKeepHistoryVideoIds: Array.isArray(
+                        creatorAdaptiveKeep.historyVideoIds
+                    ) ? creatorAdaptiveKeep.historyVideoIds.map(String) : [],
+                    creatorAdaptiveKeepArtifactSha256: finite(
+                        creatorAdaptiveKeep.predicted
+                    ) && creatorAdaptiveStudy && creatorAdaptiveStudy.modelArtifact
+                        ? creatorAdaptiveStudy.modelArtifact.artifactSha256
+                        : null,
                 },
             };
             const externalViewLogs = ['visual.views.raw', 'text.views.raw', 'together.views.raw']
@@ -5000,6 +5522,7 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
     const validationCohort = buildValidationCohort(rows, blindInputs, blindFeatureNames);
     for (const row of validationCohort.rows) {
         const frozenVisualKeep = visualKeepProduction.get(String(row.id)) || {};
+        const creatorAdaptiveKeep = creatorAdaptiveEvaluation.get(String(row.id)) || {};
         row.predictions = row.predictions || {};
         if (!finite(row.predictions.visualKeepForecast)) {
             row.predictions.visualKeepForecast = number(frozenVisualKeep.predicted);
@@ -5010,6 +5533,59 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
                 ? visualKeepArtifactSha256
                 : null;
         }
+        if (!finite(row.predictions.creatorAdaptiveKeepForecast)) {
+            row.predictions.creatorAdaptiveKeepForecast = number(
+                creatorAdaptiveKeep.predicted
+            );
+            row.predictions.creatorAdaptiveKeepForecastSource = finite(
+                creatorAdaptiveKeep.predicted
+            ) ? 'causal_final20_prequential' : null;
+            row.predictions.creatorAdaptiveKeepBaseline = number(
+                creatorAdaptiveKeep.baseline
+            );
+            row.predictions.creatorAdaptiveKeepHistoryN = number(
+                creatorAdaptiveKeep.historyN
+            );
+            row.predictions.creatorAdaptiveKeepHistoryEnd = number(
+                creatorAdaptiveKeep.historyEnd
+            );
+            row.predictions.creatorAdaptiveKeepComponentA = number(
+                creatorAdaptiveKeep.componentA
+            );
+            row.predictions.creatorAdaptiveKeepComponentB = number(
+                creatorAdaptiveKeep.componentB
+            );
+            row.predictions.creatorAdaptiveKeepHistoryVideoIds = Array.isArray(
+                creatorAdaptiveKeep.historyVideoIds
+            ) ? creatorAdaptiveKeep.historyVideoIds.map(String) : [];
+            row.predictions.creatorAdaptiveKeepArtifactSha256 = finite(
+                creatorAdaptiveKeep.predicted
+            ) && creatorAdaptiveStudy && creatorAdaptiveStudy.modelArtifact
+                ? creatorAdaptiveStudy.modelArtifact.artifactSha256
+                : null;
+        }
+        if (!finite(row.predictions.creatorAdaptiveKeepBaseline)) {
+            row.predictions.creatorAdaptiveKeepBaseline = number(
+                creatorAdaptiveKeep.baseline
+            );
+        }
+        if (!finite(row.predictions.creatorAdaptiveKeepComponentA)) {
+            row.predictions.creatorAdaptiveKeepComponentA = number(
+                creatorAdaptiveKeep.componentA
+            );
+        }
+        if (!finite(row.predictions.creatorAdaptiveKeepComponentB)) {
+            row.predictions.creatorAdaptiveKeepComponentB = number(
+                creatorAdaptiveKeep.componentB
+            );
+        }
+        if (!Array.isArray(
+            row.predictions.creatorAdaptiveKeepHistoryVideoIds
+        )) {
+            row.predictions.creatorAdaptiveKeepHistoryVideoIds = Array.isArray(
+                creatorAdaptiveKeep.historyVideoIds
+            ) ? creatorAdaptiveKeep.historyVideoIds.map(String) : [];
+        }
     }
     const coordinateRegistry = buildCoordinateRegistry({
         rows,
@@ -5017,6 +5593,7 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
         predictorPrivateRows: blindInputs.rows || [],
         forecastModel: score21Model,
         visualKeepStudy,
+        creatorAdaptiveStudy,
         sourceFingerprint,
         generatedAt,
     });
@@ -5029,7 +5606,11 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
         error.lineageAudit = audit;
         throw error;
     }
-    const ledgerAudit = attachCoordinateLedger(validationCohort.rows, coordinateRegistry);
+    const ledgerAudit = attachCoordinateLedger(
+        validationCohort.rows,
+        coordinateRegistry,
+        creatorAdaptiveStudy
+    );
     const scopes = {
         pooled: buildScope(rows, validationCohort.rows, 'pooled', coordinateRegistry),
         tyler: buildScope(rows, validationCohort.rows, 'tyler', coordinateRegistry),
@@ -5075,6 +5656,7 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
         scopes,
         score21Model,
         visualKeepStudy,
+        creatorAdaptiveStudy,
         coordinateRegistry,
         ledgerAudit,
         outcomeDefinitions: OUTCOME_DEFINITIONS.map(definition => (
@@ -5087,13 +5669,15 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
             publicViewsAxis: 'The production one-component PLS direction and rank-to-outcome calibration are refit on public corpus videos after excluding private rows, saved rows, and every video from each validation creator.',
             forwardTime: 'Training labels precede test labels, but the present-day representation remains fixed; this is a partial backtest.',
             visualKeepStudy: 'A separate visual-only study fits directly from the canonical 1,536-dimensional opening montage embedding. It reports nested video holdout, forward-time, and whole-creator holdout as separate claims; the stricter protocols determine whether the model may be promoted.',
-            ledgerOutcomeMatrix: 'The single canonical 104-coordinate by 13-outcome validation matrix. Coordinates remain in score-ledger order and are never renamed or re-created for a chart.',
+            creatorAdaptiveKeepStudy: 'The creator-adaptive coordinate is a separate known-creator next-upload claim. Its final chronological predictions use the visual and together embeddings plus only that creator’s strictly earlier measured uploads. Equal timestamps are simultaneous batches. Cold start and anonymous upload scoring are explicitly unsupported.',
+            ledgerOutcomeMatrix: 'The single canonical 105-coordinate by 13-outcome validation matrix. Coordinates remain in score-ledger order and are never renamed or re-created for a chart.',
             retentionCurve: 'Observed YouTube retention is interpolated from its native percent-of-duration curve to exact seconds 0 through 20, then divided by that video\'s observed opening value. Forecasts use only nine public axes rebuilt after both validation creators were excluded.',
             coordinateLedger: 'Every displayed scalar is resolved by canonical coordinate ID. A relationship graph is only a score-coordinate/outcome pairing and cannot mint a new score.',
             glossary: {
                 rawAssociation: 'Spearman measures whether higher coordinate values generally accompany higher outcomes without fitting a calibration. withinAccountSpearman removes each creator\'s level before measuring that rank relationship. AUC is the analogous ranking measure for the binary over-10M outcome.',
                 video5Fold: 'Videos are deterministically assigned to five folds by video ID. For each fold, the one-coordinate calibration is fit on the other four folds and then frozen before it predicts the held-out fold.',
                 leaveAccountOut: 'One creator account is the complete test fold. The calibration sees outcomes from other creators only, then predicts every eligible video from the omitted creator.',
+                prequentialTime: 'Uploads are evaluated in chronological order. A prediction may use outcomes from earlier uploads, but the current upload’s outcome becomes available only after its prediction and can enter only later predictions.',
                 oof: 'Out-of-fold. Every reported OOF prediction was made by a calibration that did not train on that test video outcome; account-held-out OOF also excludes every outcome from the test creator.',
                 oofR2: 'Improvement over the training-fold mean on the held-out rows. Zero matches that baseline; negative is worse; positive is better.',
                 oofMae: 'Average absolute held-out error in the outcome unit, such as percentage points.',
@@ -5103,7 +5687,7 @@ function buildValidation({ channels, predictor, generatedAt = Date.now(), source
                 oofBrier: 'Mean squared probability error for held-out over-10M predictions. Lower is better; zero is perfect.',
                 predictionRange: 'The maximum held-out prediction minus the minimum held-out prediction. Range ratio divides that span by the observed span. A narrow ratio exposes regression-to-the-mean even when R-squared looks favorable.',
                 plotModes: 'Held-out prediction plots apply the exact fold-specific calibration used by the reported OOF metrics. Raw-coordinate plots show the uncalibrated embedding-axis coordinate and are association diagnostics only.',
-                qValue: 'Global Benjamini-Hochberg false-discovery-rate adjustment across the full eligible 104-coordinate by 13-outcome exploratory family. Evidence and ranking use this global q-value because the UI can surface the best result across outcomes.',
+                qValue: 'Global Benjamini-Hochberg false-discovery-rate adjustment across the full eligible 105-coordinate by 13-outcome exploratory family. Evidence and ranking use this global q-value because the UI can surface the best result across outcomes.',
                 outcomeNotPredictor: 'The 13 measured-outcome columns stay in the ledger for traceability but are excluded from predictive rankings, calibration, and evidence claims.',
                 coverage: 'Counts are explicit because not every artifact contains every truth field. Blind-only rows add real keep, ret5, and views labels, but never receive fabricated stored scores, average retention, outlier, or retention curves.',
             },

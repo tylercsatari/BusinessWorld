@@ -1,0 +1,2405 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-29T22:43:06.394883+00:00",
+  "purpose": "Read-only audit of whether cross-account keep-rate failure could be caused by label, timestamp, identity, or embedding alignment rather than model class.",
+  "scope": {
+    "canonicalLoader": "Channel order from retention/channels.json; owner source from the local retention table; other sources from retention/{account}.json; first occurrence of each video ID with finite keep_rate (or stayedToWatch only when keep_rate is absent).",
+    "embeddingAvailabilitySource": "Actual embeddings.npz IDs",
+    "libraryIdentityJoin": true,
+    "dotenvDiscovered": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/.env",
+    "accounts": [
+      "tyler",
+      "brushlabs",
+      "creatinganything",
+      "hafu"
+    ]
+  },
+  "canonicalDataset": {
+    "acceptedN": 636,
+    "skippedByReason": {},
+    "skippedRows": [],
+    "channelOrder": [
+      "tyler",
+      "brushlabs",
+      "creatinganything",
+      "hafu"
+    ],
+    "perAccount": {
+      "tyler": 211,
+      "brushlabs": 12,
+      "creatinganything": 117,
+      "hafu": 296
+    },
+    "latestResultParity": {
+      "latestArtifact": {
+        "privateRetentionRows": 636,
+        "visualOnlyStudyRows": 632,
+        "creatorAdaptiveRows": 632,
+        "generatedAt": 1785362797877
+      },
+      "reconstructed": {
+        "privateRetentionRows": 636,
+        "visualOnlyStudyRows": 632,
+        "creatorAdaptiveRows": 632
+      },
+      "matches": true
+    }
+  },
+  "perAccount": {
+    "tyler": {
+      "account": "tyler",
+      "accountName": "Main",
+      "sourceRowN": 211,
+      "canonicalRowN": 211,
+      "sourceDuplicateVideoIdN": 0,
+      "label": {
+        "n": 211,
+        "mean": 74.45924,
+        "standardDeviation": 7.52246,
+        "minimum": 46.2,
+        "p05": 61.5,
+        "p25": 69.45,
+        "median": 75.6,
+        "p75": 80.1,
+        "p95": 84.5,
+        "maximum": 87.3,
+        "range": 41.1,
+        "uniqueValues": 150,
+        "topRepeatedValues": [
+          {
+            "value": 81.1,
+            "n": 4
+          },
+          {
+            "value": 73.6,
+            "n": 4
+          },
+          {
+            "value": 69.3,
+            "n": 4
+          },
+          {
+            "value": 79.0,
+            "n": 3
+          },
+          {
+            "value": 78.5,
+            "n": 3
+          },
+          {
+            "value": 80.1,
+            "n": 3
+          },
+          {
+            "value": 81.7,
+            "n": 3
+          },
+          {
+            "value": 81.0,
+            "n": 3
+          }
+        ],
+        "integerGridN": 25,
+        "tenthGridN": 211,
+        "hundredthGridN": 211,
+        "atOrBelowZeroN": 0,
+        "atOrAboveHundredN": 0,
+        "fractionScaleCandidateN": 0
+      },
+      "labelSource": {
+        "keepFieldUsage": {
+          "keep_rate": 211
+        },
+        "missingLabelN": 0,
+        "missingLabelIds": [],
+        "invalidLabelN": 0,
+        "invalidLabelIds": [],
+        "fallbackShadowedByPresentButInvalidKeepRateN": 0,
+        "fallbackShadowedIds": [],
+        "redundantKeepFieldConflictN": 0,
+        "redundantKeepFieldConflicts": [],
+        "keepPlusSwipePairN": 211,
+        "keepPlusSwipeMaxAbsoluteResidualPp": 0.0,
+        "keepPlusSwipeNonzeroResidualN": 0,
+        "publishedPrecision": {
+          "date_only": 211
+        },
+        "rowScrapeTimestampN": 211,
+        "firstScrapedAt": "2026-02-22T06:43:27.413000+00:00",
+        "lastScrapedAt": "2026-02-24T07:01:30.717000+00:00",
+        "labelObservationAgeDays": {
+          "n": 211,
+          "minimum": 8.02713,
+          "p10": 150.01531,
+          "median": 802.28918,
+          "p90": 1427.92265,
+          "maximum": 1597.27714
+        },
+        "scrapedBeforePublishN": 0,
+        "scrapedBeforePublishRows": []
+      },
+      "time": {
+        "datedN": 211,
+        "missingTimestampN": 0,
+        "firstPublishedAt": "2021-10-11T00:00:00+00:00",
+        "lastPublishedAt": "2026-02-15T00:00:00+00:00",
+        "uniqueTimestampN": 209,
+        "duplicateTimestampBatchN": 2,
+        "rowsInDuplicateTimestampBatches": 4,
+        "maximumTimestampBatchSize": 2,
+        "largestTimestampBatches": [
+          {
+            "publishedAt": "2022-02-03T00:00:00+00:00",
+            "n": 2,
+            "ids": [
+              "ETbatz38OTA",
+              "gGwtd7HruTQ"
+            ]
+          },
+          {
+            "publishedAt": "2025-07-05T00:00:00+00:00",
+            "n": 2,
+            "ids": [
+              "PaffT8WDjK4",
+              "nCKxsEbRTLQ"
+            ]
+          }
+        ],
+        "spearmanPublishedTimeVsKeep": 0.33032,
+        "spearmanPValue": 9.2e-07,
+        "linearSlopePpPerYear": 2.25536,
+        "chronologicalQuartiles": [
+          {
+            "n": 53,
+            "from": "2021-10-11T00:00:00+00:00",
+            "through": "2023-01-25T00:00:00+00:00",
+            "mean": 68.64717,
+            "median": 68.7
+          },
+          {
+            "n": 53,
+            "from": "2023-02-01T00:00:00+00:00",
+            "through": "2023-12-15T00:00:00+00:00",
+            "mean": 76.48868,
+            "median": 77.6
+          },
+          {
+            "n": 53,
+            "from": "2023-12-20T00:00:00+00:00",
+            "through": "2025-03-21T00:00:00+00:00",
+            "mean": 76.59811,
+            "median": 77.8
+          },
+          {
+            "n": 52,
+            "from": "2025-03-23T00:00:00+00:00",
+            "through": "2026-02-15T00:00:00+00:00",
+            "mean": 76.13462,
+            "median": 76.6
+          }
+        ],
+        "largestMeanSplit": {
+          "splitAt": "2022-07-02T00:00:00+00:00",
+          "beforeN": 36,
+          "afterN": 175,
+          "beforeMean": 64.83889,
+          "afterMean": 76.43829,
+          "afterMinusBeforePp": 11.5994,
+          "standardizedEffect": 1.89072,
+          "selectionWarning": "This is the largest in-sample mean split among all eligible dates; it is a drift diagnostic, not a confirmatory changepoint test."
+        }
+      },
+      "fieldCoverage": {
+        "keep_rate": 211,
+        "stayedToWatch": 0,
+        "swiped": 211,
+        "swipedAway": 0,
+        "published": 211,
+        "scraped_at": 211,
+        "scrapedAt": 0,
+        "ret5": 211,
+        "curve": 211,
+        "views": 211,
+        "duration_s": 211
+      }
+    },
+    "brushlabs": {
+      "account": "brushlabs",
+      "accountName": "Account 1",
+      "sourceRowN": 12,
+      "canonicalRowN": 12,
+      "sourceDuplicateVideoIdN": 0,
+      "label": {
+        "n": 12,
+        "mean": 73.45,
+        "standardDeviation": 6.87598,
+        "minimum": 61.1,
+        "p05": 62.2,
+        "p25": 71.075,
+        "median": 75.2,
+        "p75": 77.325,
+        "p95": 81.93,
+        "maximum": 83.8,
+        "range": 22.7,
+        "uniqueValues": 11,
+        "topRepeatedValues": [
+          {
+            "value": 72.8,
+            "n": 2
+          },
+          {
+            "value": 65.9,
+            "n": 1
+          },
+          {
+            "value": 76.0,
+            "n": 1
+          },
+          {
+            "value": 77.1,
+            "n": 1
+          },
+          {
+            "value": 74.7,
+            "n": 1
+          },
+          {
+            "value": 75.7,
+            "n": 1
+          },
+          {
+            "value": 78.0,
+            "n": 1
+          },
+          {
+            "value": 80.4,
+            "n": 1
+          }
+        ],
+        "integerGridN": 2,
+        "tenthGridN": 12,
+        "hundredthGridN": 12,
+        "atOrBelowZeroN": 0,
+        "atOrAboveHundredN": 0,
+        "fractionScaleCandidateN": 0
+      },
+      "labelSource": {
+        "keepFieldUsage": {
+          "keep_rate": 12
+        },
+        "missingLabelN": 0,
+        "missingLabelIds": [],
+        "invalidLabelN": 0,
+        "invalidLabelIds": [],
+        "fallbackShadowedByPresentButInvalidKeepRateN": 0,
+        "fallbackShadowedIds": [],
+        "redundantKeepFieldConflictN": 0,
+        "redundantKeepFieldConflicts": [],
+        "keepPlusSwipePairN": 12,
+        "keepPlusSwipeMaxAbsoluteResidualPp": 0.0,
+        "keepPlusSwipeNonzeroResidualN": 0,
+        "publishedPrecision": {
+          "second": 12
+        },
+        "rowScrapeTimestampN": 12,
+        "firstScrapedAt": "2026-06-29T23:12:48.147000+00:00",
+        "lastScrapedAt": "2026-06-29T23:22:11.781000+00:00",
+        "labelObservationAgeDays": {
+          "n": 12,
+          "minimum": 60.86285,
+          "p10": 86.29669,
+          "median": 216.83367,
+          "p90": 543.45099,
+          "maximum": 661.07338
+        },
+        "scrapedBeforePublishN": 0,
+        "scrapedBeforePublishRows": []
+      },
+      "time": {
+        "datedN": 12,
+        "missingTimestampN": 0,
+        "firstPublishedAt": "2024-09-06T21:36:32+00:00",
+        "lastPublishedAt": "2026-04-30T02:30:18+00:00",
+        "uniqueTimestampN": 12,
+        "duplicateTimestampBatchN": 0,
+        "rowsInDuplicateTimestampBatches": 0,
+        "maximumTimestampBatchSize": 1,
+        "largestTimestampBatches": [],
+        "spearmanPublishedTimeVsKeep": 0.15061,
+        "spearmanPValue": 0.64033453,
+        "linearSlopePpPerYear": 4.34308,
+        "chronologicalQuartiles": [
+          {
+            "n": 3,
+            "from": "2024-09-06T21:36:32+00:00",
+            "through": "2025-04-16T01:47:30+00:00",
+            "mean": 69.33333,
+            "median": 63.1
+          },
+          {
+            "n": 3,
+            "from": "2025-05-03T20:57:41+00:00",
+            "through": "2025-11-22T05:00:06+00:00",
+            "mean": 75.33333,
+            "median": 72.8
+          },
+          {
+            "n": 3,
+            "from": "2025-11-28T01:33:44+00:00",
+            "through": "2026-01-14T23:56:37+00:00",
+            "mean": 76.13333,
+            "median": 75.7
+          },
+          {
+            "n": 3,
+            "from": "2026-03-15T03:18:54+00:00",
+            "through": "2026-04-30T02:30:18+00:00",
+            "mean": 73.0,
+            "median": 76.0
+          }
+        ],
+        "largestMeanSplit": null
+      },
+      "fieldCoverage": {
+        "keep_rate": 12,
+        "stayedToWatch": 12,
+        "swiped": 12,
+        "swipedAway": 12,
+        "published": 12,
+        "scraped_at": 12,
+        "scrapedAt": 12,
+        "ret5": 12,
+        "curve": 12,
+        "views": 12,
+        "duration_s": 12
+      }
+    },
+    "creatinganything": {
+      "account": "creatinganything",
+      "accountName": "Account 2",
+      "sourceRowN": 117,
+      "canonicalRowN": 117,
+      "sourceDuplicateVideoIdN": 0,
+      "label": {
+        "n": 117,
+        "mean": 50.99402,
+        "standardDeviation": 18.01808,
+        "minimum": 10.2,
+        "p05": 23.94,
+        "p25": 35.6,
+        "median": 48.4,
+        "p75": 65.2,
+        "p95": 77.94,
+        "maximum": 93.0,
+        "range": 82.8,
+        "uniqueValues": 104,
+        "topRepeatedValues": [
+          {
+            "value": 61.6,
+            "n": 3
+          },
+          {
+            "value": 47.9,
+            "n": 3
+          },
+          {
+            "value": 83.5,
+            "n": 2
+          },
+          {
+            "value": 63.5,
+            "n": 2
+          },
+          {
+            "value": 42.4,
+            "n": 2
+          },
+          {
+            "value": 34.4,
+            "n": 2
+          },
+          {
+            "value": 73.1,
+            "n": 2
+          },
+          {
+            "value": 45.7,
+            "n": 2
+          }
+        ],
+        "integerGridN": 6,
+        "tenthGridN": 117,
+        "hundredthGridN": 117,
+        "atOrBelowZeroN": 0,
+        "atOrAboveHundredN": 0,
+        "fractionScaleCandidateN": 0
+      },
+      "labelSource": {
+        "keepFieldUsage": {
+          "keep_rate": 117
+        },
+        "missingLabelN": 0,
+        "missingLabelIds": [],
+        "invalidLabelN": 0,
+        "invalidLabelIds": [],
+        "fallbackShadowedByPresentButInvalidKeepRateN": 0,
+        "fallbackShadowedIds": [],
+        "redundantKeepFieldConflictN": 0,
+        "redundantKeepFieldConflicts": [],
+        "keepPlusSwipePairN": 117,
+        "keepPlusSwipeMaxAbsoluteResidualPp": 0.0,
+        "keepPlusSwipeNonzeroResidualN": 0,
+        "publishedPrecision": {
+          "second": 117
+        },
+        "rowScrapeTimestampN": 117,
+        "firstScrapedAt": "2026-06-29T23:39:30.589000+00:00",
+        "lastScrapedAt": "2026-06-30T01:33:43.498000+00:00",
+        "labelObservationAgeDays": {
+          "n": 117,
+          "minimum": 506.72175,
+          "p10": 910.76517,
+          "median": 1242.92308,
+          "p90": 1643.90527,
+          "maximum": 1648.29116
+        },
+        "scrapedBeforePublishN": 0,
+        "scrapedBeforePublishRows": []
+      },
+      "time": {
+        "datedN": 117,
+        "missingTimestampN": 0,
+        "firstPublishedAt": "2021-12-24T18:34:27+00:00",
+        "lastPublishedAt": "2025-02-08T06:20:11+00:00",
+        "uniqueTimestampN": 117,
+        "duplicateTimestampBatchN": 0,
+        "rowsInDuplicateTimestampBatches": 0,
+        "maximumTimestampBatchSize": 1,
+        "largestTimestampBatches": [],
+        "spearmanPublishedTimeVsKeep": 0.64835,
+        "spearmanPValue": 0.0,
+        "linearSlopePpPerYear": 14.45787,
+        "chronologicalQuartiles": [
+          {
+            "n": 30,
+            "from": "2021-12-24T18:34:27+00:00",
+            "through": "2022-01-04T20:41:34+00:00",
+            "mean": 40.16333,
+            "median": 39.15
+          },
+          {
+            "n": 29,
+            "from": "2022-01-04T20:42:16+00:00",
+            "through": "2023-02-03T02:23:50+00:00",
+            "mean": 37.29655,
+            "median": 35.8
+          },
+          {
+            "n": 29,
+            "from": "2023-02-03T13:40:01+00:00",
+            "through": "2023-10-07T18:28:31+00:00",
+            "mean": 58.6931,
+            "median": 63.2
+          },
+          {
+            "n": 29,
+            "from": "2023-10-08T16:01:48+00:00",
+            "through": "2025-02-08T06:20:11+00:00",
+            "mean": 68.19655,
+            "median": 67.6
+          }
+        ],
+        "largestMeanSplit": {
+          "splitAt": "2023-02-03T13:40:01+00:00",
+          "beforeN": 59,
+          "afterN": 58,
+          "beforeMean": 38.75424,
+          "afterMean": 63.44483,
+          "afterMinusBeforePp": 24.69059,
+          "standardizedEffect": 1.8803,
+          "selectionWarning": "This is the largest in-sample mean split among all eligible dates; it is a drift diagnostic, not a confirmatory changepoint test."
+        }
+      },
+      "fieldCoverage": {
+        "keep_rate": 117,
+        "stayedToWatch": 117,
+        "swiped": 117,
+        "swipedAway": 117,
+        "published": 117,
+        "scraped_at": 117,
+        "scrapedAt": 117,
+        "ret5": 117,
+        "curve": 117,
+        "views": 117,
+        "duration_s": 117
+      }
+    },
+    "hafu": {
+      "account": "hafu",
+      "accountName": "Account 3",
+      "sourceRowN": 296,
+      "canonicalRowN": 296,
+      "sourceDuplicateVideoIdN": 0,
+      "label": {
+        "n": 296,
+        "mean": 72.3098,
+        "standardDeviation": 8.25424,
+        "minimum": 46.2,
+        "p05": 56.75,
+        "p25": 67.275,
+        "median": 74.15,
+        "p75": 78.1,
+        "p95": 82.725,
+        "maximum": 91.2,
+        "range": 45.0,
+        "uniqueValues": 183,
+        "topRepeatedValues": [
+          {
+            "value": 77.7,
+            "n": 5
+          },
+          {
+            "value": 80.3,
+            "n": 5
+          },
+          {
+            "value": 77.9,
+            "n": 4
+          },
+          {
+            "value": 77.6,
+            "n": 4
+          },
+          {
+            "value": 76.8,
+            "n": 4
+          },
+          {
+            "value": 75.8,
+            "n": 4
+          },
+          {
+            "value": 72.2,
+            "n": 4
+          },
+          {
+            "value": 76.6,
+            "n": 4
+          }
+        ],
+        "integerGridN": 23,
+        "tenthGridN": 296,
+        "hundredthGridN": 296,
+        "atOrBelowZeroN": 0,
+        "atOrAboveHundredN": 0,
+        "fractionScaleCandidateN": 0
+      },
+      "labelSource": {
+        "keepFieldUsage": {
+          "keep_rate": 296
+        },
+        "missingLabelN": 0,
+        "missingLabelIds": [],
+        "invalidLabelN": 0,
+        "invalidLabelIds": [],
+        "fallbackShadowedByPresentButInvalidKeepRateN": 0,
+        "fallbackShadowedIds": [],
+        "redundantKeepFieldConflictN": 0,
+        "redundantKeepFieldConflicts": [],
+        "keepPlusSwipePairN": 296,
+        "keepPlusSwipeMaxAbsoluteResidualPp": 0.0,
+        "keepPlusSwipeNonzeroResidualN": 0,
+        "publishedPrecision": {
+          "second": 296
+        },
+        "rowScrapeTimestampN": 296,
+        "firstScrapedAt": "2026-06-30T04:18:31.686000+00:00",
+        "lastScrapedAt": "2026-06-30T09:03:37.995000+00:00",
+        "labelObservationAgeDays": {
+          "n": 296,
+          "minimum": 2.70027,
+          "p10": 234.71708,
+          "median": 852.66347,
+          "p90": 1262.77041,
+          "maximum": 2702.2599
+        },
+        "scrapedBeforePublishN": 0,
+        "scrapedBeforePublishRows": []
+      },
+      "time": {
+        "datedN": 296,
+        "missingTimestampN": 0,
+        "firstPublishedAt": "2019-02-05T02:49:23+00:00",
+        "lastPublishedAt": "2026-06-27T11:30:08+00:00",
+        "uniqueTimestampN": 296,
+        "duplicateTimestampBatchN": 0,
+        "rowsInDuplicateTimestampBatches": 0,
+        "maximumTimestampBatchSize": 1,
+        "largestTimestampBatches": [],
+        "spearmanPublishedTimeVsKeep": 0.40809,
+        "spearmanPValue": 0.0,
+        "linearSlopePpPerYear": 3.03532,
+        "chronologicalQuartiles": [
+          {
+            "n": 74,
+            "from": "2019-02-05T02:49:23+00:00",
+            "through": "2023-03-20T13:00:17+00:00",
+            "mean": 65.94189,
+            "median": 63.75
+          },
+          {
+            "n": 74,
+            "from": "2023-03-21T13:00:11+00:00",
+            "through": "2024-02-26T17:07:01+00:00",
+            "mean": 72.2473,
+            "median": 73.15
+          },
+          {
+            "n": 74,
+            "from": "2024-03-01T12:00:13+00:00",
+            "through": "2025-02-13T15:58:43+00:00",
+            "mean": 75.20676,
+            "median": 75.7
+          },
+          {
+            "n": 74,
+            "from": "2025-02-14T16:45:03+00:00",
+            "through": "2026-06-27T11:30:08+00:00",
+            "mean": 75.84324,
+            "median": 76.65
+          }
+        ],
+        "largestMeanSplit": {
+          "splitAt": "2023-04-22T13:00:26+00:00",
+          "beforeN": 87,
+          "afterN": 209,
+          "beforeMean": 65.08736,
+          "afterMean": 75.31627,
+          "afterMinusBeforePp": 10.22891,
+          "standardizedEffect": 1.5,
+          "selectionWarning": "This is the largest in-sample mean split among all eligible dates; it is a drift diagnostic, not a confirmatory changepoint test."
+        }
+      },
+      "fieldCoverage": {
+        "keep_rate": 296,
+        "stayedToWatch": 296,
+        "swiped": 296,
+        "swipedAway": 296,
+        "published": 296,
+        "scraped_at": 296,
+        "scrapedAt": 296,
+        "ret5": 296,
+        "curve": 296,
+        "views": 296,
+        "duration_s": 296
+      }
+    }
+  },
+  "crossAccountLabelDistributions": [
+    {
+      "left": "brushlabs",
+      "right": "creatinganything",
+      "leftN": 12,
+      "rightN": 117,
+      "rightMinusLeftMeanPp": -22.45598,
+      "standardizedMeanDifference": -1.29514,
+      "wassersteinDistancePp": 22.64573,
+      "ksStatistic": 0.64957,
+      "ksPValue": 5.967e-05,
+      "interpretationBoundary": "A distribution difference can reflect creator/content/audience mix or measurement differences; it does not by itself prove label incompatibility."
+    },
+    {
+      "left": "brushlabs",
+      "right": "hafu",
+      "leftN": 12,
+      "rightN": 296,
+      "rightMinusLeftMeanPp": -1.1402,
+      "standardizedMeanDifference": -0.1389,
+      "wassersteinDistancePp": 1.77421,
+      "ksStatistic": 0.19595,
+      "ksPValue": 0.69945671,
+      "interpretationBoundary": "A distribution difference can reflect creator/content/audience mix or measurement differences; it does not by itself prove label incompatibility."
+    },
+    {
+      "left": "brushlabs",
+      "right": "tyler",
+      "leftN": 12,
+      "rightN": 211,
+      "rightMinusLeftMeanPp": 1.00924,
+      "standardizedMeanDifference": 0.13472,
+      "wassersteinDistancePp": 2.02299,
+      "ksStatistic": 0.23144,
+      "ksPValue": 0.50350276,
+      "interpretationBoundary": "A distribution difference can reflect creator/content/audience mix or measurement differences; it does not by itself prove label incompatibility."
+    },
+    {
+      "left": "creatinganything",
+      "right": "hafu",
+      "leftN": 117,
+      "rightN": 296,
+      "rightMinusLeftMeanPp": 21.31578,
+      "standardizedMeanDifference": 1.7981,
+      "wassersteinDistancePp": 21.36707,
+      "ksStatistic": 0.55717,
+      "ksPValue": 0.0,
+      "interpretationBoundary": "A distribution difference can reflect creator/content/audience mix or measurement differences; it does not by itself prove label incompatibility."
+    },
+    {
+      "left": "creatinganything",
+      "right": "tyler",
+      "leftN": 117,
+      "rightN": 211,
+      "rightMinusLeftMeanPp": 23.46522,
+      "standardizedMeanDifference": 1.90346,
+      "wassersteinDistancePp": 23.56706,
+      "ksStatistic": 0.645,
+      "ksPValue": 0.0,
+      "interpretationBoundary": "A distribution difference can reflect creator/content/audience mix or measurement differences; it does not by itself prove label incompatibility."
+    },
+    {
+      "left": "hafu",
+      "right": "tyler",
+      "leftN": 296,
+      "rightN": 211,
+      "rightMinusLeftMeanPp": 2.14944,
+      "standardizedMeanDifference": 0.27009,
+      "wassersteinDistancePp": 2.21736,
+      "ksStatistic": 0.14942,
+      "ksPValue": 0.00711648,
+      "interpretationBoundary": "A distribution difference can reflect creator/content/audience mix or measurement differences; it does not by itself prove label incompatibility."
+    }
+  ],
+  "duplicates": {
+    "rawRowN": 636,
+    "uniqueVideoIdN": 636,
+    "duplicateVideoIdN": 0,
+    "duplicateVideoIdRows": 0,
+    "crossAccountDuplicateVideoIdN": 0,
+    "duplicateVideoIds": [],
+    "duplicateNormalizedTitleN": 4,
+    "duplicateNormalizedTitleSamples": [
+      {
+        "normalizedTitle": "can you break the impossible board with a 1 inch punch",
+        "instances": [
+          {
+            "account": "hafu",
+            "id": "yROgo6gcqjs",
+            "title": "Can you break the impossible board with a 1 inch punch?",
+            "published": "2023-02-13T06:00:38-08:00",
+            "keep": 63.7
+          },
+          {
+            "account": "hafu",
+            "id": "M4TqSUHU0yc",
+            "title": "Can you break the impossible board with a 1 inch punch?",
+            "published": "2023-02-02T06:00:12-08:00",
+            "keep": 58.1
+          },
+          {
+            "account": "hafu",
+            "id": "1Ct7tfqwVS4",
+            "title": "Can you break the impossible board with a 1 inch punch?",
+            "published": "2023-01-29T06:00:02-08:00",
+            "keep": 61.8
+          }
+        ]
+      },
+      {
+        "normalizedTitle": "can you pick up an egg without breaking it",
+        "instances": [
+          {
+            "account": "hafu",
+            "id": "qG8zwLtdM0A",
+            "title": "Can You Pick Up an Egg Without Breaking It?",
+            "published": "2026-05-30T04:30:05-07:00",
+            "keep": 79.2
+          },
+          {
+            "account": "hafu",
+            "id": "0d07lhmFAEI",
+            "title": "Can you pick up an egg without breaking it?",
+            "published": "2023-07-02T05:00:02-07:00",
+            "keep": 78.9
+          }
+        ]
+      },
+      {
+        "normalizedTitle": "i tested the unbreakable glass",
+        "instances": [
+          {
+            "account": "hafu",
+            "id": "qnG8EpjrJUk",
+            "title": "I Tested the \u201cUnbreakable\u201d Glass",
+            "published": "2025-06-24T08:57:01-07:00",
+            "keep": 79.8
+          },
+          {
+            "account": "hafu",
+            "id": "bbvt0BlHp68",
+            "title": "I Tested the \"Unbreakable\" Glass",
+            "published": "2023-11-22T04:00:34-08:00",
+            "keep": 77.6
+          }
+        ]
+      },
+      {
+        "normalizedTitle": "what do you think of his 1 inch punch",
+        "instances": [
+          {
+            "account": "hafu",
+            "id": "wYWS9Z-sIws",
+            "title": "What do you think of his 1 inch punch?",
+            "published": "2023-03-01T00:00:23-08:00",
+            "keep": 62.5
+          },
+          {
+            "account": "hafu",
+            "id": "1h2tbemBIQ4",
+            "title": "What do you think of his 1 inch punch?",
+            "published": "2023-02-05T06:00:01-08:00",
+            "keep": 64.6
+          }
+        ]
+      }
+    ],
+    "urlVideoIdMismatchN": 0,
+    "urlVideoIdMismatches": [],
+    "invalidYoutubeIdN": 0,
+    "invalidYoutubeIds": []
+  },
+  "library": {
+    "sourceRowN": 86165,
+    "uniqueVideoIdN": 86165,
+    "duplicateVideoIdN": 0,
+    "duplicateVideoIds": []
+  },
+  "identityJoins": {
+    "perAccount": {
+      "brushlabs": {
+        "n": 12,
+        "libraryPresentN": 1,
+        "libraryMissingN": 11,
+        "libraryTitleExactN": 1,
+        "libraryTitleCompatibleN": 1,
+        "libraryTitleSuspiciousN": 0,
+        "libraryTitleSuspiciousRows": [],
+        "libraryChannelIds": {
+          "UCIftzJqBUen0tGG7TbPJMdg": 1
+        },
+        "majorityLibraryChannelId": "UCIftzJqBUen0tGG7TbPJMdg",
+        "libraryChannelMismatchN": 0,
+        "libraryChannelMismatches": [],
+        "embeddings": {
+          "visual": {
+            "presentN": 12,
+            "missingN": 0,
+            "titleComparableN": 12,
+            "titleExactN": 12,
+            "titleCompatibleN": 12,
+            "titleSuspiciousN": 0,
+            "titleSuspiciousRows": []
+          },
+          "text": {
+            "presentN": 10,
+            "missingN": 2,
+            "titleComparableN": 10,
+            "titleExactN": 10,
+            "titleCompatibleN": 10,
+            "titleSuspiciousN": 0,
+            "titleSuspiciousRows": []
+          },
+          "together": {
+            "presentN": 12,
+            "missingN": 0,
+            "titleComparableN": 12,
+            "titleExactN": 12,
+            "titleCompatibleN": 12,
+            "titleSuspiciousN": 0,
+            "titleSuspiciousRows": []
+          }
+        }
+      },
+      "creatinganything": {
+        "n": 117,
+        "libraryPresentN": 0,
+        "libraryMissingN": 117,
+        "libraryTitleExactN": 0,
+        "libraryTitleCompatibleN": 0,
+        "libraryTitleSuspiciousN": 0,
+        "libraryTitleSuspiciousRows": [],
+        "libraryChannelIds": {},
+        "majorityLibraryChannelId": null,
+        "libraryChannelMismatchN": 0,
+        "libraryChannelMismatches": [],
+        "embeddings": {
+          "visual": {
+            "presentN": 117,
+            "missingN": 0,
+            "titleComparableN": 117,
+            "titleExactN": 117,
+            "titleCompatibleN": 117,
+            "titleSuspiciousN": 0,
+            "titleSuspiciousRows": []
+          },
+          "text": {
+            "presentN": 77,
+            "missingN": 40,
+            "titleComparableN": 77,
+            "titleExactN": 77,
+            "titleCompatibleN": 77,
+            "titleSuspiciousN": 0,
+            "titleSuspiciousRows": []
+          },
+          "together": {
+            "presentN": 117,
+            "missingN": 0,
+            "titleComparableN": 117,
+            "titleExactN": 117,
+            "titleCompatibleN": 117,
+            "titleSuspiciousN": 0,
+            "titleSuspiciousRows": []
+          }
+        }
+      },
+      "hafu": {
+        "n": 296,
+        "libraryPresentN": 9,
+        "libraryMissingN": 287,
+        "libraryTitleExactN": 9,
+        "libraryTitleCompatibleN": 9,
+        "libraryTitleSuspiciousN": 0,
+        "libraryTitleSuspiciousRows": [],
+        "libraryChannelIds": {
+          "UCXMVaxrax7RNDPdfRrXXgtQ": 8
+        },
+        "majorityLibraryChannelId": "UCXMVaxrax7RNDPdfRrXXgtQ",
+        "libraryChannelMismatchN": 0,
+        "libraryChannelMismatches": [],
+        "embeddings": {
+          "visual": {
+            "presentN": 292,
+            "missingN": 4,
+            "titleComparableN": 292,
+            "titleExactN": 292,
+            "titleCompatibleN": 292,
+            "titleSuspiciousN": 0,
+            "titleSuspiciousRows": []
+          },
+          "text": {
+            "presentN": 290,
+            "missingN": 6,
+            "titleComparableN": 290,
+            "titleExactN": 290,
+            "titleCompatibleN": 290,
+            "titleSuspiciousN": 0,
+            "titleSuspiciousRows": []
+          },
+          "together": {
+            "presentN": 292,
+            "missingN": 4,
+            "titleComparableN": 292,
+            "titleExactN": 292,
+            "titleCompatibleN": 292,
+            "titleSuspiciousN": 0,
+            "titleSuspiciousRows": []
+          }
+        }
+      },
+      "tyler": {
+        "n": 211,
+        "libraryPresentN": 0,
+        "libraryMissingN": 211,
+        "libraryTitleExactN": 0,
+        "libraryTitleCompatibleN": 0,
+        "libraryTitleSuspiciousN": 0,
+        "libraryTitleSuspiciousRows": [],
+        "libraryChannelIds": {},
+        "majorityLibraryChannelId": null,
+        "libraryChannelMismatchN": 0,
+        "libraryChannelMismatches": [],
+        "embeddings": {
+          "visual": {
+            "presentN": 211,
+            "missingN": 0,
+            "titleComparableN": 211,
+            "titleExactN": 211,
+            "titleCompatibleN": 211,
+            "titleSuspiciousN": 0,
+            "titleSuspiciousRows": []
+          },
+          "text": {
+            "presentN": 211,
+            "missingN": 0,
+            "titleComparableN": 211,
+            "titleExactN": 211,
+            "titleCompatibleN": 211,
+            "titleSuspiciousN": 0,
+            "titleSuspiciousRows": []
+          },
+          "together": {
+            "presentN": 211,
+            "missingN": 0,
+            "titleComparableN": 211,
+            "titleExactN": 211,
+            "titleCompatibleN": 211,
+            "titleSuspiciousN": 0,
+            "titleSuspiciousRows": []
+          }
+        }
+      }
+    },
+    "suspiciousLibraryTitleJoinN": 0,
+    "suspiciousLibraryTitleJoins": [],
+    "titleCaveat": "Title mismatches are diagnostics only: YouTube titles can be edited after upload and embedding archives may retain an earlier title. Canonical embedding joins use the immutable video ID."
+  },
+  "embeddings": {
+    "modalities": {
+      "visual": {
+        "archive": {
+          "bytes": 32451964,
+          "sha256": "7e3cdc13ccd4f2029666ba1001f4efde8f327c9aba13f7f7313107e64d98e632",
+          "etag": "1fa949e570ba38585d4813ce1de32290",
+          "lastModified": "2026-07-29T22:33:50+00:00",
+          "idsN": 5632,
+          "duplicateIdsN": 0,
+          "vectorShape": [
+            5632,
+            1536
+          ],
+          "vectorDtype": "float32",
+          "verification": "actual_npz_ids_and_header"
+        },
+        "mapParity": {
+          "mapN": 5632,
+          "archiveN": 5632,
+          "mapDuplicateIdsN": 0,
+          "archiveDuplicateIdsN": 0,
+          "exactIdOrderMatch": true,
+          "mapOnlyIdN": 0,
+          "archiveOnlyIdN": 0,
+          "mapOnlyIds": [],
+          "archiveOnlyIds": [],
+          "mapUpdated": 1785363458.864647
+        },
+        "canonicalPresentN": 632,
+        "canonicalMissingN": 4,
+        "canonicalCoverage": 0.99371,
+        "missingCanonicalIds": [
+          "qqbxO7JCCYI",
+          "DgFX1kJcWtw",
+          "e8ASarQ264Y",
+          "pMvCZjc7xtw"
+        ],
+        "perAccount": {
+          "brushlabs": {
+            "n": 12,
+            "presentN": 12,
+            "missingN": 0,
+            "coverage": 1.0,
+            "missingIds": [],
+            "presentKeepMean": 73.45,
+            "missingKeepMean": null,
+            "missingMinusPresentKeepPp": null
+          },
+          "creatinganything": {
+            "n": 117,
+            "presentN": 117,
+            "missingN": 0,
+            "coverage": 1.0,
+            "missingIds": [],
+            "presentKeepMean": 50.99402,
+            "missingKeepMean": null,
+            "missingMinusPresentKeepPp": null
+          },
+          "hafu": {
+            "n": 296,
+            "presentN": 292,
+            "missingN": 4,
+            "coverage": 0.98649,
+            "missingIds": [
+              "qqbxO7JCCYI",
+              "DgFX1kJcWtw",
+              "e8ASarQ264Y",
+              "pMvCZjc7xtw"
+            ],
+            "presentKeepMean": 72.31404,
+            "missingKeepMean": 72.0,
+            "missingMinusPresentKeepPp": -0.31404
+          },
+          "tyler": {
+            "n": 211,
+            "presentN": 211,
+            "missingN": 0,
+            "coverage": 1.0,
+            "missingIds": [],
+            "presentKeepMean": 74.45924,
+            "missingKeepMean": null,
+            "missingMinusPresentKeepPp": null
+          }
+        }
+      },
+      "text": {
+        "archive": {
+          "bytes": 133631059,
+          "sha256": "2396e2d598f3962de648d9f37097c2da7c476e820c9af3ea2c9a97235a5d509f",
+          "etag": "3201f03301bb6bbffce1c8889d0ae96a",
+          "lastModified": "2026-07-29T22:37:29+00:00",
+          "idsN": 23184,
+          "duplicateIdsN": 0,
+          "vectorShape": [
+            23184,
+            1536
+          ],
+          "vectorDtype": "float32",
+          "verification": "actual_npz_ids_and_header"
+        },
+        "mapParity": {
+          "mapN": 23184,
+          "archiveN": 23184,
+          "mapDuplicateIdsN": 0,
+          "archiveDuplicateIdsN": 0,
+          "exactIdOrderMatch": true,
+          "mapOnlyIdN": 0,
+          "archiveOnlyIdN": 0,
+          "mapOnlyIds": [],
+          "archiveOnlyIds": [],
+          "mapUpdated": 1785363484.057544
+        },
+        "canonicalPresentN": 588,
+        "canonicalMissingN": 48,
+        "canonicalCoverage": 0.92453,
+        "missingCanonicalIds": [
+          "yedH1iNbMpQ",
+          "lZz66fhjHNQ",
+          "3bUv_YUp4J8",
+          "PlcIjlHlEr4",
+          "ymOuulclFto",
+          "05hY197CGos",
+          "di5q7WeGxcM",
+          "5KxTWwa1AnY",
+          "9n2lx48Ttxs",
+          "uUH_V7LmLII",
+          "0Ggp1iBGMmo",
+          "r3wAxdcnlqE",
+          "9HaKbx48BmU",
+          "WuLQ2J0XnJQ",
+          "UfEajAumtic",
+          "wWdU-MIiEH0",
+          "JCaKNwJl1NE",
+          "aqc_uC8evo8",
+          "tIBqiINYcIo",
+          "J6GuTf398xA",
+          "rtpZpKOdy8E",
+          "AVkYT1xWmv0",
+          "uV1I3YfBeAo",
+          "tGrfQzINkaI",
+          "8gGbDw5mk6o",
+          "kBgq8ZRreCU",
+          "RRhLIzDu3lg",
+          "Vgy84LsQvOI",
+          "krGULUCnTss",
+          "Wz7Aqos5wbs",
+          "O7FjpdBN-oE",
+          "lPgUEBiv81U",
+          "6TFNfmQWWZQ",
+          "TF6nR2scaC4",
+          "goI_v-ov2xo",
+          "AQP6UgvJgGk",
+          "Hb_pemk2Mkk",
+          "pxC0MIEWoyM",
+          "O-kCBgu1bfw",
+          "uE_cQ_Lj4Hs",
+          "DgFWv_aeTtE",
+          "pT8QN1WaNa4",
+          "gReE6doheFU",
+          "_VgteK_4aos",
+          "ybArAeWlyWU",
+          "D_u4PrI65W0",
+          "UMyLGnyZUOc",
+          "X_HKJXATEFI"
+        ],
+        "perAccount": {
+          "brushlabs": {
+            "n": 12,
+            "presentN": 10,
+            "missingN": 2,
+            "coverage": 0.83333,
+            "missingIds": [
+              "yedH1iNbMpQ",
+              "lZz66fhjHNQ"
+            ],
+            "presentKeepMean": 75.72,
+            "missingKeepMean": 62.1,
+            "missingMinusPresentKeepPp": -13.62
+          },
+          "creatinganything": {
+            "n": 117,
+            "presentN": 77,
+            "missingN": 40,
+            "coverage": 0.65812,
+            "missingIds": [
+              "3bUv_YUp4J8",
+              "PlcIjlHlEr4",
+              "ymOuulclFto",
+              "05hY197CGos",
+              "di5q7WeGxcM",
+              "5KxTWwa1AnY",
+              "9n2lx48Ttxs",
+              "uUH_V7LmLII",
+              "0Ggp1iBGMmo",
+              "r3wAxdcnlqE",
+              "9HaKbx48BmU",
+              "WuLQ2J0XnJQ",
+              "UfEajAumtic",
+              "wWdU-MIiEH0",
+              "JCaKNwJl1NE",
+              "aqc_uC8evo8",
+              "tIBqiINYcIo",
+              "J6GuTf398xA",
+              "rtpZpKOdy8E",
+              "AVkYT1xWmv0",
+              "uV1I3YfBeAo",
+              "tGrfQzINkaI",
+              "8gGbDw5mk6o",
+              "kBgq8ZRreCU",
+              "RRhLIzDu3lg",
+              "Vgy84LsQvOI",
+              "krGULUCnTss",
+              "Wz7Aqos5wbs",
+              "O7FjpdBN-oE",
+              "lPgUEBiv81U",
+              "6TFNfmQWWZQ",
+              "TF6nR2scaC4",
+              "goI_v-ov2xo",
+              "AQP6UgvJgGk",
+              "Hb_pemk2Mkk",
+              "pxC0MIEWoyM",
+              "O-kCBgu1bfw",
+              "uE_cQ_Lj4Hs",
+              "DgFWv_aeTtE",
+              "pT8QN1WaNa4"
+            ],
+            "presentKeepMean": 46.37273,
+            "missingKeepMean": 59.89,
+            "missingMinusPresentKeepPp": 13.51727
+          },
+          "hafu": {
+            "n": 296,
+            "presentN": 290,
+            "missingN": 6,
+            "coverage": 0.97973,
+            "missingIds": [
+              "gReE6doheFU",
+              "_VgteK_4aos",
+              "ybArAeWlyWU",
+              "D_u4PrI65W0",
+              "UMyLGnyZUOc",
+              "X_HKJXATEFI"
+            ],
+            "presentKeepMean": 72.26517,
+            "missingKeepMean": 74.46667,
+            "missingMinusPresentKeepPp": 2.20149
+          },
+          "tyler": {
+            "n": 211,
+            "presentN": 211,
+            "missingN": 0,
+            "coverage": 1.0,
+            "missingIds": [],
+            "presentKeepMean": 74.45924,
+            "missingKeepMean": null,
+            "missingMinusPresentKeepPp": null
+          }
+        }
+      },
+      "together": {
+        "archive": {
+          "bytes": 381445625,
+          "sha256": "f5dcc3657e209aa16611aeb0a57ff267829e1028d6ea988d7cebcbf573edd615",
+          "etag": "ceb20283d76395c2568b062761b1f073",
+          "lastModified": "2026-07-29T22:28:26+00:00",
+          "idsN": 66142,
+          "duplicateIdsN": 0,
+          "vectorShape": [
+            66142,
+            1536
+          ],
+          "vectorDtype": "float32",
+          "verification": "actual_npz_ids_and_header"
+        },
+        "mapParity": {
+          "mapN": 66142,
+          "archiveN": 66142,
+          "mapDuplicateIdsN": 0,
+          "archiveDuplicateIdsN": 0,
+          "exactIdOrderMatch": true,
+          "mapOnlyIdN": 0,
+          "archiveOnlyIdN": 0,
+          "mapOnlyIds": [],
+          "archiveOnlyIds": [],
+          "mapUpdated": 1785363557.5137541
+        },
+        "canonicalPresentN": 632,
+        "canonicalMissingN": 4,
+        "canonicalCoverage": 0.99371,
+        "missingCanonicalIds": [
+          "qqbxO7JCCYI",
+          "DgFX1kJcWtw",
+          "e8ASarQ264Y",
+          "pMvCZjc7xtw"
+        ],
+        "perAccount": {
+          "brushlabs": {
+            "n": 12,
+            "presentN": 12,
+            "missingN": 0,
+            "coverage": 1.0,
+            "missingIds": [],
+            "presentKeepMean": 73.45,
+            "missingKeepMean": null,
+            "missingMinusPresentKeepPp": null
+          },
+          "creatinganything": {
+            "n": 117,
+            "presentN": 117,
+            "missingN": 0,
+            "coverage": 1.0,
+            "missingIds": [],
+            "presentKeepMean": 50.99402,
+            "missingKeepMean": null,
+            "missingMinusPresentKeepPp": null
+          },
+          "hafu": {
+            "n": 296,
+            "presentN": 292,
+            "missingN": 4,
+            "coverage": 0.98649,
+            "missingIds": [
+              "qqbxO7JCCYI",
+              "DgFX1kJcWtw",
+              "e8ASarQ264Y",
+              "pMvCZjc7xtw"
+            ],
+            "presentKeepMean": 72.31404,
+            "missingKeepMean": 72.0,
+            "missingMinusPresentKeepPp": -0.31404
+          },
+          "tyler": {
+            "n": 211,
+            "presentN": 211,
+            "missingN": 0,
+            "coverage": 1.0,
+            "missingIds": [],
+            "presentKeepMean": 74.45924,
+            "missingKeepMean": null,
+            "missingMinusPresentKeepPp": null
+          }
+        }
+      }
+    },
+    "predictorEligibility": {
+      "canonicalPrivateRows": 636,
+      "visualOnlyStudyRows": 632,
+      "creatorAdaptiveRows": 632,
+      "creatorAdaptiveRequirements": "finite keep, finite published timestamp, visual NPZ ID, together NPZ ID",
+      "creatorAdaptivePerAccount": {
+        "tyler": 211,
+        "brushlabs": 12,
+        "creatinganything": 117,
+        "hafu": 292
+      }
+    }
+  },
+  "sourceMetadata": {
+    "tyler": {
+      "name": "Main",
+      "meta": {
+        "n": 211,
+        "metric": "keep_rate = stayedToWatch (Viewed vs Swiped Away), scraped from YouTube Studio",
+        "columns": "title, published, keep_rate (% stayed), swiped (%), avg_retention (% viewed), views, duration",
+        "note": "keep_rate is the REAL scraped Viewed-vs-Swiped-Away (0<x<100). Verify any row in YouTube Studio via its link."
+      }
+    },
+    "brushlabs": {
+      "name": "Account 1",
+      "meta": {
+        "n": 12,
+        "channel": "Account 1",
+        "channel_id": "brushlabs",
+        "scraped_at": "2026-06-29T23:22:11.781Z"
+      }
+    },
+    "creatinganything": {
+      "name": "Account 2",
+      "meta": {
+        "n": 117,
+        "channel": "Account 2",
+        "channel_id": "creatinganything",
+        "scraped_at": "2026-06-30T01:33:43.499Z"
+      }
+    },
+    "hafu": {
+      "name": "Account 3",
+      "meta": {
+        "n": 296,
+        "channel": "Account 3",
+        "channel_id": "hafu",
+        "scraped_at": "2026-06-30T09:03:37.996Z"
+      }
+    }
+  },
+  "methodBoundaries": [
+    "This audit can detect inconsistent labels, joins, timestamp precision, coverage selection, and descriptive drift. It cannot prove that a distribution shift is measurement error rather than real creator, audience, or content change.",
+    "Title similarity never overrides video-ID identity because titles can be edited after publication.",
+    "The largest temporal split is selected in sample and is not a confirmatory changepoint p-value.",
+    "A fixed-horizon keep label cannot be reconstructed from one cumulative YouTube Studio snapshot; repeated snapshots are required."
+  ],
+  "sources": {
+    "local:buildings/jarvis/predictor-lab/results.json": {
+      "bytes": 8013371,
+      "sha256": "1150a488d2b95f8e37108dd7b8a54f2c93e0f793edf9285deca2248121d1fc93",
+      "lastModified": "2026-07-29T22:06:38.029196+00:00"
+    },
+    "local:buildings/jarvis/retention-study/retention_table.json": {
+      "bytes": 256794,
+      "sha256": "84d74505a98facec925750ff9c5ee5115c2051e987f3cc6086ca6c239dae6347",
+      "lastModified": "2026-07-29T13:56:05.120746+00:00"
+    },
+    "r2:library/db.json": {
+      "bytes": 49965788,
+      "sha256": "43be8e14c3df934f31725829683579c8e91e03e58ae54afc91cd35a4ae3b6dfd",
+      "etag": "491dd71a8b2f4e2f110c07d53fa8f51a-3",
+      "lastModified": "2026-07-29T22:43:02+00:00"
+    },
+    "r2:raw/text/embeddings.npz": {
+      "bytes": 133631059,
+      "sha256": "2396e2d598f3962de648d9f37097c2da7c476e820c9af3ea2c9a97235a5d509f",
+      "etag": "3201f03301bb6bbffce1c8889d0ae96a",
+      "lastModified": "2026-07-29T22:37:29+00:00"
+    },
+    "r2:raw/text/map.json": {
+      "bytes": 6465408,
+      "sha256": "842b066bf89ca884b7ccefaaa8744b71c19063e69f11903abb85c6731a2c1210",
+      "etag": "c437dea5d3335c70d9c6a03fb6941f81",
+      "lastModified": "2026-07-29T22:18:09+00:00"
+    },
+    "r2:raw/together/embeddings.npz": {
+      "bytes": 381445625,
+      "sha256": "f5dcc3657e209aa16611aeb0a57ff267829e1028d6ea988d7cebcbf573edd615",
+      "etag": "ceb20283d76395c2568b062761b1f073",
+      "lastModified": "2026-07-29T22:28:26+00:00"
+    },
+    "r2:raw/together/map.json": {
+      "bytes": 15478970,
+      "sha256": "56de9db829af0210e8cfe00d3c2db24a48f9b8665f57b7a31dbdbf60116311f8",
+      "etag": "cc319952cb9d1d9583e89ad9ed4a2def",
+      "lastModified": "2026-07-29T22:19:30+00:00"
+    },
+    "r2:raw/visual/embeddings.npz": {
+      "bytes": 32451964,
+      "sha256": "7e3cdc13ccd4f2029666ba1001f4efde8f327c9aba13f7f7313107e64d98e632",
+      "etag": "1fa949e570ba38585d4813ce1de32290",
+      "lastModified": "2026-07-29T22:33:50+00:00"
+    },
+    "r2:raw/visual/map.json": {
+      "bytes": 1226339,
+      "sha256": "773869b7c4d33ca9a0dd97a4586009bfc35dde4e4be8881a9d020d3c22f458f1",
+      "etag": "ed08c1c4254f943565f05b8152304cf0",
+      "lastModified": "2026-07-29T22:17:40+00:00"
+    },
+    "r2:retention/brushlabs.json": {
+      "bytes": 13030,
+      "sha256": "aeb183c2b5704b36faf8ae5c20e54fcfa4cbc6bc1eb2c36424ed5d7933043ccb",
+      "etag": "abb3a7d5911f2b8fa2b15930adb90ffc",
+      "lastModified": "2026-06-29T23:22:12+00:00"
+    },
+    "r2:retention/channels.json": {
+      "bytes": 469,
+      "sha256": "369978ec31756a7e8eb7a6ef8d44fbe0439fe0f87b35630d113a27c9b8e87269",
+      "etag": "d3f648339dbd156d681f1947330790f2",
+      "lastModified": "2026-06-30T09:03:39+00:00"
+    },
+    "r2:retention/creatinganything.json": {
+      "bytes": 125689,
+      "sha256": "c8bea8a1d2145b220cb1fd26b8f4eaa2a5048925845f1b373400039830a14878",
+      "etag": "1f1bbd91d318c7782416d3edd170d85a",
+      "lastModified": "2026-06-30T01:33:44+00:00"
+    },
+    "r2:retention/hafu.json": {
+      "bytes": 316763,
+      "sha256": "9e56702d3a02dfdad259b4465e52d52f57ff538129853eff2e202297e2fe8d5c",
+      "etag": "34632d006a95f457476df56f8825ffce",
+      "lastModified": "2026-06-30T09:03:38+00:00"
+    }
+  },
+  "benchmarkValidity": {
+    "retrospectiveStaticCrossAccount": {
+      "valid": true,
+      "verdict": "No label-value, immutable-ID, NPZ-map, or embedding-title mismatch invalidates the 632-row embedded retrospective benchmark.",
+      "labelIntegrityFailures": {
+        "redundantKeepFieldConflictRows": [],
+        "keepPlusSwipeConflictN": 0,
+        "clippedOrOutOfRangeN": 0,
+        "fallbackShadowedN": 0
+      },
+      "immutableJoinFailures": {
+        "duplicateVideoIdN": 0,
+        "urlVideoIdMismatchN": 0,
+        "invalidYoutubeIdN": 0,
+        "embeddingMapArchiveParityFailures": [],
+        "embeddingTitleSuspiciousN": 0
+      },
+      "eligibleRows": 632,
+      "excludedForMissingVisualEmbedding": [
+        "qqbxO7JCCYI",
+        "DgFX1kJcWtw",
+        "e8ASarQ264Y",
+        "pMvCZjc7xtw"
+      ]
+    },
+    "fixedHorizonInterpretation": {
+      "valid": false,
+      "verdict": "Invalid as a same-age or fixed-post-publish target: labels are single cumulative Studio snapshots observed at materially different video ages and account-specific scrape dates.",
+      "affectedAccounts": {
+        "tyler": {
+          "n": 211,
+          "firstScrapedAt": "2026-02-22T06:43:27.413000+00:00",
+          "lastScrapedAt": "2026-02-24T07:01:30.717000+00:00",
+          "observationAgeDays": {
+            "n": 211,
+            "minimum": 8.02713,
+            "p10": 150.01531,
+            "median": 802.28918,
+            "p90": 1427.92265,
+            "maximum": 1597.27714
+          }
+        },
+        "brushlabs": {
+          "n": 12,
+          "firstScrapedAt": "2026-06-29T23:12:48.147000+00:00",
+          "lastScrapedAt": "2026-06-29T23:22:11.781000+00:00",
+          "observationAgeDays": {
+            "n": 12,
+            "minimum": 60.86285,
+            "p10": 86.29669,
+            "median": 216.83367,
+            "p90": 543.45099,
+            "maximum": 661.07338
+          }
+        },
+        "creatinganything": {
+          "n": 117,
+          "firstScrapedAt": "2026-06-29T23:39:30.589000+00:00",
+          "lastScrapedAt": "2026-06-30T01:33:43.498000+00:00",
+          "observationAgeDays": {
+            "n": 117,
+            "minimum": 506.72175,
+            "p10": 910.76517,
+            "median": 1242.92308,
+            "p90": 1643.90527,
+            "maximum": 1648.29116
+          }
+        },
+        "hafu": {
+          "n": 296,
+          "firstScrapedAt": "2026-06-30T04:18:31.686000+00:00",
+          "lastScrapedAt": "2026-06-30T09:03:37.995000+00:00",
+          "observationAgeDays": {
+            "n": 296,
+            "minimum": 2.70027,
+            "p10": 234.71708,
+            "median": 852.66347,
+            "p90": 1262.77041,
+            "maximum": 2702.2599
+          }
+        }
+      },
+      "affectedRowN": 636,
+      "correction": "Persist labelObservedAt and collect repeated labels at a fixed post-publish horizon before calling this a fixed-horizon forecast."
+    },
+    "forwardTimeInterpretation": {
+      "validOnlyWithBatching": true,
+      "verdict": "Publication order is usable only if identical timestamps are simultaneous batches. Tyler's date-only rows cannot recover true intraday order.",
+      "dateOnlyRowsByAccount": {
+        "tyler": [
+          "aE9jKLck_cI",
+          "YFNOSHumPZc",
+          "TtRS6sjkZ4A",
+          "FogW1ZnoUIw",
+          "QL1h_e09IUU",
+          "vvLnmLTEh64",
+          "vwli8lumtSs",
+          "NNYEvXdXkG4",
+          "gW7LHN9nTrY",
+          "a1CoSXBAhiY",
+          "ge3qqbgVzAo",
+          "M1aiYur7Qns",
+          "GuxoGIpWe_Y",
+          "RLOFobyQ9Aw",
+          "95nL_vGLsh4",
+          "CgkdvZsamXk",
+          "F2naRHJWBM0",
+          "fYjswbeyjoA",
+          "4sKESQfYAw0",
+          "FyGnGRyEsOU",
+          "0B4RW7hTluE",
+          "63qC8qioJFk",
+          "IvVJ9RUPcaw",
+          "Kw2f_ozAkqk",
+          "9vgP1J5T2GE",
+          "d8J74Wk3a7w",
+          "ZqqOca_H99w",
+          "ABk9vNwR940",
+          "Tw0wfRTyouU",
+          "q7pvG7fhJMI",
+          "1k4VQ23I6s0",
+          "Mq5pDLKSTFg",
+          "8lDFzVul1YA",
+          "pSFSTonEYqM",
+          "zoJECFeZ5O8",
+          "UmCT36lJy0c",
+          "GFCJd_djkIU",
+          "E6jUDBSTXLs",
+          "Me-8Hr-srFI",
+          "8TVp2FwJJzQ",
+          "BkSE_Y0rQH8",
+          "YzoGoSUdv7k",
+          "KwLGygg4ZLQ",
+          "z5ffGZE9fDU",
+          "oOce-8y8Ijg",
+          "RlRfZ37JRyM",
+          "ZmJFjzVdUXs",
+          "FYOA_pSBNSc",
+          "1d_UGNUXwjk",
+          "3m5V703Iywg",
+          "mQ9H3MnZtMk",
+          "ra6mcC1iNNg",
+          "ikGj7hkLUoQ",
+          "2Wl2rdYegus",
+          "fGgEJGfXmeI",
+          "INgyFoyN5Po",
+          "URrMQS-pm4E",
+          "KtOXHbdLLyg",
+          "baNK3QlE0qo",
+          "v3hwQvOZ9ZM",
+          "eDhf8qQyqV0",
+          "AruyXSqIxek",
+          "QXhiaDKcPwU",
+          "DRnaH1F1D4A",
+          "r_TA0gHtp_M",
+          "r6gdosSpV1w",
+          "L4nObY4c9fU",
+          "hxgHUglfa9c",
+          "4T27oxLkGKg",
+          "YfQcNK_q-_4",
+          "nCKxsEbRTLQ",
+          "A1hNcdAUfy8",
+          "2DplvqP9YKs",
+          "5YB7G0W6Gno",
+          "PRhRAofJH5E",
+          "YJf5esh2gYE",
+          "uw8FiiU0G_M",
+          "ncPwIkvxPe4",
+          "DbUKvfz5Vzs",
+          "k0ziXE9FfpY",
+          "cj0TdYb3Ggw",
+          "UAxWpvsOC50",
+          "iYF9MC1gQ_A",
+          "PaffT8WDjK4",
+          "cCFHw_gvu5Y",
+          "PKf0A9GSKFA",
+          "0ApFSNYQJ_w",
+          "1nyPaqv9vJo",
+          "gx-qYIkelpI",
+          "Wd9SKCFMrkg",
+          "NjpzWyJ-N18",
+          "wcEbNGgC3RU",
+          "XSM3_ctSlLM",
+          "5QcF10qhmTo",
+          "sZGbhhKgr34",
+          "UBjvkiW7fjc",
+          "Kzc04OPQek0",
+          "9XbWlZdQqvY",
+          "ERaUBLvZgVA",
+          "uRrUc9Dtk7E",
+          "BlYsm0nShHA",
+          "kCOh7czQ5fo",
+          "FqzFQEX4x5s",
+          "0e-Qt1CCD6c",
+          "9YJu4fhgNVE",
+          "pxWXdGFno50",
+          "mREQAuthBXs",
+          "ggHmecIgFFU",
+          "5mlkXeO-sAA",
+          "K80tQmd9gCc",
+          "DibL2SzHFfs",
+          "mqqtTY48PRg",
+          "PjQKsbylrFg",
+          "HUIwE621e4g",
+          "QR-xRVflnDY",
+          "-V-LELEKkX0",
+          "pWeSGrP6Xf4",
+          "y3luO47HcNw",
+          "SwPfEj7ErJI",
+          "L_e38EvxD_8",
+          "4JZemHo8ED0",
+          "aTraR5yPYvw",
+          "XOaEowMhZXk",
+          "aw0xPqf11iY",
+          "3ZniDRt0XF8",
+          "tk7zjZ6eoFc",
+          "cGgMpHL6uNE",
+          "ETbatz38OTA",
+          "6R6uuNPB6Yg",
+          "vr0jlvXY-dA",
+          "8v2ZKGNYrbI",
+          "H-prxfgs590",
+          "FFhAxjCpKs4",
+          "hl8EGBlRFp8",
+          "Cj4zrmEaZJs",
+          "OJ1USrYYioQ",
+          "cFueNhx1FVk",
+          "S9k_7EJLTe4",
+          "q6Iiv0BUS2k",
+          "Vi8GxTLINc4",
+          "dBePGNYRK_4",
+          "_9rBMihjT4g",
+          "wuc8hXPUmJg",
+          "r10C2HhuDrc",
+          "Hc1xBWmCSNw",
+          "izk6_tAOQBc",
+          "ytS625TBqd4",
+          "xq2r0I8om3U",
+          "H30G5fvk5dk",
+          "Mdz0XPa1bTs",
+          "7cI1co-3ORE",
+          "vCCISOzJaxQ",
+          "T6B5fygr7Ms",
+          "va-_PBS-mqE",
+          "iRRDeYgK-w4",
+          "71WirGaf7oM",
+          "auQoo8y8tV4",
+          "OIaH0uZXgkQ",
+          "uzAJMmF1gVY",
+          "hcrXJ-FgMqU",
+          "NDrttrTvydU",
+          "O3ckYjBqf2g",
+          "gGwtd7HruTQ",
+          "o1hVZCzcOYM",
+          "vUEvjasrfOI",
+          "XfdXalkAdqc",
+          "EXYyNkXb5VY",
+          "E0zB3sM6lmo",
+          "7cK8O7nl0ms",
+          "GsmKo1dAQ8c",
+          "MMUUKNkJT6w",
+          "iQG4dWvrjx0",
+          "2RrNqRd96yM",
+          "VswpIsVMjMI",
+          "Sn1WY3b0xlo",
+          "THugIsO-TWo",
+          "Y8giuNlsJUI",
+          "kzXgd9X7_To",
+          "ulq-tJdiLog",
+          "qIZSBfvNRec",
+          "h_l5s9Eua4w",
+          "IDdmtvRHrhk",
+          "CysDxfwsJfE",
+          "VUKNtccgdRE",
+          "lBvkUzbsH4Y",
+          "wSDVGGqLmfA",
+          "qSrNei3qVy8",
+          "KoY_nOFbjos",
+          "yV6VEhsNIFk",
+          "mhV_8X-7jfU",
+          "PfoSGjTgoWA",
+          "C24VKpDZVC4",
+          "iOHK3UfD-pE",
+          "jYSmtVw8D5k",
+          "_4uNCXnSjCs",
+          "o5A9tC2e_mU",
+          "5dKJC3Qo_WQ",
+          "6U6hbEpFwHQ",
+          "RS0vtNpoyzE",
+          "dRXJVlwEUjY",
+          "vw0yBKVy9cs",
+          "DSBRvHryvX8",
+          "ScAX7E8JqhY",
+          "8IfnIIpbm2E",
+          "KTopfMtwdvw",
+          "6yqytZtKv2w",
+          "fAQrJWYvYJ4",
+          "vSIUXHqC924",
+          "y3J3B5TvV9Y",
+          "ykChFKNfwAE",
+          "j1U6gMrPuHc"
+        ]
+      },
+      "dateOnlyRowN": 211,
+      "tiedTimestampBatches": [
+        {
+          "account": "tyler",
+          "publishedAt": "2022-02-03T00:00:00+00:00",
+          "n": 2,
+          "ids": [
+            "ETbatz38OTA",
+            "gGwtd7HruTQ"
+          ]
+        },
+        {
+          "account": "tyler",
+          "publishedAt": "2025-07-05T00:00:00+00:00",
+          "n": 2,
+          "ids": [
+            "PaffT8WDjK4",
+            "nCKxsEbRTLQ"
+          ]
+        }
+      ],
+      "tiedTimestampRowN": 4,
+      "correction": "Use strict earlier-than timestamps for history; never train on one row from the same timestamp batch to predict another. Recover exact Tyler upload times where possible."
+    },
+    "coverageAndLeakageRisks": {
+      "missingVisualRows": [
+        "qqbxO7JCCYI",
+        "DgFX1kJcWtw",
+        "e8ASarQ264Y",
+        "pMvCZjc7xtw"
+      ],
+      "missingTogetherRows": [
+        "qqbxO7JCCYI",
+        "DgFX1kJcWtw",
+        "e8ASarQ264Y",
+        "pMvCZjc7xtw"
+      ],
+      "missingTextRows": [
+        "yedH1iNbMpQ",
+        "lZz66fhjHNQ",
+        "3bUv_YUp4J8",
+        "PlcIjlHlEr4",
+        "ymOuulclFto",
+        "05hY197CGos",
+        "di5q7WeGxcM",
+        "5KxTWwa1AnY",
+        "9n2lx48Ttxs",
+        "uUH_V7LmLII",
+        "0Ggp1iBGMmo",
+        "r3wAxdcnlqE",
+        "9HaKbx48BmU",
+        "WuLQ2J0XnJQ",
+        "UfEajAumtic",
+        "wWdU-MIiEH0",
+        "JCaKNwJl1NE",
+        "aqc_uC8evo8",
+        "tIBqiINYcIo",
+        "J6GuTf398xA",
+        "rtpZpKOdy8E",
+        "AVkYT1xWmv0",
+        "uV1I3YfBeAo",
+        "tGrfQzINkaI",
+        "8gGbDw5mk6o",
+        "kBgq8ZRreCU",
+        "RRhLIzDu3lg",
+        "Vgy84LsQvOI",
+        "krGULUCnTss",
+        "Wz7Aqos5wbs",
+        "O7FjpdBN-oE",
+        "lPgUEBiv81U",
+        "6TFNfmQWWZQ",
+        "TF6nR2scaC4",
+        "goI_v-ov2xo",
+        "AQP6UgvJgGk",
+        "Hb_pemk2Mkk",
+        "pxC0MIEWoyM",
+        "O-kCBgu1bfw",
+        "uE_cQ_Lj4Hs",
+        "DgFWv_aeTtE",
+        "pT8QN1WaNa4",
+        "gReE6doheFU",
+        "_VgteK_4aos",
+        "ybArAeWlyWU",
+        "D_u4PrI65W0",
+        "UMyLGnyZUOc",
+        "X_HKJXATEFI"
+      ],
+      "possibleRepostGroups": [
+        {
+          "normalizedTitle": "can you break the impossible board with a 1 inch punch",
+          "instances": [
+            {
+              "account": "hafu",
+              "id": "yROgo6gcqjs",
+              "title": "Can you break the impossible board with a 1 inch punch?",
+              "published": "2023-02-13T06:00:38-08:00",
+              "keep": 63.7
+            },
+            {
+              "account": "hafu",
+              "id": "M4TqSUHU0yc",
+              "title": "Can you break the impossible board with a 1 inch punch?",
+              "published": "2023-02-02T06:00:12-08:00",
+              "keep": 58.1
+            },
+            {
+              "account": "hafu",
+              "id": "1Ct7tfqwVS4",
+              "title": "Can you break the impossible board with a 1 inch punch?",
+              "published": "2023-01-29T06:00:02-08:00",
+              "keep": 61.8
+            }
+          ]
+        },
+        {
+          "normalizedTitle": "can you pick up an egg without breaking it",
+          "instances": [
+            {
+              "account": "hafu",
+              "id": "qG8zwLtdM0A",
+              "title": "Can You Pick Up an Egg Without Breaking It?",
+              "published": "2026-05-30T04:30:05-07:00",
+              "keep": 79.2
+            },
+            {
+              "account": "hafu",
+              "id": "0d07lhmFAEI",
+              "title": "Can you pick up an egg without breaking it?",
+              "published": "2023-07-02T05:00:02-07:00",
+              "keep": 78.9
+            }
+          ]
+        },
+        {
+          "normalizedTitle": "i tested the unbreakable glass",
+          "instances": [
+            {
+              "account": "hafu",
+              "id": "qnG8EpjrJUk",
+              "title": "I Tested the \u201cUnbreakable\u201d Glass",
+              "published": "2025-06-24T08:57:01-07:00",
+              "keep": 79.8
+            },
+            {
+              "account": "hafu",
+              "id": "bbvt0BlHp68",
+              "title": "I Tested the \"Unbreakable\" Glass",
+              "published": "2023-11-22T04:00:34-08:00",
+              "keep": 77.6
+            }
+          ]
+        },
+        {
+          "normalizedTitle": "what do you think of his 1 inch punch",
+          "instances": [
+            {
+              "account": "hafu",
+              "id": "wYWS9Z-sIws",
+              "title": "What do you think of his 1 inch punch?",
+              "published": "2023-03-01T00:00:23-08:00",
+              "keep": 62.5
+            },
+            {
+              "account": "hafu",
+              "id": "1h2tbemBIQ4",
+              "title": "What do you think of his 1 inch punch?",
+              "published": "2023-02-05T06:00:01-08:00",
+              "keep": 64.6
+            }
+          ]
+        }
+      ],
+      "verdict": "The four visual/together exclusions are confined to Hafu and have nearly identical mean keep to Hafu's included rows, so they cannot explain broad cross-account failure. Text missingness is substantial and outcome-selective for some accounts. Possible reposts must be grouped before video-level holdout claims."
+    }
+  },
+  "findings": [
+    {
+      "id": "video_id_uniqueness",
+      "severity": "clear",
+      "finding": "No duplicate video IDs exist across the 636 raw private rows.",
+      "evidence": {
+        "rawRows": 636,
+        "uniqueIds": 636,
+        "duplicateIds": 0,
+        "crossAccountDuplicateIds": 0
+      },
+      "supportedCorrection": "No row correction is supported. Retain a fail-fast uniqueness assertion because the production loader otherwise keeps the first account silently."
+    },
+    {
+      "id": "identity_alignment",
+      "severity": "clear",
+      "finding": "Canonical video IDs align with URLs and embedding-archive titles; the separate library can independently cover only 10/636 private rows.",
+      "evidence": {
+        "urlIdMismatches": 0,
+        "invalidYoutubeIds": 0,
+        "libraryMissingIds": 626,
+        "libraryChannelMismatches": 0,
+        "embeddingTitleMismatches": 0,
+        "suspiciousTitleDifferences": 0
+      },
+      "supportedCorrection": "No canonical join correction is supported. If independent channel verification is required, add private rows to the library; do not treat current library absence as a failed predictor join."
+    },
+    {
+      "id": "possible_reposted_content",
+      "severity": "medium",
+      "finding": "4 normalized titles occur under multiple video IDs and may represent reposted or near-duplicate content.",
+      "evidence": {
+        "duplicateNormalizedTitleGroups": 4,
+        "samples": [
+          {
+            "normalizedTitle": "can you break the impossible board with a 1 inch punch",
+            "instances": [
+              {
+                "account": "hafu",
+                "id": "yROgo6gcqjs",
+                "title": "Can you break the impossible board with a 1 inch punch?",
+                "published": "2023-02-13T06:00:38-08:00",
+                "keep": 63.7
+              },
+              {
+                "account": "hafu",
+                "id": "M4TqSUHU0yc",
+                "title": "Can you break the impossible board with a 1 inch punch?",
+                "published": "2023-02-02T06:00:12-08:00",
+                "keep": 58.1
+              },
+              {
+                "account": "hafu",
+                "id": "1Ct7tfqwVS4",
+                "title": "Can you break the impossible board with a 1 inch punch?",
+                "published": "2023-01-29T06:00:02-08:00",
+                "keep": 61.8
+              }
+            ]
+          },
+          {
+            "normalizedTitle": "can you pick up an egg without breaking it",
+            "instances": [
+              {
+                "account": "hafu",
+                "id": "qG8zwLtdM0A",
+                "title": "Can You Pick Up an Egg Without Breaking It?",
+                "published": "2026-05-30T04:30:05-07:00",
+                "keep": 79.2
+              },
+              {
+                "account": "hafu",
+                "id": "0d07lhmFAEI",
+                "title": "Can you pick up an egg without breaking it?",
+                "published": "2023-07-02T05:00:02-07:00",
+                "keep": 78.9
+              }
+            ]
+          },
+          {
+            "normalizedTitle": "i tested the unbreakable glass",
+            "instances": [
+              {
+                "account": "hafu",
+                "id": "qnG8EpjrJUk",
+                "title": "I Tested the \u201cUnbreakable\u201d Glass",
+                "published": "2025-06-24T08:57:01-07:00",
+                "keep": 79.8
+              },
+              {
+                "account": "hafu",
+                "id": "bbvt0BlHp68",
+                "title": "I Tested the \"Unbreakable\" Glass",
+                "published": "2023-11-22T04:00:34-08:00",
+                "keep": 77.6
+              }
+            ]
+          },
+          {
+            "normalizedTitle": "what do you think of his 1 inch punch",
+            "instances": [
+              {
+                "account": "hafu",
+                "id": "wYWS9Z-sIws",
+                "title": "What do you think of his 1 inch punch?",
+                "published": "2023-03-01T00:00:23-08:00",
+                "keep": 62.5
+              },
+              {
+                "account": "hafu",
+                "id": "1h2tbemBIQ4",
+                "title": "What do you think of his 1 inch punch?",
+                "published": "2023-02-05T06:00:01-08:00",
+                "keep": 64.6
+              }
+            ]
+          }
+        ]
+      },
+      "supportedCorrection": "Before claiming video-level holdout performance, compute visual near-duplicate hashes and keep every repost family in one fold. Title equality alone is not enough to delete a row."
+    },
+    {
+      "id": "label_integrity_and_precision",
+      "severity": "clear",
+      "finding": "All accepted keep labels are internally consistent with redundant keep/swipe fields, but the labels are quantized to 0.1 percentage point.",
+      "evidence": {
+        "redundantKeepFieldConflicts": 0,
+        "keepPlusSwipeConflicts": 0,
+        "clippedOrOutOfRangeLabels": 0,
+        "fallbackShadowedRows": 0,
+        "allAccountsOnTenthPpGrid": true
+      },
+      "supportedCorrection": "Persist the raw YouTube Studio value and its observation timestamp. Do not add artificial precision or jitter; 0.1 pp quantization is far below the requested +/-10 pp tolerance."
+    },
+    {
+      "id": "timestamp_precision_and_batches",
+      "severity": "medium",
+      "finding": "Publication timestamp precision differs by source, and at least one account contains tied timestamp batches.",
+      "evidence": {
+        "precisionByAccount": {
+          "tyler": {
+            "date_only": 211
+          },
+          "brushlabs": {
+            "second": 12
+          },
+          "creatinganything": {
+            "second": 117
+          },
+          "hafu": {
+            "second": 296
+          }
+        },
+        "rowsInTiedBatchesByAccount": {
+          "tyler": 4,
+          "brushlabs": 0,
+          "creatinganything": 0,
+          "hafu": 0
+        },
+        "maximumBatchByAccount": {
+          "tyler": 2,
+          "brushlabs": 1,
+          "creatinganything": 1,
+          "hafu": 1
+        }
+      },
+      "supportedCorrection": "Treat every identical timestamp as one simultaneous batch in forward validation and online history features. Never order tied rows by video ID or let one tied row train another. Recover exact upload times for date-only rows if available."
+    },
+    {
+      "id": "label_snapshot_maturity",
+      "severity": "medium",
+      "finding": "Private labels were observed in account-specific scrape snapshots and at different video ages; the current dataset does not identify a common label maturity horizon.",
+      "evidence": {
+        "lastScrapeByAccount": {
+          "tyler": "2026-02-24T07:01:30.717000+00:00",
+          "brushlabs": "2026-06-29T23:22:11.781000+00:00",
+          "creatinganything": "2026-06-30T01:33:43.498000+00:00",
+          "hafu": "2026-06-30T09:03:37.995000+00:00"
+        },
+        "medianObservationAgeDaysByAccount": {
+          "tyler": 802.28918,
+          "brushlabs": 216.83367,
+          "creatinganything": 1242.92308,
+          "hafu": 852.66347
+        }
+      },
+      "supportedCorrection": "Persist labelObservedAt and evaluate a fixed post-publish horizon (or repeated snapshots) before attributing residual account effects to visual representation. Existing cumulative labels should not be silently treated as same-horizon outcomes."
+    },
+    {
+      "id": "embedding_availability",
+      "severity": "medium",
+      "finding": "4 canonical rows lack visual embeddings and 4 lack together embeddings.",
+      "evidence": {
+        "missingVisual": 4,
+        "missingTogether": 4,
+        "mapArchiveParityFailures": [],
+        "visualCoverage": 0.99371,
+        "togetherCoverage": 0.99371
+      },
+      "supportedCorrection": "Backfill the listed IDs and preserve one immutable multimodal generation ID. Until then, report account-specific eligibility and compare embedded versus missing label distributions."
+    },
+    {
+      "id": "text_embedding_missingness",
+      "severity": "high",
+      "finding": "48 canonical rows lack text embeddings; missingness is keep-rate selective in 2 account(s).",
+      "evidence": {
+        "missingTextN": 48,
+        "coverage": 0.92453,
+        "selectiveAccounts": {
+          "brushlabs": {
+            "n": 12,
+            "presentN": 10,
+            "missingN": 2,
+            "coverage": 0.83333,
+            "missingIds": [
+              "yedH1iNbMpQ",
+              "lZz66fhjHNQ"
+            ],
+            "presentKeepMean": 75.72,
+            "missingKeepMean": 62.1,
+            "missingMinusPresentKeepPp": -13.62
+          },
+          "creatinganything": {
+            "n": 117,
+            "presentN": 77,
+            "missingN": 40,
+            "coverage": 0.65812,
+            "missingIds": [
+              "3bUv_YUp4J8",
+              "PlcIjlHlEr4",
+              "ymOuulclFto",
+              "05hY197CGos",
+              "di5q7WeGxcM",
+              "5KxTWwa1AnY",
+              "9n2lx48Ttxs",
+              "uUH_V7LmLII",
+              "0Ggp1iBGMmo",
+              "r3wAxdcnlqE",
+              "9HaKbx48BmU",
+              "WuLQ2J0XnJQ",
+              "UfEajAumtic",
+              "wWdU-MIiEH0",
+              "JCaKNwJl1NE",
+              "aqc_uC8evo8",
+              "tIBqiINYcIo",
+              "J6GuTf398xA",
+              "rtpZpKOdy8E",
+              "AVkYT1xWmv0",
+              "uV1I3YfBeAo",
+              "tGrfQzINkaI",
+              "8gGbDw5mk6o",
+              "kBgq8ZRreCU",
+              "RRhLIzDu3lg",
+              "Vgy84LsQvOI",
+              "krGULUCnTss",
+              "Wz7Aqos5wbs",
+              "O7FjpdBN-oE",
+              "lPgUEBiv81U",
+              "6TFNfmQWWZQ",
+              "TF6nR2scaC4",
+              "goI_v-ov2xo",
+              "AQP6UgvJgGk",
+              "Hb_pemk2Mkk",
+              "pxC0MIEWoyM",
+              "O-kCBgu1bfw",
+              "uE_cQ_Lj4Hs",
+              "DgFWv_aeTtE",
+              "pT8QN1WaNa4"
+            ],
+            "presentKeepMean": 46.37273,
+            "missingKeepMean": 59.89,
+            "missingMinusPresentKeepPp": 13.51727
+          }
+        }
+      },
+      "supportedCorrection": "Distinguish genuinely silent videos from extraction failures, backfill recoverable text, and validate text-present and text-missing strata separately. Do not let median imputation turn account-specific extraction coverage into a hidden predictor."
+    },
+    {
+      "id": "temporal_drift",
+      "severity": "high",
+      "finding": "Large within-account temporal mean shifts are present.",
+      "evidence": {
+        "flaggedAccounts": {
+          "tyler": {
+            "splitAt": "2022-07-02T00:00:00+00:00",
+            "beforeN": 36,
+            "afterN": 175,
+            "beforeMean": 64.83889,
+            "afterMean": 76.43829,
+            "afterMinusBeforePp": 11.5994,
+            "standardizedEffect": 1.89072,
+            "selectionWarning": "This is the largest in-sample mean split among all eligible dates; it is a drift diagnostic, not a confirmatory changepoint test."
+          },
+          "creatinganything": {
+            "splitAt": "2023-02-03T13:40:01+00:00",
+            "beforeN": 59,
+            "afterN": 58,
+            "beforeMean": 38.75424,
+            "afterMean": 63.44483,
+            "afterMinusBeforePp": 24.69059,
+            "standardizedEffect": 1.8803,
+            "selectionWarning": "This is the largest in-sample mean split among all eligible dates; it is a drift diagnostic, not a confirmatory changepoint test."
+          },
+          "hafu": {
+            "splitAt": "2023-04-22T13:00:26+00:00",
+            "beforeN": 87,
+            "afterN": 209,
+            "beforeMean": 65.08736,
+            "afterMean": 75.31627,
+            "afterMinusBeforePp": 10.22891,
+            "standardizedEffect": 1.5,
+            "selectionWarning": "This is the largest in-sample mean split among all eligible dates; it is a drift diagnostic, not a confirmatory changepoint test."
+          }
+        },
+        "perAccountTrend": {
+          "tyler": {
+            "spearman": 0.33032,
+            "slopePpPerYear": 2.25536,
+            "largestMeanSplit": {
+              "splitAt": "2022-07-02T00:00:00+00:00",
+              "beforeN": 36,
+              "afterN": 175,
+              "beforeMean": 64.83889,
+              "afterMean": 76.43829,
+              "afterMinusBeforePp": 11.5994,
+              "standardizedEffect": 1.89072,
+              "selectionWarning": "This is the largest in-sample mean split among all eligible dates; it is a drift diagnostic, not a confirmatory changepoint test."
+            }
+          },
+          "brushlabs": {
+            "spearman": 0.15061,
+            "slopePpPerYear": 4.34308,
+            "largestMeanSplit": null
+          },
+          "creatinganything": {
+            "spearman": 0.64835,
+            "slopePpPerYear": 14.45787,
+            "largestMeanSplit": {
+              "splitAt": "2023-02-03T13:40:01+00:00",
+              "beforeN": 59,
+              "afterN": 58,
+              "beforeMean": 38.75424,
+              "afterMean": 63.44483,
+              "afterMinusBeforePp": 24.69059,
+              "standardizedEffect": 1.8803,
+              "selectionWarning": "This is the largest in-sample mean split among all eligible dates; it is a drift diagnostic, not a confirmatory changepoint test."
+            }
+          },
+          "hafu": {
+            "spearman": 0.40809,
+            "slopePpPerYear": 3.03532,
+            "largestMeanSplit": {
+              "splitAt": "2023-04-22T13:00:26+00:00",
+              "beforeN": 87,
+              "afterN": 209,
+              "beforeMean": 65.08736,
+              "afterMean": 75.31627,
+              "afterMinusBeforePp": 10.22891,
+              "standardizedEffect": 1.5,
+              "selectionWarning": "This is the largest in-sample mean split among all eligible dates; it is a drift diagnostic, not a confirmatory changepoint test."
+            }
+          }
+        }
+      },
+      "supportedCorrection": "Use forward-time and rolling-origin validation with training-only account calibration. The audit cannot distinguish real creator improvement from a measurement regime change without repeated label snapshots or export provenance."
+    },
+    {
+      "id": "canonical_population_parity",
+      "severity": "clear",
+      "finding": "The audit reconstruction matches the latest Predictor Lab private and visual-eligible population counts.",
+      "evidence": {
+        "latestArtifact": {
+          "privateRetentionRows": 636,
+          "visualOnlyStudyRows": 632,
+          "creatorAdaptiveRows": 632,
+          "generatedAt": 1785362797877
+        },
+        "reconstructed": {
+          "privateRetentionRows": 636,
+          "visualOnlyStudyRows": 632,
+          "creatorAdaptiveRows": 632
+        },
+        "matches": true
+      },
+      "supportedCorrection": "No population correction is supported."
+    }
+  ],
+  "conclusion": {
+    "dataQualityCanContribute": true,
+    "decisionRule": "Treat data quality as a plausible contributor only where an audit finding has direct row-level evidence. Do not use account distribution differences alone to reject the model class.",
+    "primaryAssessment": "No direct label-value or canonical embedding-join corruption was found. The strongest data-side explanation for cross-account instability is nonstationary, differently sampled creator eras, compounded by single-snapshot labels at inconsistent maturity and outcome-selective text availability. These are validation-design and support-shift problems, not evidence that visual embeddings are attached to the wrong videos."
+  }
+}

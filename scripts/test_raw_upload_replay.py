@@ -2,8 +2,9 @@
 """Focused deterministic replay tests for raw_upload.py.
 
 No network, Gemini, ffmpeg, or real R2 credentials are used. The fake score has the
-same 18 steer + 3 novelty coordinates plus the frozen visual keep forecast as the
-production 22-output contract.
+same 21 canonical embedding outputs plus the universal frozen visual keep forecast.
+The conditional creator forecast is represented in the manifest but is intentionally
+unavailable without an explicit eligible creator profile.
 """
 import base64
 import importlib.util
@@ -154,8 +155,12 @@ def test_cache_hit_skips_all_embedding_calls():
     assert manifest['revision_fingerprint'] == replay_meta['revision_fingerprint']
     assert manifest['output_fingerprint'] == replay_meta['output_fingerprint']
     assert manifest['scorer_revisions'] == revision_state
-    assert manifest['canonical_output_contract']['total'] == 22
+    assert manifest['canonical_output_contract']['canonical_embedding_outputs'] == 21
+    assert manifest['canonical_output_contract']['universal_raw_scorer_total'] == 22
+    assert manifest['canonical_output_contract']['creator_profile_enriched_maximum'] == 23
+    assert manifest['canonical_output_contract']['derived_forecasts_total'] == 2
     assert manifest['canonical_output_contract']['frozen_model_forecasts'] == 1
+    assert manifest['canonical_output_contract']['conditional_creator_forecasts'] == 1
     assert output['visual_keep_forecast'] == first_score['visual_keep_forecast']
     assert manifest['steer_artifact_archive_key'].endswith('steer-artifact-1.npz')
     assert manifest['steer_lineage_manifest_sha256'] == 'steer-lineage-1'

@@ -35,6 +35,95 @@ assert spec and spec.loader, f"could not load {RUNNER_PATH}"
 predictor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(predictor)
 
+CREATOR_ADAPTIVE_BENCHMARK_ID = "shorts.causal-keep-mixture-benchmark.v1"
+CREATOR_ADAPTIVE_BENCHMARK_COORDINATE_ID = "shorts.causal-keep-mixture.v1"
+CREATOR_ADAPTIVE_CANDIDATE_COUNT = 43_360
+CREATOR_ADAPTIVE_CANDIDATE_SHA256 = (
+    "bc7ae80a7afeac82a40648c3ff07e066"
+    "cc238d3b27918d5f82bf3bbbd04de3ff"
+)
+CREATOR_ADAPTIVE_OUTPUT_TRANSFORM = (
+    "clip(0.5 * centered-together residual analog + "
+    "0.5 * visual+together semantic stack, 0, 100)"
+)
+CREATOR_ADAPTIVE_LOCKED_FORMULA = {
+    "coordinateId": CREATOR_ADAPTIVE_BENCHMARK_COORDINATE_ID,
+    "formula": (
+        "0.5 * stage2 centered-together pooled residual analog + "
+        "0.5 * stage3 visual+together semantic stack"
+    ),
+    "inputs": [
+        "Together embedding (visual plus text)",
+        "Visual embedding",
+        "Strictly earlier same-creator keep history",
+    ],
+    "label": "Causal keep-rate mixture",
+    "modalityClass": "multimodal",
+    "stage1": {
+        "biasWeight": 0.5,
+        "biasWindow": 12,
+        "contentWeight": 0.5,
+        "expert": "pooledKnn:centeredTogether:k12:t15:z:all",
+        "gateMargin": 0.0,
+        "gateWindow": 0,
+    },
+    "stage2": {
+        "biasWeight": 1.0,
+        "biasWindow": 12,
+        "gateMargin": 0.0,
+        "gateWindow": 0,
+        "initial": 0.5,
+        "maximum": 0.5,
+        "mode": "constant",
+        "reliability": "none",
+        "ridge": 0.0,
+        "window": 0,
+    },
+    "stage3": {
+        "alpha": 1.0,
+        "biasWeight": 0.0,
+        "biasWindow": 0,
+        "family": "stack",
+        "featureSet": "semanticWide",
+        "features": [
+            "ct12",
+            "ct24",
+            "ct48",
+            "cc12",
+            "cv12",
+            "cv24",
+            "krrTogether",
+            "krrVisual",
+        ],
+        "localWeight": 0.0,
+    },
+    "stage4": {
+        "eta": 0.0,
+        "initialWeights": [0.5, 0.5, 0.0],
+        "minimum": 0,
+        "mode": "fixed",
+        "window": 0,
+    },
+}
+
+assert predictor.CREATOR_ADAPTIVE_KEEP_SCHEMA_VERSION == 3
+assert predictor.CREATOR_ADAPTIVE_KEEP_V1_SPEC == {
+    "benchmarkId": CREATOR_ADAPTIVE_BENCHMARK_ID,
+    "benchmarkCoordinateId": CREATOR_ADAPTIVE_BENCHMARK_COORDINATE_ID,
+    "candidateCount": CREATOR_ADAPTIVE_CANDIDATE_COUNT,
+    "candidateRegistrySha256": CREATOR_ADAPTIVE_CANDIDATE_SHA256,
+    "benchmarkArtifactSha256": (
+        "c82a290cd4180974d754e6b1c0afec8"
+        "d456d08d0434794925936ffb11ea82747"
+    ),
+    "resultCoreSha256": (
+        "a8dc76db007bc1b158c1e9a04775d1a"
+        "e7f32656c19b44e733b0523256a42391a"
+    ),
+    "historyWindow": 30,
+    "minimumHistoryN": 8,
+}
+
 
 # Execute only the pure Gemini-error classifier from raw_embed.py. Importing the
 # whole worker would start network and R2 work, so the AST keeps this unit test
@@ -184,6 +273,114 @@ def assert_target_contract(target: dict, target_name: str) -> None:
                 assert isinstance(protocol.get("points"), list)
                 assert "rangeRatio" in protocol["metrics"]
                 assert "protocolBaselineR2" in protocol["metrics"]
+        creator_adaptive = target.get("creatorAdaptiveStudy")
+        assert isinstance(
+            creator_adaptive,
+            dict,
+        ), "keep target must persist the creator-adaptive study"
+        assert (
+            creator_adaptive.get("coordinateId")
+            == predictor.CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
+        )
+        assert (
+            creator_adaptive.get("schemaVersion")
+            == predictor.CREATOR_ADAPTIVE_KEEP_SCHEMA_VERSION
+        )
+        creator_selection = creator_adaptive.get("selection") or {}
+        creator_selected = creator_selection.get("selected") or {}
+        assert creator_selection["candidateCount"] == CREATOR_ADAPTIVE_CANDIDATE_COUNT
+        assert (
+            creator_selection["candidateCountWithAllAccounts"]
+            == CREATOR_ADAPTIVE_CANDIDATE_COUNT
+        )
+        assert (
+            creator_selection["candidateRegistrySha256"]
+            == CREATOR_ADAPTIVE_CANDIDATE_SHA256
+        )
+        assert creator_selected["benchmarkId"] == CREATOR_ADAPTIVE_BENCHMARK_ID
+        assert creator_selected["modalityClass"] == "multimodal"
+        assert (
+            creator_selected["formula"]
+            == CREATOR_ADAPTIVE_LOCKED_FORMULA["formula"]
+        )
+        for stage in ("stage1", "stage2", "stage3", "stage4"):
+            assert creator_selected[stage] == CREATOR_ADAPTIVE_LOCKED_FORMULA[stage]
+        assert creator_adaptive.get("evaluation", {}).get("points")
+        creator_formula = creator_adaptive.get("formula") or {}
+        assert creator_formula.get("accounts")
+        assert creator_formula["modalityClass"] == "multimodal"
+        assert creator_formula["historyWindow"] == 30
+        assert creator_formula["minimumHistoryN"] == 8
+        assert creator_formula["lockedFormula"] == CREATOR_ADAPTIVE_LOCKED_FORMULA
+        assert creator_formula["outputBounds"] == [0, 100]
+        assert (
+            creator_formula["outputTransform"]
+            == CREATOR_ADAPTIVE_OUTPUT_TRANSFORM
+        )
+        for point in creator_adaptive["evaluation"]["points"]:
+            assert isinstance(point["componentA"], (int, float))
+            assert isinstance(point["componentB"], (int, float))
+            assert abs(
+                point["predicted"]
+                - 0.5 * (point["componentA"] + point["componentB"])
+            ) <= 1e-5
+            assert 8 <= point["historyN"] <= 30
+            assert len(point["historyVideoIds"]) == point["historyN"]
+            assert len(set(point["historyVideoIds"])) == point["historyN"]
+            assert point["historyEnd"] < point["publishedAt"]
+        for profile in creator_formula["accounts"].values():
+            assert 8 <= profile["historyN"] <= 30
+            assert profile["historyWindow"] == 30
+            assert len(profile["historyVideoIds"]) == profile["historyN"]
+            assert len(set(profile["historyVideoIds"])) == profile["historyN"]
+        creator_target = creator_adaptive["evaluation"]["target"]
+        assert creator_target["allPopulationAccountsEvaluated"]
+        assert creator_target["allAccountsPassPointEstimate"]
+        assert (
+            creator_target["pointEstimatePassCount"]
+            == creator_target["accountCount"]
+            == creator_target["evaluatedAccountCount"]
+        )
+        assert all(
+            float(account["mae"]) <= 10
+            for account in creator_adaptive["evaluation"]["metrics"]["perAccount"]
+        )
+        creator_metrics = creator_adaptive["evaluation"]["metrics"]
+        assert "baselineMae" in creator_metrics
+        assert "maeImprovementVsBaseline" in creator_metrics
+        assert "protocolBaselineR2" in creator_metrics
+        assert all(
+            "baselineMae" in account
+            and "maeImprovementVsBaseline" in account
+            and "protocolBaselineR2" in account
+            for account in creator_metrics["perAccount"]
+        )
+        creator_status = creator_adaptive.get("status") or {}
+        assert creator_status.get("state", "").startswith("research_only_")
+        assert creator_status.get("absoluteTargetMet") is True
+        assert creator_status.get("promoted") is False
+        assert creator_status.get("predictorEligible") is False
+        assert creator_target["baseline"]
+        assert isinstance(
+            creator_target.get("beatsHonestBaselineOverall"),
+            bool,
+        )
+        assert isinstance(
+            creator_target.get("allAccountsBeatHonestBaseline"),
+            bool,
+        )
+        if not (
+            creator_target["beatsHonestBaselineOverall"]
+            and creator_target["allAccountsBeatHonestBaseline"]
+        ):
+            assert "baseline" in creator_status.get("plainEnglish", "").lower()
+        model_artifact = creator_adaptive.get("modelArtifact")
+        assert isinstance(model_artifact, dict)
+        assert len(model_artifact.get("artifactSha256", "")) == 64
+        assert (
+            model_artifact.get("canonicalKey")
+            == predictor.R2_CREATOR_ADAPTIVE_KEEP_MODEL_KEY
+        )
     else:
         assert isinstance(stress.get("points"), list), "unseen-channel stress must persist every held-out prediction"
 
@@ -268,6 +465,13 @@ def assert_result_contract(result: dict, candidate_hash: str) -> None:
     assert (
         provenance["visualKeepModelArtifact"]["canonicalKey"]
         == predictor.R2_VISUAL_KEEP_MODEL_KEY
+    )
+    assert len(
+        provenance["creatorAdaptiveKeepModelArtifact"]["artifactSha256"]
+    ) == 64
+    assert (
+        provenance["creatorAdaptiveKeepModelArtifact"]["canonicalKey"]
+        == predictor.R2_CREATOR_ADAPTIVE_KEEP_MODEL_KEY
     )
 
     rules = result["validationRules"]
@@ -371,6 +575,300 @@ for visual_protocol in visual_study_fixture["protocols"].values():
     assert visual_protocol["metrics"]["predictedRange"] >= 0
     assert visual_protocol["metrics"]["rangeRatio"] is not None
     assert visual_protocol["metrics"]["protocolBaselineR2"] is not None
+
+def creator_adaptive_benchmark_fixture(
+    rows: list[dict],
+    stores: dict[str, dict],
+) -> dict:
+    ordered, fingerprints = predictor.creator_adaptive_benchmark_fingerprints(
+        rows,
+        stores,
+    )
+    rows_by_account = {
+        account: sorted(
+            [row for row in ordered if row["account"] == account],
+            key=lambda row: (row["publishedAt"], row["id"]),
+        )
+        for account in sorted({row["account"] for row in ordered})
+    }
+
+    def point(row: dict, account_rows: list[dict]) -> dict:
+        position = next(
+            index
+            for index, candidate in enumerate(account_rows)
+            if candidate["id"] == row["id"]
+        )
+        history = account_rows[max(0, position - 30):position]
+        assert len(history) >= 8
+        component_a = float(row["keep"]) + 0.25
+        component_b = float(row["keep"]) + 0.75
+        return {
+            "id": row["id"],
+            "title": row["title"],
+            "accountPosition": position,
+            "publishedAt": float(row["publishedAt"]),
+            "actualKeep": float(row["keep"]),
+            "predictedKeep": 0.5 * (component_a + component_b),
+            "historyBaseline": (
+                sum(float(item["keep"]) for item in history) / len(history)
+            ),
+            "componentA": component_a,
+            "componentB": component_b,
+            "historyN": len(history),
+            "historyVideoIds": [item["id"] for item in history],
+            "predictionIntervals": None,
+        }
+
+    selection_points = {}
+    final_points = {}
+    for account, account_rows in rows_by_account.items():
+        assert len(account_rows) == 20
+        selection_points[account] = [
+            point(row, account_rows) for row in account_rows[10:16]
+        ]
+        final_points[account] = [
+            point(row, account_rows) for row in account_rows[16:20]
+        ]
+
+    final_metrics = {
+        "allAccountsWithin10": True,
+        "allAccountsBeatBaseline": True,
+    }
+    return {
+        "schemaVersion": 1,
+        "benchmarkId": CREATOR_ADAPTIVE_BENCHMARK_ID,
+        "coordinate": {
+            "id": CREATOR_ADAPTIVE_BENCHMARK_COORDINATE_ID,
+            "modalityClass": "multimodal",
+        },
+        "candidateRegistry": {
+            "count": CREATOR_ADAPTIVE_CANDIDATE_COUNT,
+            "sha256": CREATOR_ADAPTIVE_CANDIDATE_SHA256,
+        },
+        "dataset": {
+            "n": len(ordered),
+            "fingerprints": fingerprints,
+        },
+        "selection": {
+            "pointsByAccount": selection_points,
+            "metrics": {},
+            "modalityAblations": {},
+            "stages": {
+                "lockedFormula": CREATOR_ADAPTIVE_LOCKED_FORMULA,
+            },
+        },
+        "final": {
+            "causalPrequentialTail": {
+                "pointsByAccount": final_points,
+                "metrics": final_metrics,
+                "modalityAblations": {},
+                "predictionIntervals": {},
+            },
+            "frozenTail": {
+                "pointsByAccount": final_points,
+                "metrics": final_metrics,
+                "modalityAblations": {},
+                "predictionIntervals": {},
+                "uncertainty": {"perAccount": []},
+            },
+        },
+        "rollingBlockStability": {},
+        "equalTimestampAudit": {"passed": True},
+        "resultCoreSha256": hashlib.sha256(
+            b"creator-adaptive-schema3-fixture-core"
+        ).hexdigest(),
+    }
+
+
+creator_benchmark = creator_adaptive_benchmark_fixture(
+    visual_rows,
+    {"visual": visual_store, "together": visual_store},
+)
+with tempfile.TemporaryDirectory() as creator_benchmark_directory:
+    creator_benchmark_root = Path(creator_benchmark_directory)
+    creator_benchmark_path = creator_benchmark_root / "benchmark.json"
+    creator_benchmark_bytes = json.dumps(
+        creator_benchmark,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    creator_benchmark_path.write_bytes(creator_benchmark_bytes)
+    creator_benchmark_spec = {
+        **predictor.CREATOR_ADAPTIVE_KEEP_V1_SPEC,
+        "benchmarkArtifactSha256": hashlib.sha256(
+            creator_benchmark_bytes
+        ).hexdigest(),
+        "resultCoreSha256": creator_benchmark["resultCoreSha256"],
+    }
+    with (
+        mock.patch.object(predictor, "ROOT", creator_benchmark_root),
+        mock.patch.object(
+            predictor,
+            "CAUSAL_KEEP_MIXTURE_BENCHMARK",
+            creator_benchmark_path,
+        ),
+        mock.patch.object(
+            predictor,
+            "CREATOR_ADAPTIVE_KEEP_V1_SPEC",
+            creator_benchmark_spec,
+        ),
+    ):
+        creator_adaptive_fixture = predictor.run_creator_adaptive_keep_study(
+            visual_rows,
+            {
+                "visual": visual_store,
+                "together": visual_store,
+            },
+        )
+        assert (
+            creator_adaptive_fixture["coordinateId"]
+            == predictor.CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
+        )
+        assert creator_adaptive_fixture["schemaVersion"] == 3
+        assert (
+            creator_adaptive_fixture["selection"]["candidateCount"]
+            == CREATOR_ADAPTIVE_CANDIDATE_COUNT
+        )
+        assert (
+            creator_adaptive_fixture["selection"][
+                "candidateRegistrySha256"
+            ]
+            == CREATOR_ADAPTIVE_CANDIDATE_SHA256
+        )
+        assert (
+            creator_adaptive_fixture["selection"][
+                "candidateCountWithAllAccounts"
+            ]
+            == CREATOR_ADAPTIVE_CANDIDATE_COUNT
+        )
+        assert (
+            creator_adaptive_fixture["selection"]["selected"]
+            == {
+                "benchmarkId": CREATOR_ADAPTIVE_BENCHMARK_ID,
+                "modalityClass": "multimodal",
+                "formula": CREATOR_ADAPTIVE_LOCKED_FORMULA["formula"],
+                **{
+                    stage: CREATOR_ADAPTIVE_LOCKED_FORMULA[stage]
+                    for stage in ("stage1", "stage2", "stage3", "stage4")
+                },
+            }
+        )
+        assert creator_adaptive_fixture["evaluation"]["points"]
+        assert all(
+            point["historyN"] >= 8
+            and point["historyN"] <= 30
+            and len(point["historyVideoIds"]) == point["historyN"]
+            and point["historyEnd"] < point["publishedAt"]
+            and abs(
+                point["predicted"]
+                - 0.5 * (point["componentA"] + point["componentB"])
+            ) < 1e-9
+            for point in creator_adaptive_fixture["evaluation"]["points"]
+        )
+        assert creator_adaptive_fixture["evaluation"]["target"][
+            "allPopulationAccountsEvaluated"
+        ]
+        assert not creator_adaptive_fixture["evaluation"]["target"][
+            "missingEvaluationAccounts"
+        ]
+        assert set(creator_adaptive_fixture["formula"]["accounts"]) == {
+            row["account"] for row in visual_rows
+        }
+        assert creator_adaptive_fixture["formula"]["modalityClass"] == "multimodal"
+        assert creator_adaptive_fixture["formula"]["historyWindow"] == 30
+        assert creator_adaptive_fixture["formula"]["minimumHistoryN"] == 8
+        assert (
+            creator_adaptive_fixture["formula"]["lockedFormula"]
+            == CREATOR_ADAPTIVE_LOCKED_FORMULA
+        )
+        assert creator_adaptive_fixture["formula"]["outputBounds"] == [0, 100]
+        assert (
+            creator_adaptive_fixture["formula"]["outputTransform"]
+            == CREATOR_ADAPTIVE_OUTPUT_TRANSFORM
+        )
+        assert creator_adaptive_fixture["status"]["promoted"] is False
+        assert creator_adaptive_fixture["status"]["predictorEligible"] is False
+        assert creator_adaptive_fixture["status"]["state"].startswith(
+            "research_only_"
+        )
+
+        # Schema 3 is bound to exact labels and embedding matrices. Changing
+        # only final-tail outcomes must invalidate the registered benchmark.
+        mutated_rows = [dict(row) for row in visual_rows]
+        for account in {row["account"] for row in mutated_rows}:
+            account_rows = sorted(
+                (row for row in mutated_rows if row["account"] == account),
+                key=lambda row: row["publishedAt"],
+            )
+            for index, row in enumerate(account_rows[-4:]):
+                row["keep"] = 5 + index * 30
+        try:
+            predictor.run_creator_adaptive_keep_study(
+                mutated_rows,
+                {"visual": visual_store, "together": visual_store},
+            )
+        except RuntimeError as error:
+            assert "does not match the current dataset" in str(error)
+        else:
+            raise AssertionError(
+                "mutated final-tail labels bypassed the frozen benchmark fingerprint"
+            )
+
+        # A changed creator population is also refused rather than silently
+        # disappearing from the all-account denominator or triggering a refit.
+        undersized_rows = visual_rows + [
+            {
+                "id": f"undersized-{index}",
+                "title": f"undersized fixture {index}",
+                "account": "undersized",
+                "accountName": "Undersized",
+                "publishedAt": 1_800_000_000_000 + index * 86_400_000,
+                "keep": 60 + index,
+            }
+            for index in range(7)
+        ]
+        undersized_vectors = predictor.np.concatenate(
+            (
+                visual_store["vectors"],
+                predictor.np.asarray(
+                    [
+                        [index / 7, 0, 0, 0, 0, 0, 0, 1]
+                        for index in range(7)
+                    ],
+                    dtype=float,
+                ),
+            ),
+            axis=0,
+        )
+        undersized_store = {
+            "vectors": undersized_vectors,
+            "index": {
+                row["id"]: index
+                for index, row in enumerate(undersized_rows)
+            },
+        }
+        try:
+            predictor.run_creator_adaptive_keep_study(
+                undersized_rows,
+                {
+                    "visual": undersized_store,
+                    "together": undersized_store,
+                },
+            )
+        except RuntimeError as error:
+            assert "does not match the current dataset" in str(error)
+        else:
+            raise AssertionError(
+                "a changed creator population bypassed the frozen benchmark fingerprint"
+            )
+
+assert predictor.creator_adaptive_bootstrap_interval(
+    predictor.np.asarray([1, 2, 3, 4], dtype=float),
+    "bootstrap-fixture",
+) == predictor.creator_adaptive_bootstrap_interval(
+    predictor.np.asarray([1, 2, 3, 4], dtype=float),
+    "bootstrap-fixture",
+)
 
 
 # Coverage counts only stored vertical Science Center Shorts, while totals retain
@@ -742,6 +1240,9 @@ def synthetic_target(kind: str) -> dict:
     }
     if kind == "keep":
         target["visualOnlyStudy"] = json.loads(json.dumps(visual_study_fixture))
+        target["creatorAdaptiveStudy"] = json.loads(
+            json.dumps(creator_adaptive_fixture)
+        )
         target["blindInputs"] = {
             "featureNames": predictor.PRIVATE_FEATURE_NAMES,
             "videoHeldOutProtocol": "The evaluated video is excluded from this synthetic fit.",
@@ -754,12 +1255,20 @@ def synthetic_target(kind: str) -> dict:
 with tempfile.TemporaryDirectory() as temporary_directory:
     temporary_result = Path(temporary_directory) / "results.json"
     temporary_visual_model = Path(temporary_directory) / "visual-keep-model-v1.json"
+    temporary_creator_adaptive_model = (
+        Path(temporary_directory) / "creator-adaptive-keep-model-v1.json"
+    )
     with (
         mock.patch.object(predictor, "LOCAL_RESULT", temporary_result),
         mock.patch.object(
             predictor,
             "LOCAL_VISUAL_KEEP_MODEL",
             temporary_visual_model,
+        ),
+        mock.patch.object(
+            predictor,
+            "LOCAL_CREATOR_ADAPTIVE_KEEP_MODEL",
+            temporary_creator_adaptive_model,
         ),
         mock.patch.object(predictor, "update_status", lambda *args, **kwargs: None),
         mock.patch.object(predictor, "load_library", lambda: library_fixture),
@@ -817,6 +1326,48 @@ with tempfile.TemporaryDirectory() as temporary_directory:
             "artifactSha256"
         ]
         == hashlib.sha256(temporary_visual_model.read_bytes()).hexdigest()
+    )
+    assembled_creator_adaptive_model = json.loads(
+        temporary_creator_adaptive_model.read_text(encoding="utf-8")
+    )
+    assert (
+        assembled_creator_adaptive_model["coordinateId"]
+        == predictor.CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
+    )
+    assert (
+        assembled_creator_adaptive_model["schemaVersion"]
+        == predictor.CREATOR_ADAPTIVE_KEEP_SCHEMA_VERSION
+    )
+    assert (
+        assembled_creator_adaptive_model["selection"]["candidateCount"]
+        == CREATOR_ADAPTIVE_CANDIDATE_COUNT
+    )
+    assert (
+        assembled_creator_adaptive_model["selection"][
+            "candidateRegistrySha256"
+        ]
+        == CREATOR_ADAPTIVE_CANDIDATE_SHA256
+    )
+    assert (
+        assembled_creator_adaptive_model["selection"]["selected"][
+            "benchmarkId"
+        ]
+        == CREATOR_ADAPTIVE_BENCHMARK_ID
+    )
+    assert (
+        assembled_creator_adaptive_model["formula"]["outputTransform"]
+        == CREATOR_ADAPTIVE_OUTPUT_TRANSFORM
+    )
+    assert assembled_creator_adaptive_model["status"]["promoted"] is False
+    assert assembled_creator_adaptive_model["status"]["predictorEligible"] is False
+    assert assembled_creator_adaptive_model["formula"]["accounts"]
+    assert (
+        assembled_result["targets"]["keep"]["creatorAdaptiveStudy"][
+            "modelArtifact"
+        ]["artifactSha256"]
+        == hashlib.sha256(
+            temporary_creator_adaptive_model.read_bytes()
+        ).hexdigest()
     )
 
 

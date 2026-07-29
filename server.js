@@ -1248,18 +1248,81 @@ const SAVED_CHANNEL_VALIDATION_KEY = SAVED_CHANNEL_ROOT + 'blind-validation.json
 const SAVED_HOOK_INDEX_KEY = 'raw/saved-hooks/index.json';
 const VISUAL_KEEP_MODEL_KEY = 'raw/predictor-lab/visual-keep-model-v1.json';
 const VISUAL_KEEP_MODEL_MANIFEST_KEY = 'raw/predictor-lab/visual-keep-model-v1.manifest.json';
+const PREDICTOR_LAB_RELEASE_KEY = 'raw/predictor-lab/release-v1.json';
 const VISUAL_KEEP_COORDINATE_ID = 'shorts.visual-keep-forecast.v1';
+const CREATOR_ADAPTIVE_KEEP_MODEL_KEY = 'raw/predictor-lab/creator-adaptive-keep-model-v1.json';
+const CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY = 'raw/predictor-lab/creator-adaptive-keep-model-v1.manifest.json';
+const CREATOR_ADAPTIVE_KEEP_COORDINATE_ID = 'shorts.creator-adaptive-keep.v1';
+const CREATOR_ADAPTIVE_KEEP_SCHEMA_VERSION = 3;
+const CREATOR_ADAPTIVE_KEEP_BENCHMARK_ID = 'shorts.causal-keep-mixture-benchmark.v1';
+const CREATOR_ADAPTIVE_KEEP_CANDIDATE_COUNT = 43360;
+const CREATOR_ADAPTIVE_KEEP_CANDIDATE_SHA256 = 'bc7ae80a7afeac82a40648c3ff07e066cc238d3b27918d5f82bf3bbbd04de3ff';
+const CREATOR_ADAPTIVE_KEEP_BENCHMARK_SHA256 = 'c82a290cd4180974d754e6b1c0afec8d456d08d0434794925936ffb11ea82747';
+const CREATOR_ADAPTIVE_KEEP_RESULT_CORE_SHA256 = 'a8dc76db007bc1b158c1e9a04775d1ae7f32656c19b44e733b0523256a42391a';
 let visualKeepModelCache = null;
+let creatorAdaptiveKeepModelCache = null;
 
 function exactSha256(value) {
     return /^[a-f0-9]{64}$/i.test(String(value || ''));
 }
 
-async function readVisualKeepReleaseManifest() {
-    const manifestBuffer = await cloud.downloadFromR2(VISUAL_KEEP_MODEL_MANIFEST_KEY);
+async function readPredictorLabReleaseManifest() {
+    const buffer = await cloud.downloadFromR2(PREDICTOR_LAB_RELEASE_KEY);
+    if (!buffer) throw new Error('The predictor-lab atomic release pointer is not available.');
+    const manifest = JSON.parse(buffer.toString('utf8'));
+    const predictor = manifest.predictor || {};
+    const visualKeepModel = manifest.visualKeepModel || {};
+    const creatorAdaptiveKeepModel = manifest.creatorAdaptiveKeepModel || {};
+    const validComponent = (component, artifactPrefix, manifestPrefix) => (
+        exactSha256(component.artifactSha256)
+        && exactSha256(component.manifestSha256)
+        && component.artifactKey
+            === `${artifactPrefix}${String(component.artifactSha256).toLowerCase()}.json`
+        && component.manifestKey
+            === `${manifestPrefix}${String(component.artifactSha256).toLowerCase()}.manifest.json`
+    );
+    if (
+        Number(manifest.schemaVersion) !== 1
+        || !exactSha256(manifest.featureContractSha256)
+        || !exactSha256(manifest.producerSourceSha256)
+        || !validComponent(
+            predictor,
+            'raw/predictor-lab/by-sha256/',
+            'raw/predictor-lab/by-sha256/'
+        )
+        || !validComponent(
+            visualKeepModel,
+            'raw/predictor-lab/visual-keep-model/by-sha256/',
+            'raw/predictor-lab/visual-keep-model/by-sha256/'
+        )
+        || !validComponent(
+            creatorAdaptiveKeepModel,
+            'raw/predictor-lab/creator-adaptive-keep-model/by-sha256/',
+            'raw/predictor-lab/creator-adaptive-keep-model/by-sha256/'
+        )
+    ) {
+        throw new Error('The predictor-lab atomic release pointer failed integrity validation.');
+    }
+    return {
+        manifest,
+        buffer,
+        sha256: require('crypto').createHash('sha256').update(buffer).digest('hex'),
+        predictor,
+        visualKeepModel,
+        creatorAdaptiveKeepModel,
+    };
+}
+
+async function readVisualKeepReleaseManifest(pinned = null) {
+    const manifestKey = pinned && pinned.manifestKey
+        || VISUAL_KEEP_MODEL_MANIFEST_KEY;
+    const manifestBuffer = await cloud.downloadFromR2(manifestKey);
     if (!manifestBuffer) throw new Error('The frozen visual keep model release manifest is not available.');
     const manifest = JSON.parse(manifestBuffer.toString('utf8'));
     const artifactSha256 = String(manifest.artifactSha256 || '').toLowerCase();
+    const manifestSha256 = require('crypto').createHash('sha256')
+        .update(manifestBuffer)
+        .digest('hex');
     const expectedArchiveKey = `raw/predictor-lab/visual-keep-model/by-sha256/${artifactSha256}.json`;
     if (
         manifest.coordinateId !== VISUAL_KEEP_COORDINATE_ID
@@ -1268,13 +1331,19 @@ async function readVisualKeepReleaseManifest() {
         || manifest.archiveKey !== expectedArchiveKey
         || !exactSha256(manifest.producerSourceSha256)
         || !exactSha256(manifest.featureContractSha256)
+        || (pinned && (
+            artifactSha256 !== String(pinned.artifactSha256).toLowerCase()
+            || manifest.archiveKey !== pinned.artifactKey
+            || manifestSha256 !== String(pinned.manifestSha256).toLowerCase()
+        ))
     ) {
         throw new Error('The frozen visual keep model release manifest failed integrity validation.');
     }
     return {
         manifest,
         manifestBuffer,
-        manifestSha256: require('crypto').createHash('sha256').update(manifestBuffer).digest('hex'),
+        manifestSha256,
+        manifestKey,
         artifactSha256,
         artifactKey: manifest.archiveKey,
     };
@@ -1325,6 +1394,186 @@ async function readVisualKeepModel(forceRefresh = false, pinnedRelease = null) {
     return visualKeepModelCache;
 }
 
+async function readCreatorAdaptiveKeepReleaseManifest(pinned = null) {
+    const manifestKey = pinned && pinned.manifestKey
+        || CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY;
+    const manifestBuffer = await cloud.downloadFromR2(
+        manifestKey
+    );
+    if (!manifestBuffer) {
+        throw new Error('The creator-adaptive keep model release manifest is not available.');
+    }
+    const manifest = JSON.parse(manifestBuffer.toString('utf8'));
+    const artifactSha256 = String(manifest.artifactSha256 || '').toLowerCase();
+    const manifestSha256 = require('crypto')
+        .createHash('sha256')
+        .update(manifestBuffer)
+        .digest('hex');
+    const expectedArchiveKey = (
+        'raw/predictor-lab/creator-adaptive-keep-model/by-sha256/'
+        + `${artifactSha256}.json`
+    );
+    if (
+        Number(manifest.schemaVersion) !== CREATOR_ADAPTIVE_KEEP_SCHEMA_VERSION
+        || manifest.coordinateId !== CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
+        || manifest.canonicalKey !== CREATOR_ADAPTIVE_KEEP_MODEL_KEY
+        || !exactSha256(artifactSha256)
+        || manifest.archiveKey !== expectedArchiveKey
+        || !exactSha256(manifest.producerSourceSha256)
+        || !exactSha256(manifest.featureContractSha256)
+        || (pinned && (
+            artifactSha256 !== String(pinned.artifactSha256).toLowerCase()
+            || manifest.archiveKey !== pinned.artifactKey
+            || manifestSha256 !== String(pinned.manifestSha256).toLowerCase()
+        ))
+    ) {
+        throw new Error(
+            'The creator-adaptive keep model release manifest failed integrity validation.'
+        );
+    }
+    return {
+        manifest,
+        manifestBuffer,
+        manifestSha256,
+        manifestKey,
+        artifactSha256,
+        artifactKey: manifest.archiveKey,
+    };
+}
+
+async function readCreatorAdaptiveKeepModel(
+    forceRefresh = false,
+    pinnedRelease = null
+) {
+    const release = pinnedRelease || await readCreatorAdaptiveKeepReleaseManifest();
+    if (
+        !forceRefresh
+        && creatorAdaptiveKeepModelCache
+        && creatorAdaptiveKeepModelCache.artifactSha256 === release.artifactSha256
+        && creatorAdaptiveKeepModelCache.manifestSha256 === release.manifestSha256
+    ) {
+        return creatorAdaptiveKeepModelCache;
+    }
+    const buffer = await cloud.downloadFromR2(release.artifactKey);
+    if (!buffer) {
+        throw new Error(
+            'The creator-adaptive keep model immutable artifact is not available.'
+        );
+    }
+    const actualSha256 = require('crypto')
+        .createHash('sha256')
+        .update(buffer)
+        .digest('hex');
+    if (actualSha256 !== release.artifactSha256) {
+        throw new Error(
+            'The creator-adaptive keep model immutable artifact does not match its manifest.'
+        );
+    }
+    const model = JSON.parse(buffer.toString('utf8'));
+    const formula = model.formula || {};
+    const selection = model.selection || {};
+    const selected = selection.selected || {};
+    const status = model.status || {};
+    const benchmark = model.benchmark || {};
+    const lockedFormula = formula.lockedFormula || {};
+    const profiles = formula.accounts && typeof formula.accounts === 'object'
+        ? formula.accounts
+        : {};
+    const populationAccounts = (
+        model.population && Array.isArray(model.population.accounts)
+            ? model.population.accounts
+            : []
+    ).map(account => String(account && account.id || '')).filter(Boolean);
+    const embeddingDimensions = Number(
+        model.population && model.population.embeddingDimensions
+    );
+    const profileEntries = Object.entries(profiles);
+    const profilesValid = profileEntries.length === populationAccounts.length
+        && populationAccounts.every(account => profiles[account])
+        && profileEntries.every(([account, profile]) => (
+            populationAccounts.includes(account)
+            && Number.isInteger(Number(profile.historyN))
+            && Number(profile.historyN) >= Number(formula.minimumHistoryN)
+            && Number(profile.historyN) <= Number(formula.historyWindow)
+            && Number(profile.historyWindow) === Number(formula.historyWindow)
+            && Array.isArray(profile.historyVideoIds)
+            && profile.historyVideoIds.length === Number(profile.historyN)
+            && new Set(profile.historyVideoIds.map(String)).size
+                === profile.historyVideoIds.length
+            && Number.isFinite(Number(profile.historyThrough))
+        ));
+    const evaluationPoints = model.evaluation
+        && Array.isArray(model.evaluation.points)
+        ? model.evaluation.points
+        : [];
+    const evaluationPointIds = evaluationPoints.map(point => String(point && point.id || ''));
+    const evaluationValid = evaluationPoints.length > 0
+        && evaluationPointIds.every(Boolean)
+        && new Set(evaluationPointIds).size === evaluationPointIds.length
+        && evaluationPoints.every(point => (
+            profiles[String(point && point.account || '')]
+            && Number.isFinite(Number(point && point.predicted))
+            && Number.isFinite(Number(point && point.actual))
+            && Number.isFinite(Number(point && point.baseline))
+            && Number.isFinite(Number(point && point.componentA))
+            && Number.isFinite(Number(point && point.componentB))
+            && Number.isInteger(Number(point && point.historyN))
+            && Number(point.historyN) >= Number(formula.minimumHistoryN)
+            && Number(point.historyN) <= Number(formula.historyWindow)
+            && Array.isArray(point && point.historyVideoIds)
+            && point.historyVideoIds.length === Number(point.historyN)
+            && Number.isFinite(Number(point && point.historyEnd))
+        ));
+    if (
+        Number(model.schemaVersion) !== CREATOR_ADAPTIVE_KEEP_SCHEMA_VERSION
+        || model.coordinateId !== CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
+        || model.producerSourceSha256 !== release.manifest.producerSourceSha256
+        || model.featureContractVersion !== release.manifest.featureContractVersion
+        || model.featureContractSha256 !== release.manifest.featureContractSha256
+        || formula.modalityClass !== 'multimodal'
+        || Number(formula.historyWindow) !== 30
+        || Number(formula.minimumHistoryN) !== 8
+        || formula.outputTransform !== 'clip(0.5 * centered-together residual analog + 0.5 * visual+together semantic stack, 0, 100)'
+        || !Array.isArray(formula.outputBounds)
+        || Number(formula.outputBounds[0]) !== 0
+        || Number(formula.outputBounds[1]) !== 100
+        || Number(selection.candidateCount) !== CREATOR_ADAPTIVE_KEEP_CANDIDATE_COUNT
+        || Number(selection.candidateCountWithAllAccounts) <= 0
+        || selection.candidateRegistrySha256 !== CREATOR_ADAPTIVE_KEEP_CANDIDATE_SHA256
+        || selected.benchmarkId !== CREATOR_ADAPTIVE_KEEP_BENCHMARK_ID
+        || selected.modalityClass !== formula.modalityClass
+        || selected.formula !== lockedFormula.formula
+        || benchmark.benchmarkId !== CREATOR_ADAPTIVE_KEEP_BENCHMARK_ID
+        || benchmark.candidateRegistrySha256 !== CREATOR_ADAPTIVE_KEEP_CANDIDATE_SHA256
+        || benchmark.artifactSha256 !== CREATOR_ADAPTIVE_KEEP_BENCHMARK_SHA256
+        || benchmark.resultCoreSha256 !== CREATOR_ADAPTIVE_KEEP_RESULT_CORE_SHA256
+        || embeddingDimensions !== 1536
+        || status.predictorEligible !== false
+        || status.promoted !== false
+        || !profilesValid
+        || !evaluationValid
+    ) {
+        throw new Error(
+            'The creator-adaptive keep model provenance is incompatible with its release manifest.'
+        );
+    }
+    creatorAdaptiveKeepModelCache = {
+        loadedAt: Date.now(),
+        artifactSha256: release.artifactSha256,
+        artifactKey: release.artifactKey,
+        artifactBuffer: buffer,
+        manifestSha256: release.manifestSha256,
+        manifestBuffer: release.manifestBuffer,
+        manifest: release.manifest,
+        model,
+        byVideoId: new Map(
+            ((model.evaluation && model.evaluation.points) || [])
+                .map(point => [String(point.id), point])
+        ),
+    };
+    return creatorAdaptiveKeepModelCache;
+}
+
 function visualKeepForecastMatchesRelease(value, cached) {
     return !!(
         value
@@ -1362,6 +1611,105 @@ async function backfilledVisualKeepForecast(videoId, modelCache = null) {
         model_status: cached.model.status || null,
         input: cached.model.input || null,
         source: 'final_model_training_population_backfill',
+    };
+}
+
+async function historicalCreatorAdaptiveKeepForecast(
+    videoId,
+    modelCache = null,
+    expectedAccount = null
+) {
+    const cached = modelCache || await readCreatorAdaptiveKeepModel();
+    const point = cached.byVideoId.get(String(videoId));
+    if (
+        !point
+        || !Number.isFinite(Number(point.predicted))
+        || (expectedAccount && String(point.account) !== String(expectedAccount))
+    ) return null;
+    return {
+        coordinate_id: CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
+        est: Number(point.predicted),
+        raw: Number(point.predicted),
+        pctile: null,
+        kind: 'keep_rate_percent',
+        unit: 'percent',
+        calibration_scope: 'creator_prequential_next_upload',
+        profile_account: point.account || null,
+        profile_account_name: point.accountName || null,
+        history_only_baseline: Number.isFinite(Number(point.baseline))
+            ? Number(point.baseline)
+            : null,
+        history_n: Number.isFinite(Number(point.historyN)) ? Number(point.historyN) : null,
+        history_start: Number.isFinite(Number(point.historyStart)) ? Number(point.historyStart) : null,
+        history_end: Number.isFinite(Number(point.historyEnd)) ? Number(point.historyEnd) : null,
+        history_video_ids: Array.isArray(point.historyVideoIds)
+            ? point.historyVideoIds.map(String)
+            : [],
+        component_a: Number.isFinite(Number(point.componentA))
+            ? Number(point.componentA)
+            : null,
+        component_b: Number.isFinite(Number(point.componentB))
+            ? Number(point.componentB)
+            : null,
+        component_a_definition: (
+            'Centered together-embedding residual analog'
+        ),
+        component_b_definition: (
+            'Visual-plus-together semantic stack'
+        ),
+        model_modality: cached.model.formula
+            && cached.model.formula.modalityClass
+            || null,
+        model_history_window: cached.model.formula
+            && Number.isFinite(Number(cached.model.formula.historyWindow))
+            ? Number(cached.model.formula.historyWindow)
+            : null,
+        model_minimum_history_n: cached.model.formula
+            && Number.isFinite(Number(cached.model.formula.minimumHistoryN))
+            ? Number(cached.model.formula.minimumHistoryN)
+            : null,
+        model_formula: cached.model.formula
+            && cached.model.formula.outputTransform
+            || null,
+        benchmark_id: cached.model.benchmark
+            && cached.model.benchmark.benchmarkId
+            || null,
+        benchmark_artifact_sha256: cached.model.benchmark
+            && cached.model.benchmark.artifactSha256
+            || null,
+        candidate_registry_sha256: cached.model.selection
+            && cached.model.selection.candidateRegistrySha256
+            || null,
+        candidate_count: cached.model.selection
+            && Number.isFinite(Number(cached.model.selection.candidateCount))
+            ? Number(cached.model.selection.candidateCount)
+            : null,
+        model_artifact_sha256: cached.artifactSha256,
+        model_artifact_key: cached.artifactKey,
+        model_artifact_canonical_key: CREATOR_ADAPTIVE_KEEP_MODEL_KEY,
+        model_manifest_key: CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY,
+        model_manifest_sha256: cached.manifestSha256,
+        producer_source_sha256: cached.model.producerSourceSha256 || null,
+        feature_contract_version: cached.model.featureContractVersion || null,
+        feature_contract_sha256: cached.model.featureContractSha256 || null,
+        model_generated_at: cached.model.generatedAt || null,
+        model_status: cached.model.status || null,
+        predictor_eligible: !!(
+            cached.model.status
+            && cached.model.status.predictorEligible
+        ),
+        input: cached.model.input || null,
+        source: 'causal_final20_prequential',
+        claim_boundary: (
+            'Historical causal evaluation value for a known creator next upload. '
+            + (
+                cached.model.status
+                && cached.model.status.predictorEligible
+                    ? 'The artifact is marked predictor-eligible. '
+                    : 'This is a research diagnostic and is not predictor-eligible. '
+            )
+            + 'Cold start and frozen future-backlog scoring are unsupported.'
+        ),
     };
 }
 
@@ -1464,7 +1812,13 @@ async function removeSavedChannelIndex(id) {
     await writeSavedChannelIndex(index);
 }
 
-function savedChannelValidationCacheIsCompatible(cached, contractSha256, visualKeepRelease) {
+function savedChannelValidationCacheIsCompatible(
+    cached,
+    contractSha256,
+    predictorLabRelease,
+    visualKeepRelease,
+    creatorAdaptiveKeepRelease
+) {
     const registry = cached && cached.coordinateRegistry;
     const runtimeArtifact = registry && registry.lineageCatalog
         && registry.lineageCatalog.artifacts
@@ -1472,12 +1826,20 @@ function savedChannelValidationCacheIsCompatible(cached, contractSha256, visualK
     const visualKeepArtifact = registry && registry.lineageCatalog
         && registry.lineageCatalog.artifacts
         && registry.lineageCatalog.artifacts['artifact.shorts.visual-keep-model.v1'];
+    const creatorAdaptiveKeepArtifact = registry && registry.lineageCatalog
+        && registry.lineageCatalog.artifacts
+        && registry.lineageCatalog.artifacts['artifact.shorts.creator-adaptive-keep-model.v1'];
     return !!(
         cached
         && cached.version === savedChannelValidation.VERSION
         && cached.ledgerAudit && cached.ledgerAudit.passed
         && registry && registry.lineageAudit && registry.lineageAudit.passed
         && runtimeArtifact
+        && predictorLabRelease
+        && runtimeArtifact.artifactSha256
+            === predictorLabRelease.predictor.artifactSha256
+        && runtimeArtifact.archiveKey
+            === predictorLabRelease.predictor.artifactKey
         && runtimeArtifact.scoredWithContractSha256 === contractSha256
         && runtimeArtifact.displayedLineageContractSha256 === contractSha256
         && visualKeepArtifact
@@ -1489,6 +1851,19 @@ function savedChannelValidationCacheIsCompatible(cached, contractSha256, visualK
         && visualKeepArtifact.runtimeRevision
         && visualKeepArtifact.runtimeRevision.artifactSha256 === visualKeepRelease.artifactSha256
         && visualKeepArtifact.runtimeRevision.manifestSha256 === visualKeepRelease.manifestSha256
+        && creatorAdaptiveKeepArtifact
+        && creatorAdaptiveKeepRelease
+        && exactSha256(creatorAdaptiveKeepRelease.artifactSha256)
+        && exactSha256(creatorAdaptiveKeepRelease.manifestSha256)
+        && creatorAdaptiveKeepArtifact.artifactSha256
+            === creatorAdaptiveKeepRelease.artifactSha256
+        && creatorAdaptiveKeepArtifact.manifestSha256
+            === creatorAdaptiveKeepRelease.manifestSha256
+        && creatorAdaptiveKeepArtifact.runtimeRevision
+        && creatorAdaptiveKeepArtifact.runtimeRevision.artifactSha256
+            === creatorAdaptiveKeepRelease.artifactSha256
+        && creatorAdaptiveKeepArtifact.runtimeRevision.manifestSha256
+            === creatorAdaptiveKeepRelease.manifestSha256
     );
 }
 
@@ -1505,14 +1880,41 @@ async function buildSavedChannelValidationBuffer() {
     // The release pointer is required even for fallback. Serving a cached
     // ledger whose model revision cannot be compared with the current pointer
     // would make the ledger and click-through disagree silently.
-    const visualKeepRelease = await readVisualKeepReleaseManifest();
+    const predictorLabRelease = await readPredictorLabReleaseManifest();
+    const visualKeepRelease = await readVisualKeepReleaseManifest(
+        predictorLabRelease.visualKeepModel
+    );
+    const creatorAdaptiveKeepRelease =
+        await readCreatorAdaptiveKeepReleaseManifest(
+            predictorLabRelease.creatorAdaptiveKeepModel
+        );
+    for (const modelRelease of [visualKeepRelease, creatorAdaptiveKeepRelease]) {
+        if (
+            modelRelease.manifest.featureContractSha256
+                !== predictorLabRelease.manifest.featureContractSha256
+            || modelRelease.manifest.producerSourceSha256
+                !== predictorLabRelease.manifest.producerSourceSha256
+            || Number(modelRelease.manifest.generatedAt)
+                !== Number(predictorLabRelease.manifest.generatedAt)
+        ) {
+            throw new Error(
+                'The predictor-lab release pointer combines incompatible model revisions.'
+            );
+        }
+    }
     try {
-        return await buildFreshSavedChannelValidationBuffer(visualKeepRelease);
+        return await buildFreshSavedChannelValidationBuffer(
+            predictorLabRelease,
+            visualKeepRelease,
+            creatorAdaptiveKeepRelease
+        );
     } catch (error) {
         if (!savedChannelValidationCacheIsCompatible(
             cached,
             contractSha256,
-            visualKeepRelease
+            predictorLabRelease,
+            visualKeepRelease,
+            creatorAdaptiveKeepRelease
         )) throw error;
         cached.artifact = {
             ...(cached.artifact || {}),
@@ -1527,30 +1929,58 @@ async function buildSavedChannelValidationBuffer() {
     }
 }
 
-async function buildFreshSavedChannelValidationBuffer(visualKeepRelease) {
+async function buildFreshSavedChannelValidationBuffer(
+    predictorLabRelease,
+    visualKeepRelease,
+    creatorAdaptiveKeepRelease
+) {
     const sourceBuffers = new Map();
-    const predictorBuffer = await cloud.downloadFromR2('raw/predictor-lab/results.json');
+    const predictorBuffer = await cloud.downloadFromR2(
+        predictorLabRelease.predictor.artifactKey
+    );
     if (!predictorBuffer) throw new Error('The leakage-safe predictor artifact has not been built.');
-    sourceBuffers.set('raw/predictor-lab/results.json', predictorBuffer);
+    sourceBuffers.set(predictorLabRelease.predictor.artifactKey, predictorBuffer);
     const predictor = JSON.parse(predictorBuffer.toString('utf8'));
     const predictorArtifactSha256 = require('crypto').createHash('sha256').update(predictorBuffer).digest('hex');
-    const predictorManifestBuffer = await cloud.downloadFromR2('raw/predictor-lab/results.manifest.json').catch(() => null);
-    let predictorManifest = null;
-    if (predictorManifestBuffer) {
-        sourceBuffers.set('raw/predictor-lab/results.manifest.json', predictorManifestBuffer);
-        predictorManifest = JSON.parse(predictorManifestBuffer.toString('utf8'));
-        if (predictorManifest.artifactSha256 !== predictorArtifactSha256) {
-            throw new Error('The predictor manifest does not match the predictor artifact bytes.');
-        }
+    if (predictorArtifactSha256 !== predictorLabRelease.predictor.artifactSha256) {
+        throw new Error('The predictor artifact does not match the atomic release pointer.');
+    }
+    const predictorManifestBuffer = await cloud.downloadFromR2(
+        predictorLabRelease.predictor.manifestKey
+    ).catch(() => null);
+    if (!predictorManifestBuffer) {
+        throw new Error('The predictor manifest pinned by the atomic release is not available.');
+    }
+    sourceBuffers.set(
+        predictorLabRelease.predictor.manifestKey,
+        predictorManifestBuffer
+    );
+    const predictorManifest = JSON.parse(predictorManifestBuffer.toString('utf8'));
+    const predictorManifestSha256 = require('crypto').createHash('sha256')
+        .update(predictorManifestBuffer)
+        .digest('hex');
+    if (
+        predictorManifest.artifactSha256 !== predictorArtifactSha256
+        || predictorManifestSha256
+            !== predictorLabRelease.predictor.manifestSha256
+    ) {
+        throw new Error('The predictor manifest does not match the predictor artifact bytes.');
+    }
+    sourceBuffers.set(PREDICTOR_LAB_RELEASE_KEY, predictorLabRelease.buffer);
+    if (
+        predictor.provenance.featureContractSha256
+            !== predictorLabRelease.manifest.featureContractSha256
+        || predictor.provenance.producerSourceSha256
+            !== predictorLabRelease.manifest.producerSourceSha256
+    ) {
+        throw new Error('The predictor artifact provenance does not match the atomic release pointer.');
     }
     predictor.provenance = {
         ...(predictor.provenance || {}),
         artifactSha256: predictorArtifactSha256,
-        artifactArchiveKey: predictorManifest && predictorManifest.archiveKey || null,
-        artifactManifestKey: predictorManifest ? 'raw/predictor-lab/results.manifest.json' : null,
-        artifactManifestSha256: predictorManifestBuffer
-            ? require('crypto').createHash('sha256').update(predictorManifestBuffer).digest('hex')
-            : null,
+        artifactArchiveKey: predictorManifest.archiveKey,
+        artifactManifestKey: predictorLabRelease.predictor.manifestKey,
+        artifactManifestSha256: predictorManifestSha256,
         artifactGeneratedAt: predictor.generatedAt || null,
     };
     const predictorVisualKeepArtifact = predictor
@@ -1576,16 +2006,67 @@ async function buildFreshSavedChannelValidationBuffer(visualKeepRelease) {
         );
     }
     const visualKeepModel = await readVisualKeepModel(false, visualKeepRelease);
-    sourceBuffers.set(VISUAL_KEEP_MODEL_MANIFEST_KEY, visualKeepRelease.manifestBuffer);
+    sourceBuffers.set(visualKeepRelease.manifestKey, visualKeepRelease.manifestBuffer);
     sourceBuffers.set(visualKeepRelease.artifactKey, visualKeepModel.artifactBuffer);
+    const predictorCreatorAdaptiveArtifact = predictor
+        && predictor.targets
+        && predictor.targets.keep
+        && predictor.targets.keep.creatorAdaptiveStudy
+        && predictor.targets.keep.creatorAdaptiveStudy.modelArtifact
+        || predictor.provenance.creatorAdaptiveKeepModelArtifact
+        || null;
+    if (
+        !predictorCreatorAdaptiveArtifact
+        || predictorCreatorAdaptiveArtifact.artifactSha256
+            !== creatorAdaptiveKeepRelease.artifactSha256
+        || predictorCreatorAdaptiveArtifact.archiveKey
+            !== creatorAdaptiveKeepRelease.artifactKey
+        || predictorCreatorAdaptiveArtifact.producerSourceSha256
+            !== creatorAdaptiveKeepRelease.manifest.producerSourceSha256
+        || predictor.provenance.featureContractVersion
+            !== creatorAdaptiveKeepRelease.manifest.featureContractVersion
+        || predictor.provenance.featureContractSha256
+            !== creatorAdaptiveKeepRelease.manifest.featureContractSha256
+    ) {
+        throw new Error(
+            'The predictor results and creator-adaptive keep release pointer are not on the same immutable revision.'
+        );
+    }
+    const creatorAdaptiveKeepModel = await readCreatorAdaptiveKeepModel(
+        false,
+        creatorAdaptiveKeepRelease
+    );
+    sourceBuffers.set(
+        creatorAdaptiveKeepRelease.manifestKey,
+        creatorAdaptiveKeepRelease.manifestBuffer
+    );
+    sourceBuffers.set(
+        creatorAdaptiveKeepRelease.artifactKey,
+        creatorAdaptiveKeepModel.artifactBuffer
+    );
     const runtimeManifests = {};
+    runtimeManifests.predictorLabRelease = {
+        key: PREDICTOR_LAB_RELEASE_KEY,
+        sha256: predictorLabRelease.sha256,
+        generatedAt: predictorLabRelease.manifest.generatedAt,
+    };
     runtimeManifests.visualKeepModelRelease = {
-        key: VISUAL_KEEP_MODEL_MANIFEST_KEY,
+        key: visualKeepRelease.manifestKey,
         artifactSha256: visualKeepRelease.artifactSha256,
         manifestSha256: visualKeepRelease.manifestSha256,
         archiveKey: visualKeepRelease.artifactKey,
         producerSourceSha256: visualKeepRelease.manifest.producerSourceSha256,
         featureContractSha256: visualKeepRelease.manifest.featureContractSha256,
+    };
+    runtimeManifests.creatorAdaptiveKeepModelRelease = {
+        key: creatorAdaptiveKeepRelease.manifestKey,
+        artifactSha256: creatorAdaptiveKeepRelease.artifactSha256,
+        manifestSha256: creatorAdaptiveKeepRelease.manifestSha256,
+        archiveKey: creatorAdaptiveKeepRelease.artifactKey,
+        producerSourceSha256:
+            creatorAdaptiveKeepRelease.manifest.producerSourceSha256,
+        featureContractSha256:
+            creatorAdaptiveKeepRelease.manifest.featureContractSha256,
     };
     for (const [name, key] of [
         ['shortsSteer', 'raw/steer_manifest.json'],
@@ -1700,6 +2181,7 @@ async function buildFreshSavedChannelValidationBuffer(visualKeepRelease) {
     const validation = savedChannelValidation.buildValidation({
         channels,
         predictor,
+        creatorAdaptiveKeepModel,
         sourceFingerprint: fingerprint,
     });
     validation.artifact = {
@@ -5089,8 +5571,37 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                         record.visual_keep_forecast_error = 'This historical video is outside the current frozen model training population; re-score it to persist the current raw value.';
                     }
                 }
+                try {
+                    const creatorModelCache = await readCreatorAdaptiveKeepModel();
+                    const channelProfile = savedChannelValidation.SUPPORTED_CHANNELS
+                        .find(channel => channel.channelId === savedChannelVideo[1]);
+                    record.creator_adaptive_keep_release_sha256 =
+                        creatorModelCache.artifactSha256;
+                    record.creator_adaptive_keep_forecast = channelProfile
+                        ? await historicalCreatorAdaptiveKeepForecast(
+                            savedChannelVideo[2],
+                            creatorModelCache,
+                            channelProfile.accountId
+                        )
+                        : null;
+                    if (!record.creator_adaptive_keep_forecast) {
+                        record.creator_adaptive_keep_forecast_error = (
+                            'This video is outside the registered causal final-window evaluation, '
+                            + 'so no historical creator-adaptive value is attached.'
+                        );
+                    }
+                } catch (error) {
+                    record.creator_adaptive_keep_forecast = null;
+                    record.creator_adaptive_keep_forecast_error = (
+                        `Current creator-adaptive keep release could not be verified: `
+                        + String(error && error.message || error).slice(0, 180)
+                    );
+                }
             }
-            res.writeHead(buffer ? 200 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=86400' });
+            res.writeHead(buffer ? 200 : 404, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'private, no-store',
+            });
             res.end(record ? JSON.stringify(record) : JSON.stringify({ error: 'Scored video record not found.' }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;

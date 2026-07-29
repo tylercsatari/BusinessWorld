@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 8,
   "pipeline": {
     "sourceWindow": "first 5 seconds",
     "embeddingModel": "gemini-embedding-2",
@@ -15,20 +15,21 @@
     "contractId": "jarvis.coordinate-lineage.v1",
     "purpose": "Static, machine-readable lineage for every canonical Shorts ledger family and every exposed Long Quant output family. Runtime materializations may add artifact hashes, row counts, fit counts, and exclusion-set hashes, but may not replace these identities.",
     "inventorySemantics": {
-      "shortsLedgerColumns": 104,
+      "shortsLedgerColumns": 105,
       "shortsVisualKeepForecasts": 1,
+      "shortsCreatorAdaptiveKeepForecasts": 1,
       "shortsDirectAxisColumns": 45,
       "shortsDistinctDirectEmbeddingAxes": 36,
       "shortsDirectAxisAliasColumns": 9,
       "shortsEmbeddingDerivedTransforms": 12,
-      "shortsCombinedForecasts": 26,
-      "shortsForecastColumns": 27,
+      "shortsCombinedForecasts": 27,
+      "shortsForecastColumns": 28,
       "shortsObservedOutcomes": 13,
       "shortsLegacyDiagnostics": 7,
       "longScalarOutputs": 12,
       "longFrozenDirectAxes": 1,
       "longNeighborDerivedOutputs": 11,
-      "warning": "A ledger column is not necessarily an embedding space. The 45 direct-axis columns contain 36 distinct fitted axes because the same nine creator-excluded public axes are exposed under both evaluation-protocol views. The frozen visual keep forecast is one derived scalar from the existing visual representation, not a new embedding space. Observed outcomes, embedding-derived transforms, combined forecasts, and legacy diagnostics must never be described as direct embedding axes."
+      "warning": "A ledger column is not necessarily an embedding space. The 45 direct-axis columns contain 36 distinct fitted axes because the same nine creator-excluded public axes are exposed under both evaluation-protocol views. The frozen visual keep forecast reuses the visual representation. The creator-adaptive next-upload forecast reuses both the visual and together representations plus explicit prior creator outcomes. Neither derived scalar is a new embedding space. Observed outcomes, embedding-derived transforms, combined forecasts, and legacy diagnostics must never be described as direct embedding axes."
     },
     "identityRules": [
       "A coordinate identity is the tuple of coordinate ID, raw input set, representation, fit dataset, target, algorithm, calibration, artifact revision, and evaluation protocol.",
@@ -448,6 +449,22 @@
             "artifactRevision"
           ]
         },
+        "dataset.shorts.creator-adaptive-keep-prequential.v1": {
+          "domain": "shorts",
+          "role": "known-creator causal next-upload research forecast",
+          "baseDatasetId": "dataset.shorts.private-blind-population.v1",
+          "selectionRule": "A fixed four-stage registry of 43,360 causal candidates is evaluated only on each creator's chronological 50%-80% window. The selected formula is a 50/50 blend of a centered-together residual analog and a visual-plus-together semantic stack. Every feature and calibration update uses only publication timestamps strictly earlier than the target; equal timestamps are simultaneous batches. The final 20% is evaluated both frozen and prequential, and every prediction requires at least eight earlier labels.",
+          "runtimeProvenanceRequired": [
+            "population",
+            "selected",
+            "candidateRegistrySha256",
+            "candidateCountWithAllAccounts",
+            "evaluationTarget",
+            "honestHistoryBaseline",
+            "predictorEligibility",
+            "artifactRevision"
+          ]
+        },
         "dataset.shorts.video-forecast-folds.v1": {
           "domain": "shorts",
           "role": "combined forecast validation",
@@ -669,6 +686,20 @@
           "fit": "Nested training-only folds select the pooled alpha. The frozen production artifact then refits one pooled Ridge formula on every permitted labeled row.",
           "scalarFormula": "intercept + dot(L2-normalized visual embedding, 1,536 persisted coefficients). Creator identity is not an input, so an identical vector receives an identical scalar in every scoring route.",
           "sourceCode": "buildings/jarvis/predictor-lab/run_predictor_lab.py"
+        },
+        "algorithm.shorts.creator-adaptive-causal-mixture.v1": {
+          "domain": "shorts",
+          "kind": "combined_forecast",
+          "inputs": [
+            "L2-normalized 1,536D visual opening embedding",
+            "L2-normalized 1,536D together opening embedding",
+            "explicit creator profile",
+            "strictly earlier measured keep-rate outcomes"
+          ],
+          "estimator": "Selection-locked causal residual analog plus ridge semantic stack",
+          "fit": "Exactly 43,360 staged candidates are enumerated from one immutable registry. Selection sees only the per-creator chronological 50%-80% window and minimizes worst-account error before the final tail is read. The locked candidate blends a centered-together pooled analog with a causal stack over visual and together semantic experts. Every target, creator centering, correction, gate, and conformal residual is updated only after its entire equal-timestamp batch.",
+          "scalarFormula": "clip(0.5 * centered-together residual analog + 0.5 * visual-plus-together semantic stack, 0, 100). The matched null is the arithmetic mean of at most 30 strictly earlier same-creator keep labels.",
+          "sourceCode": "scripts/benchmark-causal-keep-mixture.py"
         },
         "algorithm.shorts.nested-multitarget-ridge.v1": {
           "domain": "shorts",
@@ -1104,6 +1135,50 @@
             "archiveKey",
             "producerSourceSha256"
           ]
+        },
+        "artifact.shorts.creator-adaptive-keep-model.v1": {
+          "domain": "shorts",
+          "schemaVersion": 3,
+          "path": "raw/predictor-lab/creator-adaptive-keep-model-v1.json",
+          "manifestPath": "raw/predictor-lab/creator-adaptive-keep-model-v1.manifest.json",
+          "archivePathPattern": "raw/predictor-lab/creator-adaptive-keep-model/by-sha256/{artifactSha256}.json",
+          "producer": "buildings/jarvis/predictor-lab/run_predictor_lab.py",
+          "consumer": [
+            "server.js",
+            "buildings/jarvis/saved-channel-validation.js"
+          ],
+          "contains": [
+            "coordinate ID",
+            "selected 43,360-candidate registry hash and four-stage locked formula",
+            "visual and together embedding fingerprints",
+            "history video IDs and training cutoff per profile",
+            "causal prequential and frozen final-window predictions",
+            "conformal intervals, modality ablations, rolling stability, and bootstrap uncertainty",
+            "the matched history-only baseline and incremental error for every evaluation point",
+            "explicit promoted and predictorEligible status"
+          ],
+          "availability": "Historical final-window evaluation rows only in the current UI. Anonymous raw uploads and arbitrary saved hooks must return unavailable unless a future server route requires and validates an explicit eligible creator profile.",
+          "runtimeRevisionRequired": true,
+          "runtimeRevisionRequiredFields": [
+            "artifactSha256",
+            "archiveKey",
+            "producerSourceSha256"
+          ]
+        },
+        "artifact.shorts.predictor-lab-release.v1": {
+          "domain": "shorts",
+          "path": "raw/predictor-lab/release-v1.json",
+          "producer": "buildings/jarvis/predictor-lab/run_predictor_lab.py",
+          "consumer": [
+            "server.js"
+          ],
+          "contains": [
+            "one immutable predictor result artifact and manifest revision",
+            "one immutable frozen visual keep model and manifest revision",
+            "one immutable creator-adaptive keep model and manifest revision",
+            "feature-contract and producer-source hashes shared by the bundle"
+          ],
+          "publicationRule": "Upload every immutable artifact and manifest first, update compatibility aliases second, then replace this single release pointer last. Validation consumers must begin from this pointer and never independently combine mutable aliases."
         },
         "artifact.shorts.live-score-runtime.v1": {
           "domain": "shorts",
@@ -1766,6 +1841,33 @@
           "map.shorts.keep.v1"
         ],
         "evaluationWarning": "The frozen production value is in-sample for rows used in the final fit. Video, forward-time, and account-holdout predictions are separate validation evidence and are never substituted for this coordinate."
+      },
+      {
+        "id": "family.shorts.creator-adaptive-keep.v1",
+        "coordinatePattern": "shorts.creator-adaptive-keep.v1",
+        "expansion": {
+          "count": 1
+        },
+        "valueClass": "combined_forecast",
+        "rawInputSetIds": [
+          "input.shorts.first5-montage-transcript.v1",
+          "input.shorts.private-outcomes.v1"
+        ],
+        "representationIds": [
+          "representation.shorts.visual.gemini1536.v1",
+          "representation.shorts.together.gemini1536.v1"
+        ],
+        "fitDatasetId": "dataset.shorts.creator-adaptive-keep-prequential.v1",
+        "target": "observed stayed-to-watch percentage",
+        "algorithmId": "algorithm.shorts.creator-adaptive-causal-mixture.v1",
+        "calibrationId": "calibration.identity-target-units.v1",
+        "artifactIds": [
+          "artifact.shorts.creator-adaptive-keep-model.v1"
+        ],
+        "visualizationMapIds": [
+          "map.shorts.keep.v1"
+        ],
+        "evaluationWarning": "Retrospectively, every measured creator is below 10 percentage-point MAE and the locked mixture descriptively beats its exact recent-30 history null. This is not a claim that every prediction lands within 10 points. The development tail has been inspected, current labels are cumulative snapshots at different video ages, and prospective confirmation remains required. Historical ledger values exist only on causal final-window points; cold start and anonymous uploads are unsupported."
       },
       {
         "id": "family.shorts.video-heldout.private-axis.v1",

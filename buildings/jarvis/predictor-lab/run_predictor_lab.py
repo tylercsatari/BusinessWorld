@@ -49,13 +49,45 @@ CONTRACT_PATH = ROOT / "buildings" / "jarvis" / "saved-channel-feature-contract.
 LOCAL_RESULT = HERE / "results.json"
 R2_RESULT_KEY = "raw/predictor-lab/results.json"
 R2_RESULT_MANIFEST_KEY = "raw/predictor-lab/results.manifest.json"
+R2_RELEASE_KEY = "raw/predictor-lab/release-v1.json"
 R2_STATUS_KEY = "raw/predictor-lab/status.json"
 LOCAL_VISUAL_KEEP_MODEL = HERE / "visual-keep-model-v1.json"
 R2_VISUAL_KEEP_MODEL_KEY = "raw/predictor-lab/visual-keep-model-v1.json"
 R2_VISUAL_KEEP_MODEL_MANIFEST_KEY = (
     "raw/predictor-lab/visual-keep-model-v1.manifest.json"
 )
+LOCAL_CREATOR_ADAPTIVE_KEEP_MODEL = HERE / "creator-adaptive-keep-model-v1.json"
+CAUSAL_KEEP_MIXTURE_BENCHMARK = (
+    HERE / "causal-keep-mixture-benchmark.json"
+)
+R2_CREATOR_ADAPTIVE_KEEP_MODEL_KEY = (
+    "raw/predictor-lab/creator-adaptive-keep-model-v1.json"
+)
+R2_CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY = (
+    "raw/predictor-lab/creator-adaptive-keep-model-v1.manifest.json"
+)
 VISUAL_KEEP_COORDINATE_ID = "shorts.visual-keep-forecast.v1"
+CREATOR_ADAPTIVE_KEEP_COORDINATE_ID = "shorts.creator-adaptive-keep.v1"
+CREATOR_ADAPTIVE_KEEP_SCHEMA_VERSION = 3
+CREATOR_ADAPTIVE_KEEP_V1_SPEC = {
+    "benchmarkId": "shorts.causal-keep-mixture-benchmark.v1",
+    "benchmarkCoordinateId": "shorts.causal-keep-mixture.v1",
+    "candidateCount": 43_360,
+    "candidateRegistrySha256": (
+        "bc7ae80a7afeac82a40648c3ff07e066"
+        "cc238d3b27918d5f82bf3bbbd04de3ff"
+    ),
+    "benchmarkArtifactSha256": (
+        "c82a290cd4180974d754e6b1c0afec8"
+        "d456d08d0434794925936ffb11ea82747"
+    ),
+    "resultCoreSha256": (
+        "a8dc76db007bc1b158c1e9a04775d1a"
+        "e7f32656c19b44e733b0523256a42391a"
+    ),
+    "historyWindow": 30,
+    "minimumHistoryN": 8,
+}
 EXPERIMENT_COUNT = 50_000
 MODALITIES = ("visual", "text", "together")
 MODALITY_SHORT = {"visual": "vis", "text": "txt", "together": "tog"}
@@ -2215,6 +2247,7 @@ def visual_keep_metrics(
     baseline = np.asarray(baseline[valid], dtype=float)
     scoped_rows = [row for row, keep in zip(rows, valid) if keep]
     metrics = regression_metrics(actual, predicted)
+    absolute_error = np.abs(actual - predicted)
     baseline_sse = float(np.sum((actual - baseline) ** 2))
     model_sse = float(np.sum((actual - predicted) ** 2))
     actual_range = float(np.ptp(actual)) if len(actual) else None
@@ -2237,6 +2270,25 @@ def visual_keep_metrics(
             ),
             "baselineMae": clean_number(float(np.mean(np.abs(actual - baseline)))),
             "baselineRmse": clean_number(float(np.sqrt(np.mean((actual - baseline) ** 2)))),
+            "maeImprovementVsBaseline": clean_number(
+                float(
+                    np.mean(np.abs(actual - baseline))
+                    - np.mean(np.abs(actual - predicted))
+                )
+            ),
+            "medianAbsoluteError": clean_number(
+                float(np.median(absolute_error)) if len(absolute_error) else None
+            ),
+            "p90AbsoluteError": clean_number(
+                float(np.quantile(absolute_error, 0.9))
+                if len(absolute_error)
+                else None
+            ),
+            "within10PercentagePoints": clean_number(
+                100 * float(np.mean(absolute_error <= 10))
+                if len(absolute_error)
+                else None
+            ),
         }
     )
     per_account = []
@@ -2245,6 +2297,7 @@ def visual_keep_metrics(
         account_actual = actual[mask]
         account_predicted = predicted[mask]
         account_baseline = baseline[mask]
+        account_absolute_error = np.abs(account_actual - account_predicted)
         account_sse = float(np.sum((account_actual - account_predicted) ** 2))
         account_baseline_sse = float(np.sum((account_actual - account_baseline) ** 2))
         account_metrics = regression_metrics(account_actual, account_predicted)
@@ -2286,6 +2339,34 @@ def visual_keep_metrics(
                 ),
                 "baselineMae": clean_number(
                     float(np.mean(np.abs(account_actual - account_baseline)))
+                ),
+                "baselineRmse": clean_number(
+                    float(
+                        np.sqrt(
+                            np.mean((account_actual - account_baseline) ** 2)
+                        )
+                    )
+                ),
+                "maeImprovementVsBaseline": clean_number(
+                    float(
+                        np.mean(np.abs(account_actual - account_baseline))
+                        - np.mean(account_absolute_error)
+                    )
+                ),
+                "medianAbsoluteError": clean_number(
+                    float(np.median(account_absolute_error))
+                    if len(account_absolute_error)
+                    else None
+                ),
+                "p90AbsoluteError": clean_number(
+                    float(np.quantile(account_absolute_error, 0.9))
+                    if len(account_absolute_error)
+                    else None
+                ),
+                "within10PercentagePoints": clean_number(
+                    100 * float(np.mean(account_absolute_error <= 10))
+                    if len(account_absolute_error)
+                    else None
                 ),
             }
         )
@@ -3047,6 +3128,770 @@ def run_visual_keep_study(
     }
 
 
+def creator_adaptive_point_metrics(
+    points: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not points:
+        return {}
+    metric_rows = [
+        {
+            "account": point["account"],
+            "accountName": point["accountName"],
+        }
+        for point in points
+    ]
+    return visual_keep_metrics(
+        metric_rows,
+        np.asarray([point["actual"] for point in points], dtype=float),
+        np.asarray([point["predicted"] for point in points], dtype=float),
+        np.asarray([point["baseline"] for point in points], dtype=float),
+    )
+
+
+def creator_adaptive_bootstrap_interval(
+    absolute_errors: np.ndarray,
+    seed_key: str,
+    repetitions: int = 5_000,
+) -> dict[str, Any]:
+    errors = np.asarray(absolute_errors, dtype=float)
+    if not len(errors):
+        return {"lower": None, "upper": None, "confidence": 0.9}
+    seed = stable_hash(seed_key) % (2**32)
+    rng = np.random.default_rng(seed)
+    block_length = max(1, min(len(errors), int(round(math.sqrt(len(errors))))))
+    sampled_means = []
+    for _ in range(repetitions):
+        sample = []
+        while len(sample) < len(errors):
+            start = int(rng.integers(0, len(errors)))
+            sample.extend(
+                errors[
+                    np.mod(
+                        np.arange(start, start + block_length),
+                        len(errors),
+                    )
+                ].tolist()
+            )
+        sampled_means.append(float(np.mean(sample[: len(errors)])))
+    sampled = np.asarray(sampled_means, dtype=float)
+    return {
+        "lower": clean_number(np.quantile(sampled, 0.05)),
+        "upper": clean_number(np.quantile(sampled, 0.95)),
+        "confidence": 0.9,
+        "repetitions": repetitions,
+        "seed": int(seed),
+        "blockLength": block_length,
+        "method": "Circular moving-block bootstrap of chronological absolute errors",
+        "claimBoundary": "Descriptive uncertainty for this historical error sequence only. The moving blocks preserve short-run dependence, but candidate selection, full model refitting, and future distribution shift are not resampled.",
+    }
+
+
+def creator_adaptive_benchmark_fingerprints(
+    rows: list[dict[str, Any]],
+    stores: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    ordered = sorted(
+        rows,
+        key=lambda row: (
+            str(row["account"]),
+            float(row["publishedAt"]),
+            stable_hash(str(row["id"])),
+        ),
+    )
+    visual = np.asarray(
+        [
+            stores["visual"]["vectors"][
+                stores["visual"]["index"][row["id"]]
+            ]
+            for row in ordered
+        ],
+        dtype="<f8",
+    )
+    together = np.asarray(
+        [
+            stores["together"]["vectors"][
+                stores["together"]["index"][row["id"]]
+            ]
+            for row in ordered
+        ],
+        dtype="<f8",
+    )
+    row_manifest = [
+        {
+            "id": str(row["id"]),
+            "account": str(row["account"]),
+            "accountName": str(row["accountName"]),
+            "keep": float(row["keep"]),
+            "publishedAt": float(row["publishedAt"]),
+            "title": str(row["title"]),
+        }
+        for row in ordered
+    ]
+    canonical_manifest = json.dumps(
+        row_manifest,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("utf-8")
+    row_hash = hashlib.sha256(canonical_manifest).hexdigest()
+    visual_hash = hashlib.sha256(
+        visual.tobytes(order="C")
+    ).hexdigest()
+    together_hash = hashlib.sha256(
+        together.tobytes(order="C")
+    ).hexdigest()
+    combined = hashlib.sha256()
+    combined.update(bytes.fromhex(row_hash))
+    combined.update(bytes.fromhex(visual_hash))
+    combined.update(bytes.fromhex(together_hash))
+    return ordered, {
+        "rowManifestSha256": row_hash,
+        "visualMatrixSha256": visual_hash,
+        "togetherMatrixSha256": together_hash,
+        "combinedSha256": combined.hexdigest(),
+        "visualShape": list(visual.shape),
+        "togetherShape": list(together.shape),
+    }
+
+
+def load_creator_adaptive_benchmark(
+    rows: list[dict[str, Any]],
+    stores: dict[str, dict[str, Any]],
+) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
+    if not CAUSAL_KEEP_MIXTURE_BENCHMARK.exists():
+        raise RuntimeError(
+            "The causal keep benchmark is missing. Run "
+            "scripts/benchmark-causal-keep-mixture.py first."
+        )
+    benchmark_bytes = CAUSAL_KEEP_MIXTURE_BENCHMARK.read_bytes()
+    benchmark = json.loads(benchmark_bytes)
+    ordered, fingerprints = creator_adaptive_benchmark_fingerprints(
+        rows,
+        stores,
+    )
+    registered = CREATOR_ADAPTIVE_KEEP_V1_SPEC
+    registry = benchmark.get("candidateRegistry") or {}
+    dataset = benchmark.get("dataset") or {}
+    coordinate = benchmark.get("coordinate") or {}
+    benchmark_sha256 = hashlib.sha256(benchmark_bytes).hexdigest()
+    if (
+        benchmark.get("schemaVersion") != 1
+        or benchmark.get("benchmarkId") != registered["benchmarkId"]
+        or benchmark_sha256
+        != registered["benchmarkArtifactSha256"]
+        or benchmark.get("resultCoreSha256")
+        != registered["resultCoreSha256"]
+        or coordinate.get("id") != registered["benchmarkCoordinateId"]
+        or coordinate.get("modalityClass") != "multimodal"
+        or int(registry.get("count") or 0) != registered["candidateCount"]
+        or registry.get("sha256")
+        != registered["candidateRegistrySha256"]
+        or int(dataset.get("n") or 0) != len(ordered)
+        or dataset.get("fingerprints") != fingerprints
+    ):
+        raise RuntimeError(
+            "The causal keep benchmark does not match the current "
+            "dataset, embeddings, or registered candidate search."
+        )
+    frozen = (
+        benchmark.get("final", {}).get("frozenTail", {})
+    )
+    prequential = (
+        benchmark.get("final", {}).get("causalPrequentialTail", {})
+    )
+    if not (
+        frozen.get("metrics", {}).get("allAccountsWithin10") is True
+        and prequential.get("metrics", {}).get(
+            "allAccountsWithin10"
+        ) is True
+        and frozen.get("metrics", {}).get(
+            "allAccountsBeatBaseline"
+        ) is True
+        and prequential.get("metrics", {}).get(
+            "allAccountsBeatBaseline"
+        ) is True
+    ):
+        raise RuntimeError(
+            "The registered causal keep benchmark no longer clears "
+            "its retrospective account-level gates."
+        )
+    return (
+        benchmark,
+        ordered,
+        benchmark_sha256,
+    )
+
+
+def creator_adaptive_points_from_benchmark(
+    points_by_account: dict[str, list[dict[str, Any]]],
+    row_by_id: dict[str, dict[str, Any]],
+    phase: str,
+) -> list[dict[str, Any]]:
+    points = []
+    for account in sorted(points_by_account, key=stable_hash):
+        for source in points_by_account[account]:
+            video_id = str(source["id"])
+            row = row_by_id.get(video_id)
+            if row is None:
+                raise RuntimeError(
+                    f"Causal keep point {video_id} is absent from "
+                    "the current private dataset."
+                )
+            history_ids = [
+                str(value)
+                for value in source.get("historyVideoIds") or []
+            ]
+            history_rows = [
+                row_by_id[value]
+                for value in history_ids
+                if value in row_by_id
+            ]
+            if len(history_rows) != len(history_ids):
+                raise RuntimeError(
+                    f"Causal keep point {video_id} has an unresolved "
+                    "history video ID."
+                )
+            predicted = float(source["predictedKeep"])
+            actual = float(source["actualKeep"])
+            baseline = float(source["historyBaseline"])
+            points.append(
+                {
+                    "id": video_id,
+                    "title": str(row["title"]),
+                    "account": str(account),
+                    "accountName": str(row["accountName"]),
+                    "publishedAt": clean_number(
+                        source.get("publishedAt"),
+                        0,
+                    ),
+                    "actual": clean_number(actual),
+                    "predicted": clean_number(predicted),
+                    "baseline": clean_number(baseline),
+                    "error": clean_number(predicted - actual),
+                    "absoluteError": clean_number(
+                        abs(predicted - actual)
+                    ),
+                    "baselineAbsoluteError": clean_number(
+                        abs(baseline - actual)
+                    ),
+                    "deltaAbsoluteError": clean_number(
+                        abs(predicted - actual)
+                        - abs(baseline - actual)
+                    ),
+                    "componentA": clean_number(
+                        source.get("componentA")
+                    ),
+                    "componentB": clean_number(
+                        source.get("componentB")
+                    ),
+                    "historyN": int(source["historyN"]),
+                    "historyVideoIds": history_ids,
+                    "historyStart": clean_number(
+                        min(
+                            float(item["publishedAt"])
+                            for item in history_rows
+                        )
+                        if history_rows
+                        else None
+                    ),
+                    "historyEnd": clean_number(
+                        max(
+                            float(item["publishedAt"])
+                            for item in history_rows
+                        )
+                        if history_rows
+                        else None
+                    ),
+                    "predictionIntervals": source.get(
+                        "predictionIntervals"
+                    ),
+                    "phase": phase,
+                }
+            )
+    points.sort(
+        key=lambda point: (
+            float(point["publishedAt"]),
+            stable_hash(str(point["id"])),
+        )
+    )
+    return points
+
+
+def creator_adaptive_profile_registry(
+    rows: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    profiles = {}
+    history_window = int(
+        CREATOR_ADAPTIVE_KEEP_V1_SPEC["historyWindow"]
+    )
+    accounts = sorted(
+        {str(row["account"]) for row in rows},
+        key=stable_hash,
+    )
+    for account in accounts:
+        ordered = sorted(
+            [
+                row
+                for row in rows
+                if str(row["account"]) == account
+            ],
+            key=lambda row: (
+                float(row["publishedAt"]),
+                stable_hash(str(row["id"])),
+            ),
+        )
+        history = ordered[-min(history_window, len(ordered)) :]
+        profiles[account] = {
+            "historyN": len(history),
+            "historyVideoIds": [
+                str(row["id"]) for row in history
+            ],
+            "historyThrough": clean_number(
+                history[-1]["publishedAt"] if history else None
+            ),
+            "historyWindow": history_window,
+            "liveScoringStatus": (
+                "research_shadow_only_not_served_for_anonymous_uploads"
+            ),
+        }
+    return profiles
+
+
+def run_creator_adaptive_keep_study(
+    rows: list[dict[str, Any]],
+    stores: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    eligible = [
+        row
+        for row in rows
+        if finite(row.get("keep"))
+        and finite(row.get("publishedAt"))
+        and row["id"] in stores["visual"]["index"]
+        and row["id"] in stores["together"]["index"]
+    ]
+    benchmark, ordered, benchmark_sha256 = (
+        load_creator_adaptive_benchmark(eligible, stores)
+    )
+    row_by_id = {
+        str(row["id"]): row for row in ordered
+    }
+    final = benchmark["final"]
+    prequential_source = final["causalPrequentialTail"]
+    frozen_source = final["frozenTail"]
+    selection_source = benchmark["selection"]
+    evaluation_points = creator_adaptive_points_from_benchmark(
+        prequential_source["pointsByAccount"],
+        row_by_id,
+        "causal_prequential_final20",
+    )
+    frozen_points = creator_adaptive_points_from_benchmark(
+        frozen_source["pointsByAccount"],
+        row_by_id,
+        "frozen_final20",
+    )
+    selection_points = creator_adaptive_points_from_benchmark(
+        selection_source["pointsByAccount"],
+        row_by_id,
+        "selection_middle30",
+    )
+    evaluation_metrics = creator_adaptive_point_metrics(
+        evaluation_points
+    )
+    frozen_metrics = creator_adaptive_point_metrics(
+        frozen_points
+    )
+    selection_metrics = creator_adaptive_point_metrics(
+        selection_points
+    )
+    frozen_uncertainty = frozen_source.get("uncertainty") or {}
+    frozen_uncertainty_by_account = {
+        str(item["account"]): item
+        for item in frozen_uncertainty.get("perAccount") or []
+    }
+    confidence_target_passes = 0
+    for account_metrics in evaluation_metrics.get("perAccount") or []:
+        account = str(account_metrics["account"])
+        interval = creator_adaptive_bootstrap_interval(
+            np.asarray(
+                [
+                    abs(float(point["error"]))
+                    for point in evaluation_points
+                    if str(point["account"]) == account
+                ],
+                dtype=float,
+            ),
+            (
+                f"{CREATOR_ADAPTIVE_KEEP_COORDINATE_ID}:"
+                f"prequential:{account}"
+            ),
+        )
+        account_metrics["maeBootstrap90"] = interval
+        account_metrics["frozenTailUncertainty"] = (
+            frozen_uncertainty_by_account.get(account)
+        )
+        if finite(interval.get("upper")) and float(
+            interval["upper"]
+        ) <= 10:
+            confidence_target_passes += 1
+    account_metrics = evaluation_metrics.get("perAccount") or []
+    account_count = len(
+        {str(row["account"]) for row in ordered}
+    )
+    point_passes = sum(
+        finite(item.get("mae")) and float(item["mae"]) <= 10
+        for item in account_metrics
+    )
+    baseline_passes = sum(
+        finite(item.get("maeImprovementVsBaseline"))
+        and float(item["maeImprovementVsBaseline"]) > 0
+        for item in account_metrics
+    )
+    all_point_pass = (
+        point_passes == account_count and account_count > 0
+    )
+    all_baseline_pass = (
+        baseline_passes == account_count and account_count > 0
+    )
+    locked = selection_source["stages"]["lockedFormula"]
+    profiles = creator_adaptive_profile_registry(ordered)
+    account_population = [
+        {
+            "id": account,
+            "name": next(
+                str(row["accountName"])
+                for row in ordered
+                if str(row["account"]) == account
+            ),
+            "n": sum(
+                str(row["account"]) == account
+                for row in ordered
+            ),
+        }
+        for account in sorted(profiles, key=stable_hash)
+    ]
+    target = {
+        "metric": "per-account mean absolute error",
+        "thresholdPercentagePoints": 10,
+        "pointEstimatePassCount": point_passes,
+        "accountCount": account_count,
+        "evaluatedAccountCount": len(account_metrics),
+        "allPopulationAccountsEvaluated": (
+            len(account_metrics) == account_count
+        ),
+        "missingEvaluationAccounts": sorted(
+            set(profiles)
+            - {
+                str(item["account"])
+                for item in account_metrics
+            },
+            key=stable_hash,
+        ),
+        "allAccountsPassPointEstimate": all_point_pass,
+        "bootstrap90UpperPassCount": confidence_target_passes,
+        "allAccountsPassBootstrap90Upper": (
+            confidence_target_passes == account_count
+            and account_count > 0
+        ),
+        "baseline": (
+            "Arithmetic mean keep rate of at most the 30 most "
+            "recent same-creator uploads with a publication timestamp "
+            "strictly earlier than the target upload."
+        ),
+        "baselineBeatingAccountCount": baseline_passes,
+        "allAccountsBeatHonestBaseline": all_baseline_pass,
+        "beatsHonestBaselineOverall": (
+            finite(
+                evaluation_metrics.get(
+                    "maeImprovementVsBaseline"
+                )
+            )
+            and float(
+                evaluation_metrics[
+                    "maeImprovementVsBaseline"
+                ]
+            )
+            > 0
+        ),
+        "maeImprovementVsBaseline": (
+            evaluation_metrics.get(
+                "maeImprovementVsBaseline"
+            )
+        ),
+        "squaredErrorSkillVsBaseline": (
+            evaluation_metrics.get("protocolBaselineR2")
+        ),
+        "prospectiveValidated": False,
+    }
+    return {
+        "schemaVersion": CREATOR_ADAPTIVE_KEEP_SCHEMA_VERSION,
+        "coordinateId": CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
+        "label": (
+            "Known-creator causal keep-rate mixture"
+        ),
+        "input": (
+            "The canonical 1,536D visual opening embedding, the "
+            "canonical 1,536D together visual-plus-text opening "
+            "embedding, and up to 30 strictly earlier measured keep "
+            "outcomes from the explicit creator profile."
+        ),
+        "valueDefinition": (
+            "A raw predicted stayed-to-watch percentage for a known "
+            "creator's next upload. It is a multimodal derived "
+            "forecast, not a new embedding space and not a "
+            "visual-only score."
+        ),
+        "population": {
+            "n": len(ordered),
+            "accounts": account_population,
+            "embeddingModel": "gemini-embedding-2",
+            "embeddingDimensions": 1536,
+            "representations": [
+                {
+                    "id": (
+                        "representation.shorts.visual."
+                        "gemini1536.v1"
+                    ),
+                    "dimensions": 1536,
+                },
+                {
+                    "id": (
+                        "representation.shorts.together."
+                        "gemini1536.v1"
+                    ),
+                    "dimensions": 1536,
+                },
+            ],
+            "fingerprints": benchmark["dataset"][
+                "fingerprints"
+            ],
+        },
+        "selection": {
+            "protocol": (
+                "A staged registry of 43,360 prespecified causal "
+                "candidates is evaluated only on each creator's "
+                "chronological 50%-80% window. The final 20% is never "
+                "read by candidate selection. Equal publication "
+                "timestamps are one simultaneous batch."
+            ),
+            "candidateCount": int(
+                benchmark["candidateRegistry"]["count"]
+            ),
+            "candidateRegistrySha256": (
+                benchmark["candidateRegistry"]["sha256"]
+            ),
+            "candidateCountWithAllAccounts": int(
+                benchmark["candidateRegistry"]["count"]
+            ),
+            "selected": {
+                "benchmarkId": benchmark["benchmarkId"],
+                "modalityClass": "multimodal",
+                "formula": locked["formula"],
+                "stage1": locked["stage1"],
+                "stage2": locked["stage2"],
+                "stage3": locked["stage3"],
+                "stage4": locked["stage4"],
+            },
+            "metrics": selection_metrics,
+            "benchmarkMetrics": selection_source["metrics"],
+        },
+        "evaluation": {
+            "protocol": (
+                "Causal prequential replay on the final 20% of every "
+                "creator. Each equal-time batch is predicted before "
+                "any outcome in that batch is revealed; revealed "
+                "outcomes may inform only strictly later uploads."
+            ),
+            "claimBoundary": (
+                "Retrospective known-creator next-upload evidence "
+                "with at least eight earlier labels. The development "
+                "tail has now been inspected, so this is not a virgin "
+                "prospective confirmation. Cold start and anonymous "
+                "upload scoring are unsupported."
+            ),
+            "metrics": evaluation_metrics,
+            "benchmarkMetrics": prequential_source["metrics"],
+            "predictionIntervals": (
+                prequential_source.get("predictionIntervals")
+            ),
+            "target": target,
+            "points": evaluation_points,
+        },
+        "batchFreezeStress": {
+            "protocol": (
+                "The selected formula is frozen before the final 20% "
+                "and the entire tail is predicted without consuming "
+                "any final-tail outcome."
+            ),
+            "claimBoundary": (
+                "This is the stricter frozen-backlog stress. It is "
+                "reported separately from the next-upload replay."
+            ),
+            "metrics": frozen_metrics,
+            "benchmarkMetrics": frozen_source["metrics"],
+            "predictionIntervals": (
+                frozen_source.get("predictionIntervals")
+            ),
+            "uncertainty": frozen_uncertainty,
+            "points": frozen_points,
+        },
+        "ablations": {
+            "selection": (
+                selection_source.get("modalityAblations")
+            ),
+            "frozenTail": (
+                frozen_source.get("modalityAblations")
+            ),
+            "causalPrequentialTail": (
+                prequential_source.get("modalityAblations")
+            ),
+            "interpretation": (
+                "History-only, visual-only, together-only, and the "
+                "selection-locked multimodal formula are shown "
+                "separately. The final-tail visual-only result is an "
+                "ablation, not a post-hoc replacement for the formula "
+                "selected before the final tail."
+            ),
+        },
+        "rollingBlockStability": benchmark.get(
+            "rollingBlockStability"
+        ),
+        "equalTimestampAudit": benchmark.get(
+            "equalTimestampAudit"
+        ),
+        "labelAudit": {
+            "target": (
+                "Cumulative YouTube Studio stayed-to-watch value at "
+                "the recorded scrape snapshot."
+            ),
+            "fixedHorizon": False,
+            "warning": (
+                "The current labels were observed at different video "
+                "ages. This benchmark predicts the recorded snapshot "
+                "target; it does not establish a fixed post-upload "
+                "horizon."
+            ),
+        },
+        "formula": {
+            "modalityClass": "multimodal",
+            "visualRepresentation": (
+                "L2-normalized canonical 1,536D visual embedding"
+            ),
+            "togetherRepresentation": (
+                "L2-normalized canonical 1,536D together "
+                "visual-plus-text embedding"
+            ),
+            "historyWindow": int(
+                CREATOR_ADAPTIVE_KEEP_V1_SPEC[
+                    "historyWindow"
+                ]
+            ),
+            "minimumHistoryN": int(
+                CREATOR_ADAPTIVE_KEEP_V1_SPEC[
+                    "minimumHistoryN"
+                ]
+            ),
+            "model": (
+                "Selection-locked causal 50/50 residual-analog and "
+                "semantic-stack mixture"
+            ),
+            "lockedFormula": locked,
+            "outputTransform": (
+                "clip(0.5 * centered-together residual analog + "
+                "0.5 * visual+together semantic stack, 0, 100)"
+            ),
+            "outputBounds": [0, 100],
+            "accounts": profiles,
+            "profileRequirement": (
+                "The caller must supply an explicit creator profile "
+                "with at least eight strictly earlier measured keep "
+                "outcomes. Anonymous scoring must return unavailable."
+            ),
+            "determinism": (
+                "The same pinned visual and together matrices, "
+                "creator history, equal-time batches, candidate "
+                "registry, locked formula, and source code produce "
+                "the same percentage."
+            ),
+        },
+        "benchmark": {
+            "benchmarkId": benchmark["benchmarkId"],
+            "artifactPath": str(
+                CAUSAL_KEEP_MIXTURE_BENCHMARK.relative_to(
+                    ROOT
+                )
+            ),
+            "artifactSha256": benchmark_sha256,
+            "resultCoreSha256": benchmark[
+                "resultCoreSha256"
+            ],
+            "candidateRegistrySha256": benchmark[
+                "candidateRegistry"
+            ]["sha256"],
+            "datasetFingerprints": benchmark["dataset"][
+                "fingerprints"
+            ],
+        },
+        "status": {
+            "state": (
+                "research_only_retrospective_target_met"
+                if all_point_pass and all_baseline_pass
+                else "research_only_target_not_met"
+            ),
+            "plainEnglish": (
+                "Every measured creator is below 10 percentage-point "
+                "MAE in both the protected frozen tail and the causal "
+                "next-upload replay, and the selected content mixture "
+                "beats the matched recent-30 history baseline "
+                "descriptively in each account. The improvement is "
+                "small for some accounts and the historical tail has "
+                "been inspected, so prospective confirmation is "
+                "still required."
+            ),
+            "absoluteTargetMet": all_point_pass,
+            "confidenceTargetMet": (
+                target["allAccountsPassBootstrap90Upper"]
+            ),
+            "beatsHonestBaselineOverall": target[
+                "beatsHonestBaselineOverall"
+            ],
+            "beatsHonestBaselineEveryAccount": (
+                all_baseline_pass
+            ),
+            "frozenTailTargetMet": bool(
+                frozen_source["metrics"][
+                    "allAccountsWithin10"
+                ]
+            ),
+            "frozenTailBeatsBaselineEveryAccount": bool(
+                frozen_source["metrics"][
+                    "allAccountsBeatBaseline"
+                ]
+            ),
+            "promoted": False,
+            "predictorEligible": False,
+            "promotionBlocker": (
+                "Prospective uploads have not yet confirmed the "
+                "locked artifact, and current labels are cumulative "
+                "snapshots rather than one fixed post-upload horizon."
+            ),
+            "confidenceWarning": (
+                "Per-account mean MAE below 10, individual predictions "
+                "within ±10, bootstrap confidence, and incremental "
+                "value over history are different claims. The UI "
+                "shows each separately."
+            ),
+            "coldStart": "unsupported",
+            "anonymousUpload": "unsupported",
+            "batchBacklog": (
+                "supported only as the separately reported frozen "
+                "stress; operational updates require observed "
+                "intervening outcomes"
+            ),
+        },
+    }
+
+
 def run_keep_track(
     rows: list[dict[str, Any]],
     stores: dict[str, dict[str, Any]],
@@ -3145,6 +3990,7 @@ def run_keep_track(
     operational = run_keep_known_video(eligible, stores, public_axes, candidates)
     temporal_stress = run_keep_forward_time(eligible, stores, public_axes, candidates)
     visual_only_study = run_visual_keep_study(eligible, stores)
+    creator_adaptive_study = run_creator_adaptive_keep_study(eligible, stores)
     full_oof_features = private_fold_oof(
         eligible,
         within_group_folds(eligible, "account", 5),
@@ -3227,6 +4073,7 @@ def run_keep_track(
             for indices, count in operational["selectionStability"].most_common()
         ],
         "visualOnlyStudy": visual_only_study,
+        "creatorAdaptiveStudy": creator_adaptive_study,
         "blindInputs": {
             "featureNames": PRIVATE_FEATURE_NAMES,
             "videoHeldOutProtocol": (
@@ -4490,6 +5337,118 @@ def main() -> int:
     provenance["visualKeepModelArtifact"] = dict(
         visual_keep_study["modelArtifact"]
     )
+    creator_adaptive_study = keep.get("creatorAdaptiveStudy") or {}
+    selected_creator_spec = (
+        creator_adaptive_study.get("selection") or {}
+    ).get("selected")
+    if not (
+        isinstance(selected_creator_spec, dict)
+        and selected_creator_spec.get("benchmarkId")
+        == CREATOR_ADAPTIVE_KEEP_V1_SPEC["benchmarkId"]
+        and selected_creator_spec.get("modalityClass")
+        == "multimodal"
+        and (
+            creator_adaptive_study.get("selection") or {}
+        ).get("candidateCount")
+        == CREATOR_ADAPTIVE_KEEP_V1_SPEC["candidateCount"]
+        and (
+            creator_adaptive_study.get("selection") or {}
+        ).get("candidateRegistrySha256")
+        == CREATOR_ADAPTIVE_KEEP_V1_SPEC[
+            "candidateRegistrySha256"
+        ]
+    ):
+        raise RuntimeError(
+            f"{CREATOR_ADAPTIVE_KEEP_COORDINATE_ID} is locked to "
+            f"{CREATOR_ADAPTIVE_KEEP_V1_SPEC}; candidate selection produced "
+            f"{selected_creator_spec}. Publish a new coordinate version "
+            "instead of changing v1 in place."
+        )
+    creator_adaptive_keep_model = {
+        "schemaVersion": CREATOR_ADAPTIVE_KEEP_SCHEMA_VERSION,
+        "coordinateId": CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
+        "generatedAt": result_generated_at,
+        "status": creator_adaptive_study.get("status"),
+        "input": creator_adaptive_study.get("input"),
+        "valueDefinition": creator_adaptive_study.get("valueDefinition"),
+        "population": creator_adaptive_study.get("population"),
+        "selection": {
+            "protocol": (
+                creator_adaptive_study.get("selection") or {}
+            ).get("protocol"),
+            "candidateCount": (
+                creator_adaptive_study.get("selection") or {}
+            ).get("candidateCount"),
+            "candidateRegistrySha256": (
+                creator_adaptive_study.get("selection") or {}
+            ).get("candidateRegistrySha256"),
+            "candidateCountWithAllAccounts": (
+                creator_adaptive_study.get("selection") or {}
+            ).get("candidateCountWithAllAccounts"),
+            "selected": (
+                creator_adaptive_study.get("selection") or {}
+            ).get("selected"),
+        },
+        "evaluation": creator_adaptive_study.get("evaluation"),
+        "batchFreezeStress": creator_adaptive_study.get(
+            "batchFreezeStress"
+        ),
+        "ablations": creator_adaptive_study.get("ablations"),
+        "rollingBlockStability": creator_adaptive_study.get(
+            "rollingBlockStability"
+        ),
+        "equalTimestampAudit": creator_adaptive_study.get(
+            "equalTimestampAudit"
+        ),
+        "labelAudit": creator_adaptive_study.get("labelAudit"),
+        "benchmark": creator_adaptive_study.get("benchmark"),
+        "formula": creator_adaptive_study.get("formula"),
+        "producer": "buildings/jarvis/predictor-lab/run_predictor_lab.py",
+        "producerSourceSha256": provenance["producerSourceSha256"],
+        "featureContractVersion": provenance["featureContractVersion"],
+        "featureContractSha256": provenance["featureContractSha256"],
+        "sourceArtifacts": provenance["sourceArtifacts"],
+    }
+    creator_adaptive_keep_model_bytes = json.dumps(
+        creator_adaptive_keep_model,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode()
+    creator_adaptive_keep_model_sha256 = hashlib.sha256(
+        creator_adaptive_keep_model_bytes
+    ).hexdigest()
+    creator_adaptive_keep_model_archive_key = (
+        "raw/predictor-lab/creator-adaptive-keep-model/by-sha256/"
+        f"{creator_adaptive_keep_model_sha256}.json"
+    )
+    creator_adaptive_keep_model_manifest = {
+        "schemaVersion": CREATOR_ADAPTIVE_KEEP_SCHEMA_VERSION,
+        "coordinateId": CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
+        "artifactSha256": creator_adaptive_keep_model_sha256,
+        "canonicalKey": R2_CREATOR_ADAPTIVE_KEEP_MODEL_KEY,
+        "archiveKey": creator_adaptive_keep_model_archive_key,
+        "producer": creator_adaptive_keep_model["producer"],
+        "producerSourceSha256": provenance["producerSourceSha256"],
+        "featureContractVersion": provenance["featureContractVersion"],
+        "featureContractSha256": provenance["featureContractSha256"],
+        "generatedAt": result_generated_at,
+        "profiles": sorted(
+            (
+                creator_adaptive_keep_model.get("formula") or {}
+            ).get("accounts") or {}
+        ),
+    }
+    creator_adaptive_study["modelArtifact"] = {
+        "artifactSha256": creator_adaptive_keep_model_sha256,
+        "canonicalKey": R2_CREATOR_ADAPTIVE_KEEP_MODEL_KEY,
+        "archiveKey": creator_adaptive_keep_model_archive_key,
+        "manifestKey": R2_CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY,
+        "producerSourceSha256": provenance["producerSourceSha256"],
+        "generatedAt": result_generated_at,
+    }
+    provenance["creatorAdaptiveKeepModelArtifact"] = dict(
+        creator_adaptive_study["modelArtifact"]
+    )
     coverage = coverage_payload(stores, library, private_rows, saved_rows)
     artifact_complete = bool(
         corpus is not None
@@ -4578,25 +5537,94 @@ def main() -> int:
         "runtime": provenance["runtime"],
         "sourceArtifacts": provenance["sourceArtifacts"],
     }
+    visual_keep_manifest_bytes = json.dumps(
+        visual_keep_model_manifest,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode()
+    creator_adaptive_manifest_bytes = json.dumps(
+        creator_adaptive_keep_model_manifest,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode()
+    artifact_manifest_bytes = json.dumps(
+        artifact_manifest,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode()
+    visual_keep_manifest_archive_key = (
+        "raw/predictor-lab/visual-keep-model/by-sha256/"
+        f"{visual_keep_model_sha256}.manifest.json"
+    )
+    creator_adaptive_manifest_archive_key = (
+        "raw/predictor-lab/creator-adaptive-keep-model/by-sha256/"
+        f"{creator_adaptive_keep_model_sha256}.manifest.json"
+    )
+    artifact_manifest_archive_key = (
+        f"raw/predictor-lab/by-sha256/{artifact_sha256}.manifest.json"
+    )
+    release_manifest = {
+        "schemaVersion": 1,
+        "generatedAt": result["generatedAt"],
+        "featureContractVersion": provenance["featureContractVersion"],
+        "featureContractSha256": provenance["featureContractSha256"],
+        "producerSourceSha256": provenance["producerSourceSha256"],
+        "predictor": {
+            "artifactSha256": artifact_sha256,
+            "artifactKey": archive_key,
+            "manifestKey": artifact_manifest_archive_key,
+            "manifestSha256": hashlib.sha256(
+                artifact_manifest_bytes
+            ).hexdigest(),
+        },
+        "visualKeepModel": {
+            "artifactSha256": visual_keep_model_sha256,
+            "artifactKey": visual_keep_model_archive_key,
+            "manifestKey": visual_keep_manifest_archive_key,
+            "manifestSha256": hashlib.sha256(
+                visual_keep_manifest_bytes
+            ).hexdigest(),
+        },
+        "creatorAdaptiveKeepModel": {
+            "artifactSha256": creator_adaptive_keep_model_sha256,
+            "artifactKey": creator_adaptive_keep_model_archive_key,
+            "manifestKey": creator_adaptive_manifest_archive_key,
+            "manifestSha256": hashlib.sha256(
+                creator_adaptive_manifest_bytes
+            ).hexdigest(),
+        },
+    }
     LOCAL_RESULT.write_text(pretty_result, encoding="utf-8")
     LOCAL_VISUAL_KEEP_MODEL.write_bytes(visual_keep_model_bytes)
+    LOCAL_CREATOR_ADAPTIVE_KEEP_MODEL.write_bytes(
+        creator_adaptive_keep_model_bytes
+    )
     if not args.local_only:
         put_bytes(
             visual_keep_model_archive_key,
             visual_keep_model_bytes,
             "application/json",
         )
-        put_json(
-            (
-                "raw/predictor-lab/visual-keep-model/by-sha256/"
-                f"{visual_keep_model_sha256}.manifest.json"
-            ),
-            visual_keep_model_manifest,
+        put_bytes(
+            visual_keep_manifest_archive_key,
+            visual_keep_manifest_bytes,
+            "application/json",
+        )
+        put_bytes(
+            creator_adaptive_keep_model_archive_key,
+            creator_adaptive_keep_model_bytes,
+            "application/json",
+        )
+        put_bytes(
+            creator_adaptive_manifest_archive_key,
+            creator_adaptive_manifest_bytes,
+            "application/json",
         )
         put_bytes(archive_key, artifact_bytes, "application/json")
-        put_json(
-            f"raw/predictor-lab/by-sha256/{artifact_sha256}.manifest.json",
-            artifact_manifest,
+        put_bytes(
+            artifact_manifest_archive_key,
+            artifact_manifest_bytes,
+            "application/json",
         )
         put_bytes(R2_RESULT_KEY, artifact_bytes, "application/json")
         put_json(R2_RESULT_MANIFEST_KEY, artifact_manifest)
@@ -4605,12 +5633,24 @@ def main() -> int:
             visual_keep_model_bytes,
             "application/json",
         )
+        put_bytes(
+            R2_CREATOR_ADAPTIVE_KEEP_MODEL_KEY,
+            creator_adaptive_keep_model_bytes,
+            "application/json",
+        )
         # This manifest is the release pointer. Publish it only after every
         # immutable model/result object and canonical compatibility artifact.
         put_json(
             R2_VISUAL_KEEP_MODEL_MANIFEST_KEY,
             visual_keep_model_manifest,
         )
+        put_json(
+            R2_CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY,
+            creator_adaptive_keep_model_manifest,
+        )
+        # One atomic release pointer pins the exact immutable result and both
+        # model revisions. Consumers read this last-written object first.
+        put_json(R2_RELEASE_KEY, release_manifest)
     update_status(
         "complete" if artifact_complete else "partial",
         message=(

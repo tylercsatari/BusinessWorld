@@ -79,6 +79,9 @@ includes(server, 'surfaceSourceErrors: true', 'map and status routes must surfac
 includes(server, 'savedChannelValidationCacheIsCompatible', 'saved-channel ledgers must verify a cached artifact before source-failure fallback');
 includes(server, "cacheStatus: 'source-unavailable-hit'", 'ordinary saved channels must remain readable from the last contract-matched ledger when private validation sources are temporarily unavailable');
 includes(server, 'runtimeArtifact.scoredWithContractSha256 === contractSha256', 'a cached ledger must match the exact score contract before fallback');
+includes(server, 'readPredictorLabReleaseManifest', 'saved-channel validation must begin from the atomic predictor-lab release pointer');
+includes(server, "raw/predictor-lab/release-v1.json", 'the atomic predictor-lab release key must be pinned in the server');
+includes(server, 'The predictor manifest pinned by the atomic release is not available.', 'an atomic release must fail closed when its immutable predictor manifest is missing');
 includes(shorts, 'view complete row manifest', 'touch users must be able to open the complete per-video scoring manifest');
 includes(shorts, '% probability', 'forecast 10M probabilities must remain continuous instead of being formatted as yes/no');
 includes(long, 'connection issue while checking this grind:', 'grind polling failures must stay visible while retrying');
@@ -94,7 +97,7 @@ assert(activeLongScores === 5, `only five explicitly opened detail surfaces may 
 
 // Force browsers to load the repaired clients instead of pairing new routes
 // with a cached pre-repair module.
-includes(index, 'jarvis-retention.js?v=coordinate-lineage-1', 'Shorts bundle cache key must be bumped');
+includes(index, 'jarvis-retention.js?v=creator-keep-v1', 'Shorts bundle cache key must be bumped');
 includes(index, 'jarvis-longquant.js?v=coordinate-lineage-1', 'Long Quant bundle cache key must be bumped');
 
 console.log(JSON.stringify({

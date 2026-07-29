@@ -20,9 +20,63 @@ const fixtureSnakePopulation = (label, rowCount = 24) => ({
     duplicate_video_id_count: 0,
     video_id_sha256: fixtureSha256(`population:${label}:${rowCount}`),
 });
+const CREATOR_ADAPTIVE_BENCHMARK_ID = 'shorts.causal-keep-mixture-benchmark.v1';
+const CREATOR_ADAPTIVE_BENCHMARK_COORDINATE_ID = 'shorts.causal-keep-mixture.v1';
+const CREATOR_ADAPTIVE_CANDIDATE_COUNT = 43360;
+const CREATOR_ADAPTIVE_CANDIDATE_SHA256 = 'bc7ae80a7afeac82a40648c3ff07e066cc238d3b27918d5f82bf3bbbd04de3ff';
+const CREATOR_ADAPTIVE_BENCHMARK_SHA256 = 'c82a290cd4180974d754e6b1c0afec8d456d08d0434794925936ffb11ea82747';
+const CREATOR_ADAPTIVE_RESULT_CORE_SHA256 = 'a8dc76db007bc1b158c1e9a04775d1ae7f32656c19b44e733b0523256a42391a';
+const CREATOR_ADAPTIVE_OUTPUT_TRANSFORM = 'clip(0.5 * centered-together residual analog + 0.5 * visual+together semantic stack, 0, 100)';
+const creatorAdaptiveLockedFormula = {
+    coordinateId: CREATOR_ADAPTIVE_BENCHMARK_COORDINATE_ID,
+    formula: '0.5 * stage2 centered-together pooled residual analog + 0.5 * stage3 visual+together semantic stack',
+    inputs: [
+        'Together embedding (visual plus text)',
+        'Visual embedding',
+        'Strictly earlier same-creator keep history',
+    ],
+    label: 'Causal keep-rate mixture',
+    modalityClass: 'multimodal',
+    stage1: {
+        biasWeight: 0.5,
+        biasWindow: 12,
+        contentWeight: 0.5,
+        expert: 'pooledKnn:centeredTogether:k12:t15:z:all',
+        gateMargin: 0,
+        gateWindow: 0,
+    },
+    stage2: {
+        biasWeight: 1,
+        biasWindow: 12,
+        gateMargin: 0,
+        gateWindow: 0,
+        initial: 0.5,
+        maximum: 0.5,
+        mode: 'constant',
+        reliability: 'none',
+        ridge: 0,
+        window: 0,
+    },
+    stage3: {
+        alpha: 1,
+        biasWeight: 0,
+        biasWindow: 0,
+        family: 'stack',
+        featureSet: 'semanticWide',
+        features: ['ct12', 'ct24', 'ct48', 'cc12', 'cv12', 'cv24', 'krrTogether', 'krrVisual'],
+        localWeight: 0,
+    },
+    stage4: {
+        eta: 0,
+        initialWeights: [0.5, 0.5, 0],
+        minimum: 0,
+        mode: 'fixed',
+        window: 0,
+    },
+};
 
 assert.strictEqual(validation.contract.features.length, 21);
-assert.strictEqual(validation.contract.version, 5);
+assert.strictEqual(validation.contract.version, 8);
 assert.strictEqual(validation.contract.pipeline.embeddingModel, 'gemini-embedding-2');
 assert.strictEqual(
     validation.contract.features.find(feature => feature.key === 'novelty.views').unit,
@@ -122,6 +176,7 @@ const allRows = channels.flatMap(source => source.privateTable.videos.map((row, 
     title: row.title,
     account: source.accountId,
     accountName: source.accountName,
+    actualKeep: row.keep_rate,
     videoHeldOut: blindVector(index),
     accountHeldOut: blindVector(index).map((value, featureIndex) => {
         const featureName = blindNames[featureIndex];
@@ -166,6 +221,41 @@ const viewsPoints = channels.flatMap(source => source.manifest.videos.map((row, 
     actualViews: row.views,
     predictedViews: row.views * 1.2,
 })));
+const creatorAdaptivePoints = blindArtifactRows.slice(0, 40).map((row, index) => {
+    const historyVideoIds = allRows
+        .filter(candidate => candidate.account === row.account && candidate.id !== row.id)
+        .slice(0, 8)
+        .map(candidate => candidate.id);
+    const componentA = row.actualKeep + 0.5;
+    const componentB = row.actualKeep + 1.5;
+    return {
+        id: row.id,
+        account: row.account,
+        accountName: row.accountName,
+        publishedAt: 2000 + index,
+        actual: row.actualKeep,
+        predicted: 0.5 * (componentA + componentB),
+        baseline: row.actualKeep + 2,
+        componentA,
+        componentB,
+        historyN: historyVideoIds.length,
+        historyVideoIds,
+        historyStart: 1,
+        historyEnd: 1000 + index,
+        phase: 'causal_prequential_final20',
+    };
+});
+const creatorAdaptiveProfiles = Object.fromEntries(['tyler', 'hafu'].map(account => {
+    const accountRows = allRows.filter(row => row.account === account);
+    const historyVideoIds = accountRows.slice(-30).map(row => row.id);
+    return [account, {
+        historyN: historyVideoIds.length,
+        historyVideoIds,
+        historyThrough: 1999,
+        historyWindow: 30,
+        liveScoringStatus: 'research_shadow_only_not_served_for_anonymous_uploads',
+    }];
+}));
 const fixtureMapManifest = modality => ({
     schemaVersion: 1,
     producerSourceSha256: fixtureSha256(`short-map-producer:${modality}`),
@@ -432,6 +522,130 @@ const predictor = {
                 },
                 promotion: { promoted: false, status: 'fixture' },
             },
+            creatorAdaptiveStudy: {
+                schemaVersion: 3,
+                label: 'Known-creator causal keep-rate mixture',
+                coordinateId: 'shorts.creator-adaptive-keep.v1',
+                input: 'The canonical visual opening embedding, the canonical together visual-plus-text opening embedding, and up to 30 strictly earlier measured keep outcomes.',
+                valueDefinition: 'A raw predicted stayed-to-watch percentage for a known creator next upload; this is a multimodal derived forecast.',
+                population: {
+                    n: 48,
+                    accounts: [
+                        { id: 'tyler', name: 'Tyler Csatari', n: 24 },
+                        { id: 'hafu', name: 'Hafu Go', n: 24 },
+                    ],
+                    embeddingModel: 'gemini-embedding-2',
+                    embeddingDimensions: 1536,
+                    representations: [
+                        { id: 'representation.shorts.visual.gemini1536.v1', dimensions: 1536 },
+                        { id: 'representation.shorts.together.gemini1536.v1', dimensions: 1536 },
+                    ],
+                    fingerprints: {
+                        rowManifestSha256: fixtureSha256('creator-adaptive-rows'),
+                        visualMatrixSha256: fixtureSha256('creator-adaptive-visual'),
+                        togetherMatrixSha256: fixtureSha256('creator-adaptive-together'),
+                        combinedSha256: fixtureSha256('creator-adaptive-combined'),
+                    },
+                },
+                selection: {
+                    protocol: 'Chronological 50%-80% selection with equal timestamps treated as one batch.',
+                    candidateCount: CREATOR_ADAPTIVE_CANDIDATE_COUNT,
+                    candidateRegistrySha256: CREATOR_ADAPTIVE_CANDIDATE_SHA256,
+                    candidateCountWithAllAccounts: CREATOR_ADAPTIVE_CANDIDATE_COUNT,
+                    selected: {
+                        benchmarkId: CREATOR_ADAPTIVE_BENCHMARK_ID,
+                        modalityClass: 'multimodal',
+                        formula: creatorAdaptiveLockedFormula.formula,
+                        stage1: creatorAdaptiveLockedFormula.stage1,
+                        stage2: creatorAdaptiveLockedFormula.stage2,
+                        stage3: creatorAdaptiveLockedFormula.stage3,
+                        stage4: creatorAdaptiveLockedFormula.stage4,
+                    },
+                    metrics: {},
+                    benchmarkMetrics: {},
+                },
+                evaluation: {
+                    protocol: 'Causal prequential replay of the final 20% with strictly earlier creator outcomes only.',
+                    claimBoundary: 'Retrospective known-creator next-upload evidence; anonymous and cold-start scoring are unsupported.',
+                    metrics: {
+                        n: 40,
+                        mae: 1,
+                        baselineMae: 2,
+                        maeImprovementVsBaseline: 1,
+                        protocolBaselineR2: 0.75,
+                        within10PercentagePoints: 100,
+                        perAccount: [
+                            { account: 'tyler', name: 'Tyler Csatari', n: 24, mae: 1, baselineMae: 2, maeImprovementVsBaseline: 1, protocolBaselineR2: 0.75 },
+                            { account: 'hafu', name: 'Hafu Go', n: 16, mae: 1, baselineMae: 2, maeImprovementVsBaseline: 1, protocolBaselineR2: 0.75 },
+                        ],
+                    },
+                    target: {
+                        metric: 'per-account mean absolute error',
+                        thresholdPercentagePoints: 10,
+                        pointEstimatePassCount: 2,
+                        accountCount: 2,
+                        evaluatedAccountCount: 2,
+                        allPopulationAccountsEvaluated: true,
+                        missingEvaluationAccounts: [],
+                        allAccountsPassPointEstimate: true,
+                        baseline: 'Mean of at most 30 strictly earlier same-creator keep labels.',
+                        baselineBeatingAccountCount: 2,
+                        beatsHonestBaselineOverall: true,
+                        allAccountsBeatHonestBaseline: true,
+                    },
+                    points: creatorAdaptivePoints,
+                },
+                batchFreezeStress: {
+                    metrics: {
+                        allAccountsWithin10: true,
+                        allAccountsBeatBaseline: true,
+                    },
+                    points: creatorAdaptivePoints,
+                },
+                ablations: {
+                    interpretation: 'History-only, visual-only, together-only, and the locked multimodal formula remain distinct.',
+                },
+                formula: {
+                    modalityClass: 'multimodal',
+                    visualRepresentation: 'L2-normalized canonical 1,536D visual embedding',
+                    togetherRepresentation: 'L2-normalized canonical 1,536D together visual-plus-text embedding',
+                    historyWindow: 30,
+                    minimumHistoryN: 8,
+                    model: 'Selection-locked causal 50/50 residual-analog and semantic-stack mixture',
+                    lockedFormula: creatorAdaptiveLockedFormula,
+                    outputTransform: CREATOR_ADAPTIVE_OUTPUT_TRANSFORM,
+                    outputBounds: [0, 100],
+                    accounts: creatorAdaptiveProfiles,
+                    profileRequirement: 'An explicit creator profile with at least eight strictly earlier measured outcomes is required.',
+                },
+                benchmark: {
+                    benchmarkId: CREATOR_ADAPTIVE_BENCHMARK_ID,
+                    artifactSha256: CREATOR_ADAPTIVE_BENCHMARK_SHA256,
+                    resultCoreSha256: CREATOR_ADAPTIVE_RESULT_CORE_SHA256,
+                    candidateRegistrySha256: CREATOR_ADAPTIVE_CANDIDATE_SHA256,
+                    datasetFingerprints: {
+                        combinedSha256: fixtureSha256('creator-adaptive-combined'),
+                    },
+                },
+                modelArtifact: {
+                    artifactSha256: fixtureSha256('creator-adaptive-keep-model'),
+                    canonicalKey: 'raw/predictor-lab/creator-adaptive-keep-model-v1.json',
+                    archiveKey: `raw/predictor-lab/creator-adaptive-keep-model/by-sha256/${fixtureSha256('creator-adaptive-keep-model')}.json`,
+                    producerSourceSha256: fixtureSha256('creator-adaptive-keep-producer'),
+                    generatedAt: 123456,
+                },
+                status: {
+                    state: 'research_only_retrospective_target_met',
+                    plainEnglish: 'Retrospective target met; prospective confirmation is still required.',
+                    absoluteTargetMet: true,
+                    beatsHonestBaselineOverall: true,
+                    beatsHonestBaselineEveryAccount: true,
+                    promoted: false,
+                    predictorEligible: false,
+                    coldStart: 'unsupported',
+                    anonymousUpload: 'unsupported',
+                },
+            },
             blindInputs: {
                 featureNames: blindNames,
                 videoHeldOutProtocol: 'synthetic video holdout',
@@ -453,18 +667,74 @@ const predictor = {
     },
 };
 
+const creatorAdaptiveKeepModel = {
+    artifactSha256: fixtureSha256('creator-adaptive-keep-model'),
+    model: JSON.parse(JSON.stringify(predictor.targets.keep.creatorAdaptiveStudy)),
+};
 const result = validation.buildValidation({
     channels,
     predictor,
+    creatorAdaptiveKeepModel,
     generatedAt: 999,
     sourceFingerprint: fixtureSha256('fixture'),
 });
 
 assert.strictEqual(result.version, validation.VERSION);
 assert.strictEqual(result.visualKeepStudy, predictor.targets.keep.visualOnlyStudy);
+assert.deepStrictEqual(
+    result.creatorAdaptiveStudy,
+    predictor.targets.keep.creatorAdaptiveStudy
+);
+assert.strictEqual(result.creatorAdaptiveStudy.schemaVersion, 3);
+assert.strictEqual(
+    result.creatorAdaptiveStudy.selection.candidateCount,
+    CREATOR_ADAPTIVE_CANDIDATE_COUNT
+);
+assert.strictEqual(
+    result.creatorAdaptiveStudy.selection.candidateRegistrySha256,
+    CREATOR_ADAPTIVE_CANDIDATE_SHA256
+);
+assert.strictEqual(
+    result.creatorAdaptiveStudy.selection.selected.benchmarkId,
+    CREATOR_ADAPTIVE_BENCHMARK_ID
+);
+assert.strictEqual(
+    result.creatorAdaptiveStudy.selection.selected.modalityClass,
+    'multimodal'
+);
+assert.strictEqual(result.creatorAdaptiveStudy.formula.historyWindow, 30);
+assert.strictEqual(result.creatorAdaptiveStudy.formula.minimumHistoryN, 8);
+assert.strictEqual(
+    result.creatorAdaptiveStudy.formula.outputTransform,
+    CREATOR_ADAPTIVE_OUTPUT_TRANSFORM
+);
+assert(result.creatorAdaptiveStudy.evaluation.points.every(point => (
+    Number.isFinite(point.componentA)
+    && Number.isFinite(point.componentB)
+    && point.predicted === 0.5 * (point.componentA + point.componentB)
+    && point.historyN >= 8
+    && point.historyN <= 30
+    && point.historyVideoIds.length === point.historyN
+    && new Set(point.historyVideoIds).size === point.historyN
+)));
+assert.strictEqual(result.creatorAdaptiveStudy.status.promoted, false);
+assert.strictEqual(result.creatorAdaptiveStudy.status.predictorEligible, false);
+assert.match(result.creatorAdaptiveStudy.status.state, /^research_only_/);
+const mismatchedCreatorModel = JSON.parse(JSON.stringify(creatorAdaptiveKeepModel));
+mismatchedCreatorModel.model.evaluation.points[0].predicted += 1;
+assert.throws(
+    () => validation.buildValidation({
+        channels,
+        predictor,
+        creatorAdaptiveKeepModel: mismatchedCreatorModel,
+        generatedAt: 998,
+        sourceFingerprint: fixtureSha256('fixture-creator-model-mismatch'),
+    }),
+    error => error && error.code === 'CREATOR_ADAPTIVE_MODEL_PARITY_MISMATCH'
+);
 assert.strictEqual(result.rows.length, 48);
 assert.strictEqual(result.validationRows.length, 632);
-assert(result.validationRows.every(row => row.scoreLedger && row.scoreLedger.values.length === 104));
+assert(result.validationRows.every(row => row.scoreLedger && row.scoreLedger.values.length === 105));
 assert(result.validationRows.every(row => !Object.prototype.hasOwnProperty.call(row, 'blindVideoHeldOut')));
 assert(result.validationRows.every(row => !Object.prototype.hasOwnProperty.call(row, 'blindAccountHeldOut')));
 assert.strictEqual(result.scopes.pooled.n, 48);
@@ -601,35 +871,36 @@ assert.deepStrictEqual(result.score21Model.inputs.excludedStoredNovelty, [
     'novelty.ret5',
     'novelty.views',
 ]);
-assert.strictEqual(result.coordinateRegistry.version, 3);
+assert.strictEqual(result.coordinateRegistry.version, 6);
 assert.strictEqual(result.coordinateRegistry.totals.shortsStoredProduction, 21);
 assert.strictEqual(result.coordinateRegistry.totals.shortsVisualKeepForecasts, 1);
+assert.strictEqual(result.coordinateRegistry.totals.shortsCreatorAdaptiveKeepForecasts, 1);
 assert.strictEqual(result.coordinateRegistry.totals.shortsDirectHeldout, 36);
-assert.strictEqual(result.coordinateRegistry.totals.shortsCombinedForecasts, 26);
+assert.strictEqual(result.coordinateRegistry.totals.shortsCombinedForecasts, 27);
 assert.strictEqual(result.coordinateRegistry.totals.shortsObservedOutcomes, 13);
 assert.strictEqual(result.coordinateRegistry.totals.shortsLegacyDiagnostics, 7);
-assert.strictEqual(result.coordinateRegistry.totals.shortsRowColumns, 104);
+assert.strictEqual(result.coordinateRegistry.totals.shortsRowColumns, 105);
 assert.strictEqual(result.coordinateRegistry.totals.shortsBlindColumns, 62);
 assert.strictEqual(result.coordinateRegistry.totals.shortsBlindUniquePredictions, 53);
 assert.strictEqual(result.coordinateRegistry.totals.shortsBlindAliasColumns, 9);
-assert.strictEqual(result.coordinateRegistry.totals.shortsDiagnosticColumns, 29);
+assert.strictEqual(result.coordinateRegistry.totals.shortsDiagnosticColumns, 30);
 assert.strictEqual(result.coordinateRegistry.totals.shortsOutcomeColumns, 13);
 assert.deepStrictEqual(result.coordinateRegistry.classification.blind, {
     columns: 62,
     uniquePredictions: 53,
     aliasColumns: 9,
     families: ['videoHeldout', 'accountHeldout', 'videoForecast', 'accountForecast'],
-    meaning: 'Coordinates eligible for blind validation. Nine creator-excluded public direct axes appear in both protocol views but identify the same fitted prediction.',
+    meaning: 'Coordinates currently eligible for leakage-controlled predictor ranking. Shared creator-excluded public direct axes can appear in both protocol views but identify the same fitted prediction.',
 });
-assert.strictEqual(result.coordinateRegistry.classification.diagnostics.columns, 29);
+assert.strictEqual(result.coordinateRegistry.classification.diagnostics.columns, 30);
 assert.strictEqual(result.coordinateRegistry.classification.outcomes.columns, 13);
 assert.strictEqual(result.coordinateRegistry.totals.longStoredOutputs, 12);
-assert.strictEqual(new Set(result.coordinateRegistry.columns.map(column => column.id)).size, 104);
+assert.strictEqual(new Set(result.coordinateRegistry.columns.map(column => column.id)).size, 105);
 
 const expectedValueClassCounts = {
     direct_embedding_axis: 45,
     embedding_derived_transform: 12,
-    combined_forecast: 27,
+    combined_forecast: 28,
     observed_outcome: 13,
     legacy_diagnostic: 7,
 };
@@ -643,7 +914,7 @@ assert.strictEqual(result.coordinateRegistry.totals.shortsDirectAxisColumns, 45)
 assert.strictEqual(result.coordinateRegistry.totals.shortsDistinctDirectEmbeddingAxes, 36);
 assert.strictEqual(result.coordinateRegistry.totals.shortsDirectAxisAliasColumns, 9);
 assert.strictEqual(result.coordinateRegistry.totals.shortsEmbeddingDerivedTransforms, 12);
-assert.strictEqual(result.coordinateRegistry.totals.shortsCombinedForecasts, 26);
+assert.strictEqual(result.coordinateRegistry.totals.shortsCombinedForecasts, 27);
 assert.strictEqual(result.coordinateRegistry.totals.shortsObservedOutcomes, 13);
 assert.strictEqual(result.coordinateRegistry.totals.shortsLegacyDiagnostics, 7);
 result.coordinateRegistry.columns.forEach(column => {
@@ -733,15 +1004,20 @@ function assertCompleteLineage(column) {
         resolveCatalogEntry(lineageCatalog.inputSets, column.lineage.inputId),
         `${column.id} inputId does not resolve: ${column.lineage.inputId}`,
     );
-    if (column.lineage.representationId !== null) {
+    const representationIds = column.lineage.representationId === null
+        ? []
+        : (Array.isArray(column.lineage.representationId)
+            ? column.lineage.representationId
+            : [column.lineage.representationId]);
+    representationIds.forEach(representationId => {
         assert(
-            resolveCatalogEntry(lineageCatalog.representations, column.lineage.representationId),
-            `${column.id} representationId does not resolve: ${column.lineage.representationId}`,
+            resolveCatalogEntry(lineageCatalog.representations, representationId),
+            `${column.id} representationId does not resolve: ${representationId}`,
         );
-    }
+    });
     if (['direct_embedding_axis', 'embedding_derived_transform', 'combined_forecast'].includes(column.valueClass)) {
         assert(
-            column.lineage.representationId !== null,
+            representationIds.length > 0,
             `${column.id} is predictive but does not identify its input representation`,
         );
     }
@@ -797,7 +1073,7 @@ assert(
     && result.coordinateRegistry.lineageAudit.passed === true,
     JSON.stringify(result.coordinateRegistry.lineageAudit),
 );
-assert.strictEqual(result.coordinateRegistry.lineageAudit.columnsChecked, 104);
+assert.strictEqual(result.coordinateRegistry.lineageAudit.columnsChecked, 105);
 assert.strictEqual(result.coordinateRegistry.lineageAudit.unclassifiedColumns.length, 0);
 assert.strictEqual(result.coordinateRegistry.lineageAudit.incompleteLineages.length, 0);
 assert.strictEqual(result.coordinateRegistry.lineageAudit.unresolvedReferences.length, 0);
@@ -1095,6 +1371,9 @@ const expectedMetricKeys = [
     'oofR2',
     'oofSpearman',
     'oofMae',
+    'oofBaselineMae',
+    'oofMaeImprovementVsBaseline',
+    'oofProtocolBaselineR2',
     'oofMedianFactorError',
     'oofAuc',
     'oofBrier',
@@ -1106,12 +1385,12 @@ const expectedMetricKeys = [
 outcomeKeys.forEach(outcomeKey => {
     const matrixRow = ledgerOutcomeMatrix[outcomeKey];
     assert(matrixRow.outcome && matrixRow.outcome.key === outcomeKey);
-    assert.strictEqual(matrixRow.outcome.qValueFamily, 'global_all_eligible_104x13');
+    assert.strictEqual(matrixRow.outcome.qValueFamily, 'global_all_eligible_105x13');
     assert(
-        matrixRow.outcome.qValueEligibleTests > 104,
+        matrixRow.outcome.qValueEligibleTests > 105,
         'the BH family must span eligible tests across outcomes, not one outcome at a time',
     );
-    assert.strictEqual(matrixRow.coordinates.length, 104);
+    assert.strictEqual(matrixRow.coordinates.length, 105);
     assert.deepStrictEqual(
         matrixRow.coordinates.map(entry => entry.coordinateId),
         canonicalCoordinateIds,
@@ -1235,7 +1514,7 @@ outcomeKeys.forEach(outcomeKey => {
 assert.match(result.validationContract.videoHeldOut, /five-fold calibration/i);
 assert.match(result.validationContract.accountHeldOut, /leave-account-out calibration/i);
 assert.match(result.validationContract.glossary.outcomeNotPredictor, /excluded/i);
-assert.match(result.validationContract.glossary.qValue, /full eligible 104-coordinate by 13-outcome/i);
+assert.match(result.validationContract.glossary.qValue, /full eligible 105-coordinate by 13-outcome/i);
 assert.match(result.validationContract.glossary.predictionRange, /narrow ratio/i);
 assert.match(result.validationContract.glossary.plotModes, /exact fold-specific calibration/i);
 assert.strictEqual(Object.prototype.hasOwnProperty.call(result.scopes.pooled, 'outcomeMatrix'), false);
@@ -1308,6 +1587,57 @@ assert.strictEqual(
     ].artifactSha256,
     fixtureSha256('visual-keep-model'),
 );
+const creatorAdaptiveKeepIndex = result.coordinateRegistry.columns.findIndex(
+    column => column.id === 'shorts.creator-adaptive-keep.v1'
+);
+assert(creatorAdaptiveKeepIndex >= 0);
+const firstCreatorAdaptivePoint = predictor.targets.keep.creatorAdaptiveStudy
+    .evaluation.points.find(point => point.id === firstRow.id);
+assert(firstCreatorAdaptivePoint);
+assert.strictEqual(
+    firstRow.scoreLedger.values[creatorAdaptiveKeepIndex],
+    firstCreatorAdaptivePoint.predicted,
+);
+const creatorAdaptiveColumn =
+    result.coordinateRegistry.columns[creatorAdaptiveKeepIndex];
+assert.strictEqual(creatorAdaptiveColumn.valueClass, 'combined_forecast');
+assert.strictEqual(creatorAdaptiveColumn.protocol, 'prequential');
+assert.strictEqual(creatorAdaptiveColumn.predictorEligible, false);
+assert.strictEqual(creatorAdaptiveColumn.status, 'research_diagnostic');
+assert.strictEqual(
+    creatorAdaptiveColumn.lineage.artifactId,
+    'artifact.shorts.creator-adaptive-keep-model.v1',
+);
+assert.strictEqual(
+    result.coordinateRegistry.lineageCatalog.artifacts[
+        'artifact.shorts.creator-adaptive-keep-model.v1'
+    ].artifactSha256,
+    fixtureSha256('creator-adaptive-keep-model'),
+);
+const creatorKeepMatrixEntry = result.scopes.pooled.ledgerOutcomeMatrix.keep.coordinates
+    .find(entry => entry.coordinateId === 'shorts.creator-adaptive-keep.v1');
+const creatorSwipeMatrixEntry = result.scopes.pooled.ledgerOutcomeMatrix.swipe.coordinates
+    .find(entry => entry.coordinateId === 'shorts.creator-adaptive-keep.v1');
+const creatorViewsMatrixEntry = result.scopes.pooled.ledgerOutcomeMatrix.views.coordinates
+    .find(entry => entry.coordinateId === 'shorts.creator-adaptive-keep.v1');
+assert(creatorKeepMatrixEntry.metrics.oofN > 0);
+assert.strictEqual(creatorKeepMatrixEntry.predictorEligible, false);
+assert.strictEqual(creatorKeepMatrixEntry.metrics.oofBaselineMae, 2);
+assert.strictEqual(creatorKeepMatrixEntry.metrics.oofMae, 1);
+assert.strictEqual(
+    creatorKeepMatrixEntry.metrics.oofMaeImprovementVsBaseline,
+    1,
+);
+assert(creatorSwipeMatrixEntry.metrics.oofN > 0);
+assert.strictEqual(creatorSwipeMatrixEntry.metrics.oofBaselineMae, 2);
+assert.strictEqual(creatorSwipeMatrixEntry.metrics.oofMae, 1);
+assert.strictEqual(
+    creatorSwipeMatrixEntry.metrics.oofMaeImprovementVsBaseline,
+    1,
+);
+assert.strictEqual(creatorViewsMatrixEntry.metrics.oofN, 0);
+assert.match(creatorViewsMatrixEntry.availabilityNote, /Association only/);
+assert.deepStrictEqual(result.ledgerAudit.creatorAdaptiveParityMismatches, []);
 const blindOnlyRow = result.validationRows.find(
     row => row.validationSource === 'predictor_blind_inputs_only'
 );
