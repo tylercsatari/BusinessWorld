@@ -11,8 +11,8 @@ the UI can highlight the selected account's own videos. Global views/outlier/raw
 
 Run: python3 add_steered_proj_long.py   (after raw_embed_long.py has embedded the owned videos)
 """
-import os, io, json
-import numpy as np, boto3
+import os, io, json, hashlib, platform
+import numpy as np, boto3, scipy, sklearn
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.model_selection import KFold
 from scipy.stats import spearmanr
@@ -30,10 +30,101 @@ s3 = boto3.client('s3', endpoint_url=f"https://{env('R2_ACCOUNT_ID')}.r2.cloudfl
 def r2_get(k):
     try: return s3.get_object(Bucket=BUCKET, Key=k)['Body'].read()
     except Exception: return None
-def r2_put(k, d, ct): s3.put_object(Bucket=BUCKET, Key=k, Body=d, ContentType=ct)
+def _etag(value): return str(value or '').strip().strip('"') or None
+def r2_head(k):
+    try:
+        h = s3.head_object(Bucket=BUCKET, Key=k)
+        return {
+            'key': k,
+            'etag': _etag(h.get('ETag')),
+            'version_id': str(h.get('VersionId') or '') or None,
+            'content_length': int(h['ContentLength']) if h.get('ContentLength') is not None else None,
+            'metadata': dict(h.get('Metadata') or {}),
+        }
+    except Exception:
+        return {'key': k, 'etag': None, 'version_id': None, 'content_length': None, 'metadata': {}}
+def r2_put(k, d, ct, metadata=None):
+    result = s3.put_object(
+        Bucket=BUCKET,
+        Key=k,
+        Body=d,
+        ContentType=ct,
+        Metadata=metadata or {},
+    )
+    return {
+        'key': k,
+        'etag': _etag(result.get('ETag')),
+        'version_id': str(result.get('VersionId') or '') or None,
+        'content_length': len(d),
+        'metadata': dict(metadata or {}),
+    }
 def r2_delete(k):
     try: s3.delete_object(Bucket=BUCKET, Key=k)
     except Exception: pass
+def canonical_bytes(value):
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('utf8')
+def digest(data): return hashlib.sha256(data).hexdigest()
+def id_population(values):
+    ids = [str(value) for value in values]; unique = set(ids)
+    return {
+        'row_count': len(ids),
+        'unique_video_id_count': len(unique),
+        'duplicate_video_id_count': len(ids) - len(unique),
+        'video_id_sha256': digest('\n'.join(sorted(unique)).encode('utf8')),
+        'ordered_video_id_sha256': digest(canonical_bytes(ids)),
+    }
+def put_immutable(key, data, content_type):
+    expected = key.rsplit('/', 1)[-1].split('.', 1)[0]
+    actual = digest(data)
+    if expected != actual:
+        raise RuntimeError(f'content-addressed key mismatch for {key}: expected {expected}, got {actual}')
+    existing = r2_head(key)
+    if existing.get('etag'):
+        recorded = (existing.get('metadata') or {}).get('sha256')
+        if recorded and recorded != actual:
+            raise RuntimeError(f'immutable object metadata mismatch for {key}')
+        if existing.get('content_length') not in (None, len(data)):
+            raise RuntimeError(f'immutable object length mismatch for {key}')
+        if not recorded:
+            existing_bytes = r2_get(key)
+            if existing_bytes is None or digest(existing_bytes) != actual:
+                raise RuntimeError(f'immutable object content mismatch for {key}')
+        return existing
+    return r2_put(key, data, content_type, {'sha256': actual, 'immutable': 'true'})
+def read_immutable_source(key, immutable_prefix, fallback=None):
+    before = r2_head(key)
+    data = r2_get(key)
+    if data is None:
+        return fallback, {
+            'mutable_key': key,
+            'available': False,
+            'mutable_etag': before.get('etag'),
+            'mutable_version_id': before.get('version_id'),
+            'content_length': before.get('content_length'),
+            'sha256': None,
+            'immutable_key': None,
+            'immutable_etag': None,
+        }
+    after = r2_head(key)
+    if before.get('etag') and after.get('etag') and before['etag'] != after['etag']:
+        raise RuntimeError(f'{key} changed while the generation was reading it')
+    head = after if after.get('etag') else before
+    sha256 = digest(data)
+    suffix = key.rsplit('.', 1)[-1].lower()
+    extension = 'json' if suffix == 'json' else 'bin'
+    content_type = 'application/json' if extension == 'json' else 'application/octet-stream'
+    immutable_key = f'{immutable_prefix}/{sha256}.{extension}'
+    immutable_revision = put_immutable(immutable_key, data, content_type)
+    return data, {
+        'mutable_key': key,
+        'available': True,
+        'mutable_etag': head.get('etag'),
+        'mutable_version_id': head.get('version_id'),
+        'content_length': len(data),
+        'sha256': sha256,
+        'immutable_key': immutable_key,
+        'immutable_etag': immutable_revision.get('etag'),
+    }
 def norm(X): return X / (np.linalg.norm(X, axis=1, keepdims=True) + 1e-9)
 def grid(a):
     a = np.asarray(a, float); q1, q9 = np.nanpercentile(a, 1), np.nanpercentile(a, 99)
@@ -41,32 +132,76 @@ def grid(a):
 def pls_dir(X, y):                          # PLS1 unit direction that best predicts y
     m = PLSRegression(1).fit(X, y); w = np.asarray(m.coef_).reshape(-1); return w / (np.linalg.norm(w) + 1e-9)
 CTRVIEWS_ALPHA = 0.3                         # 30% CTR-direction + 70% views-direction (from exp_ctr_views_long.py)
+PROVENANCE_SCHEMA_VERSION = 2
+ALGORITHM_GENERATION = 'long-map-steering-v2'
+try: GENERATOR_SOURCE_SHA256 = digest(open(__file__, 'rb').read())
+except Exception: GENERATOR_SOURCE_SHA256 = None
+RUNTIME_REVISION = {
+    'python': platform.python_version(),
+    'numpy': np.__version__,
+    'scikit_learn': sklearn.__version__,
+    'scipy': scipy.__version__,
+    'generator_source_sha256': GENERATOR_SOURCE_SHA256,
+}
 
 MIN_OWNED = 12   # long-form accounts have far fewer videos than the shorts 211 — lower the bar
 
 # ───── every account's long-form metrics (id → ctr / ret30 / retention / dur / views) ─────
-chans = json.loads((r2_get('longform/channels.json') or b'{"channels":[]}')).get('channels', [])
+channels_bytes, CHANNELS_REVISION = read_immutable_source(
+    'longform/channels.json',
+    'longform/source-snapshots/channels/by-sha256',
+    fallback=b'{"channels":[]}',
+)
+chans = json.loads(channels_bytes or b'{"channels":[]}').get('channels', [])
 if not any(c.get('id') == 'tyler' for c in chans):
     chans = [{'id': 'tyler', 'name': 'Main'}] + chans
 ACC = {}
+LABEL_SNAPSHOT_REVISIONS = {}
 for c in chans:
-    t = json.loads(r2_get(f"longform/ret_{c['id']}.json") or b'{"videos":[]}')
+    account_id = str(c['id'])
+    label_bytes, label_revision = read_immutable_source(
+        f'longform/ret_{account_id}.json',
+        f'longform/source-snapshots/private-labels/{account_id}/by-sha256',
+        fallback=b'{"videos":[]}',
+    )
+    LABEL_SNAPSHOT_REVISIONS[account_id] = label_revision
+    t = json.loads(label_bytes or b'{"videos":[]}')
     CT = {}; R30 = {}; RE = {}; D = {}; Vw = {}
     for v in t.get('videos', []):
         vid = str(v.get('id') or '')
         if not vid: continue
-        if v.get('ctr') is not None: CT[vid] = float(v['ctr'])
-        if v.get('ret30') is not None: R30[vid] = float(v['ret30'])
-        if v.get('avg_retention') is not None: RE[vid] = float(v['avg_retention'])
-        if v.get('duration_s') is not None: D[vid] = float(v['duration_s'])
-        if v.get('views') is not None: Vw[vid] = float(v['views'])
-    ACC[c['id']] = {'ctr': CT, 'ret30': R30, 'ret': RE, 'dur': D, 'views': Vw, 'name': c.get('name', c['id'])}
-    print(f"  account {c['id']} ({c.get('name')}): ctr={len(CT)} ret30={len(R30)}", flush=True)
+        def finite_value(key):
+            try:
+                value = float(v[key])
+                return value if np.isfinite(value) else None
+            except (KeyError, TypeError, ValueError):
+                return None
+        ctr_value = finite_value('ctr')
+        ret30_value = finite_value('ret30')
+        retention_value = finite_value('avg_retention')
+        duration_value = finite_value('duration_s')
+        views_value = finite_value('views')
+        if ctr_value is not None: CT[vid] = ctr_value
+        if ret30_value is not None: R30[vid] = ret30_value
+        if retention_value is not None: RE[vid] = retention_value
+        if duration_value is not None: D[vid] = duration_value
+        if views_value is not None: Vw[vid] = views_value
+    ACC[account_id] = {'ctr': CT, 'ret30': R30, 'ret': RE, 'dur': D, 'views': Vw, 'name': c.get('name', account_id)}
+    print(f"  account {account_id} ({c.get('name')}): ctr={len(CT)} ret30={len(R30)}", flush=True)
 # pooled 'all'
 aCT = {}; aR30 = {}; aRE = {}; aD = {}; aVw = {}
 for cid, a in ACC.items():
     aCT.update(a['ctr']); aR30.update(a['ret30']); aRE.update(a['ret']); aD.update(a['dur']); aVw.update(a['views'])
 ACC['all'] = {'ctr': aCT, 'ret30': aR30, 'ret': aRE, 'dur': aD, 'views': aVw, 'name': 'All pooled'}
+pooled_revision_members = {
+    account: revision
+    for account, revision in sorted(LABEL_SNAPSHOT_REVISIONS.items())
+}
+LABEL_SNAPSHOT_REVISIONS['all'] = {
+    'kind': 'composite_private_label_snapshot',
+    'members': pooled_revision_members,
+    'sha256': digest(canonical_bytes(pooled_revision_members)),
+}
 owner_of = {}
 for cid, a in ACC.items():
     if cid == 'all': continue
@@ -91,7 +226,8 @@ def fit_view_eq(CT, R30, D, Vw):
     score = wc * ctr + w30 * r30 + wd * ld
     beta = _slope(lv, score); alpha = lv.mean() - beta * score.mean()
     return {'wc': float(wc), 'w30': float(w30), 'wd': float(wd), 'alpha': float(alpha), 'beta': float(beta),
-            'n': len(ids), 'durmed': float(np.median([D[k] for k in ids]))}
+            'n': len(ids), 'durmed': float(np.median([D[k] for k in ids])),
+            'fit_population': id_population(ids)}
 def eq_logviews(eq, ctr, r30, ld):
     return eq['alpha'] + eq['beta'] * (eq['wc'] * ctr + eq['w30'] * r30 + eq['wd'] * ld)
 
@@ -100,11 +236,40 @@ for a in ACCTS:
     e = VIEW_EQ[a]
     if e: print(f"  view-eq[{a}]: logV = {e['wc']:.4f}·ctr + {e['w30']:.4f}·ret30 + {e['wd']:.3f}·logdur scaled β={e['beta']:.3f} (n={e['n']})", flush=True)
 
-db = json.loads((r2_get('longform/db.json') or b'{"videos":{}}'))
+db_bytes, DATABASE_REVISION = read_immutable_source(
+    'longform/db.json',
+    'longform/source-snapshots/database/by-sha256',
+    fallback=b'{"videos":{}}',
+)
+db = json.loads(db_bytes or b'{"videos":{}}')
 LIBDUR = {str(v.get('videoId', '')): float(v['durationSec']) for v in db.get('videos', {}).values() if v.get('durationSec')}
 for a in ACCTS:
     LIBDUR.update({k: ACC[a]['dur'][k] for k in ACC[a]['dur']})
 DUR_MED = float(np.median(list(ACC['tyler']['dur'].values()) or [300.0]))
+frozen_manifest_bytes, FROZEN_MANIFEST_REVISION = read_immutable_source(
+    'longform/thumb-rl/scorer_visual.manifest.json',
+    'longform/source-snapshots/frozen-ctrviews-manifests/by-sha256',
+    fallback=None,
+)
+try:
+    frozen_manifest = json.loads(frozen_manifest_bytes) if frozen_manifest_bytes else {}
+except Exception:
+    frozen_manifest = {}
+frozen_populations = frozen_manifest.get('populations') or {}
+FROZEN_VISUAL_CTRVIEWS_LINEAGE = {
+    'manifest_revision': FROZEN_MANIFEST_REVISION,
+    'artifact_revision': {
+        'mutable_key': frozen_manifest.get('canonicalKey'),
+        'sha256': frozen_manifest.get('artifactSha256'),
+        'immutable_key': frozen_manifest.get('archiveKey'),
+        'lineage_manifest_sha256': frozen_manifest.get('lineageSha256'),
+    },
+    'embedding_store_population': frozen_populations.get('embeddingStore'),
+    'frozen_ctr_fit_population': frozen_populations.get('privateCtrFit'),
+    'curated_views_fit_population': frozen_populations.get('curatedViewsFit'),
+    'calibration_ladder_population': frozen_populations.get('calibrationLadder'),
+    'source_revisions': frozen_manifest.get('sourceRevisions'),
+}
 kf = KFold(5, shuffle=True, random_state=0)
 
 def steer_metric(Vm, mids, lab):
@@ -127,27 +292,96 @@ def steer_metric(Vm, mids, lab):
             'est': [round(float(x), 2) for x in est], 'actual': actual}, len(oi)
 
 STEER = {}
+for a in ACCTS:
+    e = VIEW_EQ[a]
+    if e:
+        STEER[f'VIEWEQ_{a}'] = np.array(
+            [e['wc'], e['w30'], e['wd'], e['alpha'], e['beta'], e['durmed']],
+            np.float32,
+        )
+model_buffer = io.BytesIO()
+np.savez_compressed(model_buffer, **STEER)
+model_bytes = model_buffer.getvalue()
+model_sha256 = digest(model_bytes)
+model_immutable_key = f'raw-long/models/by-sha256/{model_sha256}.npz'
+model_immutable_revision = put_immutable(
+    model_immutable_key,
+    model_bytes,
+    'application/octet-stream',
+)
+model_artifact = {
+    'mutable_key': 'raw-long/steer_models.npz',
+    'sha256': model_sha256,
+    'immutable_key': model_immutable_key,
+    'immutable_etag': model_immutable_revision.get('etag'),
+    'algorithm_generation': ALGORITHM_GENERATION,
+    'generator_source_sha256': GENERATOR_SOURCE_SHA256,
+}
 USE_PENDING = os.environ.get('RAW_STEER_USE_PENDING') == '1'
 PENDING_KEYS = []
+CHANNEL_MANIFESTS = []
 for ch in ['visual', 'text', 'together']:
-    buf = r2_get(f'raw-long/{ch}/embeddings.npz')
+    embedding_key = f'raw-long/{ch}/embeddings.npz'
+    embedding_head = r2_head(embedding_key)
+    buf = r2_get(embedding_key)
     if not buf:
         print(f'{ch}: no embeddings yet — skip', flush=True); continue
+    embedding_after = r2_head(embedding_key)
+    if embedding_head.get('etag') and embedding_after.get('etag') and embedding_head['etag'] != embedding_after['etag']:
+        raise RuntimeError(f'{embedding_key} changed while the generation was reading it')
+    embedding_head = embedding_after if embedding_after.get('etag') else embedding_head
+    embedding_sha256 = digest(buf)
+    embedding_immutable_key = f'raw-long/{ch}/embeddings/by-sha256/{embedding_sha256}.npz'
+    embedding_immutable_revision = put_immutable(
+        embedding_immutable_key,
+        buf,
+        'application/octet-stream',
+    )
     z = np.load(io.BytesIO(buf), allow_pickle=True)
     ids = [str(x) for x in z['ids']]; V = norm(np.asarray(z['vecs'], np.float32))
     map_key = f'raw-long/{ch}/map.pending.json' if USE_PENDING else f'raw-long/{ch}/map.json'
+    source_map_head = r2_head(map_key)
     map_bytes = r2_get(map_key)
     if not map_bytes:
         raise RuntimeError(f'{map_key} is missing; refusing to replace the last complete map')
+    source_map_after = r2_head(map_key)
+    if source_map_head.get('etag') and source_map_after.get('etag') and source_map_head['etag'] != source_map_after['etag']:
+        raise RuntimeError(f'{map_key} changed while the generation was reading it')
+    source_map_head = source_map_after if source_map_after.get('etag') else source_map_head
+    source_map_sha256 = digest(map_bytes)
     mp = json.loads(map_bytes)
     mids = [str(x) for x in mp['id']]; epos = {v: i for i, v in enumerate(ids)}
+    aligned_ids = [vid for vid in mids if vid in epos]
+    map_only_ids = [vid for vid in mids if vid not in epos]
+    map_set = set(mids)
+    embedding_only_ids = [vid for vid in ids if vid not in map_set]
+    alignment_population = {
+        'method': 'exact_video_id',
+        'embedding_archive': id_population(ids),
+        'map': id_population(mids),
+        'intersection': id_population(aligned_ids),
+        'map_only': id_population(map_only_ids),
+        'embedding_archive_only': id_population(embedding_only_ids),
+    }
     Vm = np.zeros((len(mids), V.shape[1]), np.float32)
     for i, vid in enumerate(mids):
         j = epos.get(vid)
         if j is not None: Vm[i] = V[j]
     mp['owner'] = [owner_of.get(vid, '') for vid in mids]
-    lv_all = np.log10(np.array(mp.get('views', []), float) + 1)
-    w_views_ch = pls_dir(Vm, lv_all) if len(lv_all) == len(mids) and float(np.nanstd(lv_all)) > 1e-9 else None
+    public_views = np.array(mp.get('views', []), float)
+    views_fit_mask = (
+        np.isfinite(public_views)
+        & (public_views > 0)
+        & (np.abs(Vm).sum(1) > 1e-6)
+    ) if len(public_views) == len(mids) else np.zeros(len(mids), dtype=bool)
+    views_fit_ids = [mids[index] for index in np.flatnonzero(views_fit_mask)]
+    lv_all = np.log10(np.where(public_views > 0, public_views, np.nan) + 1)
+    w_views_ch = (
+        pls_dir(Vm[views_fit_mask], lv_all[views_fit_mask])
+        if views_fit_mask.sum() >= MIN_OWNED
+        and float(np.nanstd(lv_all[views_fit_mask])) > 1e-9
+        else None
+    )
 
     for acct in ACCTS:
         CTR, RET30 = ACC[acct]['ctr'], ACC[acct]['ret30']
@@ -182,7 +416,8 @@ for ch in ['visual', 'text', 'together']:
             x = Vm @ blend
             Xc = Vm - Vm.mean(0); pc = np.linalg.svd(Xc, full_matrices=False)[2][0]
             po = pc - (pc @ blend) * blend; po /= (np.linalg.norm(po) + 1e-9); y = Xc @ po
-            cvv = abs(float(spearmanr(x, lv_all)[0])); coc = abs(float(spearmanr(x[own], cy)[0]))
+            cvv = abs(float(spearmanr(x[views_fit_mask], lv_all[views_fit_mask])[0]))
+            coc = abs(float(spearmanr(x[own], cy)[0]))
             ce = mp['proj'].get(f'ctr__{acct}', {}).get('est')   # per-point CTR estimate (reused from the ctr__ axis) so the trend bands can show CTR too
             mp['proj'][f'ctrviews__{acct}'] = {'x': grid(x), 'y': grid(y), 'cv': round(cvv, 3), 'co': round(coc, 3), 'joint': True, 'ctr_est': ce}
             print(f'  {ch}/ctrviews__{acct}: views r={cvv:.3f} · CTR r={coc:.3f} (owned {len(own)})', flush=True)
@@ -200,15 +435,230 @@ for ch in ['visual', 'text', 'together']:
         if spearmanr(XYv[:, 0], vmap)[0] < 0: XYv[:, 0] = -XYv[:, 0]
         mp['proj']['rawviews'] = {'x': grid(XYv[:, 0]), 'y': grid(XYv[:, 1]), 'cv': round(cvv, 3), 'co': round(ch10, 3)}
 
-    plot = encode_plot_artifact(build_plot_artifact(mp, ch, LONG_PROJECTIONS))
-    r2_put(f'raw-long/{ch}/plot.json', plot, 'application/json')
-    r2_put(f'raw-long/{ch}/map.json', json.dumps(mp).encode(), 'application/json')
-    if USE_PENDING: PENDING_KEYS.append(f'raw-long/{ch}/map.pending.json')
-    print(f'  saved raw-long/{ch}/map.json + plot.json ({len(plot):,} bytes; proj keys: {len(mp["proj"])})', flush=True)
+    projection_fit_ids = [
+        mids[index]
+        for index in range(len(mids))
+        if float(np.abs(Vm[index]).sum()) > 1e-6
+    ]
+    account_metric_private_fit_populations = {}
+    for account in ACCTS:
+        ctr_fit_ids = [video_id for video_id in mids if video_id in ACC[account]['ctr']]
+        ret30_fit_ids = [video_id for video_id in mids if video_id in ACC[account]['ret30']]
+        view_equation = VIEW_EQ.get(account)
+        account_metric_private_fit_populations[account] = {
+            'label_snapshot_revision': LABEL_SNAPSHOT_REVISIONS.get(account),
+            'metrics': {
+                'ctr': {
+                    'projection_key': f'ctr__{account}',
+                    'published': f'ctr__{account}' in mp['proj'],
+                    'fit_population': id_population(ctr_fit_ids),
+                },
+                'ret30': {
+                    'projection_key': f'ret30__{account}',
+                    'published': f'ret30__{account}' in mp['proj'],
+                    'fit_population': id_population(ret30_fit_ids),
+                },
+                'realviews': {
+                    'projection_key': f'realviews__{account}',
+                    'published': f'realviews__{account}' in mp['proj'],
+                    'private_view_equation_fit_population': (
+                        (view_equation or {}).get('fit_population')
+                    ),
+                    'projection_fit_population': id_population(
+                        projection_fit_ids
+                        if f'realviews__{account}' in mp['proj'] else []
+                    ),
+                },
+                'ctrviews': {
+                    'projection_key': f'ctrviews__{account}',
+                    'published': f'ctrviews__{account}' in mp['proj'],
+                    'private_ctr_fit_population': id_population(ctr_fit_ids),
+                    'views_direction_fit_population': id_population(
+                        views_fit_ids if f'ctrviews__{account}' in mp['proj'] else []
+                    ),
+                },
+            },
+        }
 
-for a in ACCTS:
-    e = VIEW_EQ[a]
-    if e: STEER[f'VIEWEQ_{a}'] = np.array([e['wc'], e['w30'], e['wd'], e['alpha'], e['beta'], e['durmed']], np.float32)
-bio = io.BytesIO(); np.savez_compressed(bio, **STEER); r2_put('raw-long/steer_models.npz', bio.getvalue(), 'application/octet-stream')
+    embedding_artifact = {
+        'mutable_key': embedding_key,
+        'mutable_etag': embedding_head.get('etag'),
+        'mutable_version_id': embedding_head.get('version_id'),
+        'content_length': len(buf),
+        'sha256': embedding_sha256,
+        'immutable_key': embedding_immutable_key,
+        'immutable_etag': embedding_immutable_revision.get('etag'),
+        'video_id_population': id_population(ids),
+    }
+    source_map_artifact = {
+        'key': map_key,
+        'etag': source_map_head.get('etag'),
+        'version_id': source_map_head.get('version_id'),
+        'content_length': len(map_bytes),
+        'sha256': source_map_sha256,
+        'video_id_population': id_population(mids),
+    }
+    generation_payload = {
+        'algorithm_generation': ALGORITHM_GENERATION,
+        'generator_source_sha256': GENERATOR_SOURCE_SHA256,
+        'channel': ch,
+        'embedding_archive_sha256': embedding_sha256,
+        'source_map_sha256': source_map_sha256,
+        'model_sha256': model_sha256,
+        'video_id_alignment_sha256': digest(canonical_bytes(alignment_population)),
+        'private_fit_lineage_sha256': digest(canonical_bytes(
+            account_metric_private_fit_populations
+        )),
+        'source_database_sha256': DATABASE_REVISION.get('sha256'),
+    }
+    generation_id = digest(canonical_bytes(generation_payload))
+    mp['_provenance'] = {
+        'schema_version': PROVENANCE_SCHEMA_VERSION,
+        'generation_id': generation_id,
+        'algorithm_generation': {
+            'id': ALGORITHM_GENERATION,
+            'generator': 'add_steered_proj_long.py',
+            'generator_source_sha256': GENERATOR_SOURCE_SHA256,
+            'pls_components': 2,
+            'validation_folds': 5,
+            'random_state': 0,
+            'ctrviews_alpha': CTRVIEWS_ALPHA,
+            'minimum_owned_rows': MIN_OWNED,
+            'grid_calibration': 'per-axis p01-p99 clipped to integer [0,1000]',
+        },
+        'embedding_archive': embedding_artifact,
+        'source_map': source_map_artifact,
+        'model_artifact': model_artifact,
+        'video_id_alignment_population': alignment_population,
+        'account_metric_private_fit_populations': account_metric_private_fit_populations,
+        'label_snapshot_revisions': LABEL_SNAPSHOT_REVISIONS,
+        'source_database_revision': DATABASE_REVISION,
+        'channels_registry_revision': CHANNELS_REVISION,
+        'frozen_visual_ctrviews_lineage': FROZEN_VISUAL_CTRVIEWS_LINEAGE,
+        'runtime_revision': RUNTIME_REVISION,
+        'manifest_key': f'raw-long/{ch}/map.manifest.json',
+    }
+    plot = encode_plot_artifact(build_plot_artifact(mp, ch, LONG_PROJECTIONS))
+    published_map_bytes = canonical_bytes(mp)
+    map_sha256 = digest(published_map_bytes)
+    plot_sha256 = digest(plot)
+    map_immutable_key = f'raw-long/{ch}/maps/by-sha256/{map_sha256}.json'
+    plot_immutable_key = f'raw-long/{ch}/plots/by-sha256/{plot_sha256}.json'
+    map_immutable_revision = put_immutable(
+        map_immutable_key,
+        published_map_bytes,
+        'application/json',
+    )
+    plot_immutable_revision = put_immutable(
+        plot_immutable_key,
+        plot,
+        'application/json',
+    )
+    plot_revision = r2_put(f'raw-long/{ch}/plot.json', plot, 'application/json')
+    map_revision = r2_put(f'raw-long/{ch}/map.json', published_map_bytes, 'application/json')
+    manifest = {
+        'schema_version': PROVENANCE_SCHEMA_VERSION,
+        'artifact_type': 'longquant-map-generation',
+        'generation_id': generation_id,
+        'algorithm_generation': mp['_provenance']['algorithm_generation'],
+        'channel': ch,
+        'embedding_archive': embedding_artifact,
+        'source_map': source_map_artifact,
+        'map_artifact': {
+            'mutable_key': f'raw-long/{ch}/map.json',
+            'mutable_etag': map_revision.get('etag'),
+            'mutable_version_id': map_revision.get('version_id'),
+            'content_length': len(published_map_bytes),
+            'sha256': map_sha256,
+            'immutable_key': map_immutable_key,
+            'immutable_etag': map_immutable_revision.get('etag'),
+        },
+        'plot_artifact': {
+            'mutable_key': f'raw-long/{ch}/plot.json',
+            'mutable_etag': plot_revision.get('etag'),
+            'mutable_version_id': plot_revision.get('version_id'),
+            'content_length': len(plot),
+            'sha256': plot_sha256,
+            'immutable_key': plot_immutable_key,
+            'immutable_etag': plot_immutable_revision.get('etag'),
+        },
+        'model_artifact': model_artifact,
+        'video_id_alignment_population': alignment_population,
+        'account_metric_private_fit_populations': account_metric_private_fit_populations,
+        'label_snapshot_revisions': LABEL_SNAPSHOT_REVISIONS,
+        'source_database_revision': DATABASE_REVISION,
+        'channels_registry_revision': CHANNELS_REVISION,
+        'frozen_visual_ctrviews_lineage': FROZEN_VISUAL_CTRVIEWS_LINEAGE,
+        'runtime_revision': RUNTIME_REVISION,
+        'projection_keys': sorted(mp['proj']),
+    }
+    manifest_bytes = canonical_bytes(manifest)
+    manifest_sha256 = digest(manifest_bytes)
+    manifest_immutable_key = f'raw-long/{ch}/manifests/by-sha256/{manifest_sha256}.json'
+    manifest_immutable_revision = put_immutable(
+        manifest_immutable_key,
+        manifest_bytes,
+        'application/json',
+    )
+    r2_put(
+        f'raw-long/{ch}/map.manifest.json',
+        canonical_bytes({
+            **manifest,
+            'manifest_sha256': manifest_sha256,
+            'immutable_manifest_key': manifest_immutable_key,
+            'immutable_manifest_etag': manifest_immutable_revision.get('etag'),
+        }),
+        'application/json',
+    )
+    CHANNEL_MANIFESTS.append({
+        'channel': ch,
+        'generation_id': generation_id,
+        'manifest_sha256': manifest_sha256,
+        'immutable_manifest_key': manifest_immutable_key,
+        'map_sha256': map_sha256,
+        'map_immutable_key': map_immutable_key,
+    })
+    if USE_PENDING: PENDING_KEYS.append(f'raw-long/{ch}/map.pending.json')
+    print(f'  saved raw-long/{ch}/map.json + immutable {map_immutable_key} + manifest ({len(plot):,} plot bytes; proj keys: {len(mp["proj"])})', flush=True)
+
+model_revision = r2_put('raw-long/steer_models.npz', model_bytes, 'application/octet-stream')
+model_manifest = {
+    'schema_version': PROVENANCE_SCHEMA_VERSION,
+    'artifact_type': 'longquant-steer-model-generation',
+    'algorithm_generation': ALGORITHM_GENERATION,
+    'generator_source_sha256': GENERATOR_SOURCE_SHA256,
+    'model_artifact': {
+        **model_artifact,
+        'mutable_etag': model_revision.get('etag'),
+        'mutable_version_id': model_revision.get('version_id'),
+        'content_length': len(model_bytes),
+    },
+    'account_view_equations': {
+        account: {
+            'available': VIEW_EQ[account] is not None,
+            'fit_rows': VIEW_EQ[account]['n'] if VIEW_EQ[account] else 0,
+        }
+        for account in ACCTS
+    },
+    'channel_generations': CHANNEL_MANIFESTS,
+}
+model_manifest_bytes = canonical_bytes(model_manifest)
+model_manifest_sha256 = digest(model_manifest_bytes)
+model_manifest_immutable_key = f'raw-long/models/manifests/by-sha256/{model_manifest_sha256}.json'
+model_manifest_immutable_revision = put_immutable(
+    model_manifest_immutable_key,
+    model_manifest_bytes,
+    'application/json',
+)
+r2_put(
+    'raw-long/steer_models.manifest.json',
+    canonical_bytes({
+        **model_manifest,
+        'manifest_sha256': model_manifest_sha256,
+        'immutable_manifest_key': model_manifest_immutable_key,
+        'immutable_manifest_etag': model_manifest_immutable_revision.get('etag'),
+    }),
+    'application/json',
+)
 for pending_key in PENDING_KEYS: r2_delete(pending_key)
 print('done — per-account ctr/ret30/realviews projections + owner tags added to raw-long/*', flush=True)

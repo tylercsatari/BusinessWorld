@@ -76,6 +76,11 @@ includes(shorts, "rtFetchJson('/api/raw/saved-hook/' + id", 'saved hook details 
 includes(shorts, "rtFetchJson('/api/raw/saved-hooks'", 'saved hook indexes must use retrying JSON transport');
 includes(shorts, 'montageFromFrameIds(rec.frame_imgs || [])', 'legacy saved hooks must rebuild a missing montage from durable generated frames');
 includes(server, 'surfaceSourceErrors: true', 'map and status routes must surface backing-storage failures');
+includes(server, 'savedChannelValidationCacheIsCompatible', 'saved-channel ledgers must verify a cached artifact before source-failure fallback');
+includes(server, "cacheStatus: 'source-unavailable-hit'", 'ordinary saved channels must remain readable from the last contract-matched ledger when private validation sources are temporarily unavailable');
+includes(server, 'runtimeArtifact.scoredWithContractSha256 === contractSha256', 'a cached ledger must match the exact score contract before fallback');
+includes(shorts, 'view complete row manifest', 'touch users must be able to open the complete per-video scoring manifest');
+includes(shorts, '% probability', 'forecast 10M probabilities must remain continuous instead of being formatted as yes/no');
 includes(long, 'connection issue while checking this grind:', 'grind polling failures must stay visible while retrying');
 includes(long, 'data-lqxsavedretry', 'saved Long Quant detail failures must expose a retry action');
 includes(shorts, 'if (pj.result && pj.result.error) throw new Error(pj.result.error);', 'Shorts jobs must surface scorer error payloads');
@@ -89,8 +94,8 @@ assert(activeLongScores === 5, `only five explicitly opened detail surfaces may 
 
 // Force browsers to load the repaired clients instead of pairing new routes
 // with a cached pre-repair module.
-includes(index, 'jarvis-retention.js?v=embedding-contract-1', 'Shorts bundle cache key must be bumped');
-includes(index, 'jarvis-longquant.js?v=embedding-contract-1', 'Long Quant bundle cache key must be bumped');
+includes(index, 'jarvis-retention.js?v=coordinate-lineage-1', 'Shorts bundle cache key must be bumped');
+includes(index, 'jarvis-longquant.js?v=coordinate-lineage-1', 'Long Quant bundle cache key must be bumped');
 
 console.log(JSON.stringify({
     ok: true,

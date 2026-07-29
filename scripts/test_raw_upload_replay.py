@@ -87,6 +87,9 @@ def canonical_score(seed=1):
             'together': [0.5, 0.6],
         },
         'steer_artifact_sha256': f'steer-artifact-{seed}',
+        'steer_artifact_archive_key': f'raw/steer_models/by-sha256/steer-artifact-{seed}.npz',
+        'steer_lineage_manifest_sha256': f'steer-lineage-{seed}',
+        'steer_lineage_schema_version': 1,
         'channels': {
             'visual': {'neighbors': [{'id': 'visual-neighbor', 'sim': 0.9}]},
             'text': {'neighbors': [{'id': 'text-neighbor', 'sim': 0.8}]},
@@ -137,6 +140,9 @@ def test_cache_hit_skips_all_embedding_calls():
     assert manifest['output_fingerprint'] == replay_meta['output_fingerprint']
     assert manifest['scorer_revisions'] == revision_state
     assert manifest['canonical_output_contract']['total'] == 21
+    assert manifest['steer_artifact_archive_key'].endswith('steer-artifact-1.npz')
+    assert manifest['steer_lineage_manifest_sha256'] == 'steer-lineage-1'
+    assert manifest['steer_lineage_schema_version'] == 1
     with open(os.path.join(ROOT, 'buildings', 'jarvis', 'saved-channel-feature-contract.json'), encoding='utf-8') as handle:
         contract = json.load(handle)
     assert manifest['display_contract_version'] == contract['version']

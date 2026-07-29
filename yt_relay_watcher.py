@@ -9,7 +9,7 @@ uploads the finished record to shorts/yt-relay/results/ for the server's job to 
 
 Installed as a launchd agent (com.businessworld.ytrelay) with KeepAlive — like the crawler,
 it should always be running."""
-import base64, json, os, re, subprocess, sys, tempfile, threading, time
+import base64, hashlib, json, os, re, subprocess, sys, tempfile, threading, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -32,6 +32,7 @@ REQ, RES = 'shorts/yt-relay/requests/', 'shorts/yt-relay/results/'
 CHANNEL_REQ = 'shorts/channel-import/requests/'
 CHANNEL_ROOT = 'raw/saved-channels/'
 CHANNEL_INDEX = CHANNEL_ROOT + 'index.json'
+INDICATOR_REGISTRY_KEY = 'raw/indicators/registry.json'
 FEATURE_CONTRACT = json.load(open(os.path.join(HERE, 'buildings', 'jarvis', 'saved-channel-feature-contract.json')))
 _index_lock = threading.Lock()
 
@@ -102,35 +103,151 @@ def indicator_strength(indicator):
         return abs(float(indicator.get('auc') or .5) - .5) * 2
     return abs(float(indicator.get('spearman') or 0))
 
-def novelty_feature(record, registry, target):
+def canonical_json_bytes(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
+
+def load_indicator_registry():
+    response = s3.get_object(Bucket=BUCKET, Key=INDICATOR_REGISTRY_KEY)
+    registry_bytes = response['Body'].read()
+    registry_sha256 = hashlib.sha256(registry_bytes).hexdigest()
+    registry = json.loads(registry_bytes)
+    if not isinstance(registry, dict) or not isinstance(registry.get('indicators'), list):
+        raise RuntimeError('indicator registry is malformed')
+    revision = {
+        'source': INDICATOR_REGISTRY_KEY,
+        'sha256': registry_sha256,
+        'bytes': len(registry_bytes),
+    }
+    etag = str(response.get('ETag') or '').strip('"')
+    if etag: revision['etag'] = etag
+    version_id = str(response.get('VersionId') or '')
+    if version_id: revision['versionId'] = version_id
+    last_modified = response.get('LastModified')
+    if last_modified is not None:
+        revision['lastModified'] = (
+            last_modified.isoformat()
+            if hasattr(last_modified, 'isoformat')
+            else str(last_modified)
+        )
+    return registry, revision
+
+def select_novelty_feature(record, registry, target):
     values = record.get('indicators') or {}
     pool = [indicator for indicator in (registry.get('indicators') or [])
             if indicator.get('kind') == 'novelty' and indicator.get('target') == target
             and values.get(indicator.get('name')) is not None]
-    if not pool: return None
+    if not pool:
+        return {
+            'value': None,
+            'provenance': {
+                'status': 'unavailable',
+                'target': target,
+                'reason': 'no matching novelty indicator with a scored value',
+                'candidateIndicatorCount': 0,
+                'validatedCandidateCount': 0,
+            },
+        }
     validated = sorted([indicator for indicator in pool if indicator.get('validated')], key=indicator_strength, reverse=True)
     indicator = (validated or sorted(pool, key=indicator_strength, reverse=True))[0]
     score = float(values[indicator['name']])
     points = indicator.get('pts') or []
-    if not points: return None
+    strength_kind = 'aucDistanceFromHalf' if indicator.get('auc') is not None else 'absoluteSpearman'
+    sign = -1 if float(indicator.get('spearman') or 0) < 0 else 1
+    calibration_population_hash = hashlib.sha256(canonical_json_bytes(points)).hexdigest()
+    base_provenance = {
+        'status': 'selected',
+        'target': target,
+        'selectedIndicatorKey': indicator['name'],
+        'selectedFrom': 'validated' if validated else 'all matching',
+        'candidateIndicatorCount': len(pool),
+        'validatedCandidateCount': len(validated),
+        'selectionStrengthKind': strength_kind,
+        'selectionStrength': round(float(indicator_strength(indicator)), 6),
+        'sign': sign,
+        'signRule': 'invert empirical percentile when registered Spearman is negative',
+        'registered': {
+            key: indicator[key]
+            for key in (
+                'kind', 'modality', 'target', 'target_label', 'validated', 'strong',
+                'spearman', 'auc', 'effect', 'p', 'fdr', 'n', 'n_owned',
+            )
+            if key in indicator
+        },
+        'calibration': {
+            'method': 'empirical percentile over registered indicator points, then target-order lookup',
+            'calibrationPointCount': len(points),
+            'calibrationPointsSha256': calibration_population_hash,
+            'calibrationPopulationHash': calibration_population_hash,
+            'calibrationPopulationHashBasis': 'canonical JSON of the selected registry indicator pts array',
+            'registeredPopulationCount': indicator.get('n'),
+            'registeredOwnedPopulationCount': indicator.get('n_owned'),
+        },
+        'rawIndicatorValue': score,
+    }
+    if not points:
+        base_provenance.update({
+            'status': 'unavailable',
+            'reason': 'selected indicator has no calibration points',
+        })
+        return {'value': None, 'provenance': base_provenance}
     percentile = sum(1 for point in points if float(point[0]) <= score) / float(len(points))
-    if float(indicator.get('spearman') or 0) < 0: percentile = 1 - percentile
+    if sign < 0: percentile = 1 - percentile
     actual = sorted(float(point[1]) for point in points)
     at = max(0, min(len(actual) - 1, int(round(percentile * (len(actual) - 1)))))
-    return [round(actual[at], 4), round(percentile * 100, 2)]
+    value = [round(actual[at], 4), round(percentile * 100, 2)]
+    base_provenance['output'] = {
+        'estimatedTarget': value[0],
+        'percentile': value[1],
+    }
+    return {'value': value, 'provenance': base_provenance}
 
-def compact_features(record, registry):
-    steer = record.get('steer') or {}
+def novelty_feature(record, registry, target):
+    return select_novelty_feature(record, registry, target)['value']
+
+def compact_feature_bundle(record, registry, registry_revision):
     features = {}
+    novelty_targets = {}
     for definition in FEATURE_CONTRACT['features']:
         if definition.get('source') == 'steer':
-            value = steer.get(definition.get('sourceKey'))
+            value = (record.get('steer') or {}).get(definition.get('sourceKey'))
             if value and value.get('est') is not None:
                 features[definition['key']] = [value.get('est'), value.get('pctile')]
-        else:
-            value = novelty_feature(record, registry, definition.get('target'))
-            if value is not None: features[definition['key']] = value
-    return features
+            continue
+        selected = select_novelty_feature(record, registry, definition.get('target'))
+        novelty_targets[definition.get('target')] = selected['provenance']
+        if selected['value'] is not None:
+            features[definition['key']] = selected['value']
+    return features, {
+        'schemaVersion': 1,
+        'registryRevision': registry_revision,
+        'registryMeta': registry.get('meta') if isinstance(registry.get('meta'), dict) else None,
+        'targets': novelty_targets,
+    }
+
+def compact_features(record, registry):
+    return compact_feature_bundle(record, registry, None)[0]
+
+def scored_video_update(record, video, channel_name, montage_saved, features,
+                        novelty_provenance, scored_at=None):
+    return {
+        'status': 'done',
+        'error': None,
+        'title': str(record.get('sourceTitle') or record.get('title') or video.get('title') or video['id'])[:160],
+        'views': record.get('sourceViews') if record.get('sourceViews') is not None else video.get('views'),
+        'viewsObservedAt': video.get('viewsObservedAt') or int(time.time() * 1000),
+        'duration': record.get('dur_s') or video.get('duration'),
+        'sourceUrl': record.get('sourceUrl') or video.get('sourceUrl'),
+        'sourceChannel': record.get('sourceChannel') or channel_name,
+        'silent': bool(record.get('silent')),
+        'published': record.get('sourcePublished') or video.get('published'),
+        'subscribers': record.get('sourceSubscribers') if record.get('sourceSubscribers') is not None else video.get('subscribers'),
+        'transcript': str(record.get('transcript') or '')[:300],
+        'hasMontage': montage_saved,
+        'features': features,
+        'input_manifest': record.get('input_manifest'),
+        'novelty_provenance': novelty_provenance,
+        'scoredAt': int(time.time() * 1000) if scored_at is None else int(scored_at),
+    }
 
 def compact_channel(manifest):
     return {
@@ -250,7 +367,7 @@ def process_channel_request(key):
         save_manifest(manifest)
         log('channel %s found %d Shorts (%d already scored)' % (channel_id, len(merged), manifest.get('completed', 0)))
 
-        registry = get_json('raw/indicators/registry.json', {}) or {}
+        registry, registry_revision = load_indicator_registry()
         while True:
             candidate = next((video for video in (manifest.get('videos') or [])
                               if video.get('status') != 'done'
@@ -319,19 +436,19 @@ def process_channel_request(key):
                 if video['status'] == 'queued': time.sleep(min(20, video['attempts'] * 5))
                 continue
             record.update({'savedChannelId': channel_id, 'savedAt': int(time.time() * 1000), 'hasMontage': montage_saved})
+            features, novelty_provenance = compact_feature_bundle(
+                record, registry, registry_revision
+            )
+            record['novelty_provenance'] = novelty_provenance
             put_json(CHANNEL_ROOT + channel_id + '/videos/' + video['id'] + '.json', record)
-            features = compact_features(record, registry)
-            video.update({
-                'status': 'done', 'error': None, 'title': str(record.get('sourceTitle') or record.get('title') or video.get('title') or video['id'])[:160],
-                'views': record.get('sourceViews') if record.get('sourceViews') is not None else video.get('views'),
-                'viewsObservedAt': video.get('viewsObservedAt') or int(time.time() * 1000),
-                'duration': record.get('dur_s') or video.get('duration'), 'sourceUrl': record.get('sourceUrl') or video.get('sourceUrl'),
-                'sourceChannel': record.get('sourceChannel') or manifest.get('name'), 'silent': bool(record.get('silent')),
-                'published': record.get('sourcePublished') or video.get('published'),
-                'subscribers': record.get('sourceSubscribers') if record.get('sourceSubscribers') is not None else video.get('subscribers'),
-                'transcript': str(record.get('transcript') or '')[:300], 'hasMontage': montage_saved,
-                'features': features, 'scoredAt': int(time.time() * 1000),
-            })
+            video.update(scored_video_update(
+                record,
+                video,
+                manifest.get('name'),
+                montage_saved,
+                features,
+                novelty_provenance,
+            ))
             append_view_snapshot(video, video.get('views'), video.get('viewsObservedAt'))
             manifest['name'] = record.get('sourceChannel') or manifest.get('name')
             save_manifest(manifest)

@@ -1336,12 +1336,132 @@ async function removeSavedChannelIndex(id) {
     await writeSavedChannelIndex(index);
 }
 
+function savedChannelValidationCacheIsCompatible(cached, contractSha256) {
+    const registry = cached && cached.coordinateRegistry;
+    const runtimeArtifact = registry && registry.lineageCatalog
+        && registry.lineageCatalog.artifacts
+        && registry.lineageCatalog.artifacts['artifact.runtime.shorts.blind-predictor.v1'];
+    return !!(
+        cached
+        && cached.version === savedChannelValidation.VERSION
+        && cached.ledgerAudit && cached.ledgerAudit.passed
+        && registry && registry.lineageAudit && registry.lineageAudit.passed
+        && runtimeArtifact
+        && runtimeArtifact.scoredWithContractSha256 === contractSha256
+        && runtimeArtifact.displayedLineageContractSha256 === contractSha256
+    );
+}
+
 async function buildSavedChannelValidationBuffer() {
+    const contractPath = path.join(__dirname, 'buildings/jarvis/saved-channel-feature-contract.json');
+    const contractSha256 = require('crypto').createHash('sha256')
+        .update(fs.readFileSync(contractPath))
+        .digest('hex');
+    const cachedBuffer = await cloud.downloadFromR2(SAVED_CHANNEL_VALIDATION_KEY).catch(() => null);
+    let cached = null;
+    if (cachedBuffer) {
+        try { cached = JSON.parse(cachedBuffer.toString('utf8')); } catch (e) {}
+    }
+    try {
+        return await buildFreshSavedChannelValidationBuffer();
+    } catch (error) {
+        if (!savedChannelValidationCacheIsCompatible(cached, contractSha256)) throw error;
+        cached.artifact = {
+            ...(cached.artifact || {}),
+            cacheStatus: 'source-unavailable-hit',
+            persisted: true,
+            storage: 'R2',
+            sourceRefreshFailedAt: Date.now(),
+            note: `Serving the last contract-matched validation artifact because a source refresh failed: ${String(error && error.message || error).slice(0, 240)}`,
+        };
+        console.warn('[saved-channel-validation] source refresh failed; serving last contract-matched artifact:', error && error.message || error);
+        return Buffer.from(JSON.stringify(cached));
+    }
+}
+
+async function buildFreshSavedChannelValidationBuffer() {
     const sourceBuffers = new Map();
     const predictorBuffer = await cloud.downloadFromR2('raw/predictor-lab/results.json');
     if (!predictorBuffer) throw new Error('The leakage-safe predictor artifact has not been built.');
     sourceBuffers.set('raw/predictor-lab/results.json', predictorBuffer);
     const predictor = JSON.parse(predictorBuffer.toString('utf8'));
+    const predictorArtifactSha256 = require('crypto').createHash('sha256').update(predictorBuffer).digest('hex');
+    const predictorManifestBuffer = await cloud.downloadFromR2('raw/predictor-lab/results.manifest.json').catch(() => null);
+    let predictorManifest = null;
+    if (predictorManifestBuffer) {
+        sourceBuffers.set('raw/predictor-lab/results.manifest.json', predictorManifestBuffer);
+        predictorManifest = JSON.parse(predictorManifestBuffer.toString('utf8'));
+        if (predictorManifest.artifactSha256 !== predictorArtifactSha256) {
+            throw new Error('The predictor manifest does not match the predictor artifact bytes.');
+        }
+    }
+    predictor.provenance = {
+        ...(predictor.provenance || {}),
+        artifactSha256: predictorArtifactSha256,
+        artifactArchiveKey: predictorManifest && predictorManifest.archiveKey || null,
+        artifactManifestKey: predictorManifest ? 'raw/predictor-lab/results.manifest.json' : null,
+        artifactManifestSha256: predictorManifestBuffer
+            ? require('crypto').createHash('sha256').update(predictorManifestBuffer).digest('hex')
+            : null,
+        artifactGeneratedAt: predictor.generatedAt || null,
+    };
+    const runtimeManifests = {};
+    for (const [name, key] of [
+        ['shortsSteer', 'raw/steer_manifest.json'],
+        ['shortsVisualMap', 'raw/visual/map.manifest.json'],
+        ['shortsTextMap', 'raw/text/map.manifest.json'],
+        ['shortsTogetherMap', 'raw/together/map.manifest.json'],
+        ['longVisualMap', 'raw-long/visual/map.manifest.json'],
+        ['longTextMap', 'raw-long/text/map.manifest.json'],
+        ['longTogetherMap', 'raw-long/together/map.manifest.json'],
+        ['longSteer', 'raw-long/steer_models.manifest.json'],
+        ['longVisualScorer', 'longform/thumb-rl/scorer_visual.manifest.json'],
+        ['indicatorRegistry', 'raw/indicators/registry.json'],
+    ]) {
+        const buffer = await cloud.downloadFromR2(key).catch(() => null);
+        if (!buffer) continue;
+        sourceBuffers.set(key, buffer);
+        runtimeManifests[name] = {
+            key,
+            artifactSha256: require('crypto').createHash('sha256').update(buffer).digest('hex'),
+            value: JSON.parse(buffer.toString('utf8')),
+        };
+    }
+    for (const [name, key] of [
+        ['noveltyModels', 'raw/novelty_models.npz'],
+        ['indicatorWeights', 'raw/indicators/weights.npz'],
+    ]) {
+        const buffer = await cloud.downloadFromR2(key).catch(() => null);
+        if (!buffer) continue;
+        sourceBuffers.set(key, buffer);
+        runtimeManifests[name] = {
+            key,
+            artifactSha256: require('crypto').createHash('sha256').update(buffer).digest('hex'),
+            bytes: buffer.length,
+        };
+    }
+    for (const [name, relativePath] of [
+        ['shortsLiveScoreSource', 'raw_upload.py'],
+        ['shortsChannelWorkerSource', 'yt_relay_watcher.py'],
+        ['shortsSteerProducerSource', 'add_steered_proj.py'],
+        ['shortsThumbnailProducerSource', 'build_thumb_assets.py'],
+        ['longScoreSource', 'longquant_score.py'],
+        ['longSteerProducerSource', 'add_steered_proj_long.py'],
+        ['predictorProducerSource', 'buildings/jarvis/predictor-lab/run_predictor_lab.py'],
+        ['validationProducerSource', 'buildings/jarvis/saved-channel-validation.js'],
+    ]) {
+        const absolutePath = path.join(__dirname, relativePath);
+        const buffer = fs.readFileSync(absolutePath);
+        const key = `local:${relativePath}`;
+        sourceBuffers.set(key, buffer);
+        runtimeManifests[name] = {
+            key,
+            artifactSha256: require('crypto').createHash('sha256').update(buffer).digest('hex'),
+            bytes: buffer.length,
+            kind: 'source-code',
+        };
+    }
+    predictor.provenance.runtimeManifests = runtimeManifests;
     if (!predictor.targets || !predictor.targets.keep || !predictor.targets.keep.blindInputs) {
         throw new Error('The predictor artifact predates row-level blind inputs and must be rebuilt.');
     }

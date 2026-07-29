@@ -193,6 +193,13 @@
         -webkit-overflow-scrolling: touch;
     }
 
+    .experiment-lab-workspace [data-savedledger-scroll] table {
+        display: table;
+        width: max-content !important;
+        max-width: none;
+        overflow: visible;
+    }
+
     .experiment-lab-workspace table th,
     .experiment-lab-workspace table td {
         padding-left: 6px !important;

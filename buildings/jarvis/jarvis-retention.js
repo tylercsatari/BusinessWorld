@@ -16,7 +16,7 @@ const JarvisRetention = (function () {
     let PROMISE_UI = null, OPERATIONS_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationProtocol: 'video', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationSort: 'selectedError', savedValidationShow: 60, savedValidationExpanded: null, savedValidationPoint: null, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationProtocol: 'video', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationSort: 'selectedError', savedValidationShow: 60, savedValidationExpanded: null, savedValidationPoint: null, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '' };
     st.savedValidationCurveVideo = null;
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
@@ -533,7 +533,7 @@ const JarvisRetention = (function () {
         return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap;margin-bottom:6px"><div><div style="font-size:12px;font-weight:950;color:${C.text}">Exactly what the 21 graphs mean</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-top:2px">The input changes across Visual, Text, and Both; the target coordinate and its fitting population do not. A production score is a coordinate on that trained axis, not automatically a held-out prediction.</div></div><div style="font-size:8px;color:${C.faint};text-align:right">${esc(manifest.embedding_model || pipeline.embeddingModel || 'gemini-embedding-2')} · ${Number(manifest.embedding_dimensions || pipeline.embeddingDimensions || 1536).toLocaleString()}D<br>${esc(manifest.scorer || pipeline.scorer || 'raw_upload.py')} · artifact ${esc(hash)}</div></div>
           <div style="overflow:auto"><div style="min-width:760px;border:1px solid ${C.border}">${targetRows}</div></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:5px;margin-top:7px"><div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Deterministic replay</div><div style="font-size:9px;color:${manifest.cache_status === 'hit' ? C.green : C.text};font-weight:900">${esc(replayStatus)}</div></div><div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Input fingerprint</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(inputFingerprint)}</div></div><div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Scorer + model + artifact revision</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(revisionFingerprint)}</div></div></div>
-          <div style="font-size:8px;color:${C.amber};line-height:1.5;margin-top:7px"><b>Critical distinction:</b> Keep and 5-second axes were fitted and calibrated on Tyler's 211 private Shorts. Their stored Tyler values are in-sample diagnostics; Hafu is account-external. Public views, outlier, and 10M axes use the public corpus. “Forecast views” is a separate Tyler-channel retention-to-views model. The Blind validation tab rebuilds eligible axes with video/account exclusion and reports the actual error.</div>`, 10);
+          <div style="font-size:8px;color:${C.amber};line-height:1.5;margin-top:7px"><b>Critical distinction:</b> Keep and 5-second axes were fitted and calibrated on the exact modality-specific Tyler rows recorded in the current artifact manifest. Their stored Tyler values are in-sample diagnostics; Hafu is account-external. Public views, outlier, and 10M axes use their separately recorded public fit populations. “Forecast views” is a separate Tyler-channel retention-to-views model. The Blind validation tab rebuilds eligible axes with video/account exclusion and reports the actual error.</div>`, 10);
     }
     function predictorEnsure(force) {
         if (!PREDICTORLAB || force) {
@@ -1049,7 +1049,7 @@ const JarvisRetention = (function () {
                       </div>`;
                   })()}
                   ${placed}
-                  ${(() => { const row = (tn, lab) => { const k = steerBest(U, tn); return k ? `<div${embeddingDataAttrs(U, k.mod, tn, 'stored-production', rawEmbeddingAssetId(U), k)} style="display:flex;justify-content:space-between;gap:10px;font-size:11px"><span style="color:${C.mute}">${lab}</span><span style="color:${C.text};font-weight:700">~${k.est}% <span style="color:${C.mute};font-weight:400">(${k.pctile}th corpus percentile · ${k.mod} · ${k.sourceKey})</span></span></div>` : ''; }; const kk = row('keep', 'est. keep-rate') + row('ret5', 'est. past-5s'); return kk ? `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">extrapolated onto your 211's scale</div>${kk}<div style="font-size:9px;color:${C.faint};margin-top:4px">Projected onto the same steered direction as the 11k map, quantile-mapped to your videos' actual outcomes. Open <b>→ keep-rate</b> to see it placed.</div></div>` : ''; })()}
+                  ${(() => { const row = (tn, lab) => { const k = steerBest(U, tn); return k ? `<div${embeddingDataAttrs(U, k.mod, tn, 'stored-production', rawEmbeddingAssetId(U), k)} style="display:flex;justify-content:space-between;gap:10px;font-size:11px"><span style="color:${C.mute}">${lab}</span><span style="color:${C.text};font-weight:700">~${k.est}% <span style="color:${C.mute};font-weight:400">(${k.pctile}th corpus percentile · ${k.mod} · ${k.sourceKey})</span></span></div>` : ''; }; const kk = row('keep', 'est. keep-rate') + row('ret5', 'est. past-5s'); return kk ? `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:4px">extrapolated onto the registered private-fit scale</div>${kk}<div style="font-size:9px;color:${C.faint};margin-top:4px">Projected onto the same artifact-pinned direction as the map, then quantile-mapped to the exact target population listed in its lineage. Open <b>→ keep-rate</b> to see it placed.</div></div>` : ''; })()}
                   ${rawChanGridHtml(U)}
                 </div>`;
         })() : '';
@@ -1059,7 +1059,7 @@ const JarvisRetention = (function () {
             <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">project</span>${PROJS.map(projPill).join('')}<span style="width:8px"></span><span data-rawbands="1" style="cursor:pointer;border:1px solid ${st.rawBands ? C.cyan : C.border};background:${st.rawBands ? C.cyan + '22' : 'transparent'};color:${st.rawBands ? C.cyan : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">📊 trend bands</span>${st.rawBands ? `<span style="font-size:9px;color:${C.mute};margin-left:2px">sections</span>${[4, 6, 8, 12, 16].map(kk => `<span data-rawbandk="${kk}" style="cursor:pointer;border:1px solid ${(st.rawBandK || 6) === kk ? C.cyan : C.border};background:${(st.rawBandK || 6) === kk ? C.cyan + '1e' : 'transparent'};color:${(st.rawBandK || 6) === kk ? C.cyan : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${kk}</span>`).join('')}` : ''}</div>
             ${isAcctProj ? (() => { const ml = { keep: 'keep-rate', ret5: '5-sec retention', realviews: 'realistic views' }[pm]; return `<div style="font-size:10px;margin-bottom:6px;line-height:1.55;background:${accHas(pm) ? C.green : C.amber}14;border-left:3px solid ${accHas(pm) ? C.green : C.amber};padding:6px 10px;border-radius:4px">${accHas(pm) ? `<b style="color:${C.green}">${esc(ml)} · scoped to ${esc(ACCT_NM)}</b> — fit on ${esc(ACCT_NM)}'s own videos and projected across all ${(R.n || 0).toLocaleString()} hooks${pm === 'realviews' ? ' through the same duration-deconfounded equation as ⑤ Predict' : ''}. Switch accounts in the channel bar to see how the same hooks re-score per account.` : `<b style="color:${C.amber}">${esc(ACCT_NM)} has too few videos</b> (needs ≥40) for its own ${esc(ml)} projection — showing <b>Main</b>'s as a fallback. Pick Account 2 / Account 3 / All pooled for an account-specific view.`}</div>`; })() : ''}
             ${st.rawBands ? `<div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${bandNote}</div>` : ''}
-            <div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${ESTP ? `<b style="color:${C.green}">Steered toward ${metLabel}</b> — the embedding space is rotated by your 211 (the only videos with retention) so an axis tracks ${metLabel}, then <b>every</b> hook gets an <b>estimated ${metLabel}%</b> (extrapolated; held-out align <b>r=${proj.cv}</b>). Your videos show their <b>actual</b> ${metLabel}; corpus videos fall <b>above and below</b> them on the same 0–100% scale.` : supervised ? `<b style="color:${C.accent}">Steered projection</b> — axes rotated toward the target (held-out scored). This one aligns with <b>views r=${proj.cv}</b>, <b>outlier r=${proj.co}</b> (each pill shows v/o; higher = the axes separate that target more — pick the highest for what you're hunting).` : `<b>Raw geometry</b> (no target). Switch to a steered projection to pull views/outliers apart.`} ${ESTP ? `Coloured by <b>${metLabel}</b> (<span style="color:${rawRamp(0)}">${estLo.toFixed(0)}%</span>→<span style="color:${rawRamp(1)}">${estHi.toFixed(0)}%</span>); your videos use actual, the rest estimated.` : mode === 'voiceover' ? `Coloured by <b>voiceover</b>: <span style="color:${C.green}">●</span> has a real voiceover · <span style="color:#475569">●</span> no sound / music (${nsilent.toLocaleString()} silent, excluded from the text channel so junk transcripts can't confound it).` : mode !== 'cluster' ? `Coloured by <b>${mode}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>).` : `Coloured by k-means cluster (k=${k}).`} ${hiMine ? `<b style="color:${GOLD}">★ Your ${nmine} videos are gold</b>; everything else is dimmed.` : `<b style="color:${C.text}">Click any dot</b> to see the exact input.`}</div>${heldline}
+            <div style="font-size:10px;color:${C.mute};margin-bottom:5px;line-height:1.5">${ESTP ? `<b style="color:${C.green}">Steered toward ${metLabel}</b> — the embedding space is rotated using the exact modality-specific labeled population recorded in this map's manifest, so an axis tracks ${metLabel}; then <b>every</b> hook gets an <b>estimated ${metLabel}%</b> (extrapolated; held-out align <b>r=${proj.cv}</b>). Your videos show their <b>actual</b> ${metLabel}; corpus videos fall <b>above and below</b> them on the same 0–100% scale.` : supervised ? `<b style="color:${C.accent}">Steered projection</b> — axes rotated toward the target (held-out scored). This one aligns with <b>views r=${proj.cv}</b>, <b>outlier r=${proj.co}</b> (each pill shows v/o; higher = the axes separate that target more — pick the highest for what you're hunting).` : `<b>Raw geometry</b> (no target). Switch to a steered projection to pull views/outliers apart.`} ${ESTP ? `Coloured by <b>${metLabel}</b> (<span style="color:${rawRamp(0)}">${estLo.toFixed(0)}%</span>→<span style="color:${rawRamp(1)}">${estHi.toFixed(0)}%</span>); your videos use actual, the rest estimated.` : mode === 'voiceover' ? `Coloured by <b>voiceover</b>: <span style="color:${C.green}">●</span> has a real voiceover · <span style="color:#475569">●</span> no sound / music (${nsilent.toLocaleString()} silent, excluded from the text channel so junk transcripts can't confound it).` : mode !== 'cluster' ? `Coloured by <b>${mode}</b> (<span style="color:${rawRamp(0)}">low</span>→<span style="color:${rawRamp(1)}">high</span>).` : `Coloured by k-means cluster (k=${k}).`} ${hiMine ? `<b style="color:${GOLD}">★ Your ${nmine} videos are gold</b>; everything else is dimmed.` : `<b style="color:${C.text}">Click any dot</b> to see the exact input.`}</div>${heldline}
             ${upLegend}
             <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:${C.card2};border-radius:8px;margin-top:6px">${bandUnder}${dots}${bandOver}</svg>${detail}${upDetail}`, 12);
         return viewTabs + h;
@@ -1771,7 +1771,7 @@ const JarvisRetention = (function () {
                 const durTxt = b && b.dur_s ? (b.dur_assumed ? `assumed ${b.dur_s}s` : `${b.dur_s}s video`) : 'median dur';
                 sub = b ? durTxt : '';
                 const vb = steerBest(up, 'views');
-                foot = `displayed channel: <b>${ch}</b> = ${esc(rawInputLabel(up, ch))} · keep+5s-ret+<b>duration</b> → your 211's view model <span style="color:${C.green}">(retention deconfounded — held at fixed length)</span>${vb ? ` · library raw: <b>${steerDisp('views', vb.est)}</b>` : ''}`;
+                foot = `displayed channel: <b>${ch}</b> = ${esc(rawInputLabel(up, ch))} · keep+5s-ret+<b>duration</b> → the artifact-pinned Tyler view model <span style="color:${C.green}">(retention deconfounded — held at fixed length)</span>${vb ? ` · library raw: <b>${steerDisp('views', vb.est)}</b>` : ''}`;
             } else {
                 sub = b && b.pctile != null ? `${b.pctile.toFixed(0)}th pctile` : '';
                 const mods = ['together', 'text', 'visual'].map(m => ({ m, k: steerOf(up, m, tn) })).filter(x => x.k);
@@ -3850,17 +3850,40 @@ const JarvisRetention = (function () {
         const sctab = e.target.closest('[data-savedchanneltab]'); if (sctab) {
             st.savedChannelTab = sctab.getAttribute('data-savedchanneltab');
             if ((st.savedChannelTab === 'analysis' || st.savedChannelTab === 'atlas') && st.savedChannelSel) loadSavedChannelAnalysis(st.savedChannelSel);
-            if (st.savedChannelTab === 'validation'
-                || (st.savedChannelTab === 'ledger' && ['chd3f5a3dae83f3382', 'ch87ccaa3dd3383515'].includes(st.savedChannelSel))) {
+            if (st.savedChannelTab === 'validation' || st.savedChannelTab === 'ledger') {
                 loadSavedChannelValidation();
             }
             rtgUpdateExp(); return;
         }
         const scledgerfamily = e.target.closest('[data-savedledgerfamily]'); if (scledgerfamily) { st.savedLedgerFamily = scledgerfamily.getAttribute('data-savedledgerfamily'); st.savedLedgerShow = 40; rtgUpdateExp(); return; }
+        const scledgercoordinate = e.target.closest('[data-savedledger-coordinate-select]'); if (scledgercoordinate) {
+            const coordinateId = scledgercoordinate.getAttribute('data-savedledger-coordinate-select');
+            const scrollState = Array.from(root.querySelectorAll('[data-savedledger-scroll]')).map(element => ({
+                key: element.getAttribute('data-savedledger-scroll'),
+                left: element.scrollLeft,
+                top: element.scrollTop,
+            }));
+            const pageX = window.scrollX, pageY = window.scrollY;
+            st.savedLedgerCoordinate = coordinateId;
+            rtgUpdateExp();
+            window.requestAnimationFrame(() => {
+                window.scrollTo(pageX, pageY);
+                scrollState.forEach(saved => {
+                    const element = root.querySelector(`[data-savedledger-scroll="${saved.key}"]`);
+                    if (element) { element.scrollLeft = saved.left; element.scrollTop = saved.top; }
+                });
+            });
+            return;
+        }
         if (e.target.closest('[data-savedledgermore]')) { st.savedLedgerShow = (st.savedLedgerShow || 40) + 40; rtgUpdateExp(); return; }
         if (e.target.closest('[data-savedledgerexport]')) {
             const detail = st.savedChannelSel && SAVEDCHANNELDETAIL[st.savedChannelSel];
             if (detail && !detail.loading && !detail.error) downloadSavedLedger(detail);
+            return;
+        }
+        if (e.target.closest('[data-savedledger-provenance-export]')) {
+            const detail = st.savedChannelSel && SAVEDCHANNELDETAIL[st.savedChannelSel];
+            if (detail && !detail.loading && !detail.error) downloadSavedLedgerProvenance(detail);
             return;
         }
         const scvalidationscope = e.target.closest('[data-savedvalidationscope]'); if (scvalidationscope) { st.savedValidationScope = scvalidationscope.getAttribute('data-savedvalidationscope'); st.savedValidationShow = 60; rtgUpdateExp(); return; }
@@ -4389,7 +4412,7 @@ const JarvisRetention = (function () {
             const analysisChanged = previous && previous.analysisFingerprint && j.analysisFingerprint && previous.analysisFingerprint !== j.analysisFingerprint;
             if (analysisChanged || (oldFingerprint && oldFingerprint !== nextFingerprint)) {
                 delete SAVEDCHANNELANALYSIS[id];
-                if (id === 'chd3f5a3dae83f3382' || id === 'ch87ccaa3dd3383515') SAVEDCHANNELVALIDATION = null;
+                SAVEDCHANNELVALIDATION = null;
             }
             return j;
         } catch (e) {
@@ -5700,7 +5723,7 @@ const JarvisRetention = (function () {
         }).join('');
         const forecastCells = ['video', 'account'].flatMap(protocol => {
             const forecast = row.predictions && row.predictions.score21 && row.predictions.score21[protocol] || {};
-            return (validation.outcomeDefinitions || []).map(definition => `<div style="border-left:2px solid ${protocol === 'video' ? C.green : C.purple};background:${C.card2};padding:6px 8px"><div style="font-size:7.5px;color:${C.mute}">${protocol === 'video' ? 'Video-held-out' : 'Account-held-out'} · shorts.${protocol}-forecast.${esc(definition.key)}</div><div style="font-size:12px;font-weight:900;color:${C.text}">${savedValidationOutcomeFormat(forecast[definition.key], definition.key)}</div></div>`);
+            return (validation.outcomeDefinitions || []).map(definition => `<div style="border-left:2px solid ${protocol === 'video' ? C.green : C.purple};background:${C.card2};padding:6px 8px"><div style="font-size:7.5px;color:${C.mute}">${protocol === 'video' ? 'Video-held-out' : 'Account-held-out'} · shorts.${protocol}-forecast.${esc(definition.key)}</div><div style="font-size:12px;font-weight:900;color:${C.text}">${savedValidationOutcomeFormat(forecast[definition.key], definition.key, true)}</div></div>`);
         }).join('');
         const storedReference = selectedModality && selectedModality.stored;
         const shownStored = savedValidationFormat(storedReference, coordinateTarget);
@@ -5886,10 +5909,12 @@ const JarvisRetention = (function () {
         const match = String(key).match(/^(survival|drop)(5|10|20)$/);
         return match ? savedValidationCurveValue(row, match[1] === 'survival' ? 'normalized' : 'drop', +match[2]) : null;
     }
-    function savedValidationOutcomeFormat(value, outcomeKey) {
+    function savedValidationOutcomeFormat(value, outcomeKey, probability) {
         if (value == null || !isFinite(+value)) return '—';
         if (outcomeKey === 'views') return fv(Math.round(+value));
-        if (outcomeKey === 'hit10M') return +value >= .5 ? 'yes' : 'no';
+        if (outcomeKey === 'hit10M') {
+            return probability ? `${fmtv(+value * 100, 1)}% probability` : (+value >= .5 ? 'yes' : 'no');
+        }
         if (outcomeKey === 'outlier') return fmtv(value, 2) + '×';
         if (String(outcomeKey).startsWith('drop')) return fmtv(value, 1) + ' pp';
         return fmtv(value, 1) + '%';
@@ -6081,8 +6106,8 @@ const JarvisRetention = (function () {
         const scopeButton = (key, label) => `<span data-savedvalidationscope="${key}" style="cursor:pointer;border-bottom:2px solid ${scopeKey === key ? C.cyan : 'transparent'};color:${scopeKey === key ? C.text : C.dim};padding:5px 10px;font-size:10px;font-weight:900">${label} <b style="color:${scopeKey === key ? C.cyan : C.faint}">${(scopes[key] && scopes[key].n) || 0}</b></span>`;
         const protocolMeta = {
             stored: ['Stored 21 · diagnostic', C.amber, 'The exact 21 values shown when each video was scored. Tyler keep and 5-second axes used Tyler labels, so this view describes historical scores but cannot prove generalization.'],
-            video: ['18 direct scores · video held out', C.green, 'The evaluated video is removed from target-aligned fitting. The three stored novelty outputs stay visibly unavailable because the artifact does not contain exact held-out rebuilds for them.'],
-            account: ['18 direct scores · account external', C.purple, 'Each row uses the representation built without its account. With only two creators and rowwise fold artifacts, this is a transfer stress test rather than a creator-population estimate.'],
+            video: ['15 direct axes + 3 derived scores · video held out', C.green, 'The evaluated video is removed from target-aligned fitting. Keep, ret5, views, outlier, and 10M are direct axes per modality; realistic views is derived from held-out keep, ret5, and duration. The three stored novelty outputs stay visibly unavailable.'],
+            account: ['15 direct axes + 3 derived scores · account external', C.purple, 'Each row uses private target axes built without its account; the three public axes per modality are shared creator-excluded fits, and realistic views is derived. With only two evaluation creators, this remains a transfer stress test rather than a creator-population estimate.'],
         };
         const protocolButtons = Object.entries(protocolMeta).map(([key, meta]) => `<span data-savedvalidationprotocol="${key}" style="cursor:pointer;border:1px solid ${protocol === key ? meta[1] : C.border};background:${protocol === key ? meta[1] + '14' : 'transparent'};color:${protocol === key ? meta[1] : C.dim};padding:5px 8px;font-size:9px;font-weight:800">${esc(meta[0])}</span>`).join('');
         const targetButtons = outcomes.map(item => `<span data-savedvalidationtarget="${esc(item.key)}" title="${esc(item.derived || item.transform || item.label)}" style="cursor:pointer;border:1px solid ${target === item.key ? C.cyan : C.border};background:${target === item.key ? C.cyan + '12' : 'transparent'};color:${target === item.key ? C.cyan : C.dim};padding:4px 7px;font-size:8px">${esc(item.label)}</span>`).join('');
@@ -6182,7 +6207,7 @@ const JarvisRetention = (function () {
         if (column.key === 'outlier') {
             return video.views != null && video.subscribers > 0 ? +video.views / +video.subscribers : null;
         }
-        if (column.key === 'hit10M') return video.views == null ? null : (+video.views >= 10000000 ? 1 : 0);
+        if (column.key === 'hit10M') return video.views == null ? null : (+video.views > 10000000 ? 1 : 0);
         return null;
     }
     function savedLedgerModel(detail) {
@@ -6200,7 +6225,7 @@ const JarvisRetention = (function () {
             target: definition.target,
             label: `${definition.group === 'together' ? 'Both' : definition.group} · ${definition.label}`,
             unit: definition.displayUnit || definition.unit,
-            percentileAvailable: true,
+            percentileAvailable: definition.target !== 'realviews',
             status: 'canonical',
             description: 'Exact production score persisted when the video was analyzed.',
         }));
@@ -6227,6 +6252,14 @@ const JarvisRetention = (function () {
                 title: video.title || video.id,
                 publishedAt: video.publishedAt || video.published || null,
                 views: video.views == null ? null : +video.views,
+                inputManifest: validationRow && validationRow.inputManifest
+                    || video.input_manifest
+                    || video.inputManifest
+                    || null,
+                noveltyProvenance: validationRow && validationRow.noveltyProvenance
+                    || video.novelty_provenance
+                    || video.noveltyProvenance
+                    || null,
                 values,
                 percentiles,
                 validationMatched: !!validationRow,
@@ -6237,10 +6270,289 @@ const JarvisRetention = (function () {
     function savedLedgerFormat(value, column) {
         if (value == null || !isFinite(+value)) return '—';
         if (['observed', 'videoForecast', 'accountForecast'].includes(column.family)) {
-            return savedValidationOutcomeFormat(value, column.key);
+            return savedValidationOutcomeFormat(
+                value,
+                column.key,
+                column.family === 'videoForecast' || column.family === 'accountForecast',
+            );
         }
         if (column.target === 'outlier') return fmtv(value, 2) + '×';
         return savedValidationFormat(value, column.target);
+    }
+    const SAVED_LEDGER_LINEAGE_STEPS = [
+        { key: 'rawInputs', label: 'Raw inputs', aliases: ['rawInput', 'rawInputIds', 'rawInputId'], note: 'The bytes, text, frames, labels, metadata, or prior coordinates entering this lineage.' },
+        { key: 'representation', label: 'Representation', aliases: ['representationId', 'embedding', 'embeddingId'], note: 'How raw inputs become the numerical representation consumed downstream.' },
+        { key: 'fitDataset', label: 'Fit dataset', aliases: ['fitDatasetId', 'fitDatasetIds', 'fitDatasets', 'trainingDataset', 'fittingPopulation'], note: 'The exact population used to fit or orient this coordinate, including exclusions and hashes when registered.' },
+        { key: 'target', label: 'Fit target', aliases: ['targetId', 'targetField', 'outcome'], note: 'The observed variable used to orient or train the coordinate. Descriptive outputs may explicitly have no fit target.' },
+        { key: 'algorithm', label: 'Algorithm / rotation', aliases: ['algorithmId', 'model', 'modelId', 'rotation'], note: 'The fitted estimator or deterministic transformation that establishes direction.' },
+        { key: 'scalarProjection', label: 'Scalar projection', aliases: ['scalarProjectionId', 'projection', 'projectionId', 'formula'], note: 'The exact operation that turns a representation into this scalar coordinate.' },
+        { key: 'calibration', label: 'Calibration', aliases: ['calibrationId', 'calibrator', 'valueMapping'], note: 'How the raw scalar is mapped into its displayed unit, percentile, class rate, or view-equivalent value.' },
+        { key: 'validation', label: 'Validation / holdout', aliases: ['validationId', 'validationProtocolId', 'holdout', 'protocol'], note: 'The split, exclusion, or replay protocol defining what the value is allowed to claim.' },
+        { key: 'artifact', label: 'Frozen artifact', aliases: ['artifactId', 'artifactIds', 'modelArtifact'], note: 'The persisted coefficients, ladders, centroids, or revision used for deterministic replay.' },
+        { key: 'sourceCode', label: 'Source code', aliases: ['sourceCodeId', 'source', 'sourcePath'], note: 'The implementation path and revision responsible for producing the value.' },
+        { key: 'visualization', label: 'Visualization', aliases: ['visualizationId', 'mapView', 'mapProjection'], note: 'The display mapping. A visualization can show a coordinate without creating a new coordinate.' },
+    ];
+    const SAVED_LEDGER_CLASS_META = [
+        { key: 'direct_embedding_axis', label: 'Direct-axis columns', totalKeys: ['shortsDirectAxisColumns', 'shortsDirectEmbeddingAxes', 'directEmbeddingAxes'], expected: 45, color: C.cyan },
+        { key: 'embedding_derived_transform', label: 'Embedding-derived transforms', totalKeys: ['shortsEmbeddingDerivedTransforms', 'embeddingDerivedTransforms'], expected: 12, color: C.purple },
+        { key: 'combined_forecast', label: 'Combined forecasts', totalKeys: ['shortsCombinedForecasts', 'shortsForecastColumns', 'combinedForecasts'], expected: 26, color: C.amber },
+        { key: 'observed_outcome', label: 'Observed outcomes', totalKeys: ['shortsObservedOutcomes', 'shortsObservedColumns', 'observedOutcomes'], expected: 13, color: C.green },
+        { key: 'legacy_diagnostic', label: 'Legacy diagnostics', totalKeys: ['shortsLegacyDiagnostics', 'shortsLegacyColumns', 'legacyDiagnostics'], expected: 7, color: C.orange },
+    ];
+    function savedLedgerValueClass(column) {
+        const raw = String(column && column.valueClass || '')
+            .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+            .replace(/[\s-]+/g, '_')
+            .toLowerCase();
+        const aliases = {
+            direct_axis: 'direct_embedding_axis',
+            embedding_axis: 'direct_embedding_axis',
+            embedding_derived: 'embedding_derived_transform',
+            derived_transform: 'embedding_derived_transform',
+            forecast: 'combined_forecast',
+            observed: 'observed_outcome',
+            legacy: 'legacy_diagnostic',
+        };
+        if (raw) return aliases[raw] || raw;
+        if (column && column.status === 'legacy_diagnostic') return 'legacy_diagnostic';
+        if (column && column.family === 'observed') return 'observed_outcome';
+        if (column && ['videoForecast', 'accountForecast'].includes(column.family)) return 'combined_forecast';
+        if (column && (column.target === 'realviews' || column.group === 'novelty' || /^novelty[._]/.test(column.key || ''))) {
+            return 'embedding_derived_transform';
+        }
+        return 'direct_embedding_axis';
+    }
+    function savedLedgerClassMeta(valueClass) {
+        return SAVED_LEDGER_CLASS_META.find(item => item.key === valueClass)
+            || { key: valueClass || 'unregistered', label: valueClass || 'Unregistered class', color: C.mute };
+    }
+    function savedLedgerFindCatalogEntry(registry, referenceId) {
+        if (!registry || !registry.lineageCatalog || referenceId == null || referenceId === '') return null;
+        const wanted = String(referenceId);
+        const seen = new Set();
+        let found = null;
+        const visit = (node, objectKey) => {
+            if (found || node == null || typeof node !== 'object' || seen.has(node)) return;
+            seen.add(node);
+            if (!Array.isArray(node)) {
+                const nodeId = node.id || node.lineageId || node.catalogId;
+                if ((nodeId != null && String(nodeId) === wanted) || String(objectKey || '') === wanted) {
+                    found = { ...node, id: nodeId || wanted };
+                    return;
+                }
+                if (Object.prototype.hasOwnProperty.call(node, wanted) && node[wanted] && typeof node[wanted] === 'object') {
+                    const direct = node[wanted];
+                    found = Array.isArray(direct) ? { id: wanted, values: direct } : { ...direct, id: direct.id || wanted };
+                    return;
+                }
+            }
+            if (Array.isArray(node)) node.forEach(value => visit(value, null));
+            else Object.entries(node).forEach(([key, value]) => visit(value, key));
+        };
+        visit(registry.lineageCatalog, null);
+        return found;
+    }
+    function savedLedgerResolvedLineage(column, registry) {
+        const inline = column && column.lineage;
+        const lineageId = column && (column.lineageId || (typeof inline === 'string' ? inline : inline && inline.id)) || '';
+        const catalogLineage = lineageId ? savedLedgerFindCatalogEntry(registry, lineageId) : null;
+        const lineage = {
+            ...(catalogLineage && typeof catalogLineage === 'object' ? catalogLineage : {}),
+            ...(inline && typeof inline === 'object' && !Array.isArray(inline) ? inline : {}),
+        };
+        return { lineageId: lineageId || lineage.id || '', lineage };
+    }
+    function savedLedgerLineageRaw(lineage, step) {
+        if (!lineage || typeof lineage !== 'object') return null;
+        for (const key of [step.key, ...step.aliases]) {
+            if (lineage[key] != null) return lineage[key];
+        }
+        return null;
+    }
+    function savedLedgerReferenceList(value) {
+        if (value == null || value === '') return [];
+        if (Array.isArray(value)) return value.flatMap(savedLedgerReferenceList);
+        if (value && typeof value === 'object' && Array.isArray(value.refs)) return value.refs.flatMap(savedLedgerReferenceList);
+        if (value && typeof value === 'object' && Array.isArray(value.ids)) return value.ids.flatMap(savedLedgerReferenceList);
+        return [value];
+    }
+    function savedLedgerResolveStep(column, registry, step) {
+        const resolvedLineage = savedLedgerResolvedLineage(column, registry);
+        const raw = savedLedgerLineageRaw(resolvedLineage.lineage, step);
+        if (raw == null && step.key === 'representation' && resolvedLineage.lineage.usesEmbedding === false) {
+            return [{
+                id: 'not-applicable.no-embedding',
+                raw: null,
+                value: {
+                    id: 'not-applicable.no-embedding',
+                    label: 'No embedding representation',
+                    reason: 'This coordinate declares usesEmbedding=false and comes from an observed or deterministic non-embedding value.',
+                },
+            }];
+        }
+        return savedLedgerReferenceList(raw).map((reference, index) => {
+            const referenceObject = reference && typeof reference === 'object' && !Array.isArray(reference) ? reference : null;
+            const candidateId = referenceObject
+                ? referenceObject.id || referenceObject.ref || referenceObject.referenceId || referenceObject.catalogId || ''
+                : String(reference);
+            const catalogValue = candidateId ? savedLedgerFindCatalogEntry(registry, candidateId) : null;
+            const inlineLiteral = !referenceObject && !catalogValue && ['target', 'scalarProjection', 'sourceCode'].includes(step.key);
+            const id = inlineLiteral ? `inline-${step.key}-${index + 1}` : candidateId;
+            const value = {
+                ...(catalogValue && typeof catalogValue === 'object' ? catalogValue : {}),
+                ...(inlineLiteral ? { label: String(reference), value: reference } : {}),
+                ...(referenceObject || {}),
+            };
+            if (id && !value.id) value.id = id;
+            return { id: id || `inline-${step.key}-${index + 1}`, raw: reference, value };
+        });
+    }
+    function savedLedgerJson(value) {
+        if (value == null) return '';
+        try { return JSON.stringify(value); } catch (error) { return String(value); }
+    }
+    function savedLedgerDisplayValue(value) {
+        if (value == null || value === '') return '—';
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+        return savedLedgerJson(value);
+    }
+    function savedLedgerLineageCompact(column, registry, step) {
+        const references = savedLedgerResolveStep(column, registry, step);
+        if (!references.length) return 'not registered';
+        return references.map(reference => {
+            const value = reference.value || {};
+            const label = value.label || value.name || value.title || '';
+            const count = value.rowCount != null ? `${Number(value.rowCount).toLocaleString()} rows`
+                : value.sampleCount != null ? `${Number(value.sampleCount).toLocaleString()} samples`
+                    : value.count != null ? `${Number(value.count).toLocaleString()} items` : '';
+            const hash = value.idHash || value.videoIdHash || value.hash || value.sha256 || '';
+            return [reference.id, label && label !== reference.id ? label : '', count, hash ? `hash ${String(hash).slice(0, 16)}` : ''].filter(Boolean).join(' · ');
+        }).join(' | ');
+    }
+    function savedLedgerLineageDetails(reference) {
+        const value = reference.value || {};
+        const headline = value.label || value.name || value.title || reference.id;
+        const description = value.description || value.summary || value.note || '';
+        const rows = Object.entries(value)
+            .filter(([key]) => !['id', 'label', 'name', 'title', 'description', 'summary', 'note'].includes(key))
+            .map(([key, item]) => `<div style="display:grid;grid-template-columns:minmax(92px,.55fr) minmax(0,1.45fr);gap:7px;border-top:1px solid ${C.border};padding:4px 0"><div style="font-size:7px;color:${C.mute};word-break:break-word">${esc(key)}</div><div style="font-size:7.5px;color:${C.dim};font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word">${esc(savedLedgerDisplayValue(item))}</div></div>`)
+            .join('');
+        return `<div data-savedledger-lineage-ref="${esc(reference.id)}" style="border:1px solid ${C.border};background:${C.bg};padding:7px;min-width:0">
+          <div style="font-size:8.5px;color:${C.text};font-weight:900;word-break:break-word">${esc(headline)}</div>
+          <div style="font-size:6.8px;color:${C.faint};font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;margin-top:2px">${esc(reference.id)}</div>
+          ${description ? `<div style="font-size:7.5px;color:${C.dim};line-height:1.4;margin-top:4px">${esc(description)}</div>` : ''}
+          ${rows || `<div style="font-size:7px;color:${C.faint};margin-top:4px">Catalog ID only; no additional fields were registered.</div>`}
+        </div>`;
+    }
+    function renderSavedLedgerPipeline(column, registry) {
+        if (!column) return '';
+        const resolved = savedLedgerResolvedLineage(column, registry);
+        const valueClass = savedLedgerValueClass(column), meta = savedLedgerClassMeta(valueClass);
+        const identity = column.coordinateIdentity || {};
+        const recipe = [
+            {
+                label: 'Query evidence',
+                value: [
+                    savedLedgerLineageCompact(column, registry, SAVED_LEDGER_LINEAGE_STEPS[0]),
+                    savedLedgerLineageCompact(column, registry, SAVED_LEDGER_LINEAGE_STEPS[1]),
+                ].join(' → '),
+                note: 'These are the bytes or text from the video being scored and the numerical representation made from them. The query does not refit or rotate the axis.',
+                color: C.cyan,
+            },
+            {
+                label: 'Axis-defining evidence',
+                value: [
+                    savedLedgerLineageCompact(column, registry, SAVED_LEDGER_LINEAGE_STEPS[2]),
+                    savedLedgerLineageCompact(column, registry, SAVED_LEDGER_LINEAGE_STEPS[3]),
+                ].join(' · target '),
+                note: 'This exact population and observed target determined which direction means higher. Counts and video-ID hashes below identify the rows; exclusions are part of the identity.',
+                color: C.purple,
+            },
+            {
+                label: 'Rotation / fitted rule',
+                value: savedLedgerLineageCompact(column, registry, SAVED_LEDGER_LINEAGE_STEPS[4]),
+                note: 'This estimator fits the direction or combines prior coordinates. Its coefficients are valid only with the population and artifact revision shown here.',
+                color: C.amber,
+            },
+            {
+                label: 'Number shown',
+                value: [
+                    savedLedgerLineageCompact(column, registry, SAVED_LEDGER_LINEAGE_STEPS[5]),
+                    savedLedgerLineageCompact(column, registry, SAVED_LEDGER_LINEAGE_STEPS[6]),
+                ].join(' → '),
+                note: 'The scalar projection produces the raw score; calibration converts that score into the displayed unit. A percentile remains a view of this same coordinate.',
+                color: C.green,
+            },
+            {
+                label: 'Frozen revision / claim',
+                value: [
+                    savedLedgerLineageCompact(column, registry, SAVED_LEDGER_LINEAGE_STEPS[8]),
+                    savedLedgerLineageCompact(column, registry, SAVED_LEDGER_LINEAGE_STEPS[7]),
+                ].join(' · '),
+                note: 'Artifact hashes pin the fitted bytes and source revision. The validation protocol states which videos or creators were excluded and therefore what can be claimed.',
+                color: C.orange,
+            },
+            {
+                label: 'Display only',
+                value: savedLedgerLineageCompact(column, registry, SAVED_LEDGER_LINEAGE_STEPS[10]),
+                note: 'This map controls where points are drawn. It is not silently substituted for the scalar above unless the registered scalar formula explicitly says it reads that map.',
+                color: C.mute,
+            },
+        ];
+        const recipeHtml = recipe.map(item => `<div data-savedledger-recipe="${esc(item.label)}" style="border-top:3px solid ${item.color};background:${C.card2};padding:8px;min-width:0"><div style="font-size:7.5px;color:${item.color};font-weight:950;text-transform:uppercase">${esc(item.label)}</div><div style="font-size:7.4px;color:${C.text};font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.4;word-break:break-word;margin-top:4px">${esc(item.value)}</div><div style="font-size:7px;color:${C.dim};line-height:1.4;margin-top:4px">${esc(item.note)}</div></div>`).join('');
+        const steps = SAVED_LEDGER_LINEAGE_STEPS.map((step, index) => {
+            const references = savedLedgerResolveStep(column, registry, step);
+            return `<div data-savedledger-lineage-step="${esc(step.key)}" style="border-top:3px solid ${references.length ? meta.color : C.red};background:${C.card2};padding:8px;min-width:0">
+              <div style="display:flex;gap:6px;align-items:start"><div style="font-size:8px;color:${references.length ? meta.color : C.red};font-weight:950">${index + 1}</div><div style="min-width:0"><div style="font-size:8.5px;color:${C.text};font-weight:950">${esc(step.label)}</div><div style="font-size:7px;color:${C.mute};line-height:1.35;margin-top:2px">${esc(step.note)}</div></div></div>
+              <div style="display:grid;gap:5px;margin-top:6px">${references.length ? references.map(savedLedgerLineageDetails).join('') : `<div style="font-size:7.5px;color:${C.red};font-weight:800">Not registered for this coordinate.</div>`}</div>
+            </div>`;
+        }).join('');
+        const lineageAudit = registry && registry.lineageAudit;
+        const auditPassed = !lineageAudit || lineageAudit.passed !== false;
+        return `<div data-savedledger-provenance-drilldown data-coordinate-id="${esc(column.id)}" data-lineage-id="${esc(resolved.lineageId)}" data-value-class="${esc(valueClass)}" style="border:1px solid ${meta.color};background:${meta.color}08;padding:10px;margin:10px 0 12px">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap">
+            <div style="min-width:0"><div style="font-size:7.5px;color:${meta.color};font-weight:950;text-transform:uppercase">Selected coordinate · ${esc(meta.label)}</div><div style="font-size:13px;color:${C.text};font-weight:950;word-break:break-all;margin-top:2px">${esc(column.id)}</div><div style="font-size:8px;color:${C.dim};margin-top:2px">${esc(column.label)} · ${esc(column.unit || 'unit not registered')}</div></div>
+            <div style="text-align:right;min-width:min(420px,100%)"><div style="font-size:7px;color:${C.mute};text-transform:uppercase">Lineage ID</div><div style="font-size:8px;color:${resolved.lineageId ? C.text : C.red};font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all">${esc(resolved.lineageId || 'NOT REGISTERED')}</div><div style="font-size:7px;color:${C.mute};margin-top:4px">axis identity <span style="color:${C.cyan};font-family:ui-monospace,SFMono-Regular,Menlo,monospace">${esc(identity.axisFingerprint || 'missing')}</span></div><div style="font-size:7px;color:${C.mute};margin-top:2px">coordinate identity <span style="color:${C.purple};font-family:ui-monospace,SFMono-Regular,Menlo,monospace">${esc(identity.coordinateFingerprint || 'missing')}</span></div><div style="font-size:7px;color:${auditPassed ? C.green : C.red};margin-top:3px">${lineageAudit ? auditPassed ? 'lineage audit passed' : 'lineage audit failed' : 'lineage audit not supplied'}</div></div>
+          </div>
+          <div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:7px">${esc(column.description || '')}${column.replacement ? ` Replacement: ${esc(column.replacement)}.` : ''}</div>
+          <div style="font-size:9px;color:${C.text};font-weight:950;margin-top:10px">How this exact number is produced</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:6px;margin-top:6px">${recipeHtml}</div>
+          <div style="font-size:9px;color:${C.text};font-weight:950;margin-top:11px">Fully resolved lineage records</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:6px;margin-top:9px">${steps}</div>
+          ${lineageAudit ? `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:8px;color:${auditPassed ? C.green : C.red};font-weight:900">Exact registry lineage audit</summary><pre style="white-space:pre-wrap;word-break:break-word;font-size:7px;color:${C.dim};background:${C.bg};border:1px solid ${C.border};padding:7px;max-height:260px;overflow:auto">${esc(JSON.stringify(lineageAudit, null, 2))}</pre></details>` : ''}
+        </div>`;
+    }
+    function savedLedgerClassCounts(model) {
+        const totals = model.registry && model.registry.totals || {};
+        return SAVED_LEDGER_CLASS_META.map(meta => {
+            const supplied = meta.totalKeys.map(key => totals[key]).find(value => value != null && isFinite(+value));
+            const inferred = model.columns.filter(column => savedLedgerValueClass(column) === meta.key).length;
+            return { ...meta, count: supplied == null ? inferred : +supplied };
+        });
+    }
+    function renderSavedLedgerProvenanceMatrix(model, options) {
+        const settings = options || {};
+        const registry = model.registry;
+        const selectedId = st.savedLedgerCoordinate;
+        const header = SAVED_LEDGER_LINEAGE_STEPS.map(step => `<th style="padding:7px;min-width:205px;border-left:1px solid ${C.border}">${esc(step.label)}</th>`).join('');
+        const rows = model.columns.map(column => {
+            const valueClass = savedLedgerValueClass(column), meta = savedLedgerClassMeta(valueClass);
+            const selected = column.id === selectedId;
+            const resolved = savedLedgerResolvedLineage(column, registry);
+            const cells = SAVED_LEDGER_LINEAGE_STEPS.map(step => {
+                const compact = savedLedgerLineageCompact(column, registry, step);
+                const full = savedLedgerResolveStep(column, registry, step).map(reference => ({ id: reference.id, ...reference.value }));
+                return `<td title="${esc(savedLedgerJson(full))}" style="padding:7px;border-left:1px solid ${C.border};vertical-align:top;color:${compact === 'not registered' ? C.red : C.dim};font-size:7.5px;line-height:1.35;word-break:break-word">${esc(compact)}</td>`;
+            }).join('');
+            return `<tr data-savedledger-coordinate-select="${esc(column.id)}" data-coordinate-id="${esc(column.id)}" data-lineage-id="${esc(resolved.lineageId)}" data-value-class="${esc(valueClass)}" style="cursor:pointer;border-top:1px solid ${selected ? meta.color : C.border};background:${selected ? meta.color + '10' : 'transparent'}">
+              <td style="position:sticky;left:0;z-index:1;background:${selected ? C.card2 : C.card};padding:7px;min-width:235px"><div style="font-size:8px;color:${meta.color};font-weight:950;word-break:break-all">${esc(column.id)}</div><div style="font-size:7px;color:${C.dim};margin-top:2px">${esc(meta.label)}</div><div style="font-size:6.8px;color:${C.faint};font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;margin-top:2px">${esc(resolved.lineageId || 'lineage ID missing')}</div></td>${cells}
+            </tr>`;
+        }).join('');
+        const matrixKey = settings.key || 'shorts';
+        return `<div data-savedledger-provenance-matrix="${esc(matrixKey)}">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:end;flex-wrap:wrap;margin:14px 0 5px"><div><div style="font-size:12px;font-weight:950;color:${C.text}">${esc(settings.title || 'Complete Shorts provenance matrix')}</div><div style="font-size:8px;color:${C.mute};line-height:1.4">${esc(settings.description || 'Every registered Shorts column and every pipeline stage. Click any row to inspect its fully resolved records above.')}</div></div><div style="font-size:8px;color:${C.dim}">${model.columns.length} coordinates · ${SAVED_LEDGER_LINEAGE_STEPS.length} lineage stages</div></div>
+          <div data-savedledger-scroll="provenance-${esc(matrixKey)}" style="overflow:auto;max-height:620px;border:1px solid ${C.border};-webkit-overflow-scrolling:touch"><table style="border-collapse:collapse;font-size:8px;min-width:${250 + SAVED_LEDGER_LINEAGE_STEPS.length * 205}px"><thead style="position:sticky;top:0;background:${C.card};z-index:3"><tr style="text-align:left;color:${C.mute}"><th style="position:sticky;left:0;z-index:4;background:${C.card};padding:7px;min-width:235px">Coordinate / class / lineage</th>${header}</tr></thead><tbody>${rows}</tbody></table></div>
+        </div>`;
     }
     function savedLedgerCsv(detail) {
         const model = savedLedgerModel(detail);
@@ -6248,19 +6560,76 @@ const JarvisRetention = (function () {
         const query = String(st.savedLedgerQuery || '').trim().toLowerCase();
         const rows = model.rows.filter(row => !query || `${row.title} ${row.id}`.toLowerCase().includes(query));
         const quote = value => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`;
-        const header = ['channel_id', 'video_id', 'title', 'published_at', 'public_views'];
+        const header = [
+            'channel_id', 'video_id', 'title', 'published_at', 'public_views',
+            'input_fingerprint', 'revision_fingerprint', 'output_fingerprint',
+            'scorer_sha256', 'steer_artifact_sha256', 'steer_artifact_archive_key',
+            'steer_lineage_manifest_sha256', 'steer_lineage_schema_version',
+            'input_manifest_json', 'novelty_selection_manifest_json',
+        ];
         columns.forEach(column => {
             header.push(column.id);
             if (column.percentileAvailable) header.push(`${column.id}.percentile`);
         });
         const lines = [header.map(quote).join(',')];
         rows.forEach(row => {
-            const fields = [detail.id, row.id, row.title, row.publishedAt || '', row.views == null ? '' : row.views];
+            const manifest = row.inputManifest || {};
+            const scorerRevisions = manifest.scorer_revisions || manifest.scorerRevisions || {};
+            const scorer = scorerRevisions.scorer || {};
+            const fields = [
+                detail.id, row.id, row.title, row.publishedAt || '', row.views == null ? '' : row.views,
+                manifest.input_fingerprint || manifest.inputFingerprint || '',
+                manifest.revision_fingerprint || manifest.revisionFingerprint || '',
+                manifest.output_fingerprint || manifest.outputFingerprint || '',
+                scorer.sha256 || '',
+                manifest.steer_artifact_sha256 || manifest.steerArtifactSha256 || '',
+                manifest.steer_artifact_archive_key || manifest.steerArtifactArchiveKey || '',
+                manifest.steer_lineage_manifest_sha256 || manifest.steerLineageManifestSha256 || '',
+                manifest.steer_lineage_schema_version || manifest.steerLineageSchemaVersion || '',
+                savedLedgerJson(manifest),
+                savedLedgerJson(row.noveltyProvenance || null),
+            ];
             columns.forEach(column => {
                 const index = model.columns.indexOf(column);
                 fields.push(row.values[index] == null ? '' : row.values[index]);
                 if (column.percentileAvailable) fields.push(row.percentiles[index] == null ? '' : row.percentiles[index]);
             });
+            lines.push(fields.map(quote).join(','));
+        });
+        return lines.join('\n');
+    }
+    function savedLedgerProvenanceCsv(detail) {
+        const model = savedLedgerModel(detail), registry = model.registry || {};
+        const provenanceColumns = [
+            ...model.columns,
+            ...((registry.longQuant && registry.longQuant.columns) || []),
+        ];
+        const quote = value => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`;
+        const fixed = ['coordinate_id', 'domain', 'label', 'value_class', 'lineage_id', 'axis_identity_sha256', 'coordinate_identity_sha256', 'coordinate_identity_tuple_json', 'family', 'protocol', 'group', 'key', 'target', 'unit', 'status', 'description', 'replacement', 'registry_version', 'lineage_catalog_version'];
+        const stageHeaders = SAVED_LEDGER_LINEAGE_STEPS.flatMap(step => [`${step.key}_references`, `${step.key}_resolved_json`]);
+        const lines = [[...fixed, ...stageHeaders, 'lineage_json', 'lineage_audit_json'].map(quote).join(',')];
+        provenanceColumns.forEach(column => {
+            const resolved = savedLedgerResolvedLineage(column, registry);
+            const fields = [
+                column.id, column.id.startsWith('long.') ? 'long' : 'shorts',
+                column.label, savedLedgerValueClass(column), resolved.lineageId,
+                column.coordinateIdentity && column.coordinateIdentity.axisFingerprint,
+                column.coordinateIdentity && column.coordinateIdentity.coordinateFingerprint,
+                savedLedgerJson(column.coordinateIdentity && column.coordinateIdentity.axisTuple),
+                column.family, column.protocol, column.group, column.key, column.target,
+                column.unit, column.status, column.description, column.replacement,
+                registry.version || registry.schemaVersion || '',
+                registry.lineageCatalog && (registry.lineageCatalog.version || registry.lineageCatalog.schemaVersion) || '',
+            ];
+            SAVED_LEDGER_LINEAGE_STEPS.forEach(step => {
+                const raw = savedLedgerLineageRaw(resolved.lineage, step);
+                const references = savedLedgerResolveStep(column, registry, step).map(reference => ({
+                    id: reference.id,
+                    value: reference.value,
+                }));
+                fields.push(savedLedgerJson(raw), savedLedgerJson(references));
+            });
+            fields.push(savedLedgerJson(resolved.lineage), savedLedgerJson(registry.lineageAudit || null));
             lines.push(fields.map(quote).join(','));
         });
         return lines.join('\n');
@@ -6275,39 +6644,83 @@ const JarvisRetention = (function () {
         anchor.remove();
         window.setTimeout(() => URL.revokeObjectURL(url), 0);
     }
+    function downloadSavedLedgerProvenance(detail) {
+        const blob = new Blob([savedLedgerProvenanceCsv(detail)], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob), anchor = window.document.createElement('a');
+        anchor.href = url;
+        anchor.download = `${detail.id}-complete-score-provenance.csv`;
+        window.document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
     function renderSavedChannelLedger(detail) {
-        const supported = detail.id === 'chd3f5a3dae83f3382' || detail.id === 'ch87ccaa3dd3383515';
-        if (supported && !SAVEDCHANNELVALIDATION) {
+        if (!SAVEDCHANNELVALIDATION) {
             window.setTimeout(() => loadSavedChannelValidation(), 0);
-            return `<div style="padding:24px;text-align:center;color:${C.cyan}">Loading the canonical score registry and matched outcome ledger…</div>`;
+            return `<div style="padding:24px;text-align:center;color:${C.cyan}">Loading the canonical score registry…</div>`;
         }
-        if (supported && SAVEDCHANNELVALIDATION && SAVEDCHANNELVALIDATION.loading) {
-            return `<div style="padding:24px;text-align:center;color:${C.cyan}">Loading the canonical score registry and matched outcome ledger…</div>`;
+        if (SAVEDCHANNELVALIDATION && SAVEDCHANNELVALIDATION.loading) {
+            return `<div style="padding:24px;text-align:center;color:${C.cyan}">Loading the canonical score registry…</div>`;
         }
-        if (supported && SAVEDCHANNELVALIDATION && SAVEDCHANNELVALIDATION.error) {
+        if (SAVEDCHANNELVALIDATION && SAVEDCHANNELVALIDATION.error) {
             return `<div style="padding:18px;color:${C.red}">${esc(SAVEDCHANNELVALIDATION.error)} <span data-savedvalidationreload style="cursor:pointer;text-decoration:underline;color:${C.accent}">retry</span></div>`;
         }
         const model = savedLedgerModel(detail);
         const registry = model.registry;
+        const longColumns = registry && registry.longQuant && Array.isArray(registry.longQuant.columns)
+            ? registry.longQuant.columns
+            : [];
         const families = registry && registry.families || [{ key: 'stored', label: 'Stored production scores', count: model.columns.length }];
         const validFamily = st.savedLedgerFamily === 'all' || families.some(item => item.key === st.savedLedgerFamily)
             ? st.savedLedgerFamily : 'stored';
         st.savedLedgerFamily = validFamily;
         const columns = model.columns.filter(column => validFamily === 'all' || column.family === validFamily);
+        let selectedColumn = [...model.columns, ...longColumns].find(column => column.id === st.savedLedgerCoordinate);
+        if (!selectedColumn) {
+            selectedColumn = columns[0] || model.columns[0] || null;
+            st.savedLedgerCoordinate = selectedColumn ? selectedColumn.id : '';
+        }
         const query = String(st.savedLedgerQuery || '').trim().toLowerCase();
         const matchingRows = model.rows.filter(row => !query || `${row.title} ${row.id}`.toLowerCase().includes(query));
         const limit = st.savedLedgerShow || 40;
         const visible = matchingRows.slice(0, limit);
+        const classCounts = savedLedgerClassCounts(model);
         const familyButtons = [
             { key: 'all', label: 'All registered', count: model.columns.length },
             ...families,
         ].map(item => `<span data-savedledgerfamily="${esc(item.key)}" style="cursor:pointer;border:1px solid ${validFamily === item.key ? C.cyan : C.border};color:${validFamily === item.key ? C.cyan : C.dim};padding:4px 8px;font-size:8px;font-weight:850;white-space:nowrap">${esc(item.label)} <b>${item.count}</b></span>`).join('');
-        const header = columns.map(column => `<th data-savedledgercolumn="${esc(column.id)}" title="${esc(column.description || '')}" style="padding:7px;min-width:154px;border-left:1px solid ${C.border};vertical-align:bottom"><div style="font-size:8px;color:${savedChannelFeatureColor(column.group)};font-weight:950">${esc(column.label)}</div><div style="font-size:6.8px;color:${C.faint};font-weight:500;word-break:break-all;margin-top:2px">${esc(column.id)}</div></th>`).join('');
-        const body = visible.map(row => `<tr style="border-top:1px solid ${C.border};vertical-align:top"><td style="position:sticky;left:0;z-index:1;background:${C.card};padding:7px;min-width:220px"><div style="font-size:9px;color:${C.text};font-weight:900">${esc(row.title)}</div><div style="font-size:7px;color:${C.faint};margin-top:2px">${esc(row.id)} · ${row.validationMatched ? 'private outcomes matched' : 'stored/public data only'}</div></td>${columns.map(column => {
+        const header = columns.map(column => {
+            const valueClass = savedLedgerValueClass(column), meta = savedLedgerClassMeta(valueClass);
+            const resolved = savedLedgerResolvedLineage(column, registry), selected = selectedColumn && selectedColumn.id === column.id;
+            return `<th data-savedledgercolumn="${esc(column.id)}" data-savedledger-coordinate-select="${esc(column.id)}" data-coordinate-id="${esc(column.id)}" data-lineage-id="${esc(resolved.lineageId)}" data-value-class="${esc(valueClass)}" title="${esc(column.description || '')}" style="padding:0;min-width:154px;border-left:1px solid ${C.border};border-top:3px solid ${selected ? meta.color : 'transparent'};vertical-align:bottom">
+              <button type="button" data-savedledger-coordinate-select="${esc(column.id)}" style="display:block;width:100%;min-height:58px;text-align:left;background:${selected ? meta.color + '10' : 'transparent'};border:0;color:inherit;padding:7px;cursor:pointer;scroll-margin-inline-start:230px"><div style="font-size:8px;color:${savedChannelFeatureColor(column.group)};font-weight:950">${esc(column.label)}</div><div style="font-size:6.8px;color:${C.faint};font-weight:500;word-break:break-all;margin-top:2px">${esc(column.id)}</div><div style="font-size:6.5px;color:${meta.color};margin-top:3px">${esc(meta.label)}</div></button>
+            </th>`;
+        }).join('');
+        const body = visible.map(row => {
+            const manifest = row.inputManifest || {};
+            const completeManifest = {
+                inputManifest: manifest,
+                noveltySelectionManifest: row.noveltyProvenance || null,
+            };
+            const artifactSha = manifest.steer_artifact_sha256 || manifest.steerArtifactSha256 || '';
+            const lineageSha = manifest.steer_lineage_manifest_sha256 || manifest.steerLineageManifestSha256 || '';
+            const noveltySelections = Object.values(row.noveltyProvenance && row.noveltyProvenance.targets || {})
+                .filter(selection => selection && selection.status === 'selected').length;
+            const rowProvenance = artifactSha
+                ? `artifact ${String(artifactSha).slice(0, 12)} · ${lineageSha ? `fit manifest ${String(lineageSha).slice(0, 12)}` : 'historical fit manifest unavailable'} · ${noveltySelections}/3 novelty selections pinned`
+                : 'historical artifact revision unavailable';
+            return `<tr style="border-top:1px solid ${C.border};vertical-align:top"><td style="position:sticky;left:0;z-index:1;background:${C.card};padding:7px;min-width:220px"><div style="font-size:9px;color:${C.text};font-weight:900">${esc(row.title)}</div><div style="font-size:7px;color:${C.faint};margin-top:2px">${esc(row.id)} · ${row.validationMatched ? 'private outcomes matched' : 'stored/public data only'}</div><div data-savedledger-row-provenance="${esc(row.id)}" style="font-size:6.6px;color:${lineageSha && noveltySelections === 3 ? C.green : C.amber};margin-top:3px;line-height:1.3">${esc(rowProvenance)}</div><details data-savedledger-row-manifest="${esc(row.id)}" style="margin-top:4px;max-width:320px"><summary style="cursor:pointer;color:${C.accent};font-size:6.8px">view complete row manifest</summary><pre style="margin:4px 0 0;padding:6px;max-height:180px;overflow:auto;white-space:pre-wrap;word-break:break-word;background:${C.bg};border:1px solid ${C.border};color:${C.dim};font-size:6.5px">${esc(savedLedgerJson(completeManifest))}</pre></details></td>${columns.map(column => {
             const index = model.columns.indexOf(column), value = row.values[index], percentile = row.percentiles[index];
-            return `<td data-savedledgercell="${esc(row.id)}:${esc(column.id)}" data-coordinate-id="${esc(column.id)}" data-value-raw="${value == null || !isFinite(+value) ? '' : +value}" style="padding:7px;border-left:1px solid ${C.border};min-width:154px"><div style="font-size:10px;color:${column.status === 'legacy_diagnostic' ? C.amber : C.text};font-weight:900">${savedLedgerFormat(value, column)}</div>${percentile != null ? `<div style="font-size:7px;color:${C.faint}">${fmtv(percentile, 1)}th percentile · same coordinate</div>` : ''}${column.status === 'legacy_diagnostic' ? `<div style="font-size:6.8px;color:${C.amber}">legacy diagnostic${column.replacement ? ` · use ${esc(column.replacement)}` : ''}</div>` : ''}</td>`;
-        }).join('')}</tr>`).join('');
-        const definitions = columns.map(column => `<tr style="border-top:1px solid ${C.border}"><td style="padding:6px;color:${savedChannelFeatureColor(column.group)};font-weight:900;word-break:break-all">${esc(column.id)}</td><td>${esc(column.label)}</td><td>${esc(column.family)}</td><td>${esc(column.protocol)}</td><td>${esc(column.unit)}</td><td style="color:${C.dim};line-height:1.4">${esc(column.description || '')}${column.replacement ? ` Replacement: ${esc(column.replacement)}.` : ''}</td></tr>`).join('');
+            const valueClass = savedLedgerValueClass(column), meta = savedLedgerClassMeta(valueClass);
+            const resolved = savedLedgerResolvedLineage(column, registry), selected = selectedColumn && selectedColumn.id === column.id;
+            return `<td data-savedledgercell="${esc(row.id)}:${esc(column.id)}" data-savedledger-coordinate-select="${esc(column.id)}" data-coordinate-id="${esc(column.id)}" data-lineage-id="${esc(resolved.lineageId)}" data-value-class="${esc(valueClass)}" data-value-raw="${value == null || !isFinite(+value) ? '' : +value}" style="padding:0;border-left:1px solid ${C.border};min-width:154px;background:${selected ? meta.color + '08' : 'transparent'}"><button type="button" data-savedledger-coordinate-select="${esc(column.id)}" style="display:block;width:100%;min-height:52px;text-align:left;background:transparent;border:0;color:inherit;padding:7px;cursor:pointer"><div style="font-size:10px;color:${column.status === 'legacy_diagnostic' ? C.amber : C.text};font-weight:900">${savedLedgerFormat(value, column)}</div>${percentile != null ? `<div style="font-size:7px;color:${C.faint}">${fmtv(percentile, 1)}th percentile · same coordinate</div>` : ''}${column.status === 'legacy_diagnostic' ? `<div style="font-size:6.8px;color:${C.amber}">legacy diagnostic${column.replacement ? ` · use ${esc(column.replacement)}` : ''}</div>` : ''}</button></td>`;
+            }).join('')}</tr>`;
+        }).join('');
+        const definitions = columns.map(column => {
+            const valueClass = savedLedgerValueClass(column), meta = savedLedgerClassMeta(valueClass);
+            const resolved = savedLedgerResolvedLineage(column, registry), selected = selectedColumn && selectedColumn.id === column.id;
+            return `<tr data-savedledger-coordinate-select="${esc(column.id)}" data-coordinate-id="${esc(column.id)}" data-lineage-id="${esc(resolved.lineageId)}" data-value-class="${esc(valueClass)}" style="cursor:pointer;border-top:1px solid ${selected ? meta.color : C.border};background:${selected ? meta.color + '10' : 'transparent'}"><td style="padding:6px"><button type="button" data-savedledger-coordinate-select="${esc(column.id)}" style="background:transparent;border:0;padding:0;text-align:left;color:${savedChannelFeatureColor(column.group)};font-size:8px;font-weight:900;word-break:break-all;cursor:pointer">${esc(column.id)}</button></td><td>${esc(column.label)}</td><td style="color:${meta.color};font-weight:850">${esc(meta.label)}</td><td>${esc(column.family)}</td><td>${esc(column.protocol)}</td><td>${esc(column.unit)}</td><td style="color:${C.dim};line-height:1.4">${esc(column.description || '')}${column.replacement ? ` Replacement: ${esc(column.replacement)}.` : ''}</td></tr>`;
+        }).join('');
         const totals = registry && registry.totals || {
             shortsRowColumns: model.columns.length,
             shortsStoredProduction: model.columns.length,
@@ -6317,22 +6730,32 @@ const JarvisRetention = (function () {
             longStoredOutputs: 12,
         };
         const audit = model.validation && model.validation.ledgerAudit;
-        return `<div data-savedledger style="min-width:0">
+        const rowProvenance = audit && audit.rowProvenance || {};
+        const classSummaryCards = [
+            { key: 'all_registered', label: 'Registered scalar columns', count: totals.shortsRowColumns || model.columns.length, color: C.text },
+            ...classCounts,
+        ].map(item => `<div data-savedledger-class-count="${esc(item.key)}" data-count="${item.count}" style="border-top:2px solid ${item.color};background:${C.card2};padding:8px"><div style="font-size:7.5px;color:${C.mute}">${esc(item.label)}</div><div style="font-size:18px;font-weight:950;color:${item.color}">${item.count}</div></div>`).join('');
+        return `<div data-savedledger data-selected-coordinate-id="${esc(selectedColumn && selectedColumn.id || '')}" style="min-width:0">
           <div style="border:1px solid ${audit && !audit.passed ? C.red : C.green};background:${audit && !audit.passed ? C.red : C.green}0a;padding:10px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:950;color:${C.text}">Canonical score ledger</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:2px">One row per Short. One stable ID per interpretation. A graph may compare two IDs, but it cannot create a third number.</div></div><div style="text-align:right"><div style="font-size:9px;color:${audit && !audit.passed ? C.red : C.green};font-weight:950">${audit ? audit.passed ? 'LEDGER PARITY AUDIT PASSED' : 'LEDGER PARITY AUDIT FAILED' : '21 STORED COORDINATES AVAILABLE'}</div><div style="font-size:7px;color:${C.faint}">${audit ? `${audit.rows} matched rows · ${audit.columns} registered scalar columns` : `${model.rows.length} scored rows`}</div></div></div></div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:6px;margin-bottom:10px">${[
-              ['Shorts row columns', totals.shortsRowColumns, C.cyan],
-              ['Stored score cards', totals.shortsStoredProduction, C.green],
-              ['Direct held-out', totals.shortsDirectHeldout, C.purple],
-              ['Combined forecasts', totals.shortsCombinedForecasts, C.amber],
-              ['Observed outcomes', totals.shortsObservedOutcomes, C.cyan],
-              ['Long Quant outputs', totals.longStoredOutputs, C.accent],
-          ].map(([label, value, color]) => `<div style="border-top:2px solid ${color};background:${C.card2};padding:8px"><div style="font-size:7.5px;color:${C.mute}">${label}</div><div style="font-size:18px;font-weight:950;color:${color}">${value}</div></div>`).join('')}</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:6px;margin-bottom:10px">${classSummaryCards}</div>
+          <div style="background:${C.card2};border-left:3px solid ${C.amber};padding:9px;margin-bottom:8px;font-size:8.8px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">103 columns are not 103 embedding spaces.</b> The registry separates <b style="color:${C.cyan}">${classCounts.find(item => item.key === 'direct_embedding_axis').count} direct-axis columns representing ${registry.totals && registry.totals.shortsDistinctDirectEmbeddingAxes || 36} distinct fitted axes</b> (${registry.totals && registry.totals.shortsDirectAxisAliasColumns || 9} public-axis aliases appear in both holdout views), <b style="color:${C.purple}">${classCounts.find(item => item.key === 'embedding_derived_transform').count} embedding-derived transforms</b>, <b style="color:${C.amber}">${classCounts.find(item => item.key === 'combined_forecast').count} combined forecasts</b>, <b style="color:${C.green}">${classCounts.find(item => item.key === 'observed_outcome').count} observed outcomes</b>, and <b style="color:${C.orange}">${classCounts.find(item => item.key === 'legacy_diagnostic').count} legacy diagnostics</b>.</div>
           <div style="background:${C.card2};border-left:3px solid ${C.cyan};padding:8px;margin-bottom:9px;font-size:8.5px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">Identity rule:</b> ${esc(registry && registry.rules && registry.rules[1] || 'A relationship plot pairs a score coordinate with an observed outcome; it never creates a new score.')} ${registry ? `Shorts and Long Quant expose ${(totals.shortsStoredProduction || 0) + (totals.longStoredOutputs || 0)} current persisted score outputs total; map projections are views of those data, not new scores.` : ''}</div>
-          <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px">${familyButtons}<input data-savedledgerquery value="${esc(st.savedLedgerQuery || '')}" placeholder="filter videos…" style="margin-left:auto;min-width:160px;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:5px 7px;font-size:9px"/><span data-savedledgerexport title="Exports every registered coordinate, regardless of the visible family filter" style="cursor:pointer;border:1px solid ${C.green};color:${C.green};padding:4px 8px;font-size:8px;font-weight:900">download complete CSV</span></div>
+          <div style="background:${C.card2};border-left:3px solid ${C.purple};padding:8px;margin-bottom:9px;font-size:8.5px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">Evidence rule:</b> Exact row counts, video-ID hashes, exclusions, artifact hashes, and revisions are displayed when they were persisted. A historical fit manifest that was never saved is labeled unknown; this screen does not infer a training population from a newer map revision. <b style="color:${C.green}">${rowProvenance.exactScorerManifestRows || 0}</b> rows have exact scorer manifests and <b style="color:${C.green}">${rowProvenance.exactNoveltySelectionRows || 0}</b> pin all three novelty selections; ${rowProvenance.historicalOrIncompleteScorerManifestRows || 0} / ${rowProvenance.historicalOrIncompleteNoveltySelectionRows || 0} historical rows remain explicitly incomplete.</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px">${familyButtons}<input data-savedledgerquery value="${esc(st.savedLedgerQuery || '')}" placeholder="filter videos…" style="margin-left:auto;min-width:160px;background:${C.card2};border:1px solid ${C.border};color:${C.text};padding:5px 7px;font-size:9px"/><span data-savedledgerexport title="Exports every registered coordinate value, regardless of the visible family filter" style="cursor:pointer;border:1px solid ${C.green};color:${C.green};padding:4px 8px;font-size:8px;font-weight:900">download value CSV</span><span data-savedledger-provenance-export title="Exports every coordinate and its complete resolved lineage" style="cursor:pointer;border:1px solid ${C.purple};color:${C.purple};padding:4px 8px;font-size:8px;font-weight:900">download provenance CSV</span></div>
+          ${renderSavedLedgerPipeline(selectedColumn, registry)}
           <div style="font-size:8px;color:${C.mute};margin-bottom:5px">${visible.length}/${matchingRows.length} videos · ${columns.length}/${model.columns.length} coordinate columns shown</div>
-          <div style="overflow:auto;max-height:680px;border:1px solid ${C.border}"><table style="border-collapse:collapse;font-size:8px;min-width:${Math.max(760, 230 + columns.length * 154)}px"><thead style="position:sticky;top:0;background:${C.card};z-index:3"><tr><th style="position:sticky;left:0;z-index:4;background:${C.card};padding:7px;min-width:220px;text-align:left;color:${C.mute}">Video</th>${header}</tr></thead><tbody>${body}</tbody></table></div>
+          <div data-savedledger-scroll="values" style="overflow:auto;max-height:680px;border:1px solid ${C.border};-webkit-overflow-scrolling:touch"><table style="border-collapse:collapse;font-size:8px;min-width:${Math.max(760, 230 + columns.length * 154)}px"><thead style="position:sticky;top:0;background:${C.card};z-index:3"><tr><th style="position:sticky;left:0;z-index:4;background:${C.card};padding:7px;min-width:220px;text-align:left;color:${C.mute}">Video</th>${header}</tr></thead><tbody>${body}</tbody></table></div>
           ${matchingRows.length > limit ? `<div style="text-align:center;margin-top:9px"><span data-savedledgermore style="cursor:pointer;border:1px solid ${C.cyan};color:${C.cyan};padding:5px 12px;font-size:8px">show ${Math.min(40, matchingRows.length - limit)} more</span></div>` : ''}
-          <div style="font-size:12px;font-weight:950;color:${C.text};margin:14px 0 4px">Visible coordinate dictionary</div><div style="overflow:auto;max-height:420px"><table style="width:100%;min-width:900px;border-collapse:collapse;font-size:8px"><thead><tr style="text-align:left;color:${C.mute}"><th style="padding:6px">Canonical ID</th><th>Label</th><th>Family</th><th>Protocol</th><th>Unit</th><th>Exact meaning</th></tr></thead><tbody>${definitions}</tbody></table></div>
+          <div style="font-size:12px;font-weight:950;color:${C.text};margin:14px 0 4px">Visible coordinate dictionary</div><div data-savedledger-scroll="dictionary" style="overflow:auto;max-height:420px;-webkit-overflow-scrolling:touch"><table style="width:100%;min-width:1080px;border-collapse:collapse;font-size:8px"><thead><tr style="text-align:left;color:${C.mute}"><th style="padding:6px">Canonical ID</th><th>Label</th><th>Value class</th><th>Family</th><th>Protocol</th><th>Unit</th><th>Exact meaning</th></tr></thead><tbody>${definitions}</tbody></table></div>
+          ${renderSavedLedgerProvenanceMatrix(model)}
+          ${longColumns.length ? renderSavedLedgerProvenanceMatrix(
+              { ...model, columns: longColumns },
+              {
+                  key: 'long',
+                  title: 'Long Quant output provenance',
+                  description: 'The 12 registered Long outputs disclose thumbnail/title inputs, direct versus derived origin, fitting population, scalar formula, calibration, artifact, and map view.',
+              }
+          ) : ''}
           ${registry ? `<div style="font-size:8px;color:${C.faint};line-height:1.5;margin-top:8px">Shorts map views: ${esc(registry.shortsMapProjections.keys.join(', '))}. Long map views: ${esc(registry.longQuant.mapProjections.join(', '))}. These projection names are registered visualization modes and do not add scalar columns.</div>` : ''}
         </div>`;
     }

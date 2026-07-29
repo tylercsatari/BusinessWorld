@@ -48,6 +48,7 @@ ROOT = HERE.parents[2]
 CONTRACT_PATH = ROOT / "buildings" / "jarvis" / "saved-channel-feature-contract.json"
 LOCAL_RESULT = HERE / "results.json"
 R2_RESULT_KEY = "raw/predictor-lab/results.json"
+R2_RESULT_MANIFEST_KEY = "raw/predictor-lab/results.manifest.json"
 R2_STATUS_KEY = "raw/predictor-lab/status.json"
 EXPERIMENT_COUNT = 50_000
 MODALITIES = ("visual", "text", "together")
@@ -121,11 +122,19 @@ def required_r2_json(key: str) -> Any:
 
 
 def put_json(key: str, value: Any) -> None:
+    put_bytes(
+        key,
+        json.dumps(value, separators=(",", ":"), allow_nan=False).encode(),
+        "application/json",
+    )
+
+
+def put_bytes(key: str, payload: bytes, content_type: str) -> None:
     S3.put_object(
         Bucket=BUCKET,
         Key=key,
-        Body=json.dumps(value, separators=(",", ":"), allow_nan=False).encode(),
-        ContentType="application/json",
+        Body=payload,
+        ContentType=content_type,
     )
 
 
@@ -492,6 +501,7 @@ def fit_public_axes(
                 and video_id not in excluded_ids
                 and finite(store["views"][index])
                 and store["views"][index] > 0
+                and float(np.linalg.norm(store["vectors"][index])) > EPSILON
                 for index, video_id in enumerate(store["ids"])
             ],
             dtype=bool,
@@ -500,6 +510,39 @@ def fit_public_axes(
         views = store["views"][public]
         outlier = store["outlier"][public]
         valid_outlier = np.isfinite(outlier) & (outlier > 0)
+        public_ids = [
+            str(video_id)
+            for index, video_id in enumerate(store["ids"])
+            if bool(public[index])
+        ]
+        outlier_ids = [
+            public_ids[index]
+            for index, eligible in enumerate(valid_outlier)
+            if bool(eligible)
+        ]
+        population = {
+            "views": {
+                "rowCount": len(public_ids),
+                "videoIdSha256": hashlib.sha256(
+                    "\n".join(sorted(public_ids)).encode()
+                ).hexdigest(),
+                "selectionRule": "non-owned, creator-excluded, finite positive views, nonzero aligned modality embedding",
+            },
+            "outlier": {
+                "rowCount": len(outlier_ids),
+                "videoIdSha256": hashlib.sha256(
+                    "\n".join(sorted(outlier_ids)).encode()
+                ).hexdigest(),
+                "selectionRule": "views-eligible rows with finite positive outlier",
+            },
+            "gt10M": {
+                "rowCount": len(public_ids),
+                "videoIdSha256": hashlib.sha256(
+                    "\n".join(sorted(public_ids)).encode()
+                ).hexdigest(),
+                "selectionRule": "same eligible rows as views; label is strictly views > 10,000,000",
+            },
+        }
         view_model = QuantileMappedRegressor.fit(X, np.log10(views + 1))
         outlier_model = QuantileMappedRegressor.fit(
             X[valid_outlier], np.log10(outlier[valid_outlier] + 1)
@@ -521,6 +564,7 @@ def fit_public_axes(
             "novelty_combinatorial": combinatorial,
             "trainN": int(public.sum()),
             "method": "one-component PLS rank mapped to the public outcome distribution",
+            "population": population,
         }
     return models
 
@@ -3423,6 +3467,12 @@ def main() -> int:
     provenance = {
         "featureContractSha256": contract_hash,
         "featureContractVersion": contract.get("version"),
+        "producerSourceSha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "artifactPublication": {
+            "canonicalKey": R2_RESULT_KEY,
+            "manifestKey": R2_RESULT_MANIFEST_KEY,
+            "archiveKeyPattern": "raw/predictor-lab/by-sha256/{artifactSha256}.json",
+        },
         "featureScorerVersionPersistedPerVideo": False,
         "savedChannelVideoCount": len(saved_ids),
         "rawAxisCorpusVideoCount": len(axis_corpus_ids),
@@ -3482,6 +3532,10 @@ def main() -> int:
         )
     novelty_models = load_novelty_models()
     public_axes = fit_public_axes(stores, excluded_axis_ids, novelty_models)
+    provenance["publicAxisPopulations"] = {
+        modality: axes["population"]
+        for modality, axes in public_axes.items()
+    }
     update_status(
         "keep",
         message="Running nested known-account keep search plus unseen-account stress test",
@@ -3573,9 +3627,32 @@ def main() -> int:
         "corpusBenchmark": corpus,
     }
     HERE.mkdir(parents=True, exist_ok=True)
-    LOCAL_RESULT.write_text(json.dumps(result, indent=2, allow_nan=False), encoding="utf-8")
+    pretty_result = json.dumps(result, indent=2, allow_nan=False)
+    artifact_bytes = json.dumps(result, separators=(",", ":"), allow_nan=False).encode()
+    artifact_sha256 = hashlib.sha256(artifact_bytes).hexdigest()
+    archive_key = f"raw/predictor-lab/by-sha256/{artifact_sha256}.json"
+    artifact_manifest = {
+        "schemaVersion": 1,
+        "artifactSha256": artifact_sha256,
+        "canonicalKey": R2_RESULT_KEY,
+        "archiveKey": archive_key,
+        "producer": "buildings/jarvis/predictor-lab/run_predictor_lab.py",
+        "producerSourceSha256": provenance["producerSourceSha256"],
+        "generatedAt": result["generatedAt"],
+        "featureContractVersion": provenance["featureContractVersion"],
+        "featureContractSha256": provenance["featureContractSha256"],
+        "runtime": provenance["runtime"],
+        "sourceArtifacts": provenance["sourceArtifacts"],
+    }
+    LOCAL_RESULT.write_text(pretty_result, encoding="utf-8")
     if not args.local_only:
-        put_json(R2_RESULT_KEY, result)
+        put_bytes(R2_RESULT_KEY, artifact_bytes, "application/json")
+        put_bytes(archive_key, artifact_bytes, "application/json")
+        put_json(R2_RESULT_MANIFEST_KEY, artifact_manifest)
+        put_json(
+            f"raw/predictor-lab/by-sha256/{artifact_sha256}.manifest.json",
+            artifact_manifest,
+        )
     update_status(
         "complete" if artifact_complete else "partial",
         message=(

@@ -525,6 +525,11 @@ import gc, tempfile
 # after a deploy warms the cache; every one after skips the download entirely. Result cached per request.
 _CDIR = tempfile.gettempdir()
 _NBR = {}
+_PINNED_ARTIFACT_REVISIONS = {}
+
+class ScoreArtifactIntegrityError(RuntimeError):
+    pass
+
 def _zip_central_dir(key, size):
     """Member table of a remote zip (npz) from ONE small ranged read of its central directory."""
     import struct
@@ -546,7 +551,7 @@ def _zip_central_dir(key, size):
 def _zip_member_stream(key, info, etag=None):
     """Yield one member's DECOMPRESSED bytes via ranged reads — the archive is never on disk
     and the array never fully in RAM. IfMatch pins the object so a concurrent rewrite by the
-    embed batch fails loudly (→ stale-cache fallback) instead of corrupting the stream."""
+    embed batch fails loudly instead of corrupting the stream."""
     import struct, zlib
     cond = {'IfMatch': etag} if etag else {}
     hdr = s3.get_object(Bucket=BUCKET, Key=key, Range=f"bytes={info['off']}-{info['off'] + 29}", **cond)['Body'].read()
@@ -567,9 +572,20 @@ def _norm_emb(c):
     npy = os.path.join(_CDIR, f'rawemb_{c}.npy'); meta = os.path.join(_CDIR, f'rawemb_{c}.meta.json')
     key = f'raw/{c}/embeddings.npz'
     etag, size = None, None
+    expected = _PINNED_ARTIFACT_REVISIONS.get(key)
     try:
-        h = s3.head_object(Bucket=BUCKET, Key=key); etag, size = h.get('ETag'), h['ContentLength']
-    except Exception: pass
+        h = s3.head_object(Bucket=BUCKET, Key=key)
+        etag, size = str(h.get('ETag') or '').strip('"'), h['ContentLength']
+    except Exception as error:
+        if expected and expected.get('state') == 'present':
+            raise RuntimeError(f'could not verify pinned artifact {key}: {error}') from error
+    if expected and expected.get('state') == 'present':
+        expected_etag = str(expected.get('etag') or '').strip('"')
+        if not etag or etag != expected_etag:
+            raise RuntimeError(
+                f'pinned artifact changed before scoring: {key} '
+                f'(expected {expected_etag or "unknown"}, found {etag or "unavailable"})'
+            )
     def _cached(require_etag=True):
         try:
             m = json.load(open(meta))
@@ -584,11 +600,10 @@ def _norm_emb(c):
     # box — which lost the in-memory scoring job, and the UI's auto-resubmit looped the OOM.
     # Now the vecs.npy member is range-streamed from R2 and decompressed STRAIGHT to disk (the
     # archive never exists here and the matrix is never fully in RAM), then normalized in place
-    # through a writable mmap in 4096-row chunks. If anything fails (R2 mid-rewrite by the embed
-    # batch, network), fall back to the stale disk cache — old neighbours beat a dead upload.
+    # through a writable mmap in 4096-row chunks. A stale cache is never accepted: doing so would
+    # attribute neighbor-derived scores to an artifact revision that did not produce them.
     if not etag or not size:
-        stale = _cached(require_etag=False)
-        return stale if stale else (None, None)
+        return (None, None)
     tmp = npy + f'.dl{os.getpid()}'
     try:   # sweep partial downloads orphaned by killed runs (SIGKILL skips finally blocks)
         import glob
@@ -612,11 +627,12 @@ def _norm_emb(c):
         print(f'[warm] {c}: cached + normalized → mmap', file=sys.stderr, flush=True)
         return np.load(npy, mmap_mode='r'), ids
     except Exception as e:
-        print(f'[warm] {c}: FAILED ({type(e).__name__}: {str(e)[:120]}) — trying stale cache', file=sys.stderr, flush=True)
+        print(f'[warm] {c}: FAILED ({type(e).__name__}: {str(e)[:120]}) — stale cache rejected', file=sys.stderr, flush=True)
         try: os.remove(tmp)
         except Exception: pass
-        stale = _cached(require_etag=False)
-        return stale if stale else (None, None)
+        if expected and expected.get('state') == 'present':
+            raise RuntimeError(f'could not materialize pinned artifact {key}: {e}') from e
+        return (None, None)
 def warm_all():
     """Warm the three neighbour caches in PARALLEL threads — each stream is network-bound
     and independent, so overlapping them cuts a cold warm (fresh deploy, ~900MB at the
@@ -650,7 +666,7 @@ def _score_input_manifest(txt, good, dur_s, score, replay_meta):
         'scorer': 'raw_upload.py',
         'embedding_model': EMBEDDING_MODEL,
         'embedding_dimensions': DIM,
-        'display_contract_version': 3,
+        'display_contract_version': 4,
         'canonical_output_contract': {
             'total': 21,
             'steer_coordinates': 18,
@@ -658,6 +674,9 @@ def _score_input_manifest(txt, good, dur_s, score, replay_meta):
             'novelty_derivation': 'cached indicator state + revision-pinned indicator registry',
         },
         'steer_artifact_sha256': score.get('steer_artifact_sha256'),
+        'steer_artifact_archive_key': score.get('steer_artifact_archive_key'),
+        'steer_lineage_manifest_sha256': score.get('steer_lineage_manifest_sha256'),
+        'steer_lineage_schema_version': score.get('steer_lineage_schema_version'),
         'source_window': 'first 5 seconds',
         'display_preference': ['together', 'text', 'visual'],
         'transcript_used': bool(good),
@@ -711,6 +730,7 @@ def _score_output(extra, title, b64, txt, good, dur_s, score, replay_meta):
     }
 
 def _run():
+    global _PINNED_ARTIFACT_REVISIONS
     args = {}
     a = sys.argv[1:]
     for i in range(0, len(a) - 1, 2):
@@ -785,12 +805,14 @@ def _run():
             extra, args.get('title', 'My hook'), b64, txt, good, dur_s,
             replay['score'], replay['meta'])))
         return
+    _PINNED_ARTIFACT_REVISIONS = dict(
+        ((replay.get('meta') or {}).get('scorer_revisions') or {}).get('artifacts') or {}
+    )
 
     ev = embed([img_part(b64)])
     et = embed([{'text': txt}]) if good else None
     eg = embed([img_part(b64)] + ([{'text': txt}] if good else []))
-    try: warm_all()   # cold caches warm in parallel here; the lookups below then hit disk instantly
-    except Exception: pass
+    warm_all()   # every neighbor artifact is pinned to the revision in this score identity
     # score the hook on every validated indicator (project its embedding onto the
     # registry's probe weights; + per-modality global novelty from the neighbours).
     indicators = {}
@@ -835,11 +857,26 @@ def _run():
     # rank. Whatever the graph shows for a video, an upload gets the identical maths.
     steer = {}
     steer_artifact_sha256 = None
+    steer_artifact_archive_key = None
+    steer_lineage_manifest_sha256 = None
+    steer_lineage_schema_version = None
     try:
         sb = r2_get('raw/steer_models.npz')
         if sb:
             steer_artifact_sha256 = hashlib.sha256(sb).hexdigest()
             SM = np.load(io.BytesIO(sb), allow_pickle=True); keys = set(SM.files)
+            if 'LINEAGE_JSON' in keys:
+                steer_artifact_archive_key = f'raw/steer_models/by-sha256/{steer_artifact_sha256}.npz'
+                lineage_text = str(np.asarray(SM['LINEAGE_JSON']).reshape(-1)[0])
+                lineage_bytes = lineage_text.encode()
+                steer_lineage_manifest_sha256 = hashlib.sha256(lineage_bytes).hexdigest()
+                recorded_lineage_sha = (
+                    str(np.asarray(SM['LINEAGE_SHA256']).reshape(-1)[0])
+                    if 'LINEAGE_SHA256' in keys else None
+                )
+                if recorded_lineage_sha and recorded_lineage_sha != steer_lineage_manifest_sha256:
+                    raise ScoreArtifactIntegrityError('steer lineage manifest hash mismatch')
+                steer_lineage_schema_version = json.loads(lineage_text).get('schemaVersion')
             for mod, e in {'visual': ev, 'text': et, 'together': eg}.items():
                 if e is None: continue
                 en = np.asarray(e, float); en = en / (np.linalg.norm(en) + 1e-9)
@@ -871,7 +908,10 @@ def _run():
                     if kk and rr:
                         rv = float(max(0.0, 10 ** (PS[0] * kk['est'] + PS[1] * rr['est'] + PS[2] * ld + PS[3]) - 1))
                         steer[f'{mod}_realviews'] = {'est': round(rv), 'pctile': None, 'kind': 'realviews', 'dur_s': round(dv), 'dur_assumed': not have_dur}
-    except Exception: pass
+    except ScoreArtifactIntegrityError:
+        raise
+    except Exception:
+        pass
     def preview(e):
         if e is None: return None
         a = np.asarray(e, float)
@@ -881,6 +921,9 @@ def _run():
         'steer': steer,
         'emb_preview': {'visual': preview(ev), 'text': preview(et), 'together': preview(eg)},
         'steer_artifact_sha256': steer_artifact_sha256,
+        'steer_artifact_archive_key': steer_artifact_archive_key,
+        'steer_lineage_manifest_sha256': steer_lineage_manifest_sha256,
+        'steer_lineage_schema_version': steer_lineage_schema_version,
         'channels': {
             'visual': {'neighbors': neighbors('visual', ev)} if ev is not None else None,
             'text': ({'neighbors': neighbors('text', et)} if (good and et is not None) else None),

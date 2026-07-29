@@ -2,6 +2,7 @@
 'use strict';
 
 const assert = require('assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
@@ -13,6 +14,161 @@ const ORIGIN = process.env.EXPERIMENT_LAB_ORIGIN || 'http://127.0.0.1:8002';
 async function main() {
     const index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
     const featureContract = JSON.parse(fs.readFileSync(path.join(ROOT, 'buildings/jarvis/saved-channel-feature-contract.json'), 'utf8'));
+    const featureContractSha256 = crypto.createHash('sha256')
+        .update(fs.readFileSync(path.join(ROOT, 'buildings/jarvis/saved-channel-feature-contract.json')))
+        .digest('hex');
+    const fixtureSha256 = label => crypto.createHash('sha256').update(`experiment-lab:${label}`).digest('hex');
+    const population = (label, rowCount) => ({
+        rowCount,
+        uniqueVideoCount: rowCount,
+        duplicateVideoCount: 0,
+        videoIdSha256: fixtureSha256(`population:${label}`),
+        orderedVideoIdSha256: fixtureSha256(`ordered-population:${label}`),
+    });
+    const shortsMapManifest = modality => ({
+        producerSourceSha256: fixtureSha256(`shorts-map-source:${modality}`),
+        publishedMap: {
+            ...population(`shorts-map:${modality}`, 120),
+            artifactSha256: fixtureSha256(`shorts-map:${modality}`),
+            archiveKey: `raw/${modality}/maps/by-sha256/${fixtureSha256(`shorts-map:${modality}`)}.json`,
+        },
+        publishedPlot: {
+            artifactSha256: fixtureSha256(`shorts-plot:${modality}`),
+            archiveKey: `raw/${modality}/plots/by-sha256/${fixtureSha256(`shorts-plot:${modality}`)}.json`,
+        },
+        embeddingStore: {
+            ...population(`shorts-embedding:${modality}`, 120),
+            artifactSha256: fixtureSha256(`shorts-embedding:${modality}`),
+            source: `raw/${modality}/embeddings.npz`,
+        },
+    });
+    const snakePopulation = (label, rowCount) => ({
+        row_count: rowCount,
+        unique_video_id_count: rowCount,
+        duplicate_video_id_count: 0,
+        video_id_sha256: fixtureSha256(`population:${label}`),
+        ordered_video_id_sha256: fixtureSha256(`ordered-population:${label}`),
+    });
+    const longMapManifest = modality => ({
+        algorithm_generation: {
+            generator_source_sha256: fixtureSha256(`long-map-source:${modality}`),
+        },
+        immutable_manifest_key: `raw-long/${modality}/manifests/by-sha256/${fixtureSha256(`long-map-manifest:${modality}`)}.json`,
+        embedding_archive: {
+            sha256: fixtureSha256(`long-embedding:${modality}`),
+            immutable_key: `raw-long/${modality}/embeddings/by-sha256/${fixtureSha256(`long-embedding:${modality}`)}.npz`,
+            mutable_key: `raw-long/${modality}/embeddings.npz`,
+            video_id_population: snakePopulation(`long-embedding:${modality}`, 110),
+        },
+        map_artifact: {
+            sha256: fixtureSha256(`long-map:${modality}`),
+            immutable_key: `raw-long/${modality}/maps/by-sha256/${fixtureSha256(`long-map:${modality}`)}.json`,
+        },
+        plot_artifact: {
+            sha256: fixtureSha256(`long-plot:${modality}`),
+            immutable_key: `raw-long/${modality}/plots/by-sha256/${fixtureSha256(`long-plot:${modality}`)}.json`,
+        },
+        video_id_alignment_population: {
+            method: 'exact_video_id',
+            intersection: snakePopulation(`long-intersection:${modality}`, 110),
+        },
+        account_metric_private_fit_populations: {
+            tyler: {
+                ctr: snakePopulation(`long:${modality}:tyler:ctr`, 40),
+                ret30: snakePopulation(`long:${modality}:tyler:ret30`, 38),
+            },
+            all: {
+                ctr: snakePopulation(`long:${modality}:all:ctr`, 72),
+                ret30: snakePopulation(`long:${modality}:all:ret30`, 68),
+            },
+        },
+        label_snapshot_revisions: {
+            tyler: { sha256: fixtureSha256('long-label:tyler') },
+            all: { sha256: fixtureSha256('long-label:all') },
+        },
+    });
+    const indicatorRegistry = {
+        indicators: ['keep', 'ret5', 'views'].map((target, index) => ({
+            name: `nov_${target}`,
+            kind: 'novelty',
+            target,
+            validated: true,
+            spearman: 0.2 + index * 0.1,
+            pts: [[0.1, 1], [0.2, 2], [0.3, 3]],
+        })),
+    };
+    const runtimeManifests = {
+        shortsSteer: {
+            key: 'raw/steer_manifest.json',
+            artifactSha256: fixtureSha256('shorts-steer-manifest'),
+            value: {
+                artifactSha256: fixtureSha256('shorts-steer-artifact'),
+                archiveKey: `raw/steer_models/by-sha256/${fixtureSha256('shorts-steer-artifact')}.npz`,
+                producerSourceSha256: fixtureSha256('shorts-steer-source'),
+                sourceRevisions: {
+                    tyler: { sha256: fixtureSha256('shorts-labels:tyler') },
+                    public_library: { sha256: fixtureSha256('shorts-public-library') },
+                },
+                viewEquationFitPopulations: {
+                    tyler: population('shorts-view-equation:tyler', 42),
+                    all: population('shorts-view-equation:all', 48),
+                },
+                modalities: Object.fromEntries(['visual', 'text', 'together'].map(modality => [
+                    modality,
+                    {
+                        axes: Object.fromEntries(['keep', 'ret5', 'views', 'outlier', 'gt10M'].map(target => [
+                            target,
+                            { fitPopulation: population(`shorts:${modality}:${target}`, 50) },
+                        ])),
+                    },
+                ])),
+            },
+        },
+        shortsVisualMap: { key: 'raw/visual/map.manifest.json', artifactSha256: fixtureSha256('shorts-map-manifest:visual'), value: shortsMapManifest('visual') },
+        shortsTextMap: { key: 'raw/text/map.manifest.json', artifactSha256: fixtureSha256('shorts-map-manifest:text'), value: shortsMapManifest('text') },
+        shortsTogetherMap: { key: 'raw/together/map.manifest.json', artifactSha256: fixtureSha256('shorts-map-manifest:together'), value: shortsMapManifest('together') },
+        noveltyModels: { key: 'raw/novelty_models.npz', artifactSha256: fixtureSha256('novelty-models'), bytes: 100 },
+        indicatorWeights: { key: 'raw/indicators/weights.npz', artifactSha256: fixtureSha256('indicator-weights'), bytes: 100 },
+        indicatorRegistry: { key: 'raw/indicators/registry.json', artifactSha256: fixtureSha256('indicator-registry'), value: indicatorRegistry },
+        shortsLiveScoreSource: { key: 'local:raw_upload.py', artifactSha256: fixtureSha256('raw-upload-source') },
+        shortsChannelWorkerSource: { key: 'local:yt_relay_watcher.py', artifactSha256: fixtureSha256('saved-channel-worker-source') },
+        longVisualMap: { key: 'raw-long/visual/map.manifest.json', artifactSha256: fixtureSha256('long-map-manifest:visual'), value: longMapManifest('visual') },
+        longTextMap: { key: 'raw-long/text/map.manifest.json', artifactSha256: fixtureSha256('long-map-manifest:text'), value: longMapManifest('text') },
+        longTogetherMap: { key: 'raw-long/together/map.manifest.json', artifactSha256: fixtureSha256('long-map-manifest:together'), value: longMapManifest('together') },
+        longSteer: {
+            key: 'raw-long/steer_models.manifest.json',
+            artifactSha256: fixtureSha256('long-steer-manifest'),
+            value: {
+                generator_source_sha256: fixtureSha256('long-steer-source'),
+                immutable_manifest_key: `raw-long/models/manifests/by-sha256/${fixtureSha256('long-steer-manifest')}.json`,
+                model_artifact: {
+                    sha256: fixtureSha256('long-steer-artifact'),
+                    immutable_key: `raw-long/models/by-sha256/${fixtureSha256('long-steer-artifact')}.npz`,
+                },
+                label_snapshot_revisions: {
+                    tyler: { sha256: fixtureSha256('long-label:tyler') },
+                    all: { sha256: fixtureSha256('long-label:all') },
+                },
+            },
+        },
+        longVisualScorer: {
+            key: 'longform/thumb-rl/scorer_visual.manifest.json',
+            artifactSha256: fixtureSha256('long-frozen-manifest'),
+            value: {
+                artifactSha256: fixtureSha256('long-frozen-artifact'),
+                archiveKey: `longform/thumb-rl/by-sha256/${fixtureSha256('long-frozen-artifact')}.npz`,
+                producerSourceSha256: fixtureSha256('thumb-producer-source'),
+                populations: {
+                    privateCtrFit: population('long-frozen-ctr', 55),
+                    curatedViewsFit: population('long-frozen-curated', 70),
+                },
+                sourceRevisions: {
+                    curatedIds: { sha256: fixtureSha256('long-curated-source') },
+                },
+            },
+        },
+        longScoreSource: { key: 'local:longquant_score.py', artifactSha256: fixtureSha256('long-score-source') },
+    };
     assert(index.includes("makeClickable(g, 'Experiment Lab')"), '3D Experiment Lab is not registered as clickable');
     assert(index.includes("'Experiment Lab': experimentLab"), 'Experiment Lab is absent from persistent building lookup');
 
@@ -52,8 +208,19 @@ async function main() {
                 hasMontage: true,
                 sourceUrl: `https://youtube.com/shorts/${id}`,
                 views,
+                subscribers: 1000000,
                 scoredAt: Date.now() - videoIndex * 1000,
                 features,
+                input_manifest: {
+                    input_fingerprint: `input-${id}`,
+                    revision_fingerprint: `revision-${id}`,
+                    output_fingerprint: `output-${id}`,
+                    scorer_revisions: { scorer: { sha256: 'feedface01234567' } },
+                    steer_artifact_sha256: '0123456789abcdef',
+                    steer_artifact_archive_key: 'raw/steer_models/by-sha256/0123456789abcdef.npz',
+                    steer_lineage_manifest_sha256: 'abcdef0123456789',
+                    steer_lineage_schema_version: 1,
+                },
             };
         });
         const unfinishedVideo = { id: 'vid99999999', title: 'Retry this Short', status: 'error', views: 0, error: 'temporary worker failure', hasMontage: false };
@@ -154,16 +321,38 @@ async function main() {
             curve: Array.from({ length: 101 }, (_, curveIndex) => 1.2 - curveIndex * (0.004 + index * 0.00003)),
             published: `2025${String((index % 12) + 1).padStart(2, '0')}${String((index % 27) + 1).padStart(2, '0')}`,
         }));
+        const hafuVideos = videos.map((video, index) => ({
+            ...video,
+            id: `hafu${String(index + 1).padStart(7, '0')}`,
+            title: `Hafu validation Short ${index + 1}`,
+            sourceUrl: `https://youtube.com/shorts/hafu${String(index + 1).padStart(7, '0')}`,
+        }));
+        const hafuPrivateVideos = privateVideos.map((video, index) => ({
+            ...video,
+            id: hafuVideos[index].id,
+            title: hafuVideos[index].title,
+        }));
         const keepPoints = videos.map((video, index) => ({ id: video.id, actual: 57 + index, predicted: 58 + index * .9 }));
         const viewsPoints = videos.map(video => ({ id: video.id, channel: channelId, channelName: 'Mobile Risk Channel', actualViews: video.views, predictedViews: Math.round(video.views * 1.12) }));
-        const validationArtifact = validationBuilder.buildValidation({
-            channels: [{
-                channelId,
-                accountId: 'tyler',
-                accountName: 'Tyler Csatari',
-                manifest: { videos },
-                privateTable: { videos: privateVideos },
-            }],
+        let validationArtifact;
+        try {
+            validationArtifact = validationBuilder.buildValidation({
+            channels: [
+                {
+                    channelId,
+                    accountId: 'tyler',
+                    accountName: 'Tyler Csatari',
+                    manifest: { videos },
+                    privateTable: { videos: privateVideos },
+                },
+                {
+                    channelId: 'ch87ccaa3dd3383515',
+                    accountId: 'hafu',
+                    accountName: 'Hafu Go',
+                    manifest: { videos: hafuVideos },
+                    privateTable: { videos: hafuPrivateVideos },
+                },
+            ],
             predictor: {
                 generatedAt: Date.now(),
                 provenance: {
@@ -173,6 +362,35 @@ async function main() {
                     validationCreatorVideoCountExcluded: videos.length,
                     validationCreatorChannelIds: ['UCfixtureTyler'],
                     featureScorerVersionPersistedPerVideo: false,
+                    featureContractVersion: featureContract.version,
+                    featureContractSha256,
+                    artifactSha256: fixtureSha256('predictor-artifact'),
+                    artifactArchiveKey: `raw/predictor-lab/by-sha256/${fixtureSha256('predictor-artifact')}.json`,
+                    artifactManifestKey: 'raw/predictor-lab/results.manifest.json',
+                    artifactManifestSha256: fixtureSha256('predictor-manifest'),
+                    artifactGeneratedAt: 123456,
+                    producerSourceSha256: fixtureSha256('predictor-source'),
+                    sourceArtifacts: {
+                        'fixture:source': { sha256: fixtureSha256('predictor-source-artifact'), bytes: 123 },
+                    },
+                    runtimeManifests,
+                    rawAxisCorpusVideoCount: 1234,
+                    rawAxisCorpusIdHash: fixtureSha256('candidate-union'),
+                    publicAxisExcludedVideoCount: 321,
+                    publicAxisExcludedVideoIdHash: fixtureSha256('excluded'),
+                    rawStoreShape: {
+                        visual: { rows: 1100, dimensions: 1536, idSha256: fixtureSha256('visual-store') },
+                        text: { rows: 700, dimensions: 1536, idSha256: fixtureSha256('text-store') },
+                        together: { rows: 1000, dimensions: 1536, idSha256: fixtureSha256('together-store') },
+                    },
+                    publicAxisPopulations: Object.fromEntries(['visual', 'text', 'together'].map((modality, modalityIndex) => [
+                        modality,
+                        {
+                            views: population(`${modality}-views`, 900 - modalityIndex * 100),
+                            outlier: population(`${modality}-outlier`, 800 - modalityIndex * 100),
+                            gt10M: population(`${modality}-gt10M`, 900 - modalityIndex * 100),
+                        },
+                    ])),
                 },
                 targets: {
                     keep: {
@@ -181,10 +399,15 @@ async function main() {
                             featureNames: blindFeatureNames,
                             videoHeldOutProtocol: 'The evaluated video is excluded.',
                             accountHeldOutProtocol: 'The evaluated account is excluded.',
-                            rows: videos.map((video, index) => ({
+                            rows: [...videos, ...hafuVideos].map((video, index) => ({
                                 id: video.id,
-                                videoHeldOut: blindVector(index),
-                                accountHeldOut: blindVector(index).map((value, featureIndex) => featureIndex % 2 ? value : value - .5),
+                                account: index < videos.length ? 'tyler' : 'hafu',
+                                videoHeldOut: blindVector(index % videos.length),
+                                accountHeldOut: blindVector(index % videos.length).map((value, featureIndex) => (
+                                    /\.(?:views|outlier|gt10M)\.(?:raw|percentile)$/.test(blindFeatureNames[featureIndex])
+                                        ? value
+                                        : (featureIndex % 2 ? value : value - .5)
+                                )),
                             })),
                         },
                         stressTests: [
@@ -201,7 +424,23 @@ async function main() {
                     },
                 },
             },
-            sourceFingerprint: 'ui-fixture',
+                sourceFingerprint: fixtureSha256('ui-fixture'),
+            });
+        } catch (error) {
+            if (error && error.lineageAudit) {
+                console.error(JSON.stringify(error.lineageAudit, null, 2));
+            }
+            throw error;
+        }
+        validationArtifact.rows.forEach(row => {
+            if (row.predictions && row.predictions.score21) {
+                if (row.predictions.score21.video) row.predictions.score21.video.hit10M = 0.73;
+                if (row.predictions.score21.account) row.predictions.score21.account.hit10M = 0.41;
+            }
+            const videoHitIndex = validationArtifact.coordinateRegistry.columns.findIndex(column => column.id === 'shorts.video-forecast.hit10M');
+            const accountHitIndex = validationArtifact.coordinateRegistry.columns.findIndex(column => column.id === 'shorts.account-forecast.hit10M');
+            if (row.scoreLedger && videoHitIndex >= 0) row.scoreLedger.values[videoHitIndex] = 0.73;
+            if (row.scoreLedger && accountHitIndex >= 0) row.scoreLedger.values[accountHitIndex] = 0.41;
         });
         validationArtifact.artifact = { cacheStatus: 'hit', persisted: true, generatedAt: validationArtifact.generatedAt };
         const replies = {
@@ -231,6 +470,9 @@ async function main() {
                     embedding_model: 'gemini-embedding-2',
                     embedding_dimensions: 1536,
                     steer_artifact_sha256: '0123456789abcdef',
+                    steer_artifact_archive_key: 'raw/steer_models/by-sha256/0123456789abcdef.npz',
+                    steer_lineage_manifest_sha256: 'abcdef0123456789',
+                    steer_lineage_schema_version: 1,
                     source_window: 'first 5 seconds',
                     display_preference: ['together', 'text', 'visual'],
                 },
@@ -293,7 +535,7 @@ async function main() {
         assert(await page.locator('#rtg-exppanel').evaluate(panel => panel.textContent.includes('graphs — every channel')), 'stored score must open the complete graph read-out');
         await page.getByText('Exactly what the 21 graphs mean', { exact: true }).waitFor();
         const lineageText = await page.locator('#rtg-exppanel').innerText();
-        assert(lineageText.includes("Tyler Csatari private Shorts with observed stayed-to-watch labels"), 'score detail must expose the keep-axis fitting population');
+        assert(lineageText.includes("exact raw-map video IDs that join to a finite Tyler stayed-to-watch label"), 'score detail must expose the keep-axis fitting population');
         assert(lineageText.includes('Public Shorts embedding corpus'), 'score detail must expose the public-axis fitting population');
         assert(lineageText.includes('artifact 0123456789ab'), 'score detail must expose the exact persisted steer artifact');
         const parityAfterStoredOpen = await page.evaluate(() => window.BusinessWorldEmbeddingParityAudit(document));
@@ -322,11 +564,71 @@ async function main() {
         assert.strictEqual(await page.locator('[data-savedledgercolumn="shorts.stored.text.keep"]').count(), 1);
         await page.locator('[data-savedledgerfamily="all"]').click();
         assert.strictEqual(await page.locator('[data-savedledgercolumn]').count(), 103, 'the full ledger must expose every registered observed, stored, held-out, forecast, and legacy scalar');
-        assert((await page.locator('[data-savedledger]').innerText()).includes('Long Quant outputs'), 'the registry summary must include the 12 Long Quant outputs');
+        assert((await page.locator('[data-savedledger]').innerText()).includes('103 columns are not 103 embedding spaces.'), 'the ledger must distinguish direct axes from derived values, forecasts, observations, and legacy columns');
+        assert((await page.locator('[data-savedledger]').innerText()).includes('45 direct-axis columns representing 36 distinct fitted axes'), 'the ledger must distinguish direct-axis columns from distinct fits');
+        assert((await page.locator('[data-savedledger]').innerText()).includes('9 public-axis aliases'), 'the ledger must disclose the nine shared public axes reused across protocol views');
+        assert((await page.locator('[data-savedledger]').innerText()).includes('A historical fit manifest that was never saved is labeled unknown'), 'the ledger must not infer missing historical fit populations');
+        assert((await page.locator('[data-savedledger-row-provenance="vid00000001"]').innerText()).includes('fit manifest abcdef012345'), 'each saved row must expose its persisted artifact and fit-manifest identity');
+        const rowManifest = page.locator('[data-savedledger-row-manifest="vid00000001"]').first();
+        await rowManifest.locator('summary').click();
+        assert((await rowManifest.innerText()).includes('raw/steer_models/by-sha256/0123456789abcdef.npz'), 'the complete per-row manifest must be touch-accessible instead of existing only in a hover tooltip');
+        const hitProbabilityText = await page.locator('[data-savedledgercell$=":shorts.video-forecast.hit10M"]').first().innerText();
+        assert(hitProbabilityText.includes('% probability'), `10M forecasts must display their continuous probability (rendered: ${hitProbabilityText})`);
+        assert.strictEqual(await page.locator('[data-savedledger-provenance-matrix="shorts"] [data-savedledger-coordinate-select]').count(), 103, 'the provenance matrix must contain every Shorts coordinate');
+        assert.strictEqual(await page.locator('[data-savedledger-provenance-matrix="long"] [data-savedledger-coordinate-select]').count(), 12, 'the provenance matrix must also disclose all Long Quant outputs');
+        const valueScroller = page.locator('[data-savedledger-scroll="values"]');
+        await valueScroller.evaluate(element => { element.scrollLeft = 480; element.scrollTop = 120; });
+        const beforeCoordinateChange = await valueScroller.evaluate(element => ({ left: element.scrollLeft, top: element.scrollTop }));
+        await page.locator('[data-savedledgercolumn="shorts.stored.text.keep"] button').evaluate(button => button.click());
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.deepStrictEqual(
+            await page.locator('[data-savedledger-scroll="values"]').evaluate(element => ({ left: element.scrollLeft, top: element.scrollTop })),
+            beforeCoordinateChange,
+            'changing the selected coordinate must preserve the value-table scroll position on mobile and desktop',
+        );
+        await page.locator('[data-savedledgercolumn="shorts.account-heldout.visual.views"] button').click();
+        const lineagePanel = page.locator('[data-savedledger-provenance-drilldown]');
+        await lineagePanel.waitFor();
+        assert.strictEqual(await lineagePanel.getAttribute('data-coordinate-id'), 'shorts.account-heldout.visual.views');
+        assert.strictEqual(await lineagePanel.locator('[data-savedledger-lineage-step]').count(), 11, 'every selected coordinate must expose all lineage stages');
+        const selectedLineageText = await lineagePanel.innerText();
+        assert(selectedLineageText.includes('Shared creator-excluded public axis corpus'), 'the selected blind public axis must expose its shared fitting population');
+        assert(selectedLineageText.includes('Creator-excluded public PLS + rank-to-outcome direction'), 'the selected blind public axis must expose its projection algorithm');
+        assert(selectedLineageText.includes('Inverse Log10 Nonnegative'), 'the selected blind public axis must disclose its log-to-display-unit transform');
+        assert(selectedLineageText.includes(fixtureSha256('population:visual-views')), 'the selected axis must expose the exact visual/views fit-population hash');
+        assert.strictEqual(await lineagePanel.locator('[data-savedledger-recipe]').count(), 6, 'the selected coordinate must summarize query evidence, fitting evidence, rotation, scalar, revision, and display lineage');
+        assert(/axis identity [a-f0-9]{64}/.test(selectedLineageText), 'the selected coordinate must expose its immutable axis fingerprint');
+        assert(/coordinate identity [a-f0-9]{64}/.test(selectedLineageText), 'the selected coordinate must expose its immutable coordinate fingerprint');
+        assert(!selectedLineageText.includes('Fit target\\nNot registered'), 'the target field must resolve in the drilldown');
+        await page.locator('[data-savedledger-provenance-matrix="long"] [data-savedledger-coordinate-select="long.output.visual.realviews"]').click();
+        await page.waitForFunction(() => document.querySelector('[data-savedledger-provenance-drilldown]')?.getAttribute('data-coordinate-id') === 'long.output.visual.realviews');
+        const longRealviewsLineageText = await page.locator('[data-savedledger-provenance-drilldown]').innerText();
+        assert(longRealviewsLineageText.includes('Reference-row duration used while materializing the realviews map'), 'Long realistic views must distinguish reference duration from query inputs');
+        assert(longRealviewsLineageText.includes('Candidate/query duration is not an input to channel_score()'), 'Long realistic views must explicitly say candidate duration is not read');
+        assert(longRealviewsLineageText.includes('Long Tyler Private Performance'), 'Long realistic views must expose the private CTR/ret30/view-equation fit population');
+        assert(longRealviewsLineageText.includes('Long Raw Manifold'), 'Long realistic views must expose the ID-aligned neighbor manifold');
+        assert(longRealviewsLineageText.includes('Long Private Pls2 Axis'), 'Long realistic views must expose the upstream private PLS stage');
+        assert(longRealviewsLineageText.includes('Long Realviews Equation'), 'Long realistic views must expose the upstream view equation');
+        assert(longRealviewsLineageText.includes('Long Neighbor Placement'), 'Long realistic views must expose the neighbor-placement stage');
+        const provenanceDownloadPromise = page.waitForEvent('download');
+        await page.locator('[data-savedledger-provenance-export]').click();
+        const provenanceDownload = await provenanceDownloadPromise;
+        assert.strictEqual(provenanceDownload.suggestedFilename(), `${channelId}-complete-score-provenance.csv`);
+        const provenanceCsv = fs.readFileSync(await provenanceDownload.path(), 'utf8');
+        assert(provenanceCsv.includes('long.output.visual.realviews'), 'the provenance export must include Long Quant coordinate lineage');
+        assert(provenanceCsv.includes('Candidate/query duration is not an input to channel_score()'), 'the provenance export must preserve input roles and query exclusions');
+        assert(provenanceCsv.includes('dataset.shorts.map-manifold.v1'), 'the provenance export must distinguish visualization-map fit populations from scalar fits');
+        assert(provenanceCsv.includes('axis_identity_sha256'), 'the provenance export must include the immutable fitted-axis identity');
+        assert(provenanceCsv.includes('coordinate_identity_sha256'), 'the provenance export must include the evaluation-specific coordinate identity');
+        assert((await page.locator('[data-savedledger]').innerText()).includes('Long Quant output provenance'), 'the registry summary must include the 12 Long Quant outputs');
         const ledgerDownloadPromise = page.waitForEvent('download');
         await page.locator('[data-savedledgerexport]').click();
         const ledgerDownload = await ledgerDownloadPromise;
         assert.strictEqual(ledgerDownload.suggestedFilename(), `${channelId}-canonical-score-ledger.csv`);
+        const ledgerCsv = fs.readFileSync(await ledgerDownload.path(), 'utf8');
+        assert(ledgerCsv.includes('steer_artifact_archive_key'), 'the value ledger must export the immutable artifact archive key');
+        assert(ledgerCsv.includes('steer_lineage_manifest_sha256'), 'the value ledger must export the exact fit-manifest hash');
+        assert(ledgerCsv.includes('raw/steer_models/by-sha256/0123456789abcdef.npz'), 'the value ledger must preserve each row’s content-addressed model revision');
         if (process.env.EXPERIMENT_LAB_LEDGER_SCREENSHOT) {
             fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_LEDGER_SCREENSHOT), { recursive: true });
             await page.locator('[data-savedledger]').screenshot({ path: process.env.EXPERIMENT_LAB_LEDGER_SCREENSHOT });
@@ -425,7 +727,7 @@ async function main() {
         }
         assert.strictEqual(await page.evaluate(pathname => window.__fetchCounts[pathname], videoPath), 1, 'reopening an older cached validation video must not fetch or recompute it again');
         await page.locator('[data-savedvalidationprotocol="account"]').click();
-        assert.strictEqual(await page.getByText('18 direct scores · account external:', { exact: false }).count(), 1);
+        assert.strictEqual(await page.getByText('15 direct axes + 3 derived scores · account external:', { exact: false }).count(), 1);
         await page.locator('[data-savedvalidationexpand]').first().click();
         assert.strictEqual(await page.getByText('All 21 stored channel scores · diagnostic replay', { exact: true }).count(), 1);
         assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), 0, 'validation inspection must never recalculate a stored embedding');
