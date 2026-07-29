@@ -5936,7 +5936,11 @@ const JarvisRetention = (function () {
         const protocolKey = study.protocols[st.savedVisualKeepProtocol] ? st.savedVisualKeepProtocol : 'videoHoldout';
         const protocol = study.protocols[protocolKey];
         const accounts = study.population && study.population.accounts || [];
-        const availableAccounts = new Set((protocol.points || []).map(point => point.account));
+        const protocolAccountCounts = (protocol.points || []).reduce((counts, point) => {
+            counts.set(point.account, (counts.get(point.account) || 0) + 1);
+            return counts;
+        }, new Map());
+        const availableAccounts = new Set(protocolAccountCounts.keys());
         const accountKey = st.savedVisualKeepAccount === 'all' || availableAccounts.has(st.savedVisualKeepAccount)
             ? st.savedVisualKeepAccount
             : 'all';
@@ -5945,13 +5949,13 @@ const JarvisRetention = (function () {
             : (protocol.metrics && protocol.metrics.perAccount || []).find(item => item.account === accountKey);
         const metrics = accountMetric || protocol.metrics || {};
         const protocolButtons = protocolDefinitions.map(([key, label]) => `<span data-savedvisualkeepprotocol="${key}" style="cursor:pointer;border-bottom:2px solid ${protocolKey === key ? C.cyan : 'transparent'};color:${protocolKey === key ? C.text : C.dim};padding:6px 9px;font-size:8px;font-weight:900;white-space:nowrap">${esc(label)}</span>`).join('');
-        const accountButtons = [['all', `All ${study.population.n || 0}`], ...accounts.filter(account => availableAccounts.has(account.id)).map(account => [account.id, `${savedVisualKeepAccountName(account.id, account.name)} ${account.n}`])].map(([key, label]) => `<span data-savedvisualkeepaccount="${esc(key)}" style="cursor:pointer;border:1px solid ${accountKey === key ? savedValidationAccountColor(key) : C.border};color:${accountKey === key ? C.text : C.dim};padding:3px 6px;font-size:7.5px;white-space:nowrap">${esc(label)}</span>`).join('');
+        const accountButtons = [['all', `All ${protocol.points && protocol.points.length || 0} predictions`], ...accounts.filter(account => availableAccounts.has(account.id)).map(account => [account.id, `${savedVisualKeepAccountName(account.id, account.name)} ${protocolAccountCounts.get(account.id) || 0}`])].map(([key, label]) => `<span data-savedvisualkeepaccount="${esc(key)}" style="cursor:pointer;border:1px solid ${accountKey === key ? savedValidationAccountColor(key) : C.border};color:${accountKey === key ? C.text : C.dim};padding:3px 6px;font-size:7.5px;white-space:nowrap">${esc(label)}</span>`).join('');
         const skill = metrics.protocolBaselineR2;
         const statusColor = skill != null && +skill > 0 ? C.green : C.red;
         const selectedAccount = accounts.find(account => account.id === accountKey) || {};
         const scopeName = accountKey === 'all' ? 'all creators' : savedVisualKeepAccountName(accountKey, selectedAccount.name);
         const cards = [
-            ['Error reduction vs honest null', skill == null ? '—' : `${skill >= 0 ? '+' : ''}${fmtv(skill * 100, 1)}%`, statusColor, 'Positive means the model beats this protocol’s legitimate no-image baseline.'],
+            ['Squared-error reduction vs honest null', skill == null ? '—' : `${skill >= 0 ? '+' : ''}${fmtv(skill * 100, 1)}%`, statusColor, 'Reduction in held-out mean squared error versus this protocol’s legitimate no-image baseline. Positive is better.'],
             ['R² vs one pooled mean', metrics.r2 == null ? '—' : fmtv(metrics.r2, 3), metrics.r2 > 0 ? C.green : C.red, 'Useful context, but less strict than the protocol-specific baseline above.'],
             ['Typical miss', metrics.mae == null ? '—' : `${fmtv(metrics.mae, 2)} pp`, C.text, `Null miss ${metrics.baselineMae == null ? '—' : `${fmtv(metrics.baselineMae, 2)} pp`}.`],
             ['Rank agreement', metrics.spearman == null ? '—' : `ρ ${fmtv(metrics.spearman, 3)}`, Math.abs(metrics.spearman || 0) >= .3 ? C.green : C.amber, 'Whether higher visual predictions order videos by higher keep rate.'],
