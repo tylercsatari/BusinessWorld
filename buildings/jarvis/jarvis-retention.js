@@ -6687,6 +6687,139 @@ const JarvisRetention = (function () {
         const detail = selected ? `<div style="border-left:3px solid ${savedValidationAccountColor(selected.account)};background:${C.card2};padding:8px;margin-top:7px"><div style="font-size:9px;color:${C.text};font-weight:950">${esc(selected.title)}</div><div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:2px">causal multimodal mixture <b style="color:${C.cyan}">${fmtv(selected.predicted, 1)}%</b> · history-only baseline <b style="color:${C.text}">${fmtv(selected.baseline, 1)}%</b> · actual <b style="color:${C.text}">${fmtv(selected.actual, 1)}%</b>${componentDetail}<br>mixture miss <b style="color:${Math.abs(selected.error) <= 10 ? C.green : C.amber}">${fmtv(Math.abs(selected.error), 1)} pp</b> · history miss <b>${fmtv(selectedBaselineError, 1)} pp</b> · incremental <b style="color:${selectedIncrement > 0 ? C.green : C.red}">${selectedIncrement >= 0 ? '+' : ''}${fmtv(selectedIncrement, 1)} pp</b><br>${esc(savedVisualKeepAccountName(selected.account, selected.accountName))} · ${selected.historyN} strictly earlier uploads · history cutoff ${selected.historyEnd ? new Date(selected.historyEnd).toLocaleDateString() : 'recorded in artifact'}<br><b>This scalar combines the visual and together embeddings with creator history. It does not live on either raw embedding plane.</b></div>${detailActions}</div>` : `<div style="font-size:7.5px;color:${C.faint};margin-top:5px">Click a point to inspect the exact mixture prediction, components, honest baseline, truth, errors, and history, then open either contributing raw embedding separately.</div>`;
         return `<div data-savedcreatorkeep-scatter style="min-width:0"><svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">${svg}</svg>${detail}</div>`;
     }
+    function savedCreatorKeepQuantile(sortedValues, quantile) {
+        if (!sortedValues.length) return null;
+        const position = Math.max(0, Math.min(1, quantile)) * (sortedValues.length - 1);
+        const lower = Math.floor(position);
+        const upper = Math.ceil(position);
+        if (lower === upper) return sortedValues[lower];
+        return sortedValues[lower] + (sortedValues[upper] - sortedValues[lower]) * (position - lower);
+    }
+    function savedCreatorKeepErrorDistribution(points, accountKey, protocolKey, protocolLabel) {
+        const observations = (points || []).map(point => {
+            const coordinateError = +point.predicted - +point.actual;
+            const signedError = Number.isFinite(coordinateError)
+                ? coordinateError
+                : +point.error;
+            return {
+                signedError,
+                absoluteError: Math.abs(signedError),
+            };
+        }).filter(point => Number.isFinite(point.absoluteError));
+        if (!observations.length) return note(`No ${protocolLabel.toLowerCase()} misses exist for this creator.`, C.amber);
+
+        const errors = observations.map(point => point.absoluteError).sort((a, b) => a - b);
+        const n = errors.length;
+        const mean = errors.reduce((sum, value) => sum + value, 0) / n;
+        const median = savedCreatorKeepQuantile(errors, .5);
+        const p75 = savedCreatorKeepQuantile(errors, .75);
+        const p90 = savedCreatorKeepQuantile(errors, .9);
+        const p95 = savedCreatorKeepQuantile(errors, .95);
+        const maxError = errors[errors.length - 1];
+        const signedMean = observations.reduce((sum, point) => sum + point.signedError, 0) / n;
+        const overCount = observations.filter(point => point.signedError > .5).length;
+        const underCount = observations.filter(point => point.signedError < -.5).length;
+        const essentiallyExactCount = errors.filter(value => value <= 1).length;
+        const withinFiveCount = errors.filter(value => value <= 5).length;
+        const withinTenCount = errors.filter(value => value <= 10).length;
+        const pct = count => count / n * 100;
+
+        const rawBinWidth = Math.max(.5, maxError / Math.max(5, Math.min(12, Math.ceil(Math.sqrt(n)))));
+        const niceBinWidths = [.5, 1, 2, 2.5, 5, 10, 20, 25, 50];
+        const binWidth = niceBinWidths.find(width => width >= rawBinWidth) || Math.ceil(rawBinWidth / 50) * 50;
+        const domainMax = Math.max(binWidth, Math.ceil(maxError / binWidth) * binWidth);
+        const binCount = Math.max(1, Math.ceil(domainMax / binWidth));
+        const bins = Array.from({ length: binCount }, (_, index) => ({
+            lower: index * binWidth,
+            upper: (index + 1) * binWidth,
+            count: 0,
+        }));
+        errors.forEach(value => {
+            const index = Math.min(bins.length - 1, Math.floor(value / binWidth));
+            bins[index].count += 1;
+        });
+
+        const histogramW = 680, histogramH = 260, histogramLeft = 48, histogramRight = 14, histogramTop = 18, histogramBottom = 42;
+        const histogramInnerW = histogramW - histogramLeft - histogramRight;
+        const histogramInnerH = histogramH - histogramTop - histogramBottom;
+        const maxBinPct = Math.max(...bins.map(bin => pct(bin.count)));
+        const histogramYMax = Math.max(10, Math.ceil(maxBinPct / 10) * 10);
+        const histogramX = value => histogramLeft + value / domainMax * histogramInnerW;
+        const histogramY = value => histogramTop + histogramInnerH - value / histogramYMax * histogramInnerH;
+        let histogramSvg = `<rect x="${histogramLeft}" y="${histogramTop}" width="${histogramInnerW}" height="${histogramInnerH}" fill="${C.card2}"/>`;
+        [0, .5, 1].forEach(ratio => {
+            const value = ratio * histogramYMax;
+            const y = histogramY(value);
+            histogramSvg += `<line x1="${histogramLeft}" y1="${y}" x2="${histogramW - histogramRight}" y2="${y}" stroke="${C.border}"/><text x="${histogramLeft - 5}" y="${y + 2.5}" text-anchor="end" fill="${C.faint}" font-size="7">${fmtv(value, 0)}%</text>`;
+        });
+        const labelEvery = Math.max(1, Math.ceil(binCount / 6));
+        bins.forEach((bin, index) => {
+            const share = pct(bin.count);
+            const x = histogramX(bin.lower) + 1;
+            const width = Math.max(1, histogramX(bin.upper) - histogramX(bin.lower) - 2);
+            const y = histogramY(share);
+            const title = `${fmtv(bin.lower, 1)}–${fmtv(bin.upper, 1)} pp miss\n${bin.count}/${n} predictions · ${fmtv(share, 1)}%`;
+            histogramSvg += `<rect data-error-histogram-bin data-lower="${bin.lower}" data-upper="${bin.upper}" data-count="${bin.count}" data-percentage="${share.toFixed(6)}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${width.toFixed(1)}" height="${Math.max(0, histogramTop + histogramInnerH - y).toFixed(1)}" fill="${C.cyan}" fill-opacity=".72"><title>${esc(title)}</title></rect>`;
+            if (bin.count) histogramSvg += `<text x="${(x + width / 2).toFixed(1)}" y="${Math.max(histogramTop + 8, y - 4).toFixed(1)}" text-anchor="middle" fill="${C.text}" font-size="6.5">${fmtv(share, 1)}%</text>`;
+            if (index % labelEvery === 0) histogramSvg += `<text x="${histogramX(bin.lower)}" y="${histogramH - histogramBottom + 14}" text-anchor="${index === 0 ? 'start' : 'middle'}" fill="${C.faint}" font-size="7">${fmtv(bin.lower, 0)}</text>`;
+        });
+        histogramSvg += `<text x="${histogramW - histogramRight}" y="${histogramH - histogramBottom + 14}" text-anchor="end" fill="${C.faint}" font-size="7">${fmtv(domainMax, 0)}</text><text x="${histogramW / 2}" y="${histogramH - 7}" text-anchor="middle" fill="${C.mute}" font-size="8">absolute prediction miss (percentage points)</text><text x="10" y="${histogramH / 2}" transform="rotate(-90 10 ${histogramH / 2})" text-anchor="middle" fill="${C.mute}" font-size="8">share of predictions</text>`;
+
+        const coverageW = 680, coverageH = 260, coverageLeft = 48, coverageRight = 14, coverageTop = 18, coverageBottom = 42;
+        const coverageInnerW = coverageW - coverageLeft - coverageRight;
+        const coverageInnerH = coverageH - coverageTop - coverageBottom;
+        const coverageX = value => coverageLeft + value / domainMax * coverageInnerW;
+        const coverageY = value => coverageTop + coverageInnerH - value / 100 * coverageInnerH;
+        let coverageSvg = `<rect x="${coverageLeft}" y="${coverageTop}" width="${coverageInnerW}" height="${coverageInnerH}" fill="${C.card2}"/>`;
+        [0, 25, 50, 75, 100].forEach(value => {
+            const y = coverageY(value);
+            coverageSvg += `<line x1="${coverageLeft}" y1="${y}" x2="${coverageW - coverageRight}" y2="${y}" stroke="${C.border}"/><text x="${coverageLeft - 5}" y="${y + 2.5}" text-anchor="end" fill="${C.faint}" font-size="7">${value}%</text>`;
+        });
+        for (let tick = 0; tick <= 4; tick++) {
+            const value = tick / 4 * domainMax;
+            const x = coverageX(value);
+            coverageSvg += `<line x1="${x}" y1="${coverageTop}" x2="${x}" y2="${coverageH - coverageBottom}" stroke="${C.border}" opacity=".55"/><text x="${x}" y="${coverageH - coverageBottom + 14}" text-anchor="${tick === 0 ? 'start' : tick === 4 ? 'end' : 'middle'}" fill="${C.faint}" font-size="7">${fmtv(value, 1)}</text>`;
+        }
+        let coveragePath = `M ${coverageX(0).toFixed(1)} ${coverageY(0).toFixed(1)}`;
+        let previousCoverage = 0;
+        errors.forEach((value, index) => {
+            const nextCoverage = (index + 1) / n * 100;
+            coveragePath += ` L ${coverageX(value).toFixed(1)} ${coverageY(previousCoverage).toFixed(1)} L ${coverageX(value).toFixed(1)} ${coverageY(nextCoverage).toFixed(1)}`;
+            previousCoverage = nextCoverage;
+        });
+        coveragePath += ` L ${coverageX(domainMax).toFixed(1)} ${coverageY(100).toFixed(1)}`;
+        [5, 10].filter(value => value <= domainMax).forEach((value, index) => {
+            const x = coverageX(value);
+            coverageSvg += `<line x1="${x}" y1="${coverageTop}" x2="${x}" y2="${coverageH - coverageBottom}" stroke="${index ? C.green : C.amber}" stroke-width="1.5" stroke-dasharray="4 4"/><text x="${x + 3}" y="${coverageTop + 10 + index * 10}" fill="${index ? C.green : C.amber}" font-size="7">±${value} pp</text>`;
+        });
+        coverageSvg += `<path data-error-cdf d="${coveragePath}" fill="none" stroke="${C.green}" stroke-width="2.5"/>`;
+        coverageSvg += `<text x="${coverageW / 2}" y="${coverageH - 7}" text-anchor="middle" fill="${C.mute}" font-size="8">allowed absolute miss (percentage points)</text><text x="10" y="${coverageH / 2}" transform="rotate(-90 10 ${coverageH / 2})" text-anchor="middle" fill="${C.mute}" font-size="8">predictions within allowance</text>`;
+
+        const thresholds = [.5, 1, 2, 3, 5, 7.5, 10, 15, 20]
+            .filter(value => value <= maxError || value === 10);
+        const thresholdCards = thresholds.map(threshold => {
+            const count = errors.filter(value => value <= threshold).length;
+            return `<div data-error-coverage-threshold="${threshold}" data-count="${count}" data-percentage="${pct(count).toFixed(6)}" style="border-left:2px solid ${threshold === 10 ? C.green : C.border};padding:5px 7px;min-width:72px"><div style="font-size:6.7px;color:${C.mute}">WITHIN ${fmtv(threshold, 1)} PP</div><div style="font-size:13px;color:${threshold === 10 ? C.green : C.text};font-weight:950">${fmtv(pct(count), 1)}%</div><div style="font-size:6.7px;color:${C.faint}">${count}/${n}</div></div>`;
+        }).join('');
+        const summaryCards = [
+            ['Mean miss', `${fmtv(mean, 2)} pp`, C.text],
+            ['Essentially exact', `${fmtv(pct(essentiallyExactCount), 1)}%`, C.cyan],
+            ['Within 5 pp', `${fmtv(pct(withinFiveCount), 1)}%`, C.amber],
+            ['Within 10 pp', `${fmtv(pct(withinTenCount), 1)}%`, C.green],
+            ['Median miss', `${fmtv(median, 2)} pp`, C.text],
+            ['75th-percentile miss', `${fmtv(p75, 2)} pp`, C.text],
+            ['90th-percentile miss', `${fmtv(p90, 2)} pp`, p90 <= 10 ? C.green : C.amber],
+            ['95th-percentile miss', `${fmtv(p95, 2)} pp`, p95 <= 10 ? C.green : C.amber],
+            ['Largest miss', `${fmtv(maxError, 2)} pp`, maxError <= 10 ? C.green : C.red],
+        ].map(([label, value, color]) => `<div style="border-top:2px solid ${color};padding:6px 4px;min-width:0"><div style="font-size:6.7px;color:${C.mute};text-transform:uppercase">${esc(label)}</div><div style="font-size:14px;color:${color};font-weight:950;margin-top:2px">${esc(value)}</div></div>`).join('');
+
+        return `<div data-savedcreatorkeep-error-distribution="${esc(protocolKey)}" data-account="${esc(accountKey)}" data-error-n="${n}" data-error-max="${maxError.toFixed(6)}" style="border:1px solid ${C.border};padding:10px;margin-top:10px;min-width:0">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:start;flex-wrap:wrap"><div><div style="font-size:10px;color:${C.text};font-weight:950">${esc(protocolLabel)} miss distribution</div><div style="font-size:7.5px;color:${C.dim};line-height:1.45;margin-top:2px;max-width:760px">Empirical frequency across these ${n} held-out predictions. A miss is |predicted keep − actual keep| in percentage points. “Essentially exact” means within 1 pp. No bell curve or normality assumption is imposed.</div></div><div style="font-size:7px;color:${C.faint};text-align:right">signed bias ${signedMean >= 0 ? '+' : ''}${fmtv(signedMean, 2)} pp<br>${overCount} high · ${underCount} low · ${n - overCount - underCount} within ±0.5</div></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:7px;margin-top:9px">${summaryCards}</div>
+          <div data-error-coverage-table style="display:flex;gap:5px;overflow:auto;-webkit-overflow-scrolling:touch;padding:8px 0 2px">${thresholdCards}<div style="border-left:2px solid ${C.red};padding:5px 7px;min-width:82px"><div style="font-size:6.7px;color:${C.mute}">ALL WITHIN</div><div data-error-largest-miss style="font-size:13px;color:${C.red};font-weight:950">${fmtv(maxError, 2)} pp</div><div style="font-size:6.7px;color:${C.faint}">observed maximum</div></div></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,310px),1fr));gap:10px;margin-top:8px"><div style="min-width:0"><div style="font-size:8px;color:${C.text};font-weight:900;margin-bottom:4px">How often each miss size occurred</div><svg data-error-histogram viewBox="0 0 ${histogramW} ${histogramH}" style="display:block;width:100%;height:auto">${histogramSvg}</svg></div><div style="min-width:0"><div style="font-size:8px;color:${C.text};font-weight:900;margin-bottom:4px">Probability of landing within X points</div><svg data-error-coverage-curve viewBox="0 0 ${coverageW} ${coverageH}" style="display:block;width:100%;height:auto">${coverageSvg}</svg></div></div>
+        </div>`;
+    }
     function savedCreatorAdaptiveKeepStudyHtml(validation) {
         const study = validation && validation.creatorAdaptiveStudy;
         const evaluation = study && study.evaluation;
@@ -6714,6 +6847,7 @@ const JarvisRetention = (function () {
             ? frozenUncertainty.overall || {}
             : frozenUncertaintyMap.get(accountKey) || {};
         const scopedPoints = (evaluation.points || []).filter(point => accountKey === 'all' || point.account === accountKey);
+        const scopedFrozenPoints = (frozen.points || []).filter(point => accountKey === 'all' || point.account === accountKey);
         const status = study.status || {};
         const selection = study.selection || {};
         const selected = selection.selected || {};
@@ -6823,8 +6957,10 @@ const JarvisRetention = (function () {
           <div style="font-size:10px;color:${C.text};font-weight:950;margin:10px 0 4px">Causal prequential final tail · one next upload at a time</div><div style="font-size:7.5px;color:${C.mute};line-height:1.45;margin-bottom:5px">${esc(evaluation.protocol || '')}</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:7px">${prequentialCards}</div>
           <div style="margin-top:10px;min-width:0">${savedCreatorAdaptiveKeepScatter(study, accountKey, validation)}</div>
+          ${savedCreatorKeepErrorDistribution(scopedPoints, accountKey, 'prequential', 'Causal prequential')}
           <div style="font-size:10px;color:${C.text};font-weight:950;margin:12px 0 4px">Frozen final-tail stress · no tail outcomes consumed</div><div style="font-size:7.5px;color:${C.mute};line-height:1.45;margin-bottom:5px">${esc(frozen.protocol || '')} ${esc(frozen.claimBoundary || '')}</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:7px">${frozenCards}</div>
+          ${savedCreatorKeepErrorDistribution(scopedFrozenPoints, accountKey, 'frozen', 'Frozen final-tail')}
           <div style="font-size:9px;color:${C.text};font-weight:950;margin:12px 0 5px">Per-account metrics, coverage, and uncertainty</div><div style="overflow:auto;-webkit-overflow-scrolling:touch;max-width:100%"><table style="width:100%;min-width:1320px;border-collapse:collapse;font-size:7.5px"><thead><tr style="text-align:left;color:${C.mute}"><th style="padding:5px">Creator</th><th>pre n</th><th>pre MAE</th><th>pre history</th><th>pre value</th><th>pre ±10</th><th>pre p90</th><th>pre bootstrap 90%</th><th>frozen n</th><th>frozen MAE</th><th>frozen history</th><th>frozen value</th><th>frozen ±10</th><th>frozen p90</th><th>frozen MAE 95%</th><th>P(MAE≤10)</th></tr></thead><tbody>${rows}</tbody></table></div>
           ${ablationCards ? `<div style="font-size:9px;color:${C.text};font-weight:950;margin:12px 0 5px">Frozen-tail modality ablations</div><div style="font-size:7.5px;color:${C.mute};line-height:1.45;margin-bottom:6px">${esc(study.ablations && study.ablations.interpretation || '')}</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:7px">${ablationCards}</div>` : ''}
           <div style="border-left:3px solid ${C.amber};background:${C.amber}08;padding:8px;margin-top:9px"><div style="font-size:8px;color:${C.amber};font-weight:950">Claim boundary</div><div style="font-size:7.5px;color:${C.dim};line-height:1.5;margin-top:2px">${esc(evaluation.claimBoundary)} The individual ±10 rate, account MAE, uncertainty interval, and improvement over history are different claims. The historical final tail has been inspected; prospective fixed-horizon uploads remain the untouched confirmation. This research scalar is never predictor-eligible.</div></div>

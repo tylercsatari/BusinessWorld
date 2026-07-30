@@ -1173,6 +1173,14 @@ async function main() {
         assert(/incremental MAE value/i.test(creatorKeepStudyText));
         assert(creatorKeepStudyText.includes('PREQUENTIAL ±10 COVERAGE'));
         assert.strictEqual(await creatorKeepStudy.locator('[data-savedcreatorkeep-scatter] circle[data-savedchannelvideo], [data-savedcreatorkeep-scatter] circle[data-savedvalidationrow]').count(), 40);
+        const pooledPrequentialDistribution = creatorKeepStudy.locator('[data-savedcreatorkeep-error-distribution="prequential"]');
+        const pooledFrozenDistribution = creatorKeepStudy.locator('[data-savedcreatorkeep-error-distribution="frozen"]');
+        assert.strictEqual(await pooledPrequentialDistribution.getAttribute('data-account'), 'all');
+        assert.strictEqual(await pooledPrequentialDistribution.getAttribute('data-error-n'), '40');
+        assert.strictEqual(await pooledFrozenDistribution.getAttribute('data-error-n'), '40');
+        assert((await pooledPrequentialDistribution.locator('[data-error-histogram-bin]').count()) > 0, 'the empirical absolute-error histogram must render bins');
+        assert.strictEqual(await pooledPrequentialDistribution.locator('[data-error-cdf]').count(), 1, 'the empirical cumulative coverage curve must render');
+        assert((await pooledPrequentialDistribution.innerText()).includes('No bell curve or normality assumption is imposed.'));
         const firstCreatorKeepPoint = creatorKeepStudy.locator('[data-savedcreatorkeep-scatter] circle[data-savedvalidationrow]').first();
         const firstCreatorKeepPointTitle = await firstCreatorKeepPoint.locator('title').textContent();
         assert(firstCreatorKeepPointTitle.includes('Component A:'));
@@ -1183,6 +1191,20 @@ async function main() {
         assert(/component B .*visual\+together semantic stack/i.test(creatorKeepPointDetail));
         await creatorKeepStudy.locator('[data-savedcreatorkeepaccount="hafu"]').click();
         assert.strictEqual(await creatorKeepStudy.locator('[data-savedcreatorkeep-scatter] circle[data-savedchannelvideo], [data-savedcreatorkeep-scatter] circle[data-savedvalidationrow]').count(), 20);
+        const hafuPrequentialDistribution = creatorKeepStudy.locator('[data-savedcreatorkeep-error-distribution="prequential"]');
+        assert.strictEqual(await hafuPrequentialDistribution.getAttribute('data-account'), 'hafu');
+        assert.strictEqual(await hafuPrequentialDistribution.getAttribute('data-error-n'), '20');
+        assert(Math.abs(Number(await hafuPrequentialDistribution.getAttribute('data-error-max')) - 6.35) < 1e-6, 'Hafu maximum miss must be derived from the same plotted predictions');
+        const hafuWithinOne = hafuPrequentialDistribution.locator('[data-error-coverage-threshold="1"]');
+        assert.strictEqual(await hafuWithinOne.getAttribute('data-count'), '3');
+        assert(Math.abs(Number(await hafuWithinOne.getAttribute('data-percentage')) - 15) < 1e-6, 'Hafu within-one-point coverage must match the empirical errors');
+        const hafuHistogramCount = await hafuPrequentialDistribution.locator('[data-error-histogram-bin]').evaluateAll(bins => bins.reduce((sum, bin) => sum + Number(bin.dataset.count || 0), 0));
+        assert.strictEqual(hafuHistogramCount, 20, 'every Hafu prediction must occur in exactly one histogram bin');
+        assert(await hafuPrequentialDistribution.evaluate(element => element.scrollWidth <= element.clientWidth + 1), 'the distribution panel must not overflow its mobile-width parent');
+        if (process.env.EXPERIMENT_LAB_KEEP_DISTRIBUTION_SCREENSHOT) {
+            fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_KEEP_DISTRIBUTION_SCREENSHOT), { recursive: true });
+            await hafuPrequentialDistribution.screenshot({ path: process.env.EXPERIMENT_LAB_KEEP_DISTRIBUTION_SCREENSHOT });
+        }
         await creatorKeepStudy.locator('[data-savedcreatorkeepaccount="all"]').click();
         const visualKeepStudy = page.locator('[data-savedvisualkeep-study]');
         await visualKeepStudy.waitFor();
