@@ -46,6 +46,15 @@ function compactSavedHookRecord(record) {
     const selected = {};
     for (const target of SAVED_HOOK_METRICS) selected[target] = embeddingSteerSelection(record, target, 'shorts_raw');
     const metric = target => selected[target];
+    const manifest = record && record.input_manifest && typeof record.input_manifest === 'object'
+        ? record.input_manifest
+        : {};
+    const visualForecast = record && record.visual_keep_forecast && typeof record.visual_keep_forecast === 'object'
+        ? record.visual_keep_forecast
+        : null;
+    const creatorForecast = record && record.creator_adaptive_keep_forecast && typeof record.creator_adaptive_keep_forecast === 'object'
+        ? record.creator_adaptive_keep_forecast
+        : null;
     return {
         id: record.id,
         title: record.title,
@@ -54,6 +63,10 @@ function compactSavedHookRecord(record) {
         savedAt: record.savedAt,
         folder: record.folder || null,
         input_manifest: record.input_manifest || null,
+        score_revision_fingerprint: manifest.revision_fingerprint || null,
+        embedding_input_fingerprint: manifest.embedding_input_fingerprint || null,
+        score_input_fingerprint: manifest.score_input_fingerprint || manifest.input_fingerprint || null,
+        creator_profile: manifest.creator_profile || null,
         keep: metric('keep') && metric('keep').pctile,
         m: {
             keep: metric('keep') && metric('keep').pctile,
@@ -63,8 +76,24 @@ function compactSavedHookRecord(record) {
             sviews: metric('realviews') && metric('realviews').est,
             gt10M: metric('gt10M') && metric('gt10M').est,
             outlier: metric('outlier') && metric('outlier').pctile,
+            visual_keep_forecast: visualForecast && isFinite(Number(visualForecast.raw)) ? Number(visualForecast.raw) : null,
+            creator_adaptive_keep: creatorForecast && isFinite(Number(creatorForecast.raw)) ? Number(creatorForecast.raw) : null,
         },
         m_identity: selected,
+        derived_identity: {
+            visual_keep_forecast: visualForecast ? {
+                coordinateId: visualForecast.coordinate_id || 'shorts.visual-keep-forecast.v1',
+                raw: visualForecast.raw == null ? null : Number(visualForecast.raw),
+                artifactSha256: visualForecast.model_artifact_sha256 || null,
+            } : null,
+            creator_adaptive_keep: creatorForecast ? {
+                coordinateId: creatorForecast.coordinate_id || 'shorts.creator-adaptive-keep.v1',
+                raw: creatorForecast.raw == null ? null : Number(creatorForecast.raw),
+                profile: creatorForecast.profile_account || manifest.creator_profile || null,
+                modelArtifactSha256: creatorForecast.model_artifact_sha256 || null,
+                servingArtifactSha256: creatorForecast.serving_artifact_sha256 || null,
+            } : null,
+        },
     };
 }
 

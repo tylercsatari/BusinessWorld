@@ -3,9 +3,9 @@
 
 Render's datacenter IP is bot-blocked by YouTube, so the server can't download videos for
 link-scoring. When it hits the block, it drops a request into R2 (shorts/yt-relay/requests/)
-and this watcher — running here where YouTube is happy — downloads the video, runs the FULL
-raw_upload.py scoring pipeline locally (frames + whisper transcript + embeds + steers), and
-uploads the finished record to shorts/yt-relay/results/ for the server's job to return.
+and this watcher — running here where YouTube is happy — acquires the source video and
+uploads it to R2. Render then runs the same canonical raw_upload.py scorer used by device
+uploads, so one-off link scoring cannot drift with the Mac's Python or model environment.
 
 Installed as a launchd agent (com.businessworld.ytrelay) with KeepAlive — like the crawler,
 it should always be running."""
@@ -14,6 +14,7 @@ import base64, hashlib, json, os, re, subprocess, sys, tempfile, threading, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import boto3
+import raw_upload as raw_scorer
 
 def env(k):
     v = os.environ.get(k)
@@ -58,9 +59,12 @@ def list_json(prefix):
         token = page.get('NextContinuationToken') if page.get('IsTruncated') else None
         if not token: return out
 
-def score_link(url, title='', stop_check=None):
+def score_link(url, title='', stop_check=None, creator_profile=''):
     args = [PY, os.path.join(HERE, 'raw_upload.py'), '--youtube', url]
     if title: args += ['--title', str(title)[:80]]
+    profile = re.sub(r'[^a-z0-9_-]', '', str(creator_profile or '').lower())[:40]
+    if profile:
+        args += ['--creator-profile', profile]
     try:
         # File-backed streams cannot fill a PIPE and deadlock while yt-dlp/ffmpeg run.
         # They also keep a channel import's memory constant across hundreds of Shorts.
@@ -83,6 +87,59 @@ def score_link(url, title='', stop_check=None):
     except Exception as exc:
         return {'error': 'relay: ' + str(exc)[:240]}
 
+def acquire_link(url, request_id):
+    match = (
+        re.search(
+            r'(?:v=|youtu\.be/|/shorts/|/live/)([\w-]{11})',
+            str(url or ''),
+        )
+        or re.search(r'^([\w-]{11})$', str(url or '').strip())
+    )
+    if not match:
+        return {'error': 'relay: could not find a YouTube video id'}
+    video_id = match.group(1)
+    folder = tempfile.mkdtemp(prefix='rawyt_relay_')
+    try:
+        info, path, acquisition = raw_scorer.download_youtube_hook(
+            video_id,
+            folder,
+        )
+        extension = os.path.splitext(path)[1].lower() or '.mp4'
+        if not re.fullmatch(r'\.[a-z0-9]{2,5}', extension):
+            extension = '.mp4'
+        video_key = (
+            f'shorts/yt-relay/videos/{request_id}{extension}'
+        )
+        s3.upload_file(
+            path,
+            BUCKET,
+            video_key,
+            ExtraArgs={'ContentType': 'video/mp4'},
+        )
+        return {
+            'relayVideoKey': video_key,
+            'videoId': video_id,
+            'sourceUrl': (
+                f'https://www.youtube.com/watch?v={video_id}'
+            ),
+            'sourceTitle': str(info.get('title') or '')[:120],
+            'sourceViews': info.get('view_count'),
+            'sourceChannel': str(
+                info.get('channel') or info.get('uploader') or ''
+            )[:80],
+            'sourcePublished': (
+                info.get('upload_date') or info.get('timestamp')
+            ),
+            'sourceSubscribers': info.get('channel_follower_count'),
+            'sourceDuration': info.get('duration'),
+            'sourceAcquisition': acquisition,
+        }
+    except Exception as exc:
+        return {'error': 'relay acquisition: ' + str(exc)[:240]}
+    finally:
+        import shutil
+        shutil.rmtree(folder, ignore_errors=True)
+
 def handle(key):
     rid = key.rsplit('/', 1)[-1][:-5]
     try:
@@ -92,7 +149,10 @@ def handle(key):
         return
     url = str(req.get('url') or '')[:300]
     log('relay %s ← %s' % (rid, url))
-    out = score_link(url, req.get('title') or '')
+    out = acquire_link(url, rid)
+    out['expectedRevisionFingerprint'] = (
+        req.get('expectedRevisionFingerprint') or None
+    )
     out['relayedBy'] = 'mac'
     s3.put_object(Bucket=BUCKET, Key=RES + rid + '.json', Body=json.dumps(out).encode(), ContentType='application/json')
     s3.delete_object(Bucket=BUCKET, Key=key)

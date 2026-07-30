@@ -10,13 +10,13 @@ const JarvisRetention = (function () {
     const C = { bg: '#0b1120', card: '#0f172a', card2: '#131c30', border: '#1e293b', border2: '#27364d',
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', amber: '#f59e0b', accent: '#38bdf8' };
-    let root = null, mountMode = 'full', DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, EXPPLOTS = {}, PREDICTORLAB = null, PREDICTORSTATUS = null, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, SAVEDCHANNELS = null, SAVEDCHANNELDETAIL = {}, SAVEDCHANNELANALYSIS = {}, SAVEDCHANNELVALIDATION = null, SAVEDCHANNELVIDEOCACHE = {}, SCORECONTRACT = null, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
+    let root = null, mountMode = 'full', DATA = null, S = null, S_MAIN = null, N = null, CR = null, INT = null, CF = null, RTGF = null, RTGA = null, RTGE = null, RTGH = null, LIB = null, LIBV = null, SHORTSV = null, RAW = {}, EXPPLOTS = {}, PREDICTORLAB = null, PREDICTORSTATUS = null, GUESSES = {}, GUESSRUNS = null, GRPORUNS = null, GRPOIDX = {}, GRPOGRP = {}, EXPDEMO = {}, FUSION = null, NOV = null, EXPREG = null, SAVED = null, SAVEDDETAIL = {}, SAVEDCHANNELS = null, SAVEDCHANNELDETAIL = {}, SAVEDCHANNELANALYSIS = {}, SAVEDCHANNELVALIDATION = null, SAVEDCHANNELVIDEOCACHE = {}, SCORECONTRACT = null, SCORECONTRACT_PROMISE = null, SCORECONTRACT_AT = 0, NCEXP = null, NQ = null, NQF = null, CHANS = null, CHDECON = null, TRIBE = null, err = null;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
     let PROMISE_UI = null, OPERATIONS_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationShow: 60, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedLedgerPlotMode: 'oof', savedVisualKeepProtocol: 'videoHoldout', savedVisualKeepAccount: 'all', savedCreatorKeepAccount: 'all' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationShow: 60, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedLedgerPlotMode: 'oof', savedVisualKeepProtocol: 'videoHoldout', savedVisualKeepAccount: 'all', savedCreatorKeepAccount: 'all' };
     st.savedValidationFeature = 'shorts.video-heldout.together.keep';
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
@@ -377,12 +377,9 @@ const JarvisRetention = (function () {
             && up.savedChannelId
             && up.savedChannelVideoId
         );
-        if (!isExplicitSavedChannelRecord) return null;
         const persisted = up && up.creator_adaptive_keep_forecast;
-        const currentArtifactSha = SAVEDCHANNELVALIDATION
-            && SAVEDCHANNELVALIDATION.creatorAdaptiveStudy
-            && SAVEDCHANNELVALIDATION.creatorAdaptiveStudy.modelArtifact
-            && SAVEDCHANNELVALIDATION.creatorAdaptiveStudy.modelArtifact.artifactSha256
+        const liveContract = SCORECONTRACT && SCORECONTRACT.live || {};
+        const liveModelArtifactSha = liveContract.creator_model_artifact_sha256
             || null;
         const creatorStudy = SAVEDCHANNELVALIDATION
             && SAVEDCHANNELVALIDATION.creatorAdaptiveStudy || {};
@@ -403,28 +400,37 @@ const JarvisRetention = (function () {
             candidate_count: hasSchema3Mixture && selection.candidateCount != null ? +selection.candidateCount : 43360,
             candidate_registry_sha256: hasSchema3Mixture ? selection.candidateRegistrySha256 || null : null,
         };
-        const responseArtifactSha = up.creator_adaptive_keep_release_sha256 || null;
-        const persistedRevisionMatches = !!(
-            persisted
-            && persisted.model_artifact_sha256
-            && (
-                currentArtifactSha
-                    ? persisted.model_artifact_sha256 === currentArtifactSha
-                    : persisted.model_artifact_sha256 === responseArtifactSha
-            )
-        );
-        if (persistedRevisionMatches && persisted && persisted.coordinate_id === 'shorts.creator-adaptive-keep.v1') {
+        const responseArtifactSha = persisted && persisted.model_artifact_sha256
+            || up && up.creator_adaptive_keep_release_sha256
+            || null;
+        if (persisted && responseArtifactSha && persisted.coordinate_id === 'shorts.creator-adaptive-keep.v1') {
             const raw = persisted.raw != null ? +persisted.raw : +persisted.est;
             if (isFinite(raw)) {
+                const scoreRevision = up && up.input_manifest
+                    && up.input_manifest.revision_fingerprint || null;
+                const artifactCurrent = liveModelArtifactSha
+                    ? responseArtifactSha === liveModelArtifactSha
+                    : null;
+                const scorerCurrent = liveContract.revision_fingerprint
+                    ? scoreRevision === liveContract.revision_fingerprint
+                    : null;
                 return {
                     ...persisted,
                     ...schema3,
                     raw,
                     est: raw,
+                    artifact_current: artifactCurrent,
+                    scorer_current: scorerCurrent,
+                    revision_status: artifactCurrent === false || scorerCurrent === false
+                        ? 'stale'
+                        : artifactCurrent === true && scorerCurrent === true
+                            ? 'current'
+                            : 'unverified',
                     predictor_eligible: predictorEligible,
                 };
             }
         }
+        if (!isExplicitSavedChannelRecord) return null;
         const videoId = up.savedChannelVideoId;
         if (!videoId || !SAVEDCHANNELVALIDATION || SAVEDCHANNELVALIDATION.loading || SAVEDCHANNELVALIDATION.error) return null;
         const columns = SAVEDCHANNELVALIDATION.coordinateRegistry
@@ -447,6 +453,13 @@ const JarvisRetention = (function () {
             kind: 'keep_rate_percent',
             unit: 'percent',
             source: 'causal_final20_prequential',
+            forecast_scope: 'historical_row_prequential',
+            historical_replay_valid: true,
+            revision_status: 'historical-prequential',
+            claim_boundary: (
+                'This value was generated with only the labels available before '
+                + 'this historical row. It is the valid blind historical comparison.'
+            ),
             predictor_eligible: predictorEligible,
             profile_account: row.accountId || null,
             profile_account_name: row.accountName || null,
@@ -471,6 +484,46 @@ const JarvisRetention = (function () {
             component_a_definition: 'Centered together-embedding residual analog',
             component_b_definition: 'Visual-plus-together semantic stack',
             ...schema3,
+        };
+    }
+    function creatorAdaptiveForecastPresentation(forecast) {
+        forecast = forecast || {};
+        const historyN = forecast.history_n != null && isFinite(+forecast.history_n)
+            ? +forecast.history_n
+            : null;
+        const historicalPrequential = (
+            forecast.forecast_scope === 'historical_row_prequential'
+            || forecast.historical_replay_valid === true
+        );
+        const history = historicalPrequential
+            ? (historyN == null ? 'row-specific earlier history' : `${historyN} strictly earlier uploads`)
+            : (historyN == null ? 'the registered profile snapshot' : `${historyN} uploads in the registered profile snapshot`);
+        let historyEnd = null;
+        if (forecast.history_end != null) {
+            const numeric = +forecast.history_end;
+            const date = new Date(isFinite(numeric) && numeric > 0 && numeric < 1e11 ? numeric * 1000 : forecast.history_end);
+            if (!isNaN(date.getTime())) historyEnd = date.toLocaleString();
+        }
+        const revisionStatus = forecast.revision_status || 'unverified';
+        const revisionMeta = revisionStatus === 'current'
+            ? { label: 'current live revision', color: C.green }
+            : revisionStatus === 'stale'
+                ? { label: 'stale saved revision', color: C.red }
+                : revisionStatus === 'historical-prequential'
+                    ? { label: 'blind historical row', color: C.cyan }
+                    : { label: 'revision unverified', color: C.amber };
+        const claimBoundary = forecast.claim_boundary || (
+            historicalPrequential
+                ? 'This row is evaluated only from information that existed before it.'
+                : 'This profile snapshot is a future-upload research forecast. It is not a blind replay of an older upload.'
+        );
+        return {
+            historicalPrequential,
+            history,
+            historyEnd,
+            revisionStatus,
+            revisionMeta,
+            claimBoundary,
         };
     }
     function steerPreference(up) {
@@ -528,6 +581,44 @@ const JarvisRetention = (function () {
             embeddingModel: manifest.embedding_model,
             scorer: manifest.scorer,
         }, assetId || rawEmbeddingAssetId(up));
+    }
+    function shortFingerprint(value) {
+        return value ? String(value).slice(0, 12) : 'unavailable';
+    }
+    function scorerArtifactRevision(up, key) {
+        const manifest = up && up.input_manifest || {};
+        const artifacts = manifest.scorer_revisions
+            && manifest.scorer_revisions.artifacts || {};
+        const revision = artifacts[key] || {};
+        return revision.version_id || revision.etag || null;
+    }
+    function coordinateTraceHtml(up, coordinateId, metric, options) {
+        options = options || {};
+        const manifest = up && up.input_manifest || {};
+        const live = SCORECONTRACT && SCORECONTRACT.live || {};
+        const current = !!(
+            manifest.revision_fingerprint
+            && live.revision_fingerprint
+            && manifest.revision_fingerprint === live.revision_fingerprint
+        );
+        const raw = metric && metric.raw != null ? +metric.raw
+            : metric && metric.est != null ? +metric.est
+                : null;
+        const percentile = metric && metric.pctile != null ? +metric.pctile : null;
+        const modelRevision = options.modelRevision || metric && (
+            metric.serving_artifact_sha256
+            || metric.model_artifact_sha256
+        );
+        const artifactLabel = options.artifactLabel || 'fitted artifact';
+        const profile = options.profile || metric && metric.profile_account || manifest.creator_profile;
+        return `<div data-coordinate-trace="${esc(coordinateId)}" style="border-top:1px solid ${C.border};margin-top:7px;padding-top:6px;font-size:7.7px;color:${C.faint};line-height:1.5">
+          <div><b style="color:${C.text}">Ledger coordinate:</b> <code style="color:${C.cyan};user-select:all">${esc(coordinateId)}</code></div>
+          <div><b style="color:${C.text}">Displayed values:</b> ${raw == null || !isFinite(raw) ? 'raw unavailable' : `raw ${esc(String(Math.round(raw * 10000) / 10000))}`}${percentile == null || !isFinite(percentile) ? '' : ` · corpus rank ${fmtv(percentile, 1)}th percentile`}${options.valueNote ? ` · ${esc(options.valueNote)}` : ''}</div>
+          <div><b style="color:${C.text}">Embedding identity:</b> ${shortFingerprint(manifest.embedding_input_fingerprint)} · canonical montage ${shortFingerprint(manifest.canonical_montage && manifest.canonical_montage.montage_sha256)} · ${esc(manifest.source_mode || 'historical source unknown')}</div>
+          <div><b style="color:${C.text}">Scorer identity:</b> ${shortFingerprint(manifest.score_input_fingerprint || manifest.input_fingerprint)} · revision <span style="color:${current ? C.green : C.amber}">${shortFingerprint(manifest.revision_fingerprint)}${live.revision_fingerprint ? current ? ' current' : ` stale vs ${shortFingerprint(live.revision_fingerprint)}` : ''}</span>${profile ? ` · profile ${esc(profile)}` : ''}</div>
+          <div><b style="color:${C.text}">Artifact:</b> ${esc(artifactLabel)} · ${shortFingerprint(modelRevision || manifest.steer_artifact_sha256)}</div>
+          <button type="button" data-exp-ledger-coordinate="${esc(coordinateId)}" style="margin-top:5px;min-height:36px;background:transparent;border:1px solid ${C.border};color:${C.accent};padding:5px 8px;cursor:pointer;font-size:8px;font-weight:900">open ledger definition + lineage →</button>
+        </div>`;
     }
     function embeddingParityAudit(scope) {
         const groups = new Map(), conflicts = [];
@@ -592,20 +683,72 @@ const JarvisRetention = (function () {
         const pref = ((up && up.input_manifest && up.input_manifest.display_preference) || ['together', 'text', 'visual']).join(' > ');
         return `<div style="margin-top:8px;background:${C.card};border:1px solid ${C.border};border-radius:7px;padding:8px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;font-weight:800;margin-bottom:5px">embedded inputs by channel</div>${rows}<div style="font-size:9px;color:${C.faint};margin-top:5px">Displayed metric boxes use first available channel in this order: ${esc(pref)}.</div></div>`;
     }
-    function scoreContractEnsure() {
-        if (SCORECONTRACT) return;
+    function scoreContractEnsure(force) {
+        const ttl = SCORECONTRACT && (SCORECONTRACT.error || SCORECONTRACT.liveError)
+            ? 15000
+            : 300000;
+        if (
+            !force
+            && SCORECONTRACT_PROMISE
+            && (
+                SCORECONTRACT && SCORECONTRACT.loading
+                || Date.now() - SCORECONTRACT_AT < ttl
+            )
+        ) return SCORECONTRACT_PROMISE;
+        SCORECONTRACT_AT = Date.now();
         SCORECONTRACT = { loading: true };
-        rtFetchJson('/buildings/jarvis/saved-channel-feature-contract.json', { cache: 'default' }, 3)
-            .then(contract => {
-                SCORECONTRACT = contract && contract.provenanceByTarget
-                    ? contract
-                    : { error: 'Score provenance contract is incomplete.' };
-                rtgUpdateExp();
-            })
-            .catch(error => {
-                SCORECONTRACT = { error: fetchFail(error) };
-                rtgUpdateExp();
-            });
+        SCORECONTRACT_PROMISE = Promise.allSettled([
+            rtFetchJson('/buildings/jarvis/saved-channel-feature-contract.json', { cache: 'default' }, 3),
+            rtFetchJson('/api/raw/scorer-contract', { cache: 'no-store' }, 3),
+        ]).then(([contractResult, liveResult]) => {
+            const contract = contractResult.status === 'fulfilled' ? contractResult.value : null;
+            const live = liveResult.status === 'fulfilled' ? liveResult.value : null;
+            SCORECONTRACT = contract && contract.provenanceByTarget
+                ? {
+                    ...contract,
+                    live: live && live.revision_fingerprint ? live : null,
+                    liveError: live && live.error
+                        || (liveResult.status === 'rejected' ? fetchFail(liveResult.reason) : null),
+                }
+                : { error: 'Score provenance contract is incomplete.' };
+            SCORECONTRACT_AT = Date.now();
+            rtgUpdateExp();
+            return SCORECONTRACT;
+        }).catch(error => {
+            SCORECONTRACT = { error: fetchFail(error) };
+            SCORECONTRACT_AT = Date.now();
+            rtgUpdateExp();
+            return SCORECONTRACT;
+        });
+        return SCORECONTRACT_PROMISE;
+    }
+    async function currentScorerContract(force) {
+        const contract = await scoreContractEnsure(force);
+        return contract && !contract.error ? contract.live || null : null;
+    }
+    function scorerCreatorProfiles() {
+        const profiles = SCORECONTRACT && SCORECONTRACT.live
+            && Array.isArray(SCORECONTRACT.live.creator_profiles)
+            ? SCORECONTRACT.live.creator_profiles
+            : ['tyler', 'hafu', 'creatinganything', 'brushlabs'];
+        const unique = profiles.map(value => String(value || '').trim().toLowerCase())
+            .filter((value, index, all) => value && all.indexOf(value) === index);
+        return unique.length ? unique : ['tyler'];
+    }
+    function selectedCreatorProfile() {
+        const profiles = scorerCreatorProfiles();
+        const requested = String(st.expCreatorProfile || '').trim().toLowerCase();
+        return profiles.includes(requested) ? requested : profiles[0];
+    }
+    function expCreatorProfileHtml() {
+        const selected = selectedCreatorProfile();
+        const options = scorerCreatorProfiles().map(profile => (
+            `<option value="${esc(profile)}"${profile === selected ? ' selected' : ''}>${esc(savedVisualKeepAccountName(profile, profile))}</option>`
+        )).join('');
+        return `<label style="display:inline-flex;align-items:center;gap:6px;border-left:1px solid ${C.border};padding-left:9px;font-size:9px;color:${C.mute}">
+          creator history for the research forecast
+          <select data-expcreatorprofile style="background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:5px;padding:5px 7px;font-size:10px;min-height:32px">${options}</select>
+        </label>`;
     }
     function rawScoreProvenanceHtml(up) {
         const manifest = up && up.input_manifest || {};
@@ -627,7 +770,7 @@ const JarvisRetention = (function () {
         ].map(([key, label, color]) => {
             const row = provenance[key] || {};
             return `<div style="display:grid;grid-template-columns:minmax(105px,.55fr) minmax(220px,1.35fr) minmax(190px,1.1fr) minmax(160px,1fr);gap:8px;padding:7px;border-top:1px solid ${C.border};align-items:start">
-              <div><div style="font-size:9px;color:${color};font-weight:950">${esc(label)}</div><div style="font-size:7.5px;color:${C.faint}">${key === 'novelty' ? '3 independent outputs' : 'Visual · Text · Both'}</div></div>
+              <div><div style="font-size:9px;color:${color};font-weight:950">${esc(label)}</div><div style="font-size:7.5px;color:${C.faint}">${key === 'novelty' ? '3 independent outputs' : 'Visual · Text · Both'}</div><code style="display:block;font-size:6.5px;color:${C.faint};margin-top:3px">${key === 'novelty' ? 'shorts.stored.novelty.{keep|ret5|views}' : `shorts.stored.{visual|text|together}.${key}`}</code></div>
               <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Axis fitted on:</b> ${esc(row.axisFitPopulation || 'not documented')}</div>
               <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Displayed unit calibrated on:</b> ${esc(row.calibrationPopulation || 'not documented')}</div>
               <div style="font-size:8px;color:${C.dim};line-height:1.4"><b style="color:${C.text}">Truth it represents:</b> ${esc(row.observedOutcome || 'not documented')}</div>
@@ -649,12 +792,22 @@ const JarvisRetention = (function () {
         const replayStatus = manifest.cache_status
             ? `${manifest.cache_status}${manifest.cache_write_status && manifest.cache_write_status !== 'not_attempted' ? ` / ${manifest.cache_write_status}` : ''}`
             : 'historical score · replay identity not persisted';
-        const inputFingerprint = manifest.input_fingerprint ? String(manifest.input_fingerprint).slice(0, 12) : 'unavailable';
+        const scoreInputFingerprint = manifest.score_input_fingerprint || manifest.input_fingerprint;
+        const embeddingInputFingerprint = manifest.embedding_input_fingerprint;
         const revisionFingerprint = manifest.revision_fingerprint ? String(manifest.revision_fingerprint).slice(0, 12) : 'unavailable';
+        const liveRevision = SCORECONTRACT.live && SCORECONTRACT.live.revision_fingerprint;
+        const revisionCurrent = !!(manifest.revision_fingerprint && liveRevision && manifest.revision_fingerprint === liveRevision);
         const pipeline = SCORECONTRACT.pipeline || {};
         return cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap;margin-bottom:6px"><div><div style="font-size:12px;font-weight:950;color:${C.text}">21 embedding outputs + 2 derived keep forecasts</div><div style="font-size:9px;color:${C.mute};line-height:1.45;margin-top:2px">The original 21 coordinates remain unchanged. The frozen visual forecast reuses the visual vector. The causal creator mixture consumes both the visual and together vectors plus strictly earlier creator history. Neither derived scalar is a new embedding space.</div></div><div style="font-size:8px;color:${C.faint};text-align:right">${esc(manifest.embedding_model || pipeline.embeddingModel || 'gemini-embedding-2')} · ${Number(manifest.embedding_dimensions || pipeline.embeddingDimensions || 1536).toLocaleString()}D<br>${esc(manifest.scorer || pipeline.scorer || 'raw_upload.py')} · artifact ${esc(hash)}</div></div>
           <div style="overflow:auto"><div style="min-width:760px;border:1px solid ${C.border}">${targetRows}</div></div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:5px;margin-top:7px"><div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Deterministic replay</div><div style="font-size:9px;color:${manifest.cache_status === 'hit' ? C.green : C.text};font-weight:900">${esc(replayStatus)}</div></div><div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Input fingerprint</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(inputFingerprint)}</div></div><div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Scorer + model + artifact revision</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(revisionFingerprint)}</div></div></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:5px;margin-top:7px">
+            <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Deterministic replay</div><div style="font-size:9px;color:${manifest.cache_status === 'hit' ? C.green : C.text};font-weight:900">${esc(replayStatus)}</div></div>
+            <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Embedding input fingerprint</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(shortFingerprint(embeddingInputFingerprint))}</div><div style="font-size:7.5px;color:${C.faint};margin-top:2px">canonical pixels + normalized transcript; device, YouTube, and 5-frame routes are identical only when this fingerprint matches</div></div>
+            <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Derived-score fingerprint</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(shortFingerprint(scoreInputFingerprint))}</div><div style="font-size:7.5px;color:${C.faint};margin-top:2px">embedding identity + duration + explicit creator profile</div></div>
+            <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Scorer revision</div><div style="font-size:9px;color:${revisionCurrent ? C.green : C.amber};font-weight:900">${esc(revisionFingerprint)} · ${revisionCurrent ? 'current' : liveRevision ? `stale vs ${esc(shortFingerprint(liveRevision))}` : 'live revision unavailable'}</div></div>
+            <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Canonical source</div><div style="font-size:9px;color:${C.text};font-weight:900">${esc(manifest.source_mode || 'historical unknown')} · ${esc(manifest.creator_profile || 'no creator profile')}</div><div style="font-size:7.5px;color:${C.faint};margin-top:2px">${manifest.canonical_montage ? `${manifest.canonical_montage.width}×${manifest.canonical_montage.height} ${esc(manifest.canonical_montage.format || 'JPEG')} · pixels ${esc(shortFingerprint(manifest.canonical_montage.montage_sha256))}` : 'canonical montage metadata unavailable'}</div></div>
+            <div style="background:${C.card2};padding:7px"><div style="font-size:7.5px;color:${C.mute};text-transform:uppercase">Duration boundary</div><div style="font-size:9px;color:${C.text};font-weight:900">${manifest.duration_s == null ? 'duration defaulted' : `${fmtv(manifest.duration_s, 3)} seconds`}</div><div style="font-size:7.5px;color:${C.faint};margin-top:2px">ordinary axes ignore duration; forecast-views parity additionally requires the same duration</div></div>
+          </div>
           <div style="font-size:8px;color:${C.amber};line-height:1.5;margin-top:7px"><b>Critical distinction:</b> Keep and 5-second axes were fitted and calibrated on the exact modality-specific Tyler rows recorded in the current artifact manifest. Their stored Tyler values are in-sample diagnostics; Hafu is account-external. Public views, outlier, and 10M axes use their separately recorded public fit populations. “Forecast views” is a separate Tyler-channel retention-to-views model. The Blind validation tab rebuilds eligible axes with video/account exclusion and reports the actual error. The causal multimodal mixture is research-only: known creator, at least 8 and at most 30 strictly earlier labels, one next upload at a time, and never predictor-eligible.</div>`, 10);
     }
     function predictorEnsure(force) {
@@ -889,6 +1042,7 @@ const JarvisRetention = (function () {
         return head + progress + providerBanner + targetTabs + decisionBanner + scoreCards + predictorStressTests(target, key) + plotCard + `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px">${calibrationCard}${predictorFormula(target)}</div>` + allInputsFormula + predictorGroupCalibration(target, key) + predictorMaturitySensitivity(target, key) + predictorTailRisk(target) + foldCard + corpus + predictorFeatureBars(target.singleFeatures, 'withinSourceSpearman', 'Which single outputs add video-level signal within a source?') + predictorFeatureAtlas(target.singleFeatures, key) + registryCard + provenanceCard + rules;
     }
     function renderRaw() {
+        scoreContractEnsure();
         const viewTabs = rawViewTabs();
         if ((st.rawView || 'map') === 'predictor') return viewTabs + renderRawPredictor();
         const chan = st.rawChan || 'visual';
@@ -1150,8 +1304,12 @@ const JarvisRetention = (function () {
                 <div style="font-size:8px;color:${C.green};font-weight:950;text-transform:uppercase">${esc(frozenVisualKeepOrigin)} · raw ledger value</div>
                 <div style="font-size:22px;color:${C.text};font-weight:950;line-height:1.15;margin-top:2px">${fmtv(frozenVisualKeep.raw, 1)}%</div>
                 <div style="font-size:8px;color:${C.dim};line-height:1.45;margin-top:3px">The marker above is this opening's normal visual embedding placement. The percentage applies one immutable pooled full-vector Ridge formula to that same 1,536D vector; it is stored as <b>${esc(frozenVisualKeep.coordinate_id)}</b> · pooled globally · artifact ${esc(String(frozenVisualKeep.model_artifact_sha256 || 'unavailable').slice(0, 12))}.</div>
+                ${coordinateTraceHtml(U, frozenVisualKeep.coordinate_id, frozenVisualKeep, { modelRevision: frozenVisualKeep.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}
             </div>` : `<div data-visual-keep-raw-map-value style="border-left:3px solid ${C.amber};background:${C.amber}0d;padding:8px 9px;margin:8px 0;font-size:8px;color:${C.dim}">${esc(U.visual_keep_forecast_error || 'This stored score predates shorts.visual-keep-forecast.v1. Re-score it once to persist the frozen raw forecast.')}</div>`;
             const creatorAdaptiveKeep = creatorAdaptiveKeepForecastOf(U);
+            const creatorPresentation = creatorAdaptiveKeep
+                ? creatorAdaptiveForecastPresentation(creatorAdaptiveKeep)
+                : null;
             const creatorAdaptiveBaseline = creatorAdaptiveKeep
                 && creatorAdaptiveKeep.history_only_baseline != null
                 && isFinite(+creatorAdaptiveKeep.history_only_baseline)
@@ -1174,11 +1332,12 @@ const JarvisRetention = (function () {
                 || creatorComponentB == null
                 ? ''
                 : `<br><b>Component A:</b> ${fmtv(creatorComponentA, 1)}% centered-together residual analog · <b>Component B:</b> ${fmtv(creatorComponentB, 1)}% visual+together semantic stack · final = clipped 50/50 mean.`;
-            const creatorAdaptiveKeepHtml = creatorAdaptiveKeep ? `<div data-creator-adaptive-keep-raw-map-value style="border-left:3px solid ${C.amber};background:${C.amber}0d;padding:8px 9px;margin:8px 0">
-                <div style="font-size:8px;color:${C.amber};font-weight:950;text-transform:uppercase">Causal multimodal mixture · research only · not predictor-eligible</div>
+            const creatorAdaptiveKeepHtml = creatorAdaptiveKeep ? `<div data-creator-adaptive-keep-raw-map-value data-revision-status="${esc(creatorPresentation.revisionStatus)}" style="border-left:3px solid ${C.amber};background:${C.amber}0d;padding:8px 9px;margin:8px 0">
+                <div style="display:flex;justify-content:space-between;gap:7px;align-items:start;flex-wrap:wrap"><div style="font-size:8px;color:${C.amber};font-weight:950;text-transform:uppercase">Causal multimodal mixture · research only · not predictor-eligible</div><span style="border:1px solid ${creatorPresentation.revisionMeta.color};color:${creatorPresentation.revisionMeta.color};padding:2px 6px;font-size:6.5px;font-weight:950;text-transform:uppercase">${esc(creatorPresentation.revisionMeta.label)}</span></div>
                 <div style="font-size:22px;color:${C.text};font-weight:950;line-height:1.15;margin-top:2px">${fmtv(creatorAdaptiveKeep.raw, 1)}%</div>
-                <div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px">Mixture scalar <b style="color:${C.cyan}">${fmtv(creatorAdaptiveKeep.raw, 1)}%</b>${creatorAdaptiveBaseline == null ? '' : ` · matched recent-history baseline <b style="color:${C.text}">${fmtv(creatorAdaptiveBaseline, 1)}%</b> · scalar shift <b style="color:${C.text}">${creatorAdaptiveShift >= 0 ? '+' : ''}${fmtv(creatorAdaptiveShift, 1)} pp</b>`}.${creatorComponentLine}<br><b>Inputs:</b> visual embedding + together (visual + text) embedding + ${creatorAdaptiveKeep.history_n == null ? '8–30 strictly earlier labels' : `${creatorAdaptiveKeep.history_n} strictly earlier labels`} (30 maximum; 8 minimum).<br><b>Selected formula:</b> ${esc(creatorAdaptiveKeep.model_formula)}. Frozen after ${Number(creatorAdaptiveKeep.candidate_count || 43360).toLocaleString()} prespecified candidates. Stored as <b>${esc(creatorAdaptiveKeep.coordinate_id)}</b>. This percentage is not a point on either embedding plane.</div>
+                <div style="font-size:8px;color:${C.dim};line-height:1.5;margin-top:3px">Mixture scalar <b style="color:${C.cyan}">${fmtv(creatorAdaptiveKeep.raw, 1)}%</b>${creatorAdaptiveBaseline == null ? '' : ` · matched recent-history baseline <b style="color:${C.text}">${fmtv(creatorAdaptiveBaseline, 1)}%</b> · scalar shift <b style="color:${C.text}">${creatorAdaptiveShift >= 0 ? '+' : ''}${fmtv(creatorAdaptiveShift, 1)} pp</b>`}.${creatorComponentLine}<br><b>Inputs:</b> visual embedding + together (visual + text) embedding + ${esc(creatorPresentation.history)} (30 maximum; 8 minimum)${creatorPresentation.historyEnd ? ` · history through ${esc(creatorPresentation.historyEnd)}` : ''}.<br><b>Evidence boundary:</b> <span style="color:${creatorPresentation.historicalPrequential ? C.cyan : C.amber}">${esc(creatorPresentation.claimBoundary)}</span><br><b>Selected formula:</b> ${esc(creatorAdaptiveKeep.model_formula)}. Frozen after ${Number(creatorAdaptiveKeep.candidate_count || 43360).toLocaleString()} prespecified candidates. Stored as <b>${esc(creatorAdaptiveKeep.coordinate_id)}</b>. This percentage is not a point on either embedding plane.</div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px"><button type="button" data-expgo="visual:keep" style="min-height:44px;background:transparent;border:1px solid ${C.green};color:${C.green};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw visual:keep embedding →</button><button type="button" data-expgo="together:keep" style="min-height:44px;background:transparent;border:1px solid ${C.accent};color:${C.accent};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw together:keep embedding →</button></div>
+                ${coordinateTraceHtml(U, creatorAdaptiveKeep.coordinate_id, creatorAdaptiveKeep, { profile: creatorAdaptiveKeep.profile_account, artifactLabel: 'creator serving artifact', modelRevision: creatorAdaptiveKeep.serving_artifact_sha256 || creatorAdaptiveKeep.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}
             </div>` : `<div data-creator-adaptive-keep-raw-map-value style="border-left:3px solid ${C.faint};background:${C.card};padding:8px 9px;margin:8px 0;font-size:8px;color:${C.dim}">No causal mixture value is shown: this score lacks an explicit creator profile with at least 8 prior labels or is outside the registered causal evaluation window.</div>`;
             const uc = U.channels ? U.channels[chan] : null, pos = upPos(U);
             const nbrTitles = (uc && uc.neighbors ? uc.neighbors.slice(0, 4) : []).map(nb => {
@@ -1217,7 +1376,7 @@ const JarvisRetention = (function () {
                 </div>`;
         })() : '';
         h += cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
-              <div style="font-size:12px;font-weight:700;color:${C.text};display:flex;gap:6px;align-items:center;flex-wrap:wrap">${n.toLocaleString()} hooks · ${chan} ${mineBtn} ${modeToggle} ${st.rawBuildMode ? showBtn : upBtn} ${upErr}</div>
+              <div style="font-size:12px;font-weight:700;color:${C.text};display:flex;gap:6px;align-items:center;flex-wrap:wrap">${n.toLocaleString()} hooks · ${chan} ${mineBtn} ${modeToggle} ${st.rawBuildMode ? showBtn : upBtn} ${expCreatorProfileHtml()} ${upErr}</div>
               <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">colour</span>${pill('cluster', 'cluster', mode === 'cluster', 'data-rawcolor')}${pill('views', 'views', mode === 'views', 'data-rawcolor')}${pill('outlier', 'outlier', mode === 'outlier', 'data-rawcolor')}${pill('subs', 'subs', mode === 'subs', 'data-rawcolor')}${chan !== 'text' ? pill('voiceover', 'voiceover', mode === 'voiceover', 'data-rawcolor') : ''}${mode === 'cluster' ? `<span style="width:6px"></span><span style="font-size:9px;color:${C.mute}">k</span>${['6', '10', '16', '24'].map(kk => pill(kk, kk, k === kk, 'data-rawk')).join('')}` : ''}</div></div>${builder}
             <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">project</span>${PROJS.map(projPill).join('')}<span style="width:8px"></span><span data-rawbands="1" style="cursor:pointer;border:1px solid ${st.rawBands ? C.cyan : C.border};background:${st.rawBands ? C.cyan + '22' : 'transparent'};color:${st.rawBands ? C.cyan : C.dim};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:700">📊 trend bands</span>${st.rawBands ? `<span style="font-size:9px;color:${C.mute};margin-left:2px">sections</span>${[4, 6, 8, 12, 16].map(kk => `<span data-rawbandk="${kk}" style="cursor:pointer;border:1px solid ${(st.rawBandK || 6) === kk ? C.cyan : C.border};background:${(st.rawBandK || 6) === kk ? C.cyan + '1e' : 'transparent'};color:${(st.rawBandK || 6) === kk ? C.cyan : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${kk}</span>`).join('')}` : ''}</div>
             ${isAcctProj ? (() => { const ml = { keep: 'keep-rate', ret5: '5-sec retention', realviews: 'realistic views' }[pm]; return `<div style="font-size:10px;margin-bottom:6px;line-height:1.55;background:${accHas(pm) ? C.green : C.amber}14;border-left:3px solid ${accHas(pm) ? C.green : C.amber};padding:6px 10px;border-radius:4px">${accHas(pm) ? `<b style="color:${C.green}">${esc(ml)} · scoped to ${esc(ACCT_NM)}</b> — fit on ${esc(ACCT_NM)}'s own videos and projected across all ${(R.n || 0).toLocaleString()} hooks${pm === 'realviews' ? ' through the same duration-deconfounded equation as ⑤ Predict' : ''}. Switch accounts in the channel bar to see how the same hooks re-score per account.` : `<b style="color:${C.amber}">${esc(ACCT_NM)} has too few videos</b> (needs ≥40) for its own ${esc(ml)} projection — showing <b>Main</b>'s as a fallback. Pick Account 2 / Account 3 / All pooled for an account-specific view.`}</div>`; })() : ''}
@@ -1714,7 +1873,7 @@ const JarvisRetention = (function () {
         const prem = inp ? inp.value.trim() : '';
         if (!prem || st.grindStarting) return;
         st.grindPrem = prem; st.grindStarting = 1; rtgUpdateExp();
-        fetch('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', hours: st.grindHours || 3 }) })
+        fetch('/api/hooks/grind', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ premise: prem, threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', hours: st.grindHours || 3, creatorProfile: selectedCreatorProfile() }) })
             .then(r => r.json()).then(j => {
                 st.grindStarting = 0;
                 if (j.rid) { st.grindMine = st.grindMine || {}; st.grindMine[j.rid] = 1; st.grindRid = j.rid; st.grindT0 = Date.now(); GRINDRUN = { rid: j.rid, premise: prem, status: 'running', attempts: [], threshold: st.grindThr || 82, metric: st.grindMetric || 'keep', note: 'queued — the worker picks it up within seconds…' }; grindPoll(j.rid); }
@@ -1827,6 +1986,7 @@ const JarvisRetention = (function () {
             <div style="font-size:11px;color:${C.cyan};margin-top:8px;font-weight:600">⏳ ${esc(sub)}${cold ? ` <span style="color:${C.mute};font-weight:400">· first run this session spins up the GPU (~2 min), then it's fast</span>` : ''}</div></div>`;
     }
     function renderExperiment() {
+        scoreContractEnsure();
         const head = h2c('🧪 Experiment — generate or score a hook against every validated indicator', 'Generate a hook (or upload a video / build one from 5 frames + text). Every path embeds visual, text, and together when text exists; displayed embedding scores use together first, then text, then visual. Keep-rate can therefore include voiceover words when a coherent first-5-second transcript exists.') + pipelineProgress() + expGenPanel() + grindPanel();
         if (EXPREG === null) { EXPREG = { loading: 1 }; rtFetchJson('/api/indicators/registry', { cache: 'no-store' }, 4).then(j => { EXPREG = j; rtgUpdateExp(); }).catch(e => { EXPREG = { error: fetchFail(e) }; rtgUpdateExp(); }); }
         if (SAVED === null) { SAVED = { loading: 1 }; rtFetchJson('/api/raw/saved-hooks', { cache: 'no-store' }, 4).then(j => { SAVED = j; rtgUpdateExp(); }).catch(e => { SAVED = { hooks: [], error: fetchFail(e) }; rtgUpdateExp(); }); }
@@ -1849,7 +2009,7 @@ const JarvisRetention = (function () {
             <span data-rawstrip="1" title="upload ONE photo that already holds all 5 frames side by side (or stacked) — it's sliced into the 5 slots" style="cursor:pointer;border:1px dashed ${C.border};color:${C.dim};border-radius:6px;padding:5px 10px;font-size:10px;font-weight:700;white-space:nowrap">⬆ 1-photo strip</span>
             <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="hook text…" style="flex:1;min-width:160px;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:12px"/>
             <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CY : C.border};background:${nFrames ? CY + '22' : 'transparent'};color:${nFrames ? CY : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Score this hook</span></div>${genFramesPanel()}` : '';
-        const controls = cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, '🖼 5 frames + text')}${!st.rawBuildMode ? `<span ${st.rawUploading ? 'aria-disabled="true"' : 'data-rawupload="1"'} style="cursor:${st.rawUploading ? 'not-allowed' : 'pointer'};opacity:${st.rawUploading ? '.45' : '1'};border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ ${st.rawUploading ? 'Video in progress' : 'Upload video'}</span><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;max-width:100%"><input data-rawyturl value="${esc(st.rawYtUrl || '')}" placeholder="or paste a YouTube link…" style="width:220px;max-width:100%;box-sizing:border-box;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 9px;font-size:11px"/><span data-rawytgo style="cursor:pointer;border:1px solid ${st.rawYtBusy ? C.amber : CY};background:${st.rawYtBusy ? C.amber + '18' : CY + '18'};color:${st.rawYtBusy ? C.amber : CY};border-radius:6px;padding:4px 11px;font-size:11px;font-weight:800;white-space:nowrap">${st.rawYtBusy ? '⏳ downloading + embedding…' : '⬇ score from link'}</span></span>` : ''}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red};line-height:1.4;max-width:560px">${esc(String(st.rawUpErr).slice(0, 320))}</span>` : ''}</div>${builder}`, 12);
+        const controls = cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, '🖼 5 frames + text')}${!st.rawBuildMode ? `<span ${st.rawUploading ? 'aria-disabled="true"' : 'data-rawupload="1"'} style="cursor:${st.rawUploading ? 'not-allowed' : 'pointer'};opacity:${st.rawUploading ? '.45' : '1'};border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ ${st.rawUploading ? 'Video in progress' : 'Upload video'}</span><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;max-width:100%"><input data-rawyturl value="${esc(st.rawYtUrl || '')}" placeholder="or paste a YouTube link…" style="width:220px;max-width:100%;box-sizing:border-box;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 9px;font-size:11px"/><span data-rawytgo style="cursor:pointer;border:1px solid ${st.rawYtBusy ? C.amber : CY};background:${st.rawYtBusy ? C.amber + '18' : CY + '18'};color:${st.rawYtBusy ? C.amber : CY};border-radius:6px;padding:4px 11px;font-size:11px;font-weight:800;white-space:nowrap">${st.rawYtBusy ? '⏳ downloading + embedding…' : '⬇ score from link'}</span></span>` : ''}${expCreatorProfileHtml()}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red};line-height:1.4;max-width:560px">${esc(String(st.rawUpErr).slice(0, 320))}</span>` : ''}</div>${builder}`, 12);
         if (!EXPREG || EXPREG.loading) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">Loading the indicator registry…</div>`);
         if (EXPREG.error || !EXPREG.indicators) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">No indicator registry yet — run <code>indicators.py</code>.</div>`);
         // scorable = the indicators a NEW hook can actually be scored on (content probes + global novelty)
@@ -1994,7 +2154,7 @@ const JarvisRetention = (function () {
                 embeddingModel: up.input_manifest && up.input_manifest.embedding_model,
                 scorer: up.input_manifest && up.input_manifest.scorer,
             };
-            return cardc(`<div${embeddingIdentityAttrs(identity, rawEmbeddingAssetId(up))}><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML((dispV(tn, est) || '—') + star, pc != null ? `${(pc * 100).toFixed(0)}th pctile novel` : '')}${novCurve(d, sc)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${d.name.replace('nov_', '')} (R=${Rof(d).toFixed(2)}) — novelty→${metShort(tn)} curve, your hook ◆</div></div>`, 12);
+            return cardc(`<div${embeddingIdentityAttrs(identity, rawEmbeddingAssetId(up))}><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML((dispV(tn, est) || '—') + star, pc != null ? `${(pc * 100).toFixed(0)}th pctile novel` : '')}${novCurve(d, sc)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${d.name.replace('nov_', '')} (R=${Rof(d).toFixed(2)}) — novelty→${metShort(tn)} curve, your hook ◆</div>${coordinateTraceHtml(up, identity.coordinateId, identity, { valueNote: 'novelty calibration output', artifactLabel: 'raw/novelty_models.npz revision', modelRevision: scorerArtifactRevision(up, 'raw/novelty_models.npz') })}</div>`, 12);
         };
         const visualForecastBox = () => {
             const forecast = visualKeepForecastOf(up);
@@ -2021,22 +2181,29 @@ const JarvisRetention = (function () {
             const revision = forecast.model_artifact_sha256
                 ? String(forecast.model_artifact_sha256).slice(0, 12)
                 : 'revision unavailable';
-            return cardc(`<div data-visual-keep-forecast data-expgo="visual:keep"${embeddingIdentityAttrs(identity, rawEmbeddingAssetId(up))} style="cursor:pointer"><div style="font-size:11px;color:${C.green};font-weight:800;text-transform:uppercase">Frozen visual model → keep rate</div>${bigNumHTML(`${fmtv(forecast.raw, 1)}%`, 'raw model value')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">Full 1,536D visual vector → immutable Ridge · ${esc(scope)} · model ${esc(revision)}.<br>This reuses the <b>visual · keep rate</b> map below; the percentage is the separate frozen-model scalar stored as <b>${esc(forecast.coordinate_id)}</b>. <span style="color:${C.amber}">Research-only until unseen-creator transfer validates.</span> · <span style="color:${C.accent}">open normal embedding →</span></div></div>`, 12);
+            return cardc(`<div data-visual-keep-forecast data-expgo="visual:keep"${embeddingIdentityAttrs(identity, rawEmbeddingAssetId(up))} style="cursor:pointer"><div style="font-size:11px;color:${C.green};font-weight:800;text-transform:uppercase">Frozen visual model → keep rate</div>${bigNumHTML(`${fmtv(forecast.raw, 1)}%`, 'raw predicted keep rate')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">Full 1,536D visual vector → immutable Ridge · ${esc(scope)} · model ${esc(revision)}.<br>This reuses the <b>visual · keep rate</b> map below; the percentage is the separate frozen-model scalar stored as <b>${esc(forecast.coordinate_id)}</b>. <span style="color:${C.amber}">Research-only until unseen-creator transfer validates.</span> · <span style="color:${C.accent}">open normal embedding →</span></div>${coordinateTraceHtml(up, forecast.coordinate_id, forecast, { modelRevision: forecast.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}</div>`, 12);
         };
         const creatorAdaptiveForecastBox = () => {
             const forecast = creatorAdaptiveKeepForecastOf(up);
             if (!forecast) {
-                return cardc(`<div data-creator-adaptive-keep-forecast><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Causal multimodal keep mixture · research only</div>${bigNumHTML('—', 'explicit creator profile required')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">Unavailable unless this saved-channel video has both canonical visual and together embeddings plus at least 8 strictly earlier measured uploads for its explicit creator. It never substitutes another profile and is never predictor-eligible.</div></div>`, 12);
+                const reason = up.creator_adaptive_keep_forecast_error
+                    || 'The scorer did not return a creator-profile forecast for this historical result.';
+                return cardc(`<div data-creator-adaptive-keep-forecast><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Creator-adaptive multimodal keep forecast · research only</div>${bigNumHTML('—', 'current profile value unavailable')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">${esc(reason)} Re-score with an explicit registered creator profile to combine the canonical visual and together embeddings with that profile's prior history. Profiles are never substituted silently, and this scalar is never predictor-eligible.</div></div>`, 12);
             }
             const profile = savedVisualKeepAccountName(
                 forecast.profile_account || forecast.account,
                 forecast.profile_account_name || forecast.account_name,
             );
-            const historyN = forecast.history_n != null ? +forecast.history_n : null;
-            const history = historyN == null ? 'strictly earlier history' : `${historyN} strictly earlier uploads`;
+            const presentation = creatorAdaptiveForecastPresentation(forecast);
+            const historicalPrequential = presentation.historicalPrequential;
+            const history = presentation.history;
+            const historyEnd = presentation.historyEnd;
             const historyWindow = forecast.model_history_window != null ? +forecast.model_history_window : 30;
             const minimumHistory = forecast.model_minimum_history_n != null ? +forecast.model_minimum_history_n : 8;
             const candidateCount = forecast.candidate_count != null ? +forecast.candidate_count : 43360;
+            const revisionStatus = presentation.revisionStatus;
+            const revisionMeta = presentation.revisionMeta;
+            const claimBoundary = presentation.claimBoundary;
             const baseline = forecast.history_only_baseline != null
                 && isFinite(+forecast.history_only_baseline)
                 ? +forecast.history_only_baseline
@@ -2053,7 +2220,7 @@ const JarvisRetention = (function () {
             const componentLine = componentA == null || componentB == null
                 ? ''
                 : `<b>Component A:</b> ${fmtv(componentA, 1)}% centered-together residual analog · <b>Component B:</b> ${fmtv(componentB, 1)}% visual+together semantic stack · final = clipped 50/50 mean.<br>`;
-            return cardc(`<div data-creator-adaptive-keep-forecast><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Causal multimodal keep mixture · research only · not predictor-eligible</div>${bigNumHTML(`${fmtv(forecast.raw, 1)}%`, 'historical causal replay scalar')}<div style="font-size:8.5px;color:${C.mute};line-height:1.5;margin-top:4px">${baseline == null ? '' : `History-only baseline <b style="color:${C.text}">${fmtv(baseline, 1)}%</b> · mixture shift <b style="color:${C.text}">${modelMinusBaseline >= 0 ? '+' : ''}${fmtv(modelMinusBaseline, 1)} pp</b>.<br>`}${componentLine}<b>Inputs:</b> canonical visual embedding + canonical together (visual + text) embedding + ${esc(profile || 'explicit creator')} ${esc(history)}; ${historyWindow} maximum, ${minimumHistory} minimum.<br><b>Frozen selection:</b> ${candidateCount.toLocaleString()} prespecified causal candidates. <b>Selected formula:</b> ${esc(forecast.model_formula)}.<br>Stored as <b>${esc(forecast.coordinate_id)}</b>. This is one derived scalar, not a location on either raw plane.</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" data-expgo="visual:keep" style="min-height:44px;background:transparent;border:1px solid ${C.green};color:${C.green};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw visual:keep embedding →</button><button type="button" data-expgo="together:keep" style="min-height:44px;background:transparent;border:1px solid ${C.accent};color:${C.accent};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw together:keep embedding →</button></div></div>`, 12);
+            return cardc(`<div data-creator-adaptive-keep-forecast data-revision-status="${esc(revisionStatus)}"${embeddingIdentityAttrs({ domain: 'shorts_raw', origin: 'creator-adaptive-forecast', channel: 'visual+together+creator-history', target: 'keep', sourceKey: 'creator_adaptive_keep_forecast', coordinateId: forecast.coordinate_id, est: forecast.raw, pctile: null, kind: forecast.kind, embeddingModel: up.input_manifest && up.input_manifest.embedding_model, scorer: up.input_manifest && up.input_manifest.scorer }, rawEmbeddingAssetId(up))}><div style="display:flex;justify-content:space-between;gap:8px;align-items:start;flex-wrap:wrap"><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Creator-adaptive multimodal keep forecast · research only · not predictor-eligible</div><span style="border:1px solid ${revisionMeta.color};color:${revisionMeta.color};padding:2px 6px;font-size:7px;font-weight:950;text-transform:uppercase">${esc(revisionMeta.label)}</span></div>${bigNumHTML(`${fmtv(forecast.raw, 1)}%`, 'raw predicted keep rate · not a percentile')}<div style="font-size:8.5px;color:${C.mute};line-height:1.5;margin-top:4px">${baseline == null ? '' : `History-only baseline <b style="color:${C.text}">${fmtv(baseline, 1)}%</b> · mixture shift <b style="color:${C.text}">${modelMinusBaseline >= 0 ? '+' : ''}${fmtv(modelMinusBaseline, 1)} pp</b>.<br>`}${componentLine}<b>Inputs:</b> canonical visual embedding + canonical together (visual + text) embedding + ${esc(profile || 'explicit creator')} ${esc(history)}; ${historyWindow} maximum, ${minimumHistory} minimum${historyEnd ? ` · history through ${esc(historyEnd)}` : ''}.<br><b>Evidence boundary:</b> <span style="color:${historicalPrequential ? C.cyan : C.amber}">${esc(claimBoundary)}</span><br><b>Frozen selection:</b> ${candidateCount.toLocaleString()} prespecified causal candidates. <b>Selected formula:</b> ${esc(forecast.model_formula)}.<br>Stored as <b>${esc(forecast.coordinate_id)}</b>. This is one derived scalar, not a location on either raw plane and is not predictor-eligible.</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" data-expgo="visual:keep" style="min-height:44px;background:transparent;border:1px solid ${C.green};color:${C.green};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw visual:keep embedding →</button><button type="button" data-expgo="together:keep" style="min-height:44px;background:transparent;border:1px solid ${C.accent};color:${C.accent};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw together:keep embedding →</button></div>${coordinateTraceHtml(up, forecast.coordinate_id, forecast, { profile: forecast.profile_account, artifactLabel: 'creator serving artifact', modelRevision: forecast.serving_artifact_sha256 || forecast.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}</div>`, 12);
         };
         const gcol = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:12px';
         const hasTextUp = !!String(up.transcript || up.text || '').trim() && !up.silent;
@@ -2065,7 +2232,8 @@ const JarvisRetention = (function () {
             const k = steerOf(up, ch, tn), pj = projFor2[tn], cm = colorFor2[tn];
             const big = k ? steerDisp(tn, k.est) : '—';
             const sub = k && k.pctile != null ? `${Math.round(k.pctile)}th pctile` : (k ? '' : 'no steer for this output');
-            return cardc(`<div data-expgo="${ch}:${pj}"${k ? embeddingDataAttrs(up, ch, tn, 'stored-production', rawEmbeddingAssetId(up), k) : ''} style="cursor:pointer"><div style="font-size:10px;color:${CY};font-weight:800;text-transform:uppercase">${metShort2(tn)}</div>${bigNumHTML(big, sub)}${cluster(ch, pj, cm)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px"><span style="color:${C.accent}">open graph →</span></div></div>`, 12);
+            const coordinateId = `shorts.stored.${ch}.${tn}`;
+            return cardc(`<div data-expgo="${ch}:${pj}"${k ? embeddingDataAttrs(up, ch, tn, 'stored-production', rawEmbeddingAssetId(up), k) : ''} style="cursor:pointer"><div style="font-size:10px;color:${CY};font-weight:800;text-transform:uppercase">${metShort2(tn)}</div>${bigNumHTML(big, sub)}${cluster(ch, pj, cm)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px"><span style="color:${C.accent}">open graph →</span></div>${coordinateTraceHtml(up, coordinateId, k, { valueNote: 'calibrated map value and separate corpus rank' })}</div>`, 12);
         };
         const chanSection = ch => {
             const input = ch === 'visual' ? '5-frame montage only' : ch === 'text' ? 'transcript only' : 'montage + transcript fused';
@@ -4047,7 +4215,7 @@ const JarvisRetention = (function () {
         if (!u || !u.montage || rawScoreBusy()) return;
         st.rawReembedBusy = true; st.rawUpErr = null; rtgUpdateRaw(); rtgUpdateExp();
         try {
-            const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage: u.montage, text: visualOnly ? '' : String(text || '').slice(0, 2000), title: u.title || 'Re-embedded hook', duration: u.dur_s || u.duration || null, async: true }) });
+            const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage: u.montage, text: visualOnly ? '' : String(text || '').slice(0, 2000), title: u.title || 'Re-embedded hook', duration: u.dur_s || u.duration || null, creatorProfile: selectedCreatorProfile(), async: true }) });
             if (j && !j.error) {
                 st.rawUploads[idx] = { ...j, title: u.title || j.title, transcriptSource: visualOnly ? 'forced visual-only' : 'typed by you', _reembedded: true };
                 st.rawUpSel = idx;
@@ -4074,7 +4242,8 @@ const JarvisRetention = (function () {
                 if (!k) return `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;font-size:9px;color:${C.faint}">${lab} missing</span>`;
                 found++;
                 const pc = k.pctile != null ? Math.round(k.pctile) : null;
-                return `<span${embeddingDataAttrs(U, m, tn, 'stored-production', rawEmbeddingAssetId(U), k)} title="${esc(m)} embedding: ${esc(input)}" style="border:1px solid ${pc != null && pc >= 80 ? C.green : C.cyan}55;border-radius:5px;padding:2px 6px;font-size:9px;color:${C.dim}">${lab} <b style="color:${pc != null && pc >= 80 ? C.green : C.text}">${steerDisp(tn, k.est)}</b>${pc != null ? ` <span style="color:${C.faint}">${pc}th</span>` : ''}</span>`;
+                const coordinateId = `shorts.stored.${m}.${tn}`;
+                return `<button type="button" data-exp-ledger-coordinate="${esc(coordinateId)}"${embeddingDataAttrs(U, m, tn, 'stored-production', rawEmbeddingAssetId(U), k)} title="${esc(m)} embedding: ${esc(input)}" style="cursor:pointer;text-align:left;background:transparent;border:1px solid ${pc != null && pc >= 80 ? C.green : C.cyan}55;border-radius:5px;padding:3px 6px;font-size:9px;color:${C.dim}">${lab} <b style="color:${pc != null && pc >= 80 ? C.green : C.text}">${steerDisp(tn, k.est)}</b>${pc != null ? ` <span style="color:${C.faint}">${pc}th</span>` : ''}<code style="display:block;font-size:6.5px;color:${C.faint};margin-top:2px">${esc(coordinateId)}</code></button>`;
             }).join('');
             return `<div style="display:grid;grid-template-columns:74px minmax(0,1fr);gap:6px;align-items:start;margin-top:4px"><div><div style="font-size:9px;font-weight:900;text-transform:uppercase;color:${m === 'visual' ? C.green : m === 'text' ? C.purple : C.accent}">${m}</div><div style="font-size:7.5px;color:${C.faint};line-height:1.25">${present ? esc(input) : 'no transcript'}</div></div><div style="display:flex;gap:3px;flex-wrap:wrap">${cells}</div></div>`;
         }).join('');
@@ -4089,12 +4258,37 @@ const JarvisRetention = (function () {
         }
         st.rawYtBusy = true; st.rawUpErr = null; render();
         try {
-            const j = await rtJob('/api/raw/embed-youtube', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, async: true }) });
+            const j = await rtJob('/api/raw/embed-youtube', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, creatorProfile: selectedCreatorProfile(), async: true }) });
             if (!j || j.error) st.rawUpErr = (j && j.error) || 'YouTube score failed';
             else { st.rawUploads = st.rawUploads || []; st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null; st.rawYtUrl = ''; }
         } catch (e) { st.rawUpErr = 'YouTube: ' + (e.message || e); }
         st.rawYtBusy = false;
         render();
+    }
+    async function openCoordinateLedger(coordinateId) {
+        if (!coordinateId) return;
+        st.sec = 'experiment';
+        st.savedBank = 'channels';
+        st.savedChannelTab = 'ledger';
+        st.savedLedgerCoordinate = coordinateId;
+        st.savedLedgerFamily = coordinateId.indexOf('creator-adaptive') >= 0
+            ? 'creatorAdaptiveKeepForecast'
+            : coordinateId.indexOf('visual-keep-forecast') >= 0
+                ? 'visualKeepForecast'
+                : 'stored';
+        rtgUpdateExp();
+        if (!SAVEDCHANNELS || SAVEDCHANNELS.error) await refreshSavedChannels(true);
+        const channels = SAVEDCHANNELS && SAVEDCHANNELS.channels || [];
+        if (!st.savedChannelSel || !channels.some(channel => channel.id === st.savedChannelSel)) {
+            st.savedChannelSel = channels.length ? channels[0].id : null;
+        }
+        if (st.savedChannelSel) await loadSavedChannelDetail(st.savedChannelSel, false);
+        await loadSavedChannelValidation(false);
+        rtgUpdateExp();
+        window.setTimeout(() => {
+            const panel = window.document.querySelector('[data-saved-channel-ledger]');
+            if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 80);
     }
     function onClick(e) {
         if (e.target.closest('[data-experiment-raw-back]')) { st.sec = 'experiment'; render(); return; }
@@ -4249,6 +4443,7 @@ const JarvisRetention = (function () {
         const rpt = e.target.closest('[data-predictortarget]'); if (rpt) { st.rawPredictorTarget = rpt.getAttribute('data-predictortarget'); st.rawPredictorPoint = null; rtgUpdateRaw(); return; }
         const rpp = e.target.closest('[data-predictorpoint]'); if (rpp) { const id = rpp.getAttribute('data-predictorpoint'); st.rawPredictorPoint = st.rawPredictorPoint === id ? null : id; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-predictorpointclose]')) { st.rawPredictorPoint = null; rtgUpdateRaw(); return; }
+        const ledgerCoordinate = e.target.closest('[data-exp-ledger-coordinate]'); if (ledgerCoordinate) { openCoordinateLedger(ledgerCoordinate.getAttribute('data-exp-ledger-coordinate')); return; }
         if (e.target.closest('[data-predictorrefresh]')) { PREDICTORLAB = null; PREDICTORSTATUS = null; predictorEnsure(true); rtgUpdateRaw(); return; }
         const rawRetry = e.target.closest('[data-rawretry]'); if (rawRetry) { const ch = rawRetry.getAttribute('data-rawretry') || st.rawChan || 'visual'; delete RAW[ch]; rawEnsure(ch, true); rtgUpdateRaw(); return; }
         const rc = e.target.closest('[data-rawcolor]'); if (rc) { st.rawColor = rc.getAttribute('data-rawcolor'); rtgUpdateRaw(); return; }
@@ -4278,7 +4473,7 @@ const JarvisRetention = (function () {
         const gsa = e.target.closest('[data-grindsave]'); if (gsa) { grindSave(+gsa.getAttribute('data-grindsave')); return; }
         const gsc = e.target.closest('[data-genscore]'); if (gsc) { if (!st.rawUploading) { const k = +gsc.getAttribute('data-genscore'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) scoreGenerated(k, a.frame_imgs || [], a.premise || a.caption || ''); } return; }
         const gsv = e.target.closest('[data-gensave]'); if (gsv) { const k = +gsv.getAttribute('data-gensave'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) saveHook({ kind: 'idea', source: 'generated', title: (a.premise || a.caption || 'idea').slice(0, 80), text: a.premise || a.caption || '', frames: a.frames || [], frame_imgs: a.frame_imgs || [], cohesion_mode: a.cohesion_mode || '' }); return; }
-        if (e.target.closest('[data-savescored]')) { const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0]; if (up) saveHook({ kind: 'scored', source: up.source || 'scored', title: up.title || (up.transcript || 'Scored hook').slice(0, 60), text: up.transcript || '', montage: up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : ''), frames: up.genFrames || [], frame_imgs: up.genFrameImgs || [], indicators: up.indicators || null, steer: up.steer || null, visual_keep_forecast: up.visual_keep_forecast || null, channels: up.channels || null, emb_preview: up.emb_preview || null, input_manifest: up.input_manifest || rawInputManifestData(up) }); return; }
+        if (e.target.closest('[data-savescored]')) { const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0]; if (up) saveHook({ kind: 'scored', source: up.source || 'scored', title: up.title || (up.transcript || 'Scored hook').slice(0, 60), text: up.transcript || '', montage: up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : ''), frames: up.genFrames || [], frame_imgs: up.genFrameImgs || [], indicators: up.indicators || null, steer: up.steer || null, visual_keep_forecast: up.visual_keep_forecast || null, creator_adaptive_keep_forecast: up.creator_adaptive_keep_forecast || null, creator_adaptive_keep_forecast_error: up.creator_adaptive_keep_forecast_error || null, channels: up.channels || null, emb_preview: up.emb_preview || null, input_manifest: up.input_manifest || rawInputManifestData(up) }); return; }
         const sdel = e.target.closest('[data-savedel]'); if (sdel) { deleteSaved(sdel.getAttribute('data-savedel')); return; }
         if (e.target.closest('[data-savedclose]')) { st.savedSel = null; rtgUpdateExp(); return; }
         const ssort = e.target.closest('[data-savedsort]'); if (ssort) { st.savedSort = ssort.getAttribute('data-savedsort'); rtgUpdateExp(); return; }
@@ -4351,6 +4546,11 @@ const JarvisRetention = (function () {
     function onChange(e) {
         if (e.target.closest('#shorts-operations-panel') && operationsUI() && operationsUI().handleChange(e)) return;
         if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleChange(e)) return;
+        if (e.target.hasAttribute && e.target.hasAttribute('data-expcreatorprofile')) {
+            st.expCreatorProfile = String(e.target.value || '').trim().toLowerCase();
+            rtgUpdateExp();
+            return;
+        }
         if (e.target.getAttribute && e.target.getAttribute('data-savedmove') != null) { moveHook(e.target.getAttribute('data-savedmove'), e.target.value); return; }
         if (e.target.closest('[data-tracked]')) { st.trackedOnly = e.target.checked; render(); }
     }
@@ -4404,7 +4604,7 @@ const JarvisRetention = (function () {
                     mode: prepared.mode,
                 };
                 rtgUpdateRaw();
-                const upHeaders = { 'X-Raw-Ext': ext, 'X-Raw-Title': safeTitle, 'X-Raw-Upload-Mode': prepared.mode || 'direct' };
+                const upHeaders = { 'X-Raw-Ext': ext, 'X-Raw-Title': safeTitle, 'X-Raw-Upload-Mode': prepared.mode || 'direct', 'X-Raw-Creator-Profile': selectedCreatorProfile() };
                 if (realDur > 0) upHeaders['X-Raw-Duration'] = String(Math.round(realDur));   // true full length → correct realviews
                 if (prepared.sparse) {
                     upHeaders['X-Raw-Sparse'] = '1';
@@ -4441,7 +4641,7 @@ const JarvisRetention = (function () {
                     j = await rtJob('/api/raw/embed-montage', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ montage, text: '', title: safeTitle, duration: realDur || null, async: true }),
+                        body: JSON.stringify({ montage, text: '', title: safeTitle, duration: realDur || null, creatorProfile: selectedCreatorProfile(), async: true }),
                     });
                     if (j) {
                         j._uploadWarning = 'The phone/server could not decode the audio upload, so this result recovered from the exact five visual frames. Text and combined-with-voice scores are unavailable.';
@@ -4529,7 +4729,7 @@ const JarvisRetention = (function () {
         try {
             const montage = await composeFrames(st.rawFrames);
             const title = (st.rawText && st.rawText.trim() ? st.rawText.trim().slice(0, 40) : 'Built hook ' + (st.rawUploads.length + 1));
-            const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: st.rawText || '', title, async: true }) });
+            const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: st.rawText || '', title, creatorProfile: selectedCreatorProfile(), async: true }) });
             st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
         } catch (e) { st.rawUpErr = e.message; }
         window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0;
@@ -4572,7 +4772,7 @@ const JarvisRetention = (function () {
             const dataUrls = [];
             for (const f of (fids || [])) dataUrls.push(f ? await urlToDataUrl('/api/hooks/grpo/montage/demo/' + f) : null);
             const montage = await composeFrames(dataUrls);
-            const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: text || '', title: (text || 'Generated hook').slice(0, 40), async: true }) });
+            const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: text || '', title: (text || 'Generated hook').slice(0, 40), creatorProfile: selectedCreatorProfile(), async: true }) });
             const g = EXPDEMO[st.expGenRid], a = g && g.attempts && g.attempts.find(x => x.k === k);
             j.source = 'generated'; j.genFrameImgs = fids; j.genFrames = (a && a.frames) || []; j.montageDataUrl = montage;
             st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
@@ -4604,12 +4804,47 @@ const JarvisRetention = (function () {
         if (!window.confirm('Delete this folder? Hooks inside become Unfiled.')) return;
         try { await rtFetchJson('/api/raw/folder-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: fid }) }, 1); if (st.savedFolder === fid) st.savedFolder = 'all'; SAVED = null; rtgUpdateExp(); } catch (e) { st.rawUpErr = fetchFail(e); rtgUpdateExp(); }
     }
-    // Saved hooks open from their durable score artifact. A legacy hook without a complete artifact is
-    // scored once, enriched in place, and then uses this same instant path on every later open.
+    function savedHookScoreIsComplete(rec) {
+        return !!(rec && rec.emb_preview && rec.channels && rec.steer && rec.visual_keep_forecast);
+    }
+    function savedHookScoreIsCurrent(rec, live, creatorProfile) {
+        const manifest = rec && rec.input_manifest || {};
+        return !!(
+            savedHookScoreIsComplete(rec)
+            && live
+            && manifest.revision_fingerprint
+            && manifest.revision_fingerprint === live.revision_fingerprint
+            && String(manifest.creator_profile || '') === String(creatorProfile || '')
+        );
+    }
+    function savedHookResult(rec, id, warning) {
+        return {
+            transcript: rec.transcript || rec.text || '',
+            silent: rec.silent,
+            title: rec.title,
+            indicators: rec.indicators,
+            steer: rec.steer,
+            visual_keep_forecast: rec.visual_keep_forecast || null,
+            creator_adaptive_keep_forecast: rec.creator_adaptive_keep_forecast || null,
+            creator_adaptive_keep_forecast_error: rec.creator_adaptive_keep_forecast_error || null,
+            emb_preview: rec.emb_preview,
+            channels: rec.channels,
+            input_manifest: rec.input_manifest || null,
+            source: 'saved',
+            savedId: id,
+            genFrames: rec.frames || [],
+            montageDataUrl: rec.hasMontage ? '/api/raw/saved-montage/' + id : '',
+            _uploadWarning: warning || null,
+        };
+    }
+    // Saved hooks open from a revision-pinned durable score. Legacy or stale records are
+    // re-scored once from their durable montage, then enriched for instant later opens.
     async function openSaved(id) {
         if (rawScoreBusy()) { rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before opening this saved hook.'); return; }
         st.savedSel = id; st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; rtgUpdateExp();
         try {
+            const live = await currentScorerContract(true);
+            const creatorProfile = selectedCreatorProfile();
             let stored = SAVEDDETAIL[id];
             if (!stored) {
                 const rec = await rtFetchJson('/api/raw/saved-hook/' + id, { cache: 'no-store' }, 4);
@@ -4618,40 +4853,62 @@ const JarvisRetention = (function () {
                 while (cachedIds.length > 8) delete SAVEDDETAIL[cachedIds.shift()];
             }
             const rec = stored.rec || {};
-            if (rec && rec.emb_preview && rec.channels && rec.visual_keep_forecast) {
-                // Statistics are durable and independent from media delivery. Open them immediately;
-                // the ordinary image URL can load (or fail) without blocking the embedding read-out.
-                const result = { transcript: rec.transcript || rec.text || '', silent: rec.silent, title: rec.title, indicators: rec.indicators, steer: rec.steer, visual_keep_forecast: rec.visual_keep_forecast || null, emb_preview: rec.emb_preview, channels: rec.channels, input_manifest: rec.input_manifest || null, source: 'saved', savedId: id, genFrames: rec.frames || [], montageDataUrl: rec.hasMontage ? '/api/raw/saved-montage/' + id : '' };
+            if (savedHookScoreIsComplete(rec) && !live) {
+                const result = savedHookResult(rec, id, 'The live scorer contract could not be loaded. These persisted historical values are shown, but revision parity could not be verified.');
+                st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
+                st.rawUploads.push(result);
+                st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+            } else if (savedHookScoreIsCurrent(rec, live, creatorProfile)) {
+                const result = savedHookResult(rec, id, null);
                 st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
                 st.rawUploads.push(result);
                 st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
             } else {
-                // One legacy record has no durable score. Only that record needs its media fetched
-                // and scored once; complete records above never convert images to base64.
                 let montage = stored.montage;
                 if (!montage && rec.hasMontage) {
                     try { montage = await urlToDataUrl('/api/raw/saved-montage/' + id); } catch (e) {}
                 }
                 let reconstructed = false;
                 if (!montage) {
-                    montage = await montageFromFrameIds(rec.frame_imgs || []);
-                    reconstructed = true;
+                    try {
+                        montage = await montageFromFrameIds(rec.frame_imgs || []);
+                        reconstructed = true;
+                    } catch (e) {}
                 }
-                if (!montage) throw new Error('This legacy hook has no stored montage to rebuild its score.');
-                stored.montage = montage; stored.reconstructed = reconstructed;
-                const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1200);
-                let j;
-                try {
-                    j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: rec.text || rec.title || '', title: (rec.title || 'Saved hook').slice(0, 40), async: true }) });
-                } finally {
-                    window.clearInterval(tick);
+                if (!montage && savedHookScoreIsComplete(rec)) {
+                    const storedRevision = rec.input_manifest && rec.input_manifest.revision_fingerprint;
+                    const warning = !live
+                        ? 'The live scorer contract could not be loaded. These persisted historical values are shown, but revision parity could not be verified.'
+                        : `Historical score shown because its media could not be recovered for migration. Stored revision ${String(storedRevision || 'unknown').slice(0, 12)}; current revision ${String(live.revision_fingerprint || 'unknown').slice(0, 12)}.`;
+                    const result = savedHookResult(rec, id, warning);
+                    st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
+                    st.rawUploads.push(result);
+                    st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+                } else {
+                    if (!montage) throw new Error('This saved hook has no durable montage to migrate to the current scorer.');
+                    stored.montage = montage; stored.reconstructed = reconstructed;
+                    const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1200);
+                    let j;
+                    try {
+                        j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: rec.text || rec.title || '', title: (rec.title || 'Saved hook').slice(0, 40), duration: rec.input_manifest && rec.input_manifest.duration_s || null, creatorProfile, async: true }) });
+                    } finally {
+                        window.clearInterval(tick);
+                    }
+                    j.source = 'saved'; j.savedId = id; j.genFrames = rec.frames || []; j.montageDataUrl = montage;
+                    st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
+                    st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+                    Object.assign(rec, { indicators: j.indicators, steer: j.steer, visual_keep_forecast: j.visual_keep_forecast, creator_adaptive_keep_forecast: j.creator_adaptive_keep_forecast, creator_adaptive_keep_forecast_error: j.creator_adaptive_keep_forecast_error, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest });
+                    SAVEDDETAIL[id] = { rec, montage };
+                    try {
+                        await rtFetchJson('/api/raw/hook-enrich', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id, montage, indicators: j.indicators, steer: j.steer, visual_keep_forecast: j.visual_keep_forecast, creator_adaptive_keep_forecast: j.creator_adaptive_keep_forecast, creator_adaptive_keep_forecast_error: j.creator_adaptive_keep_forecast_error, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest }),
+                        }, 2);
+                    } catch (persistError) {
+                        j._uploadWarning = `The current score is visible, but saving its migration failed: ${fetchFail(persistError)}. Opening this hook again may need to re-score it.`;
+                    }
                 }
-                j.source = 'saved'; j.savedId = id; j.genFrames = rec.frames || []; j.montageDataUrl = montage;
-                st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
-                st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-                Object.assign(rec, { indicators: j.indicators, steer: j.steer, visual_keep_forecast: j.visual_keep_forecast, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest });
-                SAVEDDETAIL[id] = { rec, montage };
-                fetch('/api/raw/hook-enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, montage, indicators: j.indicators, steer: j.steer, visual_keep_forecast: j.visual_keep_forecast, emb_preview: j.emb_preview, channels: j.channels, input_manifest: j.input_manifest }) }).catch(() => {});
             }
         } catch (e) { st.rawUpErr = fetchFail(e); }
         st.rawUploading = false; st.rawUpStage = 0; rtgUpdateExp();
@@ -7354,7 +7611,7 @@ const JarvisRetention = (function () {
             { key: 'all_registered', label: 'Registered scalar columns', count: totals.shortsRowColumns || model.columns.length, color: C.text },
             ...classCounts,
         ].map(item => `<div data-savedledger-class-count="${esc(item.key)}" data-count="${item.count}" style="border-top:2px solid ${item.color};background:${C.card2};padding:8px"><div style="font-size:7.5px;color:${C.mute}">${esc(item.label)}</div><div style="font-size:18px;font-weight:950;color:${item.color}">${item.count}</div></div>`).join('');
-        return `<div data-savedledger data-selected-coordinate-id="${esc(selectedColumn && selectedColumn.id || '')}" style="min-width:0">
+        return `<div data-savedledger data-saved-channel-ledger data-selected-coordinate-id="${esc(selectedColumn && selectedColumn.id || '')}" style="min-width:0">
           <div style="border:1px solid ${audit && !audit.passed ? C.red : C.green};background:${audit && !audit.passed ? C.red : C.green}0a;padding:10px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:13px;font-weight:950;color:${C.text}">Canonical score ledger</div><div style="font-size:9px;color:${C.dim};line-height:1.5;margin-top:2px">One row per Short. One stable ID per interpretation. A graph may compare two IDs, but it cannot create a third number.</div></div><div style="text-align:right"><div style="font-size:9px;color:${audit && !audit.passed ? C.red : C.green};font-weight:950">${audit ? audit.passed ? 'LEDGER PARITY AUDIT PASSED' : 'LEDGER PARITY AUDIT FAILED' : '21 STORED COORDINATES AVAILABLE'}</div><div style="font-size:7px;color:${C.faint}">${audit ? `${audit.rows} matched rows · ${audit.columns} registered scalar columns` : `${model.rows.length} scored rows`}</div></div></div></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:6px;margin-bottom:10px">${classSummaryCards}</div>
           <div style="background:${C.card2};border-left:3px solid ${C.amber};padding:9px;margin-bottom:8px;font-size:8.8px;color:${C.dim};line-height:1.5"><b style="color:${C.text}">${totals.shortsRowColumns || model.columns.length} columns are not ${totals.shortsRowColumns || model.columns.length} embedding spaces.</b> The registry separates <b style="color:${C.cyan}">${classCounts.find(item => item.key === 'direct_embedding_axis').count} direct-axis columns representing ${registry.totals && registry.totals.shortsDistinctDirectEmbeddingAxes || 36} distinct fitted axes</b> (${registry.totals && registry.totals.shortsDirectAxisAliasColumns || 9} public-axis aliases appear in both holdout views), <b style="color:${C.purple}">${classCounts.find(item => item.key === 'embedding_derived_transform').count} embedding-derived transforms</b>, <b style="color:${C.amber}">${classCounts.find(item => item.key === 'combined_forecast').count} combined forecasts</b>, <b style="color:${C.green}">${classCounts.find(item => item.key === 'observed_outcome').count} observed outcomes</b>, and <b style="color:${C.orange}">${classCounts.find(item => item.key === 'legacy_diagnostic').count} legacy diagnostics</b>. The visual keep forecast is one combined forecast derived from the existing visual vector.</div>
@@ -7405,7 +7662,10 @@ const JarvisRetention = (function () {
             return `<div data-savedchannelopen="${channel.id}" style="cursor:pointer;border:1px solid ${selected ? C.accent : C.border};background:${selected ? C.accent + '12' : C.card2};border-radius:7px;padding:7px 9px;min-width:180px;max-width:260px"><div style="font-size:10px;color:${C.text};font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(channel.name || channel.url)}</div><div style="font-size:8.5px;color:${color};margin-top:2px">${esc(channel.status || 'queued')} · ${channel.completed || 0}/${channel.discovered || 0} scored${channel.failed ? ` · ${channel.failed} errors` : ''}</div></div>`;
         }).join('');
         const selected = st.savedChannelSel && SAVEDCHANNELDETAIL[st.savedChannelSel];
-        return input + cardc(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:12px;font-weight:900;color:${C.text}">Saved channels <span style="font-size:9px;color:${C.mute};font-weight:600">${channels.length} total</span></div><span data-savedchannelsreload style="cursor:pointer;font-size:9px;color:${C.accent}">refresh all</span></div>${channels.length ? `<div style="display:flex;gap:7px;flex-wrap:wrap">${pills}</div>` : `<div style="font-size:10px;color:${C.mute}">No channels saved yet.</div>`}`, 10) + (selected ? renderSavedChannelDetail(selected) : (channels.length ? cardc(`<div style="padding:12px;color:${C.dim};font-size:10px">Choose a saved channel to browse every scored Short or open its prediction analysis.</div>`, 10) : ''));
+        const globalLedger = !selected && st.savedChannelTab === 'ledger'
+            ? renderSavedChannelLedger({ id: '', videos: [], featureContract: SCORECONTRACT })
+            : '';
+        return input + cardc(`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:12px;font-weight:900;color:${C.text}">Saved channels <span style="font-size:9px;color:${C.mute};font-weight:600">${channels.length} total</span></div><span data-savedchannelsreload style="cursor:pointer;font-size:9px;color:${C.accent}">refresh all</span></div>${channels.length ? `<div style="display:flex;gap:7px;flex-wrap:wrap">${pills}</div>` : `<div style="font-size:10px;color:${C.mute}">No channels saved yet. The global coordinate dictionary remains available below.</div>`}`, 10) + (selected ? renderSavedChannelDetail(selected) : globalLedger || (channels.length ? cardc(`<div style="padding:12px;color:${C.dim};font-size:10px">Choose a saved channel to browse every scored Short or open its prediction analysis.</div>`, 10) : ''));
     }
     function savedBank() {
         const tab = st.savedBank || 'hooks', hookCount = (SAVED && SAVED.hooks || []).length, channelCount = (SAVEDCHANNELS && SAVEDCHANNELS.channels || []).length;
@@ -7465,7 +7725,27 @@ const JarvisRetention = (function () {
                 scorer: h.input_manifest && h.input_manifest.scorer,
             } : null);
             const kpct = keepIdentity && keepIdentity.pctile != null ? keepIdentity.pctile : ((h.m && h.m.keep != null) ? h.m.keep : null);
-            const badge = (kpct != null) ? `<span${embeddingIdentityAttrs(keepIdentity, `saved:${h.id}`)} title="${esc((keepIdentity && keepIdentity.sourceKey) || 'keep')} · exact stored reference-corpus percentile" style="font-size:9px;font-weight:700;color:${heatCol((kpct || 0) / 100)}">${keepIdentity && keepIdentity.channel === 'together' ? 'Both' : keepIdentity && keepIdentity.channel ? keepIdentity.channel : ''} keep ${Math.round(kpct)}th</span>` : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'scored' : 'idea'}</span>`;
+            const kraw = keepIdentity && keepIdentity.est != null
+                ? +keepIdentity.est
+                : h.m && h.m.keep_est != null ? +h.m.keep_est : null;
+            const coordinateId = keepIdentity && keepIdentity.channel
+                ? `shorts.stored.${keepIdentity.channel}.keep`
+                : '';
+            const liveRevision = SCORECONTRACT && SCORECONTRACT.live
+                && SCORECONTRACT.live.revision_fingerprint || '';
+            const storedRevision = h.score_revision_fingerprint
+                || h.input_manifest && h.input_manifest.revision_fingerprint
+                || '';
+            const revisionStatus = storedRevision && liveRevision
+                ? (storedRevision === liveRevision ? 'current' : 'stale')
+                : 'unverified';
+            const revisionColor = revisionStatus === 'current'
+                ? C.green
+                : revisionStatus === 'stale' ? C.red : C.amber;
+            const coordinateLine = coordinateId
+                ? esc(coordinateId)
+                : 'legacy coordinate unavailable';
+            const badge = (kpct != null || kraw != null) ? `<span${embeddingIdentityAttrs(keepIdentity, `saved:${h.id}`)} title="${esc((keepIdentity && keepIdentity.sourceKey) || 'legacy keep identity unavailable')} · raw calibrated percentage and separate corpus rank" style="font-size:8.5px;font-weight:700;color:${heatCol((kpct || 0) / 100)}">${keepIdentity && keepIdentity.channel === 'together' ? 'Both' : keepIdentity && keepIdentity.channel ? keepIdentity.channel : 'Legacy'} keep ${kraw == null ? 'raw unavailable' : `${fmtv(kraw, 1)}%`}<small style="display:block;font-size:6.8px;color:${C.faint};font-weight:500">${kpct == null ? 'rank unavailable' : `${Math.round(kpct)}th corpus rank`} · ${coordinateLine}</small><small style="display:block;font-size:6.6px;color:${revisionColor};font-weight:850">${revisionStatus} scorer revision${storedRevision ? ` ${esc(shortFingerprint(storedRevision))}` : ''}</small></span>` : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'scored' : 'idea'}<small style="display:block;color:${revisionColor}">${revisionStatus} scorer revision</small></span>`;
             const sel = st.savedSel === h.id;
             return `<div data-savedopen="${h.id}" style="border:1px solid ${sel ? C.accent : C.border};border-radius:8px;padding:7px;background:${C.card2};width:152px;position:relative;cursor:pointer">
               <span data-savedel="${h.id}" title="delete" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer;z-index:2">✕</span>

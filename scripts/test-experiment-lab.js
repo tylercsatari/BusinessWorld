@@ -909,6 +909,13 @@ async function main() {
             [`/api/raw/saved-channel/${channelId}`]: { id: channelId, name: 'Mobile Risk Channel', url: 'https://youtube.com/@risk', status: 'partial', discovered: 21, completed: 20, failed: 1, queued: 0, videos: videos.concat(unfinishedVideo), featureContract },
             [`/api/raw/saved-channel/${channelId}/analysis`]: riskAnalysis,
             '/api/raw/saved-channel-validation': validationArtifact,
+            '/api/raw/scorer-contract': {
+                schema: 'shorts-live-score-contract-v2',
+                revision_fingerprint: 'current-live-revision',
+                creator_model_artifact_sha256: fixtureSha256('creator-adaptive-keep-model'),
+                creator_serving_artifact_sha256: fixtureSha256('creator-adaptive-keep-serving'),
+                creator_profiles: ['tyler', 'hafu'],
+            },
             '/api/raw/map': rawVisualMap,
             [`/api/raw/saved-channel/${channelId}/resume`]: { ok: true },
             '/api/hooks/grind/runs': { runs: [] },
@@ -941,6 +948,8 @@ async function main() {
                     steer_lineage_schema_version: 1,
                     source_window: 'first 5 seconds',
                     display_preference: ['together', 'text', 'visual'],
+                    revision_fingerprint: 'current-live-revision',
+                    creator_profile: 'tyler',
                 },
             };
         });
@@ -1013,6 +1022,8 @@ async function main() {
         assert(storedCreatorForecastText.includes('shorts.creator-adaptive-keep.v1'), 'the ordinary score card must name the creator-adaptive ledger coordinate');
         assert(storedCreatorForecastText.includes('canonical visual embedding + canonical together'), 'the derived scalar must disclose both multimodal embedding inputs');
         assert(storedCreatorForecastText.includes('43,360 prespecified causal candidates'), 'the stored card must disclose the frozen schema-3 registry size');
+        assert.strictEqual(await storedCreatorForecast.getAttribute('data-revision-status'), 'current', 'the creator forecast must prove its live model and scorer revisions match');
+        assert(storedCreatorForecastText.includes('future-upload research forecast'), 'an arbitrary historical open must not be mislabeled as a blind prequential replay');
         assert.strictEqual(await storedCreatorForecast.locator('[data-expgo="visual:keep"]').count(), 1, 'the multimodal scalar must expose its visual source plane');
         assert.strictEqual(await storedCreatorForecast.locator('[data-expgo="together:keep"]').count(), 1, 'the multimodal scalar must expose its together source plane');
         const lineageText = await page.locator('#rtg-exppanel').innerText();

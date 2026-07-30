@@ -884,7 +884,7 @@ const RAW_PYTHON = (() => {
     const cands = [process.env.RAW_PYTHON, '/Users/tylercsatari/miniforge3/bin/python3',
         '/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3', '/usr/bin/python3'].filter(Boolean);
     for (const p of cands) {
-        try { execSync(`"${p}" -c "import numpy, boto3, scipy, sklearn"`, { stdio: 'ignore', timeout: 12000, env: RAW_PY_ENV }); return p; }
+        try { execSync(`"${p}" -c "import numpy, boto3, scipy, sklearn, PIL"`, { stdio: 'ignore', timeout: 12000, env: RAW_PY_ENV }); return p; }
         catch (e) {}
     }
     return 'python3';
@@ -939,6 +939,23 @@ function validateRawScoreResult(result) {
         || !Number.isFinite(Number(visualKeepForecast.raw))) {
         missing.push('frozen visual keep forecast');
     }
+    const requestedCreatorProfile = String(
+        result.input_manifest && result.input_manifest.creator_profile || ''
+    ).trim();
+    const creatorForecast = result.creator_adaptive_keep_forecast;
+    if (requestedCreatorProfile && (
+        !creatorForecast
+        || creatorForecast.coordinate_id !== 'shorts.creator-adaptive-keep.v1'
+        || creatorForecast.profile_account !== requestedCreatorProfile
+        || !Number.isFinite(Number(creatorForecast.raw))
+    )) {
+        missing.push(
+            'creator-adaptive keep forecast'
+            + (result.creator_adaptive_keep_forecast_error
+                ? ` (${String(result.creator_adaptive_keep_forecast_error).slice(0, 140)})`
+                : '')
+        );
+    }
     if (!result.channels || !validPlacement(result.channels.visual)) missing.push('visual map placement');
     if (!result.channels || !validPlacement(result.channels.together)) missing.push('combined map placement');
     if (missing.length) {
@@ -950,7 +967,52 @@ function validateRawScoreResult(result) {
 // /api/raw/upload-health so a scorer that the kernel OOM-kills is visible remotely.
 let lastRawScorer = null;
 let lastRawUpload = null;
+let rawScorerContractCache = null;
 const _rawActiveTempPaths = new Set();
+function safeCreatorProfile(value) {
+    const profile = String(value || '').trim().toLowerCase();
+    return /^[a-z0-9_-]{1,40}$/.test(profile) ? profile : '';
+}
+async function readRawScorerContract(force = false) {
+    if (!force && rawScorerContractCache
+        && Date.now() - rawScorerContractCache.at < 300000) {
+        return rawScorerContractCache.value;
+    }
+    const value = await new Promise((resolve, reject) => {
+        const py = spawnRawPython([
+            path.join(__dirname, 'raw_upload.py'),
+            '--contract',
+        ]);
+        let out = '', err = '', timedOut = false;
+        py.stdout.on('data', chunk => out += chunk);
+        py.stderr.on('data', chunk => err += chunk);
+        const timer = setTimeout(() => {
+            timedOut = true;
+            killRawPythonTree(py);
+        }, 90000);
+        py.on('close', () => {
+            clearTimeout(timer);
+            if (timedOut) {
+                reject(new Error('scorer contract lookup timed out'));
+                return;
+            }
+            const line = out.trim().split('\n')
+                .filter(item => item.trim().startsWith('{')).pop();
+            if (!line) {
+                reject(new Error(
+                    'scorer contract produced no result — '
+                    + (err.trim().split('\n').pop() || 'no output').slice(-160)
+                ));
+                return;
+            }
+            try { resolve(JSON.parse(line)); }
+            catch (error) { reject(error); }
+        });
+        py.on('error', reject);
+    });
+    rawScorerContractCache = { at: Date.now(), value };
+    return value;
+}
 function rawBoxStats() {
     const os = require('os');
     const mu = process.memoryUsage();
@@ -3381,6 +3443,25 @@ const server = http.createServer(async (req, res) => {
     // =========================================
     // RAW upload — embed an uploaded video's first-5s hook (visual/text/together) and
     // locate it in the existing map by nearest neighbours. Raw binary body; ext in X-Raw-Ext.
+    if (pathname === '/api/raw/scorer-contract' && req.method === 'GET') {
+        try {
+            const contract = await readRawScorerContract(
+                url.searchParams.get('refresh') === '1'
+            );
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify(contract));
+        } catch (error) {
+            res.writeHead(503, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({ error: error.message }));
+        }
+        return;
+    }
     // ⬇ score a hook straight from a YouTube link: server downloads the short, extracts the
     // 5-frame montage + first-5s transcript, embeds and scores — identical record to an upload.
     if (pathname === '/api/raw/embed-youtube' && req.method === 'POST') {
@@ -3391,6 +3472,10 @@ const server = http.createServer(async (req, res) => {
             const ytArgs = [path.join(__dirname, 'raw_upload.py'), '--youtube', yurl];
             const yTitle = String(body.title || '').slice(0, 80).trim();
             if (yTitle) ytArgs.push('--title', yTitle);
+            const creatorProfile = safeCreatorProfile(body.creatorProfile);
+            if (creatorProfile) {
+                ytArgs.push('--creator-profile', creatorProfile);
+            }
             const ytRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
                 const py = spawnRawPython(ytArgs);
                 let out = '', err = '';
@@ -3411,10 +3496,24 @@ const server = http.createServer(async (req, res) => {
                 catch (e) {
                     const msg = String((e && e.message) || e);
                     if (!/cookie|bot|confirm|sign in|authenticat|403|429|too many requests|ffmpeg exited with code (8|183)/i.test(msg)) throw e;
-                    // YouTube bot-blocks this datacenter IP — relay the job through the Mac watcher,
-                    // which downloads on a residential IP and runs the identical scoring pipeline.
+                    // YouTube bot-blocks this datacenter IP. The Mac watcher acquires only the
+                    // source video; this server still runs the canonical scorer and artifacts.
                     const rid = 'y' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-                    await cloud.uploadToR2(`shorts/yt-relay/requests/${rid}.json`, Buffer.from(JSON.stringify({ url: yurl, title: yTitle, ts: Date.now() })), 'application/json');
+                    const expectedContract = await readRawScorerContract();
+                    const expectedRevisionFingerprint = String(
+                        expectedContract && expectedContract.revision_fingerprint || ''
+                    );
+                    await cloud.uploadToR2(
+                        `shorts/yt-relay/requests/${rid}.json`,
+                        Buffer.from(JSON.stringify({
+                            url: yurl,
+                            title: yTitle,
+                            creatorProfile: creatorProfile || null,
+                            expectedRevisionFingerprint,
+                            ts: Date.now(),
+                        })),
+                        'application/json'
+                    );
                     for (let i = 0; i < 100; i++) {
                         await new Promise(r => setTimeout(r, 5000));
                         const b = await cloud.downloadFromR2(`shorts/yt-relay/results/${rid}.json`).catch(() => null);
@@ -3422,7 +3521,158 @@ const server = http.createServer(async (req, res) => {
                             await cloud.deleteFromR2(`shorts/yt-relay/results/${rid}.json`).catch(() => {});
                             const j = JSON.parse(b.toString('utf8'));
                             if (j.error) throw new Error(j.error);
-                            return j;
+                            const relayVideoKey = String(
+                                j.relayVideoKey || ''
+                            );
+                            if (!/^shorts\/yt-relay\/videos\/[\w.-]+\.(?:mp4|mov|mkv|webm|m4v)$/i.test(relayVideoKey)) {
+                                throw new Error(
+                                    'YouTube relay returned no usable acquisition'
+                                );
+                            }
+                            const relayVideo = await cloud.downloadFromR2(
+                                relayVideoKey
+                            );
+                            const extension = path.extname(relayVideoKey)
+                                .replace(/[^a-z0-9.]/gi, '')
+                                .slice(0, 8) || '.mp4';
+                            const relayTemp = path.join(
+                                require('os').tmpdir(),
+                                `rawyt_relay_${rid}${extension}`
+                            );
+                            fs.writeFileSync(relayTemp, relayVideo);
+                            let scored;
+                            try {
+                                const relayArgs = [
+                                    path.join(__dirname, 'raw_upload.py'),
+                                    '--file', relayTemp,
+                                    '--title', (
+                                        yTitle
+                                        || j.sourceTitle
+                                        || j.videoId
+                                        || 'YouTube hook'
+                                    ).toString().slice(0, 80),
+                                ];
+                                const sourceDuration = Number(
+                                    j.sourceDuration
+                                );
+                                if (
+                                    sourceDuration > 0
+                                    && Number.isFinite(sourceDuration)
+                                ) {
+                                    relayArgs.push(
+                                        '--duration',
+                                        String(
+                                            Math.round(
+                                                sourceDuration * 1000
+                                            ) / 1000
+                                        )
+                                    );
+                                }
+                                if (creatorProfile) {
+                                    relayArgs.push(
+                                        '--creator-profile',
+                                        creatorProfile
+                                    );
+                                }
+                                scored = await runHeavyScoreInteractive(
+                                    () => new Promise((resolve, reject) => {
+                                        const py = spawnRawPython(relayArgs);
+                                        let stdout = '', stderr = '';
+                                        let timedOut = false;
+                                        py.stdout.on(
+                                            'data',
+                                            chunk => stdout += chunk
+                                        );
+                                        py.stderr.on(
+                                            'data',
+                                            chunk => stderr += chunk
+                                        );
+                                        const timer = setTimeout(() => {
+                                            timedOut = true;
+                                            killRawPythonTree(py);
+                                        }, 240000);
+                                        py.on('close', () => {
+                                            clearTimeout(timer);
+                                            if (timedOut) {
+                                                reject(new Error(
+                                                    'relayed YouTube scoring '
+                                                    + 'timed out'
+                                                ));
+                                                return;
+                                            }
+                                            const line = stdout.trim()
+                                                .split('\n')
+                                                .filter(value => (
+                                                    value.trim()
+                                                        .startsWith('{')
+                                                )).pop();
+                                            if (!line) {
+                                                reject(new Error(
+                                                    'relayed YouTube scorer '
+                                                    + 'produced no result — '
+                                                    + (
+                                                        stderr.trim()
+                                                            .split('\n')
+                                                            .pop()
+                                                        || 'no output'
+                                                    ).slice(-160)
+                                                ));
+                                                return;
+                                            }
+                                            try {
+                                                resolve(
+                                                    validateRawScoreResult(
+                                                        JSON.parse(line)
+                                                    )
+                                                );
+                                            } catch (error) {
+                                                reject(error);
+                                            }
+                                        });
+                                        py.on('error', reject);
+                                    })
+                                );
+                            } finally {
+                                fs.rmSync(relayTemp, { force: true });
+                                await cloud.deleteFromR2(
+                                    relayVideoKey
+                                ).catch(() => {});
+                            }
+                            scored = {
+                                ...scored,
+                                videoId: j.videoId || null,
+                                sourceUrl: j.sourceUrl || yurl,
+                                sourceTitle: j.sourceTitle || '',
+                                sourceViews: j.sourceViews,
+                                sourceChannel: j.sourceChannel || '',
+                                sourcePublished: j.sourcePublished || null,
+                                sourceSubscribers: j.sourceSubscribers,
+                                sourceAcquisition:
+                                    `${j.sourceAcquisition || 'relay'}`
+                                    + '+server-score',
+                                relayedBy: j.relayedBy || 'mac',
+                            };
+                            if (scored.input_manifest) {
+                                scored.input_manifest.source_mode =
+                                    'youtube-relay-acquisition';
+                            }
+                            const actualRevision = String(
+                                scored.input_manifest
+                                && scored.input_manifest.revision_fingerprint
+                                || ''
+                            );
+                            if (
+                                !expectedRevisionFingerprint
+                                || actualRevision !== expectedRevisionFingerprint
+                            ) {
+                                throw new Error(
+                                    'YouTube relay scorer revision mismatch: '
+                                    + `expected ${expectedRevisionFingerprint.slice(0, 12) || 'unknown'}, `
+                                    + `received ${actualRevision.slice(0, 12) || 'unknown'}. `
+                                    + 'The deploy changed while this request was running; retry it.'
+                                );
+                            }
+                            return validateRawScoreResult(scored);
                         }
                     }
                     await cloud.deleteFromR2(`shorts/yt-relay/requests/${rid}.json`).catch(() => {});
@@ -3456,6 +3706,9 @@ const server = http.createServer(async (req, res) => {
         const title = (req.headers['x-raw-title'] || 'My upload').toString().slice(0, 80);
         const durH = parseFloat(req.headers['x-raw-duration']);   // real full-video length (client trims to 6s but sends this so realviews isn't skewed)
         const uploadMode = String(req.headers['x-raw-upload-mode'] || 'direct').replace(/[^a-z-]/gi, '').slice(0, 24) || 'direct';
+        const creatorProfile = safeCreatorProfile(
+            req.headers['x-raw-creator-profile']
+        );
         const sparse = String(req.headers['x-raw-sparse'] || '') === '1';
         const logicalSize = Number(req.headers['x-raw-original-size'] || 0);
         const headSize = Number(req.headers['x-raw-head-size'] || 0);
@@ -3571,7 +3824,15 @@ const server = http.createServer(async (req, res) => {
                 };
                 const script = path.join(__dirname, 'raw_upload.py');
                 const pyArgs = [script, '--file', tmp, '--title', title];
-                if (durH > 0 && isFinite(durH)) pyArgs.push('--duration', String(Math.round(durH)));
+                if (durH > 0 && isFinite(durH)) {
+                    pyArgs.push(
+                        '--duration',
+                        String(Math.round(durH * 1000) / 1000)
+                    );
+                }
+                if (creatorProfile) {
+                    pyArgs.push('--creator-profile', creatorProfile);
+                }
                 const upT0 = Date.now();
                 const upRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
                         lastRawUpload = { ...(lastRawUpload || {}), stage: 'scoring', scoringAt: Date.now(), cgroupBeforeMB: (rawBoxStats().cgroup || {}).currentMB || null };
@@ -3673,7 +3934,16 @@ const server = http.createServer(async (req, res) => {
             const script = path.join(__dirname, 'raw_upload.py');
             const monArgs = [script, '--image', tmp, '--text', (j.text || '').toString().slice(0, 2000), '--title', (j.title || 'Built hook').toString().slice(0, 80)];
             const monDur = parseFloat(j.duration);
-            if (monDur > 0 && isFinite(monDur)) monArgs.push('--duration', String(Math.round(monDur)));
+            if (monDur > 0 && isFinite(monDur)) {
+                monArgs.push(
+                    '--duration',
+                    String(Math.round(monDur * 1000) / 1000)
+                );
+            }
+            const creatorProfile = safeCreatorProfile(j.creatorProfile);
+            if (creatorProfile) {
+                monArgs.push('--creator-profile', creatorProfile);
+            }
             const monRunner = () => runHeavyScoreInteractive(() => new Promise((ok, no) => {
                     const py = spawnRawPython(monArgs);
                     let out = '', err = '';
@@ -5742,6 +6012,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 indicators: (body.indicators && typeof body.indicators === 'object') ? body.indicators : null,
                 steer: (body.steer && typeof body.steer === 'object') ? body.steer : null,
                 visual_keep_forecast: (body.visual_keep_forecast && typeof body.visual_keep_forecast === 'object') ? body.visual_keep_forecast : null,
+                creator_adaptive_keep_forecast: (body.creator_adaptive_keep_forecast && typeof body.creator_adaptive_keep_forecast === 'object') ? body.creator_adaptive_keep_forecast : null,
+                creator_adaptive_keep_forecast_error: body.creator_adaptive_keep_forecast_error == null ? null : String(body.creator_adaptive_keep_forecast_error).slice(0, 500),
                 channels: (body.channels && typeof body.channels === 'object') ? body.channels : null,
                 emb_preview: (body.emb_preview && typeof body.emb_preview === 'object') ? body.emb_preview : null,
                 input_manifest: (body.input_manifest && typeof body.input_manifest === 'object') ? body.input_manifest : null,
@@ -5770,8 +6042,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const existing = await cloud.downloadFromR2(key).catch(() => null);
             if (!existing) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"saved hook not found"}'); return; }
             const rec = JSON.parse(existing.toString('utf8'));
-            for (const field of ['indicators', 'steer', 'visual_keep_forecast', 'channels', 'emb_preview', 'input_manifest']) {
+            for (const field of ['indicators', 'steer', 'visual_keep_forecast', 'creator_adaptive_keep_forecast', 'channels', 'emb_preview', 'input_manifest']) {
                 if (body[field] && typeof body[field] === 'object') rec[field] = body[field];
+            }
+            if (body.creator_adaptive_keep_forecast_error != null) {
+                rec.creator_adaptive_keep_forecast_error = String(body.creator_adaptive_keep_forecast_error).slice(0, 500);
             }
             if (typeof body.montage === 'string' && body.montage.indexOf('base64,') >= 0) {
                 const jpg = Buffer.from(body.montage.split('base64,').pop(), 'base64');
@@ -6769,7 +7044,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             } catch (e) {}
             const rid = 'gr' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
             await cloud.uploadToR2(`hooks/grind/requests/${rid}.json`, Buffer.from(JSON.stringify({
-                premise, threshold: body.threshold, metric: body.metric, hours: body.hours, maxAttempts: body.maxAttempts, ts: Date.now() })), 'application/json');
+                premise, threshold: body.threshold, metric: body.metric, hours: body.hours, maxAttempts: body.maxAttempts,
+                creatorProfile: safeCreatorProfile(body.creatorProfile) || null, ts: Date.now() })), 'application/json');
             res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ rid }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
@@ -13188,13 +13464,16 @@ async function composeMontage(frameBufs) {
         return fs.readFileSync(out);
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
-async function scoreMontage(buf, text, title) {
+async function scoreMontage(buf, text, title, creatorProfile) {
     const os = require('os');
     const tmp = path.join(os.tmpdir(), `grindmon_${Date.now()}_${Math.round(Math.random() * 1e6)}.jpg`);
     fs.writeFileSync(tmp, buf);
     try {
         return await runHeavyScore(() => new Promise((ok, no) => {
-            const py = spawnRawPython([path.join(__dirname, 'raw_upload.py'), '--image', tmp, '--text', String(text || '').slice(0, 2000), '--title', String(title || 'grind').slice(0, 80)]);
+            const args = [path.join(__dirname, 'raw_upload.py'), '--image', tmp, '--text', String(text || '').slice(0, 2000), '--title', String(title || 'grind').slice(0, 80)];
+            const profile = safeCreatorProfile(creatorProfile);
+            if (profile) args.push('--creator-profile', profile);
+            const py = spawnRawPython(args);
             let out = '', err2 = '';
             py.stdout.on('data', d => out += d); py.stderr.on('data', d => err2 += d);
             const t = setTimeout(() => { killRawPythonTree(py); }, 150000);
@@ -13210,6 +13489,7 @@ function grindPct(score, metric) {
 }
 async function grindProcess(rid, req0) {
     const premise = String(req0.premise || '').trim().slice(0, 500);
+    const creatorProfile = safeCreatorProfile(req0.creatorProfile);
     const metric = ['keep', 'ret5', 'views', 'gt10M'].includes(req0.metric) ? req0.metric : 'keep';
     const threshold = Math.max(50, Math.min(99, parseInt(req0.threshold) || 82));
     const maxAttempts = Math.max(1, Math.min(150, parseInt(req0.maxAttempts) || 80));
@@ -13268,7 +13548,7 @@ async function grindProcess(rid, req0) {
                 if (!okBufs.length) throw new Error('no frames rendered');
                 const mon = await composeMontage(okBufs);
                 await cloud.uploadToR2(`hooks/grind/montages/${rid}_${a.k}.jpg`, mon, 'image/jpeg');
-                const score = await scoreMontage(mon, premise, spec.premise);
+                const score = await scoreMontage(mon, premise, spec.premise, creatorProfile);
                 delete score.montage;   // the strip is already in R2 — don't double-store 200KB of b64
                 await cloud.uploadToR2(`hooks/grind/scores/${rid}_${a.k}.json`, Buffer.from(JSON.stringify(score)), 'application/json');
                 a.pct = grindPct(score, metric); a.hasScore = a.pct != null;

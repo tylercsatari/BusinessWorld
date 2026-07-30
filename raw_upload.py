@@ -14,6 +14,11 @@ Identical montage/whisper/embed to raw_embed.py so the upload's vectors are comp
 """
 import os, sys, json, base64, subprocess, tempfile, shutil, io, time, re, hashlib, unicodedata
 import numpy as np, boto3, urllib.request, urllib.error
+from PIL import Image, __version__ as PILLOW_VERSION
+from creator_adaptive_keep import (
+    load_serving_state,
+    score_creator_adaptive_keep,
+)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DISPLAY_CONTRACT_PATH = os.path.join(
@@ -44,43 +49,50 @@ s3 = boto3.client('s3', endpoint_url=f"https://{env('R2_ACCOUNT_ID')}.r2.cloudfl
                   aws_access_key_id=env('R2_ACCESS_KEY_ID'), aws_secret_access_key=env('R2_SECRET_ACCESS_KEY'), region_name='auto')
 DIM = 1536
 EMBEDDING_MODEL = 'gemini-embedding-2'
-TRANSCRIPTION_MODEL = 'gemini-flash-latest'
+TRANSCRIPTION_MODEL = env('RAW_TRANSCRIPTION_MODEL') or 'gemini-2.5-flash'
 EMB_URL = f'https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL}:embedContent'
-SCORE_CACHE_VERSION = 1
+SCORE_CACHE_VERSION = 2
 DISPLAY_CONTRACT_VERSION = _load_display_contract_version()
-SCORE_CACHE_PREFIX = (env('RAW_SCORE_CACHE_PREFIX') or 'raw/score-cache/v1').strip('/')
+SCORE_CACHE_PREFIX = (env('RAW_SCORE_CACHE_PREFIX') or 'raw/score-cache/v2').strip('/')
 VISUAL_KEEP_MODEL_KEY = 'raw/predictor-lab/visual-keep-model-v1.json'
 VISUAL_KEEP_MODEL_MANIFEST_KEY = 'raw/predictor-lab/visual-keep-model-v1.manifest.json'
 VISUAL_KEEP_COORDINATE_ID = 'shorts.visual-keep-forecast.v1'
+CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY = (
+    'raw/predictor-lab/creator-adaptive-keep-model-v1.manifest.json'
+)
+CREATOR_ADAPTIVE_KEEP_SERVING_KEY = (
+    'raw/predictor-lab/creator-adaptive-keep-serving-v1.npz'
+)
+CREATOR_ADAPTIVE_KEEP_SERVING_MANIFEST_KEY = (
+    'raw/predictor-lab/creator-adaptive-keep-serving-v1.manifest.json'
+)
+CREATOR_ADAPTIVE_KEEP_COORDINATE_ID = 'shorts.creator-adaptive-keep.v1'
+CANONICAL_MONTAGE_WIDTH = 1600
+CANONICAL_MONTAGE_HEIGHT = 568
+CANONICAL_MONTAGE_QUALITY = 90
 SCORE_REVISION_KEYS = (
     'raw/steer_models.npz',
     'raw/indicators/weights.npz',
     'raw/indicators/registry.json',
     'raw/novelty_models.npz',
     VISUAL_KEEP_MODEL_MANIFEST_KEY,
+    CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY,
+    CREATOR_ADAPTIVE_KEEP_SERVING_MANIFEST_KEY,
     'raw/visual/embeddings.npz',
     'raw/text/embeddings.npz',
     'raw/together/embeddings.npz',
 )
 
-ENGWORDS = set()
-try:
-    for _w in open('/usr/share/dict/words'):
-        _w = _w.strip().lower()
-        if _w: ENGWORDS.add(_w)
-except Exception: pass
 def coherent(txt):
     toks = re.findall(r"[a-z']{2,}", (txt or '').lower())
-    if len(toks) < 2: return False
-    if not ENGWORDS: return len(toks) >= 3
-    real = sum(1 for w in toks if w.strip("'") in ENGWORDS)
-    return real >= 2 and real / len(toks) >= 0.5
+    return len(toks) >= 2
 
 def r2_get(key):
     try: return s3.get_object(Bucket=BUCKET, Key=key)['Body'].read()
     except Exception: return None
 
 _VISUAL_KEEP_MODEL_CACHE = None
+_CREATOR_ADAPTIVE_KEEP_STATE_CACHE = None
 
 def _exact_sha256(value):
     return bool(re.fullmatch(r'[a-f0-9]{64}', str(value or '').lower()))
@@ -191,12 +203,148 @@ def visual_keep_forecast(embedding):
         cached['manifest_sha256'],
     )
 
+def creator_adaptive_keep_forecast(visual, together, profile):
+    global _CREATOR_ADAPTIVE_KEEP_STATE_CACHE
+    profile = str(profile or '').strip().lower()
+    if not profile:
+        return None
+    if _CREATOR_ADAPTIVE_KEEP_STATE_CACHE is None:
+        serving_manifest_bytes = r2_get(
+            CREATOR_ADAPTIVE_KEEP_SERVING_MANIFEST_KEY
+        )
+        model_manifest_bytes = r2_get(
+            CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY
+        )
+        if not serving_manifest_bytes or not model_manifest_bytes:
+            raise RuntimeError(
+                'creator-adaptive keep serving release is unavailable'
+            )
+        try:
+            serving_manifest = json.loads(serving_manifest_bytes)
+            model_manifest = json.loads(model_manifest_bytes)
+        except Exception as error:
+            raise RuntimeError(
+                'creator-adaptive keep release manifest is invalid JSON'
+            ) from error
+        artifact_sha256 = str(
+            serving_manifest.get('artifactSha256') or ''
+        ).lower()
+        artifact_key = str(serving_manifest.get('archiveKey') or '')
+        expected_key = (
+            'raw/predictor-lab/creator-adaptive-keep-serving/by-sha256/'
+            f'{artifact_sha256}.npz'
+        )
+        model_artifact_sha256 = str(
+            model_manifest.get('artifactSha256') or ''
+        ).lower()
+        if (
+            serving_manifest.get('coordinateId')
+            != CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
+            or serving_manifest.get('canonicalKey')
+            != CREATOR_ADAPTIVE_KEEP_SERVING_KEY
+            or artifact_key != expected_key
+            or not _exact_sha256(artifact_sha256)
+            or not _exact_sha256(model_artifact_sha256)
+            or serving_manifest.get('modelArtifactSha256')
+            != model_artifact_sha256
+        ):
+            raise RuntimeError(
+                'creator-adaptive keep serving manifest failed integrity validation'
+            )
+        artifact = r2_get(artifact_key)
+        if not artifact:
+            raise RuntimeError(
+                'creator-adaptive keep immutable serving artifact is unavailable'
+            )
+        if hashlib.sha256(artifact).hexdigest() != artifact_sha256:
+            raise RuntimeError(
+                'creator-adaptive keep serving artifact hash does not match'
+            )
+        state = load_serving_state(artifact)
+        metadata = state.get('metadata') or {}
+        scorer_source_sha256 = hashlib.sha256(
+            open(
+                os.path.join(HERE, 'creator_adaptive_keep.py'),
+                'rb',
+            ).read()
+        ).hexdigest()
+        if (
+            metadata.get('modelArtifactSha256') != model_artifact_sha256
+            or metadata.get('servingScorerSourceSha256')
+            != scorer_source_sha256
+            or serving_manifest.get('servingScorerSourceSha256')
+            != scorer_source_sha256
+        ):
+            raise RuntimeError(
+                'creator-adaptive keep serving code or model revision is incompatible'
+            )
+        _CREATOR_ADAPTIVE_KEEP_STATE_CACHE = {
+            'state': state,
+            'artifact_sha256': artifact_sha256,
+            'artifact_key': artifact_key,
+            'manifest_sha256': hashlib.sha256(
+                serving_manifest_bytes
+            ).hexdigest(),
+            'manifest_key': CREATOR_ADAPTIVE_KEEP_SERVING_MANIFEST_KEY,
+            'model_artifact_sha256': model_artifact_sha256,
+            'model_manifest_sha256': hashlib.sha256(
+                model_manifest_bytes
+            ).hexdigest(),
+        }
+    cached = _CREATOR_ADAPTIVE_KEEP_STATE_CACHE
+    result = score_creator_adaptive_keep(
+        cached['state'],
+        visual,
+        together,
+        profile,
+    )
+    result.update({
+        'serving_artifact_sha256': cached['artifact_sha256'],
+        'serving_artifact_key': cached['artifact_key'],
+        'serving_manifest_sha256': cached['manifest_sha256'],
+        'serving_manifest_key': cached['manifest_key'],
+        'model_artifact_sha256': cached['model_artifact_sha256'],
+        'model_manifest_sha256': cached['model_manifest_sha256'],
+    })
+    return result
+
 def _canonical_json(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
 
 def normalize_transcript(value):
     """Canonicalize only representation, not meaning, before both hashing and embedding."""
     return re.sub(r'\s+', ' ', unicodedata.normalize('NFKC', str(value or ''))).strip()
+
+def canonicalize_montage_bytes(value):
+    """Give every source path the exact same pixel geometry and JPEG encoder contract."""
+    try:
+        with Image.open(io.BytesIO(value)) as source:
+            if (
+                source.format == 'JPEG'
+                and source.size
+                == (CANONICAL_MONTAGE_WIDTH, CANONICAL_MONTAGE_HEIGHT)
+            ):
+                return bytes(value)
+            image = source.convert('RGB').resize(
+                (CANONICAL_MONTAGE_WIDTH, CANONICAL_MONTAGE_HEIGHT),
+                Image.Resampling.LANCZOS,
+            )
+            output = io.BytesIO()
+            image.save(
+                output,
+                format='JPEG',
+                quality=CANONICAL_MONTAGE_QUALITY,
+                subsampling=2,
+                optimize=False,
+                progressive=False,
+            )
+            return output.getvalue()
+    except Exception as error:
+        raise RuntimeError(f'could not canonicalize the five-frame montage: {error}') from error
+
+def canonicalize_montage_b64(value):
+    raw = base64.b64decode(value)
+    return base64.b64encode(canonicalize_montage_bytes(raw)).decode()
 
 def _duration_milliseconds(value):
     try:
@@ -205,14 +353,13 @@ def _duration_milliseconds(value):
     except Exception:
         return None
 
-def _score_input_state(montage_b64, transcript, transcript_used, duration_s):
+def _embedding_input_state(montage_b64, transcript, transcript_used):
     montage_bytes = base64.b64decode(montage_b64)
     used = bool(transcript_used and transcript)
     return {
-        'schema': 'shorts-score-input-v1',
+        'schema': 'shorts-embedding-input-v2',
         'montage_sha256': hashlib.sha256(montage_bytes).hexdigest(),
         'transcript': normalize_transcript(transcript),
-        'duration_ms': _duration_milliseconds(duration_s),
         'channels': {
             'visual': '5-frame-montage',
             'text': 'normalized-transcript' if used else 'absent',
@@ -220,8 +367,43 @@ def _score_input_state(montage_b64, transcript, transcript_used, duration_s):
         },
     }
 
-def _score_input_fingerprint(montage_b64, transcript, transcript_used, duration_s):
-    state = _score_input_state(montage_b64, transcript, transcript_used, duration_s)
+def _score_input_state(
+    montage_b64,
+    transcript,
+    transcript_used,
+    duration_s,
+    creator_profile=None,
+):
+    embedding_state = _embedding_input_state(
+        montage_b64,
+        transcript,
+        transcript_used,
+    )
+    embedding_fingerprint = hashlib.sha256(
+        _canonical_json(embedding_state)
+    ).hexdigest()
+    return {
+        'schema': 'shorts-score-input-v2',
+        'embedding_input_fingerprint': embedding_fingerprint,
+        'embedding_input': embedding_state,
+        'duration_ms': _duration_milliseconds(duration_s),
+        'creator_profile': str(creator_profile or '').strip().lower() or None,
+    }
+
+def _score_input_fingerprint(
+    montage_b64,
+    transcript,
+    transcript_used,
+    duration_s,
+    creator_profile=None,
+):
+    state = _score_input_state(
+        montage_b64,
+        transcript,
+        transcript_used,
+        duration_s,
+        creator_profile,
+    )
     return hashlib.sha256(_canonical_json(state)).hexdigest(), state
 
 def _r2_error_code(error):
@@ -250,6 +432,34 @@ def _score_code_sha256():
     except Exception:
         return None
 
+def _creator_scorer_code_sha256():
+    try:
+        return hashlib.sha256(
+            open(os.path.join(HERE, 'creator_adaptive_keep.py'), 'rb').read()
+        ).hexdigest()
+    except Exception:
+        return None
+
+_FFMPEG_VERSION = None
+def _ffmpeg_version():
+    global _FFMPEG_VERSION
+    if _FFMPEG_VERSION is None:
+        try:
+            result = subprocess.run(
+                ['ffmpeg', '-version'],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            _FFMPEG_VERSION = (
+                result.stdout.strip().splitlines()[0][:160]
+                if result.stdout.strip()
+                else 'unavailable'
+            )
+        except Exception:
+            _FFMPEG_VERSION = 'unavailable'
+    return _FFMPEG_VERSION
+
 def _score_revisions():
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=len(SCORE_REVISION_KEYS)) as executor:
@@ -259,6 +469,8 @@ def _score_revisions():
         'scorer': {
             'name': 'raw_upload.py',
             'sha256': _score_code_sha256(),
+            'creator_adaptive_module_sha256':
+                _creator_scorer_code_sha256(),
         },
         'models': {
             'embedding': {
@@ -274,6 +486,11 @@ def _score_revisions():
         'runtime': {
             'python': f'{sys.version_info.major}.{sys.version_info.minor}',
             'numpy': np.__version__,
+            'pillow': PILLOW_VERSION,
+            'pillow_jpeg': str(
+                getattr(Image.core, 'jpeglib_version', 'unavailable')
+            ),
+            'ffmpeg': _ffmpeg_version(),
         },
         'artifacts': dict(zip(SCORE_REVISION_KEYS, artifact_rows)),
     }
@@ -292,7 +509,76 @@ def _score_cache_key(input_fingerprint, revision_fingerprint):
 def _score_output_fingerprint(score):
     return hashlib.sha256(_canonical_json(score)).hexdigest()
 
-def _score_cache_read(key, input_fingerprint, revision_fingerprint):
+def _score_completeness_errors(
+    score,
+    creator_profile=None,
+    transcript_used=False,
+):
+    missing = []
+    previews = score.get('emb_preview') or {}
+    for channel in ('visual', 'together'):
+        preview = previews.get(channel)
+        if not (
+            isinstance(preview, list)
+            and len(preview) == 48
+            and all(np.isfinite(value) for value in preview)
+        ):
+            missing.append(f'{channel} embedding preview')
+    required_channels = ['visual', 'together']
+    if transcript_used:
+        required_channels.append('text')
+    steer = score.get('steer') or {}
+    for channel in required_channels:
+        for target in (
+            'keep', 'ret5', 'views', 'realviews', 'outlier', 'gt10M'
+        ):
+            value = (steer.get(f'{channel}_{target}') or {}).get('est')
+            if value is None or not np.isfinite(value):
+                missing.append(f'{channel}_{target}')
+    indicators = score.get('indicators') or {}
+    for channel in ('vis', 'tog'):
+        value = indicators.get(f'nov_{channel}_global')
+        if value is None or not np.isfinite(value):
+            missing.append(f'nov_{channel}_global')
+    if transcript_used:
+        value = indicators.get('nov_txt_global')
+        if value is None or not np.isfinite(value):
+            missing.append('nov_txt_global')
+    visual_forecast = score.get('visual_keep_forecast') or {}
+    if (
+        visual_forecast.get('coordinate_id')
+        != VISUAL_KEEP_COORDINATE_ID
+        or visual_forecast.get('raw') is None
+        or not np.isfinite(visual_forecast.get('raw'))
+    ):
+        missing.append('frozen visual keep forecast')
+    for channel in ('visual', 'together'):
+        placement = ((score.get('channels') or {}).get(channel) or {})
+        neighbors_value = placement.get('neighbors')
+        if not isinstance(neighbors_value, list) or not neighbors_value:
+            missing.append(f'{channel} map placement')
+    if creator_profile:
+        creator_forecast = score.get(
+            'creator_adaptive_keep_forecast'
+        ) or {}
+        if (
+            creator_forecast.get('coordinate_id')
+            != CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
+            or creator_forecast.get('profile_account')
+            != creator_profile
+            or creator_forecast.get('raw') is None
+            or not np.isfinite(creator_forecast.get('raw'))
+        ):
+            missing.append('creator-adaptive keep forecast')
+    return missing
+
+def _score_cache_read(
+    key,
+    input_fingerprint,
+    revision_fingerprint,
+    creator_profile=None,
+    transcript_used=False,
+):
     try:
         raw = s3.get_object(Bucket=BUCKET, Key=key)['Body'].read()
         payload = json.loads(raw)
@@ -311,6 +597,11 @@ def _score_cache_read(key, input_fingerprint, revision_fingerprint):
                 'emb_preview',
                 'channels',
             ))
+            and not _score_completeness_errors(
+                score,
+                creator_profile,
+                transcript_used,
+            )
             and output_fingerprint == _score_output_fingerprint(score)
         )
         if not valid:
@@ -345,9 +636,21 @@ def _score_cache_write(key, input_fingerprint, revision_fingerprint, revisions, 
     except Exception as error:
         return 'write_error', f'{type(error).__name__}: {str(error)[:160]}', output_fingerprint
 
-def _score_replay_prepare(montage_b64, transcript, transcript_used, duration_s, revisions=None):
+def _score_replay_prepare(
+    montage_b64,
+    transcript,
+    transcript_used,
+    duration_s,
+    creator_profile=None,
+    revisions=None,
+):
     input_fingerprint, input_state = _score_input_fingerprint(
-        montage_b64, transcript, transcript_used, duration_s)
+        montage_b64,
+        transcript,
+        transcript_used,
+        duration_s,
+        creator_profile,
+    )
     revisions = revisions or _score_revisions()
     revision_fingerprint = _revision_fingerprint(revisions)
     unavailable = [
@@ -362,6 +665,9 @@ def _score_replay_prepare(montage_b64, transcript, transcript_used, duration_s, 
         'cache_status': 'disabled' if disabled else 'disabled_revision_unavailable' if unavailable else 'miss',
         'cache_write_status': 'not_attempted',
         'input_fingerprint': input_fingerprint,
+        'embedding_input_fingerprint': input_state.get(
+            'embedding_input_fingerprint'
+        ),
         'revision_fingerprint': revision_fingerprint,
         'output_fingerprint': None,
         'scorer_revisions': revisions,
@@ -371,7 +677,13 @@ def _score_replay_prepare(montage_b64, transcript, transcript_used, duration_s, 
         if unavailable:
             meta['cache_error'] = 'revision lookup unavailable for: ' + ', '.join(unavailable)
         return {'score': None, 'meta': meta}
-    score, status, error = _score_cache_read(cache_key, input_fingerprint, revision_fingerprint)
+    score, status, error = _score_cache_read(
+        cache_key,
+        input_fingerprint,
+        revision_fingerprint,
+        str(creator_profile or '').strip().lower() or None,
+        bool(transcript_used),
+    )
     meta['cache_status'] = status
     if error:
         meta['cache_error'] = error
@@ -379,8 +691,99 @@ def _score_replay_prepare(montage_b64, transcript, transcript_used, duration_s, 
         meta['output_fingerprint'] = _score_output_fingerprint(score)
     return {'score': score, 'meta': meta}
 
-def _score_replay_store(replay, score):
+def _scorer_contract():
+    revisions = _score_revisions()
+    creator_profiles = []
+    serving_manifest_bytes = r2_get(
+        CREATOR_ADAPTIVE_KEEP_SERVING_MANIFEST_KEY
+    )
+    model_manifest_bytes = r2_get(
+        CREATOR_ADAPTIVE_KEEP_MODEL_MANIFEST_KEY
+    )
+    serving_manifest = None
+    model_manifest = None
+    if serving_manifest_bytes:
+        try:
+            serving_manifest = json.loads(serving_manifest_bytes)
+            creator_profiles = sorted(
+                str(value).strip().lower()
+                for value in (serving_manifest.get('profiles') or [])
+                if str(value).strip()
+            )
+        except Exception:
+            creator_profiles = []
+    if model_manifest_bytes:
+        try:
+            model_manifest = json.loads(model_manifest_bytes)
+        except Exception:
+            model_manifest = None
+    return {
+        'schema': 'shorts-live-score-contract-v2',
+        'scorer': 'raw_upload.py',
+        'revision_fingerprint': _revision_fingerprint(revisions),
+        'scorer_revisions': revisions,
+        'display_contract_version': DISPLAY_CONTRACT_VERSION,
+        'embedding_model': EMBEDDING_MODEL,
+        'embedding_dimensions': DIM,
+        'source_window': 'first 5 seconds',
+        'canonical_montage': {
+            'width': CANONICAL_MONTAGE_WIDTH,
+            'height': CANONICAL_MONTAGE_HEIGHT,
+            'format': 'JPEG',
+            'quality': CANONICAL_MONTAGE_QUALITY,
+            'subsampling': '4:2:0',
+        },
+        'coordinates': {
+            'stored_pattern': 'shorts.stored.{channel}.{target}',
+            'visual_keep_forecast': VISUAL_KEEP_COORDINATE_ID,
+            'creator_adaptive_keep_forecast':
+                CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
+        },
+        'creator_profiles': creator_profiles,
+        'creator_serving_manifest_sha256': (
+            hashlib.sha256(serving_manifest_bytes).hexdigest()
+            if serving_manifest_bytes else None
+        ),
+        'creator_serving_artifact_sha256': (
+            serving_manifest.get('artifactSha256')
+            if serving_manifest else None
+        ),
+        'creator_model_manifest_sha256': (
+            hashlib.sha256(model_manifest_bytes).hexdigest()
+            if model_manifest_bytes else None
+        ),
+        'creator_model_artifact_sha256': (
+            model_manifest.get('artifactSha256')
+            if model_manifest else None
+        ),
+        'parity_rule': (
+            'Ordinary embedding coordinates replay exactly when the '
+            'embedding_input_fingerprint and revision_fingerprint match. '
+            'Duration and creator profile affect only derived scores. '
+            'The realviews coordinate also requires the same duration_ms; '
+            'a five-frame input without duration uses the documented default '
+            'and cannot claim realviews parity with a source of known duration.'
+        ),
+    }
+
+def _score_replay_store(
+    replay,
+    score,
+    creator_profile=None,
+    transcript_used=False,
+):
     meta = replay['meta']
+    incomplete = _score_completeness_errors(
+        score,
+        str(creator_profile or '').strip().lower() or None,
+        bool(transcript_used),
+    )
+    if incomplete:
+        meta['cache_write_status'] = 'skipped_incomplete'
+        raise RuntimeError(
+            'scoring dependencies returned an incomplete result: '
+            + ', '.join(incomplete)
+        )
     if meta.get('cache_status') in ('disabled', 'disabled_revision_unavailable'):
         meta['output_fingerprint'] = _score_output_fingerprint(score)
         return meta
@@ -442,7 +845,7 @@ def gemini_transcribe(wav):
     body = json.dumps({'contents': [{'parts': [
         {'inlineData': {'mimeType': 'audio/wav', 'data': data}},
         {'text': 'Transcribe ONLY the spoken words in this short audio, verbatim. If there is no speech (music or ambient noise only), reply with exactly: NO_SPEECH'}]}],
-        'generationConfig': {'temperature': 0, 'topP': 1, 'topK': 1}}).encode()   # greedy → deterministic transcript (text/together stay stable on re-upload)
+        'generationConfig': {'temperature': 0, 'topP': 1, 'topK': 1}}).encode()
     last_error = 'unknown Gemini transcription failure'
     for attempt in range(3):
         retry_delay = 1.0 * (attempt + 1)
@@ -475,27 +878,8 @@ def gemini_transcribe(wav):
     raise RuntimeError(last_error)
 
 def whisper_text(wav):
-    """Whisper-tiny where available (matches how the dataset was transcribed) with a Gemini
-    SECOND OPINION: quiet or music-backed voiceovers routinely fail whisper-tiny's confidence
-    gates and used to come back 'silent' even though speech exists. If whisper isn't confident,
-    Gemini listens too — a hook is only called silent when BOTH hear nothing."""
-    wtxt, wgood = '', False
-    try:
-        import whisper
-        res = whisper.load_model('tiny').transcribe(wav, fp16=False)
-        wtxt = (res.get('text') or '').strip()
-        segs = res.get('segments') or []
-        nsp = float(np.mean([sg.get('no_speech_prob', 0.0) for sg in segs])) if segs else 1.0
-        alp = float(np.mean([sg.get('avg_logprob', -5.0) for sg in segs])) if segs else -5.0
-        wgood = bool(wtxt) and nsp < 0.6 and alp > -1.0 and coherent(wtxt)
-    except Exception:
-        pass
-    if wgood:
-        return wtxt, True
-    gtxt, ggood = gemini_transcribe(wav)
-    if ggood and gtxt:
-        return gtxt, True
-    return (wtxt or gtxt), False
+    """Use one transcriber on Render and the relay so source mode cannot change text."""
+    return gemini_transcribe(wav)
 
 def _montage_audio(src, mon, wav):
     """Extract the 5-frame montage + first-5s audio→transcript from one source file.
@@ -799,7 +1183,17 @@ def neighbors(c, vec, k=12):
     r = _NBR[c]
     return r if r is None else r[:k]
 
-def _score_input_manifest(txt, good, dur_s, score, replay_meta):
+def _score_input_manifest(
+    txt,
+    good,
+    dur_s,
+    score,
+    replay_meta,
+    creator_profile=None,
+    source_mode=None,
+):
+    input_state = replay_meta.get('input_state') or {}
+    embedding_state = input_state.get('embedding_input') or {}
     input_manifest = {
         'domain': 'shorts_raw',
         'scorer': 'raw_upload.py',
@@ -825,14 +1219,28 @@ def _score_input_manifest(txt, good, dur_s, score, replay_meta):
         'steer_lineage_manifest_sha256': score.get('steer_lineage_manifest_sha256'),
         'steer_lineage_schema_version': score.get('steer_lineage_schema_version'),
         'source_window': 'first 5 seconds',
+        'source_mode': source_mode or 'unknown',
+        'canonical_montage': {
+            'width': CANONICAL_MONTAGE_WIDTH,
+            'height': CANONICAL_MONTAGE_HEIGHT,
+            'format': 'JPEG',
+            'quality': CANONICAL_MONTAGE_QUALITY,
+            'subsampling': '4:2:0',
+            'montage_sha256': embedding_state.get('montage_sha256'),
+        },
         'display_preference': ['together', 'text', 'visual'],
         'transcript_used': bool(good),
         'duration_s': round(float(dur_s), 3) if dur_s else None,
+        'creator_profile': str(creator_profile or '').strip().lower() or None,
         'cache_version': replay_meta.get('cache_version'),
         'cache_key': replay_meta.get('cache_key'),
         'cache_status': replay_meta.get('cache_status'),
         'cache_write_status': replay_meta.get('cache_write_status'),
         'input_fingerprint': replay_meta.get('input_fingerprint'),
+        'score_input_fingerprint': replay_meta.get('input_fingerprint'),
+        'embedding_input_fingerprint': replay_meta.get(
+            'embedding_input_fingerprint'
+        ),
         'revision_fingerprint': replay_meta.get('revision_fingerprint'),
         'output_fingerprint': replay_meta.get('output_fingerprint'),
         'scorer_revisions': replay_meta.get('scorer_revisions'),
@@ -861,7 +1269,18 @@ def _score_input_manifest(txt, good, dur_s, score, replay_meta):
         input_manifest['cache_error'] = replay_meta['cache_error']
     return input_manifest
 
-def _score_output(extra, title, b64, txt, good, dur_s, score, replay_meta):
+def _score_output(
+    extra,
+    title,
+    b64,
+    txt,
+    good,
+    dur_s,
+    score,
+    replay_meta,
+    creator_profile=None,
+    source_mode=None,
+):
     return {
         **extra,
         'montage': b64,
@@ -872,8 +1291,22 @@ def _score_output(extra, title, b64, txt, good, dur_s, score, replay_meta):
         'indicators': score.get('indicators') or {},
         'steer': score.get('steer') or {},
         'visual_keep_forecast': score.get('visual_keep_forecast') or None,
+        'creator_adaptive_keep_forecast': (
+            score.get('creator_adaptive_keep_forecast') or None
+        ),
+        'creator_adaptive_keep_forecast_error': score.get(
+            'creator_adaptive_keep_forecast_error'
+        ),
         'emb_preview': score.get('emb_preview') or {},
-        'input_manifest': _score_input_manifest(txt, good, dur_s, score, replay_meta),
+        'input_manifest': _score_input_manifest(
+            txt,
+            good,
+            dur_s,
+            score,
+            replay_meta,
+            creator_profile,
+            source_mode,
+        ),
         'channels': score.get('channels') or {},
     }
 
@@ -889,7 +1322,9 @@ def _run():
     try:                                                   # the client may send the REAL full length (it trims the upload to 6s)
         if args.get('duration'): dur_s = float(args['duration'])
     except Exception: dur_s = None
+    creator_profile = str(args.get('creator-profile') or '').strip().lower() or None
     extra = {}
+    source_mode = 'youtube' if args.get('youtube') else 'five-frame-montage' if args.get('image') else 'device-upload'
     if args.get('youtube'):
         # ⬇ score straight from a YouTube link: download the short (lowest useful quality),
         # then run the EXACT same 5-frame + first-5s-transcript pipeline as a manual upload.
@@ -945,13 +1380,20 @@ def _run():
                                    capture_output=True, text=True, timeout=20)
                 dur_s = float(r.stdout.strip()) if r.stdout.strip() else None
             except Exception: dur_s = None
+    b64 = canonicalize_montage_b64(b64)
     txt = normalize_transcript(txt)
     good = bool(good and txt)
-    replay = _score_replay_prepare(b64, txt, good, dur_s)
+    replay = _score_replay_prepare(
+        b64,
+        txt,
+        good,
+        dur_s,
+        creator_profile,
+    )
     if replay.get('score') is not None:
         print(json.dumps(_score_output(
             extra, args.get('title', 'My hook'), b64, txt, good, dur_s,
-            replay['score'], replay['meta'])))
+            replay['score'], replay['meta'], creator_profile, source_mode)))
         return
     _PINNED_ARTIFACT_REVISIONS = dict(
         ((replay.get('meta') or {}).get('scorer_revisions') or {}).get('artifacts') or {}
@@ -1065,10 +1507,23 @@ def _run():
         a = np.asarray(e, float)
         return [round(float(x), 3) for x in (a[:1536].reshape(48, 32).mean(1) if len(a) >= 1536 else a)]
     visual_keep = visual_keep_forecast(ev)
+    creator_keep = None
+    creator_keep_error = None
+    if creator_profile:
+        try:
+            creator_keep = creator_adaptive_keep_forecast(
+                ev,
+                eg,
+                creator_profile,
+            )
+        except Exception as error:
+            creator_keep_error = str(error)[:500]
     score = {
         'indicators': indicators,
         'steer': steer,
         'visual_keep_forecast': visual_keep,
+        'creator_adaptive_keep_forecast': creator_keep,
+        'creator_adaptive_keep_forecast_error': creator_keep_error,
         'emb_preview': {'visual': preview(ev), 'text': preview(et), 'together': preview(eg)},
         'steer_artifact_sha256': steer_artifact_sha256,
         'steer_artifact_archive_key': steer_artifact_archive_key,
@@ -1080,12 +1535,20 @@ def _run():
             'together': {'neighbors': neighbors('together', eg)} if eg is not None else None,
         },
     }
-    replay_meta = _score_replay_store(replay, score)
+    replay_meta = _score_replay_store(
+        replay,
+        score,
+        creator_profile,
+        good,
+    )
     print(json.dumps(_score_output(
         extra, args.get('title', 'My hook'), b64, txt, good, dur_s,
-        score, replay_meta)))
+        score, replay_meta, creator_profile, source_mode)))
 
 def main():
+    if '--contract' in sys.argv:
+        print(json.dumps(_scorer_contract()))
+        return
     if '--prewarm' in sys.argv:   # server boot: fill the neighbour caches before anyone uploads
         try: warm_all()
         except Exception as e: print(f'[prewarm] failed: {e}', file=sys.stderr, flush=True)

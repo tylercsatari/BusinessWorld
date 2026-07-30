@@ -1,4 +1,5 @@
 node_modules/
+__pycache__/
 .env
 StorageAI/api_keys.json
 video_data/
@@ -20,6 +21,7 @@ buildings/jarvis/expanded-dataset.json
 buildings/jarvis/vision-retention-cache.json
 buildings/jarvis/vision-scores-cache.json
 buildings/jarvis/__pycache__/
+buildings/jarvis/predictor-lab/creator-adaptive-keep-serving-v1.npz
 buildings/jarvis/archive/
 buildings/jarvis/derived_experiments_full_backup.json
 # Compact mirrors (derived from full files, canonical storage is R2)

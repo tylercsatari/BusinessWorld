@@ -10,6 +10,7 @@ const server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
 const shorts = fs.readFileSync(path.join(ROOT, 'buildings/jarvis/jarvis-retention.js'), 'utf8');
 const long = fs.readFileSync(path.join(ROOT, 'buildings/jarvis/jarvis-longquant.js'), 'utf8');
 const index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+const youtubeRelay = fs.readFileSync(path.join(ROOT, 'yt_relay_watcher.py'), 'utf8');
 
 function includes(source, needle, message) {
     assert(source.includes(needle), message);
@@ -51,6 +52,10 @@ includes(server, 'runHeavyScore(() => new Promise(resolve => {', 'raw prewarm mu
 // Shorts jobs must be persisted and polled in the Shorts namespace. Polling the
 // Long Quant endpoint happened to work only while both sides used the default.
 includes(server, "quantJobSubmit('raw-embed-youtube', relayRunner, 'shorts', quantRequestId(req))", 'link scoring must create an idempotent Shorts job');
+includes(youtubeRelay, 'out = acquire_link(url, rid)', 'the residential relay must acquire media without scoring it');
+includes(server, "'--file', relayTemp", 'relayed media must be scored by the canonical server runtime');
+includes(server, 'validateRawScoreResult(scored)', 'the server must validate a relayed score before returning it');
+excludes(youtubeRelay, 'out = score_link(url, title, creator_profile=creator_profile)', 'one-off link scoring must not run a second scorer environment on the Mac');
 includes(server, "}, 'shorts', quantRequestId(req));", 'upload scoring must create an idempotent Shorts job');
 includes(shorts, "'/api/shortsquant/jobs/' + j.jobId", 'Shorts UI must poll the Shorts job namespace');
 excludes(shorts, "'/api/longquant/jobs/' + j.jobId", 'Shorts UI must never poll Long Quant jobs');
@@ -74,6 +79,8 @@ includes(long, "lqxJob('/api/longquant/thumbs/save', payload)", 'Long Quant save
 includes(server, "quantJobSubmit('thumb-save', saveRunner, 'longform', quantRequestId(req))", 'Long Quant save jobs must be idempotent');
 includes(shorts, "rtFetchJson('/api/raw/saved-hook/' + id", 'saved hook details must use retrying JSON transport');
 includes(shorts, "rtFetchJson('/api/raw/saved-hooks'", 'saved hook indexes must use retrying JSON transport');
+includes(shorts, 'currentScorerContract(true)', 'opening a saved hook must refresh the live scorer revision before trusting persisted values');
+includes(shorts, "await rtFetchJson('/api/raw/hook-enrich'", 'saved-score migrations must await durable persistence and surface failures');
 includes(shorts, 'montageFromFrameIds(rec.frame_imgs || [])', 'legacy saved hooks must rebuild a missing montage from durable generated frames');
 includes(server, 'surfaceSourceErrors: true', 'map and status routes must surface backing-storage failures');
 includes(server, 'savedChannelValidationCacheIsCompatible', 'saved-channel ledgers must verify a cached artifact before source-failure fallback');
@@ -97,7 +104,7 @@ assert(activeLongScores === 5, `only five explicitly opened detail surfaces may 
 
 // Force browsers to load the repaired clients instead of pairing new routes
 // with a cached pre-repair module.
-includes(index, 'jarvis-retention.js?v=creator-keep-v1', 'Shorts bundle cache key must be bumped');
+includes(index, 'jarvis-retention.js?v=creator-keep-v2', 'Shorts bundle cache key must be bumped');
 includes(index, 'jarvis-longquant.js?v=coordinate-lineage-1', 'Long Quant bundle cache key must be bumped');
 
 console.log(JSON.stringify({
