@@ -5,9 +5,38 @@ const fs = require('fs');
 const path = require('path');
 const contract = require('./saved-channel-feature-contract.json');
 
-const VERSION = 9;
-const LEDGER_VERSION = 6;
+const VERSION = 10;
+const LEDGER_VERSION = 7;
 const VISUAL_KEEP_COORDINATE_ID = 'shorts.visual-keep-forecast.v1';
+const VISUAL_KEEP_PROTOCOL_COORDINATES = Object.freeze({
+    videoHoldout: Object.freeze({
+        id: 'shorts.visual-keep-protocol.video-heldout.v1',
+        protocol: 'visual_video_holdout',
+        label: 'Visual-only protocol · known-creator video-held-out keep',
+        familyId: 'family.shorts.visual-keep-video-holdout.v1',
+        datasetId: 'dataset.shorts.visual-keep-video-holdout.v1',
+        algorithmId: 'algorithm.shorts.visual-keep-video-holdout-nested-blend.v1',
+        description: 'Leakage-controlled research prediction made after excluding this video while retaining other labeled videos from the same creator.',
+    }),
+    forwardTime: Object.freeze({
+        id: 'shorts.visual-keep-protocol.forward-time.v1',
+        protocol: 'visual_forward_time',
+        label: 'Visual-only protocol · future-upload keep',
+        familyId: 'family.shorts.visual-keep-forward-time.v1',
+        datasetId: 'dataset.shorts.visual-keep-forward-time.v1',
+        algorithmId: 'algorithm.shorts.visual-keep-forward-time-ridge.v1',
+        description: 'Chronological research prediction fitted and selected from strictly earlier videos by the same creator.',
+    }),
+    accountHoldout: Object.freeze({
+        id: 'shorts.visual-keep-protocol.account-heldout.v1',
+        protocol: 'visual_account_holdout',
+        label: 'Visual-only protocol · unseen-creator keep',
+        familyId: 'family.shorts.visual-keep-account-holdout.v1',
+        datasetId: 'dataset.shorts.visual-keep-account-holdout.v1',
+        algorithmId: 'algorithm.shorts.visual-keep-account-holdout-ridge.v1',
+        description: 'Cold-start research prediction made after excluding every labeled video from this creator.',
+    }),
+});
 const CREATOR_ADAPTIVE_KEEP_COORDINATE_ID = 'shorts.creator-adaptive-keep.v1';
 const CURVE_SECONDS = Object.freeze(Array.from({ length: 21 }, (_, second) => second));
 const SUPPORTED_CHANNELS = Object.freeze([
@@ -1157,6 +1186,14 @@ function buildCanonicalLineageCatalog(runtime) {
         fitDatasetId: 'dataset.shorts.visual-keep-final-fit.v1',
         selectionRule: 'The pooled Ridge setting is selected inside training-only folds, then one pooled formula is frozen on every eligible labeled training row. Its production value is diagnostic on those fitting rows; leakage-controlled protocol predictions remain separate evidence.',
     };
+    for (const definition of Object.values(VISUAL_KEEP_PROTOCOL_COORDINATES)) {
+        families[definition.familyId] = {
+            id: definition.familyId,
+            label: definition.label,
+            fitDatasetId: definition.datasetId,
+            selectionRule: definition.description,
+        };
+    }
     families['family.shorts.creator-adaptive-keep.v1'] = {
         id: 'family.shorts.creator-adaptive-keep.v1',
         label: 'Creator-adaptive next-upload keep forecast',
@@ -1249,6 +1286,39 @@ function buildCanonicalLineageCatalog(runtime) {
                 && runtime.visualKeepModel.artifact.artifactSha256 || null,
         } : null,
     };
+    datasets['dataset.shorts.visual-keep-video-holdout.v1'] = {
+        id: 'dataset.shorts.visual-keep-video-holdout.v1',
+        domain: 'shorts',
+        role: 'known-creator nested video holdout',
+        selectionRule: 'Deterministic balanced five-fold video holdout. Every test video is excluded from the outer fit; pooled Ridge strength, creator-specific Ridge strength, and blend weight are selected again in four inner folds.',
+        runtimeSnapshot: runtime.visualKeepModel ? {
+            population: runtime.visualKeepModel.population,
+            predictorArtifactRevision:
+                runtime.predictorArtifact.artifactSha256 || null,
+        } : null,
+    };
+    datasets['dataset.shorts.visual-keep-forward-time.v1'] = {
+        id: 'dataset.shorts.visual-keep-forward-time.v1',
+        domain: 'shorts',
+        role: 'same-creator chronological backtest',
+        selectionRule: 'For each creator and test window, model kind, lookback, and Ridge strength are selected on still-earlier windows and fitted only on uploads published before the test window.',
+        runtimeSnapshot: runtime.visualKeepModel ? {
+            population: runtime.visualKeepModel.population,
+            predictorArtifactRevision:
+                runtime.predictorArtifact.artifactSha256 || null,
+        } : null,
+    };
+    datasets['dataset.shorts.visual-keep-account-holdout.v1'] = {
+        id: 'dataset.shorts.visual-keep-account-holdout.v1',
+        domain: 'shorts',
+        role: 'whole-creator holdout',
+        selectionRule: 'Every labeled video from the evaluated creator is excluded. Ridge strength is selected by leaving each remaining training creator out in turn before the model is fitted to all remaining creators.',
+        runtimeSnapshot: runtime.visualKeepModel ? {
+            population: runtime.visualKeepModel.population,
+            predictorArtifactRevision:
+                runtime.predictorArtifact.artifactSha256 || null,
+        } : null,
+    };
     datasets['dataset.shorts.creator-adaptive-keep-prequential.v1'] = {
         ...(datasets['dataset.shorts.creator-adaptive-keep-prequential.v1'] || {}),
         id: 'dataset.shorts.creator-adaptive-keep-prequential.v1',
@@ -1283,6 +1353,27 @@ function buildCanonicalLineageCatalog(runtime) {
             && {
                 pooledAlpha: runtime.visualKeepModel.selected.pooledAlpha,
             } || null,
+    };
+    algorithms['algorithm.shorts.visual-keep-video-holdout-nested-blend.v1'] = {
+        id: 'algorithm.shorts.visual-keep-video-holdout-nested-blend.v1',
+        domain: 'shorts',
+        kind: 'nested held-out combined forecast',
+        fit: 'Inside each outer video fold, select pooled alpha, creator alpha, and creator blend weight from four inner folds, then fit only on the outer-training rows.',
+        scalarFormula: 'clip((1 - selected creator weight) × pooled Ridge prediction + selected creator weight × same-creator Ridge prediction, 0, 100); use the pooled prediction when the outer-training creator history is insufficient.',
+    };
+    algorithms['algorithm.shorts.visual-keep-forward-time-ridge.v1'] = {
+        id: 'algorithm.shorts.visual-keep-forward-time-ridge.v1',
+        domain: 'shorts',
+        kind: 'chronological held-out forecast',
+        fit: 'Within each creator, select a trailing-history mean or Ridge lookback and alpha using earlier windows, then fit it only on uploads before the evaluated window.',
+        scalarFormula: 'Selected trailing mean or intercept + dot(L2-normalized visual embedding, training-window Ridge coefficients).',
+    };
+    algorithms['algorithm.shorts.visual-keep-account-holdout-ridge.v1'] = {
+        id: 'algorithm.shorts.visual-keep-account-holdout-ridge.v1',
+        domain: 'shorts',
+        kind: 'whole-creator held-out forecast',
+        fit: 'Select pooled Ridge alpha by inner leave-creator-out error among the training creators, then fit on every creator except the evaluated one.',
+        scalarFormula: 'intercept + dot(L2-normalized visual embedding, whole-creator-held-out Ridge coefficients).',
     };
     algorithms['algorithm.shorts.creator-adaptive-causal-mixture.v1'] = {
         ...(algorithms['algorithm.shorts.creator-adaptive-causal-mixture.v1'] || {}),
@@ -2377,6 +2468,36 @@ function lineageForVisualKeepForecast() {
     };
 }
 
+function lineageForVisualKeepProtocol(protocolKey) {
+    const definition = VISUAL_KEEP_PROTOCOL_COORDINATES[protocolKey];
+    if (!definition) throw new Error(`Unknown visual keep protocol: ${protocolKey}`);
+    return {
+        rawInputIds: ['input.shorts.first5-montage.v1'],
+        representationId: 'representation.shorts.visual.gemini1536.v1',
+        fitDatasetId: definition.datasetId,
+        fitDataset: [{
+            id: definition.datasetId,
+            role: definition.description,
+        }],
+        targetField: 'observed stayed-to-watch percentage',
+        algorithmId: definition.algorithmId,
+        scalarProjection: `${definition.description} The returned value is already a keep-rate percentage; no second outcome-fitted calibration is applied.`,
+        calibrationId: 'calibration.identity-target-units.v1',
+        validationProtocolId: definition.familyId,
+        artifactId: 'artifact.runtime.shorts.blind-predictor.v1',
+        sourceCode: [
+            'buildings/jarvis/predictor-lab/run_predictor_lab.py:run_visual_keep_study',
+            'buildings/jarvis/saved-channel-validation.js:buildValidation',
+        ],
+        visualizationId: 'map.runtime.none.v1',
+        usesEmbedding: true,
+        reproducibility: {
+            status: 'deterministic-protocol-artifact',
+            warning: 'This is a protocol-specific research prediction, not the frozen production scalar and not the visual keep map estimate. It is available only for rows that participated in this exact held-out protocol.',
+        },
+    };
+}
+
 function lineageForCreatorAdaptiveKeepForecast() {
     return {
         rawInputIds: [
@@ -3314,6 +3435,26 @@ function buildCoordinateRegistry(options = {}) {
         lineage: lineageForVisualKeepForecast(),
         description: 'One raw keep-rate percentage from the immutable full-vector visual Ridge model. It is a derived forecast from the existing visual embedding, not another embedding space.',
     }];
+    const visualKeepProtocolForecasts = Object.entries(
+        VISUAL_KEEP_PROTOCOL_COORDINATES
+    ).map(([protocolKey, definition]) => ({
+        id: definition.id,
+        family: 'visualKeepProtocolForecast',
+        protocol: definition.protocol,
+        protocolKey,
+        group: 'visual',
+        key: protocolKey,
+        target: 'keep',
+        label: definition.label,
+        unit: 'percent',
+        percentileAvailable: false,
+        status: 'research_diagnostic',
+        predictorEligible: false,
+        valueClass: 'combined_forecast',
+        lineageId: `lineage.${definition.id}`,
+        lineage: lineageForVisualKeepProtocol(protocolKey),
+        description: `${definition.description} This value is already out of fold and is never substituted for the frozen production forecast or a stored map estimate.`,
+    }));
     const creatorAdaptiveKeepForecast = [{
         id: CREATOR_ADAPTIVE_KEEP_COORDINATE_ID,
         family: 'creatorAdaptiveKeepForecast',
@@ -3398,6 +3539,7 @@ function buildCoordinateRegistry(options = {}) {
         ...observed,
         ...stored,
         ...visualKeepForecast,
+        ...visualKeepProtocolForecasts,
         ...creatorAdaptiveKeepForecast,
         ...direct,
         ...forecasts,
@@ -3407,6 +3549,7 @@ function buildCoordinateRegistry(options = {}) {
         ['observed', 'Observed outcomes', 'Measured truth; never an embedding.'],
         ['stored', 'Stored production scores', 'The exact 21 score-card coordinates.'],
         ['visualKeepForecast', 'Frozen visual keep forecast', 'One derived full-vector forecast from the existing visual embedding; not a new embedding space.'],
+        ['visualKeepProtocolForecast', 'Visual keep protocol predictions', 'Three protocol-specific research outputs. Each is already held out under its named protocol and is distinct from both the frozen production scalar and stored map coordinates.'],
         ['creatorAdaptiveKeepForecast', 'Creator-adaptive keep forecast', 'One causal next-upload forecast from the existing visual and together embeddings plus explicit prior creator history.'],
         ['videoHeldout', 'Video-held-out scores', '15 direct axes plus 3 derived realistic-views transforms rebuilt without the evaluated video.'],
         ['accountHeldout', 'Account-held-out scores', '15 direct axes plus 3 derived realistic-views transforms rebuilt without the evaluated account.'],
@@ -3465,6 +3608,7 @@ function buildCoordinateRegistry(options = {}) {
     const diagnosticColumns = columns.filter(column => (
         column.family === 'stored'
         || column.family === 'visualKeepForecast'
+        || column.family === 'visualKeepProtocolForecast'
         || column.family === 'legacy'
         || column.predictorEligible === false
     ));
@@ -3509,6 +3653,7 @@ function buildCoordinateRegistry(options = {}) {
             shortsLegacyDiagnostics: legacy.length,
             shortsStoredProduction: stored.length,
             shortsVisualKeepForecasts: visualKeepForecast.length,
+            shortsVisualKeepProtocolForecasts: visualKeepProtocolForecasts.length,
             shortsCreatorAdaptiveKeepForecasts: creatorAdaptiveKeepForecast.length,
             shortsDirectHeldout: direct.length,
             shortsCombinedForecasts: (
@@ -3662,6 +3807,14 @@ function ledgerValue(row, column) {
     if (column.family === 'visualKeepForecast') {
         return number(row.predictions && row.predictions.visualKeepForecast);
     }
+    if (column.family === 'visualKeepProtocolForecast') {
+        return number(
+            row.predictions
+            && row.predictions.visualKeepProtocols
+            && row.predictions.visualKeepProtocols[column.protocolKey]
+            && row.predictions.visualKeepProtocols[column.protocolKey].predicted
+        );
+    }
     if (column.family === 'creatorAdaptiveKeepForecast') {
         return number(row.predictions && row.predictions.creatorAdaptiveKeepForecast);
     }
@@ -3682,6 +3835,14 @@ function ledgerValue(row, column) {
 }
 
 function ledgerBaselineValue(row, column) {
+    if (column.family === 'visualKeepProtocolForecast') {
+        return number(
+            row.predictions
+            && row.predictions.visualKeepProtocols
+            && row.predictions.visualKeepProtocols[column.protocolKey]
+            && row.predictions.visualKeepProtocols[column.protocolKey].baseline
+        );
+    }
     if (column.family === 'creatorAdaptiveKeepForecast') {
         return number(
             row.predictions
@@ -3697,7 +3858,12 @@ function ledgerPercentile(row, column) {
     return index >= 0 ? number(row.storedPercentile[index]) : null;
 }
 
-function attachCoordinateLedger(rows, registry, creatorAdaptiveStudy = null) {
+function attachCoordinateLedger(
+    rows,
+    registry,
+    visualKeepStudy = null,
+    creatorAdaptiveStudy = null
+) {
     for (const row of rows) {
         const values = registry.columns.map(column => number(ledgerValue(row, column)));
         const percentiles = registry.columns.map(column => number(ledgerPercentile(row, column)));
@@ -3732,6 +3898,48 @@ function attachCoordinateLedger(rows, registry, creatorAdaptiveStudy = null) {
             }
         }
     }
+    const visualKeepProtocolParityMismatches = [];
+    const rowsById = new Map(rows.map(row => [String(row.id), row]));
+    for (const [protocolKey, definition] of Object.entries(
+        VISUAL_KEEP_PROTOCOL_COORDINATES
+    )) {
+        const ledgerIndex = registry.columns.findIndex(
+            column => column.id === definition.id
+        );
+        const protocolPoints = pointMap(
+            visualKeepStudy
+            && visualKeepStudy.protocols
+            && visualKeepStudy.protocols[protocolKey]
+            && visualKeepStudy.protocols[protocolKey].points
+        );
+        for (const [id, expected] of protocolPoints) {
+            const row = rowsById.get(id);
+            if (!row) continue;
+            const actual = ledgerIndex >= 0
+                && row.scoreLedger
+                && row.scoreLedger.values
+                && row.scoreLedger.values[ledgerIndex];
+            if (!finite(expected.predicted)
+                || !finite(actual)
+                || Math.abs(Number(expected.predicted) - Number(actual)) > 1e-6) {
+                visualKeepProtocolParityMismatches.push(
+                    `${id}:${protocolKey}:prediction`
+                );
+            }
+        }
+        for (const row of rows) {
+            if (protocolPoints.has(String(row.id))) continue;
+            const actual = ledgerIndex >= 0
+                && row.scoreLedger
+                && row.scoreLedger.values
+                && row.scoreLedger.values[ledgerIndex];
+            if (finite(actual)) {
+                visualKeepProtocolParityMismatches.push(
+                    `${row.id}:${protocolKey}:outside-protocol`
+                );
+            }
+        }
+    }
     const creatorAdaptiveParityMismatches = [];
     const creatorCoordinateIndex = registry.columns.findIndex(
         column => column.id === CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
@@ -3750,7 +3958,6 @@ function attachCoordinateLedger(rows, registry, creatorAdaptiveStudy = null) {
         && creatorAdaptiveStudy.evaluation
         && creatorAdaptiveStudy.evaluation.points
     );
-    const rowsById = new Map(rows.map(row => [String(row.id), row]));
     for (const [id, expected] of creatorPoints) {
         const row = rowsById.get(id);
         if (!row) {
@@ -3852,6 +4059,7 @@ function attachCoordinateLedger(rows, registry, creatorAdaptiveStudy = null) {
         passed: duplicateIds.length === 0
             && rowLengthMismatches.length === 0
             && storedParityMismatches.length === 0
+            && visualKeepProtocolParityMismatches.length === 0
             && creatorAdaptiveParityMismatches.length === 0
             && (!registry.lineageAudit || registry.lineageAudit.passed),
         registryVersion: registry.version,
@@ -3860,6 +4068,8 @@ function attachCoordinateLedger(rows, registry, creatorAdaptiveStudy = null) {
         duplicateIds,
         rowLengthMismatches,
         storedParityMismatches: storedParityMismatches.slice(0, 50),
+        visualKeepProtocolParityMismatches:
+            visualKeepProtocolParityMismatches.slice(0, 50),
         creatorAdaptiveParityMismatches: creatorAdaptiveParityMismatches.slice(0, 50),
         lineagePassed: !registry.lineageAudit || registry.lineageAudit.passed,
         lineageMissing: registry.lineageAudit ? registry.lineageAudit.missing : [],
@@ -3930,6 +4140,9 @@ function coordinateFoldMode(column) {
         || column.family === 'accountForecast') {
         return 'leave_account_out';
     }
+    if (column.family === 'visualKeepProtocolForecast') {
+        return 'heldout_protocol_prediction';
+    }
     if (column.family === 'creatorAdaptiveKeepForecast') return 'prequential_time';
     return 'video_5fold';
 }
@@ -3942,6 +4155,7 @@ function coordinateValidationTier(column) {
     if (column.family === 'videoForecast') return 'video_held_out_forecast_plus_video_5fold_calibration';
     if (column.family === 'stored') return 'stored_coordinate_plus_video_5fold_calibration';
     if (column.family === 'visualKeepForecast') return 'frozen_final_model_diagnostic_plus_video_5fold_calibration';
+    if (column.family === 'visualKeepProtocolForecast') return `identity_${column.protocol}`;
     if (column.family === 'creatorAdaptiveKeepForecast') return 'creator_prequential_next_upload';
     if (column.family === 'legacy') return 'legacy_diagnostic_plus_video_5fold_calibration';
     return 'video_5fold_calibration';
@@ -3954,18 +4168,22 @@ function coordinatePlainEnglish(column, outcome) {
     const foldMode = coordinateFoldMode(column);
     const protocol = foldMode === 'leave_account_out'
         ? 'The one-coordinate calibration is trained on other creator accounts and then tested on the creator account that was left out.'
+        : (foldMode === 'heldout_protocol_prediction'
+            ? 'This value is already the exact held-out prediction from its named protocol. It is evaluated in target units without fitting a second calibration.'
         : (foldMode === 'prequential_time'
             ? 'The raw coordinate already is a causal prequential prediction: the final chronological window was scored one upload at a time from strictly earlier same-creator history, with no second calibration.'
-            : 'The one-coordinate calibration is trained on four deterministic video folds and tested on the fifth, so a video outcome never calibrates its own prediction.');
+            : 'The one-coordinate calibration is trained on four deterministic video folds and tested on the fifth, so a video outcome never calibrates its own prediction.'));
     const upstream = column.family === 'stored'
         ? 'This is the exact production value stored with the scored video; the calibration is held out, but the upstream production axis may still be in-sample for its original training account.'
         : (column.family === 'visualKeepForecast'
             ? 'This is the exact raw percentage from the frozen final full-vector visual model. Its fitting-population values are in-sample diagnostics; only the separately displayed protocol predictions are blind evidence.'
+            : (column.family === 'visualKeepProtocolForecast'
+                ? 'This is one exact research prediction from the named visual-only holdout protocol. It is not the frozen production value and it is not a stored visual keep map estimate.'
             : (column.family === 'creatorAdaptiveKeepForecast'
                 ? 'This is the exact raw percentage produced for the known creator’s next upload from its visual and together embeddings plus at most 30 strictly earlier labels. It is intentionally null outside the registered causal evaluation rows or an explicit live profile.'
                 : (column.family === 'legacy'
                 ? 'This is a legacy diagnostic retained only for comparison and is never promoted to a canonical production score.'
-                : column.description)));
+                : column.description))));
     return `${upstream} This cell tests whether that exact coordinate predicts ${outcome.label}. ${protocol}`;
 }
 
@@ -4061,17 +4279,21 @@ function singleCoordinateOof(points, outcome, foldMode) {
         predicted: Number(point.predicted),
         baseline: finite(point.baseline) ? Number(point.baseline) : null,
     }));
-    if (foldMode === 'prequential_time') {
+    if (foldMode === 'prequential_time'
+        || foldMode === 'heldout_protocol_prediction') {
+        const protocolPrediction = foldMode === 'heldout_protocol_prediction';
         return {
-            mode: 'prequential_time',
+            mode: foldMode,
             eligibleN: eligible.length,
             predictions: eligible.map(point => ({
                 ...point,
                 calibrated: point.predicted,
-                fold: 'causal-final-window',
+                fold: protocolPrediction
+                    ? 'registered-heldout-protocol'
+                    : 'causal-final-window',
             })),
             audit: {
-                mode: 'prequential_time',
+                mode: foldMode,
                 requestedFolds: 1,
                 completedFolds: eligible.length ? 1 : 0,
                 folds: [],
@@ -4079,7 +4301,9 @@ function singleCoordinateOof(points, outcome, foldMode) {
                 heldOutAccountLeakageN: 0,
                 duplicateTestPredictionN: 0,
                 predictedN: eligible.length,
-                rule: 'Use the already prequential raw forecast without a second outcome-fitted calibration.',
+                rule: protocolPrediction
+                    ? 'Use the already held-out protocol forecast without a second outcome-fitted calibration.'
+                    : 'Use the already prequential raw forecast without a second outcome-fitted calibration.',
             },
         };
     }
@@ -4323,6 +4547,7 @@ function ledgerEvidence(metrics, column) {
     if (!metrics || metrics.n < 20 || metrics.oofN < 20) return 'insufficient_evidence';
     const diagnosticOnly = column.family === 'stored'
         || column.family === 'visualKeepForecast'
+        || column.family === 'visualKeepProtocolForecast'
         || column.family === 'legacy'
         || column.predictorEligible === false;
     if (finite(metrics.oofAuc)) {
@@ -4380,11 +4605,13 @@ function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey, calibratio
                 baseline: ledgerBaselineValue(row, column),
                 validationSource: row.validationSource || 'saved_channel_join',
             }));
-            const prequentialTargetCompatible = foldMode !== 'prequential_time'
+            const identityPrediction = foldMode === 'prequential_time'
+                || foldMode === 'heldout_protocol_prediction';
+            const prequentialTargetCompatible = !identityPrediction
                 || outcome.key === 'keep'
                 || outcome.key === 'swipe';
             const targetCompatibleCalibrationPoints = (
-                foldMode === 'prequential_time' && outcome.key === 'swipe'
+                identityPrediction && outcome.key === 'swipe'
             ) ? calibrationPoints.map(point => ({
                 ...point,
                 predicted: finite(point.predicted)
@@ -4424,7 +4651,7 @@ function buildLedgerOutcomeMatrix(rows, coordinateRegistry, scopeKey, calibratio
             } else if (pairedRows < 3) {
                 availabilityNote = 'Fewer than three paired rows; association and calibration are not estimable.';
             } else if (!prequentialTargetCompatible) {
-                availabilityNote = 'Association only: this causal scalar predicts keep rate, so it is not reused as a numerical prediction in another outcome unit.';
+                availabilityNote = `Association only: this ${foldMode === 'heldout_protocol_prediction' ? 'held-out protocol' : 'causal'} scalar predicts keep rate, so it is not reused as a numerical prediction in another outcome unit.`;
             } else if (!oofMetrics.oofN) {
                 availabilityNote = foldMode === 'leave_account_out'
                     ? 'Raw association is available, but this scope does not contain another creator account for leave-account-out calibration.'
@@ -5323,6 +5550,27 @@ function buildValidation({
         && visualKeepStudy.production
         && visualKeepStudy.production.points
     );
+    const visualKeepProtocolMaps = Object.fromEntries(
+        Object.keys(VISUAL_KEEP_PROTOCOL_COORDINATES).map(protocolKey => [
+            protocolKey,
+            pointMap(
+                visualKeepStudy
+                && visualKeepStudy.protocols
+                && visualKeepStudy.protocols[protocolKey]
+                && visualKeepStudy.protocols[protocolKey].points
+            ),
+        ])
+    );
+    const visualKeepProtocolValues = id => Object.fromEntries(
+        Object.entries(visualKeepProtocolMaps).map(([protocolKey, points]) => {
+            const point = points.get(String(id)) || {};
+            return [protocolKey, {
+                predicted: number(point.predicted),
+                baseline: number(point.baseline),
+                fold: point.fold == null ? null : String(point.fold),
+            }];
+        })
+    );
     const creatorAdaptiveEvaluation = pointMap(
         creatorAdaptiveStudy
         && creatorAdaptiveStudy.evaluation
@@ -5456,6 +5704,7 @@ function buildValidation({
                             ? persistedVisualKeep.model_artifact_sha256 || 'unversioned'
                             : null
                     ),
+                    visualKeepProtocols: visualKeepProtocolValues(id),
                     creatorAdaptiveKeepForecast: number(
                         creatorAdaptiveKeep.predicted
                     ),
@@ -5524,6 +5773,7 @@ function buildValidation({
         const frozenVisualKeep = visualKeepProduction.get(String(row.id)) || {};
         const creatorAdaptiveKeep = creatorAdaptiveEvaluation.get(String(row.id)) || {};
         row.predictions = row.predictions || {};
+        row.predictions.visualKeepProtocols = visualKeepProtocolValues(row.id);
         if (!finite(row.predictions.visualKeepForecast)) {
             row.predictions.visualKeepForecast = number(frozenVisualKeep.predicted);
             row.predictions.visualKeepForecastSource = finite(frozenVisualKeep.predicted)
@@ -5609,6 +5859,7 @@ function buildValidation({
     const ledgerAudit = attachCoordinateLedger(
         validationCohort.rows,
         coordinateRegistry,
+        visualKeepStudy,
         creatorAdaptiveStudy
     );
     const scopes = {
@@ -5670,7 +5921,7 @@ function buildValidation({
             forwardTime: 'Training labels precede test labels, but the present-day representation remains fixed; this is a partial backtest.',
             visualKeepStudy: 'A separate visual-only study fits directly from the canonical 1,536-dimensional opening montage embedding. It reports nested video holdout, forward-time, and whole-creator holdout as separate claims; the stricter protocols determine whether the model may be promoted.',
             creatorAdaptiveKeepStudy: 'The creator-adaptive coordinate is a separate known-creator next-upload claim. Its final chronological predictions use the visual and together embeddings plus only that creator’s strictly earlier measured uploads. Equal timestamps are simultaneous batches. Cold start and anonymous upload scoring are explicitly unsupported.',
-            ledgerOutcomeMatrix: 'The single canonical 105-coordinate by 13-outcome validation matrix. Coordinates remain in score-ledger order and are never renamed or re-created for a chart.',
+            ledgerOutcomeMatrix: `The single canonical ${coordinateRegistry.columns.length}-coordinate by 13-outcome validation matrix. Coordinates remain in score-ledger order and are never renamed or re-created for a chart.`,
             retentionCurve: 'Observed YouTube retention is interpolated from its native percent-of-duration curve to exact seconds 0 through 20, then divided by that video\'s observed opening value. Forecasts use only nine public axes rebuilt after both validation creators were excluded.',
             coordinateLedger: 'Every displayed scalar is resolved by canonical coordinate ID. A relationship graph is only a score-coordinate/outcome pairing and cannot mint a new score.',
             glossary: {
@@ -5687,7 +5938,7 @@ function buildValidation({
                 oofBrier: 'Mean squared probability error for held-out over-10M predictions. Lower is better; zero is perfect.',
                 predictionRange: 'The maximum held-out prediction minus the minimum held-out prediction. Range ratio divides that span by the observed span. A narrow ratio exposes regression-to-the-mean even when R-squared looks favorable.',
                 plotModes: 'Held-out prediction plots apply the exact fold-specific calibration used by the reported OOF metrics. Raw-coordinate plots show the uncalibrated embedding-axis coordinate and are association diagnostics only.',
-                qValue: 'Global Benjamini-Hochberg false-discovery-rate adjustment across the full eligible 105-coordinate by 13-outcome exploratory family. Evidence and ranking use this global q-value because the UI can surface the best result across outcomes.',
+                qValue: `Global Benjamini-Hochberg false-discovery-rate adjustment across the full eligible ${coordinateRegistry.columns.length}-coordinate by 13-outcome exploratory family. Evidence and ranking use this global q-value because the UI can surface the best result across outcomes.`,
                 outcomeNotPredictor: 'The 13 measured-outcome columns stay in the ledger for traceability but are excluded from predictive rankings, calibration, and evidence claims.',
                 coverage: 'Counts are explicit because not every artifact contains every truth field. Blind-only rows add real keep, ret5, and views labels, but never receive fabricated stored scores, average retention, outlier, or retention curves.',
             },
