@@ -887,12 +887,10 @@ function validateScoreLedger(ledger) {
             )
         ) {
             errors.push('score ledger feature contract document hash is missing');
-        } else if (
-            ledger.feature_contract_document_sha256
-                !== FEATURE_CONTRACT_DOCUMENT_SHA256
-        ) {
-            errors.push('score ledger feature contract document hash does not match');
         }
+        // The document contains descriptive lineage for many surfaces outside
+        // this ledger. Its hash is immutable provenance, while the compact
+        // feature-contract identity above governs the 21 score coordinates.
         if (
             ledger.coordinate_governance_version !== GOVERNANCE.schemaVersion
             || ledger.coordinate_governance_sha256 !== GOVERNANCE_SHA256
@@ -1040,6 +1038,19 @@ function validateScoreLedger(ledger) {
     return {
         valid: errors.length === 0,
         errors,
+        featureContractDocumentSha256:
+            ledger && exactSha256(
+                ledger.feature_contract_document_sha256
+            )
+                ? ledger.feature_contract_document_sha256
+                : null,
+        currentFeatureContractDocumentSha256:
+            FEATURE_CONTRACT_DOCUMENT_SHA256,
+        featureContractDocumentCurrent: !!(
+            ledger
+            && ledger.feature_contract_document_sha256
+                === FEATURE_CONTRACT_DOCUMENT_SHA256
+        ),
         entries,
         entriesById: new Map(
             entries
@@ -1389,6 +1400,8 @@ function scoreLedgerValidationSummary(record) {
         };
     }
     const validation = validateScoreLedger(ledger);
+    const documentCurrent =
+        validation.featureContractDocumentCurrent === true;
     return {
         state: validation.valid
             ? 'canonical-valid'
@@ -1398,8 +1411,25 @@ function scoreLedgerValidationSummary(record) {
             ? ledger.ledger_sha256
             : null,
         errors: validation.errors.slice(0, 12),
+        feature_contract_document_sha256:
+            validation.featureContractDocumentSha256,
+        current_feature_contract_document_sha256:
+            validation.currentFeatureContractDocumentSha256,
+        feature_contract_document_current: documentCurrent,
+        warnings: validation.valid && !documentCurrent
+            ? [
+                'The score is bound to an archived feature-contract document revision; its semantic coordinate identity and governance match the current scorer.',
+            ]
+            : [],
         note: validation.valid
-            ? 'All displayed stored coordinates are read from this validated ledger.'
+            ? (
+                'All displayed stored coordinates are read from this validated ledger. '
+                + (
+                    documentCurrent
+                        ? 'Its descriptive contract document is current.'
+                        : 'Its descriptive contract document is archived; the scoring identity is unchanged.'
+                )
+            )
             : 'The canonical ledger failed integrity checks. Compatibility fields must not be displayed as substitutes.',
     };
 }

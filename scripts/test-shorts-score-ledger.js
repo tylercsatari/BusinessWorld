@@ -413,10 +413,10 @@ const browserMutationMatrix = [
         }),
     },
     {
-        name: 'feature contract document hash',
+        name: 'feature contract document hash format',
         ledger: mutatedLedger(candidate => {
             candidate.feature_contract_document_sha256 =
-                'a'.repeat(64);
+                'not-a-sha256';
         }),
     },
     {
@@ -474,6 +474,32 @@ for (const testCase of browserMutationMatrix) {
         `${testCase.name} must have browser/canonical parity`
     );
 }
+
+const archivedDocumentLedger = mutatedLedger(candidate => {
+    candidate.feature_contract_document_sha256 = 'a'.repeat(64);
+});
+const archivedDocumentValidation =
+    ledgerContract.validateScoreLedger(archivedDocumentLedger);
+assert.strictEqual(
+    archivedDocumentValidation.valid,
+    true,
+    archivedDocumentValidation.errors.join('; ')
+);
+assert.strictEqual(
+    archivedDocumentValidation.featureContractDocumentCurrent,
+    false,
+    'an archived descriptive document must remain visible without changing coordinate validity'
+);
+const archivedDocumentSummary =
+    ledgerContract.scoreLedgerValidationSummary({
+        score_ledger: archivedDocumentLedger,
+    });
+assert.strictEqual(archivedDocumentSummary.valid, true);
+assert.strictEqual(
+    archivedDocumentSummary.feature_contract_document_current,
+    false
+);
+assert.strictEqual(archivedDocumentSummary.warnings.length, 1);
 
 const repairableLedger = mutatedLedger(candidate => {
     candidate.feature_contract_sha256 = 'd'.repeat(64);
@@ -1096,7 +1122,13 @@ assert.deepStrictEqual(
         valid: true,
         ledger_sha256: ledger.ledger_sha256,
         errors: [],
-        note: 'All displayed stored coordinates are read from this validated ledger.',
+        feature_contract_document_sha256:
+            ledgerContract.FEATURE_CONTRACT_DOCUMENT_SHA256,
+        current_feature_contract_document_sha256:
+            ledgerContract.FEATURE_CONTRACT_DOCUMENT_SHA256,
+        feature_contract_document_current: true,
+        warnings: [],
+        note: 'All displayed stored coordinates are read from this validated ledger. Its descriptive contract document is current.',
     }
 );
 assert.deepStrictEqual(

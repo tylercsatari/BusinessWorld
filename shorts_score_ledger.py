@@ -1128,8 +1128,9 @@ def validate_score_ledger(ledger):
         or any(character not in '0123456789abcdef' for character in document_hash)
     ):
         raise ValueError('score ledger feature contract document hash is missing')
-    if document_hash != FEATURE_CONTRACT_DOCUMENT_SHA256:
-        raise ValueError('score ledger feature contract document hash does not match')
+    # The full document also describes unrelated analysis surfaces. Preserve
+    # its exact hash as provenance; FEATURE_CONTRACT_SHA256 is the semantic
+    # identity that determines compatibility for these 21 coordinates.
     if (
         ledger.get('coordinate_governance_version')
         != GOVERNANCE['schemaVersion']

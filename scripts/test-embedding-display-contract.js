@@ -465,14 +465,15 @@ async function main() {
         claim_boundary:
             'Historical values only; not a current prediction.',
     };
-    assert.deepStrictEqual(
+    const priorDocumentLedgerValidation =
         shortsScoreLedger.validateScoreLedger(
             priorDocumentHistoricalRecord.score_ledger
-        ).errors,
-        [
-            'score ledger feature contract document hash does not match',
-        ],
-        'the fixture must differ only by its superseded contract-document hash'
+        );
+    assert.strictEqual(priorDocumentLedgerValidation.valid, true);
+    assert.strictEqual(
+        priorDocumentLedgerValidation.featureContractDocumentCurrent,
+        false,
+        'the archived descriptive document revision must remain explicit'
     );
     const priorDocumentDisplay =
         contract.historicalSavedHookDisplay(
@@ -497,12 +498,19 @@ async function main() {
         JSON.stringify(priorDocumentHistoricalRecord)
     );
     delete unboundedPriorDocumentRecord.score_materialization;
-    assert.strictEqual(
+    const unboundedPriorDocumentDisplay =
         contract.historicalSavedHookDisplay(
             unboundedPriorDocumentRecord
+        );
+    assert(
+        contract.validateHistoricalSavedHookDisplay(
+            unboundedPriorDocumentDisplay
         ),
-        null,
-        'a document-mismatched ledger without the historical materialization boundary was accepted'
+        'a hash-bound ledger with unchanged semantic identity must remain available as display-only evidence'
+    );
+    assert.strictEqual(
+        unboundedPriorDocumentDisplay.score_ledger_sha256,
+        unboundedPriorDocumentRecord.score_ledger.ledger_sha256
     );
     const hashTamperedPriorDocumentRecord = JSON.parse(
         JSON.stringify(priorDocumentHistoricalRecord)

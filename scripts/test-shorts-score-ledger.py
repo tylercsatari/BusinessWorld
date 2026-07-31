@@ -314,13 +314,21 @@ def rehash(value):
 wrong_feature_document = copy.deepcopy(ledger)
 wrong_feature_document['feature_contract_document_sha256'] = 'a' * 64
 rehash(wrong_feature_document)
+archived_document_bundle = feature_bundle_from_ledger(
+    wrong_feature_document
+)
+assert archived_document_bundle['features'] == bundle['features']
+
+malformed_feature_document = copy.deepcopy(ledger)
+malformed_feature_document['feature_contract_document_sha256'] = 'bad'
+rehash(malformed_feature_document)
 try:
-    feature_bundle_from_ledger(wrong_feature_document)
+    feature_bundle_from_ledger(malformed_feature_document)
     raise AssertionError(
-        'a different feature-contract document hash should fail closed'
+        'a malformed feature-contract document hash should fail closed'
     )
 except ValueError as error:
-    assert 'feature contract document hash does not match' in str(error)
+    assert 'feature contract document hash is missing' in str(error)
 
 
 relabeled = copy.deepcopy(ledger)

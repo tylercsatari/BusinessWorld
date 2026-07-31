@@ -674,15 +674,15 @@ async function main() {
             claim_boundary:
                 'Historical display only; not a current prediction.',
         };
-        assert.deepStrictEqual(
+        const historicalDocumentValidation =
             shortsScoreLedger.validateScoreLedger(
                 historicalSavedHookRecord.score_ledger
-            ).errors,
-            [
-                'score ledger feature contract document hash does not match',
-            ],
-            'historical browser fixture must differ only by the '
-                + 'superseded feature-contract document hash'
+            );
+        assert.strictEqual(historicalDocumentValidation.valid, true);
+        assert.strictEqual(
+            historicalDocumentValidation.featureContractDocumentCurrent,
+            false,
+            'historical browser fixture must retain its archived document revision'
         );
         const historicalSavedHookRow =
             savedHookRuntimeIndex.legacyRow(

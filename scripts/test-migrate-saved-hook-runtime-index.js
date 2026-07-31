@@ -91,13 +91,14 @@ function priorDocumentHistoricalLedgerRecord() {
         claim_boundary:
             'Historical values only; not a current prediction.',
     };
-    assert.deepEqual(
+    const archivedDocumentValidation =
         shortsScoreLedger.validateScoreLedger(
             record.score_ledger
-        ).errors,
-        [
-            'score ledger feature contract document hash does not match',
-        ]
+        );
+    assert.equal(archivedDocumentValidation.valid, true);
+    assert.equal(
+        archivedDocumentValidation.featureContractDocumentCurrent,
+        false
     );
     return record;
 }

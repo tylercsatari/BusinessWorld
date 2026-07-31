@@ -917,11 +917,12 @@ async function main() {
             delete ledger.ledger_sha256;
             ledger.ledger_sha256 =
                 shortsScoreLedger.sha256Canonical(ledger);
-            assert.deepStrictEqual(
-                shortsScoreLedger.validateScoreLedger(ledger).errors,
-                [
-                    'score ledger feature contract document hash does not match',
-                ]
+            const archivedDocumentValidation =
+                shortsScoreLedger.validateScoreLedger(ledger);
+            assert.strictEqual(archivedDocumentValidation.valid, true);
+            assert.strictEqual(
+                archivedDocumentValidation.featureContractDocumentCurrent,
+                false
             );
             const record = {
                 id,
@@ -984,6 +985,11 @@ async function main() {
             );
             assert.strictEqual(
                 reply.json.score_ledger_validation.valid,
+                true
+            );
+            assert.strictEqual(
+                reply.json.score_ledger_validation
+                    .feature_contract_document_current,
                 false
             );
             assert.strictEqual(
