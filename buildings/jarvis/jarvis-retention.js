@@ -7983,7 +7983,6 @@ const JarvisRetention = (function () {
             }, {
                 title: rec.title || scored.title || 'Saved video',
                 text,
-                montage,
             });
             if (!payload) {
                 throw new Error(

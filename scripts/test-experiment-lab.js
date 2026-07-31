@@ -711,7 +711,7 @@ async function main() {
         historicalUpgradeScore.transcript =
             historicalSavedHookRecord.text;
         historicalUpgradeScore.montage =
-            'R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+            'c2NvcmVyLWNhbm9uaWNhbC1tb250YWdl';
         historicalUpgradeScore.hasMontage = true;
         historicalUpgradeScore.evidence_state = 'canonical_bound';
         historicalUpgradeScore.predictor_eligible = true;
@@ -2253,6 +2253,13 @@ window.fetch=function(url,options){
                 || ''
             ),
             'the upgrade must preserve the historical transcript'
+        );
+        assert.strictEqual(
+            enrichSubmission.montage,
+            'data:image/jpeg;base64,'
+                + historicalUpgradeScore.montage,
+            'the upgrade must persist the exact canonical JPEG returned '
+                + 'by the scorer instead of the older display montage'
         );
         await page.locator('[data-savedbank="channels"]').click();
         assert.strictEqual(await page.getByPlaceholder('type a video idea — or leave blank and the model invents one…').count(), 1);
