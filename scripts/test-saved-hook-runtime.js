@@ -231,7 +231,7 @@ function sendJsonGz(_req, res, data, statusCode, headers = {}) {
     res.end(JSON.stringify(data));
 }
 
-function runtimeFor(cloud) {
+function runtimeFor(cloud, options = {}) {
     const helperSource = sourceSlice(
         serverSource,
         'async function readSavedHookIndex()',
@@ -313,16 +313,20 @@ function runtimeFor(cloud) {
         exactSha256(value) {
             return /^[a-f0-9]{64}$/i.test(String(value || ''));
         },
-        validateRawScoreResult() {
-            throw new Error(
-                'canonical scorer validation was unexpectedly reached'
-            );
-        },
+        validateRawScoreResult:
+            options.validateRawScoreResult
+            || (() => {
+                throw new Error(
+                    'canonical scorer validation was unexpectedly reached'
+                );
+            }),
         url: {
             searchParams: new URLSearchParams(),
         },
         experimentLabAccountScope: async () => null,
-        requireExperimentLabItem: async () => null,
+        requireExperimentLabItem:
+            options.requireExperimentLabItem
+            || (async () => null),
         readBody,
         sendJsonGz,
     });
@@ -834,6 +838,96 @@ async function main() {
                     uploads: cloud.uploads,
                     deletes: cloud.deletes,
                 })}`
+            );
+        }
+    );
+
+    await test(
+        'explicit enrich atomically persists a current score and refreshes the index binding',
+        async () => {
+            const fixture = canonicalFixture('hkexplicitrescore');
+            const cloud = new MemoryR2(canonicalSeed(fixture));
+            const authorizationCalls = [];
+            const runtime = runtimeFor(cloud, {
+                validateRawScoreResult: value => value,
+                requireExperimentLabItem: async (...args) => {
+                    authorizationCalls.push(args);
+                    return null;
+                },
+            });
+            cloud.resetOperations();
+            const visualKeepForecast = {
+                coordinate_id: 'shorts.visual-keep-forecast.v1',
+                raw: 73.25,
+                est: 73.25,
+            };
+            const reply = await dispatch(
+                runtime,
+                'POST',
+                '/api/raw/hook-enrich',
+                {
+                    id: fixture.record.id,
+                    expected_score_record_sha256:
+                        fixture.record.score_record_sha256,
+                    montage:
+                        fixture.mediaBytes.toString('base64'),
+                    text: fixture.record.text,
+                    indicators: fixture.record.indicators,
+                    score_ledger: fixture.record.score_ledger,
+                    score_ledger_sha256:
+                        fixture.record.score_ledger.ledger_sha256,
+                    novelty_provenance: null,
+                    visual_keep_forecast: visualKeepForecast,
+                    creator_adaptive_keep_forecast: null,
+                    creator_adaptive_keep_forecast_error:
+                        'fixture profile unavailable',
+                    channels: fixture.record.channels,
+                    emb_preview: fixture.record.emb_preview,
+                    input_manifest: fixture.record.input_manifest,
+                }
+            );
+            assert.strictEqual(reply.status, 200, reply.raw);
+            assert.strictEqual(authorizationCalls.length, 1);
+            assert.strictEqual(
+                authorizationCalls[0][2],
+                'hooks'
+            );
+            assert.strictEqual(
+                authorizationCalls[0][3],
+                fixture.record.id
+            );
+            assert.strictEqual(
+                authorizationCalls[0][4]
+                    && authorizationCalls[0][4].write,
+                true
+            );
+            const persisted = JSON.parse(
+                cloud.objects.get(fixture.recordKey).toString('utf8')
+            );
+            assert.deepStrictEqual(
+                persisted.visual_keep_forecast,
+                visualKeepForecast
+            );
+            assert.notStrictEqual(
+                persisted.score_record_sha256,
+                fixture.record.score_record_sha256
+            );
+            assert.strictEqual(
+                persisted.score_record_sha256,
+                displayContract.savedHookScoreRecordSha256(persisted)
+            );
+            const index = JSON.parse(
+                cloud.objects.get(
+                    'raw/saved-hooks/index.json'
+                ).toString('utf8')
+            );
+            const compact = index.hooks.find(
+                row => row.id === fixture.record.id
+            );
+            assert.ok(compact);
+            assert.strictEqual(
+                compact.score_record_sha256,
+                persisted.score_record_sha256
             );
         }
     );

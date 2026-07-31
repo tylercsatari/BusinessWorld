@@ -97,7 +97,7 @@ async function permsForAccount(account) {
 const SHORTS_EXPERIMENT_SHARED_ROUTES = [
     /^\/api\/indicators\/registry$/,
     /^\/api\/shortsquant\/jobs\/j[a-z0-9]+$/,
-    /^\/api\/raw\/(?:scorer-contract|plot|map|embed-youtube|embed-upload|embed-montage|hook-save|hook-delete|folder-create|folder-delete|hook-move|saved-hooks)$/,
+    /^\/api\/raw\/(?:scorer-contract|plot|map|embed-youtube|embed-upload|embed-montage|hook-save|hook-enrich|hook-delete|folder-create|folder-delete|hook-move|saved-hooks)$/,
     /^\/api\/raw\/saved-(?:hook|montage)\/[a-z0-9]{1,32}$/,
     /^\/api\/raw\/saved-channels$/,
     /^\/api\/raw\/saved-channel$/,

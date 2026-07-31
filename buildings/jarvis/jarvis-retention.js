@@ -47,7 +47,7 @@ const JarvisRetention = (function () {
     let PROMISE_UI = null, OPERATIONS_UI = null, STORYBOARD_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationShow: 60, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedLedgerPlotMode: 'oof', savedVisualKeepProtocol: 'videoHoldout', savedVisualKeepAccount: 'all', savedCreatorKeepAccount: 'all', labTeamAccount: null, labTeamLoading: false, labTeamError: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedRescoreId: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationShow: 60, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedLedgerPlotMode: 'oof', savedVisualKeepProtocol: 'videoHoldout', savedVisualKeepAccount: 'all', savedCreatorKeepAccount: 'all', labTeamAccount: null, labTeamLoading: false, labTeamError: null };
     st.savedValidationFeature = null;
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
@@ -4389,6 +4389,8 @@ const JarvisRetention = (function () {
         const UPSTAGES = ['Uploading…', 'Extracting 5 frames…', 'Transcribing…', 'Embedding…', 'Scoring indicators…'];
         const upLabel = st.rawUpQueue && st.rawUpQueue.preparing
             ? 'Preparing a phone-safe opening…'
+            : st.rawUpQueue && st.rawUpQueue.rescore
+                ? 'Re-scoring the saved video and validating its new ledger…'
             : st.rawUpQueue && st.rawUpQueue.fallback
                 ? 'Recovering with the 5 visual frames…'
                 : st.rawUpQueue && st.rawUpQueue.transferMB
@@ -4420,6 +4422,18 @@ const JarvisRetention = (function () {
             up._inspectionReadOnly === true;
         const displayReadOnly =
             historicalReadOnly || inspectionReadOnly;
+        const savedRescoreEligible = !!(
+            up.source === 'saved'
+            && up.savedId
+            && !inspectionReadOnly
+        );
+        const savedRescoreBusy = !!(
+            st.savedRescoreId
+            && String(st.savedRescoreId) === String(up.savedId)
+        );
+        const savedRescoreButton = savedRescoreEligible
+            ? `<button type="button" data-savedrescore="${esc(up.savedId)}" ${savedRescoreBusy ? 'disabled' : ''} style="min-height:36px;cursor:${savedRescoreBusy ? 'wait' : 'pointer'};border:1px solid ${C.green};background:${C.green}18;color:${C.green};padding:6px 11px;font-size:9px;font-weight:900;opacity:${savedRescoreBusy ? '.65' : '1'}">${savedRescoreBusy ? 'Scoring + saving…' : 'Re-score video with current model'}</button>`
+            : '';
         // ── 1. trace: raw input → embedding ──
         const embHeat = ch => { const a = up.emb_preview && up.emb_preview[ch]; if (!a) return `<div style="font-size:9px;color:${C.faint}">${ch}: ${esc(rawInputLabel(up, ch))}</div>`; const mn = Math.min(...a), mx = Math.max(...a); return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span title="${esc(rawInputLabel(up, ch))}" style="font-size:9px;color:${C.dim};width:58px">${ch}</span><svg viewBox="0 0 ${a.length * 5} 10" style="height:11px;width:${a.length * 5}px">${a.map((v, i) => `<rect x="${i * 5}" width="4.4" height="10" fill="${rawRamp((v - mn) / ((mx - mn) || 1))}"/>`).join('')}</svg><span style="font-size:8px;color:${C.faint};white-space:nowrap">${esc(rawInputLabel(up, ch))}</span></div>`; };
         const upIdx = (st.rawUploads || []).lastIndexOf(up);
@@ -4442,9 +4456,10 @@ const JarvisRetention = (function () {
         })();
         const trace = cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
               ${titleRow}
-              ${displayReadOnly
-                ? `<span data-historical-display-readonly style="border:1px solid ${C.amber};background:${C.amber}12;color:${C.amber};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:800;white-space:nowrap">${inspectionReadOnly ? 'Team workspace · read-only' : 'Historical display · read-only'}</span>`
-                : `<span data-savescored style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${st.savedFlash ? '✅ saved' : '💾 Save this hook'}</span>`}</div>
+              <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                ${displayReadOnly ? `<span data-historical-display-readonly style="border:1px solid ${C.amber};background:${C.amber}12;color:${C.amber};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:800;white-space:nowrap">${inspectionReadOnly ? 'Team workspace · read-only' : 'Persisted historical score'}</span>` : ''}
+                ${!displayReadOnly && up.source !== 'saved' ? `<span data-savescored style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${st.savedFlash ? '✅ saved' : '💾 Save this hook'}</span>` : ''}
+              </span></div>
             ${up._uploadWarning ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}12;border-left:3px solid ${C.amber};padding:7px 9px;margin-bottom:8px;line-height:1.4">${esc(up._uploadWarning)}</div>` : ''}
             <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
               <div><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">1 · the 5-frame hook (what gets embedded)</div>${upMontageSrc ? `<img src="${esc(upMontageSrc)}" style="width:260px;border-radius:6px;background:#000"/>` : `<div style="width:260px;padding:20px;box-sizing:border-box;border-radius:6px;background:#000;color:${C.mute};font-size:10px;text-align:center">stored montage unavailable</div>`}</div>
@@ -4589,7 +4604,7 @@ const JarvisRetention = (function () {
                     return cardc(`<div data-visual-keep-fit-diagnostic data-coordinate-authority="unbound-scalar-suppressed"><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Visual keep · in-sample diagnostic</div>${bigNumHTML('Not available', 'unbound scalar suppressed')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">A fitting-population reconstruction exists, but it has no canonical row-ledger coordinate and ledger hash. Its numeric value is deliberately hidden and cannot be used as a score.</div></div>`, 12);
                 }
                 const reason = up.visual_keep_forecast_error || 'This score artifact predates the frozen model.';
-                return cardc(`<div data-visual-keep-forecast><div style="font-size:11px;color:${C.green};font-weight:800;text-transform:uppercase">Frozen visual model → keep rate</div>${bigNumHTML('Not available', 'no verified score-record value')}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${esc(reason)} ${up.visual_keep_forecast_error ? '' : 'Re-score this opening once to persist the canonical raw forecast.'}</div></div>`, 12);
+                return cardc(`<div data-visual-keep-forecast><div style="font-size:11px;color:${C.green};font-weight:800;text-transform:uppercase">Frozen visual model → keep rate</div>${bigNumHTML('Not available', 'no verified score-record value')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">${esc(reason)} ${up.visual_keep_forecast_error ? '' : `This saved record has not yet been run through the current forecast.${savedRescoreEligible ? ' Use Re-score video above to upgrade it once.' : ''}`}</div></div>`, 12);
             }
             const scope = forecast.calibration_scope === 'pooled_global'
                 ? 'pooled globally'
@@ -4604,7 +4619,7 @@ const JarvisRetention = (function () {
             if (!forecast) {
                 const reason = up.creator_adaptive_keep_forecast_error
                     || 'The scorer did not return a creator-profile forecast for this historical result.';
-                return cardc(`<div data-creator-adaptive-keep-forecast><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Creator-adaptive multimodal keep forecast · research only</div>${bigNumHTML('Not available', 'no verified creator-profile value')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">${esc(reason)} Re-score with an explicit registered creator profile to combine the canonical visual and together embeddings with that profile's prior history. Profiles are never substituted silently, and this scalar is never predictor-eligible.</div></div>`, 12);
+                return cardc(`<div data-creator-adaptive-keep-forecast><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Creator-adaptive multimodal keep forecast · research only</div>${bigNumHTML('Not available', 'no verified creator-profile value')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">${esc(reason)} Re-score with the explicitly selected <b>${esc(savedVisualKeepAccountName(selectedCreatorProfile(), selectedCreatorProfile()))}</b> profile to combine the canonical visual and together embeddings with that profile's prior history. Profiles are never substituted silently, and this scalar is not yet prospectively predictor-eligible.${savedRescoreEligible ? ' Use Re-score video above to upgrade it once.' : ''}</div></div>`, 12);
             }
             const profile = savedVisualKeepAccountName(
                 forecast.profile_account || forecast.account,
@@ -4672,6 +4687,52 @@ const JarvisRetention = (function () {
             .reduce((count, ch) => count + CH_TARGETS.filter(
                 tn => !!steerOf(up, ch, tn)
             ).length, 0);
+        const canonicalVisualKeep = steerOf(up, 'visual', 'keep');
+        const frozenVisualKeep = visualKeepForecastOf(up);
+        const creatorAdaptiveKeep = creatorAdaptiveKeepForecastOf(up);
+        const keepPrimary = creatorAdaptiveKeep
+            ? {
+                label: 'Known-creator multimodal forecast',
+                value: `${fmtv(creatorAdaptiveKeep.value, 1)}%`,
+                coordinateId: creatorAdaptiveKeep.coordinateId,
+                badge: 'BEST RETROSPECTIVE KNOWN-CREATOR PREDICTOR',
+                color: C.amber,
+                explanation: 'This is the strongest measured keep-rate forecast currently available for a registered creator: visual + together embeddings plus strictly prior creator outcomes. It passed the retrospective per-account MAE target, but remains research-only until prospective confirmation.',
+            }
+            : frozenVisualKeep
+                ? {
+                    label: 'Frozen visual-only forecast',
+                    value: `${fmtv(frozenVisualKeep.value, 1)}%`,
+                    coordinateId: frozenVisualKeep.coordinateId,
+                    badge: 'BEST TESTED VISUAL-ONLY CANDIDATE',
+                    color: C.green,
+                    explanation: 'This full-vector Ridge forecast is the strongest visual-only candidate. It is a percentage prediction, separate from the visual keep embedding coordinate, and remains research-only until unseen-creator transfer is confirmed.',
+                }
+                : canonicalVisualKeep
+                    ? {
+                        label: 'Canonical visual keep embedding estimate',
+                        value: steerDisp('keep', canonicalVisualKeep.value),
+                        coordinateId: canonicalVisualKeep.coordinateId,
+                        badge: 'CANONICAL LEDGER COORDINATE',
+                        color: C.cyan,
+                        explanation: 'This historical record still has its exact ledger-backed visual keep coordinate. It is an embedding-axis estimate, not the newer full-vector percentage forecast; explicitly re-score the saved video to add the current forecasts.',
+                    }
+                    : {
+                        label: 'Keep-rate prediction',
+                        value: 'Not available',
+                        coordinateId: null,
+                        badge: 'NO VERIFIED KEEP VALUE',
+                        color: C.red,
+                        explanation: 'No keep value passed the persisted score-ledger checks for this record.',
+                    };
+        const keepReadoutRow = (label, coordinate, value, note, color) => `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:6px 10px;padding:6px 0;border-top:1px solid ${C.border};align-items:start"><div style="font-size:8px;color:${color};font-weight:900">${esc(label)}</div><div style="font-size:12px;color:${value === 'Not available' ? C.faint : C.text};font-weight:950">${esc(value)}</div><div style="font-size:7.5px;color:${C.dim};line-height:1.4;overflow-wrap:anywhere"><code style="color:${C.faint}">${esc(coordinate || 'not persisted')}</code><br>${esc(note)}</div></div>`;
+        const keepDecisionReadout = cardc(`<section data-best-keep-predictor data-coordinate-id="${esc(keepPrimary.coordinateId || '')}" data-score-source="${esc(up.source || '')}" data-saved-id="${esc(up.savedId || '')}" data-inspection-readonly="${inspectionReadOnly ? 'true' : 'false'}" data-rescore-eligible="${savedRescoreEligible ? 'true' : 'false'}">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap"><div><div style="font-size:9px;color:${keepPrimary.color};font-weight:950;text-transform:uppercase">${esc(keepPrimary.badge)}</div><div style="font-size:14px;color:${C.text};font-weight:950;margin-top:3px">${esc(keepPrimary.label)}</div><div data-best-keep-predictor-value style="font-size:30px;color:${keepPrimary.color};font-weight:950;line-height:1.1;margin-top:3px">${esc(keepPrimary.value)}</div></div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${canonicalVisualKeep ? `<button type="button" data-expgo="visual:keep" style="min-height:36px;background:transparent;border:1px solid ${C.cyan};color:${C.cyan};padding:6px 10px;cursor:pointer;font-size:8px;font-weight:900">Open visual keep geometry</button>` : ''}${savedRescoreButton}</div></div>
+            <div style="font-size:8.5px;color:${C.dim};line-height:1.5;margin:6px 0 8px">${esc(keepPrimary.explanation)}</div>
+            ${keepReadoutRow('Canonical visual embedding', canonicalVisualKeep && canonicalVisualKeep.coordinateId, canonicalVisualKeep ? steerDisp('keep', canonicalVisualKeep.value) : 'Not available', 'The exact stored visual-axis scalar and corpus percentile.', C.cyan)}
+            ${keepReadoutRow('Frozen visual-only forecast', frozenVisualKeep && frozenVisualKeep.coordinateId, frozenVisualKeep ? `${fmtv(frozenVisualKeep.value, 1)}%` : 'Not available', 'Full 1,536D visual vector converted directly to keep-rate percentage.', C.green)}
+            ${keepReadoutRow('Known-creator forecast', creatorAdaptiveKeep && creatorAdaptiveKeep.coordinateId, creatorAdaptiveKeep ? `${fmtv(creatorAdaptiveKeep.value, 1)}%` : 'Not available', `Visual + together vectors + strictly prior ${savedVisualKeepAccountName(selectedCreatorProfile(), selectedCreatorProfile())} outcomes; retrospectively validated, research-only.`, C.amber)}
+        </section>`, 12);
         const boxes = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">All 18 registered channel coordinates · ${availableChannelCoordinates} scored · ${18 - availableChannelCoordinates} explicitly unavailable</div>
             <div style="font-size:9px;color:${C.mute};margin-bottom:8px">Availability comes only from the persisted score ledger. The page never infers it from transcript text. Two optional keep forecasts reuse existing vectors: a pooled visual diagnostic and a known-creator prequential next-upload forecast. Neither mints another embedding space. <b style="color:${C.purple}">Novelty</b> uses its own calibration curves.</div>
             <div style="font-size:10px;color:${C.green};font-weight:800;text-transform:uppercase;margin-bottom:5px">Full-vector keep forecasts — 2 derived outputs</div>
@@ -4685,6 +4746,7 @@ const JarvisRetention = (function () {
             + trace
             + savedVisualKeepCoordinateTableHtml(up)
             + rawScoreProvenanceHtml(up)
+            + keepDecisionReadout
             + boxes
             + savedBank();
     }
@@ -6533,6 +6595,7 @@ const JarvisRetention = (function () {
             || st.rawYtBusy
             || st.rawReembedBusy
             || st.savedDetailLoading
+            || st.savedRescoreId
             || st.genScoringK != null
         );
     }
@@ -7376,6 +7439,13 @@ const JarvisRetention = (function () {
             }
             return;
         }
+        const savedRescore = e.target.closest('[data-savedrescore]');
+        if (savedRescore) {
+            rescoreSavedHook(
+                savedRescore.getAttribute('data-savedrescore')
+            );
+            return;
+        }
         if (e.target.closest('[data-savescored]')) {
             const up = selectedRawScoreUpload();
             const payload = scoredHookSavePayload(up);
@@ -7803,6 +7873,156 @@ const JarvisRetention = (function () {
             _inspectionReadOnly:
                 inspectionReadOnly === true,
         };
+    }
+    async function rescoreSavedHook(id) {
+        id = String(id || '');
+        if (!id) return;
+        const selected = selectedRawScoreUpload();
+        if (
+            !selected
+            || selected.source !== 'saved'
+            || String(selected.savedId || '') !== id
+        ) {
+            rawUploadPickerError(
+                'Open the saved video score card before re-scoring it.'
+            );
+            return;
+        }
+        if (selected._inspectionReadOnly === true) {
+            rawUploadPickerError(
+                'Team workspace inspection is read-only. Switch back to your own workspace to re-score a saved video.'
+            );
+            return;
+        }
+        if (rawScoreBusy()) {
+            rawUploadPickerError(
+                'Another video is already being prepared or scored. Wait for that result before re-scoring this saved video.'
+            );
+            return;
+        }
+        const detailCacheKey = id;
+        let stored = SAVEDDETAIL[detailCacheKey];
+        let tick = null;
+        let upgraded = false;
+        st.savedRescoreId = id;
+        st.rawUploading = true;
+        st.rawUpErr = null;
+        st.rawUpStage = 1;
+        st.rawUpQueue = { rescore: true };
+        rtgUpdateExp();
+        try {
+            if (!stored || !stored.rec) {
+                stored = SAVEDDETAIL[detailCacheKey] = {
+                    rec: await rtFetchJson(
+                        '/api/raw/saved-hook/' + id,
+                        { cache: 'no-store' },
+                        4
+                    ),
+                    montage: null,
+                    reconstructed: false,
+                };
+            }
+            const rec = stored.rec || {};
+            if ((rec.score_domain || 'shorts') !== 'shorts') {
+                throw new Error(
+                    'This saved record belongs to Long Quant and cannot be scored by the Shorts model.'
+                );
+            }
+            let montage = stored.montage;
+            if (!montage) {
+                try {
+                    montage = await urlToDataUrl(
+                        '/api/raw/saved-montage/' + id
+                    );
+                } catch (error) {}
+            }
+            if (!montage) {
+                montage = await montageFromFrameIds(
+                    rec.frame_imgs || []
+                );
+                stored.reconstructed = true;
+            }
+            stored.montage = montage;
+            const text = String(
+                rec.transcript || rec.text || ''
+            ).slice(0, 2000);
+            const durationValue = Number(
+                rec.input_manifest
+                && rec.input_manifest.duration_s != null
+                    ? rec.input_manifest.duration_s
+                    : rec.dur_s
+            );
+            const duration = Number.isFinite(durationValue)
+                && durationValue > 0
+                ? durationValue
+                : null;
+            const creatorProfile = selectedCreatorProfile();
+            tick = window.setInterval(() => {
+                if (st.rawUpStage < 4) {
+                    st.rawUpStage++;
+                    rtgUpdateExp();
+                }
+            }, 1400);
+            const scored = await rtJob('/api/raw/embed-montage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    montage,
+                    text,
+                    title: String(rec.title || 'Saved video').slice(0, 80),
+                    duration,
+                    creatorProfile,
+                    async: true,
+                }),
+            });
+            const payload = scoredHookSavePayload({
+                ...scored,
+                title: rec.title || scored.title,
+                transcript: text,
+                montageDataUrl: montage,
+            }, {
+                title: rec.title || scored.title || 'Saved video',
+                text,
+                montage,
+            });
+            if (!payload) {
+                throw new Error(
+                    'The current scorer did not return a valid canonical score ledger.'
+                );
+            }
+            await rtFetchJson('/api/raw/hook-enrich', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...payload,
+                    id,
+                    expected_score_record_sha256:
+                        rec.score_record_sha256 || null,
+                }),
+            }, 1);
+            upgraded = true;
+        } catch (error) {
+            st.rawUpErr = 'Re-score video: ' + fetchFail(error);
+        } finally {
+            if (tick) window.clearInterval(tick);
+            st.savedRescoreId = null;
+            st.rawUploading = false;
+            st.rawUpStage = 0;
+            st.rawUpQueue = null;
+        }
+        if (!upgraded) {
+            rtgUpdateExp();
+            return;
+        }
+        delete SAVEDDETAIL[detailCacheKey];
+        SAVED = null;
+        st.rawUploads = (st.rawUploads || []).filter(row => !(
+            row
+            && row.source === 'saved'
+            && String(row.savedId || '') === id
+        ));
+        st.rawUpSel = null;
+        await openSaved(id);
     }
     // Opening a saved hook is read-only. A persisted score keeps the exact
     // scorer revision that produced it; an unscored idea may be scored for

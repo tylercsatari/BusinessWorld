@@ -11064,6 +11064,13 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const body = (await readBody(req)) || {};
             const id = String(body.id || '').replace(/[^a-z0-9]/gi, '');
             if (!id) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end('{"error":"no hook id"}'); return; }
+            await requireExperimentLabItem(
+                req,
+                url,
+                'hooks',
+                id,
+                { write: true }
+            );
             const key = `raw/saved-hooks/${id}.json`;
             const existing = await cloud.downloadFromR2(key).catch(() => null);
             if (!existing) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"saved hook not found"}'); return; }
@@ -11099,6 +11106,21 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     ),
                 }));
                 return;
+            }
+            const submittedLedgerSha256 =
+                body.score_ledger
+                && body.score_ledger.ledger_sha256;
+            if (
+                !exactSha256(body.score_ledger_sha256)
+                || body.score_ledger_sha256
+                    !== submittedLedgerSha256
+            ) {
+                throw new HttpRequestError(
+                    422,
+                    'replacement score does not bind the canonical ledger SHA '
+                        + 'returned by the current scorer',
+                    'replacement_score_ledger_mismatch'
+                );
             }
             const montageBytes = decodeSavedHookMontage(body.montage);
             const rec = canonicalSavedHookRecord({
@@ -11196,7 +11218,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 score_ledger_sha256:
                     rec.score_ledger.ledger_sha256,
             }));
-        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        } catch (e) {
+            res.writeHead(e.statusCode || 500, {
+                'Content-Type': 'application/json',
+            });
+            res.end(JSON.stringify({
+                error: e.message,
+                code: e.code || 'saved_hook_enrich_failed',
+            }));
+        }
         return;
     }
     if ((pathname === '/api/raw/saved-hooks' || pathname === '/api/raw-long/saved-hooks') && req.method === 'GET') {

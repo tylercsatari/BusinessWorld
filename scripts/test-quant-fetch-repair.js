@@ -111,7 +111,18 @@ includes(shorts, "rtFetchJson('/api/raw/saved-hooks'", 'saved hook indexes must 
 includes(shorts, 'currentScorerContract(true)', 'opening a saved hook must compare its persisted scorer revision with the live contract');
 includes(shorts, "'Historical display evidence: the score ledger was '", 'legacy saved hooks must be labeled as unbound display evidence');
 includes(shorts, "'This is a new transient score for an unscored '", 'an unscored saved idea may be evaluated only as an explicit transient result');
-excludes(shorts, "await rtFetchJson('/api/raw/hook-enrich'", 'opening saved evidence must never mutate or silently migrate it');
+const openSavedReadPath = shorts.slice(
+    shorts.indexOf('async function openSaved(id, options)'),
+    shorts.indexOf('function savedDetail()')
+);
+excludes(openSavedReadPath, '/api/raw/hook-enrich', 'opening saved evidence must never mutate or silently migrate it');
+includes(shorts, 'async function rescoreSavedHook(id)', 'historical saved videos must expose one explicit current-model re-score path');
+includes(shorts, "await rtFetchJson('/api/raw/hook-enrich'", 'an explicit re-score must persist the validated replacement record');
+includes(shorts, 'expected_score_record_sha256:', 'the explicit saved-video upgrade must use an atomic record precondition');
+includes(shorts, "rec.transcript || rec.text || ''", 'the explicit re-score must preserve transcripts from every historical schema');
+includes(shorts, "'/api/raw/saved-montage/' + id", 'the explicit re-score must attempt durable legacy montage recovery even when old metadata omitted hasMontage');
+includes(shorts, 'data-best-keep-predictor', 'every score card must surface the strongest available keep-rate readout');
+includes(server, 'replacement score does not bind the canonical ledger SHA', 'saved-video upgrades must bind the exact scorer ledger before replacing evidence');
 includes(server, 'surfaceSourceErrors: true', 'map and status routes must surface backing-storage failures');
 includes(server, 'cached.sourceFingerprint === fingerprint', 'saved-channel validation may reuse an artifact only after every source byte matches');
 includes(server, 'return buildFreshSavedChannelValidationBuffer(', 'saved-channel validation must rebuild from current exact sources or fail closed');

@@ -405,6 +405,11 @@ async function main() {
             contentType: 'image/gif',
             body: Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64'),
         }));
+        await page.route('**/api/raw/saved-montage/**', route => route.fulfill({
+            status: 200,
+            contentType: 'image/gif',
+            body: Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64'),
+        }));
         await page.route(`${ORIGIN}/__experiment-lab-origin__`, route => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><title>Experiment Lab test origin</title>' }));
         // Establish the local origin without loading Business World's global bundles twice.
         await page.goto(`${ORIGIN}/__experiment-lab-origin__`, { waitUntil: 'domcontentloaded' });
@@ -695,6 +700,32 @@ async function main() {
         const historicalSavedHookKeep =
             historicalSavedHookRow.historical_display
                 .m_identity.keep;
+        const historicalUpgradeScore = JSON.parse(
+            JSON.stringify(videos[0].__record)
+        );
+        historicalUpgradeScore.id = historicalSavedHookId;
+        historicalUpgradeScore.title =
+            historicalSavedHookRecord.title;
+        historicalUpgradeScore.text =
+            historicalSavedHookRecord.text;
+        historicalUpgradeScore.transcript =
+            historicalSavedHookRecord.text;
+        historicalUpgradeScore.montage =
+            'R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+        historicalUpgradeScore.hasMontage = true;
+        historicalUpgradeScore.evidence_state = 'canonical_bound';
+        historicalUpgradeScore.predictor_eligible = true;
+        historicalUpgradeScore.score_display_eligible = true;
+        historicalUpgradeScore.score_ledger_validation =
+            scoreLedgerValidationSummary(historicalUpgradeScore);
+        historicalUpgradeScore.score_record_validation = {
+            state: 'verified',
+            valid: true,
+            recorded_sha256:
+                historicalUpgradeScore.score_record_sha256,
+            calculated_sha256:
+                historicalUpgradeScore.score_record_sha256,
+        };
         const rebindHistoricalFixture = fixture => {
             delete fixture.score_ledger.ledger_sha256;
             fixture.score_ledger.ledger_sha256 =
@@ -1477,6 +1508,8 @@ async function main() {
             },
         ];
         const replies = {
+            '/buildings/jarvis/saved-channel-feature-contract.json':
+                featureContract,
             '/api/experimentlab/context': {
                 schema: 'experiment-lab-workspace-v1',
                 viewer: {
@@ -1722,6 +1755,8 @@ const nativeFetch=window.fetch.bind(window);
 const replies=${JSON.stringify(replies)};
 const teamReplies=${JSON.stringify(teamReplies)};
 const teamAccountId=${JSON.stringify(teamAccountId)};
+const historicalSavedHookId=${JSON.stringify(historicalSavedHookId)};
+const historicalUpgradeScore=${JSON.stringify(historicalUpgradeScore)};
 window.__historicalTamperFixtures=${
     JSON.stringify(historicalTamperFixtures)
 };
@@ -1742,6 +1777,55 @@ window.fetch=function(url,options){
                 'X-Experiment-Lab-Account'
             )
         });
+    }
+    if(p==='/api/raw/saved-montage/'+historicalSavedHookId){
+        const b=Uint8Array.from(
+            atob('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='),
+            c=>c.charCodeAt(0)
+        );
+        return Promise.resolve(new Response(b,{
+            status:200,
+            headers:{'Content-Type':'image/gif'}
+        }));
+    }
+    if(
+        p==='/api/raw/embed-montage'
+        && String(options&&options.method||'GET').toUpperCase()==='POST'
+    ){
+        return Promise.resolve(new Response(
+            JSON.stringify(historicalUpgradeScore),
+            {
+                status:200,
+                headers:{'Content-Type':'application/json'}
+            }
+        ));
+    }
+    if(
+        p==='/api/raw/hook-enrich'
+        && String(options&&options.method||'GET').toUpperCase()==='POST'
+    ){
+        const submitted=JSON.parse(options.body||'{}');
+        window.__historicalEnrichSubmission=submitted;
+        replies['/api/raw/saved-hook/'+historicalSavedHookId]={
+            ...historicalUpgradeScore,
+            id:historicalSavedHookId,
+            title:submitted.title||historicalUpgradeScore.title,
+            text:submitted.text||historicalUpgradeScore.text,
+            hasMontage:true,
+            evidence_state:'canonical_bound',
+            predictor_eligible:true,
+            score_display_eligible:true
+        };
+        return Promise.resolve(new Response(JSON.stringify({
+            ok:true,
+            score_record_sha256:
+                historicalUpgradeScore.score_record_sha256,
+            score_ledger_sha256:
+                historicalUpgradeScore.score_ledger.ledger_sha256
+        }),{
+            status:200,
+            headers:{'Content-Type':'application/json'}
+        }));
     }
     if(
         requestHeaders.get('X-Experiment-Lab-Account')===teamAccountId
@@ -1924,6 +2008,17 @@ window.fetch=function(url,options){
             1,
             'owner Team hook inspection must use the exact canonical detail in read-only mode'
         );
+        assert.strictEqual(
+            await page.locator(
+                '#rtg-exppanel [data-savedrescore]'
+            ).count(),
+            0,
+            'team inspection must never expose a write-capable re-score action'
+        );
+        await page.locator(
+            `[data-labteamaccount="${ownerAccountId}"]`
+        ).click();
+        await page.getByText('Owner workspace', { exact: true }).waitFor();
         await page.locator('[data-savedbank="hooks"]').click();
         const storyboardMode = page.locator(
             '[data-rawbuildmode="1"]'
@@ -2006,6 +2101,9 @@ window.fetch=function(url,options){
             'opening persisted history must not masquerade as a live '
                 + 'extraction or embedding job'
         );
+        await page.locator(
+            '[data-saved-detail-state="historical-read-only"]'
+        ).waitFor();
         const openedHistoricalCoordinate = page.locator(
             '#rtg-exppanel '
                 + '[data-coordinate-id="shorts.stored.together.keep"]'
@@ -2023,9 +2121,43 @@ window.fetch=function(url,options){
             'saved grid and opened score card must render the same '
                 + 'ledger value'
         );
-        await page.locator(
-            '[data-saved-detail-state="historical-read-only"]'
-        ).waitFor();
+        const historicalVisualKeep =
+            historicalSavedHookRecord.score_ledger.entries.find(
+                entry => entry.coordinate_id
+                    === 'shorts.stored.visual.keep'
+            );
+        assert(historicalVisualKeep && historicalVisualKeep.available);
+        const historicalKeepDecision = page.locator(
+            '#rtg-exppanel [data-best-keep-predictor]'
+        );
+        await historicalKeepDecision.waitFor();
+        assert.strictEqual(
+            await historicalKeepDecision.getAttribute(
+                'data-coordinate-id'
+            ),
+            historicalVisualKeep.coordinate_id,
+            'an old score must promote its exact canonical visual keep '
+                + 'coordinate instead of presenting the whole keep result '
+                + 'as unavailable'
+        );
+        assert(
+            (await historicalKeepDecision.innerText()).includes(
+                'Canonical visual keep embedding estimate'
+            )
+        );
+        const historicalRescoreCount =
+            await historicalKeepDecision.locator(
+                '[data-savedrescore]'
+            ).count();
+        assert.strictEqual(
+            historicalRescoreCount,
+            1,
+            'an owner must get one explicit current-model upgrade action: '
+                + JSON.stringify(await historicalKeepDecision.evaluate(
+                    node => ({ ...node.dataset })
+                )) + ' '
+                + (await historicalKeepDecision.innerText()).slice(0, 1200)
+        );
         await page.locator(
             '[data-historical-display-readonly]'
         ).waitFor();
@@ -2074,6 +2206,54 @@ window.fetch=function(url,options){
             0,
             'opening a persisted historical score must not re-embed'
         );
+        await historicalKeepDecision.locator(
+            '[data-savedrescore]'
+        ).click();
+        await page.waitForFunction(() => (
+            window.__fetchCounts['/api/raw/embed-montage'] === 1
+            && window.__fetchCounts['/api/raw/hook-enrich'] === 1
+        ));
+        const explicitRescoreEmbedCount = 1;
+        const upgradedKeepDecision = page.locator(
+            '#rtg-exppanel '
+                + '[data-best-keep-predictor]'
+                + '[data-coordinate-id="shorts.creator-adaptive-keep.v1"]'
+        );
+        await upgradedKeepDecision.waitFor();
+        assert(
+            (await upgradedKeepDecision.innerText()).includes(
+                `${historicalUpgradeScore.creator_adaptive_keep_forecast.raw.toFixed(1)}%`
+            ),
+            'the explicit upgrade must reopen the persisted current score '
+                + 'and promote its known-creator forecast'
+        );
+        const enrichSubmission = await page.evaluate(
+            () => window.__historicalEnrichSubmission
+        );
+        assert.strictEqual(
+            enrichSubmission.id,
+            historicalSavedHookId
+        );
+        assert.strictEqual(
+            enrichSubmission.expected_score_record_sha256,
+            historicalSavedHookRecord.score_record_sha256 || null,
+            'the historical upgrade must preserve its exact prior record '
+                + 'precondition'
+        );
+        assert.strictEqual(
+            enrichSubmission.score_ledger_sha256,
+            historicalUpgradeScore.score_ledger.ledger_sha256,
+            'the replacement write must carry the scorer ledger SHA'
+        );
+        assert.strictEqual(
+            enrichSubmission.text,
+            String(
+                historicalSavedHookRecord.transcript
+                || historicalSavedHookRecord.text
+                || ''
+            ),
+            'the upgrade must preserve the historical transcript'
+        );
         await page.locator('[data-savedbank="channels"]').click();
         assert.strictEqual(await page.getByPlaceholder('type a video idea — or leave blank and the model invents one…').count(), 1);
         assert.strictEqual(await page.getByPlaceholder("the hook you're writing — every variant stays grounded on this…").count(), 1);
@@ -2111,7 +2291,7 @@ window.fetch=function(url,options){
         await selectedCard.click();
         const videoPath = `/api/raw/saved-channel/${channelId}/video/vid00000002`;
         await page.waitForFunction(pathname => window.__fetchCounts[pathname] === 1, videoPath);
-        assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), 0, 'opening a saved scored Short must not invoke the embedding endpoint');
+        assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), explicitRescoreEmbedCount, 'opening a saved scored Short must not invoke the embedding endpoint');
         try {
             await page.locator(
                 '#rtg-exppanel [data-visual-keep-forecast]'
@@ -2172,6 +2352,20 @@ window.fetch=function(url,options){
         assert(storedCreatorForecastText.includes('43,360 prespecified time-ordered candidates'), 'the stored card must disclose the frozen schema-3 registry size');
         assert.strictEqual(await storedCreatorForecast.getAttribute('data-revision-status'), 'current', 'the creator forecast must prove its live model and scorer revisions match');
         assert(/future-upload research forecast/i.test(storedCreatorForecastText), 'an arbitrary historical open must not be mislabeled as a blind prequential replay');
+        const currentKeepDecision = page.locator(
+            '#rtg-exppanel [data-best-keep-predictor]'
+        );
+        assert.strictEqual(
+            await currentKeepDecision.getAttribute('data-coordinate-id'),
+            'shorts.creator-adaptive-keep.v1',
+            'the score card must promote the strongest available '
+                + 'known-creator keep forecast without minting a new space'
+        );
+        assert(
+            (await currentKeepDecision.innerText()).includes(
+                `${videos[1].creator_adaptive_keep_forecast.raw.toFixed(1)}%`
+            )
+        );
         assert.strictEqual(await storedCreatorForecast.locator('[data-expgo="visual:keep"]').count(), 1, 'the multimodal scalar must expose its visual source plane');
         assert.strictEqual(await storedCreatorForecast.locator('[data-expgo="together:keep"]').count(), 1, 'the multimodal scalar must expose its together source plane');
         const lineageText = await page.locator('#rtg-exppanel').innerText();
@@ -2539,7 +2733,7 @@ window.fetch=function(url,options){
             await page.locator('#rtg-exppanel').screenshot({ path: process.env.EXPERIMENT_LAB_CONTEXT_SCREENSHOT });
         }
         assert.strictEqual(await page.evaluate(pathname => window.__fetchCounts[pathname], videoPath), 1, 'reopening an older cached validation video must not fetch or recompute it again');
-        assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), 0, 'validation inspection must never recalculate a stored embedding');
+        assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), explicitRescoreEmbedCount, 'validation inspection must never recalculate a stored embedding');
         const lineageDetails = page.locator('[data-savedvalidation-canonical] details').filter({ hasText: 'show the complete raw-input' }).first();
         await lineageDetails.locator(':scope > summary').click();
         const validationLineageText = await lineageDetails.innerText();
@@ -2650,7 +2844,7 @@ window.fetch=function(url,options){
             '#fff',
             'the exact existing map point must be visibly selected'
         );
-        assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), 0, 'opening the normal embedding must reuse the stored vector and never re-embed');
+        assert.strictEqual(await page.evaluate(() => window.__fetchCounts['/api/raw/embed-montage'] || 0), explicitRescoreEmbedCount, 'opening the normal embedding must reuse the stored vector and never re-embed');
         assert.deepStrictEqual(await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth })), { width: 390, scroll: 390 });
         if (process.env.EXPERIMENT_LAB_SCREENSHOT) {
             fs.mkdirSync(path.dirname(process.env.EXPERIMENT_LAB_SCREENSHOT), { recursive: true });
