@@ -2,6 +2,7 @@
   "scripts": {
     "postinstall": "bash scripts/ensure-python-deps.sh",
     "start": "bash start.sh",
+    "test:world-layout": "node scripts/test-world-layout-store.js && node scripts/test-world-layout-client.js && node scripts/test-world-layout-browser.js",
     "test:quant-ledgers": "node scripts/test-quant-coordinate-governance.js && node scripts/test-shorts-swipe-map-retirement.js && node scripts/test-shorts-score-ledger.js && python3 scripts/test-shorts-score-ledger.py && node scripts/test-long-score-ledger.js && node scripts/test-longquant-ui-ledger-contract.js",
     "test:quant-provenance": "node scripts/test-visual-keep-forecast-contract.js && node scripts/test-creator-adaptive-keep-forecast-contract.js && node scripts/test-saved-hook-record-binding.js && node scripts/test-saved-hook-runtime.js && node scripts/test-saved-channel-record-artifact-binding.js && node scripts/test-long-saved-thumbnail-record.js && node scripts/test-long-hook-library-index.js && node scripts/test-raw-map-release-consistency.js && node scripts/test-quant-job-identity.js",
     "test:quant-runtime": "node scripts/test-embedding-display-contract.js && node scripts/test-experiment-lab-workspace.js && node scripts/test-quant-fetch-repair.js && node buildings/jarvis/score-provenance-ui.test.js && node scripts/test-shorts-grind-ui-contract.js",

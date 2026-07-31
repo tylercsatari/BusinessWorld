@@ -58,6 +58,11 @@
         #edit-btn { position: fixed; bottom: 20px; right: 20px; z-index: 100; padding: 14px 28px; background: linear-gradient(135deg, #3498db, #2980b9); color: white; border: 3px solid #1a5276; border-radius: 18px; font-family: 'Fredoka One', cursive; font-size: 16px; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.3); transition: all 0.2s; }
         #edit-btn:hover { transform: scale(1.05); }
         #edit-btn.active { background: linear-gradient(135deg, #e74c3c, #c0392b); border-color: #7b241c; }
+        #edit-btn:disabled { cursor: wait; opacity: 0.82; transform: none; }
+        #layout-save-status { position: fixed; bottom: 82px; right: 20px; z-index: 100; max-width: min(320px, calc(100vw - 40px)); padding: 8px 12px; border-radius: 9px; background: rgba(32,45,33,0.92); color: #fff; font-size: 12px; font-weight: 800; box-shadow: 0 3px 12px rgba(0,0,0,0.28); display: none; }
+        #layout-save-status.visible { display: block; }
+        #layout-save-status.error { background: rgba(153,38,28,0.96); }
+        #layout-save-status.saved { background: rgba(24,112,66,0.94); }
         #path-btn { position: fixed; bottom: 20px; right: 200px; z-index: 100; padding: 14px 28px; background: linear-gradient(135deg, #e67e22, #d35400); color: white; border: 3px solid #7f3f00; border-radius: 18px; font-family: 'Fredoka One', cursive; font-size: 16px; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.3); transition: all 0.2s; display: none; }
         #path-btn:hover { transform: scale(1.05); }
         #path-btn.active { background: linear-gradient(135deg, #27ae60, #1e8449); border-color: #145a32; }
@@ -97,6 +102,7 @@
             #level-text { font-size: 16px; }
             #money-bar-container { height: 20px; }
             #edit-btn { padding: 10px 20px; font-size: 14px; bottom: 30px; }
+            #layout-save-status { bottom: 82px; right: 12px; }
             #path-btn { padding: 10px 20px; font-size: 14px; bottom: 30px; }
             #hamburger-btn { width: 44px; height: 44px; }
             #todo-bell-btn { width: 36px; height: 36px; }
@@ -182,6 +188,7 @@
 </div>
 <button id="edit-btn" onclick="toggleEditMode()">Edit Mode</button>
 <button id="path-btn" onclick="togglePathMode()">Place Paths</button>
+<div id="layout-save-status" role="status" aria-live="polite"></div>
 <div id="edit-indicator">EDIT MODE - Drag to rearrange</div>
 <div id="tooltip"></div>
 <div id="bw-badge-library" class="building-count-badge"></div>
@@ -299,6 +306,7 @@ function hashString(str) {
 <script src="buildings/finance/finance-ui.js"></script>
 <script src="buildings/employee/employee-service.js"></script>
 <script src="buildings/employee/employee-ui.js"></script>
+<script src="world-layout-client.js?v=2"></script>
 
 <script type="importmap">
 { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
@@ -2461,12 +2469,46 @@ function getBuildingByName(n) {
 // (a separate script) calls window.getBuildingByName for the access poll + the
 // Employee Island spawn — expose it explicitly or those silently no-op.
 window.getBuildingByName = getBuildingByName;
-let _layoutReady = false;   // true only after the saved layout is APPLIED — saving before that would overwrite R2 with default positions
-// Latest write always wins — no cross-tab stale check, no banner. The only
-// guard is _layoutReady, so a tab that never loaded the real layout can't
-// clobber R2 with default positions.
-function saveLayout(useBeacon) {
-    if (!_layoutReady) return;
+let _layoutReady = false;
+let _layoutStatusTimer = null;
+const _editButton = document.getElementById('edit-btn');
+if (_editButton) _editButton.disabled = true;
+
+function showLayoutStatus(kind, message, detail) {
+    const element = document.getElementById('layout-save-status');
+    if (!element) return;
+    if (_layoutStatusTimer) clearTimeout(_layoutStatusTimer);
+    _layoutStatusTimer = null;
+    const hiddenKinds = new Set(['loading', 'loaded']);
+    if (hiddenKinds.has(kind)) {
+        element.className = '';
+        element.textContent = '';
+        return;
+    }
+    element.className = 'visible';
+    if (kind === 'saved') element.classList.add('saved');
+    if (kind === 'save-error' || kind === 'load-error' || kind === 'conflict') {
+        element.classList.add('error');
+    }
+    element.textContent = message || 'Layout status changed';
+    if (kind === 'conflict' && _editButton) _editButton.disabled = true;
+    if (kind === 'saved' || kind === 'conflict-resolved') {
+        _layoutStatusTimer = setTimeout(() => {
+            element.className = '';
+            element.textContent = '';
+        }, kind === 'saved' ? 1600 : 3200);
+    }
+    if (detail && detail.error) console.warn('Layout persistence:', detail.error);
+}
+
+const _layoutPersistence = window.WorldLayoutClient.createWorldLayoutClient({
+    fetchImpl: (input, options) => window.fetch(input, options),
+    storage: window.sessionStorage,
+    onStatus: event => showLayoutStatus(event.kind, event.message, event.detail),
+});
+window.__layoutPersistence = _layoutPersistence;
+
+function collectLayout() {
     const data = {
         buildings: {},
         paths: Array.from(pathTiles),
@@ -2481,30 +2523,31 @@ function saveLayout(useBeacon) {
         const b = getBuildingByName(n);
         if (b) data.buildings[n] = { x: b.position.x, z: b.position.z };
     });
-    const json = JSON.stringify(data);
-    // On page unload a normal fetch gets cancelled mid-flight — sendBeacon survives
-    if (useBeacon && navigator.sendBeacon) {
-        navigator.sendBeacon('/save-layout', new Blob([json], { type: 'application/json' }));
-        return;
+    return data;
+}
+
+function saveLayout(options) {
+    if (!_layoutReady) {
+        return Promise.resolve({ ok: false, error: 'Layout is still loading.' });
     }
-    // keepalive lets an in-flight save finish even if the page navigates away
-    fetch('/save-layout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: json, keepalive: true })
-        .catch(err => console.warn('Server save failed:', err));
+    const normalizedOptions = typeof options === 'boolean'
+        ? { keepalive: options }
+        : (options || {});
+    try {
+        return _layoutPersistence.save(collectLayout(), normalizedOptions);
+    } catch (error) {
+        showLayoutStatus('save-error', 'Layout is not saved yet', { error: error.message });
+        return Promise.resolve({ ok: false, error: error.message });
+    }
 }
 async function loadLayout() {
     try {
-        const ctrl = new AbortController();
-        const to = setTimeout(() => ctrl.abort(), 12000);   // don't let a slow server hang the boot
-        const res = await fetch('/load-layout', { signal: ctrl.signal });
-        clearTimeout(to);
-        if (res.ok) {
-            const data = await res.json();
-            if (data && typeof data === 'object') return data;   // {} = nothing saved yet (fresh start)
-        }
+        const result = await _layoutPersistence.load();
+        return result && result.layout || null;
     } catch (e) {
         console.warn('Server load failed:', e);
     }
-    return null;   // ERROR — layout server unreachable; saves stay disabled until a retry succeeds
+    return null;
 }
 function applySavedBuildings(saved) {
     if (!saved.buildings) return;
@@ -2516,24 +2559,27 @@ function applySavedBuildings(saved) {
         }
     });
 }
-// Load failed at startup: the session is read-only for layout (saving now
-// would clobber R2 with defaults). Keep retrying SILENTLY; apply + unlock on
-// success. No banner — the user never sees layout plumbing.
 function retryLayoutLoad() {
     const t = setInterval(async () => {
         const saved = await loadLayout();
         if (!saved) return;
         clearInterval(t);
         applySavedBuildings(saved);
-        if (saved.paths) saved.paths.forEach(k => { const [gx, gz] = k.split(',').map(Number); addPathTile(gx, gz); });
+        if (Array.isArray(saved.paths)) replacePathTiles(saved.paths);
         _layoutReady = true; window.__layoutReady = true;
+        _layoutPersistence.setReady();
+        if (_editButton) _editButton.disabled = false;
         if (window.__access && !window.__access.all && window.applyAccess) window.applyAccess(window.__access);
         console.log('Layout loaded after retry — saving enabled');
     }, 15000);
 }
-window.addEventListener('beforeunload', () => { saveLayout(true); });
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveLayout(true); });
-setInterval(saveLayout, 30000);
+window.addEventListener('pagehide', () => { saveLayout({ reason: 'pagehide', keepalive: true }); });
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+        saveLayout({ reason: 'hidden', keepalive: true });
+    }
+});
+setInterval(() => saveLayout({ reason: 'periodic' }), 30000);
 window.saveLayout = saveLayout;
 
 // --- Async Init: Load models, create buildings, start game ---
@@ -2574,15 +2620,15 @@ async function init() {
         // Restore building positions
         applySavedBuildings(saved);
         // Restore path tiles
-        if (saved.paths && saved.paths.length > 0) {
-            saved.paths.forEach(key => {
-                const [gx, gz] = key.split(',').map(Number);
-                addPathTile(gx, gz);
-            });
+        if (Array.isArray(saved.paths)) {
+            replacePathTiles(saved.paths);
         } else {
             initDefaultPaths();
         }
-        _layoutReady = true; window.__layoutReady = true;   // only now is it safe to save — we're based on the real layout
+        _layoutReady = true;
+        window.__layoutReady = true;
+        _layoutPersistence.setReady();
+        if (_editButton) _editButton.disabled = false;
     } else {
         initDefaultPaths();
         retryLayoutLoad();     // load FAILED: keep this session read-only for layout until it loads
@@ -2606,7 +2652,7 @@ async function init() {
     initTrees(saved && saved.trees);
 
     // Snap buildings to grid (for initial default positions)
-    if (!saved || !saved.buildings) {
+    if (!saved || !saved.buildings || Object.keys(saved.buildings).length === 0) {
         [workshop, storage, moneyPit, pen, employeeIsland, scienceCenter, jarvis, experimentLab, library, finance, house, casino, videoLab].forEach(b => {
             if (!b) return;
             b.position.x = snapToGrid(b.position.x);
@@ -3036,6 +3082,16 @@ function removePathTile(gx, gz) {
     pathTiles.delete(key);
     if (pathTileMeshes[key]) { pathTileGroup.remove(pathTileMeshes[key]); delete pathTileMeshes[key]; }
 }
+function replacePathTiles(keys) {
+    Array.from(pathTiles).forEach(key => {
+        const [gx, gz] = key.split(',').map(Number);
+        removePathTile(gx, gz);
+    });
+    (Array.isArray(keys) ? keys : []).forEach(key => {
+        const [gx, gz] = String(key).split(',').map(Number);
+        if (Number.isFinite(gx) && Number.isFinite(gz)) addPathTile(gx, gz);
+    });
+}
 function togglePathTile(gx, gz) {
     const key = gridKey(gx, gz);
     if (pathTiles.has(key)) removePathTile(gx, gz); else addPathTile(gx, gz);
@@ -3212,17 +3268,53 @@ function renderYouTubeSettings() {
         el.innerHTML = '<div style="color:#e74c3c;font-size:13px;">Could not check YouTube status</div>';
     });
 }
-window.toggleEditMode = function () {
-    editMode = !editMode;
-    if (!editMode) { pathPlaceMode = false; document.getElementById('path-btn').classList.remove('active'); }
+let _editModeSaving = false;
+function renderEditModeControls() {
     const b = document.getElementById('edit-btn'), ind = document.getElementById('edit-indicator');
-    b.classList.toggle('active');
+    b.classList.toggle('active', editMode);
     b.textContent = editMode ? 'Done Editing' : 'Edit Mode';
     ind.style.display = editMode ? 'block' : 'none';
     document.getElementById('path-btn').style.display = editMode ? 'block' : 'none';
     if (editMode) { showGrid(); showPenHandles(true); }
     else { hideGrid(); showPenHandles(false); }
-    if (!editMode) saveLayout();
+}
+window.toggleEditMode = async function () {
+    if (_editModeSaving) return;
+    if (!editMode) {
+        const state = _layoutPersistence.getState();
+        if (!_layoutReady || !state.ready) {
+            showLayoutStatus('load-error', 'Layout is still loading');
+            return;
+        }
+        if (state.conflict) {
+            showLayoutStatus('conflict', 'Reload to use the newer saved layout');
+            return;
+        }
+        editMode = true;
+        renderEditModeControls();
+        return;
+    }
+
+    _editModeSaving = true;
+    const button = document.getElementById('edit-btn');
+    button.disabled = true;
+    button.textContent = 'Saving...';
+    const result = await saveLayout({ reason: 'done-editing' });
+    _editModeSaving = false;
+    button.disabled = _layoutPersistence.getState().conflict;
+    if (!result.ok) {
+        button.textContent = 'Retry Save';
+        document.getElementById('edit-indicator').textContent = 'EDIT MODE - Layout not saved';
+        return;
+    }
+
+    editMode = false;
+    pathPlaceMode = false;
+    const pathButton = document.getElementById('path-btn');
+    pathButton.classList.remove('active');
+    pathButton.textContent = 'Place Paths';
+    document.getElementById('edit-indicator').textContent = 'EDIT MODE - Drag to rearrange';
+    renderEditModeControls();
 };
 window.togglePathMode = function () {
     pathPlaceMode = !pathPlaceMode;
@@ -3556,19 +3648,28 @@ renderer.domElement.addEventListener('mousemove', e => {
     tt.style.display = 'none';
     renderer.domElement.style.cursor = editMode && pathPlaceMode ? 'crosshair' : 'default';
 });
-renderer.domElement.addEventListener('mouseup', e => {
+function finishDesktopLayoutDrag(e) {
     if (e.button === 2) { isRMB = false; return; }
     if (dragPenHandle) {
         dragPenHandle = null;
         renderer.domElement.style.cursor = 'default';
-        saveLayout();
+        saveLayout({ reason: 'pen-resize' });
         return;
     }
     if (dragObject) {
         dragObject = null;
         renderer.domElement.style.cursor = 'default';
-        saveLayout();
+        saveLayout({ reason: 'building-drag' });
     }
+}
+renderer.domElement.addEventListener('mouseup', finishDesktopLayoutDrag);
+window.addEventListener('mouseup', finishDesktopLayoutDrag);
+window.addEventListener('blur', () => {
+    if (!dragPenHandle && !dragObject) return;
+    dragPenHandle = null;
+    dragObject = null;
+    renderer.domElement.style.cursor = 'default';
+    saveLayout({ reason: 'drag-interrupted', keepalive: true });
 });
 renderer.domElement.addEventListener('wheel', e => { cameraDistance = Math.max(10, Math.min(80, cameraDistance + e.deltaY * 0.05)); });
 renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
@@ -3742,7 +3843,7 @@ if (isTouchDevice && joystickZone) {
         // Release drag
         if (touchDragObject) {
             touchDragObject = null;
-            saveLayout();
+            saveLayout({ reason: 'touch-building-drag' });
         }
 
         if (e.touches.length === 0) { touchCamId = null; }
@@ -3760,7 +3861,7 @@ if (isTouchDevice && joystickZone) {
                     if (gp) {
                         const gx = Math.round(gp.x / GRID_SIZE), gz = Math.round(gp.z / GRID_SIZE);
                         togglePathTile(gx, gz);
-                        saveLayout();
+                        saveLayout({ reason: 'touch-path-change' });
                     }
                 } else if (!editMode) {
                     // Inspect building
@@ -3775,8 +3876,10 @@ if (isTouchDevice && joystickZone) {
     }, { passive: true });
 
     renderer.domElement.addEventListener('touchcancel', () => {
+        const changedLayout = !!touchDragObject;
         touchDragObject = null;
         touchCamId = null;
+        if (changedLayout) saveLayout({ reason: 'touch-drag-interrupted', keepalive: true });
     });
 }
 

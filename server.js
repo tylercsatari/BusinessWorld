@@ -101,6 +101,11 @@ const {
     createR2JsonCasMutator,
 } = require('./buildings/jarvis/r2-json-cas');
 const {
+    WorldLayoutConflictError,
+    createWorldLayoutStore,
+    layoutRevisionMetadata,
+} = require('./world-layout-store');
+const {
     canonicalJsonBytes,
     sha256Bytes,
 } = require('./buildings/jarvis/canonical-json-artifact');
@@ -6736,6 +6741,10 @@ function appendCasinoChat(entry) {
     casinoChatWrite = write.catch(error => { console.warn('Casino chat write failed:', error.message); });
     return write;
 }
+
+const worldLayoutStore = createWorldLayoutStore({
+    storage: r2JsonCasStorage,
+});
 
 const STATIC_STREAM_THRESHOLD = Math.max(
     1024 * 1024,
@@ -17629,73 +17638,56 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
     // Save layout
     // =========================================
     if (req.method === 'POST' && pathname === '/save-layout') {
-        let body = '';
-        req.on('data', chunk => body += chunk);
-        req.on('end', async () => {
-            try {
-                const incoming = JSON.parse(body);
-                if (!cloud.isR2Ready()) {
-                    res.writeHead(503, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: 'R2 not available' }));
-                    return;
-                }
-
-                // Load existing layout from R2 for merge
-                let existing = {};
-                try {
-                    const r2Data = await cloud.downloadFromR2('layout/layout.json');
-                    if (r2Data) existing = JSON.parse(r2Data.toString());
-                } catch (_) { /* no existing layout, start fresh */ }
-
-                // Latest write always wins — no stale-writer rejection. The
-                // merge below still preserves a position when a client sends
-                // 0,0 (building not yet created on that client).
-                const BUILDING_NAMES = ['Workshop','Storage','Money Pit','The Pen','Employee Island','Science Center','Jarvis','Experiment Lab','Library','Finance','The House','Movie Theatre','Gym','Chocolate Bar','Casino','Video Lab'];
-                const MISSING_DEFAULTS = {
-                    'Chocolate Bar': { x: 42, z: 12 },
-                    'Gym': { x: 15, z: 30 },
-                    'Casino': { x: 30, z: -18 },
-                };
-
-                // Merge buildings: keep R2 position when incoming is 0,0.
-                // Union of names so a building added in the client never gets
-                // silently dropped by a stale server-side list.
-                const existingBuildings = existing.buildings || {};
-                const incomingBuildings = incoming.buildings || {};
-                const merged = {};
-
-                const allNames = new Set([...BUILDING_NAMES, ...Object.keys(incomingBuildings), ...Object.keys(existingBuildings)]);
-                for (const name of allNames) {
-                    const inc = incomingBuildings[name];
-                    const ext = existingBuildings[name];
-
-                    if (inc && !(inc.x === 0 && inc.z === 0)) {
-                        // Incoming has a real (non-origin) position — use it
-                        merged[name] = inc;
-                    } else if (ext) {
-                        // Incoming is missing or at 0,0 — keep existing R2 value
-                        merged[name] = ext;
-                    } else if (MISSING_DEFAULTS[name]) {
-                        // Missing from both — use hardcoded default
-                        merged[name] = { ...MISSING_DEFAULTS[name] };
-                    }
-                    // else: not in either source and no default — omit
-                }
-
-                // Build final layout: non-building fields from incoming, merged buildings,
-                // stamped so the next save can prove it's based on this one
-                const finalLayout = { ...incoming, buildings: merged, _savedAt: new Date().toISOString(), _writer: incoming._writer || '' };
-                delete finalLayout._basedOn;
-
-                await cloud.uploadToR2('layout/layout.json', Buffer.from(JSON.stringify(finalLayout)), 'application/json');
-                console.log('Layout saved to R2 (merged)');
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ ok: true, savedAt: finalLayout._savedAt }));
-            } catch (e) {
-                res.writeHead(400);
-                res.end('Invalid JSON');
+        if (!cloud.isR2Ready()) {
+            res.writeHead(503, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: 'Layout storage is temporarily unavailable.',
+                code: 'world_layout_storage_unavailable',
+            }));
+            return;
+        }
+        try {
+            const command = await readBody(req, 2 * 1024 * 1024);
+            const saved = await worldLayoutStore.save(command);
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                ok: true,
+                ...layoutRevisionMetadata(saved),
+            }));
+        } catch (error) {
+            if (error instanceof WorldLayoutConflictError) {
+                res.writeHead(409, {
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'no-store',
+                });
+                res.end(JSON.stringify({
+                    error: error.message,
+                    code: error.code,
+                    current: error.current,
+                }));
+                return;
             }
-        });
+            const statusCode = error instanceof HttpRequestError
+                ? error.statusCode
+                : error instanceof TypeError
+                    ? 400
+                    : 503;
+            console.warn('World layout save failed:', error.message);
+            res.writeHead(statusCode, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: error.message || 'World layout could not be saved.',
+                code: error.code || 'world_layout_save_failed',
+            }));
+        }
         return;
     }
 
@@ -18100,11 +18092,12 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
             return;
         }
         try {
-            const buf = await cloud.downloadFromR2('layout/layout.json');
-            // null = key doesn't exist yet (fresh start) — that's a valid empty
-            // layout, NOT an error; clients may save. 503 only on real R2 errors.
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(buf ? buf.toString('utf8') : '{}');
+            const layout = await worldLayoutStore.read();
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify(layout));
             return;
         } catch (e) {
             console.warn('R2 layout load failed:', e.message);
