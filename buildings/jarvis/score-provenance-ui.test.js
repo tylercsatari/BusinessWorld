@@ -224,6 +224,38 @@ assert.equal(
     ),
     null
 );
+const shortsArchivedDocument = structuredClone(shortsRecord);
+shortsArchivedDocument.score_ledger
+    .feature_contract_document_sha256 = '4'.repeat(64);
+delete shortsArchivedDocument.score_ledger.ledger_sha256;
+shortsArchivedDocument.score_ledger.ledger_sha256 =
+    shortsLedger.sha256Canonical(shortsArchivedDocument.score_ledger);
+shortsArchivedDocument.score_ledger_validation = {
+    valid: true,
+    ledger_sha256:
+        shortsArchivedDocument.score_ledger.ledger_sha256,
+    feature_contract_document_current: false,
+    warnings: [
+        'The score is bound to an archived feature-contract document revision.',
+    ],
+};
+const archivedDocumentState = shortsApi.shortsLedgerState(
+    shortsArchivedDocument
+);
+assert.equal(archivedDocumentState.valid, true);
+assert.equal(
+    archivedDocumentState.featureContractDocumentCurrent,
+    false
+);
+assert.equal(
+    shortsApi.shortsRegisteredCoordinate(
+        shortsArchivedDocument,
+        'shorts.stored.visual.keep'
+    ).value,
+    shortsRecord.score_ledger.values_by_id[
+        'shorts.stored.visual.keep'
+    ]
+);
 assert.equal(
     shortsApi.shortsGrindVerifiedScore({
         score_verified: true,

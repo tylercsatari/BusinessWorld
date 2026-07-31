@@ -1044,13 +1044,16 @@ const JarvisRetention = (function () {
                 !== SHORTS_FEATURE_IDENTITY_SCHEMA_VERSION
             || ledger.feature_contract_sha256
                 !== SHORTS_FEATURE_CONTRACT_SHA256
-            || ledger.feature_contract_document_sha256
-                !== SHORTS_FEATURE_CONTRACT_DOCUMENT_SHA256
             || ledger.coordinate_governance_version
                 !== SHORTS_COORDINATE_GOVERNANCE_VERSION
             || ledger.coordinate_governance_sha256
                 !== SHORTS_COORDINATE_GOVERNANCE_SHA256
         ) errors.push('ledger contract identity');
+        if (!SHORTS_LEDGER_SHA256.test(String(
+            ledger.feature_contract_document_sha256 || ''
+        ))) {
+            errors.push('feature contract document hash');
+        }
         const expectedIds = SHORTS_LEDGER_DEFINITIONS.map(
             definition => definition.coordinateId
         );
@@ -1194,6 +1197,11 @@ const JarvisRetention = (function () {
             present: true,
             valid: errors.length === 0,
             ledgerSha256: errors.length === 0 ? ledgerSha256 : null,
+            featureContractDocumentSha256:
+                ledger.feature_contract_document_sha256 || null,
+            featureContractDocumentCurrent:
+                ledger.feature_contract_document_sha256
+                    === SHORTS_FEATURE_CONTRACT_DOCUMENT_SHA256,
             entriesById,
             errors: [...new Set(errors)],
         };
@@ -1426,10 +1434,8 @@ const JarvisRetention = (function () {
         ) errors.push('historical evidence boundary');
         if (
             !strict.present
-            || strict.valid
-            || strict.errors.length !== 1
-            || strict.errors[0] !== 'ledger contract identity'
-        ) errors.push('historical ledger mismatch boundary');
+            || !strict.valid
+        ) errors.push('historical ledger integrity');
         if (
             !ledger
             || ledger.ledger_version !== SHORTS_LEDGER_VERSION
@@ -1539,6 +1545,15 @@ const JarvisRetention = (function () {
     }
     function shortsDisplayLedgerState(up) {
         const strict = shortsLedgerState(up);
+        const explicitlyHistorical = !!(
+            up
+            && up.evidence_state === 'legacy_unbound_evidence'
+            && up.historical_display
+            && up.score_materialization
+        );
+        if (explicitlyHistorical) {
+            return shortsHistoricalDisplayLedgerState(up, strict);
+        }
         if (strict.valid) {
             return {
                 ...strict,
