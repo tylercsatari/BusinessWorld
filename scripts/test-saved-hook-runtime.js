@@ -298,6 +298,8 @@ function runtimeFor(cloud) {
             displayContract.compactSavedHookBindingPayload,
         compactSavedHookRecord:
             displayContract.compactSavedHookRecord,
+        historicalSavedHookDisplay:
+            displayContract.historicalSavedHookDisplay,
         savedHookScoreRecordSha256:
             displayContract.savedHookScoreRecordSha256,
         scoreDomainForRecord:
@@ -306,6 +308,8 @@ function runtimeFor(cloud) {
             displayContract.validateCompactSavedHookRecord,
         validateCompactSavedHookSource:
             displayContract.validateCompactSavedHookSource,
+        validateHistoricalSavedHookDisplay:
+            displayContract.validateHistoricalSavedHookDisplay,
         exactSha256(value) {
             return /^[a-f0-9]{64}$/i.test(String(value || ''));
         },
@@ -885,6 +889,108 @@ async function main() {
             assert.strictEqual(
                 reply.json.score_record_validation.valid,
                 null
+            );
+            assert.strictEqual(cloud.writeCount, 0);
+        }
+    );
+
+    await test(
+        'prior-document historical ledger opens read-only with HTTP 200',
+        async () => {
+            const id = 'hkhistoricalledger';
+            const ledger = fixtureLedger();
+            ledger.entries.forEach(entry => {
+                entry.provenance = {
+                    ...(entry.provenance || {}),
+                    status: entry.available
+                        ? 'historical_materialization'
+                        : 'unavailable',
+                };
+            });
+            ledger.feature_contract_document_sha256 =
+                '4'.repeat(64);
+            delete ledger.ledger_sha256;
+            ledger.ledger_sha256 =
+                shortsScoreLedger.sha256Canonical(ledger);
+            assert.deepStrictEqual(
+                shortsScoreLedger.validateScoreLedger(ledger).errors,
+                [
+                    'score ledger feature contract document hash does not match',
+                ]
+            );
+            const record = {
+                id,
+                savedAt: 1700000000000,
+                kind: 'scored',
+                score_domain: 'shorts',
+                title: 'Historical materialized ledger',
+                text: 'Exact historical scalar display',
+                hasMontage: false,
+                score_ledger: ledger,
+                score_record_sha256: '7'.repeat(64),
+                score_materialization: {
+                    schema:
+                        'saved-hook-historical-materialization-v1',
+                    role:
+                        'historical_evidence_not_live_rescore',
+                    ledger_sha256: ledger.ledger_sha256,
+                    source_record_sha256: '5'.repeat(64),
+                    source_fields: ['features', 'steer'],
+                    claim_boundary:
+                        'Historical values only; not a current prediction.',
+                },
+            };
+            const legacyRow =
+                savedHookRuntimeIndex.legacyRow(record);
+            assert(
+                legacyRow.historical_display,
+                'historical fixture must materialize a bound display'
+            );
+            const cloud = new MemoryR2({
+                [`raw/saved-hooks/${id}.json`]:
+                    JSON.stringify(record),
+                'raw/saved-hooks/index.json': JSON.stringify(
+                    canonicalIndex([], [legacyRow])
+                ),
+            });
+            const runtime = runtimeFor(cloud);
+            cloud.resetOperations();
+            const reply = await dispatch(
+                runtime,
+                'GET',
+                `/api/raw/saved-hook/${id}`
+            );
+            assert.strictEqual(reply.status, 200, reply.raw);
+            assert.strictEqual(
+                reply.json.evidence_state,
+                'legacy_unbound_evidence'
+            );
+            assert.strictEqual(
+                reply.json.historical_display_only,
+                true
+            );
+            assert.strictEqual(
+                reply.json.score_display_eligible,
+                true
+            );
+            assert.strictEqual(
+                reply.json.predictor_eligible,
+                false
+            );
+            assert.strictEqual(
+                reply.json.score_ledger_validation.valid,
+                false
+            );
+            assert.strictEqual(
+                reply.json.score_record_validation.valid,
+                false,
+                'a stale legacy record binding must remain disclosed '
+                    + 'without blocking the independently hash-bound '
+                    + 'display-only ledger'
+            );
+            assert.strictEqual(
+                reply.json.historical_display.display_sha256,
+                legacyRow.historical_display.display_sha256
             );
             assert.strictEqual(cloud.writeCount, 0);
         }

@@ -23,7 +23,7 @@ const JarvisRetention = (function () {
     let PROMISE_UI = null, OPERATIONS_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationShow: 60, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedLedgerPlotMode: 'oof', savedVisualKeepProtocol: 'videoHoldout', savedVisualKeepAccount: 'all', savedCreatorKeepAccount: 'all' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationShow: 60, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedLedgerPlotMode: 'oof', savedVisualKeepProtocol: 'videoHoldout', savedVisualKeepAccount: 'all', savedCreatorKeepAccount: 'all' };
     st.savedValidationFeature = null;
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
@@ -624,7 +624,21 @@ const JarvisRetention = (function () {
     // aliases and visualization geometry are never consulted for scalar values.
     const STEER_KEY = { views: 'views', rawviews: 'views', realviews: 'realviews', outlier: 'outlier', hi10m: 'gt10M', keep: 'keep', ret5: 'ret5' };
     const SHORTS_LEDGER_SHA256 = /^[a-f0-9]{64}$/;
+    const SHORTS_HISTORICAL_DISPLAY_SCHEMA =
+        'saved-hook-historical-display-v1';
+    const SHORTS_HISTORICAL_MATERIALIZATION_SCHEMA =
+        'saved-hook-historical-materialization-v1';
+    const SHORTS_HISTORICAL_TARGETS = Object.freeze([
+        'keep',
+        'ret5',
+        'views',
+        'realviews',
+        'gt10M',
+        'outlier',
+    ]);
     let SHORTS_LEDGER_STATE_CACHE = new WeakMap();
+    let SHORTS_HISTORICAL_SUMMARY_STATE_CACHE = new WeakMap();
+    let SHORTS_HISTORICAL_DISPLAY_STATE_CACHE = new WeakMap();
     let SHORTS_LEDGER_RUNTIME = (
         typeof globalThis !== 'undefined'
         && globalThis.__SHORTS_SCORE_LEDGER_RUNTIME__
@@ -731,6 +745,8 @@ const JarvisRetention = (function () {
             )
         );
         SHORTS_LEDGER_STATE_CACHE = new WeakMap();
+        SHORTS_HISTORICAL_SUMMARY_STATE_CACHE = new WeakMap();
+        SHORTS_HISTORICAL_DISPLAY_STATE_CACHE = new WeakMap();
         return true;
     }
     function ensureShortsLedgerRuntime() {
@@ -1182,6 +1198,349 @@ const JarvisRetention = (function () {
             ) : null,
         };
     }
+    function shortsExactObjectKeys(value, keys) {
+        return !!value
+            && typeof value === 'object'
+            && !Array.isArray(value)
+            && shortsCanonicalJson(Object.keys(value).sort())
+                === shortsCanonicalJson(keys.slice().sort());
+    }
+    function shortsHistoricalDisplayBindingPayload(display) {
+        return {
+            schema: SHORTS_HISTORICAL_DISPLAY_SCHEMA,
+            version: 1,
+            record_id: display && display.record_id || null,
+            score_domain: display && display.score_domain || null,
+            score_ledger_sha256:
+                display && display.score_ledger_sha256 || null,
+            score_revision_fingerprint:
+                display && display.score_revision_fingerprint || null,
+            m_identity: display && display.m_identity || null,
+            selection_policy:
+                display && display.selection_policy || null,
+        };
+    }
+    function shortsHistoricalIdentityValid(
+        identity,
+        target,
+        ledgerSha256
+    ) {
+        if (identity == null) return true;
+        if (
+            !identity
+            || typeof identity !== 'object'
+            || Array.isArray(identity)
+            || Object.prototype.hasOwnProperty.call(identity, 'est')
+            || Object.prototype.hasOwnProperty.call(identity, 'pctile')
+            || !['visual', 'text', 'together'].includes(identity.channel)
+            || identity.target !== target
+            || identity.value == null
+            || !isFinite(Number(identity.value))
+            || typeof identity.valueUnit !== 'string'
+            || !identity.valueUnit
+            || (
+                identity.percentile100 != null
+                && (
+                    !isFinite(Number(identity.percentile100))
+                    || Number(identity.percentile100) < 0
+                    || Number(identity.percentile100) > 100
+                )
+            )
+            || identity.percentileUnit !== SHORTS_PERCENTILE_UNIT
+            || typeof identity.modality !== 'string'
+            || typeof identity.input !== 'string'
+            || !identity.input
+            || identity.ledgerSha256 !== ledgerSha256
+        ) return false;
+        return identity.coordinateId
+            === `shorts.stored.${identity.channel}.${target}`;
+    }
+    function shortsHistoricalDisplaySummaryState(record) {
+        if (record && typeof record === 'object') {
+            const cached =
+                SHORTS_HISTORICAL_SUMMARY_STATE_CACHE.get(record);
+            if (cached) return cached;
+        }
+        const display = record && record.historical_display;
+        const errors = [];
+        const recordId = String(
+            record && (record.id || record.savedId) || ''
+        );
+        if (
+            !shortsExactObjectKeys(display, [
+                'schema',
+                'version',
+                'record_id',
+                'score_domain',
+                'score_ledger_sha256',
+                'score_revision_fingerprint',
+                'm_identity',
+                'selection_policy',
+                'display_sha256',
+            ])
+            || display.schema !== SHORTS_HISTORICAL_DISPLAY_SCHEMA
+            || display.version !== 1
+            || !recordId
+            || display.record_id !== recordId
+            || display.score_domain !== 'shorts'
+            || (
+                record.score_domain
+                && record.score_domain !== 'shorts'
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(display.score_ledger_sha256 || '')
+            )
+            || (
+                display.score_revision_fingerprint != null
+                && !SHORTS_LEDGER_SHA256.test(
+                    String(
+                        display.score_revision_fingerprint
+                    )
+                )
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(display.display_sha256 || '')
+            )
+        ) errors.push('historical display identity');
+        if (
+            !shortsExactObjectKeys(
+                display && display.m_identity,
+                SHORTS_HISTORICAL_TARGETS
+            )
+            || !Object.entries(
+                display && display.m_identity || {}
+            ).every(([target, identity]) => (
+                SHORTS_HISTORICAL_TARGETS.includes(target)
+                && shortsHistoricalIdentityValid(
+                    identity,
+                    target,
+                    display.score_ledger_sha256
+                )
+            ))
+            || !Object.values(
+                display && display.m_identity || {}
+            ).some(Boolean)
+        ) errors.push('historical display coordinate identities');
+        const policy = display && display.selection_policy;
+        if (
+            !shortsExactObjectKeys(policy, [
+                'id',
+                'preference',
+                'role',
+                'source_ledger_sha256',
+                'meaning',
+            ])
+            || policy.id
+                !== 'policy.shorts.display-preference.v1'
+            || !Array.isArray(policy.preference)
+            || policy.preference.some(
+                channel => ![
+                    'visual',
+                    'text',
+                    'together',
+                ].includes(channel)
+            )
+            || new Set(policy.preference).size
+                !== policy.preference.length
+            || policy.role
+                !== 'historical_display_only_hash_bound_materialized_view'
+            || policy.source_ledger_sha256
+                !== display.score_ledger_sha256
+            || typeof policy.meaning !== 'string'
+            || !policy.meaning
+        ) errors.push('historical display selection policy');
+        if (
+            display
+            && display.display_sha256 !== shortsSha256(
+                shortsCanonicalJson(
+                    shortsHistoricalDisplayBindingPayload(display)
+                )
+            )
+        ) errors.push('historical display hash binding');
+        const state = {
+            valid: errors.length === 0,
+            display: errors.length === 0 ? display : null,
+            errors: [...new Set(errors)],
+        };
+        if (record && typeof record === 'object') {
+            SHORTS_HISTORICAL_SUMMARY_STATE_CACHE.set(
+                record,
+                state
+            );
+        }
+        return state;
+    }
+    function shortsHistoricalDisplayLedgerState(
+        up,
+        strictState
+    ) {
+        if (!up || typeof up !== 'object') {
+            return {
+                present: false,
+                valid: false,
+                historical: true,
+                ledgerSha256: null,
+                entriesById: new Map(),
+                errors: ['historical display record is missing'],
+            };
+        }
+        const cached =
+            SHORTS_HISTORICAL_DISPLAY_STATE_CACHE.get(up);
+        if (cached) return cached;
+        const strict = strictState || shortsLedgerState(up);
+        const ledger = up.score_ledger;
+        const displayState =
+            shortsHistoricalDisplaySummaryState(up);
+        const materialization = up.score_materialization;
+        const entries = ledger && Array.isArray(ledger.entries)
+            ? ledger.entries
+            : [];
+        const errors = [].concat(displayState.errors);
+        if (
+            up.evidence_state !== 'legacy_unbound_evidence'
+            || up.predictor_eligible === true
+        ) errors.push('historical evidence boundary');
+        if (
+            !strict.present
+            || strict.valid
+            || strict.errors.length !== 1
+            || strict.errors[0] !== 'ledger contract identity'
+        ) errors.push('historical ledger mismatch boundary');
+        if (
+            !ledger
+            || ledger.ledger_version !== SHORTS_LEDGER_VERSION
+            || ledger.feature_contract_identity_schema_version
+                !== SHORTS_FEATURE_IDENTITY_SCHEMA_VERSION
+            || ledger.feature_contract_sha256
+                !== SHORTS_FEATURE_CONTRACT_SHA256
+            || !SHORTS_LEDGER_SHA256.test(String(
+                ledger.feature_contract_document_sha256 || ''
+            ))
+            || ledger.feature_contract_document_sha256
+                === SHORTS_FEATURE_CONTRACT_DOCUMENT_SHA256
+            || ledger.coordinate_governance_version
+                !== SHORTS_COORDINATE_GOVERNANCE_VERSION
+            || ledger.coordinate_governance_sha256
+                !== SHORTS_COORDINATE_GOVERNANCE_SHA256
+        ) errors.push('historical ledger contract identity');
+        if (
+            !materialization
+            || materialization.schema
+                !== SHORTS_HISTORICAL_MATERIALIZATION_SCHEMA
+            || materialization.role
+                !== 'historical_evidence_not_live_rescore'
+            || materialization.ledger_sha256
+                !== (ledger && ledger.ledger_sha256)
+            || !SHORTS_LEDGER_SHA256.test(String(
+                materialization.source_record_sha256 || ''
+            ))
+            || !Array.isArray(materialization.source_fields)
+            || materialization.source_fields.length === 0
+            || materialization.source_fields.some(
+                field => !['features', 'steer'].includes(field)
+            )
+            || typeof materialization.claim_boundary !== 'string'
+            || !materialization.claim_boundary
+        ) errors.push('historical materialization boundary');
+        if (
+            !displayState.valid
+            || displayState.display.score_ledger_sha256
+                !== ledger.ledger_sha256
+        ) errors.push('historical display ledger binding');
+        if (
+            entries.length === 0
+            || entries.some(entry => {
+                const status = entry
+                    && entry.provenance
+                    && entry.provenance.status;
+                return !entry || (
+                    entry.available === true
+                        ? status !== 'historical_materialization'
+                        : !['unavailable', 'conflict'].includes(
+                            status
+                        )
+                );
+            })
+        ) errors.push('historical coordinate provenance');
+        if (displayState.valid) {
+            for (const [target, identity] of Object.entries(
+                displayState.display.m_identity
+            )) {
+                if (!identity) continue;
+                const entry = strict.entriesById.get(
+                    identity.coordinateId
+                );
+                if (
+                    !entry
+                    || entry.available !== true
+                    || entry.group !== identity.channel
+                    || entry.target !== target
+                    || Number(entry.value) !== Number(identity.value)
+                    || (
+                        entry.percentile == null
+                            ? identity.percentile100 != null
+                            : Number(entry.percentile)
+                                !== Number(identity.percentile100)
+                    )
+                    || entry.unit !== identity.valueUnit
+                    || (
+                        entry.display_unit || entry.unit
+                    ) !== (
+                        identity.displayUnit
+                        || identity.valueUnit
+                    )
+                ) {
+                    errors.push(
+                        `${identity.coordinateId} historical display parity`
+                    );
+                }
+            }
+        }
+        const state = {
+            present: !!ledger,
+            valid: errors.length === 0,
+            historical: true,
+            displayOnly: true,
+            ledgerSha256:
+                errors.length === 0 ? ledger.ledger_sha256 : null,
+            displaySha256:
+                errors.length === 0
+                    ? displayState.display.display_sha256
+                    : null,
+            entriesById: strict.entriesById,
+            errors: [...new Set(errors)],
+        };
+        SHORTS_HISTORICAL_DISPLAY_STATE_CACHE.set(up, state);
+        return state;
+    }
+    function shortsDisplayLedgerState(up) {
+        const strict = shortsLedgerState(up);
+        if (strict.valid) {
+            return {
+                ...strict,
+                historical: false,
+                displayOnly: false,
+            };
+        }
+        const historical = shortsHistoricalDisplayLedgerState(
+            up,
+            strict
+        );
+        return historical.valid ? historical : strict;
+    }
+    if (typeof window !== 'undefined') {
+        window.BusinessWorldShortsScoreDisplayAudit = record => {
+            const state = shortsDisplayLedgerState(record);
+            return {
+                present: state.present,
+                valid: state.valid,
+                historical: state.historical === true,
+                displayOnly: state.displayOnly === true,
+                ledgerSha256: state.ledgerSha256,
+                errors: (state.errors || []).slice(),
+            };
+        };
+    }
     function shortsInputDescriptor(up, channel) {
         const manifest = up && up.input_manifest;
         const value = manifest && manifest.channels
@@ -1225,13 +1584,13 @@ const JarvisRetention = (function () {
         };
     }
     function scoreLedgerEntry(up, coordinateId) {
-        const state = shortsLedgerState(up);
+        const state = shortsDisplayLedgerState(up);
         return state.valid
             ? state.entriesById.get(coordinateId) || null
             : null;
     }
     function shortsRegisteredCoordinate(up, coordinateId) {
-        const state = shortsLedgerState(up);
+        const state = shortsDisplayLedgerState(up);
         const entry = state.valid
             ? state.entriesById.get(coordinateId)
             : null;
@@ -1261,6 +1620,13 @@ const JarvisRetention = (function () {
             kind: entry.provenance && entry.provenance.kind || entry.source,
             sourceKey: entry.source_key || entry.feature_key,
             provenance: entry.provenance || null,
+            authority: state.historical
+                ? 'historical-display-ledger-coordinate'
+                : 'canonical-ledger-coordinate',
+            origin: state.historical
+                ? 'historical-materialized-ledger'
+                : 'canonical-score-ledger',
+            displayOnly: state.historical === true,
         });
     }
     function steerOf(up, mod, tn) {
@@ -1940,7 +2306,7 @@ const JarvisRetention = (function () {
             || 'canonical-ledger-coordinate';
         const origin = identity.origin || 'canonical-score-ledger';
         const authorityLabel = `${identity.coordinateId}; value ${identity.value} ${identity.valueUnit}; percentile ${identity.percentile100 == null ? 'unavailable' : identity.percentile100} ${identity.percentileUnit || SHORTS_PERCENTILE_UNIT}; target ${identity.target}; modality ${identity.modality}; input ${identity.input}; authority ${authority}; ledger lineage ${identity.ledgerSha256}${identity.scoreRecordSha256 ? `; score record ${identity.scoreRecordSha256}` : ''}${identity.validationRowLedgerSha256 ? `; validation row ledger ${identity.validationRowLedgerSha256}` : ''}`;
-        return `${attr('aria-label', authorityLabel)}${attr('data-embedding-id', embeddingId)}${attr('data-embedding-authority', authority)}${attr('data-coordinate-id', identity.coordinateId)}${attr('data-coordinate-ledger-sha256', identity.ledgerSha256)}${attr('data-coordinate-value', identity.value)}${attr('data-coordinate-value-unit', identity.valueUnit)}${attr('data-coordinate-display-unit', identity.displayUnit || identity.valueUnit)}${attr('data-coordinate-percentile-0-100', identity.percentile100)}${attr('data-coordinate-percentile-unit', identity.percentileUnit || SHORTS_PERCENTILE_UNIT)}${attr('data-coordinate-target', identity.target)}${attr('data-coordinate-modality', identity.modality)}${attr('data-coordinate-input', identity.input)}${attr('data-score-record-sha256', identity.scoreRecordSha256)}${attr('data-base-ledger-sha256', identity.baseLedgerSha256)}${attr('data-validation-row-ledger-sha256', identity.validationRowLedgerSha256)}${attr('data-embedding-asset', rawAsset)}${attr('data-embedding-domain', 'shorts_raw')}${attr('data-embedding-origin', origin)}${attr('data-embedding-channel', identity.channel)}${attr('data-embedding-target', identity.target)}${attr('data-embedding-source-key', sourceKey)}${attr('data-embedding-est', identity.value)}${attr('data-embedding-percentile', identity.percentile100)}${attr('data-embedding-kind', identity.kind)}${attr('data-embedding-model', identity.embeddingModel || identity.embedding_model)}${attr('data-embedding-scorer', identity.scorer)}`;
+        return `${attr('aria-label', authorityLabel)}${attr('data-embedding-id', embeddingId)}${attr('data-embedding-authority', authority)}${attr('data-coordinate-id', identity.coordinateId)}${attr('data-coordinate-ledger-sha256', identity.ledgerSha256)}${attr('data-coordinate-value', identity.value)}${attr('data-coordinate-value-unit', identity.valueUnit)}${attr('data-coordinate-display-unit', identity.displayUnit || identity.valueUnit)}${attr('data-coordinate-percentile-0-100', identity.percentile100)}${attr('data-coordinate-percentile-unit', identity.percentileUnit || SHORTS_PERCENTILE_UNIT)}${attr('data-coordinate-target', identity.target)}${attr('data-coordinate-modality', identity.modality)}${attr('data-coordinate-input', identity.input)}${attr('data-coordinate-display-only', identity.displayOnly === true ? 'true' : null)}${attr('data-score-record-sha256', identity.scoreRecordSha256)}${attr('data-base-ledger-sha256', identity.baseLedgerSha256)}${attr('data-validation-row-ledger-sha256', identity.validationRowLedgerSha256)}${attr('data-embedding-asset', rawAsset)}${attr('data-embedding-domain', 'shorts_raw')}${attr('data-embedding-origin', origin)}${attr('data-embedding-channel', identity.channel)}${attr('data-embedding-target', identity.target)}${attr('data-embedding-source-key', sourceKey)}${attr('data-embedding-est', identity.value)}${attr('data-embedding-percentile', identity.percentile100)}${attr('data-embedding-kind', identity.kind)}${attr('data-embedding-model', identity.embeddingModel || identity.embedding_model)}${attr('data-embedding-scorer', identity.scorer)}`;
     }
     function embeddingDataAttrs(up, mod, target, origin, assetId, metricOverride) {
         const metric = metricOverride || steerOf(up, mod, target);
@@ -1960,6 +2326,9 @@ const JarvisRetention = (function () {
             percentileUnit: metric.percentileUnit,
             ledgerSha256: metric.ledgerSha256,
             kind: metric.kind,
+            authority: metric.authority,
+            origin: metric.origin || origin,
+            displayOnly: metric.displayOnly,
             embeddingModel: manifest.embedding_model,
             scorer: manifest.scorer,
         }, assetId || rawEmbeddingAssetId(up));
@@ -2002,21 +2371,28 @@ const JarvisRetention = (function () {
         const derived = coordinate.authority === 'record-bound-derived-coordinate';
         const validationRow = coordinate.authority
             === 'validation-row-ledger-coordinate';
+        const historical = coordinate.authority
+            === 'historical-display-ledger-coordinate';
         const coordinateLabel = derived
             ? 'Derived score coordinate'
             : validationRow
                 ? 'Validation row coordinate'
+                : historical
+                    ? 'Historical display coordinate'
                 : 'Ledger coordinate';
         const ledgerLabel = derived
             ? 'Base 21-coordinate ledger SHA-256'
             : validationRow
                 ? 'Validation row ledger SHA-256'
+                : historical
+                    ? 'Historical persisted ledger SHA-256'
                 : 'Ledger SHA-256';
         return `<div data-coordinate-trace="${esc(coordinateId)}"${embeddingIdentityAttrs(coordinate, rawEmbeddingAssetId(up))} style="border-top:1px solid ${C.border};margin-top:7px;padding-top:6px;font-size:7.7px;color:${C.faint};line-height:1.5">
           <div><b style="color:${C.text}">${coordinateLabel}:</b> <code style="color:${C.cyan};user-select:all">${esc(coordinateId)}</code></div>
           <div><b style="color:${C.text}">Displayed value:</b> ${esc(String(Math.round(raw * 10000) / 10000))} <code>${esc(coordinate.valueUnit)}</code>${percentile == null || !isFinite(percentile) ? '' : ` · corpus rank ${fmtv(percentile, 1)} <code>${esc(coordinate.percentileUnit)}</code>`}${options.valueNote ? ` · ${esc(options.valueNote)}` : ''}</div>
           <div><b style="color:${C.text}">Target / input:</b> ${esc(coordinate.target)} · ${esc(coordinate.modality)} · ${esc(coordinate.input)}</div>
           <div><b style="color:${C.text}">${ledgerLabel}:</b> <code style="user-select:all">${esc(coordinate.ledgerSha256)}</code></div>
+          ${historical ? `<div style="color:${C.amber}"><b>Evidence boundary:</b> exact persisted display value only; excluded from prediction, fitting, ranking, thresholds, and saving.</div>` : ''}
           ${derived ? `<div><b style="color:${C.text}">Score-record binding SHA-256:</b> <code style="user-select:all">${esc(coordinate.scoreRecordSha256 || 'unavailable')}</code> · this derived forecast is bound to the scored record and is not one of the 21 stored embedding axes.</div>` : ''}
           ${validationRow ? `<div><b style="color:${C.text}">Source score record SHA-256:</b> <code style="user-select:all">${esc(coordinate.scoreRecordSha256 || 'unavailable')}</code> · this value belongs to the retrospective validation-row ledger and does not replace the score-time coordinate.</div>` : ''}
           <div><b style="color:${C.text}">Embedding identity:</b> ${shortFingerprint(manifest.embedding_input_fingerprint)} · canonical montage ${shortFingerprint(manifest.canonical_montage && manifest.canonical_montage.montage_sha256)} · ${esc(manifest.source_mode || 'historical source unknown')}</div>
@@ -4058,10 +4434,15 @@ const JarvisRetention = (function () {
         }
         scoreContractEnsure();
         const upMontageSrc = up.montageDataUrl || (up.montage ? 'data:image/jpeg;base64,' + up.montage : '');
+        const historicalReadOnly =
+            up._historicalDisplayOnly === true;
         // ── 1. trace: raw input → embedding ──
         const embHeat = ch => { const a = up.emb_preview && up.emb_preview[ch]; if (!a) return `<div style="font-size:9px;color:${C.faint}">${ch}: ${esc(rawInputLabel(up, ch))}</div>`; const mn = Math.min(...a), mx = Math.max(...a); return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px"><span title="${esc(rawInputLabel(up, ch))}" style="font-size:9px;color:${C.dim};width:58px">${ch}</span><svg viewBox="0 0 ${a.length * 5} 10" style="height:11px;width:${a.length * 5}px">${a.map((v, i) => `<rect x="${i * 5}" width="4.4" height="10" fill="${rawRamp((v - mn) / ((mx - mn) || 1))}"/>`).join('')}</svg><span style="font-size:8px;color:${C.faint};white-space:nowrap">${esc(rawInputLabel(up, ch))}</span></div>`; };
         const upIdx = (st.rawUploads || []).lastIndexOf(up);
         const titleRow = (() => {
+            if (historicalReadOnly) {
+                return `<span style="font-size:13px;font-weight:900;color:${C.text}">${esc(up.title || 'Historical scored hook')}</span>`;
+            }
             const ed = st.rawTitleEdit && st.rawTitleEdit.idx === upIdx ? st.rawTitleEdit : null;
             if (ed) return `<span style="display:inline-flex;gap:5px;align-items:center;flex:1;min-width:220px"><input data-rawtitletext value="${esc(ed.text || '')}" style="flex:1;background:#1e293b;border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:4px 8px;font-size:12px;font-weight:800"/><span data-rawtitlesave="${upIdx}" style="cursor:pointer;border:1px solid ${C.green};color:${C.green};border-radius:5px;padding:3px 9px;font-size:10px;font-weight:900">save</span><span data-rawtitlecancel style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:5px;padding:3px 8px;font-size:10px">cancel</span></span>`;
             return `<span style="font-size:13px;font-weight:900;color:${C.text}">${esc(up.title || 'Scored hook')} <span data-rawtitleedit="${upIdx}" title="rename this hook" style="cursor:pointer;color:${C.amber};font-size:11px">✏️</span></span>`;
@@ -4071,16 +4452,19 @@ const JarvisRetention = (function () {
             const shown = up.silent
                 ? `<div style="font-size:11px;color:${C.dim};background:#0f172a;border-radius:6px;padding:8px;margin-bottom:6px">no voiceover detected${up.transcript ? ` — low-confidence guess: <i>"${esc(String(up.transcript).slice(0, 120))}"</i>` : ''} — the Text channel is not scored; Together remains visible whenever its persisted ledger coordinate used the montage-only fallback</div>`
                 : `<div style="font-size:11px;font-style:italic;color:${C.text};background:#0f172a;border-radius:6px;padding:8px;margin-bottom:6px">"${esc(up.transcript || '')}"${up.transcriptSource ? ` <span style="font-style:normal;font-size:9px;color:${C.faint}">· ${esc(up.transcriptSource)}</span>` : ''}</div>`;
+            if (historicalReadOnly) return shown;
             if (!ed) return shown + (up.montage ? `<div style="margin-bottom:8px"><span data-rawtransedit="${upIdx}" style="cursor:pointer;border:1px solid ${C.amber};background:${C.amber}18;color:${C.amber};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:800">✏️ fix transcript + re-embed</span></div>` : '');
             return `<div style="border:1px solid ${C.amber}66;border-radius:8px;padding:8px;margin-bottom:8px;background:#0f172a"><textarea data-rawtranstext rows="2" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:12px;font-family:inherit;resize:vertical">${esc(ed.text || '')}</textarea><div style="display:flex;gap:7px;margin-top:6px;flex-wrap:wrap"><span data-rawreembed="${upIdx}" style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:4px 11px;font-size:10px;font-weight:900">${st.rawReembedBusy ? '⏳ re-embedding all channels…' : '🔁 re-embed with this transcript'}</span><span data-rawreembedvis="${upIdx}" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">visuals only</span><span data-rawtranscancel style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">cancel</span></div></div>`;
         })();
         const trace = cardc(`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
               ${titleRow}
-              <span data-savescored style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${st.savedFlash ? '✅ saved' : '💾 Save this hook'}</span></div>
+              ${historicalReadOnly
+                ? `<span data-historical-display-readonly style="border:1px solid ${C.amber};background:${C.amber}12;color:${C.amber};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:800;white-space:nowrap">Historical display · read-only</span>`
+                : `<span data-savescored style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap">${st.savedFlash ? '✅ saved' : '💾 Save this hook'}</span>`}</div>
             ${up._uploadWarning ? `<div style="font-size:10px;color:${C.amber};background:${C.amber}12;border-left:3px solid ${C.amber};padding:7px 9px;margin-bottom:8px;line-height:1.4">${esc(up._uploadWarning)}</div>` : ''}
             <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
               <div><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">1 · the 5-frame hook (what gets embedded)</div>${upMontageSrc ? `<img src="${esc(upMontageSrc)}" style="width:260px;border-radius:6px;background:#000"/>` : `<div style="width:260px;padding:20px;box-sizing:border-box;border-radius:6px;background:#000;color:${C.mute};font-size:10px;text-align:center">stored montage unavailable</div>`}</div>
-              <div style="flex:1;min-width:220px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">2 · transcript (editable)</div>${transcriptBlock}
+              <div style="flex:1;min-width:220px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">2 · transcript${historicalReadOnly ? ' (persisted read-only evidence)' : ' (editable)'}</div>${transcriptBlock}
                 <div style="font-size:9px;color:${C.mute};text-transform:uppercase;margin-bottom:3px">3 · Gemini embedding (1536-d, pooled to 48 for display)</div>${embHeat('visual')}${embHeat('text')}${embHeat('together')}${rawInputManifestHtml(up)}</div>
             </div>
             <div style="font-size:10px;color:${C.mute};margin-top:7px">4 · each indicator = <b>embedding · (a direction learned toward that metric) + bias → one number</b>, placed on the corpus scatter below.</div>`, 12);
@@ -6110,12 +6494,25 @@ const JarvisRetention = (function () {
         refreshRawUploadPanel();
     }
     function rawScoreBusy() {
-        return !!(st.rawUploading || st.rawYtBusy || st.rawReembedBusy || st.genScoringK != null);
+        return !!(
+            st.rawUploading
+            || st.rawYtBusy
+            || st.rawReembedBusy
+            || st.savedDetailLoading
+            || st.genScoringK != null
+        );
     }
     function rawUploadIsScored(upload) {
         return !!(
             upload
+            && upload._historicalDisplayOnly !== true
             && shortsLedgerState(upload).valid
+        );
+    }
+    function rawUploadIsDisplayable(upload) {
+        return !!(
+            upload
+            && shortsDisplayLedgerState(upload).valid
         );
     }
     function selectedRawScoreUpload() {
@@ -6130,7 +6527,7 @@ const JarvisRetention = (function () {
             return null;
         }
         const selected = uploads[selectedIndex];
-        return rawUploadIsScored(selected) ? selected : null;
+        return rawUploadIsDisplayable(selected) ? selected : null;
     }
     function scoredHookSavePayload(upload, overrides) {
         if (!rawUploadIsScored(upload)) return null;
@@ -6692,7 +7089,10 @@ const JarvisRetention = (function () {
             return;
         }
         const sdel = e.target.closest('[data-savedel]'); if (sdel) { deleteSaved(sdel.getAttribute('data-savedel')); return; }
-        if (e.target.closest('[data-savedclose]')) { st.savedSel = null; rtgUpdateExp(); return; }
+        if (e.target.closest('[data-savedclose]')) {
+            closeSavedDetail();
+            return;
+        }
         const ssort = e.target.closest('[data-savedsort]'); if (ssort) { st.savedSort = ssort.getAttribute('data-savedsort'); rtgUpdateExp(); return; }
         const sfdel = e.target.closest('[data-savedfolderdel]'); if (sfdel) { deleteFolder(sfdel.getAttribute('data-savedfolderdel')); return; }
         const sfol = e.target.closest('[data-savedfolder]'); if (sfol) { st.savedFolder = sfol.getAttribute('data-savedfolder'); st.savedShow = window.innerWidth < 700 ? 20 : 60; rtgUpdateExp(); return; }
@@ -7068,19 +7468,31 @@ const JarvisRetention = (function () {
             ))
         ) || null;
     }
-    function savedHookResult(rec, id, warning) {
+    function savedHookResult(
+        rec,
+        id,
+        warning,
+        historicalDisplayOnly
+    ) {
         return {
+            id: rec.id || id,
             transcript: rec.transcript || rec.text || '',
             silent: rec.silent,
             title: rec.title,
+            score_domain: rec.score_domain || 'shorts',
             indicators: rec.indicators,
             score_ledger: rec.score_ledger || null,
             score_ledger_validation: rec.score_ledger_validation || null,
+            score_materialization:
+                rec.score_materialization || null,
+            historical_display:
+                rec.historical_display || null,
             score_record_sha256: rec.score_record_sha256 || null,
             score_record_validation: rec.score_record_validation || null,
             evidence_state: rec.evidence_state || null,
             score_display_eligible:
                 rec.score_display_eligible === true
+                || historicalDisplayOnly === true
                 || savedHookScoreIsComplete(rec),
             predictor_eligible:
                 rec.predictor_eligible === true,
@@ -7098,6 +7510,8 @@ const JarvisRetention = (function () {
             genFrames: rec.frames || [],
             montageDataUrl: rec.hasMontage ? '/api/raw/saved-montage/' + id : '',
             _uploadWarning: warning || null,
+            _historicalDisplayOnly:
+                historicalDisplayOnly === true,
         };
     }
     // Opening a saved hook is read-only. A persisted score keeps the exact
@@ -7105,9 +7519,11 @@ const JarvisRetention = (function () {
     // display, but that transient result is never written over saved evidence.
     async function openSaved(id) {
         if (rawScoreBusy()) { rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before opening this saved hook.'); return; }
-        st.savedSel = id; st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; rtgUpdateExp();
+        st.savedSel = id;
+        st.savedDetailLoading = true;
+        st.savedDetailErr = null;
+        rtgUpdateExp();
         try {
-            const live = await currentScorerContract(true);
             const creatorProfile = selectedCreatorProfile();
             const indexRow = savedHookIndexRow(id);
             const indexFingerprint = savedHookEvidenceFingerprint(indexRow);
@@ -7127,8 +7543,17 @@ const JarvisRetention = (function () {
                 while (cachedIds.length > 8) delete SAVEDDETAIL[cachedIds.shift()];
             }
             const rec = stored.rec || {};
+            if (
+                !rec.historical_display
+                && indexRow
+                && indexRow.historical_display
+            ) {
+                rec.historical_display =
+                    indexRow.historical_display;
+            }
             const persistedLedgerState = shortsLedgerState(rec);
             if (persistedLedgerState.valid) {
+                const live = await currentScorerContract(true);
                 const current = savedHookScoreIsCurrent(
                     rec,
                     live,
@@ -7161,12 +7586,45 @@ const JarvisRetention = (function () {
                                 + 'it was not silently recalculated.'
                             )
                             : null;
-                const result = savedHookResult(rec, id, warning);
+                const result = savedHookResult(
+                    rec,
+                    id,
+                    warning,
+                    rec.evidence_state
+                        === 'legacy_unbound_evidence'
+                );
                 st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
                 st.rawUploads.push(result);
                 st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
             } else {
-                if (
+                const historicalState =
+                    shortsHistoricalDisplayLedgerState(
+                        rec,
+                        persistedLedgerState
+                    );
+                if (historicalState.valid) {
+                    const warning = (
+                        'Historical display-only evidence. These are the '
+                        + 'exact persisted values from ledger '
+                        + `${historicalState.ledgerSha256}; they were not `
+                        + 'recalculated. The original JPEG and text were '
+                        + 'not jointly bound, so this record remains '
+                        + 'excluded from prediction, training, ranking, '
+                        + 'thresholds, and saving.'
+                    );
+                    const result = savedHookResult(
+                        rec,
+                        id,
+                        warning,
+                        true
+                    );
+                    st.rawUploads = (st.rawUploads || []).filter(
+                        row => !(row && row.source === 'saved')
+                    );
+                    st.rawUploads.push(result);
+                    st.rawUpSel = st.rawUploads.length - 1;
+                    st.rawSel = null;
+                } else if (
                     persistedLedgerState.present
                     || rec.kind === 'scored'
                     || rec.score_display_eligible === true
@@ -7175,12 +7633,13 @@ const JarvisRetention = (function () {
                 ) {
                     throw new Error(
                         'This saved score has invalid persisted ledger '
-                        + `evidence (${persistedLedgerState.errors.join(
-                            '; '
-                        ) || 'canonical validation failed'}). It was not `
-                        + 'silently recalculated.'
+                        + `evidence (${[].concat(
+                            persistedLedgerState.errors || [],
+                            historicalState.errors || []
+                        ).join('; ') || 'score display validation failed'}). `
+                        + 'It was not silently recalculated.'
                     );
-                }
+                } else {
                 let montage = stored.montage;
                 if (!montage && rec.hasMontage) {
                     try { montage = await urlToDataUrl('/api/raw/saved-montage/' + id); } catch (e) {}
@@ -7198,12 +7657,18 @@ const JarvisRetention = (function () {
                     );
                 }
                 stored.montage = montage; stored.reconstructed = reconstructed;
+                st.rawUploading = true;
+                st.rawUpErr = null;
+                st.rawUpStage = 1;
+                rtgUpdateExp();
                 const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1200);
                 let j;
                 try {
                     j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: rec.text || rec.title || '', title: (rec.title || 'Saved hook').slice(0, 40), duration: rec.input_manifest && rec.input_manifest.duration_s || null, creatorProfile, async: true }) });
                 } finally {
                     window.clearInterval(tick);
+                    st.rawUploading = false;
+                    st.rawUpStage = 0;
                 }
                 j.source = 'saved';
                 j.savedId = id;
@@ -7218,22 +7683,51 @@ const JarvisRetention = (function () {
                 );
                 st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
                 st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
+                }
             }
-        } catch (e) { st.rawUpErr = fetchFail(e); }
-        st.rawUploading = false; st.rawUpStage = 0; rtgUpdateExp();
+        } catch (e) {
+            st.savedDetailErr = fetchFail(e);
+            st.rawUploading = false;
+            st.rawUpStage = 0;
+        }
+        st.savedDetailLoading = false;
+        rtgUpdateExp();
         window.setTimeout(() => { const el = window.document.getElementById('exp-scoreout'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
     }
     function savedDetail() {
         if (!st.savedSel) return '';
         const selected = selectedRawScoreUpload();
-        const msg = st.rawUploading
+        const historical = selected
+            && selected._historicalDisplayOnly === true;
+        const msg = st.savedDetailLoading
             ? 'Loading this saved hook and validating its exact persisted score ledger…'
-            : st.rawUpErr
+            : st.savedDetailErr
                 ? 'This saved hook was not opened. Its stored score was not recalculated.'
+                : historical
+                    ? 'Exact historical persisted display loaded read-only. Every scalar above comes from the same hash-bound ledger; none was recalculated or admitted to the predictor.'
                 : selected
                     ? 'Exact persisted score loaded. Every scalar above comes from this card’s canonical ledger.'
                     : 'No canonical score is selected for this saved hook.';
-        return `<div style="background:${C.accent}14;border:1px solid ${C.accent}55;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:${C.accent};display:flex;justify-content:space-between;align-items:center"><span>${msg}</span><span data-savedclose style="cursor:pointer;color:${C.dim};font-weight:700">✕</span></div>`;
+        return `<div data-saved-detail-state="${st.savedDetailLoading ? 'loading' : st.savedDetailErr ? 'error' : historical ? 'historical-read-only' : selected ? 'canonical' : 'empty'}" style="background:${C.accent}14;border:1px solid ${C.accent}55;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:${C.accent};display:flex;justify-content:space-between;align-items:center"><span>${msg}</span><span data-savedclose style="cursor:pointer;color:${C.dim};font-weight:700">✕</span></div>${st.savedDetailErr ? `<div data-saved-detail-error style="font-size:9px;color:${C.red};margin:-5px 0 10px;line-height:1.45">${esc(st.savedDetailErr)}</div>` : ''}`;
+    }
+    function closeSavedDetail() {
+        const uploads = st.rawUploads || [];
+        const selectedIndex = Number(st.rawUpSel);
+        const selected = Number.isInteger(selectedIndex)
+            ? uploads[selectedIndex]
+            : null;
+        st.rawUploads = uploads.filter(
+            row => !(row && row.source === 'saved')
+        );
+        if (selected && selected.source === 'saved') {
+            st.rawUpSel = null;
+        }
+        st.savedSel = null;
+        st.savedDetailLoading = false;
+        st.savedDetailErr = null;
+        st.rawTitleEdit = null;
+        st.rawTransEdit = null;
+        rtgUpdateExp();
     }
     function scheduleSavedChannelPoll() {
         window.clearTimeout(st._savedChannelPoll);
@@ -10544,22 +11038,7 @@ const JarvisRetention = (function () {
                 : null;
             const historicalValid = !!(
                 historical
-                && historical.schema
-                    === 'saved-hook-historical-display-v1'
-                && historical.version === 1
-                && historical.record_id === String(hook.id)
-                && historical.score_domain === hook.score_domain
-                && SHORTS_LEDGER_SHA256.test(
-                    String(historical.score_ledger_sha256 || '')
-                )
-                && SHORTS_LEDGER_SHA256.test(
-                    String(historical.display_sha256 || '')
-                )
-                && historical.selection_policy
-                && historical.selection_policy.role
-                    === 'historical_display_only_hash_bound_materialized_view'
-                && historical.selection_policy.source_ledger_sha256
-                    === historical.score_ledger_sha256
+                && shortsHistoricalDisplaySummaryState(hook).valid
             );
             if (
                 historical

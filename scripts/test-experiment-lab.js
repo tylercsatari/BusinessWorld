@@ -10,6 +10,9 @@ const validationBuilder = require('../buildings/jarvis/saved-channel-validation'
 const {
     scoreLedgerFromFeatures,
 } = require('./fixtures/score-ledger-fixture');
+const shortsScoreLedger = require(
+    '../buildings/jarvis/shorts-score-ledger'
+);
 const {
     EXPECTED_COORDINATE_IDS,
     FEATURE_CONTRACT_DOCUMENT_SHA256,
@@ -20,7 +23,7 @@ const {
     GOVERNANCE_SHA256,
     scoreRecordBindingSha256,
     scoreLedgerValidationSummary,
-} = require('../buildings/jarvis/shorts-score-ledger');
+} = shortsScoreLedger;
 const {
     CANONICAL_EVIDENCE_STATE,
     manifestRowBindingSha256,
@@ -579,6 +582,46 @@ async function main() {
         historicalSavedHookRecord.evidence_warning =
             'Historical display only.';
         delete historicalSavedHookRecord.score_ledger_validation;
+        historicalSavedHookRecord.score_ledger.entries.forEach(
+            entry => {
+                entry.provenance = {
+                    ...(entry.provenance || {}),
+                    status: entry.available
+                        ? 'historical_materialization'
+                        : 'unavailable',
+                };
+            }
+        );
+        historicalSavedHookRecord.score_ledger
+            .feature_contract_document_sha256 = '4'.repeat(64);
+        delete historicalSavedHookRecord.score_ledger.ledger_sha256;
+        historicalSavedHookRecord.score_ledger.ledger_sha256 =
+            shortsScoreLedger.sha256Canonical(
+                historicalSavedHookRecord.score_ledger
+            );
+        historicalSavedHookRecord.score_materialization = {
+            schema: 'saved-hook-historical-materialization-v1',
+            role: 'historical_evidence_not_live_rescore',
+            ledger_sha256:
+                historicalSavedHookRecord.score_ledger
+                    .ledger_sha256,
+            source_record_sha256: fixtureSha256(
+                'historical-source-record'
+            ),
+            source_fields: ['features', 'steer'],
+            claim_boundary:
+                'Historical display only; not a current prediction.',
+        };
+        assert.deepStrictEqual(
+            shortsScoreLedger.validateScoreLedger(
+                historicalSavedHookRecord.score_ledger
+            ).errors,
+            [
+                'score ledger feature contract document hash does not match',
+            ],
+            'historical browser fixture must differ only by the '
+                + 'superseded feature-contract document hash'
+        );
         const historicalSavedHookRow =
             savedHookRuntimeIndex.legacyRow(
                 historicalSavedHookRecord
@@ -590,6 +633,71 @@ async function main() {
         const historicalSavedHookKeep =
             historicalSavedHookRow.historical_display
                 .m_identity.keep;
+        const rebindHistoricalFixture = fixture => {
+            delete fixture.score_ledger.ledger_sha256;
+            fixture.score_ledger.ledger_sha256 =
+                shortsScoreLedger.sha256Canonical(
+                    fixture.score_ledger
+                );
+            fixture.score_materialization.ledger_sha256 =
+                fixture.score_ledger.ledger_sha256;
+            fixture.historical_display.score_ledger_sha256 =
+                fixture.score_ledger.ledger_sha256;
+            fixture.historical_display.selection_policy
+                .source_ledger_sha256 =
+                    fixture.score_ledger.ledger_sha256;
+            Object.values(
+                fixture.historical_display.m_identity
+            ).filter(Boolean).forEach(identity => {
+                identity.ledgerSha256 =
+                    fixture.score_ledger.ledger_sha256;
+            });
+            delete fixture.historical_display.display_sha256;
+            fixture.historical_display.display_sha256 =
+                shortsScoreLedger.sha256Canonical(
+                    displayContract
+                        .historicalSavedHookDisplayBindingPayload(
+                            fixture.historical_display
+                        )
+                );
+            return fixture;
+        };
+        const historicalTamperFixtures = [];
+        const tamperedDisplay = JSON.parse(JSON.stringify({
+            ...historicalSavedHookRecord,
+            historical_display:
+                historicalSavedHookRow.historical_display,
+        }));
+        tamperedDisplay.historical_display.m_identity.keep.value += 1;
+        historicalTamperFixtures.push(tamperedDisplay);
+        const tamperedMaterialization = JSON.parse(JSON.stringify({
+            ...historicalSavedHookRecord,
+            historical_display:
+                historicalSavedHookRow.historical_display,
+        }));
+        tamperedMaterialization.score_materialization.role =
+            'live_rescore';
+        historicalTamperFixtures.push(tamperedMaterialization);
+        const tamperedContractIdentity = JSON.parse(JSON.stringify({
+            ...historicalSavedHookRecord,
+            historical_display:
+                historicalSavedHookRow.historical_display,
+        }));
+        tamperedContractIdentity.score_ledger
+            .coordinate_governance_sha256 = '6'.repeat(64);
+        historicalTamperFixtures.push(
+            rebindHistoricalFixture(tamperedContractIdentity)
+        );
+        const tamperedProvenance = JSON.parse(JSON.stringify({
+            ...historicalSavedHookRecord,
+            historical_display:
+                historicalSavedHookRow.historical_display,
+        }));
+        tamperedProvenance.score_ledger.entries[0]
+            .provenance.status = 'current_score';
+        historicalTamperFixtures.push(
+            rebindHistoricalFixture(tamperedProvenance)
+        );
         const unfinishedVideo = { id: 'vid99999999', title: 'Retry this Short', status: 'error', views: 0, error: 'temporary worker failure', hasMontage: false };
         const singles = featureContract.features.map((feature, index) => ({
             key: feature.key,
@@ -1350,6 +1458,9 @@ async function main() {
 <script>
 const nativeFetch=window.fetch.bind(window);
 const replies=${JSON.stringify(replies)};
+window.__historicalTamperFixtures=${
+    JSON.stringify(historicalTamperFixtures)
+};
 window.__fetchCounts={};
 window.fetch=function(url,options){
     const p=new URL(url,location.href).pathname;
@@ -1372,10 +1483,19 @@ window.fetch=function(url,options){
             headers['X-Artifact-SHA256']='${fixtureSha256('raw-map-artifact')}';
             headers.ETag='"${fixtureSha256('raw-map-artifact')}"';
         }
-        return Promise.resolve(new Response(
+        const response=()=>new Response(
             JSON.stringify(replies[p]),
             {status:200,headers}
-        ));
+        );
+        if(p==='${
+            `/api/raw/saved-hook/${historicalSavedHookId}`
+        }'){
+            return new Promise(resolve=>setTimeout(
+                ()=>resolve(response()),
+                120
+            ));
+        }
+        return Promise.resolve(response());
     }
     if(p.includes('/principles/')||p==='/api/rtg/labels'){
         return Promise.resolve(new Response('{}',{
@@ -1419,7 +1539,35 @@ window.fetch=function(url,options){
             !historicalSavedHookCardText.includes('No valid persisted'),
             'valid historical ledger was rendered as a missing score'
         );
+        const tamperAudits = await page.evaluate(() => (
+            window.__historicalTamperFixtures.map(
+                fixture => (
+                    window.BusinessWorldShortsScoreDisplayAudit(
+                        fixture
+                    )
+                )
+            )
+        ));
+        assert(
+            tamperAudits.every(audit => audit.valid === false),
+            'historical display audit must reject a changed display '
+                + 'value, materialization role, second contract identity, '
+                + `and provenance status: ${JSON.stringify(tamperAudits)}`
+        );
         await historicalSavedHookCard.click();
+        await page.locator(
+            '[data-saved-detail-state="loading"]'
+        ).waitFor();
+        const historicalLoadingText =
+            await page.locator('#rtg-exppanel').innerText();
+        assert(
+            !historicalLoadingText.includes('Extracting 5 frames')
+                && !historicalLoadingText.includes(
+                    'embedding the 5 frames'
+                ),
+            'opening persisted history must not masquerade as a live '
+                + 'extraction or embedding job'
+        );
         const openedHistoricalCoordinate = page.locator(
             '#rtg-exppanel '
                 + '[data-coordinate-id="shorts.stored.together.keep"]'
@@ -1436,6 +1584,48 @@ window.fetch=function(url,options){
             historicalSavedHookKeep.value,
             'saved grid and opened score card must render the same '
                 + 'ledger value'
+        );
+        await page.locator(
+            '[data-saved-detail-state="historical-read-only"]'
+        ).waitFor();
+        await page.locator(
+            '[data-historical-display-readonly]'
+        ).waitFor();
+        assert.strictEqual(
+            await page.locator(
+                '#rtg-exppanel [data-savescored]'
+            ).count(),
+            0,
+            'historical display-only evidence must not expose Save'
+        );
+        assert.strictEqual(
+            await page.locator(
+                '#rtg-exppanel [data-rawtitleedit], '
+                    + '#rtg-exppanel [data-rawtransedit], '
+                    + '#rtg-exppanel [data-rawreembed]'
+            ).count(),
+            0,
+            'historical display-only evidence must not expose edit or '
+                + 're-embedding controls'
+        );
+        const renderedHistoricalCoordinates = await page.locator(
+            `[data-embedding-asset="saved:${historicalSavedHookId}"]`
+                + '[data-coordinate-display-only="true"]'
+        ).evaluateAll(nodes => [
+            ...new Set(nodes.map(
+                node => node.getAttribute('data-coordinate-id')
+            ).filter(Boolean)),
+        ].sort());
+        const expectedHistoricalCoordinates =
+            historicalSavedHookRecord.score_ledger.entries
+                .filter(entry => entry.available === true)
+                .map(entry => entry.coordinate_id)
+                .sort();
+        assert.deepStrictEqual(
+            renderedHistoricalCoordinates,
+            expectedHistoricalCoordinates,
+            'the read-only historical detail must expose every available '
+                + 'persisted ledger coordinate'
         );
         assert.strictEqual(
             await page.evaluate(

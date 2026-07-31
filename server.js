@@ -163,10 +163,12 @@ const {
     SAVED_HOOK_INDEX_VERSION,
     compactSavedHookBindingPayload,
     compactSavedHookRecord,
+    historicalSavedHookDisplay,
     savedHookScoreRecordSha256,
     scoreDomainForRecord,
     validateCompactSavedHookRecord,
     validateCompactSavedHookSource,
+    validateHistoricalSavedHookDisplay,
 } = require('./embedding-display-contract');
 const PDFDocument = require('pdfkit');
 const { spawn } = require('child_process');
@@ -9485,6 +9487,25 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const stored = JSON.parse(b.toString('utf8'));
             const canonicalCandidate =
                 evidence.evidenceClass === 'canonical';
+            const scoreDomain = scoreDomainForRecord(stored);
+            const generatedHistoricalDisplay = canonicalCandidate
+                ? null
+                : historicalSavedHookDisplay(stored, {
+                    scoreDomain,
+                });
+            const indexedHistoricalDisplay =
+                evidence.row && evidence.row.historical_display;
+            const historicalDisplayExact = !!(
+                generatedHistoricalDisplay
+                && validateHistoricalSavedHookDisplay(
+                    indexedHistoricalDisplay
+                )
+                && indexedHistoricalDisplay.display_sha256
+                    === generatedHistoricalDisplay.display_sha256
+                && indexedHistoricalDisplay.score_ledger_sha256
+                    === generatedHistoricalDisplay
+                        .score_ledger_sha256
+            );
             const calculatedSha256 =
                 savedHookScoreRecordSha256(stored);
             const recordBindingValid = canonicalCandidate
@@ -9557,6 +9578,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 ).catch(() => null);
             }
             const record = withPersistedSavedHookValidation(stored);
+            if (historicalDisplayExact) {
+                record.historical_display =
+                    generatedHistoricalDisplay;
+            }
             record.evidence_state = canonicalCandidate
                 ? (
                     recordBindingValid
@@ -9616,7 +9641,6 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 score_record_sha256:
                     stored.score_record_sha256 || null,
             };
-            const scoreDomain = scoreDomainForRecord(record);
             const scalarLedgerValid = scoreDomain === 'longquant'
                 ? !!(
                     record.long_score_ledger_validation
@@ -9632,8 +9656,20 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     && record.long_score_predictor_validation.valid === true
                 )
                 : true;
-            record.score_display_eligible =
-                stored.kind === 'scored' && scalarLedgerValid;
+            const historicalDisplayOnly = !!(
+                stored.kind === 'scored'
+                && scoreDomain === 'shorts'
+                && historicalDisplayExact
+            );
+            record.score_display_eligible = !!(
+                stored.kind === 'scored'
+                && (
+                    scalarLedgerValid
+                    || historicalDisplayOnly
+                )
+            );
+            record.historical_display_only =
+                historicalDisplayOnly;
             record.predictor_eligible = !!(
                 canonicalCandidate
                 && recordBindingValid
@@ -9647,9 +9683,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 ) || (
                     record.score_record_validation
                     && record.score_record_validation.valid === false
+                    && !historicalDisplayOnly
                 ) || (
                     record.score_ledger_validation
                     && record.score_ledger_validation.valid === false
+                    && !historicalDisplayOnly
                 ) || (
                     record.long_score_ledger_validation
                     && record.long_score_ledger_validation.valid === false

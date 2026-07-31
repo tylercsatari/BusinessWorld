@@ -480,7 +480,16 @@ function localStructuralAudit() {
             'function shortsRegisteredCoordinate('
         )
             && shortsUiSource.includes(
-                'const state = shortsLedgerState(up);'
+                'function shortsDisplayLedgerState(up)'
+            )
+            && shortsUiSource.includes(
+                'const state = shortsDisplayLedgerState(up);'
+            )
+            && shortsUiSource.includes(
+                'function rawUploadIsScored(upload)'
+            )
+            && shortsUiSource.includes(
+                '&& shortsLedgerState(upload).valid'
             )
             && longUiSource.includes(
                 'function lqxLedgerState('

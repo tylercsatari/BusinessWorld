@@ -1496,7 +1496,7 @@ assert(
         'This saved score has invalid persisted ledger '
     )
         && retentionUi.includes(
-            "'silently recalculated.'"
+            "'It was not silently recalculated.'"
         ),
     'an invalid persisted saved score must fail closed instead of being re-scored'
 );
