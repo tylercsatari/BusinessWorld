@@ -75,6 +75,33 @@ function historicalLedgerRecord() {
     return record;
 }
 
+function priorDocumentHistoricalLedgerRecord() {
+    const record = historicalLedgerRecord();
+    record.score_ledger.feature_contract_document_sha256 =
+        '4'.repeat(64);
+    delete record.score_ledger.ledger_sha256;
+    record.score_ledger.ledger_sha256 =
+        shortsScoreLedger.sha256Canonical(record.score_ledger);
+    record.score_materialization = {
+        schema: 'saved-hook-historical-materialization-v1',
+        role: 'historical_evidence_not_live_rescore',
+        ledger_sha256: record.score_ledger.ledger_sha256,
+        source_record_sha256: '5'.repeat(64),
+        source_fields: ['steer'],
+        claim_boundary:
+            'Historical values only; not a current prediction.',
+    };
+    assert.deepEqual(
+        shortsScoreLedger.validateScoreLedger(
+            record.score_ledger
+        ).errors,
+        [
+            'score ledger feature contract document hash does not match',
+        ]
+    );
+    return record;
+}
+
 function canonicalRecord() {
     const record = legacyRecord();
     const mediaBytes = jpegFixture();
@@ -228,7 +255,7 @@ function memoryStorage(seed) {
 }
 
 async function main() {
-    const source = historicalLedgerRecord();
+    const source = priorDocumentHistoricalLedgerRecord();
     const priorIndex = {
         version: 7,
         hooks: [{
@@ -311,6 +338,11 @@ async function main() {
     assert.equal(
         historicalDisplay.m_identity.keep.ledgerSha256,
         source.score_ledger.ledger_sha256
+    );
+    assert.equal(
+        written.canonical.historical_display_rows,
+        1,
+        'a prior-document historical ledger lost its display-only values'
     );
     const staleSource = historicalLedgerRecord();
     const staleDisplay =

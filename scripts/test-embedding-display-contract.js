@@ -431,6 +431,86 @@ async function main() {
         historicalDisplay.m_identity.keep.ledgerSha256,
         compact.score_ledger_sha256
     );
+    const priorDocumentHistoricalRecord = JSON.parse(
+        JSON.stringify(shortRecord)
+    );
+    priorDocumentHistoricalRecord.score_ledger.entries.forEach(
+        entry => {
+            entry.provenance = {
+                status: entry.available
+                    ? 'historical_materialization'
+                    : 'unavailable',
+                source: 'legacy_steer_cache',
+            };
+        }
+    );
+    priorDocumentHistoricalRecord.score_ledger
+        .feature_contract_document_sha256 = '4'.repeat(64);
+    delete priorDocumentHistoricalRecord.score_ledger.ledger_sha256;
+    priorDocumentHistoricalRecord.score_ledger.ledger_sha256 =
+        shortsScoreLedger.sha256Canonical(
+            priorDocumentHistoricalRecord.score_ledger
+        );
+    priorDocumentHistoricalRecord.score_materialization = {
+        schema: 'saved-hook-historical-materialization-v1',
+        role: 'historical_evidence_not_live_rescore',
+        ledger_sha256:
+            priorDocumentHistoricalRecord.score_ledger.ledger_sha256,
+        source_record_sha256: '5'.repeat(64),
+        source_fields: ['steer'],
+        claim_boundary:
+            'Historical values only; not a current prediction.',
+    };
+    assert.deepStrictEqual(
+        shortsScoreLedger.validateScoreLedger(
+            priorDocumentHistoricalRecord.score_ledger
+        ).errors,
+        [
+            'score ledger feature contract document hash does not match',
+        ],
+        'the fixture must differ only by its superseded contract-document hash'
+    );
+    const priorDocumentDisplay =
+        contract.historicalSavedHookDisplay(
+            priorDocumentHistoricalRecord
+        );
+    assert(
+        contract.validateHistoricalSavedHookDisplay(
+            priorDocumentDisplay
+        ),
+        'an explicitly bounded historical materialization lost its exact display-only values'
+    );
+    assert.strictEqual(
+        priorDocumentDisplay.m_identity.keep.value,
+        historicalDisplay.m_identity.keep.value
+    );
+    assert.strictEqual(
+        priorDocumentDisplay.score_ledger_sha256,
+        priorDocumentHistoricalRecord.score_ledger.ledger_sha256,
+        'historical display identity must retain the original ledger hash'
+    );
+    const unboundedPriorDocumentRecord = JSON.parse(
+        JSON.stringify(priorDocumentHistoricalRecord)
+    );
+    delete unboundedPriorDocumentRecord.score_materialization;
+    assert.strictEqual(
+        contract.historicalSavedHookDisplay(
+            unboundedPriorDocumentRecord
+        ),
+        null,
+        'a document-mismatched ledger without the historical materialization boundary was accepted'
+    );
+    const hashTamperedPriorDocumentRecord = JSON.parse(
+        JSON.stringify(priorDocumentHistoricalRecord)
+    );
+    hashTamperedPriorDocumentRecord.score_ledger.entries[0].value += 1;
+    assert.strictEqual(
+        contract.historicalSavedHookDisplay(
+            hashTamperedPriorDocumentRecord
+        ),
+        null,
+        'a historical materialization with a second integrity failure was accepted'
+    );
     const tamperedHistoricalDisplay =
         JSON.parse(JSON.stringify(historicalDisplay));
     tamperedHistoricalDisplay.m_identity.keep.value += 1;

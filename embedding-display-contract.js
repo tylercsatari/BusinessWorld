@@ -18,6 +18,8 @@ const SHORTS_DISPLAY_PREFERENCE = Object.freeze(['together', 'text', 'visual']);
 const LONGQUANT_DISPLAY_PREFERENCE = Object.freeze(['visual', 'together', 'text']);
 const SAVED_HOOK_METRICS = Object.freeze(['keep', 'ret5', 'views', 'realviews', 'gt10M', 'outlier']);
 const LONGQUANT_SAVED_METRICS = longScoreLedger.OUTPUT_METRICS;
+const HISTORICAL_SHORTS_DOCUMENT_MISMATCH_ERROR =
+    'score ledger feature contract document hash does not match';
 
 function exactSha256(value) {
     return (
@@ -364,13 +366,14 @@ function historicalSavedHookDisplay(record, options = {}) {
     );
     const ledger = scoreDomain === 'longquant'
         ? record.long_score_ledger
-        : record.score_ledger;
+        : historicalShortsDisplayLedger(record);
     const ledgerValidation = scoreDomain === 'longquant'
         ? longScoreLedger.validateLongOutputContract(record)
-        : validateScoreLedger(ledger);
-    if (!ledgerValidation.valid || !exactSha256(
-        ledger && ledger.ledger_sha256
-    )) {
+        : { valid: !!ledger };
+    if (
+        !ledgerValidation.valid
+        || !exactSha256(ledger && ledger.ledger_sha256)
+    ) {
         return null;
     }
     const targets = scoreDomain === 'longquant'
@@ -380,10 +383,10 @@ function historicalSavedHookDisplay(record, options = {}) {
     for (const target of targets) {
         selected[target] = scoreDomain === 'longquant'
             ? longQuantEmbeddingSelection(record, target)
-            : embeddingSteerSelection(
+            : historicalShortsEmbeddingSelection(
                 record,
                 target,
-                'shorts_raw'
+                ledger
             );
     }
     if (!Object.values(selected).some(Boolean)) return null;
@@ -430,6 +433,123 @@ function historicalSavedHookDisplay(record, options = {}) {
     return validateHistoricalSavedHookDisplay(display)
         ? display
         : null;
+}
+
+function historicalShortsDisplayLedger(record) {
+    const ledger = record && record.score_ledger;
+    const validation = validateScoreLedger(ledger);
+    if (validation.valid) return ledger;
+    const materialization = record && record.score_materialization;
+    const entries = ledger && Array.isArray(ledger.entries)
+        ? ledger.entries
+        : [];
+    const exactHistoricalMaterialization = !!(
+        materialization
+        && materialization.schema
+            === 'saved-hook-historical-materialization-v1'
+        && materialization.role
+            === 'historical_evidence_not_live_rescore'
+        && materialization.ledger_sha256 === ledger.ledger_sha256
+        && exactSha256(materialization.source_record_sha256)
+        && Array.isArray(materialization.source_fields)
+        && materialization.source_fields.length > 0
+        && materialization.source_fields.every(
+            field => ['features', 'steer'].includes(field)
+        )
+        && typeof materialization.claim_boundary === 'string'
+        && materialization.claim_boundary
+        && entries.length > 0
+        && entries.every(entry => {
+            const status = entry
+                && entry.provenance
+                && entry.provenance.status;
+            return entry && (
+                entry.available === true
+                    ? status === 'historical_materialization'
+                    : ['unavailable', 'conflict'].includes(status)
+            );
+        })
+    );
+    return (
+        exactHistoricalMaterialization
+        && validation.errors.length === 1
+        && validation.errors[0]
+            === HISTORICAL_SHORTS_DOCUMENT_MISMATCH_ERROR
+    ) ? ledger : null;
+}
+
+function historicalShortsEmbeddingSelection(
+    record,
+    target,
+    ledger
+) {
+    for (const channel of embeddingDisplayPreference(
+        record,
+        'shorts_raw'
+    )) {
+        const coordinateId =
+            `shorts.stored.${channel}.${target}`;
+        const entry = (ledger.entries || []).find(
+            candidate => (
+                candidate
+                && candidate.coordinate_id === coordinateId
+            )
+        );
+        if (
+            !entry
+            || entry.available !== true
+            || !Number.isFinite(Number(entry.value))
+        ) {
+            continue;
+        }
+        const inputIdentity = channelInputIdentity(
+            record,
+            channel,
+            'shorts'
+        );
+        return {
+            domain: String(
+                record.input_manifest
+                && record.input_manifest.domain
+                || 'shorts_raw'
+            ),
+            origin: 'historical-materialized-ledger',
+            channel,
+            target,
+            sourceKey: entry.source_key
+                || `${channel}_${target}`,
+            coordinateId,
+            value: Number(entry.value),
+            valueUnit: entry.unit,
+            displayUnit: entry.display_unit || entry.unit,
+            percentile100: entry.percentile == null
+                || !Number.isFinite(Number(entry.percentile))
+                ? null
+                : Number(entry.percentile),
+            percentileUnit:
+                coordinateGovernance.percentileStorageUnit,
+            modality: inputIdentity.modality,
+            input: inputIdentity.input,
+            inputPresent: inputIdentity.inputPresent,
+            kind:
+                entry.provenance
+                && entry.provenance.kind || null,
+            scorer:
+                record.input_manifest
+                && record.input_manifest.scorer || null,
+            embeddingModel:
+                record.input_manifest
+                && record.input_manifest.embedding_model || null,
+            selectionPolicyId:
+                'policy.shorts.display-preference.v1',
+            selectionPreference: embeddingDisplayPreference(
+                record,
+                'shorts_raw'
+            ),
+            ledgerSha256: ledger.ledger_sha256,
+        };
+    }
+    return null;
 }
 
 function scoreDomainForRecord(record, requestedDomain) {
