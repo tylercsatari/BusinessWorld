@@ -7627,11 +7627,11 @@ async function handleHttpRequest(req, res) {
                                                 return;
                                             }
                                             try {
-                                                resolve(
-                                                    validateRawScoreResult(
-                                                        JSON.parse(line)
-                                                    )
-                                                );
+                                                // Acquisition metadata is added below. Keep
+                                                // the producer payload intact until then so
+                                                // its denormalized compatibility caches are
+                                                // checked exactly once at the API boundary.
+                                                resolve(JSON.parse(line));
                                             } catch (error) {
                                                 reject(error);
                                             }

@@ -70,6 +70,20 @@ includes(server, "'raw-embed-youtube',\n                    relayRunner,\n      
 includes(youtubeRelay, 'out = acquire_link(url, rid)', 'the residential relay must acquire media without scoring it');
 includes(server, "'--file', relayTemp", 'relayed media must be scored by the canonical server runtime');
 includes(server, 'validateRawScoreResult(scored)', 'the server must validate a relayed score before returning it');
+const youtubeRoute = server.slice(
+    server.indexOf("if (pathname === '/api/raw/embed-youtube'"),
+    server.indexOf("if (pathname === '/api/raw/embed-upload'")
+);
+assert.strictEqual(
+    (youtubeRoute.match(/validateRawScoreResult\(/g) || []).length,
+    2,
+    'YouTube scoring must validate the direct result once or the relayed result once, never validate a stripped relay result twice'
+);
+includes(
+    youtubeRoute,
+    'resolve(JSON.parse(line));',
+    'the relay scorer payload must remain intact until acquisition metadata is attached and the final canonical validation runs'
+);
 excludes(youtubeRelay, 'out = score_link(url, title, creator_profile=creator_profile)', 'one-off link scoring must not run a second scorer environment on the Mac');
 includes(server, "}, 'shorts', requestId, requestFingerprint);", 'upload scoring must create an exact-input idempotent Shorts job');
 includes(shorts, "'/api/shortsquant/jobs/' + j.jobId", 'Shorts UI must poll the Shorts job namespace');
