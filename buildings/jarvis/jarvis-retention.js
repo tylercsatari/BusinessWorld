@@ -20,10 +20,10 @@ const JarvisRetention = (function () {
     let PREDICTORLAB_ROLLOVER_RETRIES = 0;
     const THREAD_COLORS = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#a3e635'];
     let RTGLABELS = {};   // { videoId: { pairs:[{r,g}], orphans:[{r}] } } — your hand-labelled ground truth
-    let PROMISE_UI = null, OPERATIONS_UI = null;
+    let PROMISE_UI = null, OPERATIONS_UI = null, STORYBOARD_UI = null;
     let BGPEND = 0;       // heavy corpus files still streaming in behind the visible tab
     let GRINDRUN = null, GRINDLIST = null;   // 🎯 grind: current run + recent-runs list
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawFrames: [null, null, null, null, null], rawText: '', rawFrameSlot: 0, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', rawFrameDesc: ['', '', '', '', ''], rawGenModel: 'flux-2-pro', rawGenBusy: false, rawGenStage: '', rawGenErr: null, rawGenPlan: null, tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationShow: 60, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedLedgerPlotMode: 'oof', savedVisualKeepProtocol: 'videoHoldout', savedVisualKeepAccount: 'all', savedCreatorKeepAccount: 'all' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', predFeats: ['keep', 'retention', 'log_dur'], predInts: [], nov: 'global', novRes: 'hook', corTarget: 'ret_5s', corGroup: 'all', corSel: null, intView: 'synergy', intPair: null, cfTarget: 'keep_rate', cfSel: null, principle: 'novelty', rtgSel: null, rtgLabel: false, rtgPending: null, rtgSignal: 'cAny_entail_g4', rtgMinStr: 0, rtgProj: 'aligned', rtgEmbFocus: 'all', hazUnit: 'pct', hazA: 5, hazB: 50, rawView: 'map', rawPredictorTarget: 'keep', rawPredictorPoint: null, rawColor: 'cluster', rawK: '10', rawProj: 'both', rawChan: 'visual', rawSel: null, rawMine: false, rawUploads: [], rawUpShow: true, rawUpSel: null, rawUploading: false, rawUpErr: null, rawUpStage: 0, rawUpQueue: null, rawBuildMode: false, rawBands: false, rawBandK: 6, fuTarget: 'views', novMine: false, nqMod: 'whole', nqMeth: 'mode', guessRun: 'phase1', guessSel: null, guessIter: null, guessProj: null, guessBands: false, guessBandK: 6, guessRunSet: 0, grpoRun: null, grpoSel: null, expGenPrem: '', expGenRid: null, expGenBusy: false, expGenN: 4, expGenStage: null, expCreatorProfile: 'tyler', tribeTarget: 'keep', tribeFeat: 'mean', tribeGroup: 'all', tribeSel: null, tribeView: 'heatmap', tribeDecon: 'dec', savedBank: 'hooks', savedDetailLoading: false, savedDetailErr: null, savedChannelTab: 'library', savedChannelGroup: 'views', savedChannelSort: 'views', savedChannelMinPct: 0, savedChannelMinViews: 0, savedChannelQuery: '', savedChannelShow: 60, savedChannelAtlasScale: 'log', savedChannelRiskTarget: 30000000, savedChannelRiskAge: 0, savedChannelRiskSignal: 'together.views', savedChannelRiskCutoff: 30000000, savedChannelRiskSubset: 'passed', savedChannelRiskWin: 1, savedChannelRiskLoss: 1, savedValidationScope: 'pooled', savedValidationTarget: 'keep', savedValidationFeature: 'together.keep', savedValidationShow: 60, savedLedgerFamily: 'stored', savedLedgerShow: 40, savedLedgerQuery: '', savedLedgerCoordinate: '', savedLedgerPlotMode: 'oof', savedVisualKeepProtocol: 'videoHoldout', savedVisualKeepAccount: 'all', savedCreatorKeepAccount: 'all' };
     st.savedValidationFeature = null;
     st.savedValidationFamily = 'all';
     st.savedValidationQuery = '';
@@ -3533,17 +3533,10 @@ const JarvisRetention = (function () {
                </span>`
             : `${uploadBtn} ${showBtn}`;
         const upErr = st.rawUpErr ? `<span style="font-size:10px;color:${C.red};line-height:1.4;max-width:560px">upload failed: ${esc(String(st.rawUpErr).slice(0, 320))}</span>` : '';
-        const modeToggle = `<span data-rawbuildmode="0" style="cursor:pointer;border:1px solid ${!st.rawBuildMode ? CYAN : C.border};background:${!st.rawBuildMode ? CYAN + '22' : 'transparent'};color:${!st.rawBuildMode ? CYAN : C.dim};border-radius:6px 0 0 6px;padding:3px 9px;font-size:10px;font-weight:700">🎬 Video</span><span data-rawbuildmode="1" style="cursor:pointer;border:1px solid ${st.rawBuildMode ? CYAN : C.border};border-left:none;background:${st.rawBuildMode ? CYAN + '22' : 'transparent'};color:${st.rawBuildMode ? CYAN : C.dim};border-radius:0 6px 6px 0;padding:3px 9px;font-size:10px;font-weight:700">🖼 5 frames + text</span>`;
-        const fr = st.rawFrames || [null, null, null, null, null];
-        const nFrames = fr.filter(Boolean).length;
-        const builder = st.rawBuildMode ? `<div style="border:1px solid ${C.border};border-radius:10px;padding:10px;margin-bottom:8px;background:${C.card2}">
-              <div style="font-size:10px;color:${C.mute};margin-bottom:6px">Build a hook from photos — drop in up to 5 frames (any image type, auto-fit to 9:16), or upload ONE strip photo that already holds all 5, and set the spoken text. It's embedded the same way and added as a marker to compare.</div>
-              <div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:8px">${[0, 1, 2, 3, 4].map(i => fr[i]
-            ? `<div style="position:relative"><img src="${fr[i]}" style="width:48px;height:85px;object-fit:cover;border-radius:5px;border:1px solid ${C.border}"/><span data-rawframedel="${i}" style="position:absolute;top:-7px;right:-7px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:10px;cursor:pointer">✕</span><div style="text-align:center;font-size:8px;color:${C.mute}">${i + 1}</div></div>`
-            : `<div data-rawframe="${i}" style="width:48px;height:85px;border:1px dashed ${C.border};border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋<span>frame ${i + 1}</span></div>`).join('')}<span data-rawstrip="1" title="upload ONE photo that already holds all 5 frames side by side (or stacked) — it's sliced into the 5 slots" style="cursor:pointer;border:1px dashed ${C.border};color:${C.dim};border-radius:6px;padding:5px 10px;font-size:10px;font-weight:700;white-space:nowrap;align-self:center">⬆ 1-photo strip</span></div>
-              <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="optional — type the hook's spoken text (drives Text + Together)…" style="width:100%;box-sizing:border-box;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:12px;margin-bottom:8px"/>
-              <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CYAN : C.border};background:${nFrames ? CYAN + '22' : 'transparent'};color:${nFrames ? CYAN : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Place this hook${nFrames ? ` (${nFrames}/5 frames)` : ''}</span>
-            </div>` : '';
+        const modeToggle = `<span data-rawbuildmode="0" style="cursor:pointer;border:1px solid ${!st.rawBuildMode ? CYAN : C.border};background:${!st.rawBuildMode ? CYAN + '22' : 'transparent'};color:${!st.rawBuildMode ? CYAN : C.dim};border-radius:6px 0 0 6px;padding:3px 9px;font-size:10px;font-weight:700">🎬 Video</span><span data-rawbuildmode="1" style="cursor:pointer;border:1px solid ${st.rawBuildMode ? CYAN : C.border};border-left:none;background:${st.rawBuildMode ? CYAN + '22' : 'transparent'};color:${st.rawBuildMode ? CYAN : C.dim};border-radius:0 6px 6px 0;padding:3px 9px;font-size:10px;font-weight:700">Storyboard</span>`;
+        const builder = st.rawBuildMode
+            ? renderStoryboardWorkbench()
+            : '';
         const upLegend = ups.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">my uploads</span>${ups.map((u, i) => `<span data-rawupmark="${i}" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;border:1px solid ${st.rawUpSel === i ? upColor(i) : C.border};background:${upColor(i)}1e;border-radius:6px;padding:2px 7px;font-size:10px;color:${C.text}"><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:${upColor(i)};color:#0f172a;font-size:9px;font-weight:700;text-align:center;line-height:13px">${i + 1}</span>${esc((u.title || 'upload').replace(/\.[^.]+$/, '').slice(0, 22))}${u.silent ? ' 🔇' : ''}<span data-rawupdel="${i}" style="color:${C.mute};margin-left:2px">✕</span></span>`).join('')}</div>` : '';
         const upDetail = (st.rawUpSel != null && ups[st.rawUpSel]) ? (() => {
             const i = st.rawUpSel, U = ups[i], col = upColor(i);
@@ -3642,6 +3635,11 @@ const JarvisRetention = (function () {
         catch (e) { console.error('[shorts quant] raw panel refresh failed', e); }
         try { const e2 = window.document.getElementById('rtg-exppanel'); if (e2) e2.innerHTML = renderExperiment(); }
         catch (e) { console.error('[shorts quant] experiment panel refresh failed', e); }
+        try {
+            if (storyboardUI()) storyboardUI().afterRender();
+        } catch (e) {
+            console.error('[storyboard] raw refresh failed', e);
+        }
     }
     // ── 🎰 Guesses: every hook the model generates, dropped into the SAME map as the library ──
     function guessEnsure(run) { run = run || 'phase0'; if (GUESSES[run]) return; GUESSES[run] = { loading: 1 }; fetch('/api/hooks/guesses?run=' + run).then(r => r.json()).then(j => { GUESSES[run] = j; rtgUpdateGuesses(); }).catch(() => { GUESSES[run] = { rows: [] }; rtgUpdateGuesses(); }); }
@@ -3881,76 +3879,11 @@ const JarvisRetention = (function () {
             }
         }
         catch (e) { console.error('[shorts quant] experiment panel refresh failed', e); }
-    }
-    // ── Describe → generate the 5 frames (photorealistic, reference-conditioned) ──
-    // UNIFIED architecture: you just describe each frame in plain language. A planner LLM reads ALL the
-    // descriptions and infers which frames share a concrete visual entity (a person, place, object,
-    // style) by resolving references ("she", "the kitchen", "the same man") — no dial, no "keep the
-    // same person as frame 1", and the image prompt is your description VERBATIM. Each frame is then
-    // generated conditioned on exactly the frames the planner linked it to (any subset, any direction),
-    // so consistency emerges only where your descriptions actually share something; unrelated frames
-    // come out independent. Generation order is the planner's (an entity is created before it's reused).
-    const GEN_MODELS = [['flux-2-pro', 'FLUX.2 pro', '~$0.04'], ['seedream-4', 'Seedream 4', '$0.03'], ['nano-banana', 'Nano-Banana', '~$0.04'], ['nano-banana-pro', 'NB Pro', '~$0.15']];
-    function genFramesPanel() {
-        const descs = st.rawFrameDesc || ['', '', '', '', ''], CY = C.cyan, frames = st.rawFrames || [], plan = st.rawGenPlan;
-        const mPill = ([id, lab, pr]) => `<span data-genmodel="${id}" title="${id}" style="cursor:pointer;border:1px solid ${st.rawGenModel === id ? CY : C.border};background:${st.rawGenModel === id ? CY + '22' : 'transparent'};color:${st.rawGenModel === id ? CY : C.dim};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">${lab} <span style="opacity:.6;font-weight:400">${pr}</span></span>`;
-        const REL = { new: ['NEW', C.dim], edit: ['EDIT', C.green], compose: ['COMPOSE', C.purple] };
-        const linkOf = i => {
-            const f = plan && (plan.frames || []).find(x => x.i === i); if (!f) return '';
-            const r = REL[f.relation] || REL.new, src = f.relation === 'edit' ? `← ${f.edit_of + 1}` : f.relation === 'compose' ? `← ${(f.compose_from || []).map(x => x + 1).join(',')}` : '';
-            const pr = f.prompt && f.prompt !== descs[i] ? `<span style="opacity:.65;font-weight:400" title="${esc(f.prompt)}"> · ${esc(f.prompt.slice(0, 42))}${f.prompt.length > 42 ? '…' : ''}</span>` : '';
-            return `<span style="color:${r[1]};font-weight:800">${r[0]}${src ? ' ' + src : ''}</span>${pr}`;
-        };
-        const rows = [0, 1, 2, 3, 4].map(i => `<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px">
-            <span style="width:14px;font-size:11px;font-weight:800;color:${frames[i] ? C.green : C.mute}">${frames[i] ? '✓' : i + 1}</span>
-            <input data-framedesc="${i}" type="text" value="${esc(descs[i] || '')}" placeholder="frame ${i + 1} — describe the shot in plain language…" style="flex:1;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:11px"/>
-            <span style="font-size:9px;flex:0 0 220px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${linkOf(i)}</span></div>`).join('');
-        const any = (descs || []).some(d => (d || '').trim());
-        return `<div style="border:1px solid ${C.border};border-radius:10px;padding:10px;margin-top:8px;background:${C.card2}">
-            <div style="font-size:10px;color:${C.mute};margin-bottom:7px;line-height:1.5">Describe each frame in plain language — nothing else. A <b>director</b> reads the whole storyboard and decides per frame whether it's a <b style="color:${C.dim}">NEW</b> scene, an <b style="color:${C.green}">EDIT</b> of a prior frame's actual image (e.g. "now glowing" transforms the real picture, not a lookalike), or a <b style="color:${C.purple}">COMPOSE</b> of entities from several frames — resolving "it/she/the picture" itself. No dials, no "same as frame 1"; your words reach the model with only pronouns resolved. EDIT frames use an image-editing model so the actual content carries forward.</div>
-            <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:7px"><span style="font-size:9px;color:${C.mute};text-transform:uppercase">model</span>${GEN_MODELS.map(mPill).join('')}</div>
-            ${rows}
-            <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
-                <span data-gengo="1" style="cursor:${any && !st.rawGenBusy ? 'pointer' : 'not-allowed'};border:1px solid ${any && !st.rawGenBusy ? C.accent : C.border};background:${any && !st.rawGenBusy ? C.accent + '22' : 'transparent'};color:${any && !st.rawGenBusy ? C.accent : C.faint};border-radius:6px;padding:5px 14px;font-size:11px;font-weight:800">${st.rawGenBusy ? '⏳ Generating…' : '✨ Generate frames'}</span>
-                ${st.rawGenStage ? `<span style="font-size:10px;color:${C.cyan}">${esc(st.rawGenStage)}</span>` : ''}
-                ${st.rawGenErr ? `<span style="font-size:10px;color:${C.red}">${esc(st.rawGenErr)}</span>` : ''}</div></div>`;
-    }
-    async function genFrames() {
-        if (st.rawGenBusy) return;
-        const descs = st.rawFrameDesc || ['', '', '', '', ''];
-        const idx = [0, 1, 2, 3, 4].filter(i => (descs[i] || '').trim());
-        if (!idx.length) { st.rawGenErr = 'Describe at least one frame first.'; rtgUpdateExp(); return; }
-        st.rawGenBusy = true; st.rawGenErr = null; st.rawGenPlan = null; rtgUpdateExp();
-        const model = st.rawGenModel || 'flux-2-pro';
-        const frames = (st.rawFrames || [null, null, null, null, null]).slice();
-        const J = { 'Content-Type': 'application/json' };
         try {
-            // 1) the director reads the whole storyboard → per-frame relation (new/edit/compose) + resolved prompt
-            st.rawGenStage = 'directing the storyboard…'; rtgUpdateExp();
-            let plan = await fetch('/api/frames/plan', { method: 'POST', headers: J, body: JSON.stringify({ descriptions: descs }) }).then(r => r.json()).catch(() => null);
-            if (!plan || plan.error || !Array.isArray(plan.order)) plan = { order: idx.slice(), frames: idx.map(i => ({ i, relation: 'new', edit_of: null, compose_from: [], prompt: descs[i] })) };
-            st.rawGenPlan = plan; rtgUpdateExp();   // show the director's plan live
-            const planOf = i => (plan.frames || []).find(x => x.i === i) || { i, relation: 'new', edit_of: null, compose_from: [], prompt: descs[i] };
-            const order = plan.order.filter(i => idx.includes(i)); idx.forEach(i => { if (!order.includes(i)) order.push(i); });
-            const done = new Set();
-            // 2) generate in the director's order; route each frame by relation, using ALREADY-generated source frames
-            for (let n = 0; n < order.length; n++) {
-                const i = order[n], f = planOf(i);
-                let relation = f.relation || 'new';
-                let srcIdx = relation === 'edit' ? (f.edit_of != null ? [f.edit_of] : []) : relation === 'compose' ? (f.compose_from || []) : [];
-                srcIdx = srcIdx.filter(s => done.has(s) && frames[s]);                 // only sources that actually exist yet
-                if (relation === 'edit' && !srcIdx.length) relation = 'new';            // source missing → fall back to fresh
-                if (relation === 'compose' && !srcIdx.length) relation = 'new';         // COMPOSE keeps a single reference (new scene, reused entity)
-                const refs = srcIdx.map(s => frames[s]);
-                st.rawGenStage = `${relation === 'edit' ? 'editing' : relation === 'compose' ? 'composing' : 'generating'} frame ${i + 1} (${n + 1}/${order.length})…`; rtgUpdateExp();
-                const j = await fetch('/api/frames/gen', { method: 'POST', headers: J, body: JSON.stringify({ model, prompt: (f.prompt || descs[i]).trim(), refs, relation }) }).then(r => r.json());
-                if (!j || j.error) throw new Error((j && j.error) || 'generation failed');
-                frames[i] = j.image; done.add(i); st.rawFrames = frames.slice(); rtgUpdateExp();
-            }
-            st.rawGenStage = '';
-        } catch (e) { st.rawGenErr = String((e && e.message) || e).slice(0, 160); }
-        st.rawGenBusy = false; st.rawGenStage = ''; rtgUpdateExp();
-        if (!st.rawGenErr && (st.rawFrames || []).some(Boolean)) rtgPlaceHook();   // auto-embed + score the generated frames → same output as every other path
+            if (storyboardUI()) storyboardUI().afterRender();
+        } catch (e) {
+            console.error('[storyboard] experiment refresh failed', e);
+        }
     }
     function expDemoPoll(rid, tries) {
         tries = tries || 0;
@@ -4378,8 +4311,6 @@ const JarvisRetention = (function () {
         if (st.expGenBusy) {
             const M = { queued: 'spinning up the fine-tuned model…', reasoning: 'the model is inventing ideas — they stream in one at a time…', rendering: 'rendering the 5 frames…', done: 'done' };
             phase = 0; sub = (st.expGenStat && st.expGenStat.note) || M[st.expGenStage] || 'working…'; cold = (st.expGenStage === 'queued' || (st.expGenStage === 'reasoning' && !(st.expGenStat && st.expGenStat.done)));
-        } else if (st.rawGenBusy) {
-            phase = 0; sub = st.rawGenStage || 'generating the 5 frames…';
         } else if (st.rawUploading) {
             const s = Math.min(st.rawUpStage || 0, 4), vid = !!(st.rawUpQueue && st.rawUpQueue.total);
             if (vid) { phase = s <= 2 ? 0 : (s === 3 ? 1 : 2); sub = ['uploading the video…', 'extracting the 5 hook frames…', 'transcribing the audio…', 'embedding (visual · text · together)…', 'placing among similar hooks…'][s]; }
@@ -4401,7 +4332,6 @@ const JarvisRetention = (function () {
         if (SAVED === null) { SAVED = { loading: 1 }; rtFetchJson('/api/raw/saved-hooks', { cache: 'no-store' }, 4).then(j => { SAVED = j; rtgUpdateExp(); }).catch(e => { SAVED = { hooks: [], error: fetchFail(e) }; rtgUpdateExp(); }); }
         if ((st.savedBank || 'hooks') === 'channels' && SAVEDCHANNELS === null) { SAVEDCHANNELS = { loading: 1, channels: [] }; refreshSavedChannels(true); }
         const CY = '#22d3ee';
-        const fr = st.rawFrames || [null, null, null, null, null], nFrames = fr.filter(Boolean).length;
         const modePill = (m, lab) => `<span data-rawbuildmode="${m}" style="cursor:pointer;border:1px solid ${(!!st.rawBuildMode === !!m) ? CY : C.border};background:${(!!st.rawBuildMode === !!m) ? CY + '22' : 'transparent'};color:${(!!st.rawBuildMode === !!m) ? CY : C.dim};border-radius:${m ? '0 6px 6px 0' : '6px 0 0 6px'};padding:4px 10px;font-size:11px;font-weight:700">${lab}</span>`;
         const UPSTAGES = ['Uploading…', 'Extracting 5 frames…', 'Transcribing…', 'Embedding…', 'Scoring indicators…'];
         const upLabel = st.rawUpQueue && st.rawUpQueue.preparing
@@ -4412,13 +4342,10 @@ const JarvisRetention = (function () {
                     ? `Uploading ${st.rawUpQueue.transferMB} MB opening…`
                     : UPSTAGES[Math.min(st.rawUpStage || 0, 4)];
         const prog = st.rawUploading ? `<span style="display:inline-flex;flex-direction:column;gap:3px;min-width:230px"><span style="font-size:10px;color:${CY};font-weight:700">⏳ ${upLabel}</span><span style="height:6px;background:${C.border};border-radius:4px;overflow:hidden;display:block"><span style="display:block;height:100%;width:${Math.min(93, ((st.rawUpStage || 0) + 1) / 5 * 100)}%;background:${CY};border-radius:4px;transition:width .5s"></span></span></span>` : '';
-        const builder = st.rawBuildMode ? `<div style="margin-top:8px;display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">${[0, 1, 2, 3, 4].map(i => fr[i]
-            ? `<div style="position:relative"><img src="${fr[i]}" style="width:42px;height:75px;object-fit:cover;border-radius:5px;border:1px solid ${C.border}"/><span data-rawframedel="${i}" style="position:absolute;top:-7px;right:-7px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:15px;height:15px;line-height:13px;text-align:center;font-size:9px;cursor:pointer">✕</span></div>`
-            : `<div data-rawframe="${i}" style="width:42px;height:75px;border:1px dashed ${C.border};border-radius:5px;display:flex;align-items:center;justify-content:center;color:${C.mute};cursor:pointer;font-size:9px">＋${i + 1}</div>`).join('')}
-            <span data-rawstrip="1" title="upload ONE photo that already holds all 5 frames side by side (or stacked) — it's sliced into the 5 slots" style="cursor:pointer;border:1px dashed ${C.border};color:${C.dim};border-radius:6px;padding:5px 10px;font-size:10px;font-weight:700;white-space:nowrap">⬆ 1-photo strip</span>
-            <input data-rawtext type="text" value="${esc(st.rawText || '')}" placeholder="hook text…" style="flex:1;min-width:160px;background:${C.bg || '#0f172a'};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:6px 9px;font-size:12px"/>
-            <span data-rawplace="1" style="cursor:${nFrames ? 'pointer' : 'not-allowed'};border:1px solid ${nFrames ? CY : C.border};background:${nFrames ? CY + '22' : 'transparent'};color:${nFrames ? CY : C.faint};border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700">◆ Score this hook</span></div>${genFramesPanel()}` : '';
-        const controls = cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, '🖼 5 frames + text')}${!st.rawBuildMode ? `<span ${st.rawUploading ? 'aria-disabled="true"' : 'data-rawupload="1"'} style="cursor:${st.rawUploading ? 'not-allowed' : 'pointer'};opacity:${st.rawUploading ? '.45' : '1'};border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ ${st.rawUploading ? 'Video in progress' : 'Upload video'}</span><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;max-width:100%"><input data-rawyturl value="${esc(st.rawYtUrl || '')}" placeholder="or paste a YouTube link…" style="width:220px;max-width:100%;box-sizing:border-box;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 9px;font-size:11px"/><span data-rawytgo style="cursor:pointer;border:1px solid ${st.rawYtBusy ? C.amber : CY};background:${st.rawYtBusy ? C.amber + '18' : CY + '18'};color:${st.rawYtBusy ? C.amber : CY};border-radius:6px;padding:4px 11px;font-size:11px;font-weight:800;white-space:nowrap">${st.rawYtBusy ? '⏳ downloading + embedding…' : '⬇ score from link'}</span></span>` : ''}${expCreatorProfileHtml()}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red};line-height:1.4;max-width:560px">${esc(String(st.rawUpErr).slice(0, 320))}</span>` : ''}</div>${builder}`, 12);
+        const builder = st.rawBuildMode
+            ? `<div style="margin-top:10px">${renderStoryboardWorkbench()}</div>`
+            : '';
+        const controls = cardc(`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:12px;font-weight:800;color:${C.text}">Score a hook:</span>${modePill(0, '🎬 Video')}${modePill(1, 'Storyboard')}${!st.rawBuildMode ? `<span ${st.rawUploading ? 'aria-disabled="true"' : 'data-rawupload="1"'} style="cursor:${st.rawUploading ? 'not-allowed' : 'pointer'};opacity:${st.rawUploading ? '.45' : '1'};border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700">⬆ ${st.rawUploading ? 'Video in progress' : 'Upload video(s)'}</span><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;max-width:100%"><input data-rawyturl value="${esc(st.rawYtUrl || '')}" placeholder="or paste a YouTube link…" style="width:220px;max-width:100%;box-sizing:border-box;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:5px 9px;font-size:11px"/><span data-rawytgo style="cursor:pointer;border:1px solid ${st.rawYtBusy ? C.amber : CY};background:${st.rawYtBusy ? C.amber + '18' : CY + '18'};color:${st.rawYtBusy ? C.amber : CY};border-radius:6px;padding:4px 11px;font-size:11px;font-weight:800;white-space:nowrap">${st.rawYtBusy ? '⏳ downloading + embedding…' : '⬇ score from link'}</span></span>` : ''}${expCreatorProfileHtml()}${prog}${st.rawUpErr ? `<span style="font-size:10px;color:${C.red};line-height:1.4;max-width:560px">${esc(String(st.rawUpErr).slice(0, 320))}</span>` : ''}</div>${builder}`, 12);
         if (!EXPREG || EXPREG.loading) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">Loading the indicator registry…</div>`);
         if (EXPREG.error || !EXPREG.indicators) return head + controls + cardc(`<div style="padding:20px;text-align:center;color:${C.dim}">No indicator registry yet — run <code>indicators.py</code>.</div>`);
         // scorable = the indicators a NEW hook can actually be scored on (content probes + global novelty)
@@ -5954,6 +5881,14 @@ const JarvisRetention = (function () {
     }
     function rtgAfterRender() {
         if (typeof window === 'undefined' || !window.document || !window.document.getElementById) return;
+        try {
+            if (
+                window.document.getElementById('shorts-storyboard-workbench')
+                && storyboardUI()
+            ) storyboardUI().afterRender();
+        } catch (error) {
+            console.error('[storyboard] after-render failed', error);
+        }
         const host = window.document.getElementById('rtg-yt');
         rtgLastSec = -1;
         if (!host) { try { if (rtgPlayer && rtgPlayer.destroy) rtgPlayer.destroy(); } catch (e) { } rtgPlayer = null; return; }
@@ -6397,6 +6332,41 @@ const JarvisRetention = (function () {
         const ui = operationsUI();
         return ui ? ui.render() : cardc(`<div style="padding:24px;color:${C.red}">Operations UI module did not load.</div>`);
     }
+    function storyboardUI() {
+        if (
+            !STORYBOARD_UI
+            && typeof window !== 'undefined'
+            && window.JarvisStoryboardWorkbench
+            && typeof window.JarvisStoryboardWorkbench.create === 'function'
+        ) {
+            STORYBOARD_UI = window.JarvisStoryboardWorkbench.create({
+                escapeHtml: esc,
+                requestJson: (url, options) =>
+                    rtFetchJson(url, options, 3),
+                runJob: (url, body) => rtJob(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body || {}),
+                }),
+                composeFrames,
+                scoreCandidate: scoreStoryboardCandidate,
+                openScore: openStoryboardScore,
+                saveScore: saveStoryboardScore,
+                getCreatorProfile: selectedCreatorProfile,
+                onError: rawUploadPickerError,
+            });
+        }
+        return STORYBOARD_UI;
+    }
+    function renderStoryboardWorkbench() {
+        const ui = storyboardUI();
+        return ui
+            ? ui.render()
+            : cardc(
+                `<div style="padding:20px;color:${C.red}">The storyboard workbench did not load. Reload Business World and try again.</div>`,
+                10
+            );
+    }
 
     // switch the active channel → reload its retention table into DATA (or merge all → pooled)
     async function loadChannel(id) {
@@ -6562,6 +6532,98 @@ const JarvisRetention = (function () {
             ...(overrides || {}),
         };
     }
+    async function scoreStoryboardCandidate(input) {
+        const result = await rtJob('/api/raw/embed-montage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                montage: input.montage,
+                text: input.text || '',
+                title: input.title || 'Storyboard opening',
+                creatorProfile:
+                    input.creatorProfile || selectedCreatorProfile(),
+                async: true,
+            }),
+        });
+        result.source = 'storyboard';
+        result.title = input.title || result.title || 'Storyboard opening';
+        result.transcript = input.text || result.transcript || '';
+        result.montageDataUrl = input.montage;
+        result.storyboardCandidateId = input.id;
+        const uploads = st.rawUploads || (st.rawUploads = []);
+        const existingIndex = uploads.findIndex(candidate => (
+            candidate
+            && candidate.storyboardCandidateId === input.id
+        ));
+        if (existingIndex >= 0) {
+            uploads[existingIndex] = result;
+            st.rawUpSel = existingIndex;
+        } else {
+            uploads.push(result);
+            st.rawUpSel = uploads.length - 1;
+        }
+        st.rawSel = null;
+        return result;
+    }
+    async function openStoryboardScore(result) {
+        if (!result) return;
+        if (
+            !result.montageDataUrl
+            && Array.isArray(result.storyboardFrames)
+            && result.storyboardFrames.length === 5
+        ) {
+            result.montageDataUrl = await composeFrames(
+                result.storyboardFrames
+            );
+        }
+        if (
+            (!Array.isArray(result.genFrames) || !result.genFrames.length)
+            && Array.isArray(result.storyboardFrames)
+        ) {
+            result.genFrames = result.storyboardFrames.slice();
+        }
+        const uploads = st.rawUploads || (st.rawUploads = []);
+        let index = uploads.indexOf(result);
+        if (index < 0) {
+            index = uploads.findIndex(candidate => (
+                candidate
+                && result.storyboardCandidateId
+                && candidate.storyboardCandidateId
+                    === result.storyboardCandidateId
+            ));
+        }
+        if (index < 0) {
+            uploads.push(result);
+            index = uploads.length - 1;
+        }
+        st.rawUpSel = index;
+        st.rawSel = null;
+        st.rawUpShow = true;
+        refreshRawUploadPanel();
+    }
+    async function saveStoryboardScore(score, overrides) {
+        const payload = scoredHookSavePayload(score, {
+            ...(overrides || {}),
+            source: 'storyboard',
+        });
+        if (!payload) {
+            throw new Error(
+                'The storyboard has no valid canonical score ledger to save.'
+            );
+        }
+        const response = await rtFetchJson('/api/raw/hook-save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        }, 1);
+        if (!response || !response.ok) {
+            throw new Error(
+                response && response.error || 'Saved hook write failed.'
+            );
+        }
+        SAVED = null;
+        return response;
+    }
     function openRawVideoPicker() {
         if (rawScoreBusy()) {
             rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before starting another.');
@@ -6572,32 +6634,7 @@ const JarvisRetention = (function () {
             rawUploadPickerError('The uploader did not initialize. Reload the page and try again.');
             return;
         }
-        upload.pickFiles({ accept: 'video/*', multiple: false, onSelect: files => rtgRawUpload(files), onError: rawUploadPickerError });
-    }
-    function openRawFramePicker(slot) {
-        if (rawScoreBusy()) {
-            rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before changing frames.');
-            return;
-        }
-        const upload = window.JarvisUpload;
-        if (!upload || typeof upload.pickFiles !== 'function') {
-            rawUploadPickerError('The uploader did not initialize. Reload the page and try again.');
-            return;
-        }
-        st.rawFrameSlot = slot;
-        upload.pickFiles({ accept: 'image/jpeg,image/png,image/webp', onSelect: files => files[0] ? rtgFrameFile(files[0], slot) : null, onError: rawUploadPickerError });
-    }
-    function openRawStripPicker() {
-        if (rawScoreBusy()) {
-            rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before changing frames.');
-            return;
-        }
-        const upload = window.JarvisUpload;
-        if (!upload || typeof upload.pickFiles !== 'function') {
-            rawUploadPickerError('The uploader did not initialize. Reload the page and try again.');
-            return;
-        }
-        upload.pickFiles({ accept: 'image/jpeg,image/png,image/webp', onSelect: files => files[0] ? rtgStripFile(files[0]) : null, onError: rawUploadPickerError });
+        upload.pickFiles({ accept: 'video/*', multiple: true, onSelect: files => rtgRawUpload(files), onError: rawUploadPickerError });
     }
     // async scoring job: POST returns {jobId} instantly (no Render 100s proxy ceiling),
     // poll until done; if a redeploy loses the job, resubmit up to twice.
@@ -6848,6 +6885,11 @@ const JarvisRetention = (function () {
         }, 80);
     }
     function onClick(e) {
+        if (
+            e.target.closest('#shorts-storyboard-workbench')
+            && storyboardUI()
+            && storyboardUI().handleClick(e)
+        ) return;
         if (e.target.closest('[data-experiment-raw-back]')) { st.sec = 'experiment'; render(); return; }
         if (e.target.closest('#shorts-operations-panel') && operationsUI() && operationsUI().handleClick(e)) return;
         if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleClick(e)) return;
@@ -7008,8 +7050,6 @@ const JarvisRetention = (function () {
         const rc = e.target.closest('[data-rawcolor]'); if (rc) { st.rawColor = rc.getAttribute('data-rawcolor'); rtgUpdateRaw(); return; }
         const rk = e.target.closest('[data-rawk]'); if (rk) { st.rawK = rk.getAttribute('data-rawk'); rtgUpdateRaw(); return; }
         const rp = e.target.closest('[data-rawproj]'); if (rp) { st.rawProj = rp.getAttribute('data-rawproj'); rtgUpdateRaw(); return; }
-        const gm = e.target.closest('[data-genmodel]'); if (gm) { st.rawGenModel = gm.getAttribute('data-genmodel'); rtgUpdateExp(); return; }
-        if (e.target.closest('[data-gengo]')) { genFrames(); return; }
         const fut = e.target.closest('[data-futarget]'); if (fut) { st.fuTarget = fut.getAttribute('data-futarget'); rtgUpdateFusion(); return; }
         if (e.target.closest('[data-rawbands]')) { st.rawBands = !st.rawBands; rtgUpdateRaw(); return; }
         const rbk = e.target.closest('[data-rawbandk]'); if (rbk) { st.rawBandK = +rbk.getAttribute('data-rawbandk'); rtgUpdateRaw(); return; }
@@ -7115,10 +7155,6 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-rawupclose]')) { st.rawUpSel = null; rtgUpdateRaw(); return; }
         if (e.target.closest('[data-rawupclear]')) { st.rawUploads = []; st.rawUpSel = null; st.rawUpErr = null; rtgUpdateRaw(); return; }
         const bm = e.target.closest('[data-rawbuildmode]'); if (bm) { st.rawBuildMode = bm.getAttribute('data-rawbuildmode') === '1'; st.rawUpErr = null; rtgUpdateRaw(); return; }
-        const rfr = e.target.closest('[data-rawframe]'); if (rfr) { openRawFramePicker(+rfr.getAttribute('data-rawframe')); return; }
-        if (e.target.closest('[data-rawstrip]')) { openRawStripPicker(); return; }
-        const rfd = e.target.closest('[data-rawframedel]'); if (rfd) { st.rawFrames[+rfd.getAttribute('data-rawframedel')] = null; rtgUpdateRaw(); return; }
-        if (e.target.closest('[data-rawplace]')) { rtgPlaceHook(); return; }
         if (e.target.closest('[data-libreload]')) { Promise.all([
             fetch('/api/library/stats').then(r => r.json()).then(j => { LIB = j; }).catch(() => {}),
             fetch('/api/library/videos?limit=150').then(r => r.json()).then(j => { LIBV = j.videos || []; }).catch(() => {})
@@ -7134,6 +7170,11 @@ const JarvisRetention = (function () {
         if (tr) { const id = tr.getAttribute('data-row'); st.open = st.open === id ? null : id; render(); }
     }
     function onInput(e) {
+        if (
+            e.target.closest('#shorts-storyboard-workbench')
+            && storyboardUI()
+            && storyboardUI().handleInput(e)
+        ) return;
         if (e.target.closest('#shorts-operations-panel') && operationsUI() && operationsUI().handleInput(e)) return;
         if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleInput(e)) return;
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedchannelurl')) { st.savedChannelUrl = e.target.value; return; }
@@ -7155,12 +7196,15 @@ const JarvisRetention = (function () {
         if (e.target.hasAttribute && e.target.hasAttribute('data-savedfilt')) { const k = e.target.getAttribute('data-savedfilt'); st.savedFilt = st.savedFilt || {}; st.savedFilt[k] = +e.target.value; window.clearTimeout(st._sfT); st._sfT = window.setTimeout(rtgUpdateExp, 130); return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-grindthr')) { st.grindThr = +e.target.value; window.clearTimeout(st._gtT); st._gtT = window.setTimeout(rtgUpdateExp, 130); return; }
         if (e.target.id === 'grind-input') { st.grindPrem = e.target.value; return; }
-        if (e.target.hasAttribute && e.target.hasAttribute('data-rawtext')) { st.rawText = e.target.value; return; }
-        if (e.target.hasAttribute && e.target.hasAttribute('data-framedesc')) { const i = +e.target.getAttribute('data-framedesc'); st.rawFrameDesc = (st.rawFrameDesc || ['', '', '', '', '']).slice(); st.rawFrameDesc[i] = e.target.value; return; }
         if (e.target.hasAttribute && e.target.hasAttribute('data-pf')) { st.pvals = st.pvals || {}; st.pvals[e.target.getAttribute('data-pf')] = +e.target.value; updatePredict(); return; }
         if (e.target.closest('[data-q]')) { st.q = e.target.value; render(); }
     }
     function onChange(e) {
+        if (
+            e.target.closest('#shorts-storyboard-workbench')
+            && storyboardUI()
+            && storyboardUI().handleChange(e)
+        ) return;
         if (e.target.closest('#shorts-operations-panel') && operationsUI() && operationsUI().handleChange(e)) return;
         if (e.target.closest('#shorts-promise-panel') && promiseUI() && promiseUI().handleChange(e)) return;
         if (e.target.hasAttribute && e.target.hasAttribute('data-expcreatorprofile')) {
@@ -7172,6 +7216,12 @@ const JarvisRetention = (function () {
         if (e.target.closest('[data-tracked]')) { st.trackedOnly = e.target.checked; render(); }
     }
     function onKeyDown(e) {
+        if (
+            e.target.closest('#shorts-storyboard-workbench')
+            && storyboardUI()
+            && storyboardUI().handleKeyDown
+            && storyboardUI().handleKeyDown(e)
+        ) return;
         if (
             e.target.closest('#shorts-operations-panel')
             && operationsUI()
@@ -7272,50 +7322,7 @@ const JarvisRetention = (function () {
         st.rawUploading = false; st.rawUpStage = 0; st.rawUpQueue = null;
         rtgUpdateRaw();
     }
-    // ── build-a-hook from photos: fit each to a 9:16 cell (any image type → JPEG via
-    //    canvas), tile 5 into one montage, embed with user-set text, place on the map ──
     const FRAME_W = 320, FRAME_H = 569;
-    function rtgFrameFile(file, slot) {
-        const fr = new window.FileReader();
-        fr.onload = () => {
-            const im = new window.Image();
-            im.onload = () => {
-                const c = window.document.createElement('canvas'); c.width = FRAME_W; c.height = FRAME_H;
-                const x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, FRAME_W, FRAME_H);
-                const s = Math.max(FRAME_W / im.width, FRAME_H / im.height), w = im.width * s, hh = im.height * s;  // cover-fit
-                x.drawImage(im, (FRAME_W - w) / 2, (FRAME_H - hh) / 2, w, hh);
-                st.rawFrames[slot] = c.toDataURL('image/jpeg', 0.9); st.rawUpErr = null; rtgUpdateRaw();
-            };
-            im.onerror = () => { st.rawUpErr = 'could not read that image (HEIC may be unsupported — try JPG/PNG)'; rtgUpdateRaw(); };
-            im.src = fr.result;
-        };
-        fr.onerror = () => { st.rawUpErr = 'could not read file'; rtgUpdateRaw(); };
-        fr.readAsDataURL(file);
-    }
-    // one photo that already holds all 5 frames (a strip/montage) → slice into 5 equal cells
-    // and fill every slot; wider-than-tall = side-by-side columns, taller = stacked rows
-    function rtgStripFile(file) {
-        const fr = new window.FileReader();
-        fr.onload = () => {
-            const im = new window.Image();
-            im.onload = () => {
-                const horiz = im.width >= im.height;
-                const cw = horiz ? im.width / 5 : im.width, ch = horiz ? im.height : im.height / 5;
-                for (let i = 0; i < 5; i++) {
-                    const c = window.document.createElement('canvas'); c.width = FRAME_W; c.height = FRAME_H;
-                    const x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, FRAME_W, FRAME_H);
-                    const s = Math.max(FRAME_W / cw, FRAME_H / ch), w = cw * s, hh = ch * s;  // cover-fit each cell
-                    x.drawImage(im, horiz ? i * cw : 0, horiz ? 0 : i * ch, cw, ch, (FRAME_W - w) / 2, (FRAME_H - hh) / 2, w, hh);
-                    st.rawFrames[i] = c.toDataURL('image/jpeg', 0.9);
-                }
-                st.rawUpErr = null; rtgUpdateRaw();
-            };
-            im.onerror = () => { st.rawUpErr = 'could not read that image (HEIC may be unsupported — try JPG/PNG)'; rtgUpdateRaw(); };
-            im.src = fr.result;
-        };
-        fr.onerror = () => { st.rawUpErr = 'could not read file'; rtgUpdateRaw(); };
-        fr.readAsDataURL(file);
-    }
     async function composeFrames(frames) {
         const c = window.document.createElement('canvas'); c.width = FRAME_W * 5; c.height = FRAME_H;
         const x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, FRAME_W * 5, FRAME_H);
@@ -7324,20 +7331,6 @@ const JarvisRetention = (function () {
             await new Promise(res => { const im = new window.Image(); im.onload = () => { x.drawImage(im, i * FRAME_W, 0, FRAME_W, FRAME_H); res(); }; im.onerror = res; im.src = d; });
         }
         return c.toDataURL('image/jpeg', 0.9);
-    }
-    async function rtgPlaceHook() {
-        if (!(st.rawFrames || []).some(Boolean)) { st.rawUpErr = 'add at least one frame first'; rtgUpdateRaw(); return; }
-        if (rawScoreBusy()) { rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before scoring these frames.'); return; }
-        st.rawUploading = true; st.rawUpErr = null; st.rawUpStage = 1; st.rawUpQueue = null; rtgUpdateRaw();
-        const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateRaw(); } }, 1600);
-        try {
-            const montage = await composeFrames(st.rawFrames);
-            const title = (st.rawText && st.rawText.trim() ? st.rawText.trim().slice(0, 40) : 'Built hook ' + (st.rawUploads.length + 1));
-            const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: st.rawText || '', title, creatorProfile: selectedCreatorProfile(), async: true }) });
-            st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-        } catch (e) { st.rawUpErr = e.message; }
-        window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0;
-        rtgUpdateRaw();
     }
     // Fetch an image URL → data-URL (so a generated R2 frame can be composed + embedded).
     async function urlToDataUrl(u) {

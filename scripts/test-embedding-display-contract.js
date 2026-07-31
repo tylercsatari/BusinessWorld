@@ -22,6 +22,9 @@ const longHookLibraryIndex = require(
 const savedHookRuntimeIndex = require(
     '../buildings/jarvis/saved-hook-runtime-index'
 );
+const storyboardContract = require(
+    '../buildings/jarvis/storyboard-contract'
+);
 const {
     createR2JsonCasMutator,
 } = require('../buildings/jarvis/r2-json-cas');
@@ -63,6 +66,7 @@ const context = {
     longScoreLedger,
     longHookLibraryIndex,
     savedHookRuntimeIndex,
+    storyboardContract,
     createR2JsonCasMutator,
     cloud: {
         downloadFromR2: async key => objects.has(key) ? Buffer.from(objects.get(key)) : null,

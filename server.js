@@ -91,6 +91,9 @@ const visualKeepForecastContract = require(
 const creatorAdaptiveKeepForecastContract = require(
     './buildings/jarvis/creator-adaptive-keep-forecast-contract'
 );
+const storyboardContract = require(
+    './buildings/jarvis/storyboard-contract'
+);
 const {
     createR2JsonCasMutator,
 } = require('./buildings/jarvis/r2-json-cas');
@@ -2681,6 +2684,21 @@ const SAVED_CHANNEL_REQUEST_ROOT = 'shorts/channel-import/requests/';
 const SAVED_CHANNEL_VALIDATION_KEY = SAVED_CHANNEL_ROOT + 'blind-validation.json';
 const SAVED_HOOK_INDEX_KEY = 'raw/saved-hooks/index.json';
 const SAVED_HOOK_MEDIA_ROOT = 'raw/saved-hooks/media/by-sha256/';
+const STORYBOARD_ROOT = 'raw/storyboards/v1/';
+const STORYBOARD_INDEX_KEY = `${STORYBOARD_ROOT}index.json`;
+const STORYBOARD_MEDIA_ROOT =
+    `${STORYBOARD_ROOT}media/by-sha256/`;
+const STORYBOARD_MANIFEST_ROOT =
+    `${STORYBOARD_ROOT}manifests/`;
+const STORYBOARD_REVISION_ROOT =
+    `${STORYBOARD_ROOT}revisions/`;
+const STORYBOARD_INDEX_REPAIR_ROOT =
+    `${STORYBOARD_ROOT}index-repair/`;
+const STORYBOARD_MAX_MEDIA_BYTES = 12 * 1024 * 1024;
+const STORYBOARD_MAX_REFERENCE_BYTES = 6 * 1024 * 1024;
+const STORYBOARD_MAX_REFERENCE_TOTAL_BYTES = 24 * 1024 * 1024;
+const STORYBOARD_MAX_IMAGE_SIDE = 8192;
+const STORYBOARD_MAX_IMAGE_PIXELS = 40 * 1000 * 1000;
 const LONG_SAVED_THUMBNAIL_INDEX_KEY =
     'longform/saved-thumbs/index.json';
 const LONG_HOOK_LIBRARY_INDEX_KEY =
@@ -2721,6 +2739,903 @@ const r2JsonCasStorage = Object.freeze({
     isPreconditionFailed: error =>
         cloud.isR2PreconditionFailedError(error),
 });
+
+const storyboardIndexCas = createR2JsonCasMutator({
+    key: STORYBOARD_INDEX_KEY,
+    storage: r2JsonCasStorage,
+    emptyValue: () => storyboardContract.bindIndex({
+        storyboards: [],
+        updatedAt: Date.now(),
+    }),
+    validate: storyboardContract.validateIndex,
+    bind: index => storyboardContract.bindIndex({
+        ...index,
+        updatedAt: Date.now(),
+    }),
+    label: 'Shorts storyboard index',
+});
+
+function updateStoryboardIndex(mutator) {
+    return storyboardIndexCas.mutate(async index => {
+        await mutator(index);
+        return index;
+    });
+}
+
+async function repairStoryboardIndexEntry(id) {
+    const record = await readStoryboardRecord(id);
+    if (!record) return false;
+    await updateStoryboardIndex(index => {
+        const rows = Array.isArray(index.storyboards)
+            ? index.storyboards
+            : [];
+        const existing = rows.find(row => row.id === id);
+        if (existing && existing.revision === record.revision) return;
+        index.storyboards = rows.filter(row => row.id !== id);
+        index.storyboards.unshift(
+            storyboardContract.compactDocument(record)
+        );
+    });
+    await cloud.deleteFromR2(
+        `${STORYBOARD_INDEX_REPAIR_ROOT}${id}.json`
+    ).catch(() => {});
+    return true;
+}
+
+async function queueStoryboardIndexRepair(record) {
+    await cloud.uploadToR2(
+        `${STORYBOARD_INDEX_REPAIR_ROOT}${record.id}.json`,
+        canonicalJsonBytes({
+            schema: 'shorts-storyboard-index-repair-v1',
+            id: record.id,
+            revision: record.revision,
+            queuedAt: Date.now(),
+        }),
+        'application/json'
+    );
+}
+
+let storyboardIndexRepairInflight = null;
+async function repairPendingStoryboardIndexes() {
+    if (storyboardIndexRepairInflight) {
+        return storyboardIndexRepairInflight;
+    }
+    storyboardIndexRepairInflight = (async () => {
+        const keys = await cloud.listR2Keys(
+            STORYBOARD_INDEX_REPAIR_ROOT
+        );
+        const pending = (keys || []).slice(0, 20);
+        for (const key of pending) {
+            const match = key.match(
+                /\/(sb[a-z0-9]{10,40})\.json$/
+            );
+            if (!match) continue;
+            await repairStoryboardIndexEntry(match[1]);
+        }
+    })().finally(() => {
+        storyboardIndexRepairInflight = null;
+    });
+    return storyboardIndexRepairInflight;
+}
+
+async function readStoryboardIndex() {
+    await repairPendingStoryboardIndexes().catch(error => {
+        console.warn(
+            '[storyboard] pending index repair deferred:',
+            error.message || error
+        );
+    });
+    const revision = await storyboardIndexCas.readRevision();
+    const validation = storyboardContract.validateIndex(revision.value);
+    if (!validation.valid) {
+        throw new HttpRequestError(
+            409,
+            'The storyboard index failed integrity validation: '
+                + validation.errors.join('; '),
+            'storyboard_index_invalid'
+        );
+    }
+    return revision.value;
+}
+
+function storyboardId() {
+    return 'sb'
+        + Date.now().toString(36)
+        + Math.floor(Math.random() * 1e12).toString(36);
+}
+
+function storyboardJpegDimensions(bytes) {
+    let offset = 2;
+    const sof = new Set([
+        0xc0, 0xc1, 0xc2, 0xc3,
+        0xc5, 0xc6, 0xc7,
+        0xc9, 0xca, 0xcb,
+        0xcd, 0xce, 0xcf,
+    ]);
+    while (offset + 4 <= bytes.length) {
+        if (bytes[offset] !== 0xff) {
+            offset++;
+            continue;
+        }
+        while (offset < bytes.length && bytes[offset] === 0xff) offset++;
+        const marker = bytes[offset++];
+        if (marker === 0xd8 || marker === 0xd9) continue;
+        if (marker === 0xda || offset + 2 > bytes.length) break;
+        const length = bytes.readUInt16BE(offset);
+        if (length < 2 || offset + length > bytes.length) break;
+        if (sof.has(marker) && length >= 7) {
+            return {
+                width: bytes.readUInt16BE(offset + 5),
+                height: bytes.readUInt16BE(offset + 3),
+            };
+        }
+        offset += length;
+    }
+    return null;
+}
+
+function storyboardWebpDimensions(bytes) {
+    const chunk = bytes.subarray(12, 16).toString('ascii');
+    if (chunk === 'VP8X' && bytes.length >= 30) {
+        return {
+            width: 1 + bytes.readUIntLE(24, 3),
+            height: 1 + bytes.readUIntLE(27, 3),
+        };
+    }
+    if (
+        chunk === 'VP8L'
+        && bytes.length >= 25
+        && bytes[20] === 0x2f
+    ) {
+        const bits = bytes.readUInt32LE(21);
+        return {
+            width: (bits & 0x3fff) + 1,
+            height: ((bits >>> 14) & 0x3fff) + 1,
+        };
+    }
+    if (
+        chunk === 'VP8 '
+        && bytes.length >= 30
+        && bytes[23] === 0x9d
+        && bytes[24] === 0x01
+        && bytes[25] === 0x2a
+    ) {
+        return {
+            width: bytes.readUInt16LE(26) & 0x3fff,
+            height: bytes.readUInt16LE(28) & 0x3fff,
+        };
+    }
+    return null;
+}
+
+function validatedStoryboardDimensions(dimensions) {
+    const width = dimensions && Number(dimensions.width);
+    const height = dimensions && Number(dimensions.height);
+    if (
+        !Number.isSafeInteger(width)
+        || !Number.isSafeInteger(height)
+        || width < 1
+        || height < 1
+        || width > STORYBOARD_MAX_IMAGE_SIDE
+        || height > STORYBOARD_MAX_IMAGE_SIDE
+        || width * height > STORYBOARD_MAX_IMAGE_PIXELS
+    ) {
+        throw new HttpRequestError(
+            415,
+            'Storyboard media has invalid or unsafe pixel dimensions.',
+            'storyboard_media_dimensions'
+        );
+    }
+    return { width, height };
+}
+
+function storyboardImageType(bytes) {
+    if (
+        bytes.length >= 4
+        && bytes[0] === 0xff
+        && bytes[1] === 0xd8
+        && bytes[bytes.length - 2] === 0xff
+        && bytes[bytes.length - 1] === 0xd9
+    ) {
+        return {
+            extension: 'jpg',
+            mediaType: 'image/jpeg',
+            ...validatedStoryboardDimensions(
+                storyboardJpegDimensions(bytes)
+            ),
+        };
+    }
+    if (
+        bytes.length >= 8
+        && bytes.subarray(0, 8).equals(Buffer.from([
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        ]))
+    ) {
+        const dimensions = (
+            bytes.length >= 24
+            && bytes.subarray(12, 16).toString('ascii') === 'IHDR'
+        ) ? {
+            width: bytes.readUInt32BE(16),
+            height: bytes.readUInt32BE(20),
+        } : null;
+        return {
+            extension: 'png',
+            mediaType: 'image/png',
+            ...validatedStoryboardDimensions(dimensions),
+        };
+    }
+    if (
+        bytes.length >= 12
+        && bytes.subarray(0, 4).toString('ascii') === 'RIFF'
+        && bytes.subarray(8, 12).toString('ascii') === 'WEBP'
+    ) {
+        return {
+            extension: 'webp',
+            mediaType: 'image/webp',
+            ...validatedStoryboardDimensions(
+                storyboardWebpDimensions(bytes)
+            ),
+        };
+    }
+    throw new HttpRequestError(
+        415,
+        'Storyboard media must be a structurally valid JPEG, PNG, or WebP.',
+        'storyboard_media_unsupported'
+    );
+}
+
+function decodeStoryboardDataImage(
+    value,
+    label = 'image',
+    maxBytes = STORYBOARD_MAX_MEDIA_BYTES
+) {
+    const match = String(value || '').match(
+        /^data:image\/(?:jpeg|jpg|png|webp);base64,([a-z0-9+/=\s]+)$/i
+    );
+    if (!match) {
+        throw new HttpRequestError(
+            422,
+            `${label} is not a supported image payload`,
+            'storyboard_media_invalid'
+        );
+    }
+    const bytes = Buffer.from(match[1].replace(/\s/g, ''), 'base64');
+    if (bytes.length < 100 || bytes.length > maxBytes) {
+        throw new HttpRequestError(
+            413,
+            `${label} must be between 100 bytes and ${
+                Math.floor(maxBytes / (1024 * 1024))
+            } MB`,
+            'storyboard_media_size'
+        );
+    }
+    const type = storyboardImageType(bytes);
+    return { bytes, ...type };
+}
+
+function storyboardMediaReference(bytes, type) {
+    const sha256 = sha256Bytes(bytes);
+    return {
+        schema: 'shorts-storyboard-media-v1',
+        url:
+            `/api/storyboards/media/${sha256}.${type.extension}`,
+        key:
+            `${STORYBOARD_MEDIA_ROOT}${sha256}.${type.extension}`,
+        sha256,
+        byte_length: bytes.length,
+        media_type: type.mediaType,
+    };
+}
+
+async function writeImmutableStoryboardMedia(reference, bytes) {
+    const existingObject = await cloud.getR2SmallObject(
+        reference.key,
+        { maxBytes: reference.byte_length }
+    ).catch(error => {
+        if (cloud.isMissingR2ObjectError(error)) return null;
+        throw error;
+    });
+    const existing = existingObject && existingObject.body;
+    if (existingObject) {
+        if (
+            existing.length !== bytes.length
+            || sha256Bytes(existing) !== reference.sha256
+            || !existing.equals(bytes)
+        ) {
+            throw new Error(
+                'content-addressed storyboard media collision'
+            );
+        }
+        return reference;
+    }
+    await cloud.uploadToR2(
+        reference.key,
+        bytes,
+        reference.media_type
+    );
+    const verifiedObject = await cloud.getR2SmallObject(
+        reference.key,
+        { maxBytes: reference.byte_length }
+    );
+    const verified = verifiedObject && verifiedObject.body;
+    if (
+        !verified
+        || verified.length !== bytes.length
+        || !verified.equals(bytes)
+    ) {
+        throw new Error(
+            'storyboard media failed read-after-write validation'
+        );
+    }
+    return reference;
+}
+
+async function readStoryboardMediaReference(
+    value,
+    label,
+    maxBytes = STORYBOARD_MAX_MEDIA_BYTES
+) {
+    const candidate = typeof value === 'object' && value
+        ? value.url || value.image || ''
+        : value;
+    const own = String(candidate || '').match(
+        storyboardContract.MEDIA_URL_PATTERN
+    );
+    if (own) {
+        const extension = own[2];
+        const type = {
+            extension,
+            mediaType: extension === 'png'
+                ? 'image/png'
+                : extension === 'webp'
+                    ? 'image/webp'
+                    : 'image/jpeg',
+        };
+        const key = `${STORYBOARD_MEDIA_ROOT}${own[1]}.${extension}`;
+        const stored = await cloud.getR2SmallObject(
+            key,
+            { maxBytes }
+        ).catch(error => {
+            if (cloud.isMissingR2ObjectError(error)) return null;
+            throw error;
+        });
+        const bytes = stored && stored.body;
+        if (!bytes || sha256Bytes(bytes) !== own[1]) {
+            throw new HttpRequestError(
+                409,
+                `${label} references missing or invalid stored media`,
+                'storyboard_media_missing'
+            );
+        }
+        return storyboardMediaReference(bytes, type);
+    }
+    const decoded = decodeStoryboardDataImage(
+        candidate,
+        label,
+        maxBytes
+    );
+    const reference = storyboardMediaReference(
+        decoded.bytes,
+        decoded
+    );
+    await writeImmutableStoryboardMedia(reference, decoded.bytes);
+    return reference;
+}
+
+async function optionalStoryboardMedia(value, label) {
+    if (!value) return null;
+    return readStoryboardMediaReference(value, label);
+}
+
+async function persistedStoryboardPanel(value, index) {
+    const panel = value && typeof value === 'object' ? value : {};
+    const revisions = [];
+    const sourceRevisions = Array.isArray(panel.revisions)
+        ? panel.revisions.slice(-12)
+        : [];
+    for (let at = 0; at < sourceRevisions.length; at++) {
+        const revision = sourceRevisions[at] || {};
+        const media = await optionalStoryboardMedia(
+            revision.image || revision.media,
+            `frame ${index + 1} revision ${at + 1}`
+        );
+        if (!media) continue;
+        revisions.push({ ...revision, media, image: undefined });
+    }
+    return {
+        ...panel,
+        media: await optionalStoryboardMedia(
+            panel.image || panel.media,
+            `frame ${index + 1}`
+        ),
+        image: undefined,
+        revisions,
+    };
+}
+
+async function persistedStoryboardReference(value, index) {
+    const reference = value && typeof value === 'object' ? value : {};
+    return {
+        ...reference,
+        media: await readStoryboardMediaReference(
+            reference.image || reference.media,
+            `reference ${index + 1}`,
+            STORYBOARD_MAX_REFERENCE_BYTES
+        ),
+        image: undefined,
+    };
+}
+
+function storyboardClientRecord(record) {
+    return {
+        ...record,
+        composite: record.composite && record.composite.url || null,
+        references: (record.references || []).map(reference => ({
+            ...reference,
+            image: reference.media && reference.media.url || null,
+        })),
+        panels: (record.panels || []).map(panel => ({
+            ...panel,
+            image: panel.media && panel.media.url || null,
+            revisions: (panel.revisions || []).map(revision => ({
+                ...revision,
+                image: revision.media && revision.media.url || null,
+            })),
+        })),
+    };
+}
+
+async function readStoryboardManifestRevision(id) {
+    if (!storyboardContract.ID_PATTERN.test(String(id || ''))) {
+        throw new HttpRequestError(
+            400,
+            'Storyboard id is invalid.',
+            'storyboard_id_invalid'
+        );
+    }
+    let revision;
+    try {
+        revision = await cloud.getR2SmallObject(
+            `${STORYBOARD_MANIFEST_ROOT}${id}.json`
+        );
+    } catch (error) {
+        if (cloud.isMissingR2ObjectError(error)) return null;
+        throw error;
+    }
+    const bytes = revision.body;
+    let record;
+    try {
+        record = JSON.parse(bytes.toString('utf8'));
+    } catch (error) {
+        throw new HttpRequestError(
+            409,
+            'Stored storyboard manifest is invalid JSON.',
+            'storyboard_manifest_invalid'
+        );
+    }
+    const validation = storyboardContract.validateDocument(record);
+    if (!validation.valid) {
+        throw new HttpRequestError(
+            409,
+            'Stored storyboard failed integrity validation: '
+                + validation.errors.join('; '),
+            'storyboard_manifest_integrity'
+        );
+    }
+    return { record, etag: revision.etag };
+}
+
+async function readStoryboardRecord(id) {
+    const revision = await readStoryboardManifestRevision(id);
+    return revision && revision.record || null;
+}
+
+async function writeImmutableStoryboardRevision(record) {
+    const key =
+        `${STORYBOARD_REVISION_ROOT}${record.id}/${record.revision}.json`;
+    const bytes = canonicalJsonBytes(record);
+    try {
+        await cloud.putR2SmallObjectConditional(
+            key,
+            bytes,
+            {
+                ifNoneMatch: '*',
+                contentType: 'application/json',
+            }
+        );
+    } catch (error) {
+        if (!cloud.isR2PreconditionFailedError(error)) throw error;
+        const existing = await cloud.getR2SmallObject(
+            key,
+            { maxBytes: bytes.length }
+        );
+        if (!existing.body.equals(bytes)) {
+            throw new Error(
+                'content-addressed storyboard revision collision'
+            );
+        }
+        return;
+    }
+    const verifiedObject = await cloud.getR2SmallObject(
+        key,
+        { maxBytes: bytes.length }
+    );
+    const verified = verifiedObject && verifiedObject.body;
+    if (!verified || !verified.equals(bytes)) {
+        throw new Error(
+            'storyboard revision failed read-after-write validation'
+        );
+    }
+}
+
+async function storyboardGenerationReferences(refs) {
+    const materialized = [];
+    const identities = [];
+    const descriptions = [];
+    let totalBytes = 0;
+    for (let index = 0; index < Math.min(8, (refs || []).length); index++) {
+        const specification = (
+            refs[index]
+            && typeof refs[index] === 'object'
+            && !Array.isArray(refs[index])
+        ) ? refs[index] : null;
+        const source = specification
+            ? specification.image || specification.url || ''
+            : refs[index];
+        const panels = [...new Set((
+            specification && Array.isArray(specification.panels)
+                ? specification.panels
+                : []
+        ).map(Number).filter(panelIndex => (
+            Number.isInteger(panelIndex)
+            && panelIndex >= 0
+            && panelIndex < storyboardContract.PANEL_COUNT
+        )))].sort((left, right) => left - right);
+        const global = !specification || specification.global !== false;
+        const name = String(
+            specification && specification.name
+            || `Reference ${index + 1}`
+        ).trim().slice(0, 80);
+        let bytes;
+        let type;
+        const own = String(source || '').match(
+            storyboardContract.MEDIA_URL_PATTERN
+        );
+        if (own) {
+            const stored = await cloud.getR2SmallObject(
+                `${STORYBOARD_MEDIA_ROOT}${own[1]}.${own[2]}`,
+                { maxBytes: STORYBOARD_MAX_REFERENCE_BYTES }
+            ).catch(error => {
+                if (cloud.isMissingR2ObjectError(error)) return null;
+                throw error;
+            });
+            bytes = stored && stored.body;
+            if (!bytes || sha256Bytes(bytes) !== own[1]) {
+                throw new HttpRequestError(
+                    409,
+                    `generation reference ${index + 1} is unavailable`,
+                    'storyboard_reference_missing'
+                );
+            }
+            type = storyboardImageType(bytes);
+        } else {
+            const decoded = decodeStoryboardDataImage(
+                source,
+                `generation reference ${index + 1}`,
+                STORYBOARD_MAX_REFERENCE_BYTES
+            );
+            bytes = decoded.bytes;
+            type = decoded;
+        }
+        totalBytes += bytes.length;
+        if (totalBytes > STORYBOARD_MAX_REFERENCE_TOTAL_BYTES) {
+            throw new HttpRequestError(
+                413,
+                'Storyboard references exceed the 24 MB combined limit.',
+                'storyboard_reference_total_size'
+            );
+        }
+        const sha256 = sha256Bytes(bytes);
+        identities.push({
+            sha256,
+            byte_length: bytes.length,
+            media_type: type.mediaType,
+            name,
+            global,
+            panels,
+        });
+        descriptions.push(
+            `REFERENCE IMAGE ${index + 1} (${name}) applies to ${
+                global || !panels.length
+                    ? 'all five panels'
+                    : panels.map(panelIndex => (
+                        `panel ${panelIndex + 1}`
+                    )).join(', ')
+            }.`
+        );
+        materialized.push(
+            `data:${type.mediaType};base64,${bytes.toString('base64')}`
+        );
+    }
+    return { materialized, identities, descriptions };
+}
+
+async function storyboardMediaBytes(reference, label) {
+    if (
+        !reference
+        || !reference.key
+        || !exactSha256(reference.sha256)
+        || !Number.isSafeInteger(reference.byte_length)
+        || reference.byte_length < 100
+        || reference.byte_length > STORYBOARD_MAX_MEDIA_BYTES
+    ) {
+        throw new HttpRequestError(
+            422,
+            `${label} has an invalid media reference`,
+            'storyboard_media_reference_invalid'
+        );
+    }
+    const stored = await cloud.getR2SmallObject(
+        reference.key,
+        { maxBytes: reference.byte_length }
+    ).catch(error => {
+        if (cloud.isMissingR2ObjectError(error)) return null;
+        throw error;
+    });
+    const bytes = stored && stored.body;
+    if (
+        !bytes
+        || bytes.length !== reference.byte_length
+        || sha256Bytes(bytes) !== reference.sha256
+    ) {
+        throw new HttpRequestError(
+            409,
+            `${label} is missing or failed its content hash`,
+            'storyboard_media_integrity'
+        );
+    }
+    return bytes;
+}
+
+async function canonicalStoryboardMontage(panels) {
+    if (
+        !Array.isArray(panels)
+        || panels.length !== storyboardContract.PANEL_COUNT
+        || panels.some(panel => !panel || !panel.media)
+    ) {
+        throw new HttpRequestError(
+            422,
+            'All five storyboard panels are required before scoring.',
+            'storyboard_incomplete'
+        );
+    }
+    const os = require('os');
+    const directory = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'storyboard_')
+    );
+    let bytes;
+    try {
+        const framePaths = [];
+        for (let index = 0; index < panels.length; index++) {
+            const panelBytes = await storyboardMediaBytes(
+                panels[index].media,
+                `frame ${index + 1}`
+            );
+            const framePath = path.join(
+                directory,
+                `frame-${index + 1}.img`
+            );
+            fs.writeFileSync(framePath, panelBytes);
+            framePaths.push(framePath);
+        }
+        bytes = await composeMontageFiles(framePaths, directory);
+    } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+    }
+    const type = storyboardImageType(bytes);
+    const media = storyboardMediaReference(bytes, type);
+    await writeImmutableStoryboardMedia(media, bytes);
+    return {
+        bytes,
+        media,
+        panelMediaSha256s: panels.map(panel => panel.media.sha256),
+    };
+}
+
+async function canonicalStoryboardScore(
+    value,
+    panels,
+    hookText
+) {
+    if (!value) return null;
+    if (!value.score_ledger || !value.input_manifest) {
+        throw new HttpRequestError(
+            422,
+            'A scored storyboard requires its canonical ledger and input manifest.',
+            'storyboard_score_incomplete'
+        );
+    }
+    const submittedScoreRecordSha256 = value.score_record_sha256;
+    const calculatedScoreRecordSha256 =
+        savedHookScoreRecordSha256(value);
+    if (
+        !exactSha256(submittedScoreRecordSha256)
+        || submittedScoreRecordSha256
+            !== calculatedScoreRecordSha256
+    ) {
+        throw new HttpRequestError(
+            422,
+            'The storyboard score record does not match the canonical '
+                + 'scorer response. Score these frames again.',
+            'storyboard_score_record_mismatch'
+        );
+    }
+    const montage = await canonicalStoryboardMontage(panels);
+    const submittedMontage = await readStoryboardMediaReference(
+        value.score_montage || value.scoreMontage,
+        'scored storyboard montage'
+    );
+    if (submittedMontage.sha256 !== montage.media.sha256) {
+        throw new HttpRequestError(
+            422,
+            'The score belongs to different storyboard panels. Score these five frames again.',
+            'storyboard_score_panel_mismatch'
+        );
+    }
+    const manifest = value.input_manifest;
+    const inputValidation =
+        shortsScoreLedger.validateShortsInputManifest(
+            value,
+            {
+                montageBytes: montage.bytes,
+                text: hookText || '',
+                durationS: manifest.duration_s,
+                creatorProfile: manifest.creator_profile,
+            }
+        );
+    if (!inputValidation.valid) {
+        throw new HttpRequestError(
+            422,
+            'The storyboard score input does not match: '
+                + inputValidation.errors.join('; '),
+            'storyboard_score_input_mismatch'
+        );
+    }
+    const validated = validateRawScoreResult(
+        {
+            ...JSON.parse(JSON.stringify(value)),
+            montage: montage.bytes.toString('base64'),
+            transcript: String(hookText || ''),
+            text: String(hookText || ''),
+        },
+        { requireCompatibilityCaches: false }
+    );
+    if (
+        validated.score_record_sha256
+        !== submittedScoreRecordSha256
+    ) {
+        throw new HttpRequestError(
+            422,
+            'The storyboard score evidence changed during validation. '
+                + 'Score these frames again.',
+            'storyboard_score_evidence_mismatch'
+        );
+    }
+    const scoreInput = storyboardContract.bindScoreInput({
+        montage_sha256: montage.media.sha256,
+        panel_media_sha256s: montage.panelMediaSha256s,
+        hookText,
+        score_input_fingerprint:
+            manifest.score_input_fingerprint
+            || manifest.input_fingerprint,
+        score_ledger_sha256:
+            validated.score_ledger.ledger_sha256,
+        score_record_sha256:
+            validated.score_record_sha256,
+        output_fingerprint: manifest.output_fingerprint,
+        scorer_revision_fingerprint:
+            manifest.revision_fingerprint,
+    });
+    const durationValue = value.duration_s !== undefined
+        ? value.duration_s
+        : value.dur_s;
+    return {
+        ...value,
+        title: String(value.title || '').slice(0, 140),
+        text: String(hookText || '').slice(0, 2000),
+        duration_s: Number.isFinite(Number(
+            durationValue
+        )) && durationValue !== null && durationValue !== ''
+            ? Number(durationValue)
+            : null,
+        score_ledger_validation:
+            validated.score_ledger_validation,
+        score_record_sha256:
+            validated.score_record_sha256,
+        score_montage: montage.media,
+        score_input: scoreInput,
+    };
+}
+
+function storyboardSheetGeometry(modelKey) {
+    if (modelKey === 'flux-2-pro') {
+        return {
+            aspect_ratio: 'custom',
+            width: 1440,
+            height: 512,
+            panel_aspect_ratio: '9:16',
+            postprocess: 'five-equal-columns',
+        };
+    }
+    if (modelKey === 'seedream-4') {
+        return {
+            size: 'custom',
+            width: 2880,
+            height: 1024,
+            panel_aspect_ratio: '9:16',
+            postprocess: 'five-equal-columns',
+        };
+    }
+    return {
+        aspect_ratio: '21:9',
+        panel_aspect_ratio: '9:16',
+        postprocess: 'five-equal-columns-center-crop',
+    };
+}
+
+function storyboardGenerationIdentity(modelKey, mode) {
+    const model = STORY_MODELS[modelKey] || STORY_MODELS['flux-2-pro'];
+    const payload = {
+        schema: 'shorts-storyboard-generation-contract-v1',
+        provider: 'replicate',
+        model_key: modelKey,
+        model_slug: model.slug,
+        mode,
+        prompt_template: mode === 'coherent-sheet'
+            ? 'five-panel-coherent-sheet-v1'
+            : 'single-panel-generation-v1',
+        geometry: mode === 'coherent-sheet'
+            ? storyboardSheetGeometry(modelKey)
+            : { aspect_ratio: '9:16' },
+    };
+    return {
+        ...payload,
+        revision_fingerprint: sha256Bytes(canonicalJsonBytes(payload)),
+    };
+}
+
+function storyboardSheetPrompt({
+    brief,
+    hookText,
+    panels,
+    referenceDescriptions = [],
+}) {
+    const opening = brief || hookText || 'A compelling visual opening.';
+    const panelLines = panels.map((prompt, index) => (
+        `PANEL ${index + 1}: ${
+            String(prompt || '').trim()
+            || `Continue the visual progression of: ${opening}`
+        }`
+    ));
+    return [
+        'Create one single edge-to-edge photographic storyboard sheet.',
+        'The sheet must contain exactly five equal vertical panels arranged '
+            + 'left to right in chronological order.',
+        'Maintain the exact same people, faces, wardrobe, objects, location, '
+            + 'lighting logic, and visual style whenever they recur.',
+        'Each panel must be a complete 9:16 composition within its fifth of '
+            + 'the sheet. Use clean edge-to-edge panel boundaries.',
+        'Do not add captions, words, letters, numbers, watermarks, borders, '
+            + 'gaps, frames, contact-sheet labels, or UI.',
+        `OVERALL OPENING: ${opening}`,
+        hookText ? `SPOKEN CONTEXT: ${hookText}` : '',
+        referenceDescriptions.length
+            ? 'REFERENCE SCOPE (obey this panel mapping exactly):'
+            : '',
+        ...referenceDescriptions,
+        ...panelLines,
+    ].filter(Boolean).join('\n');
+}
 
 const longHookLibraryIndexCas = createR2JsonCasMutator({
     key: LONG_HOOK_LIBRARY_INDEX_KEY,
@@ -11470,6 +12385,602 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
+    const storyboardMediaMatch = pathname.match(
+        /^\/api\/storyboards\/media\/([a-f0-9]{64})\.(jpg|png|webp)$/
+    );
+    if (storyboardMediaMatch && req.method === 'GET') {
+        const mediaType = storyboardMediaMatch[2] === 'png'
+            ? 'image/png'
+            : storyboardMediaMatch[2] === 'webp'
+                ? 'image/webp'
+                : 'image/jpeg';
+        const sha256 = storyboardMediaMatch[1];
+        const key =
+            `${STORYBOARD_MEDIA_ROOT}${sha256}.${storyboardMediaMatch[2]}`;
+        try {
+            const stored = await cloud.getR2SmallObject(
+                key,
+                { maxBytes: STORYBOARD_MAX_MEDIA_BYTES }
+            );
+            const bytes = stored && stored.body;
+            if (!bytes || sha256Bytes(bytes) !== sha256) {
+                throw new HttpRequestError(
+                    409,
+                    'Stored storyboard media failed its content hash.',
+                    'storyboard_media_integrity'
+                );
+            }
+            const headers = {
+                'Content-Type': mediaType,
+                'Content-Length': String(bytes.length),
+                'Cache-Control':
+                    'private, max-age=31536000, immutable',
+                'ETag': `"${sha256}"`,
+            };
+            if (req.headers['if-none-match'] === headers.ETag) {
+                res.writeHead(304, headers);
+                res.end();
+            } else {
+                res.writeHead(200, headers);
+                res.end(bytes);
+            }
+        } catch (error) {
+            const missing = cloud.isMissingR2ObjectError(error);
+            const status = missing
+                ? 404
+                : error.statusCode || 503;
+            res.writeHead(status, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                error: missing
+                    ? 'storyboard media not found'
+                    : error.message,
+                code: missing
+                    ? 'storyboard_media_not_found'
+                    : error.code || 'storyboard_media_read_failed',
+            }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/storyboards' && req.method === 'GET') {
+        try {
+            const limit = Math.max(
+                1,
+                Math.min(100, Number(url.searchParams.get('limit')) || 40)
+            );
+            const offset = Math.max(
+                0,
+                Math.floor(Number(
+                    url.searchParams.get('offset')
+                ) || 0)
+            );
+            const index = await readStoryboardIndex();
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                schema: storyboardContract.INDEX_SCHEMA,
+                storyboards: index.storyboards.slice(
+                    offset,
+                    offset + limit
+                ),
+                total: index.storyboards.length,
+                offset,
+                limit,
+                updatedAt: index.updatedAt,
+            }));
+        } catch (error) {
+            const status = error.statusCode || 500;
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'storyboard_list_failed',
+            }));
+        }
+        return;
+    }
+
+    const storyboardRecordMatch = pathname.match(
+        /^\/api\/storyboards\/(sb[a-z0-9]{10,40})$/
+    );
+    if (storyboardRecordMatch && req.method === 'GET') {
+        try {
+            const record = await readStoryboardRecord(
+                storyboardRecordMatch[1]
+            );
+            if (!record) {
+                res.writeHead(404, {
+                    'Content-Type': 'application/json',
+                });
+                res.end(JSON.stringify({
+                    error: 'storyboard not found',
+                    code: 'storyboard_not_found',
+                }));
+                return;
+            }
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify(storyboardClientRecord(record)));
+        } catch (error) {
+            const status = error.statusCode || 500;
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'storyboard_load_failed',
+            }));
+        }
+        return;
+    }
+
+    if (
+        pathname === '/api/storyboards/montage'
+        && req.method === 'POST'
+    ) {
+        try {
+            const body = await readBody(req, 32 * 1024 * 1024);
+            if (
+                !Array.isArray(body.panels)
+                || body.panels.length !== storyboardContract.PANEL_COUNT
+            ) {
+                throw new HttpRequestError(
+                    422,
+                    'Exactly five panels are required to assemble a montage.',
+                    'storyboard_montage_panel_count'
+                );
+            }
+            const panels = [];
+            for (
+                let index = 0;
+                index < storyboardContract.PANEL_COUNT;
+                index++
+            ) {
+                panels.push({
+                    media: await readStoryboardMediaReference(
+                        body.panels[index],
+                        `frame ${index + 1}`
+                    ),
+                });
+            }
+            const montage = await canonicalStoryboardMontage(panels);
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                ok: true,
+                image: montage.media.url,
+                media: montage.media,
+                panelMediaSha256s: montage.panelMediaSha256s,
+            }));
+        } catch (error) {
+            const status = error.statusCode || 500;
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'storyboard_montage_failed',
+            }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/storyboards/save' && req.method === 'POST') {
+        try {
+            const body = await readBody(req, 32 * 1024 * 1024);
+            const suppliedId = String(body.id || '');
+            const id = suppliedId || storyboardId();
+            if (!storyboardContract.ID_PATTERN.test(id)) {
+                throw new HttpRequestError(
+                    400,
+                    'Storyboard id is invalid.',
+                    'storyboard_id_invalid'
+                );
+            }
+            const currentRevision = suppliedId
+                ? await readStoryboardManifestRevision(id)
+                : null;
+            if (suppliedId && !currentRevision) {
+                throw new HttpRequestError(
+                    404,
+                    'Storyboard no longer exists.',
+                    'storyboard_not_found'
+                );
+            }
+            const current = currentRevision && currentRevision.record;
+            const expectedRevision = String(body.expectedRevision || '');
+            if (
+                current
+                && (
+                    !expectedRevision
+                    || expectedRevision !== current.revision
+                )
+            ) {
+                throw new HttpRequestError(
+                    409,
+                    'This storyboard changed in another session. Reload it '
+                        + 'before saving another revision.',
+                    'storyboard_revision_conflict'
+                );
+            }
+            const panels = [];
+            for (
+                let index = 0;
+                index < storyboardContract.PANEL_COUNT;
+                index++
+            ) {
+                panels.push(await persistedStoryboardPanel(
+                    body.panels && body.panels[index],
+                    index
+                ));
+            }
+            const references = [];
+            let referenceBytes = 0;
+            const incomingReferences = Array.isArray(body.references)
+                ? body.references.slice(0, 8)
+                : [];
+            for (
+                let index = 0;
+                index < incomingReferences.length;
+                index++
+            ) {
+                const reference = await persistedStoryboardReference(
+                    incomingReferences[index],
+                    index
+                );
+                referenceBytes += Number(
+                    reference.media
+                    && reference.media.byte_length
+                    || 0
+                );
+                if (
+                    referenceBytes
+                    > STORYBOARD_MAX_REFERENCE_TOTAL_BYTES
+                ) {
+                    throw new HttpRequestError(
+                        413,
+                        'Storyboard references exceed the 24 MB combined limit.',
+                        'storyboard_reference_total_size'
+                    );
+                }
+                references.push(reference);
+            }
+            const now = Date.now();
+            const score = await canonicalStoryboardScore(
+                body.score,
+                panels,
+                body.hookText
+            );
+            const record = storyboardContract.bindDocument({
+                id,
+                parentRevision: current && current.revision || null,
+                name: body.name,
+                brief: body.brief,
+                hookText: body.hookText,
+                model: STORY_MODELS[body.model]
+                    ? body.model
+                    : 'flux-2-pro',
+                generationMode: body.generationMode,
+                selectedPanel: body.selectedPanel,
+                composite: await optionalStoryboardMedia(
+                    body.composite,
+                    'storyboard sheet'
+                ),
+                references,
+                panels,
+                score,
+                savedHookId: body.savedHookId,
+                createdAt: current && current.createdAt || now,
+                updatedAt: now,
+            });
+            const validation = storyboardContract.validateDocument(record);
+            if (!validation.valid) {
+                throw new HttpRequestError(
+                    422,
+                    'Storyboard document is invalid: '
+                        + validation.errors.join('; '),
+                    'storyboard_document_invalid'
+                );
+            }
+            await writeImmutableStoryboardRevision(record);
+            const manifestKey =
+                `${STORYBOARD_MANIFEST_ROOT}${id}.json`;
+            const manifestBytes = canonicalJsonBytes(record);
+            try {
+                await cloud.putR2SmallObjectConditional(
+                    manifestKey,
+                    manifestBytes,
+                    currentRevision
+                        ? {
+                            ifMatch: currentRevision.etag,
+                            contentType: 'application/json',
+                        }
+                        : {
+                            ifNoneMatch: '*',
+                            contentType: 'application/json',
+                        }
+                );
+            } catch (error) {
+                if (cloud.isR2PreconditionFailedError(error)) {
+                    throw new HttpRequestError(
+                        409,
+                        'This storyboard changed while it was being saved. '
+                            + 'Reload it and try again.',
+                        'storyboard_revision_conflict'
+                    );
+                }
+                throw error;
+            }
+            const verified = await readStoryboardRecord(id);
+            if (!verified || verified.revision !== record.revision) {
+                throw new Error(
+                    'storyboard manifest failed read-after-write validation'
+                );
+            }
+            let indexPending = false;
+            try {
+                await repairStoryboardIndexEntry(id);
+            } catch (error) {
+                indexPending = true;
+                await queueStoryboardIndexRepair(record).catch(
+                    markerError => {
+                        console.error(
+                            '[storyboard] index repair marker failed:',
+                            id,
+                            markerError.message || markerError
+                        );
+                    }
+                );
+                console.warn(
+                    '[storyboard] manifest committed; index repair queued:',
+                    id,
+                    error.message || error
+                );
+                setTimeout(() => {
+                    repairStoryboardIndexEntry(id).catch(repairError => {
+                        console.error(
+                            '[storyboard] index repair failed:',
+                            id,
+                            repairError.message || repairError
+                        );
+                    });
+                }, 250);
+            }
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+            });
+            res.end(JSON.stringify({
+                ok: true,
+                id,
+                revision: record.revision,
+                complete: record.complete,
+                indexPending,
+                scoreLedgerSha256:
+                    record.score
+                    && record.score.score_ledger.ledger_sha256
+                    || null,
+            }));
+        } catch (error) {
+            const status = error.statusCode || 500;
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'storyboard_save_failed',
+            }));
+        }
+        return;
+    }
+
+    if (
+        pathname === '/api/storyboards/generate'
+        && req.method === 'POST'
+    ) {
+        try {
+            const body = await readBody(req, 32 * 1024 * 1024);
+            const model = STORY_MODELS[body.model]
+                ? body.model
+                : 'flux-2-pro';
+            const brief = String(body.brief || '').trim().slice(0, 8000);
+            const hookText =
+                String(body.hookText || '').trim().slice(0, 2000);
+            const panels = Array.from(
+                { length: storyboardContract.PANEL_COUNT },
+                (_, index) => String(
+                    body.panels && body.panels[index] || ''
+                ).trim().slice(0, 1800)
+            );
+            if (!brief && !hookText && !panels.some(Boolean)) {
+                throw new HttpRequestError(
+                    400,
+                    'A visual brief, spoken opening, or panel prompt is required.',
+                    'storyboard_prompt_required'
+                );
+            }
+            const refs = await storyboardGenerationReferences(
+                Array.isArray(body.refs) ? body.refs : []
+            );
+            const prompt = storyboardSheetPrompt({
+                brief,
+                hookText,
+                panels,
+                referenceDescriptions: refs.descriptions,
+            });
+            const requestFingerprint = quantRequestFingerprint(
+                'raw-storyboard-generate',
+                'shorts',
+                {
+                    model,
+                    prompt,
+                    reference_identities: refs.identities,
+                    geometry: storyboardSheetGeometry(model),
+                },
+                storyboardGenerationIdentity(
+                    model,
+                    'coherent-sheet'
+                )
+            );
+            const jobId = quantJobSubmit(
+                'raw-storyboard-generate',
+                async () => {
+                    const image = await genStoryFrame(
+                        model,
+                        prompt,
+                        refs.materialized,
+                        refs.materialized.length ? 'compose' : 'new',
+                        { aspectRatio: 'storyboard-sheet' }
+                    );
+                    const decoded = decodeStoryboardDataImage(
+                        image,
+                        'generated storyboard sheet'
+                    );
+                    const media = storyboardMediaReference(
+                        decoded.bytes,
+                        decoded
+                    );
+                    await writeImmutableStoryboardMedia(
+                        media,
+                        decoded.bytes
+                    );
+                    return {
+                        image: media.url,
+                        media,
+                        model,
+                        mode: 'coherent-sheet',
+                        panelCount: storyboardContract.PANEL_COUNT,
+                        requestFingerprint,
+                    };
+                },
+                'shorts',
+                quantRequestId(req),
+                requestFingerprint
+            );
+            await quantJobReady(jobId, 'shorts');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                ok: true,
+                jobId,
+                requestFingerprint,
+            }));
+        } catch (error) {
+            const status = error.statusCode || 500;
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'storyboard_generation_failed',
+            }));
+        }
+        return;
+    }
+
+    if (
+        pathname === '/api/storyboards/panel'
+        && req.method === 'POST'
+    ) {
+        try {
+            const body = await readBody(req, 32 * 1024 * 1024);
+            const prompt =
+                String(body.prompt || '').trim().slice(0, 1800);
+            if (!prompt) {
+                throw new HttpRequestError(
+                    400,
+                    'A panel prompt or edit instruction is required.',
+                    'storyboard_panel_prompt_required'
+                );
+            }
+            const model = STORY_MODELS[body.model]
+                ? body.model
+                : 'flux-2-pro';
+            const relation = ['new', 'edit', 'compose'].includes(
+                body.relation
+            )
+                ? body.relation
+                : 'new';
+            const refs = await storyboardGenerationReferences(
+                Array.isArray(body.refs) ? body.refs : []
+            );
+            const effectiveModel = storyboardEffectiveModel(
+                model,
+                relation,
+                refs.materialized.length
+            );
+            if (relation === 'edit' && !refs.materialized.length) {
+                throw new HttpRequestError(
+                    422,
+                    'A panel edit requires the current frame as a reference.',
+                    'storyboard_panel_edit_reference'
+                );
+            }
+            const requestFingerprint = quantRequestFingerprint(
+                'raw-storyboard-panel',
+                'shorts',
+                {
+                    requested_model: model,
+                    effective_model: effectiveModel,
+                    prompt,
+                    relation,
+                    reference_identities: refs.identities,
+                    aspect_ratio: '9:16',
+                },
+                storyboardGenerationIdentity(effectiveModel, 'panel')
+            );
+            const jobId = quantJobSubmit(
+                'raw-storyboard-panel',
+                async () => {
+                    const image = await genStoryFrame(
+                        model,
+                        prompt,
+                        refs.materialized,
+                        relation,
+                        { aspectRatio: '9:16' }
+                    );
+                    const decoded = decodeStoryboardDataImage(
+                        image,
+                        'generated storyboard panel'
+                    );
+                    const media = storyboardMediaReference(
+                        decoded.bytes,
+                        decoded
+                    );
+                    await writeImmutableStoryboardMedia(
+                        media,
+                        decoded.bytes
+                    );
+                    return {
+                        image: media.url,
+                        media,
+                        model: effectiveModel,
+                        requestedModel: model,
+                        relation,
+                        requestFingerprint,
+                    };
+                },
+                'shorts',
+                quantRequestId(req),
+                requestFingerprint
+            );
+            await quantJobReady(jobId, 'shorts');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                ok: true,
+                jobId,
+                requestFingerprint,
+            }));
+        } catch (error) {
+            const status = error.statusCode || 500;
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: error.message,
+                code: error.code || 'storyboard_panel_failed',
+            }));
+        }
+        return;
+    }
+
     // PLAN cross-frame continuity from the raw descriptions alone (no prompt engineering, no user dial).
     // An LLM reads every frame, resolves which concrete visual entities (a person, place, object, style)
     // recur across frames, and returns — per frame — exactly which OTHER frames to use as reference
@@ -11528,9 +13039,19 @@ Rules: EDIT has exactly one edit_of (earlier in order); COMPOSE has ≥1 compose
             const model = STORY_MODELS[body.model] ? body.model : 'flux-2-pro';
             const refs = Array.isArray(body.refs) ? body.refs.filter(x => typeof x === 'string' && x.startsWith('data:image')).slice(0, 8) : [];
             const relation = ['new', 'edit', 'compose'].includes(body.relation) ? body.relation : (refs.length ? 'compose' : 'new');
+            const effectiveModel = storyboardEffectiveModel(
+                model,
+                relation,
+                refs.length
+            );
             const image = await genStoryFrame(model, prompt, refs, relation);
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ image, model, relation }));
+            res.end(JSON.stringify({
+                image,
+                model: effectiveModel,
+                requestedModel: model,
+                relation,
+            }));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
@@ -17592,6 +19113,15 @@ const STORY_MODELS = {
     'flux-kontext-pro': { slug: 'black-forest-labs/flux-kontext-pro', field: 'input_image',  arr: false, max: 1 },   // $0.04 · instruction EDIT of ONE image (preserves the rest)
 };
 const STORY_EDITOR = 'flux-kontext-pro';   // EDIT beats always use the edit specialist — it transforms the ACTUAL prior frame
+function storyboardEffectiveModel(modelKey, relation, referenceCount) {
+    const requested = STORY_MODELS[modelKey]
+        ? modelKey
+        : 'flux-2-pro';
+    if (relation === 'edit' && referenceCount <= 1) {
+        return STORY_EDITOR;
+    }
+    return requested;
+}
 async function replicateRun(slug, input, timeoutMs = 180000) {
     const tok = process.env.REPLICATE_API_TOKEN; if (!tok) throw new Error('REPLICATE_API_TOKEN missing on server');
     const auth = { Authorization: 'Bearer ' + tok };
@@ -17612,18 +19142,63 @@ async function replicateRun(slug, input, timeoutMs = 180000) {
 }
 // relation: 'new' (text-to-image) · 'edit' (TRANSFORM one prior frame's actual pixels via Kontext) ·
 // 'compose' (carry entities from ≥2 prior frames into a new scene via a multi-reference model).
-async function genStoryFrame(modelKey, prompt, refs, relation) {
+async function genStoryFrame(modelKey, prompt, refs, relation, options = {}) {
     refs = (refs || []).filter(Boolean);
-    const key = (relation === 'edit') ? STORY_EDITOR : (STORY_MODELS[modelKey] ? modelKey : 'flux-2-pro');
+    const key = storyboardEffectiveModel(
+        modelKey,
+        relation,
+        refs.length
+    );
     const M = STORY_MODELS[key];
-    const input = { prompt };
+    const input = {
+        prompt: (
+            relation === 'edit'
+            && refs.length > 1
+        ) ? [
+            'Edit REFERENCE IMAGE 1 as the base frame.',
+            'Preserve its composition and unchanged pixels as closely as possible.',
+            'Use REFERENCE IMAGES 2 onward only for identity, object, wardrobe, '
+                + 'and continuity details.',
+            prompt,
+        ].join('\n') : prompt,
+    };
     const isKontext = M.slug.includes('kontext');
-    if (!isKontext) input.aspect_ratio = '9:16';                         // EDIT inherits the source frame's geometry
+    if (!isKontext) {
+        if (options.aspectRatio === 'storyboard-sheet') {
+            const geometry = storyboardSheetGeometry(key);
+            Object.assign(input, geometry);
+            delete input.panel_aspect_ratio;
+            delete input.postprocess;
+        } else {
+            input.aspect_ratio = '9:16';
+        }
+    }                                                                    // EDIT inherits the source frame's geometry
     if (M.slug.includes('flux') || M.slug.includes('nano')) input.output_format = 'jpg';
     if (refs.length) input[M.field] = M.arr ? refs.slice(0, M.max) : refs[0];
     const out = await replicateRun(M.slug, input);
-    const buf = Buffer.from(await (await fetchT(out, {}, 60000)).arrayBuffer());
-    return 'data:image/jpeg;base64,' + buf.toString('base64');
+    if (/^data:image\//i.test(String(out))) {
+        const decoded = decodeStoryboardDataImage(
+            out,
+            'image-model output'
+        );
+        return `data:${decoded.mediaType};base64,${
+            decoded.bytes.toString('base64')
+        }`;
+    }
+    const response = await fetchT(out, {}, 60000);
+    if (!response.ok) {
+        throw new Error(`image-model output download failed (${response.status})`);
+    }
+    const declaredBytes = Number(response.headers.get('content-length'));
+    if (Number.isFinite(declaredBytes) && declaredBytes > 20 * 1024 * 1024) {
+        throw new Error('image-model output exceeds the 20 MB safety limit');
+    }
+    const buf = Buffer.from(await response.arrayBuffer());
+    if (buf.length > 20 * 1024 * 1024) {
+        throw new Error('image-model output exceeds the 20 MB safety limit');
+    }
+    const type = storyboardImageType(buf);
+    return `data:${type.mediaType};base64,${buf.toString('base64')}`;
 }
 async function hookRenderFrame(prompt, modelOverride) {
     // Poll-until-terminal via replicateRun: 'Prefer: wait' alone returns 202 "starting" whenever
@@ -18108,24 +19683,46 @@ setInterval(() => { hookDemoQueue().catch(() => {}); }, 4000);
 // rejects variants too close to earlier attempts (before any render spend) → flux renders the 5
 // frames → ffmpeg composes the SAME 5x1 strip the corpus uses → raw_upload.py scores it on the
 // trained steer models → streamed to R2 so every attempt is visible/clickable/savable live.
+async function composeMontageFiles(framePaths, dir) {
+    const inputs = [];
+    framePaths.forEach(framePath => inputs.push('-i', framePath));
+    const out = path.join(dir, 'm.jpg');
+    const n = framePaths.length;
+    const scale = framePaths.map((_, i) => `[${i}:v]scale=320:568:force_original_aspect_ratio=increase,crop=320:568,setsar=1[s${i}]`).join(';');
+    const refs = framePaths.map((_, i) => `[s${i}]`).join('');
+    await new Promise((ok, no) => {
+        const child = spawn('ffmpeg', ['-nostdin', '-loglevel', 'error', ...inputs, '-filter_complex', `${scale};${refs}hstack=inputs=${n}`, '-frames:v', '1', '-q:v', '4', out], { env: RAW_PY_ENV });
+        const timer = setTimeout(() => {
+            try { child.kill('SIGKILL'); } catch (error) {}
+            no(new Error('ffmpeg timeout'));
+        }, 60000);
+        child.on('close', code => {
+            clearTimeout(timer);
+            code === 0 && fs.existsSync(out)
+                ? ok()
+                : no(new Error(`ffmpeg exit ${code}`));
+        });
+        child.on('error', error => {
+            clearTimeout(timer);
+            no(error);
+        });
+    });
+    return fs.readFileSync(out);
+}
+
 async function composeMontage(frameBufs) {
     const os = require('os');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'grind_'));
     try {
-        const inputs = [];
-        frameBufs.forEach((b, i) => { const p = path.join(dir, `f${i}.jpg`); fs.writeFileSync(p, b); inputs.push('-i', p); });
-        const out = path.join(dir, 'm.jpg'), n = frameBufs.length;
+        const framePaths = [];
+        frameBufs.forEach((bytes, index) => {
+            const framePath = path.join(dir, `f${index}.img`);
+            fs.writeFileSync(framePath, bytes);
+            framePaths.push(framePath);
+        });
         // force EVERY tile to exactly 320x568 (cover-crop) — frames can come from different models
         // with different native sizes, and hstack hard-fails on mixed heights (ffmpeg exit 1)
-        const scale = frameBufs.map((_, i) => `[${i}:v]scale=320:568:force_original_aspect_ratio=increase,crop=320:568,setsar=1[s${i}]`).join(';');
-        const refs = frameBufs.map((_, i) => `[s${i}]`).join('');
-        await new Promise((ok, no) => {
-            const p = spawn('ffmpeg', ['-nostdin', '-loglevel', 'error', ...inputs, '-filter_complex', `${scale};${refs}hstack=inputs=${n}`, '-frames:v', '1', '-q:v', '4', out], { env: RAW_PY_ENV });
-            const t = setTimeout(() => { try { p.kill('SIGKILL'); } catch (e) {} no(new Error('ffmpeg timeout')); }, 60000);
-            p.on('close', c => { clearTimeout(t); c === 0 && fs.existsSync(out) ? ok() : no(new Error('ffmpeg exit ' + c)); });
-            p.on('error', e => { clearTimeout(t); no(e); });
-        });
-        return fs.readFileSync(out);
+        return await composeMontageFiles(framePaths, dir);
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 async function scoreMontage(buf, text, title, creatorProfile) {

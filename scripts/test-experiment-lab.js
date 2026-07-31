@@ -1452,7 +1452,7 @@ async function main() {
                 },
             };
         });
-        await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><base href="${ORIGIN}/"><link rel="stylesheet" href="/buildings/experimentlab/experimentlab.css"><style>html,body,#root{margin:0;width:100%;height:100%;overflow:hidden;background:#080d14}</style></head><body><main id="root"></main>
+        await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><base href="${ORIGIN}/"><link rel="stylesheet" href="/buildings/experimentlab/experimentlab.css"><link rel="stylesheet" href="/buildings/jarvis/storyboard-workbench.css"><style>html,body,#root{margin:0;width:100%;height:100%;overflow:hidden;background:#080d14}</style></head><body><main id="root"></main>
 <script>Object.defineProperty(globalThis,"__SHORTS_SCORE_LEDGER_RUNTIME__",{value:${JSON.stringify(shortsScoreLedgerRuntime)},writable:false,configurable:false});</script>
 <script src="/buildings/building-registry.js"></script><script src="/buildings/jarvis/jarvis-upload-utils.js"></script>
 <script>
@@ -1503,10 +1503,19 @@ window.fetch=function(url,options){
             headers:{'Content-Type':'application/json'}
         }));
     }
+    if(p==='/api/storyboards'){
+        return Promise.resolve(new Response(JSON.stringify({
+            storyboards:[],
+            total:0
+        }),{
+            status:200,
+            headers:{'Content-Type':'application/json'}
+        }));
+    }
     return nativeFetch(url,options);
 };
 </script>
-<script src="/buildings/jarvis/jarvis-retention.js"></script><script src="/buildings/experimentlab/experimentlab-ui.js"></script><script>BuildingRegistry.get('Experiment Lab').open(document.getElementById('root'));</script></body></html>`, { waitUntil: 'networkidle' });
+<script src="/buildings/jarvis/storyboard-workbench.js"></script><script src="/buildings/jarvis/jarvis-retention.js"></script><script src="/buildings/experimentlab/experimentlab-ui.js"></script><script>BuildingRegistry.get('Experiment Lab').open(document.getElementById('root'));</script></body></html>`, { waitUntil: 'networkidle' });
 
         await page.getByRole('heading', { name: 'Experiment Lab' }).waitFor();
         try {
@@ -1515,6 +1524,34 @@ window.fetch=function(url,options){
             console.error('INITIAL ROOT:', (await page.locator('#root').innerText()).slice(0, 1500));
             throw error;
         }
+        const storyboardMode = page.locator(
+            '[data-rawbuildmode="1"]'
+        ).first();
+        await storyboardMode.click();
+        const integratedStoryboard = page.locator(
+            '#rtg-exppanel #shorts-storyboard-workbench'
+        );
+        await integratedStoryboard.waitFor();
+        assert.strictEqual(
+            await integratedStoryboard.locator(
+                '[data-sb-panel]'
+            ).count(),
+            5,
+            'the live Experiment UI must render the shared five-panel '
+                + 'storyboard workbench'
+        );
+        assert.strictEqual(
+            await integratedStoryboard.locator(
+                '[data-sb-score-current]'
+            ).count(),
+            1,
+            'the integrated storyboard must expose the canonical Shorts '
+                + 'score action'
+        );
+        await page.locator('[data-rawbuildmode="0"]').first().click();
+        await page.getByPlaceholder(
+            'or paste a YouTube link…'
+        ).waitFor();
         const historicalSavedHookCard = page.locator(
             `[data-savedopen="${historicalSavedHookId}"]`
         );

@@ -96,6 +96,7 @@ raw_embed_long.log
 
 # Principles Atlas quantitative rebuild caches (canonical sources remain on R2)
 buildings/jarvis/principles-lab/quant/.cache/
+buildings/jarvis/storyboard-workbench/.cache/
 
 # Browser QA screenshots are reproducible test output.
 tmp/predictor-lab-qa/
