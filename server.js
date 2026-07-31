@@ -2037,7 +2037,7 @@ function validateRawScoreResult(result, options = {}) {
                 featureContractVersion:
                     savedChannelFeatureContract.version,
                 featureContractSha256:
-                    savedChannelFeatureContractSha256,
+                    savedChannelFeatureContractDocumentSha256,
             }
         );
     if (!visualKeepAudit.valid) {
@@ -2074,7 +2074,7 @@ function validateRawScoreResult(result, options = {}) {
                     featureContractVersion:
                         savedChannelFeatureContract.version,
                     featureContractSha256:
-                        savedChannelFeatureContractSha256,
+                        savedChannelFeatureContractDocumentSha256,
                 }
             )
         : null;

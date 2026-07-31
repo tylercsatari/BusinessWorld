@@ -122,6 +122,45 @@ includes(shorts, 'expected_score_record_sha256:', 'the explicit saved-video upgr
 includes(shorts, "rec.transcript || rec.text || ''", 'the explicit re-score must preserve transcripts from every historical schema');
 includes(shorts, "'/api/raw/saved-montage/' + id", 'the explicit re-score must attempt durable legacy montage recovery even when old metadata omitted hasMontage');
 includes(shorts, 'data-best-keep-predictor', 'every score card must surface the strongest available keep-rate readout');
+assert.strictEqual(
+    (
+        server.match(
+            /featureContractSha256:\s*savedChannelFeatureContractDocumentSha256/g
+        ) || []
+    ).length,
+    2,
+    'both derived keep-forecast contracts must validate against the exact '
+        + 'feature-contract document release rather than the separate '
+        + 'semantic identity hash'
+);
+const keepForecastReadPath = shorts.slice(
+    shorts.indexOf('function visualKeepForecastOf(up)'),
+    shorts.indexOf('function savedVisualKeepCoordinateSnapshot')
+);
+includes(
+    keepForecastReadPath,
+    'live.feature_contract_document_sha256',
+    'the visual keep forecast must use the document lineage recorded by its model release'
+);
+excludes(
+    keepForecastReadPath,
+    'live.feature_contract_sha256',
+    'the visual keep forecast must not compare a document-bound model to the semantic identity hash'
+);
+const creatorForecastReadPath = shorts.slice(
+    shorts.indexOf('function creatorAdaptiveKeepForecastOf(up)'),
+    shorts.indexOf('function creatorAdaptiveForecastPresentation')
+);
+includes(
+    creatorForecastReadPath,
+    'manifest.feature_contract_document_sha256',
+    'the creator-adaptive forecast must use the document lineage recorded by its model release'
+);
+excludes(
+    creatorForecastReadPath,
+    'manifest.feature_contract_sha256',
+    'the creator-adaptive forecast must not compare a document-bound model to the semantic identity hash'
+);
 includes(server, 'replacement score does not bind the canonical ledger SHA', 'saved-video upgrades must bind the exact scorer ledger before replacing evidence');
 includes(server, 'surfaceSourceErrors: true', 'map and status routes must surface backing-storage failures');
 includes(server, 'cached.sourceFingerprint === fingerprint', 'saved-channel validation may reuse an artifact only after every source byte matches');

@@ -10,6 +10,7 @@ const {
     scoreLedgerFromFeatures,
 } = require('./fixtures/score-ledger-fixture');
 const {
+    FEATURE_CONTRACT_DOCUMENT_SHA256,
     FEATURE_CONTRACT_SHA256,
     scoreRecordBindingSha256,
 } = require('../buildings/jarvis/shorts-score-ledger');
@@ -26,6 +27,16 @@ const {
 } = require('../buildings/jarvis/canonical-json-artifact');
 const featureContractPath = path.join(__dirname, '..', 'buildings', 'jarvis', 'saved-channel-feature-contract.json');
 const featureContractSha256 = crypto.createHash('sha256').update(fs.readFileSync(featureContractPath)).digest('hex');
+assert.strictEqual(
+    featureContractSha256,
+    FEATURE_CONTRACT_DOCUMENT_SHA256
+);
+assert.notStrictEqual(
+    FEATURE_CONTRACT_DOCUMENT_SHA256,
+    FEATURE_CONTRACT_SHA256,
+    'the validation fixture must preserve the distinction between the '
+        + 'release document hash and the score-ledger identity hash'
+);
 const serverSource = fs.readFileSync(
     path.join(__dirname, '..', 'server.js'),
     'utf8'
@@ -180,6 +191,10 @@ function visualKeepInputManifest(id) {
         canonical_montage: {
             montage_sha256: fixtureSha256(`montage:${id}`),
         },
+        feature_contract_sha256:
+            FEATURE_CONTRACT_SHA256,
+        feature_contract_document_sha256:
+            FEATURE_CONTRACT_DOCUMENT_SHA256,
     };
 }
 
@@ -250,7 +265,7 @@ const channels = validation.SUPPORTED_CHANNELS.map((definition, channelIndex) =>
                     fixtureSha256('visual-keep-producer'),
                 feature_contract_version: featureContract.version,
                 feature_contract_sha256:
-                    FEATURE_CONTRACT_SHA256,
+                    FEATURE_CONTRACT_DOCUMENT_SHA256,
                 input: 'first-five-second five-frame montage embedding only',
                 pctile: null,
             } : null,

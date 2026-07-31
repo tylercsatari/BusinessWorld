@@ -9,7 +9,7 @@ const {
     validateVisualKeepForecast,
 } = require('./visual-keep-forecast-contract');
 const {
-    FEATURE_CONTRACT_SHA256,
+    FEATURE_CONTRACT_DOCUMENT_SHA256,
     scoreRecordBindingSha256,
     scoreFeatureCell,
     scoreLedgerValidationSummary,
@@ -7725,7 +7725,7 @@ function buildValidation({
                     visualKeepManifestSha256,
                     visualKeepStudy,
                     contract.version,
-                    FEATURE_CONTRACT_SHA256
+                    FEATURE_CONTRACT_DOCUMENT_SHA256
                 );
             const currentPersistedVisualKeep =
                 persistedVisualKeepAudit.valid

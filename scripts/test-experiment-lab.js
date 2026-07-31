@@ -216,6 +216,16 @@ async function main() {
     const featureContractSha256 = crypto.createHash('sha256')
         .update(fs.readFileSync(path.join(ROOT, 'buildings/jarvis/saved-channel-feature-contract.json')))
         .digest('hex');
+    assert.strictEqual(
+        featureContractSha256,
+        FEATURE_CONTRACT_DOCUMENT_SHA256
+    );
+    assert.notStrictEqual(
+        FEATURE_CONTRACT_DOCUMENT_SHA256,
+        FEATURE_CONTRACT_SHA256,
+        'the predictor release document hash must remain distinct from '
+            + 'the semantic score-ledger identity hash in this fixture'
+    );
     const fixtureSha256 = label => crypto.createHash('sha256').update(`experiment-lab:${label}`).digest('hex');
     const population = (label, rowCount) => ({
         rowCount,
@@ -463,7 +473,7 @@ async function main() {
                         fixtureSha256('visual-keep-producer'),
                     feature_contract_version: featureContract.version,
                     feature_contract_sha256:
-                        FEATURE_CONTRACT_SHA256,
+                        FEATURE_CONTRACT_DOCUMENT_SHA256,
                     input: 'first-five-second five-frame montage embedding only',
                 },
                 creator_adaptive_keep_forecast: {
@@ -538,7 +548,7 @@ async function main() {
                     feature_contract_version:
                         featureContract.version,
                     feature_contract_sha256:
-                        FEATURE_CONTRACT_SHA256,
+                        FEATURE_CONTRACT_DOCUMENT_SHA256,
                     input:
                         'canonical visual embedding + canonical together embedding + registered strictly-earlier creator profile history',
                     forecast_scope:
@@ -597,6 +607,8 @@ async function main() {
                     },
                     feature_contract_sha256:
                         FEATURE_CONTRACT_SHA256,
+                    feature_contract_document_sha256:
+                        FEATURE_CONTRACT_DOCUMENT_SHA256,
                     channels: {
                         visual: {
                             present: true,
@@ -1574,6 +1586,8 @@ async function main() {
                     fixtureSha256('current-live-revision'),
                 feature_contract_sha256:
                     FEATURE_CONTRACT_SHA256,
+                feature_contract_document_sha256:
+                    FEATURE_CONTRACT_DOCUMENT_SHA256,
                 coordinates: {
                     visual_keep_forecast:
                         coordinateGovernance.coordinates

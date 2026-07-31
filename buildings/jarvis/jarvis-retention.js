@@ -1776,9 +1776,9 @@ const JarvisRetention = (function () {
                     !== live.visual_keep_model_manifest_sha256
             )
             || (
-                live.feature_contract_sha256
+                live.feature_contract_document_sha256
                 && value.feature_contract_sha256
-                    !== live.feature_contract_sha256
+                    !== live.feature_contract_document_sha256
             )
             || (
                 live.display_contract_version != null
@@ -2174,7 +2174,7 @@ const JarvisRetention = (function () {
             || persisted.model_artifact_key !== immutableModelKey
             || persisted.feature_contract_version == null
             || persisted.feature_contract_sha256
-                !== manifest.feature_contract_sha256
+                !== manifest.feature_contract_document_sha256
             || (
                 modelManifestRevision
                 && persisted.model_manifest_sha256
