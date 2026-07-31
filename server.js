@@ -2866,30 +2866,27 @@ async function experimentLabAccountScope(
 
 function experimentLabWorkspaceCas(account) {
     const identity = experimentLabWorkspace.accountIdentity(account);
-    if (experimentLabWorkspaceCasCache.has(identity.id)) {
-        return experimentLabWorkspaceCasCache.get(identity.id);
+    const identitySha256 = sha256Bytes(
+        canonicalJsonBytes(identity)
+    );
+    const cached = experimentLabWorkspaceCasCache.get(identity.id);
+    if (
+        cached
+        && cached.identitySha256 === identitySha256
+    ) {
+        return cached.cas;
     }
     const cas = createR2JsonCasMutator({
         key: experimentLabWorkspace.workspaceKey(identity.id),
         storage: r2JsonCasStorage,
         emptyValue: () =>
             experimentLabWorkspace.emptyWorkspace(identity),
-        validate: value => {
-            const validation =
-                experimentLabWorkspace.validateWorkspace(value);
-            if (
-                value
-                && value.account
-                && value.account.id !== identity.id
-            ) {
-                validation.valid = false;
-                validation.errors = [
-                    ...(validation.errors || []),
-                    'workspace account differs from its storage key',
-                ];
-            }
-            return validation;
-        },
+        validate: value =>
+            experimentLabWorkspace.validateWorkspaceForAccount(
+                value,
+                identity,
+                { allowIdentityNormalization: true }
+            ),
         bind: value => experimentLabWorkspace.bindWorkspace({
             ...value,
             account: identity,
@@ -2897,26 +2894,19 @@ function experimentLabWorkspaceCas(account) {
         }),
         label: `Experiment Lab workspace ${identity.id}`,
     });
-    experimentLabWorkspaceCasCache.set(identity.id, cas);
+    experimentLabWorkspaceCasCache.set(identity.id, {
+        identitySha256,
+        cas,
+    });
     return cas;
 }
 
 async function readExperimentLabWorkspace(account) {
-    const revision =
-        await experimentLabWorkspaceCas(account).readRevision();
-    const workspace = revision.value;
-    const validation =
-        experimentLabWorkspace.validateWorkspace(workspace);
-    if (!validation.valid) {
-        throw new Error(
-            'Experiment Lab workspace failed validation: '
-            + validation.errors.join('; ')
+    return experimentLabWorkspace
+        .readWorkspaceRevisionForAccount(
+            experimentLabWorkspaceCas(account),
+            account
         );
-    }
-    return {
-        workspace,
-        exists: !!revision.revision,
-    };
 }
 
 async function mutateExperimentLabWorkspace(account, mutator) {
@@ -3189,9 +3179,39 @@ async function experimentLabAccountSummaries() {
                 && permissions.buildings.includes('Experiment Lab')
             )
         ) return null;
-        const { workspace } =
-            await readExperimentLabWorkspace(account);
-        return experimentLabWorkspace.summary(workspace);
+        try {
+            const { workspace } =
+                await readExperimentLabWorkspace(account);
+            return experimentLabWorkspace.summary(workspace);
+        } catch (error) {
+            console.warn(
+                'Experiment Lab team workspace unavailable:',
+                account && account.id,
+                error && error.message
+            );
+            return {
+                account:
+                    experimentLabWorkspace.accountIdentity(account),
+                counts: {
+                    hooks: 0,
+                    channels: 0,
+                    storyboards: 0,
+                },
+                folderCounts: {
+                    hooks: 0,
+                    channels: 0,
+                    storyboards: 0,
+                },
+                activityCount: 0,
+                updatedAt: 0,
+                workspace_sha256: null,
+                unavailable: true,
+                error: String(
+                    error && error.message
+                    || 'Workspace unavailable'
+                ),
+            };
+        }
     }));
     return eligible.filter(Boolean).sort((left, right) => (
         Number(right.updatedAt || 0) - Number(left.updatedAt || 0)

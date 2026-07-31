@@ -10,6 +10,9 @@ const {
     emptyWorkspace,
     bindWorkspace,
     validateWorkspace,
+    validateWorkspaceForAccount,
+    normalizeWorkspaceIdentity,
+    readWorkspaceRevisionForAccount,
     canonicalWorkspaceBytes,
     collectionFor,
     upsertItem,
@@ -21,6 +24,9 @@ const {
     markArtifactSaved,
     summary,
 } = require('../buildings/experimentlab/experimentlab-workspace');
+const {
+    createR2JsonCasMutator,
+} = require('../buildings/jarvis/r2-json-cas');
 const {
     canonicalJsonBytes,
     sha256Bytes,
@@ -57,6 +63,45 @@ function bindingPayload(workspace) {
 
 function rebind(workspace) {
     return bindWorkspace(clone(workspace));
+}
+
+function memoryCasStorage(initialWorkspace) {
+    let body = canonicalWorkspaceBytes(initialWorkspace);
+    let etagSequence = 1;
+    let etag = `etag-${etagSequence}`;
+    let writes = 0;
+    const preconditionError = () => {
+        const error = new Error('precondition failed');
+        error.code = 'PreconditionFailed';
+        return error;
+    };
+    return {
+        async get(_key, options = {}) {
+            if (options.ifMatch && options.ifMatch !== etag) {
+                throw preconditionError();
+            }
+            return {
+                body: Buffer.from(body),
+                etag,
+            };
+        },
+        async put(_key, nextBody, options = {}) {
+            if (
+                options.ifMatch && options.ifMatch !== etag
+                || options.ifNoneMatch === '*'
+            ) throw preconditionError();
+            body = Buffer.from(nextBody);
+            etag = `etag-${++etagSequence}`;
+            writes += 1;
+            return { etag };
+        },
+        isMissing: () => false,
+        isPreconditionFailed: error => (
+            error && error.code === 'PreconditionFailed'
+        ),
+        value: () => JSON.parse(body.toString('utf8')),
+        writes: () => writes,
+    };
 }
 
 // Account keys are stable, opaque, and account-specific.
@@ -328,6 +373,110 @@ assert.deepStrictEqual(
     { valid: true, errors: [] }
 );
 
+// A historical account snapshot can carry legacy fields or stale mutable
+// metadata. It is repairable only when the immutable account id still matches
+// the workspace's storage scope and every non-identity integrity check passes.
+const legacyIdentityWorkspace = clone(ownerWorkspace);
+legacyIdentityWorkspace.account = {
+    ...legacyIdentityWorkspace.account,
+    displayName: 'Historical owner display name',
+};
+legacyIdentityWorkspace.workspace_sha256 = sha256Bytes(
+    canonicalJsonBytes(bindingPayload(legacyIdentityWorkspace))
+);
+assert.strictEqual(
+    validateWorkspace(legacyIdentityWorkspace).valid,
+    false
+);
+assert.deepStrictEqual(
+    validateWorkspace(legacyIdentityWorkspace).errors,
+    ['workspace account identity is invalid']
+);
+assert.strictEqual(
+    validateWorkspaceForAccount(
+        legacyIdentityWorkspace,
+        OWNER,
+        { allowIdentityNormalization: true }
+    ).valid,
+    true
+);
+const normalizedLegacyWorkspace = normalizeWorkspaceIdentity(
+    legacyIdentityWorkspace,
+    OWNER
+);
+assert.strictEqual(
+    validateWorkspaceForAccount(
+        normalizedLegacyWorkspace,
+        OWNER
+    ).valid,
+    true
+);
+assert.deepStrictEqual(
+    normalizedLegacyWorkspace.account,
+    {
+        id: OWNER.id,
+        email: OWNER.email,
+        name: OWNER.displayName,
+        role: OWNER.role,
+    }
+);
+assert.deepStrictEqual(
+    normalizedLegacyWorkspace.collections,
+    ownerWorkspace.collections
+);
+assert.deepStrictEqual(
+    normalizedLegacyWorkspace.activity,
+    ownerWorkspace.activity
+);
+
+const staleIdentityWorkspace = clone(ownerWorkspace);
+staleIdentityWorkspace.account.name = 'Old account name';
+staleIdentityWorkspace.workspace_sha256 = sha256Bytes(
+    canonicalJsonBytes(bindingPayload(staleIdentityWorkspace))
+);
+assert.strictEqual(validateWorkspace(staleIdentityWorkspace).valid, true);
+assert.strictEqual(
+    validateWorkspaceForAccount(staleIdentityWorkspace, OWNER).valid,
+    false
+);
+assert.strictEqual(
+    validateWorkspaceForAccount(
+        staleIdentityWorkspace,
+        OWNER,
+        { allowIdentityNormalization: true }
+    ).valid,
+    true
+);
+
+const wrongAccountWorkspace = clone(legacyIdentityWorkspace);
+wrongAccountWorkspace.account.id = CREATOR.id;
+wrongAccountWorkspace.workspace_sha256 = sha256Bytes(
+    canonicalJsonBytes(bindingPayload(wrongAccountWorkspace))
+);
+assert.strictEqual(
+    validateWorkspaceForAccount(
+        wrongAccountWorkspace,
+        OWNER,
+        { allowIdentityNormalization: true }
+    ).valid,
+    false
+);
+assert.throws(
+    () => normalizeWorkspaceIdentity(wrongAccountWorkspace, OWNER),
+    /differs from its storage key/
+);
+
+const corruptLegacyWorkspace = clone(legacyIdentityWorkspace);
+corruptLegacyWorkspace.workspace_sha256 = '0'.repeat(64);
+assert.strictEqual(
+    validateWorkspaceForAccount(
+        corruptLegacyWorkspace,
+        OWNER,
+        { allowIdentityNormalization: true }
+    ).valid,
+    false
+);
+
 const expectedSha = sha256Bytes(
     canonicalJsonBytes(bindingPayload(ownerWorkspace))
 );
@@ -401,13 +550,100 @@ assert.strictEqual(
     ownerWorkspace.workspace_sha256
 );
 
-console.log(JSON.stringify({
-    ok: true,
-    accounts: 2,
-    accountKeysIsolated: true,
-    canonicalSha256: ownerWorkspace.workspace_sha256,
-    references: ownerSummary.counts,
-    activityCount: ownerSummary.activityCount,
-    activityBound: MAX_ACTIVITY,
-    tamperDetection: true,
-}, null, 2));
+async function runIdentityMigrationRegression() {
+    const storage = memoryCasStorage(legacyIdentityWorkspace);
+    const cas = createR2JsonCasMutator({
+        key: workspaceKey(OWNER.id),
+        storage,
+        emptyValue: () => emptyWorkspace(OWNER),
+        validate: value => validateWorkspaceForAccount(
+            value,
+            OWNER,
+            { allowIdentityNormalization: true }
+        ),
+        bind: value => normalizeWorkspaceIdentity(value, OWNER),
+        label: 'Experiment Lab identity migration test',
+    });
+    const migrated = await readWorkspaceRevisionForAccount(
+        cas,
+        OWNER
+    );
+    assert.strictEqual(migrated.exists, true);
+    assert.strictEqual(storage.writes(), 1);
+    assert.strictEqual(
+        validateWorkspaceForAccount(
+            migrated.workspace,
+            OWNER
+        ).valid,
+        true
+    );
+    assert.strictEqual(
+        Object.prototype.hasOwnProperty.call(
+            migrated.workspace.account,
+            'displayName'
+        ),
+        false
+    );
+    assert.deepStrictEqual(
+        migrated.workspace.collections,
+        legacyIdentityWorkspace.collections
+    );
+    assert.deepStrictEqual(
+        migrated.workspace.activity,
+        legacyIdentityWorkspace.activity
+    );
+
+    const secondRead = await readWorkspaceRevisionForAccount(
+        cas,
+        OWNER
+    );
+    assert.strictEqual(secondRead.workspace.workspace_sha256,
+        migrated.workspace.workspace_sha256);
+    assert.strictEqual(
+        storage.writes(),
+        1,
+        'a repaired workspace must not rewrite on every load'
+    );
+
+    const wrongStorage = memoryCasStorage(wrongAccountWorkspace);
+    const wrongCas = createR2JsonCasMutator({
+        key: workspaceKey(OWNER.id),
+        storage: wrongStorage,
+        emptyValue: () => emptyWorkspace(OWNER),
+        validate: value => validateWorkspaceForAccount(
+            value,
+            OWNER,
+            { allowIdentityNormalization: true }
+        ),
+        bind: value => normalizeWorkspaceIdentity(value, OWNER),
+        label: 'Experiment Lab cross-account rejection test',
+    });
+    await assert.rejects(
+        () => readWorkspaceRevisionForAccount(
+            wrongCas,
+            OWNER
+        ),
+        /differs from its storage key/
+    );
+    assert.strictEqual(wrongStorage.writes(), 0);
+}
+
+runIdentityMigrationRegression()
+    .then(() => {
+        console.log(JSON.stringify({
+            ok: true,
+            accounts: 2,
+            accountKeysIsolated: true,
+            identityMigration: true,
+            crossAccountRejection: true,
+            canonicalSha256: ownerWorkspace.workspace_sha256,
+            references: ownerSummary.counts,
+            activityCount: ownerSummary.activityCount,
+            activityBound: MAX_ACTIVITY,
+            tamperDetection: true,
+        }, null, 2));
+    })
+    .catch(error => {
+        console.error(error);
+        process.exitCode = 1;
+    });

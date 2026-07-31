@@ -18,6 +18,12 @@ const ACCOUNT_ID_PATTERN =
     /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const ITEM_ID_PATTERN = /^[a-z0-9_-]{2,96}$/i;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const IDENTITY_SHAPE_ERROR =
+    'workspace account identity is invalid';
+const IDENTITY_SCOPE_ERROR =
+    'workspace account differs from its storage key';
+const IDENTITY_STALE_ERROR =
+    'workspace account identity differs from the current account';
 
 function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -387,7 +393,7 @@ function validateWorkspace(workspace) {
             !canonicalJsonBytes(identity).equals(
                 canonicalJsonBytes(workspace.account)
             )
-        ) errors.push('workspace account identity is invalid');
+        ) errors.push(IDENTITY_SHAPE_ERROR);
     } catch (error) {
         errors.push(error.message);
     }
@@ -455,6 +461,136 @@ function validateWorkspace(workspace) {
     };
 }
 
+function validateWorkspaceForAccount(
+    workspace,
+    account,
+    { allowIdentityNormalization = false } = {}
+) {
+    const validation = validateWorkspace(workspace);
+    let errors = [...validation.errors];
+    let identity = null;
+    try {
+        identity = accountIdentity(account);
+    } catch (error) {
+        errors.push(error.message);
+    }
+    const storedId = String(
+        workspace
+        && workspace.account
+        && workspace.account.id
+        || ''
+    ).trim().toLowerCase();
+    const sameAccount = !!(
+        identity
+        && storedId
+        && storedId === identity.id
+    );
+    if (identity && !sameAccount) {
+        errors.push(IDENTITY_SCOPE_ERROR);
+    } else if (
+        sameAccount
+        && !canonicalJsonBytes(workspace.account).equals(
+            canonicalJsonBytes(identity)
+        )
+    ) {
+        errors.push(IDENTITY_STALE_ERROR);
+    }
+    if (allowIdentityNormalization && sameAccount) {
+        errors = errors.filter(error => ![
+            IDENTITY_SHAPE_ERROR,
+            IDENTITY_STALE_ERROR,
+        ].includes(error));
+    }
+    errors = [...new Set(errors)];
+    return {
+        valid: errors.length === 0,
+        errors,
+        identity,
+        sameAccount,
+    };
+}
+
+function normalizeWorkspaceIdentity(workspace, account) {
+    const validation = validateWorkspaceForAccount(
+        workspace,
+        account,
+        { allowIdentityNormalization: true }
+    );
+    if (!validation.valid) {
+        throw new Error(
+            'Experiment Lab workspace cannot normalize identity: '
+            + validation.errors.join('; ')
+        );
+    }
+    return bindWorkspace({
+        ...clone(workspace),
+        account: validation.identity,
+        updatedAt: Date.now(),
+    });
+}
+
+async function readWorkspaceRevisionForAccount(cas, account) {
+    if (
+        !cas
+        || typeof cas.readRevision !== 'function'
+        || typeof cas.mutate !== 'function'
+    ) {
+        throw new TypeError(
+            'Experiment Lab workspace CAS is invalid'
+        );
+    }
+    const revision = await cas.readRevision();
+    let workspace = revision.value;
+    let validation = validateWorkspaceForAccount(
+        workspace,
+        account
+    );
+    if (!validation.valid && revision.revision) {
+        const repairable = validateWorkspaceForAccount(
+            workspace,
+            account,
+            { allowIdentityNormalization: true }
+        );
+        if (repairable.valid) {
+            workspace = await cas.mutate(current => {
+                const currentValidation =
+                    validateWorkspaceForAccount(
+                        current,
+                        account
+                    );
+                if (currentValidation.valid) return null;
+                const currentRepairable =
+                    validateWorkspaceForAccount(
+                        current,
+                        account,
+                        { allowIdentityNormalization: true }
+                    );
+                if (!currentRepairable.valid) {
+                    throw new Error(
+                        'Experiment Lab workspace failed validation: '
+                        + currentRepairable.errors.join('; ')
+                    );
+                }
+                return current;
+            });
+            validation = validateWorkspaceForAccount(
+                workspace,
+                account
+            );
+        }
+    }
+    if (!validation.valid) {
+        throw new Error(
+            'Experiment Lab workspace failed validation: '
+            + validation.errors.join('; ')
+        );
+    }
+    return {
+        workspace,
+        exists: !!revision.revision,
+    };
+}
+
 function summary(workspace) {
     const counts = {};
     const folderCounts = {};
@@ -485,6 +621,9 @@ module.exports = {
     emptyWorkspace,
     bindWorkspace,
     validateWorkspace,
+    validateWorkspaceForAccount,
+    normalizeWorkspaceIdentity,
+    readWorkspaceRevisionForAccount,
     canonicalWorkspaceBytes,
     collectionFor,
     upsertItem,
