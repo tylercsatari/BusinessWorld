@@ -490,6 +490,53 @@ def test_incomplete_scores_are_never_cached():
     assert replay['meta']['cache_key'] not in fake_s3.objects
 
 
+def test_optional_creator_forecast_failure_does_not_hide_canonical_score():
+    fake_s3 = FakeS3()
+    RAW.s3 = fake_s3
+    montage = base64.b64encode(b'exact-five-frame-jpeg-bytes').decode()
+    replay = RAW._score_replay_prepare(
+        montage,
+        'hook',
+        True,
+        5,
+        'tyler',
+        revisions=revisions(),
+    )
+    score = canonical_score(creator_profile='tyler')
+    score['creator_adaptive_keep_forecast'] = None
+    score['creator_adaptive_keep_forecast_error'] = (
+        'creator-adaptive keep serving release is unavailable'
+    )
+    meta = RAW._score_replay_store(
+        replay,
+        score,
+        'tyler',
+        True,
+    )
+    assert meta['cache_write_status'] == 'skipped_optional_creator_forecast'
+    assert meta['output_fingerprint'] == RAW._score_output_fingerprint(score)
+    assert 'serving release is unavailable' in meta['cache_error']
+    assert meta['cache_key'] not in fake_s3.objects
+
+    silent_failure = canonical_score(creator_profile='tyler')
+    silent_failure['creator_adaptive_keep_forecast'] = None
+    errors = RAW._score_completeness_errors(
+        silent_failure,
+        'tyler',
+        True,
+    )
+    assert 'creator-adaptive keep forecast status' in errors
+
+    malformed = canonical_score(creator_profile='tyler')
+    malformed['creator_adaptive_keep_forecast']['profile_account'] = 'hafu'
+    errors = RAW._score_completeness_errors(
+        malformed,
+        'tyler',
+        True,
+    )
+    assert 'creator-adaptive keep forecast' in errors
+
+
 def test_production_lookup_precedes_embedding():
     source = inspect.getsource(RAW._run)
     lookup = source.index('_score_replay_prepare(')
@@ -624,6 +671,7 @@ if __name__ == '__main__':
         test_cache_failures_fall_through_without_hiding_scores()
         test_corrupt_cache_is_an_integrity_miss()
         test_incomplete_scores_are_never_cached()
+        test_optional_creator_forecast_failure_does_not_hide_canonical_score()
         test_production_lookup_precedes_embedding()
         test_visual_keep_formula_replays_the_frozen_raw_coordinate()
         test_revision_pinned_reads_fail_closed_on_mutation()

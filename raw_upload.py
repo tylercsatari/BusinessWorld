@@ -847,12 +847,19 @@ def _score_completeness_errors(
     if creator_profile:
         creator_forecast = score.get(
             'creator_adaptive_keep_forecast'
-        ) or {}
-        if (
-            creator_forecast.get('coordinate_id')
-            != CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
+        )
+        creator_forecast_error = str(
+            score.get('creator_adaptive_keep_forecast_error') or ''
+        ).strip()
+        if creator_forecast is None:
+            if not creator_forecast_error:
+                missing.append('creator-adaptive keep forecast status')
+        elif (
+            not isinstance(creator_forecast, dict)
+            or creator_forecast.get('coordinate_id')
+                != CREATOR_ADAPTIVE_KEEP_COORDINATE_ID
             or creator_forecast.get('profile_account')
-            != creator_profile
+                != creator_profile
             or creator_forecast.get('raw') is None
             or not np.isfinite(creator_forecast.get('raw'))
         ):
@@ -1117,6 +1124,21 @@ def _score_replay_store(
             'scoring dependencies returned an incomplete result: '
             + ', '.join(incomplete)
         )
+    creator_forecast_error = str(
+        score.get('creator_adaptive_keep_forecast_error') or ''
+    ).strip()
+    if (
+        creator_profile
+        and score.get('creator_adaptive_keep_forecast') is None
+        and creator_forecast_error
+    ):
+        meta['cache_write_status'] = 'skipped_optional_creator_forecast'
+        meta['output_fingerprint'] = _score_output_fingerprint(score)
+        meta['cache_error'] = (
+            'creator-adaptive keep forecast unavailable: '
+            + creator_forecast_error[:300]
+        )
+        return meta
     if meta.get('cache_status') in ('disabled', 'disabled_revision_unavailable'):
         meta['output_fingerprint'] = _score_output_fingerprint(score)
         return meta
