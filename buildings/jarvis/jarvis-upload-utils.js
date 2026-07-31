@@ -278,75 +278,6 @@
         }
     }
 
-    async function recordVideoPrefix(file, options) {
-        const opts = options || {};
-        const seconds = Math.max(2, Number(opts.seconds) || 6);
-        const opened = await openVideo(file, opts.timeoutMs || 20000);
-        const video = opened.video;
-        let recorder = null;
-        let stream = null;
-        try {
-            if (!opened.duration || opened.duration <= seconds + 0.6) {
-                return { blob: null, duration: opened.duration || 0, reason: 'already-short' };
-            }
-            const capture = video.captureStream || video.mozCaptureStream;
-            if (typeof capture !== 'function' || typeof window.MediaRecorder !== 'function') {
-                return { blob: null, duration: opened.duration || 0, reason: 'capture-unsupported' };
-            }
-            try { stream = capture.call(video); } catch (error) { stream = null; }
-            if (!stream) return { blob: null, duration: opened.duration || 0, reason: 'capture-unavailable' };
-            const mimes = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm', 'video/mp4'];
-            const mime = mimes.find(value => {
-                try { return window.MediaRecorder.isTypeSupported(value); } catch (error) { return false; }
-            }) || '';
-            const chunks = [];
-            const blob = await new Promise((resolve, reject) => {
-                let settled = false;
-                let stopTimer = null;
-                let hardTimer = null;
-                const finish = (fn, value) => {
-                    if (settled) return;
-                    settled = true;
-                    if (stopTimer) window.clearTimeout(stopTimer);
-                    if (hardTimer) window.clearTimeout(hardTimer);
-                    fn(value);
-                };
-                try { recorder = new window.MediaRecorder(stream, mime ? { mimeType: mime } : {}); }
-                catch (error) { finish(reject, error); return; }
-                recorder.ondataavailable = event => { if (event.data && event.data.size) chunks.push(event.data); };
-                recorder.onerror = event => finish(reject, (event && event.error) || pickerError('The browser could not trim this video.'));
-                recorder.onstop = () => {
-                    const actualMime = String(recorder.mimeType || (chunks[0] && chunks[0].type) || mime || 'video/webm').split(';')[0];
-                    finish(resolve, new window.Blob(chunks, { type: actualMime }));
-                };
-                hardTimer = window.setTimeout(() => {
-                    try { if (recorder && recorder.state !== 'inactive') recorder.stop(); } catch (error) {}
-                    finish(reject, pickerError('The browser did not finish trimming this video.'));
-                }, (seconds + 4) * 1000);
-                // Hidden audible playback is rejected on mobile after asynchronous
-                // metadata work and can unexpectedly play through the phone speaker.
-                video.muted = true;
-                Promise.resolve(video.play()).then(() => {
-                    recorder.start(500);
-                    stopTimer = window.setTimeout(() => {
-                        try { if (recorder && recorder.state !== 'inactive') recorder.stop(); } catch (error) {}
-                    }, seconds * 1000);
-                }).catch(error => finish(reject, error));
-            });
-            return {
-                blob: blob && blob.size > 2000 ? blob : null,
-                duration: opened.duration || 0,
-                reason: blob && blob.size > 2000 ? 'recorded' : 'empty-recording',
-            };
-        } catch (error) {
-            return { blob: null, duration: opened.duration || 0, reason: 'capture-failed' };
-        } finally {
-            try { if (recorder && recorder.state !== 'inactive') recorder.stop(); } catch (error) {}
-            try { if (stream && stream.getTracks) stream.getTracks().forEach(track => track.stop()); } catch (error) {}
-            opened.cleanup();
-        }
-    }
-
     async function prepareVideo(file, options) {
         const opts = options || {};
         if (!file) throw pickerError('No video was selected.');
@@ -361,17 +292,27 @@
         if (originalBytes > maxOriginalBytes) throw pickerError('That video is over 8 GB. Export only the opening and upload it again.');
 
         const directBytes = Math.max(256 * 1024, Number(opts.directBytes) || 20 * MIB);
-        const maxClipBytes = Math.max(directBytes, Number(opts.maxClipBytes) || 28 * MIB);
         const prefixSeconds = Math.max(2, Number(opts.prefixSeconds) || 6);
         const ext = videoExtension(file);
         let duration = 0;
-        let capture = null;
-
         if (originalBytes > directBytes) {
-            capture = await recordVideoPrefix(file, { seconds: prefixSeconds, timeoutMs: opts.timeoutMs || 20000 });
-            duration = Number(capture.duration) || 0;
+            try {
+                const opened = await openVideo(
+                    file,
+                    Math.min(
+                        12000,
+                        Number(opts.timeoutMs) || 12000
+                    )
+                );
+                duration = opened.duration || 0;
+                opened.cleanup();
+            } catch (error) {}
             const shortDirectBytes = Math.max(directBytes, Number(opts.shortDirectBytes) || 32 * MIB);
-            if (capture.reason === 'already-short' && originalBytes <= shortDirectBytes) {
+            if (
+                duration > 0
+                && duration <= prefixSeconds + 0.6
+                && originalBytes <= shortDirectBytes
+            ) {
                 return {
                     blob: file,
                     ext,
@@ -379,18 +320,6 @@
                     mode: 'direct',
                     originalBytes,
                     transferBytes: originalBytes,
-                    fallbackMontage: null,
-                };
-            }
-            if (capture.blob && capture.blob.size <= maxClipBytes) {
-                const clipType = String(capture.blob.type || '').toLowerCase();
-                return {
-                    blob: capture.blob,
-                    ext: clipType.includes('mp4') ? 'mp4' : 'webm',
-                    duration,
-                    mode: 'trimmed',
-                    originalBytes,
-                    transferBytes: capture.blob.size,
                     fallbackMontage: null,
                 };
             }
@@ -410,12 +339,6 @@
                 fallbackMontage: null,
             };
         }
-
-        let montage = null;
-        try {
-            montage = await extractVideoMontage(file, { seconds: 5, frameCount: 5, frameWidth: 320, frameHeight: 569, timeoutMs: opts.timeoutMs || 20000 });
-            duration = duration || Number(montage.duration) || 0;
-        } catch (error) {}
 
         const minHeadBytes = Math.max(512 * 1024, Number(opts.minHeadBytes) || 16 * MIB);
         const maxHeadBytes = Math.max(minHeadBytes, Number(opts.maxHeadBytes) || 56 * MIB);
@@ -442,8 +365,8 @@
             originalBytes,
             transferBytes: blob.size,
             sparse: { originalBytes, headBytes, tailBytes },
-            fallbackMontage: montage && montage.dataUrl ? montage.dataUrl : null,
-            captureReason: capture && capture.reason,
+            fallbackMontage: null,
+            captureReason: 'canonical-original-byte-window',
         };
     }
 

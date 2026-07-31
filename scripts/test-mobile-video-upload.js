@@ -224,7 +224,7 @@ async function runUiFlow(browser, origin, fixture, failVideoScore, emulateNoCapt
     await page.goto(origin + '/__mobile-upload__', { waitUntil: 'domcontentloaded' });
     await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><base href="${origin}/"><style>html,body{margin:0;background:#020617}</style></head><body><main id="root"></main></body></html>`);
     await page.addScriptTag({ path: helperPath });
-    await page.evaluate(({ failVideoScore, fullScore, visualScore, emulateNoCapture }) => {
+    await page.evaluate(({ failVideoScore, fullScore, emulateNoCapture }) => {
         if (emulateNoCapture) {
             try { Object.defineProperty(HTMLMediaElement.prototype, 'captureStream', { value: undefined, configurable: true }); } catch (error) {}
             try { Object.defineProperty(window, 'MediaRecorder', { value: undefined, configurable: true }); } catch (error) {}
@@ -254,17 +254,14 @@ async function runUiFlow(browser, origin, fixture, failVideoScore, emulateNoCapt
             if (pathname === '/api/raw/map') return json({ n: 0 });
             if (pathname === '/api/rtg/labels') return json({});
             if (pathname === '/api/raw/embed-upload') return json({ ok: true, jobId: failVideoScore ? 'video-fails' : 'video-ok' });
-            if (pathname === '/api/raw/embed-montage') return json({ ok: true, jobId: 'visual-ok' });
             if (pathname === '/api/shortsquant/jobs/video-fails') return json({ status: 'error', error: 'could not read this bounded phone video' });
             if (pathname === '/api/shortsquant/jobs/video-ok') return json({ status: 'done', result: fullScore });
-            if (pathname === '/api/shortsquant/jobs/visual-ok') return json({ status: 'done', result: visualScore });
             return nativeFetch(url, options);
         };
     }, {
         failVideoScore,
         emulateNoCapture,
         fullScore: mockScore('phone-opening.mp4', false),
-        visualScore: mockScore('phone-opening.mp4', true),
     });
     await page.addScriptTag({ path: retentionPath });
     await page.evaluate(() => window.JarvisRetention.mountExperiment(document.getElementById('root')));
@@ -276,24 +273,39 @@ async function runUiFlow(browser, origin, fixture, failVideoScore, emulateNoCapt
     await chooser.setFiles(fixture);
     await page.waitForFunction(() => {
         const state = window.JarvisRetention && window.JarvisRetention.__st && window.JarvisRetention.__st();
-        return state && state.rawUploads && state.rawUploads.length === 1 && !state.rawUploading;
+        return state
+            && !state.rawUploading
+            && (
+                state.rawUpErr
+                || state.rawUploads
+                    && state.rawUploads.length === 1
+            );
     }, null, { timeout: 60000 });
     const result = await page.evaluate(() => {
         const state = window.JarvisRetention.__st();
         return {
             error: state.rawUpErr,
             upload: {
-                warning: state.rawUploads[0]._uploadWarning || null,
-                mode: state.rawUploads[0]._uploadMode || null,
-                silent: state.rawUploads[0].silent,
+                warning:
+                    state.rawUploads[0]
+                    && state.rawUploads[0]._uploadWarning || null,
+                mode:
+                    state.rawUploads[0]
+                    && state.rawUploads[0]._uploadMode || null,
+                silent:
+                    state.rawUploads[0]
+                    && state.rawUploads[0].silent,
                 ledgerSha256:
-                    state.rawUploads[0].score_ledger
+                    state.rawUploads[0]
+                    && state.rawUploads[0].score_ledger
                     && state.rawUploads[0].score_ledger.ledger_sha256,
                 ledgerValid:
-                    state.rawUploads[0].score_ledger_validation
+                    state.rawUploads[0]
+                    && state.rawUploads[0].score_ledger_validation
                     && state.rawUploads[0].score_ledger_validation.valid,
                 ledgerCoordinates:
-                    state.rawUploads[0].score_ledger
+                    state.rawUploads[0]
+                    && state.rawUploads[0].score_ledger
                     && state.rawUploads[0].score_ledger.entries.length,
             },
             requests: window.__mobileUploadRequests,
@@ -372,7 +384,7 @@ async function main() {
         if (emulateNoCapture) {
             assert.strictEqual(prepared.mode, 'sparse');
             assert(prepared.transferBytes <= 3 * 1024 * 1024, 'test transfer exceeded its explicit bound');
-            assert.strictEqual(prepared.fallbackMontage, true, 'phone path must retain a visual recovery montage');
+            assert.strictEqual(prepared.fallbackMontage, false, 'canonical phone path must not precompute a divergent browser montage');
             assert.strictEqual(prepared.headMatches, true, 'bounded transfer did not preserve opening bytes');
             assert.strictEqual(prepared.tailMatches, true, 'bounded transfer did not preserve final metadata bytes');
         }
@@ -392,18 +404,21 @@ async function main() {
         assert.strictEqual(normalUi.upload.ledgerCoordinates, 21);
 
         const recoveryUi = await runUiFlow(browser, staticServer.origin, fixture, true, emulateNoCapture);
-        assert.strictEqual(recoveryUi.error, null, 'visual recovery should produce a usable score');
-        assert(recoveryUi.requests.some(request => request.pathname === '/api/raw/embed-upload'), 'recovery test never attempted the bounded video');
-        assert(recoveryUi.requests.some(request => request.pathname === '/api/raw/embed-montage'), 'codec failure did not automatically use the visual recovery');
-        assert(recoveryUi.upload.warning && recoveryUi.upload.warning.includes('five visual frames'), 'visual-only recovery was not clearly disclosed');
-        assert.strictEqual(recoveryUi.upload.silent, true);
-        assert.strictEqual(recoveryUi.upload.ledgerValid, true);
-        assert.strictEqual(recoveryUi.upload.ledgerCoordinates, 21);
-        assert.notStrictEqual(
-            normalUi.upload.ledgerSha256,
-            recoveryUi.upload.ledgerSha256,
-            'visual-only recovery must not masquerade as the full audiovisual score'
+        assert(
+            recoveryUi.error
+                && recoveryUi.error.includes(
+                    'No browser-made visual-only score was substituted'
+                ),
+            'a canonical decode failure must explain why no divergent score was substituted'
         );
+        assert(recoveryUi.requests.some(request => request.pathname === '/api/raw/embed-upload'), 'recovery test never attempted the bounded video');
+        assert(
+            !recoveryUi.requests.some(
+                request => request.pathname === '/api/raw/embed-montage'
+            ),
+            'codec failure silently started a second visual-only score'
+        );
+        assert.strictEqual(recoveryUi.upload.ledgerSha256, undefined);
 
         console.log(JSON.stringify({
             ok: true,

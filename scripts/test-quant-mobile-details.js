@@ -18,6 +18,50 @@ const {
     scoreLedgerFromFeatures,
 } = require('./fixtures/score-ledger-fixture');
 
+function shortsBrowserRuntime() {
+    return {
+        schema: 'shorts-score-ledger-browser-runtime-v1',
+        schemaVersion: 1,
+        ledgerSchema: 'shorts-stored-score-ledger-v1',
+        ledgerSchemaVersion: 1,
+        ledgerVersion: scoreLedgerContract.GOVERNANCE.ledgerVersion,
+        percentileUnit:
+            scoreLedgerContract.GOVERNANCE.percentileStorageUnit,
+        featureIdentitySchemaVersion:
+            scoreLedgerContract.FEATURE_CONTRACT_IDENTITY_SCHEMA_VERSION,
+        featureContractSha256:
+            scoreLedgerContract.FEATURE_CONTRACT_SHA256,
+        featureContractDocumentSha256:
+            scoreLedgerContract.FEATURE_CONTRACT_DOCUMENT_SHA256,
+        governanceVersion:
+            scoreLedgerContract.GOVERNANCE.schemaVersion,
+        governanceSha256:
+            scoreLedgerContract.GOVERNANCE_SHA256,
+        expectedCoordinateIds:
+            scoreLedgerContract.EXPECTED_COORDINATE_IDS,
+        unitBounds: Object.fromEntries(
+            Object.entries(scoreLedgerContract.GOVERNANCE.valueUnits)
+                .map(([unit, definition]) => [unit, {
+                    min: definition.minimumInclusive,
+                    max: definition.maximumInclusive,
+                }])
+        ),
+        definitions: scoreLedgerContract.FEATURE_DEFINITIONS.map(
+            definition => ({
+                coordinateId: definition.coordinateId,
+                featureKey: definition.key,
+                group: definition.group,
+                target: definition.target,
+                source: definition.source,
+                sourceKey:
+                    definition.sourceKey || definition.key,
+                unit: definition.unit,
+                displayUnit: definition.displayUnit ?? null,
+            })
+        ),
+    };
+}
+
 function canonicalSavedHookFixture() {
     const neighbors = [
         { id: 'video-a', sim: 0.93 },
@@ -232,6 +276,7 @@ function canonicalSavedHookFixture() {
             visual_keep_model_artifact_sha256: 'a'.repeat(64),
             visual_keep_model_manifest_sha256: 'b'.repeat(64),
         },
+        scoreLedgerRuntime: shortsBrowserRuntime(),
         record,
     };
 }
@@ -288,7 +333,17 @@ async function main() {
             featureContract: contractFixture,
             liveContract,
             record,
+            scoreLedgerRuntime,
         }) => {
+            Object.defineProperty(
+                window,
+                '__SHORTS_SCORE_LEDGER_RUNTIME__',
+                {
+                    value: scoreLedgerRuntime,
+                    writable: false,
+                    configurable: false,
+                }
+            );
             window.__quantCalls = [];
             window.fetch = async (input, options) => {
                 const url = new URL(String(input), location.href);

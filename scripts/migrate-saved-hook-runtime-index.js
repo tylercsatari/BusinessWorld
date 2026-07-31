@@ -24,7 +24,7 @@ const {
 const INDEX_KEY = 'raw/saved-hooks/index.json';
 const SOURCE_ROOT = 'raw/saved-hooks';
 const ARCHIVE_PREFIX =
-    'raw/saved-hooks-bound/runtime-index-migration-v2';
+    'raw/saved-hooks-bound/runtime-index-migration-v3';
 
 function sha256Bytes(bytes) {
     return crypto.createHash('sha256').update(bytes).digest('hex');
@@ -248,108 +248,11 @@ async function migrateSavedHookRuntimeIndex({
                 },
             };
         }
+        let source;
         try {
-            const source = JSON.parse(
+            source = JSON.parse(
                 Buffer.from(recordBytes).toString('utf8')
             );
-            const mediaReference = source.montage_ref;
-            const canonicalMediaBytes = mediaReference
-                ? await storage.get(mediaReference.key)
-                : null;
-            const evidence = validateCanonicalSource(
-                source,
-                canonicalMediaBytes
-            );
-            if (!evidence.valid) {
-                return {
-                    legacy: runtimeIndex.legacyRow({
-                        ...row,
-                        ...source,
-                    }),
-                    record: {
-                        id,
-                        state: 'legacy_unbound_evidence',
-                        reason: evidence.errors.join('; '),
-                    },
-                };
-            }
-            const canonical = source;
-            const compact = evidence.compact;
-
-            const canonicalBytes = canonicalJsonBytes(canonical);
-            const canonicalizedBytes =
-                !Buffer.from(recordBytes).equals(canonicalBytes);
-            const archiveTransition = canonicalizedBytes;
-            const recordArchiveKey = archiveTransition
-                ? (
-                    `${ARCHIVE_PREFIX}/source-json/by-sha256/`
-                    + `${sha256Bytes(recordBytes)}.json`
-                )
-                : null;
-            if (recordArchiveKey) {
-                await immutablePut(
-                    storage,
-                    recordArchiveKey,
-                    recordBytes,
-                    write
-                );
-            }
-            const canonicalMedia = canonical.montage_ref;
-            if (
-                !canonicalMedia
-                || !canonicalMediaBytes
-                || sha256Bytes(canonicalMediaBytes)
-                    !== canonicalMedia.sha256
-                || Buffer.byteLength(canonicalMediaBytes)
-                    !== canonicalMedia.byte_length
-            ) {
-                throw new Error(
-                    'canonical saved-hook media binding differs'
-                );
-            }
-            if (write && canonicalizedBytes) {
-                const current = await storage.get(recordKey);
-                if (
-                    !current
-                    || !Buffer.from(current).equals(recordBytes)
-                ) {
-                    throw new Error(
-                        'source record changed during migration'
-                    );
-                }
-                await storage.put(
-                    recordKey,
-                    canonicalBytes,
-                    'application/json'
-                );
-                const persisted = await storage.get(recordKey);
-                if (
-                    !persisted
-                    || !Buffer.from(persisted).equals(canonicalBytes)
-                ) {
-                    throw new Error(
-                        'canonical source failed verification'
-                    );
-                }
-            }
-            return {
-                canonical: compact,
-                record: {
-                    id,
-                    state: canonicalizedBytes
-                        ? 'canonical_bytes_normalized'
-                        : 'canonical_unchanged',
-                    score_ledger_sha256:
-                        canonical.score_ledger
-                        && canonical.score_ledger.ledger_sha256
-                        || canonical.long_score_ledger
-                        && canonical.long_score_ledger.ledger_sha256
-                        || null,
-                    score_record_sha256:
-                        canonical.score_record_sha256 || null,
-                    source_archive_key: recordArchiveKey,
-                },
-            };
         } catch (error) {
             return {
                 legacy: runtimeIndex.legacyRow(row),
@@ -360,6 +263,78 @@ async function migrateSavedHookRuntimeIndex({
                 },
             };
         }
+        const mediaReference = source.montage_ref;
+        const canonicalMediaBytes = mediaReference
+            ? await storage.get(mediaReference.key)
+            : null;
+        const evidence = validateCanonicalSource(
+            source,
+            canonicalMediaBytes
+        );
+        if (!evidence.valid) {
+            return {
+                legacy: runtimeIndex.legacyRow({
+                    ...row,
+                    ...source,
+                }),
+                record: {
+                    id,
+                    state: 'legacy_unbound_evidence',
+                    reason: evidence.errors.join('; '),
+                },
+            };
+        }
+        const canonical = source;
+        const compact = evidence.compact;
+        const canonicalBytes = canonicalJsonBytes(canonical);
+        const canonicalizedBytes =
+            !Buffer.from(recordBytes).equals(canonicalBytes);
+        const recordArchiveKey = canonicalizedBytes
+            ? (
+                `${ARCHIVE_PREFIX}/source-json/by-sha256/`
+                + `${sha256Bytes(recordBytes)}.json`
+            )
+            : null;
+        if (recordArchiveKey) {
+            await immutablePut(
+                storage,
+                recordArchiveKey,
+                recordBytes,
+                write
+            );
+        }
+        const canonicalMedia = canonical.montage_ref;
+        if (
+            !canonicalMedia
+            || !canonicalMediaBytes
+            || sha256Bytes(canonicalMediaBytes)
+                !== canonicalMedia.sha256
+            || Buffer.byteLength(canonicalMediaBytes)
+                !== canonicalMedia.byte_length
+        ) {
+            throw new Error(
+                'canonical saved-hook media binding differs'
+            );
+        }
+        return {
+            canonical: compact,
+            record: {
+                id,
+                state: canonicalizedBytes
+                    ? 'canonical_source_preserved'
+                    : 'canonical_unchanged',
+                canonical_json_differs: canonicalizedBytes,
+                score_ledger_sha256:
+                    canonical.score_ledger
+                    && canonical.score_ledger.ledger_sha256
+                    || canonical.long_score_ledger
+                    && canonical.long_score_ledger.ledger_sha256
+                    || null,
+                score_record_sha256:
+                    canonical.score_record_sha256 || null,
+                source_archive_key: recordArchiveKey,
+            },
+        };
     }
 
     // R2 latency dominates this offline audit. Bounded batches preserve
@@ -463,6 +438,14 @@ async function migrateSavedHookRuntimeIndex({
             canonical_rows: migrated.hooks.length,
             legacy_unbound_rows:
                 migrated.legacy_hooks.length,
+            historical_display_rows:
+                migrated.legacy_hooks.filter(
+                    row => !!row.historical_display
+                ).length,
+            historical_without_score_ledger_rows:
+                migrated.legacy_hooks.filter(
+                    row => !row.historical_display
+                ).length,
             historical_quarantined_rows: records.filter(
                 record => (
                     record.state === 'legacy_unbound_evidence'
@@ -476,6 +459,11 @@ async function migrateSavedHookRuntimeIndex({
             canonical_bytes_normalized_rows: records.filter(
                 record => (
                     record.state === 'canonical_bytes_normalized'
+                )
+            ).length,
+            canonical_source_preserved_rows: records.filter(
+                record => (
+                    record.state === 'canonical_source_preserved'
                 )
             ).length,
             folders: migrated.folders.length,

@@ -125,12 +125,13 @@ const activeLongScores = (
     || []
 ).length;
 assert(passiveLongScores >= 8, `Long Quant summary cards must never rescore on render (found ${passiveLongScores} passive calls)`);
-assert(activeLongScores === 4, `only four explicitly opened detail surfaces may score exact recovered image bytes (found ${activeLongScores})`);
+assert(activeLongScores === 0, `opening Long Quant detail surfaces must never create a new score (found ${activeLongScores} active calls)`);
 
 // Force browsers to load the repaired clients instead of pairing new routes
 // with a cached pre-repair module.
-includes(index, 'jarvis-retention.js?v=keep-coordinate-ledger-v1', 'Shorts bundle cache key must be bumped');
-includes(index, 'jarvis-longquant.js?v=coordinate-lineage-1', 'Long Quant bundle cache key must be bumped');
+includes(index, 'jarvis-upload-utils.js?v=canonical-source-v2', 'upload canonicalization bundle cache key must be bumped');
+includes(index, 'jarvis-retention.js?v=score-ledger-runtime-v2', 'Shorts bundle cache key must be bumped');
+includes(index, 'jarvis-longquant.js?v=immutable-score-card-v2', 'Long Quant bundle cache key must be bumped');
 
 console.log(JSON.stringify({
     ok: true,

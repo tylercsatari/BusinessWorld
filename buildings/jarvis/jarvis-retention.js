@@ -624,8 +624,158 @@ const JarvisRetention = (function () {
     // aliases and visualization geometry are never consulted for scalar values.
     const STEER_KEY = { views: 'views', rawviews: 'views', realviews: 'realviews', outlier: 'outlier', hi10m: 'gt10M', keep: 'keep', ret5: 'ret5' };
     const SHORTS_LEDGER_SHA256 = /^[a-f0-9]{64}$/;
-    const SHORTS_PERCENTILE_UNIT = 'percentile_0_100';
-    const SHORTS_LEDGER_STATE_CACHE = new WeakMap();
+    let SHORTS_LEDGER_STATE_CACHE = new WeakMap();
+    let SHORTS_LEDGER_RUNTIME = (
+        typeof globalThis !== 'undefined'
+        && globalThis.__SHORTS_SCORE_LEDGER_RUNTIME__
+    ) || null;
+    let SHORTS_LEDGER_SCHEMA =
+        SHORTS_LEDGER_RUNTIME
+        && SHORTS_LEDGER_RUNTIME.ledgerSchema || '';
+    let SHORTS_LEDGER_SCHEMA_VERSION = Number(
+        SHORTS_LEDGER_RUNTIME
+        && SHORTS_LEDGER_RUNTIME.ledgerSchemaVersion
+    );
+    let SHORTS_LEDGER_VERSION = Number(
+        SHORTS_LEDGER_RUNTIME
+        && SHORTS_LEDGER_RUNTIME.ledgerVersion
+    );
+    let SHORTS_PERCENTILE_UNIT =
+        SHORTS_LEDGER_RUNTIME
+        && SHORTS_LEDGER_RUNTIME.percentileUnit || '';
+    let SHORTS_FEATURE_IDENTITY_SCHEMA_VERSION = Number(
+        SHORTS_LEDGER_RUNTIME
+        && SHORTS_LEDGER_RUNTIME.featureIdentitySchemaVersion
+    );
+    let SHORTS_FEATURE_CONTRACT_SHA256 =
+        SHORTS_LEDGER_RUNTIME
+        && SHORTS_LEDGER_RUNTIME.featureContractSha256 || '';
+    let SHORTS_FEATURE_CONTRACT_DOCUMENT_SHA256 =
+        SHORTS_LEDGER_RUNTIME
+        && SHORTS_LEDGER_RUNTIME.featureContractDocumentSha256 || '';
+    let SHORTS_COORDINATE_GOVERNANCE_VERSION = Number(
+        SHORTS_LEDGER_RUNTIME
+        && SHORTS_LEDGER_RUNTIME.governanceVersion
+    );
+    let SHORTS_COORDINATE_GOVERNANCE_SHA256 =
+        SHORTS_LEDGER_RUNTIME
+        && SHORTS_LEDGER_RUNTIME.governanceSha256 || '';
+    let SHORTS_UNIT_BOUNDS = Object.freeze({
+        ...(
+            SHORTS_LEDGER_RUNTIME
+            && SHORTS_LEDGER_RUNTIME.unitBounds
+            || {}
+        ),
+    });
+    let SHORTS_LEDGER_DEFINITIONS = Object.freeze(
+        (
+            SHORTS_LEDGER_RUNTIME
+            && Array.isArray(SHORTS_LEDGER_RUNTIME.definitions)
+                ? SHORTS_LEDGER_RUNTIME.definitions
+                : []
+        ).map(definition => Object.freeze({ ...definition }))
+    );
+    let SHORTS_LEDGER_RUNTIME_PROMISE = null;
+    function installShortsLedgerRuntime(runtime) {
+        const definitions = runtime
+            && Array.isArray(runtime.definitions)
+            ? runtime.definitions
+            : [];
+        const expectedIds = runtime
+            && Array.isArray(runtime.expectedCoordinateIds)
+            ? runtime.expectedCoordinateIds
+            : [];
+        if (
+            !runtime
+            || runtime.schema
+                !== 'shorts-score-ledger-browser-runtime-v1'
+            || runtime.schemaVersion !== 1
+            || definitions.length !== 21
+            || expectedIds.length !== definitions.length
+            || definitions.some((definition, index) => (
+                !definition
+                || definition.coordinateId !== expectedIds[index]
+            ))
+            || !SHORTS_LEDGER_SHA256.test(
+                String(runtime.featureContractSha256 || '')
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(runtime.featureContractDocumentSha256 || '')
+            )
+            || !SHORTS_LEDGER_SHA256.test(
+                String(runtime.governanceSha256 || '')
+            )
+        ) return false;
+        SHORTS_LEDGER_RUNTIME = runtime;
+        SHORTS_LEDGER_SCHEMA = runtime.ledgerSchema || '';
+        SHORTS_LEDGER_SCHEMA_VERSION =
+            Number(runtime.ledgerSchemaVersion);
+        SHORTS_LEDGER_VERSION = Number(runtime.ledgerVersion);
+        SHORTS_PERCENTILE_UNIT = runtime.percentileUnit || '';
+        SHORTS_FEATURE_IDENTITY_SCHEMA_VERSION =
+            Number(runtime.featureIdentitySchemaVersion);
+        SHORTS_FEATURE_CONTRACT_SHA256 =
+            runtime.featureContractSha256 || '';
+        SHORTS_FEATURE_CONTRACT_DOCUMENT_SHA256 =
+            runtime.featureContractDocumentSha256 || '';
+        SHORTS_COORDINATE_GOVERNANCE_VERSION =
+            Number(runtime.governanceVersion);
+        SHORTS_COORDINATE_GOVERNANCE_SHA256 =
+            runtime.governanceSha256 || '';
+        SHORTS_UNIT_BOUNDS = Object.freeze({
+            ...(runtime.unitBounds || {}),
+        });
+        SHORTS_LEDGER_DEFINITIONS = Object.freeze(
+            definitions.map(
+                definition => Object.freeze({ ...definition })
+            )
+        );
+        SHORTS_LEDGER_STATE_CACHE = new WeakMap();
+        return true;
+    }
+    function ensureShortsLedgerRuntime() {
+        if (installShortsLedgerRuntime(SHORTS_LEDGER_RUNTIME)) {
+            return Promise.resolve(SHORTS_LEDGER_RUNTIME);
+        }
+        if (SHORTS_LEDGER_RUNTIME_PROMISE) {
+            return SHORTS_LEDGER_RUNTIME_PROMISE;
+        }
+        SHORTS_LEDGER_RUNTIME_PROMISE = rtFetchJson(
+            '/api/quant-coordinate-governance.json',
+            {
+                cache: 'force-cache',
+                _timeoutMs: 15000,
+                _retryDelays: [750, 2000, 5000],
+            },
+            4
+        ).then(payload => {
+            const runtime = payload
+                && payload.shortsScoreLedgerRuntime;
+            if (!installShortsLedgerRuntime(runtime)) {
+                throw new Error(
+                    'canonical Shorts score-ledger runtime is invalid'
+                );
+            }
+            if (
+                typeof globalThis !== 'undefined'
+                && !globalThis.__SHORTS_SCORE_LEDGER_RUNTIME__
+            ) {
+                Object.defineProperty(
+                    globalThis,
+                    '__SHORTS_SCORE_LEDGER_RUNTIME__',
+                    {
+                        value: shortsDeepFreeze(runtime),
+                        writable: false,
+                        configurable: false,
+                    }
+                );
+            }
+            return runtime;
+        }).finally(() => {
+            SHORTS_LEDGER_RUNTIME_PROMISE = null;
+        });
+        return SHORTS_LEDGER_RUNTIME_PROMISE;
+    }
     function shortsCanonicalJson(value) {
         if (Array.isArray(value)) {
             return `[${value.map(shortsCanonicalJson).join(',')}]`;
@@ -799,7 +949,27 @@ const JarvisRetention = (function () {
             };
         }
         const cached = SHORTS_LEDGER_STATE_CACHE.get(ledger);
-        if (cached && cached.validation === validation) return cached.state;
+        if (cached) {
+            return {
+                ...cached,
+                validationSummary: validation || null,
+                validationWarning: (
+                    validation
+                    && (
+                        validation.valid === false
+                        || (
+                            validation.valid === true
+                            && validation.ledger_sha256
+                                !== cached.ledgerSha256
+                        )
+                    )
+                ) ? (
+                    validation.errors
+                    && validation.errors.join('; ')
+                    || 'server record-binding summary differs from the self-validated score ledger'
+                ) : null,
+            };
+        }
         const errors = [];
         const entries = Array.isArray(ledger.entries) ? ledger.entries : [];
         const expected = Array.isArray(ledger.expected_coordinate_ids)
@@ -813,22 +983,51 @@ const JarvisRetention = (function () {
             shortsCanonicalJson(hashPayload)
         );
         if (
-            ledger.schema !== 'shorts-stored-score-ledger-v1'
-            || ledger.schema_version !== 1
-            || ledger.schema_complete !== true
+            !SHORTS_LEDGER_RUNTIME
+            || SHORTS_LEDGER_RUNTIME.schema
+                !== 'shorts-score-ledger-browser-runtime-v1'
+            || SHORTS_LEDGER_RUNTIME.schemaVersion !== 1
+            || ledger.schema !== SHORTS_LEDGER_SCHEMA
+            || ledger.schema_version !== SHORTS_LEDGER_SCHEMA_VERSION
+            || Object.prototype.hasOwnProperty.call(
+                ledger,
+                'migration_provenance'
+            )
         ) errors.push('schema');
         if (
             !SHORTS_LEDGER_SHA256.test(ledgerSha256)
             || ledgerSha256 !== computedLedgerSha256
-            || !validation
-            || validation.valid !== true
-            || validation.ledger_sha256 !== ledgerSha256
         ) errors.push('ledger hash binding');
         if (
-            entries.length !== 21
-            || expected.length !== entries.length
+            ledger.ledger_version !== SHORTS_LEDGER_VERSION
+            || ledger.feature_contract_identity_schema_version
+                !== SHORTS_FEATURE_IDENTITY_SCHEMA_VERSION
+            || ledger.feature_contract_sha256
+                !== SHORTS_FEATURE_CONTRACT_SHA256
+            || ledger.feature_contract_document_sha256
+                !== SHORTS_FEATURE_CONTRACT_DOCUMENT_SHA256
+            || ledger.coordinate_governance_version
+                !== SHORTS_COORDINATE_GOVERNANCE_VERSION
+            || ledger.coordinate_governance_sha256
+                !== SHORTS_COORDINATE_GOVERNANCE_SHA256
+        ) errors.push('ledger contract identity');
+        const expectedIds = SHORTS_LEDGER_DEFINITIONS.map(
+            definition => definition.coordinateId
+        );
+        if (
+            expected.length !== expectedIds.length
+            || expected.some(
+                (coordinateId, index) => (
+                    coordinateId !== expectedIds[index]
+                )
+            )
+            || entries.length !== expectedIds.length
             || new Set(ids).size !== entries.length
-            || ids.some((id, index) => id !== expected[index])
+            || ids.some(
+                (coordinateId, index) => (
+                    coordinateId !== expectedIds[index]
+                )
+            )
         ) errors.push('coordinate inventory');
         const values = ledger.values_by_id;
         const percentiles = ledger.percentiles_by_id;
@@ -840,15 +1039,30 @@ const JarvisRetention = (function () {
             || typeof percentiles !== 'object'
             || Array.isArray(percentiles)
         ) errors.push('coordinate indexes');
+        if (
+            values
+            && percentiles
+            && (
+                Object.keys(values).length !== expected.length
+                || Object.keys(percentiles).length !== expected.length
+                || Object.keys(values).some(
+                    coordinateId => !expectedIds.includes(coordinateId)
+                )
+                || Object.keys(percentiles).some(
+                    coordinateId => !expectedIds.includes(coordinateId)
+                )
+            )
+        ) errors.push('coordinate index inventory');
         const entriesById = new Map();
-        entries.forEach(entry => {
+        let availableCount = 0;
+        entries.forEach((entry, index) => {
             if (!entry || typeof entry !== 'object') {
                 errors.push('entry');
                 return;
             }
             const coordinateId = String(entry.coordinate_id || '');
             entriesById.set(coordinateId, entry);
-            const expectedId = `shorts.stored.${entry.feature_key || ''}`;
+            const definition = SHORTS_LEDGER_DEFINITIONS[index];
             const finiteValue = (
                 entry.value !== null
                 && entry.value !== undefined
@@ -865,18 +1079,38 @@ const JarvisRetention = (function () {
                     && Number(percentile) <= 100
                 )
             );
+            const bounds = SHORTS_UNIT_BOUNDS[
+                definition && definition.unit
+            ];
+            const valueInBounds = finiteValue
+                && bounds
+                && (
+                    bounds.min == null
+                    || Number(entry.value) >= bounds.min
+                )
+                && (
+                    bounds.max == null
+                    || Number(entry.value) <= bounds.max
+                );
             if (
-                coordinateId !== expectedId
-                || !entry.group
-                || !entry.target
-                || !entry.unit
+                !definition
+                || coordinateId !== definition.coordinateId
+                || entry.feature_key !== definition.featureKey
+                || entry.group !== definition.group
+                || entry.target !== definition.target
+                || entry.source !== definition.source
+                || entry.source_key !== definition.sourceKey
+                || entry.unit !== definition.unit
+                || entry.display_unit !== definition.displayUnit
             ) errors.push(`${coordinateId || 'unknown'} identity`);
             if ((entry.available === true) !== finiteValue) {
                 errors.push(`${coordinateId} availability`);
             }
             if (entry.available === true) {
+                availableCount++;
                 if (
                     !validPercentile
+                    || !valueInBounds
                     || !values
                     || Number(values[coordinateId]) !== Number(entry.value)
                     || (
@@ -887,6 +1121,7 @@ const JarvisRetention = (function () {
                                 || Number(percentiles[coordinateId])
                                     !== Number(percentile)
                     )
+                    || entry.unavailable_reason != null
                 ) errors.push(`${coordinateId} value parity`);
             } else if (
                 values && values[coordinateId] != null
@@ -896,6 +1131,25 @@ const JarvisRetention = (function () {
                 errors.push(`${coordinateId} unavailable`);
             }
         });
+        if (
+            ledger.schema_complete !== true
+            || ledger.available_count !== availableCount
+            || ledger.all_values_available
+                !== (
+                    availableCount
+                    === SHORTS_LEDGER_DEFINITIONS.length
+                )
+        ) errors.push('ledger summary counts');
+        const expectedUnavailable = entries
+            .filter(entry => entry && entry.available !== true)
+            .map(entry => ({
+                coordinate_id: entry.coordinate_id,
+                reason: entry.unavailable_reason,
+            }));
+        if (
+            shortsCanonicalJson(ledger.unavailable)
+                !== shortsCanonicalJson(expectedUnavailable)
+        ) errors.push('ledger unavailable inventory');
         const state = {
             present: true,
             valid: errors.length === 0,
@@ -905,10 +1159,28 @@ const JarvisRetention = (function () {
         };
         if (state.valid) {
             shortsDeepFreeze(ledger);
-            shortsDeepFreeze(validation);
         }
-        SHORTS_LEDGER_STATE_CACHE.set(ledger, { validation, state });
-        return state;
+        if (state.valid) {
+            SHORTS_LEDGER_STATE_CACHE.set(ledger, state);
+        }
+        return {
+            ...state,
+            validationSummary: validation || null,
+            validationWarning: (
+                validation
+                && (
+                    validation.valid === false
+                    || (
+                        validation.valid === true
+                        && validation.ledger_sha256 !== ledgerSha256
+                    )
+                )
+            ) ? (
+                validation.errors
+                && validation.errors.join('; ')
+                || 'server record-binding summary differs from the self-validated score ledger'
+            ) : null,
+        };
     }
     function shortsInputDescriptor(up, channel) {
         const manifest = up && up.input_manifest;
@@ -3777,12 +4049,7 @@ const JarvisRetention = (function () {
         const scorableKind = d => d.kind === 'content' || d.kind === 'novelty';
         const val = EXPREG.indicators.filter(d => d.validated && scorableKind(d));
         const uploads = st.rawUploads || [];
-        const selectedUpload = st.rawUpSel !== null && st.rawUpSel !== false
-            ? uploads[Number(st.rawUpSel)]
-            : null;
-        const up = selectedUpload && selectedUpload.indicators
-            ? selectedUpload
-            : uploads.filter(u => u && u.indicators).slice(-1)[0];
+        const up = selectedRawScoreUpload();
         const keyOf = d => d.kind === 'content' ? `${d.name}__${d.target}` : d.name;
         const TLAB = { keep: 'keep rate (stay to watch)', ret5: 'past 5 seconds', views: 'est. views', gt10M: 'chance >10M views' };
         if (!up) {
@@ -3802,7 +4069,7 @@ const JarvisRetention = (function () {
         const transcriptBlock = (() => {
             const ed = st.rawTransEdit && st.rawTransEdit.idx === upIdx ? st.rawTransEdit : null;
             const shown = up.silent
-                ? `<div style="font-size:11px;color:${C.dim};background:#0f172a;border-radius:6px;padding:8px;margin-bottom:6px">no voiceover detected${up.transcript ? ` — low-confidence guess: <i>"${esc(String(up.transcript).slice(0, 120))}"</i>` : ''} — text + together stay locked until fixed</div>`
+                ? `<div style="font-size:11px;color:${C.dim};background:#0f172a;border-radius:6px;padding:8px;margin-bottom:6px">no voiceover detected${up.transcript ? ` — low-confidence guess: <i>"${esc(String(up.transcript).slice(0, 120))}"</i>` : ''} — the Text channel is not scored; Together remains visible whenever its persisted ledger coordinate used the montage-only fallback</div>`
                 : `<div style="font-size:11px;font-style:italic;color:${C.text};background:#0f172a;border-radius:6px;padding:8px;margin-bottom:6px">"${esc(up.transcript || '')}"${up.transcriptSource ? ` <span style="font-style:normal;font-size:9px;color:${C.faint}">· ${esc(up.transcriptSource)}</span>` : ''}</div>`;
             if (!ed) return shown + (up.montage ? `<div style="margin-bottom:8px"><span data-rawtransedit="${upIdx}" style="cursor:pointer;border:1px solid ${C.amber};background:${C.amber}18;color:${C.amber};border-radius:6px;padding:3px 9px;font-size:10px;font-weight:800">✏️ fix transcript + re-embed</span></div>` : '');
             return `<div style="border:1px solid ${C.amber}66;border-radius:8px;padding:8px;margin-bottom:8px;background:#0f172a"><textarea data-rawtranstext rows="2" style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 9px;font-size:12px;font-family:inherit;resize:vertical">${esc(ed.text || '')}</textarea><div style="display:flex;gap:7px;margin-top:6px;flex-wrap:wrap"><span data-rawreembed="${upIdx}" style="cursor:pointer;border:1px solid ${C.green};background:${C.green}22;color:${C.green};border-radius:6px;padding:4px 11px;font-size:10px;font-weight:900">${st.rawReembedBusy ? '⏳ re-embedding all channels…' : '🔁 re-embed with this transcript'}</span><span data-rawreembedvis="${upIdx}" style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">visuals only</span><span data-rawtranscancel style="cursor:pointer;border:1px solid ${C.border};color:${C.dim};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700">cancel</span></div></div>`;
@@ -3872,7 +4139,7 @@ const JarvisRetention = (function () {
         // (embedding→retention→your 211's view model) on YOUR channel scale. Both steered, both shown.
         const embBox = tn => {
             const b = steerBest(up, tn), ch = b ? b.mod : 'together', pj = projFor[tn], cm = colorFor[tn];
-            const big = b ? steerDisp(tn, b.value) : '—';
+            const big = b ? steerDisp(tn, b.value) : 'Not scored';
             let sub = '', foot;
             if (tn === 'realviews') {
                 const durTxt = b && b.dur_s ? (b.dur_assumed ? `assumed ${b.dur_s}s` : `${b.dur_s}s video`) : 'median dur';
@@ -3912,7 +4179,7 @@ const JarvisRetention = (function () {
             ) {
                 const reason = ledgerEntry && ledgerEntry.unavailable_reason
                     || 'canonical novelty coordinate unavailable';
-                return cardc(`<div><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML('—', esc(reason))}<code style="display:block;font-size:6.5px;color:${C.faint};margin-top:5px">${esc(coordinateId)}</code></div>`, 12);
+                return cardc(`<div><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML('Not scored', esc(reason))}<code style="display:block;font-size:6.5px;color:${C.faint};margin-top:5px">${esc(coordinateId)}</code></div>`, 12);
             }
             const pool = EXPREG.indicators.filter(
                 d => d.kind === 'novelty' && d.target === tn
@@ -3943,7 +4210,7 @@ const JarvisRetention = (function () {
             const definition = d
                 ? `${d.name.replace('nov_', '')} (R=${Rof(d).toFixed(2)})`
                 : coordinateId;
-            return cardc(`<div${embeddingIdentityAttrs(identity, rawEmbeddingAssetId(up))}><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML((dispV(tn, est) || '—') + star, pc != null ? `${(pc * 100).toFixed(0)}th ${SHORTS_PERCENTILE_UNIT}` : '')}${curve}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${esc(definition)} — persisted ledger value · ${esc(identity.coordinateId)} · ledger ${identity.ledgerSha256.slice(0, 12)}…; the curve is descriptive only · your hook ◆</div>${coordinateTraceHtml(up, identity.coordinateId, identity, { valueNote: 'novelty calibration output', artifactLabel: 'raw/indicators/registry.json revision', modelRevision: ledger && ledger.registry_revision && ledger.registry_revision.sha256 || scorerArtifactRevision(up, 'raw/indicators/registry.json') })}</div>`, 12);
+            return cardc(`<div${embeddingIdentityAttrs(identity, rawEmbeddingAssetId(up))}><div style="font-size:11px;color:${C.purple};font-weight:800;text-transform:uppercase">Novelty → ${metShort(tn)}</div>${bigNumHTML((dispV(tn, est) || 'Not scored') + star, pc != null ? `${(pc * 100).toFixed(0)}th ${SHORTS_PERCENTILE_UNIT}` : '')}${curve}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${esc(definition)} — persisted ledger value · ${esc(identity.coordinateId)} · ledger ${identity.ledgerSha256.slice(0, 12)}…; the curve is descriptive only · your hook ◆</div>${coordinateTraceHtml(up, identity.coordinateId, identity, { valueNote: 'novelty calibration output', artifactLabel: 'raw/indicators/registry.json revision', modelRevision: ledger && ledger.registry_revision && ledger.registry_revision.sha256 || scorerArtifactRevision(up, 'raw/indicators/registry.json') })}</div>`, 12);
         };
         const visualForecastBox = () => {
             const forecast = visualKeepForecastOf(up);
@@ -3951,10 +4218,10 @@ const JarvisRetention = (function () {
                 const diagnostic = up.runtime_diagnostics
                     && up.runtime_diagnostics.visual_keep_full_fit;
                 if (diagnostic && isFinite(+diagnostic.raw)) {
-                    return cardc(`<div data-visual-keep-fit-diagnostic data-coordinate-authority="unbound-scalar-suppressed"><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Visual keep · in-sample diagnostic</div>${bigNumHTML('—', 'unbound scalar suppressed')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">A fitting-population reconstruction exists, but it has no canonical row-ledger coordinate and ledger hash. Its numeric value is deliberately hidden and cannot be used as a score.</div></div>`, 12);
+                    return cardc(`<div data-visual-keep-fit-diagnostic data-coordinate-authority="unbound-scalar-suppressed"><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Visual keep · in-sample diagnostic</div>${bigNumHTML('Not available', 'unbound scalar suppressed')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">A fitting-population reconstruction exists, but it has no canonical row-ledger coordinate and ledger hash. Its numeric value is deliberately hidden and cannot be used as a score.</div></div>`, 12);
                 }
                 const reason = up.visual_keep_forecast_error || 'This score artifact predates the frozen model.';
-                return cardc(`<div data-visual-keep-forecast><div style="font-size:11px;color:${C.green};font-weight:800;text-transform:uppercase">Frozen visual model → keep rate</div>${bigNumHTML('—', 'current raw value unavailable')}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${esc(reason)} ${up.visual_keep_forecast_error ? '' : 'Re-score this opening once to persist the canonical raw forecast.'}</div></div>`, 12);
+                return cardc(`<div data-visual-keep-forecast><div style="font-size:11px;color:${C.green};font-weight:800;text-transform:uppercase">Frozen visual model → keep rate</div>${bigNumHTML('Not available', 'no verified score-record value')}<div style="font-size:8.5px;color:${C.mute};margin-top:4px">${esc(reason)} ${up.visual_keep_forecast_error ? '' : 'Re-score this opening once to persist the canonical raw forecast.'}</div></div>`, 12);
             }
             const scope = forecast.calibration_scope === 'pooled_global'
                 ? 'pooled globally'
@@ -3969,7 +4236,7 @@ const JarvisRetention = (function () {
             if (!forecast) {
                 const reason = up.creator_adaptive_keep_forecast_error
                     || 'The scorer did not return a creator-profile forecast for this historical result.';
-                return cardc(`<div data-creator-adaptive-keep-forecast><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Creator-adaptive multimodal keep forecast · research only</div>${bigNumHTML('—', 'current profile value unavailable')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">${esc(reason)} Re-score with an explicit registered creator profile to combine the canonical visual and together embeddings with that profile's prior history. Profiles are never substituted silently, and this scalar is never predictor-eligible.</div></div>`, 12);
+                return cardc(`<div data-creator-adaptive-keep-forecast><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Creator-adaptive multimodal keep forecast · research only</div>${bigNumHTML('Not available', 'no verified creator-profile value')}<div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:4px">${esc(reason)} Re-score with an explicit registered creator profile to combine the canonical visual and together embeddings with that profile's prior history. Profiles are never substituted silently, and this scalar is never predictor-eligible.</div></div>`, 12);
             }
             const profile = savedVisualKeepAccountName(
                 forecast.profile_account || forecast.account,
@@ -4004,30 +4271,41 @@ const JarvisRetention = (function () {
             return cardc(`<div data-creator-adaptive-keep-forecast data-revision-status="${esc(revisionStatus)}"${embeddingIdentityAttrs(forecast, rawEmbeddingAssetId(up))}><div style="display:flex;justify-content:space-between;gap:8px;align-items:start;flex-wrap:wrap"><div style="font-size:11px;color:${C.amber};font-weight:800;text-transform:uppercase">Creator-adaptive multimodal keep forecast · research only · not predictor-eligible</div><span style="border:1px solid ${revisionMeta.color};color:${revisionMeta.color};padding:2px 6px;font-size:7px;font-weight:950;text-transform:uppercase">${esc(revisionMeta.label)}</span></div>${bigNumHTML(`${fmtv(forecast.value, 1)}%`, `${esc(forecast.valueUnit)} · no percentile`)}<div style="font-size:8.5px;color:${C.mute};line-height:1.5;margin-top:4px">${baseline == null ? '' : `History-only baseline <b style="color:${C.text}">${fmtv(baseline, 1)}%</b> · mixture shift <b style="color:${C.text}">${modelMinusBaseline >= 0 ? '+' : ''}${fmtv(modelMinusBaseline, 1)} pp</b>.<br>`}${componentLine}<b>Inputs:</b> ${esc(forecast.input)}; ${esc(profile || 'explicit creator')} ${esc(history)}; ${historyWindow} maximum, ${minimumHistory} minimum${historyEnd ? ` · history through ${esc(historyEnd)}` : ''}.<br><b>Evidence boundary:</b> <span style="color:${historicalPrequential ? C.cyan : C.amber}">${esc(claimBoundary)}</span><br><b>Frozen selection:</b> ${candidateCount.toLocaleString()} prespecified time-ordered candidates. <b>Selected formula:</b> ${esc(forecast.model_formula)}.<br>Coordinate <b>${esc(forecast.coordinateId)}</b> · ledger ${forecast.ledgerSha256.slice(0, 12)}…. This is one derived scalar, not a location on either raw plane.</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" data-expgo="visual:keep" style="min-height:44px;background:transparent;border:1px solid ${C.green};color:${C.green};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw visual:keep geometry →</button><button type="button" data-expgo="together:keep" style="min-height:44px;background:transparent;border:1px solid ${C.accent};color:${C.accent};padding:7px 10px;cursor:pointer;font-size:8px;font-weight:900">open raw together:keep geometry →</button></div>${coordinateTraceHtml(up, forecast.coordinateId, forecast, { profile: forecast.profile_account, artifactLabel: 'creator serving artifact', modelRevision: forecast.serving_artifact_sha256 || forecast.model_artifact_sha256, valueNote: 'percentage, not corpus percentile' })}</div>`, 12);
         };
         const gcol = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:12px';
-        const hasTextUp = !!String(up.transcript || up.text || '').trim() && !up.silent;
         const metShort2 = tn => ({ keep: 'keep rate', ret5: '5s retention', views: 'view-equivalent (corpus quantile)', realviews: 'forecast views (your channel scale)', outlier: 'outlier ×', gt10M: '>10M class' })[tn] || tn;
         const projFor2 = { keep: 'keep', ret5: 'ret5', views: 'views', realviews: 'realviews', outlier: 'outlier', gt10M: 'hi10m' };
         const colorFor2 = { keep: 'metric', ret5: 'metric', views: 'views', realviews: 'metric', outlier: 'metric', gt10M: 'gt10m' };
         const CH_TARGETS = ['keep', 'ret5', 'views', 'realviews', 'outlier', 'gt10M'];
         const chanBox = (ch, tn) => {
             const k = steerOf(up, ch, tn), pj = projFor2[tn], cm = colorFor2[tn];
-            const big = k ? steerDisp(tn, k.value) : '—';
-            const sub = k && k.percentile100 != null
-                ? `${Math.round(k.percentile100)}th ${k.percentileUnit}`
-                : (k ? '' : 'canonical coordinate unavailable');
             const coordinateId = k && k.coordinateId
                 || `shorts.stored.${ch}.${tn}`;
-            return cardc(`<div data-expgo="${ch}:${pj}"${k ? embeddingDataAttrs(up, ch, tn, 'canonical-score-ledger', rawEmbeddingAssetId(up), k) : ''} style="cursor:pointer"><div style="font-size:10px;color:${CY};font-weight:800;text-transform:uppercase">${metShort2(tn)}</div>${bigNumHTML(big, sub)}${cluster(ch, pj, cm)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px"><span style="color:${C.accent}">open geometry →</span></div>${coordinateTraceHtml(up, coordinateId, k, { valueNote: 'canonical scalar; map placement shown separately' })}</div>`, 12);
+            if (!k) {
+                const entry = scoreLedgerEntry(up, coordinateId);
+                const reason = entry
+                    && entry.unavailable_reason
+                    || 'This coordinate is unavailable in the persisted score ledger.';
+                return cardc(`<div data-coordinate-unavailable="${esc(coordinateId)}"><div style="font-size:10px;color:${C.faint};font-weight:800;text-transform:uppercase">${metShort2(tn)}</div><div style="font-size:19px;color:${C.mute};font-weight:900;margin-top:6px">Not scored</div><div style="font-size:8.5px;color:${C.mute};line-height:1.45;margin-top:5px">${esc(reason)}</div><code style="display:block;font-size:7px;color:${C.faint};margin-top:6px">${esc(coordinateId)}</code></div>`, 12);
+            }
+            const big = steerDisp(tn, k.value);
+            const sub = k && k.percentile100 != null
+                ? `${Math.round(k.percentile100)}th ${k.percentileUnit}`
+                : '';
+            return cardc(`<div data-expgo="${ch}:${pj}"${embeddingDataAttrs(up, ch, tn, 'canonical-score-ledger', rawEmbeddingAssetId(up), k)} style="cursor:pointer"><div style="font-size:10px;color:${CY};font-weight:800;text-transform:uppercase">${metShort2(tn)}</div>${bigNumHTML(big, sub)}${cluster(ch, pj, cm)}<div style="font-size:8.5px;color:${C.mute};margin-top:4px"><span style="color:${C.accent}">open geometry →</span></div>${coordinateTraceHtml(up, coordinateId, k, { valueNote: 'canonical scalar; map placement shown separately' })}</div>`, 12);
         };
         const chanSection = ch => {
-            const input = ch === 'visual' ? '5-frame montage only' : ch === 'text' ? 'transcript only' : 'montage + transcript fused';
+            const input = rawInputLabel(up, ch);
             const col = ch === 'visual' ? C.green : ch === 'text' ? C.purple : C.accent;
-            if (ch !== 'visual' && !hasTextUp) return `<div style="border:1px dashed ${C.border};border-radius:8px;padding:10px;margin-bottom:12px;font-size:10px;color:${C.dim}"><b style="color:${col};text-transform:uppercase">${ch}</b> — locked: no transcript detected. Fix the transcript in the trace card above and these ${CH_TARGETS.length} graphs unlock.</div>`;
-            return `<div style="display:flex;justify-content:space-between;align-items:end;gap:10px;margin:2px 0 5px"><div><span style="font-size:10px;color:${col};font-weight:800;text-transform:uppercase">${ch}</span> <span style="font-size:9px;color:${C.faint}">${input}</span></div><span style="font-size:9px;color:${C.faint};font-weight:800">${CH_TARGETS.length} graphs</span></div><div style="${gcol};margin-bottom:12px">${CH_TARGETS.map(tn => chanBox(ch, tn)).join('')}</div>`;
+            const available = CH_TARGETS.filter(
+                tn => !!steerOf(up, ch, tn)
+            ).length;
+            return `<div style="display:flex;justify-content:space-between;align-items:end;gap:10px;margin:2px 0 5px"><div><span style="font-size:10px;color:${col};font-weight:800;text-transform:uppercase">${ch}</span> <span style="font-size:9px;color:${C.faint}">${esc(input)}</span></div><span style="font-size:9px;color:${available === CH_TARGETS.length ? C.green : C.faint};font-weight:800">${available}/${CH_TARGETS.length} ledger coordinates available</span></div><div style="${gcol};margin-bottom:12px">${CH_TARGETS.map(tn => chanBox(ch, tn)).join('')}</div>`;
         };
-        const nGraphs = CH_TARGETS.length * (hasTextUp ? 3 : 1) + 5;
-        const boxes = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">${nGraphs} graphs — every channel × every output, plus novelty</div>
-            <div style="font-size:9px;color:${C.mute};margin-bottom:8px">The original channel tiles are unchanged. Two optional keep forecasts reuse existing vectors: a pooled visual diagnostic and a known-creator prequential next-upload forecast. Neither mints another embedding space. <b style="color:${C.purple}">Novelty</b> uses its own calibration curves.</div>
+        const availableChannelCoordinates = ['visual', 'text', 'together']
+            .reduce((count, ch) => count + CH_TARGETS.filter(
+                tn => !!steerOf(up, ch, tn)
+            ).length, 0);
+        const boxes = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:2px">All 18 registered channel coordinates · ${availableChannelCoordinates} scored · ${18 - availableChannelCoordinates} explicitly unavailable</div>
+            <div style="font-size:9px;color:${C.mute};margin-bottom:8px">Availability comes only from the persisted score ledger. The page never infers it from transcript text. Two optional keep forecasts reuse existing vectors: a pooled visual diagnostic and a known-creator prequential next-upload forecast. Neither mints another embedding space. <b style="color:${C.purple}">Novelty</b> uses its own calibration curves.</div>
             <div style="font-size:10px;color:${C.green};font-weight:800;text-transform:uppercase;margin-bottom:5px">Full-vector keep forecasts — 2 derived outputs</div>
             <div style="${gcol};margin-bottom:12px">${visualForecastBox()}${creatorAdaptiveForecastBox()}</div>
             ${chanSection('visual')}${chanSection('together')}${chanSection('text')}
@@ -5834,6 +6112,59 @@ const JarvisRetention = (function () {
     function rawScoreBusy() {
         return !!(st.rawUploading || st.rawYtBusy || st.rawReembedBusy || st.genScoringK != null);
     }
+    function rawUploadIsScored(upload) {
+        return !!(
+            upload
+            && shortsLedgerState(upload).valid
+        );
+    }
+    function selectedRawScoreUpload() {
+        const uploads = st.rawUploads || [];
+        if (st.rawUpSel === null || st.rawUpSel === false) return null;
+        const selectedIndex = Number(st.rawUpSel);
+        if (
+            !Number.isInteger(selectedIndex)
+            || selectedIndex < 0
+            || selectedIndex >= uploads.length
+        ) {
+            return null;
+        }
+        const selected = uploads[selectedIndex];
+        return rawUploadIsScored(selected) ? selected : null;
+    }
+    function scoredHookSavePayload(upload, overrides) {
+        if (!rawUploadIsScored(upload)) return null;
+        return {
+            kind: 'scored',
+            source: upload.source || 'scored',
+            title:
+                upload.title
+                || (upload.transcript || 'Scored hook').slice(0, 60),
+            text: upload.transcript || upload.text || '',
+            montage: upload.montage
+                ? 'data:image/jpeg;base64,' + upload.montage
+                : upload.montageDataUrl || '',
+            frames: upload.genFrames || [],
+            frame_imgs: upload.genFrameImgs || [],
+            indicators: upload.indicators || null,
+            score_ledger: upload.score_ledger,
+            score_ledger_sha256:
+                upload.score_ledger.ledger_sha256,
+            novelty_provenance:
+                upload.novelty_provenance || null,
+            visual_keep_forecast:
+                upload.visual_keep_forecast || null,
+            creator_adaptive_keep_forecast:
+                upload.creator_adaptive_keep_forecast || null,
+            creator_adaptive_keep_forecast_error:
+                upload.creator_adaptive_keep_forecast_error || null,
+            channels: upload.channels || null,
+            emb_preview: upload.emb_preview || null,
+            input_manifest:
+                upload.input_manifest || rawInputManifestData(upload),
+            ...(overrides || {}),
+        };
+    }
     function openRawVideoPicker() {
         if (rawScoreBusy()) {
             rawUploadPickerError('Another hook is already being prepared or scored. Wait for that result before starting another.');
@@ -6051,25 +6382,28 @@ const JarvisRetention = (function () {
     function rawChanGridHtml(U) {
         if (!U || !U.score_ledger) return '';
         const TARGETS = [['keep', 'keep rate'], ['ret5', 'past-5s'], ['views', 'view-equivalent (corpus quantile)'], ['realviews', 'forecast views (your channel scale)'], ['outlier', 'outlier'], ['gt10M', '>10M']];
-        const CHANS = [['visual', '5-frame montage only'], ['text', 'transcript only'], ['together', 'montage + transcript']];
-        const hasText = !!String(U.transcript || U.text || '').trim() && !U.silent;
-        let found = 0, possible = 0;
-        const rows = CHANS.map(([m, input]) => {
-            const present = m === 'visual' || hasText;
+        const CHANS = ['visual', 'text', 'together'];
+        let found = 0, unavailable = 0;
+        const rows = CHANS.map(m => {
+            const manifestChannel = rawInputChannel(U, m);
             const cells = TARGETS.map(([tn, lab]) => {
-                if (present) possible++;
+                const coordinateId = `shorts.stored.${m}.${tn}`;
+                const entry = scoreLedgerEntry(U, coordinateId);
                 const k = steerOf(U, m, tn);
-                if (!present) return `<span style="border:1px dashed ${C.border};border-radius:5px;padding:2px 6px;font-size:9px;color:${C.faint}">${lab} —</span>`;
-                if (!k) return `<span style="border:1px solid ${C.border};border-radius:5px;padding:2px 6px;font-size:9px;color:${C.faint}">${lab} missing</span>`;
+                if (!k) {
+                    unavailable++;
+                    const reason = entry
+                        && entry.unavailable_reason
+                        || 'canonical ledger coordinate unavailable';
+                    return `<span title="${esc(reason)}" style="border:1px dashed ${C.border};border-radius:5px;padding:2px 6px;font-size:9px;color:${C.faint}">${lab} <b>not scored</b><small style="display:block;font-size:6.5px">${esc(reason)}</small></span>`;
+                }
                 found++;
                 const pc = k.percentile100 != null ? Math.round(k.percentile100) : null;
-                const coordinateId = k.coordinateId
-                    || `shorts.stored.${m}.${tn}`;
                 return `<button type="button" data-exp-ledger-coordinate="${esc(coordinateId)}"${embeddingDataAttrs(U, m, tn, 'canonical-score-ledger', rawEmbeddingAssetId(U), k)} title="${esc(k.modality)}: ${esc(k.input)} · ${esc(k.valueUnit)} · ledger ${esc(k.ledgerSha256)}" style="cursor:pointer;text-align:left;background:transparent;border:1px solid ${pc != null && pc >= 80 ? C.green : C.cyan}55;border-radius:5px;padding:3px 6px;font-size:9px;color:${C.dim}">${lab} <b style="color:${pc != null && pc >= 80 ? C.green : C.text}">${steerDisp(tn, k.value)}</b>${pc != null ? ` <span style="color:${C.faint}">${pc}th</span>` : ''}<code style="display:block;font-size:6.5px;color:${C.faint};margin-top:2px">${esc(coordinateId)} · ${esc(k.valueUnit)} · ${k.ledgerSha256.slice(0, 10)}…</code></button>`;
             }).join('');
-            return `<div style="display:grid;grid-template-columns:74px minmax(0,1fr);gap:6px;align-items:start;margin-top:4px"><div><div style="font-size:9px;font-weight:900;text-transform:uppercase;color:${m === 'visual' ? C.green : m === 'text' ? C.purple : C.accent}">${m}</div><div style="font-size:7.5px;color:${C.faint};line-height:1.25">${present ? esc(input) : 'no transcript'}</div></div><div style="display:flex;gap:3px;flex-wrap:wrap">${cells}</div></div>`;
+            return `<div style="display:grid;grid-template-columns:74px minmax(0,1fr);gap:6px;align-items:start;margin-top:4px"><div><div style="font-size:9px;font-weight:900;text-transform:uppercase;color:${m === 'visual' ? C.green : m === 'text' ? C.purple : C.accent}">${m}</div><div style="font-size:7.5px;color:${C.faint};line-height:1.25">${esc(manifestChannel && manifestChannel.input || rawInputLabel(U, m))}</div></div><div style="display:flex;gap:3px;flex-wrap:wrap">${cells}</div></div>`;
         }).join('');
-        return `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="display:flex;justify-content:space-between;gap:6px;font-size:9px;font-weight:900;text-transform:uppercase"><span style="color:${C.mute}">all stored score coordinates</span><span style="color:${found === possible ? C.green : C.amber}">${found}/${possible}${hasText ? '' : ' (visual-only — no transcript; fix it above to unlock text + together)'}</span></div>${rows}</div>`;
+        return `<div style="margin-top:8px;border-top:1px solid ${C.border};padding-top:7px"><div style="display:flex;justify-content:space-between;gap:6px;font-size:9px;font-weight:900;text-transform:uppercase"><span style="color:${C.mute}">all stored score coordinates</span><span style="color:${unavailable === 0 ? C.green : C.amber}">${found} available · ${unavailable} explicitly unavailable</span></div>${rows}</div>`;
     }
     async function rtgScoreYoutube() {
         const inp = window.document.querySelector('[data-rawyturl]'); if (inp) st.rawYtUrl = inp.value;
@@ -6300,8 +6634,63 @@ const JarvisRetention = (function () {
         const gvw = e.target.closest('[data-grindview]'); if (gvw) { const rid = gvw.getAttribute('data-grindview'); st.grindRid = rid; delete (st.grindHide || {})[rid]; grindPoll(rid); rtgUpdateExp(); return; }
         const gsa = e.target.closest('[data-grindsave]'); if (gsa) { grindSave(+gsa.getAttribute('data-grindsave')); return; }
         const gsc = e.target.closest('[data-genscore]'); if (gsc) { if (!st.rawUploading) { const k = +gsc.getAttribute('data-genscore'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) scoreGenerated(k, a.frame_imgs || [], a.premise || a.caption || ''); } return; }
-        const gsv = e.target.closest('[data-gensave]'); if (gsv) { const k = +gsv.getAttribute('data-gensave'); const g = EXPDEMO[st.expGenRid]; const a = g && g.attempts && g.attempts.find(x => x.k === k); if (a) saveHook({ kind: 'idea', source: 'generated', title: (a.premise || a.caption || 'idea').slice(0, 80), text: a.premise || a.caption || '', frames: a.frames || [], frame_imgs: a.frame_imgs || [], cohesion_mode: a.cohesion_mode || '' }); return; }
-        if (e.target.closest('[data-savescored]')) { const up = (st.rawUploads || []).filter(u => u && u.indicators).slice(-1)[0]; if (up) saveHook({ kind: 'scored', source: up.source || 'scored', title: up.title || (up.transcript || 'Scored hook').slice(0, 60), text: up.transcript || '', montage: up.montage ? 'data:image/jpeg;base64,' + up.montage : (up.montageDataUrl || ''), frames: up.genFrames || [], frame_imgs: up.genFrameImgs || [], indicators: up.indicators || null, score_ledger: up.score_ledger || null, novelty_provenance: up.novelty_provenance || null, visual_keep_forecast: up.visual_keep_forecast || null, creator_adaptive_keep_forecast: up.creator_adaptive_keep_forecast || null, creator_adaptive_keep_forecast_error: up.creator_adaptive_keep_forecast_error || null, channels: up.channels || null, emb_preview: up.emb_preview || null, input_manifest: up.input_manifest || rawInputManifestData(up) }); return; }
+        const gsv = e.target.closest('[data-gensave]'); if (gsv) {
+            const k = +gsv.getAttribute('data-gensave');
+            const g = EXPDEMO[st.expGenRid];
+            const a = g && g.attempts
+                && g.attempts.find(x => x.k === k);
+            const generatedScores = st.rawUploads || [];
+            let scored = null;
+            for (
+                let scoreIndex = generatedScores.length - 1;
+                scoreIndex >= 0;
+                scoreIndex -= 1
+            ) {
+                const candidate = generatedScores[scoreIndex];
+                if (
+                    candidate
+                    && candidate.generatedRunId === st.expGenRid
+                    && candidate.generatedAttemptIndex === k
+                    && rawUploadIsScored(candidate)
+                ) {
+                    scored = candidate;
+                    break;
+                }
+            }
+            if (scored) {
+                saveHook(scoredHookSavePayload(scored, {
+                    title:
+                        (a && (a.premise || a.caption)
+                        || scored.title
+                        || 'Generated hook').slice(0, 80),
+                    text:
+                        a && (a.premise || a.caption)
+                        || scored.transcript
+                        || '',
+                }));
+            } else if (a) {
+                saveHook({
+                    kind: 'idea',
+                    source: 'generated',
+                    title:
+                        (a.premise || a.caption || 'idea').slice(0, 80),
+                    text: a.premise || a.caption || '',
+                    frames: a.frames || [],
+                    frame_imgs: a.frame_imgs || [],
+                    cohesion_mode: a.cohesion_mode || '',
+                });
+            }
+            return;
+        }
+        if (e.target.closest('[data-savescored]')) {
+            const up = selectedRawScoreUpload();
+            const payload = scoredHookSavePayload(up);
+            if (payload) saveHook(payload);
+            else rawUploadPickerError(
+                'The selected card has no valid canonical score ledger to save.'
+            );
+            return;
+        }
         const sdel = e.target.closest('[data-savedel]'); if (sdel) { deleteSaved(sdel.getAttribute('data-savedel')); return; }
         if (e.target.closest('[data-savedclose]')) { st.savedSel = null; rtgUpdateExp(); return; }
         const ssort = e.target.closest('[data-savedsort]'); if (ssort) { st.savedSort = ssort.getAttribute('data-savedsort'); rtgUpdateExp(); return; }
@@ -6433,7 +6822,11 @@ const JarvisRetention = (function () {
                 };
                 rtgUpdateRaw();
                 const upHeaders = { 'X-Raw-Ext': ext, 'X-Raw-Title': safeTitle, 'X-Raw-Upload-Mode': prepared.mode || 'direct', 'X-Raw-Creator-Profile': selectedCreatorProfile() };
-                if (realDur > 0) upHeaders['X-Raw-Duration'] = String(Math.round(realDur));   // true full length → correct realviews
+                if (realDur > 0) {
+                    upHeaders['X-Raw-Duration'] = String(
+                        Math.round(realDur * 1000) / 1000
+                    );
+                }
                 if (prepared.sparse) {
                     upHeaders['X-Raw-Sparse'] = '1';
                     upHeaders['X-Raw-Original-Size'] = String(prepared.sparse.originalBytes);
@@ -6442,40 +6835,24 @@ const JarvisRetention = (function () {
                 }
                 rawTrace('post-start', { mb: Math.round(blob.size / 1e6), mode: prepared.mode });
                 let j;
-                let primaryError = null;
                 try {
                     j = await rtJob('/api/raw/embed-upload', { method: 'POST', headers: { ...upHeaders, 'x-raw-async': '1' }, body: blob });   // async job — immune to the proxy ceiling
                 } catch (error) {
-                    primaryError = error;
                     const message = String((error && error.message) || error || '');
-                    // Only a definitive media/container failure should downgrade to
-                    // visual-only. A transport or polling failure can leave the original
-                    // job running; starting a montage job there would duplicate billing.
-                    if (!/could not read|could not reconstruct|ffmpeg|decode|decoder|codec|unsupported (?:video|container)|invalid data|moov atom/i.test(message)) {
-                        throw error;
+                    if (
+                        /could not read|could not reconstruct|ffmpeg|decode|decoder|codec|unsupported (?:video|container)|invalid data|moov atom/i.test(message)
+                    ) {
+                        throw new Error(
+                            'Canonical scoring stopped because the server '
+                            + 'could not decode the original opening bytes. '
+                            + 'No browser-made visual-only score was '
+                            + 'substituted, because that would produce a '
+                            + 'different embedding for the same video. '
+                            + 'Trim the original video to its first 10 seconds '
+                            + `and upload that file. Server detail: ${message}`
+                        );
                     }
-                    let montage = prepared.fallbackMontage;
-                    if (!montage && typeof upload.extractVideoMontage === 'function') {
-                        try {
-                            const fallback = await upload.extractVideoMontage(file, { seconds: 5, frameCount: 5, frameWidth: 320, frameHeight: 569 });
-                            montage = fallback && fallback.dataUrl;
-                        } catch (fallbackError) {}
-                    }
-                    if (!montage) throw error;
-                    st.rawUpStage = 2;
-                    st.rawUpQueue = { i: n + 1, total: list.length, fallback: true };
-                    rtgUpdateRaw();
-                    rawTrace('visual-fallback-start', { reason: message.slice(0, 120) });
-                    j = await rtJob('/api/raw/embed-montage', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ montage, text: '', title: safeTitle, duration: realDur || null, creatorProfile: selectedCreatorProfile(), async: true }),
-                    });
-                    if (j) {
-                        j._uploadWarning = 'The phone/server could not decode the audio upload, so this result recovered from the exact five visual frames. Text and combined-with-voice scores are unavailable.';
-                        j.transcriptSource = 'phone-safe visual recovery';
-                    }
-                    rawTrace('visual-fallback-done');
+                    throw error;
                 }
                 rawTrace('scored', { err: (j && j.error) ? String(j.error).slice(0, 80) : null });
                 if (!j || j.error) { st.rawUpErr = (file.name || '') + ': ' + ((j && j.error) || 'embed failed'); }
@@ -6483,7 +6860,6 @@ const JarvisRetention = (function () {
                     j._uploadMode = prepared.mode;
                     j._originalBytes = prepared.originalBytes || file.size;
                     j._transferBytes = prepared.transferBytes || blob.size;
-                    if (primaryError && !j._uploadWarning) j._uploadWarning = 'The original upload recovered automatically after: ' + String(primaryError.message || primaryError).slice(0, 140);
                     st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
                 }
             } catch (e) {
@@ -6603,6 +6979,8 @@ const JarvisRetention = (function () {
             const j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: text || '', title: (text || 'Generated hook').slice(0, 40), creatorProfile: selectedCreatorProfile(), async: true }) });
             const g = EXPDEMO[st.expGenRid], a = g && g.attempts && g.attempts.find(x => x.k === k);
             j.source = 'generated'; j.genFrameImgs = fids; j.genFrames = (a && a.frames) || []; j.montageDataUrl = montage;
+            j.generatedRunId = st.expGenRid;
+            j.generatedAttemptIndex = k;
             st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
         } catch (e) { st.rawUpErr = e.message; }
         window.clearInterval(tick); st.rawUploading = false; st.rawUpStage = 0; st.genScoringK = null; rtgUpdateExp();
@@ -6651,6 +7029,45 @@ const JarvisRetention = (function () {
             && String(manifest.creator_profile || '') === String(creatorProfile || '')
         );
     }
+    function savedHookEvidenceFingerprint(record) {
+        if (!record || typeof record !== 'object') return '';
+        const ledgerSha256 = record.score_ledger
+            && record.score_ledger.ledger_sha256
+            || record.score_ledger_sha256
+            || record.historical_display
+                && record.historical_display.score_ledger_sha256
+            || '';
+        const revisionFingerprint = record.score_revision_fingerprint
+            || record.input_manifest
+                && record.input_manifest.revision_fingerprint
+            || record.historical_display
+                && record.historical_display.score_revision_fingerprint
+            || '';
+        return [
+            String(record.id || ''),
+            String(record.kind || ''),
+            String(record.score_domain || 'shorts'),
+            String(record.evidence_state || ''),
+            String(record.score_record_sha256 || ''),
+            String(ledgerSha256),
+            String(revisionFingerprint),
+            String(record.compact_score_sha256 || ''),
+            String(
+                record.historical_display
+                && record.historical_display.display_sha256
+                || ''
+            ),
+        ].join('|');
+    }
+    function savedHookIndexRow(id) {
+        return (
+            SAVED
+            && Array.isArray(SAVED.hooks)
+            && SAVED.hooks.find(row => (
+                row && String(row.id) === String(id)
+            ))
+        ) || null;
+    }
     function savedHookResult(rec, id, warning) {
         return {
             transcript: rec.transcript || rec.text || '',
@@ -6661,6 +7078,14 @@ const JarvisRetention = (function () {
             score_ledger_validation: rec.score_ledger_validation || null,
             score_record_sha256: rec.score_record_sha256 || null,
             score_record_validation: rec.score_record_validation || null,
+            evidence_state: rec.evidence_state || null,
+            score_display_eligible:
+                rec.score_display_eligible === true
+                || savedHookScoreIsComplete(rec),
+            predictor_eligible:
+                rec.predictor_eligible === true,
+            input_binding_validation:
+                rec.input_binding_validation || null,
             novelty_provenance: rec.novelty_provenance || null,
             visual_keep_forecast: rec.visual_keep_forecast || null,
             creator_adaptive_keep_forecast: rec.creator_adaptive_keep_forecast || null,
@@ -6684,15 +7109,26 @@ const JarvisRetention = (function () {
         try {
             const live = await currentScorerContract(true);
             const creatorProfile = selectedCreatorProfile();
+            const indexRow = savedHookIndexRow(id);
+            const indexFingerprint = savedHookEvidenceFingerprint(indexRow);
             let stored = SAVEDDETAIL[id];
-            if (!stored) {
+            if (
+                !stored
+                || stored.indexFingerprint !== indexFingerprint
+            ) {
                 const rec = await rtFetchJson('/api/raw/saved-hook/' + id, { cache: 'no-store' }, 4);
-                stored = SAVEDDETAIL[id] = { rec, montage: null, reconstructed: false };
+                stored = SAVEDDETAIL[id] = {
+                    rec,
+                    montage: null,
+                    reconstructed: false,
+                    indexFingerprint,
+                };
                 const cachedIds = Object.keys(SAVEDDETAIL);
                 while (cachedIds.length > 8) delete SAVEDDETAIL[cachedIds.shift()];
             }
             const rec = stored.rec || {};
-            if (savedHookScoreIsComplete(rec)) {
+            const persistedLedgerState = shortsLedgerState(rec);
+            if (persistedLedgerState.valid) {
                 const current = savedHookScoreIsCurrent(
                     rec,
                     live,
@@ -6705,6 +7141,13 @@ const JarvisRetention = (function () {
                         + 'not jointly bound to these exact JPEG bytes and '
                         + 'text, so it is not predictor-eligible.'
                     )
+                    : rec.predictor_eligible === false
+                        ? (
+                            'The exact persisted score ledger is shown, but '
+                            + 'its media, input, or output-sidecar binding is '
+                            + 'not predictor-eligible. It is excluded from '
+                            + 'training, ranking, and saving decisions.'
+                        )
                     : !live
                         ? (
                             'The live scorer contract could not be loaded. '
@@ -6723,6 +7166,21 @@ const JarvisRetention = (function () {
                 st.rawUploads.push(result);
                 st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
             } else {
+                if (
+                    persistedLedgerState.present
+                    || rec.kind === 'scored'
+                    || rec.score_display_eligible === true
+                    || rec.score_ledger_sha256
+                    || rec.score_record_sha256
+                ) {
+                    throw new Error(
+                        'This saved score has invalid persisted ledger '
+                        + `evidence (${persistedLedgerState.errors.join(
+                            '; '
+                        ) || 'canonical validation failed'}). It was not `
+                        + 'silently recalculated.'
+                    );
+                }
                 let montage = stored.montage;
                 if (!montage && rec.hasMontage) {
                     try { montage = await urlToDataUrl('/api/raw/saved-montage/' + id); } catch (e) {}
@@ -6734,39 +7192,32 @@ const JarvisRetention = (function () {
                         reconstructed = true;
                     } catch (e) {}
                 }
-                if (!montage && savedHookScoreIsComplete(rec)) {
-                    const storedRevision = rec.input_manifest && rec.input_manifest.revision_fingerprint;
-                    const warning = !live
-                        ? 'The live scorer contract could not be loaded. These persisted historical values are shown, but revision parity could not be verified.'
-                        : `Historical score shown because its media could not be recovered for migration. Stored revision ${String(storedRevision || 'unknown').slice(0, 12)}; current revision ${String(live.revision_fingerprint || 'unknown').slice(0, 12)}.`;
-                    const result = savedHookResult(rec, id, warning);
-                    st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
-                    st.rawUploads.push(result);
-                    st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
-                } else {
-                    if (!montage) throw new Error('This saved hook has no durable montage to migrate to the current scorer.');
-                    stored.montage = montage; stored.reconstructed = reconstructed;
-                    const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1200);
-                    let j;
-                    try {
-                        j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: rec.text || rec.title || '', title: (rec.title || 'Saved hook').slice(0, 40), duration: rec.input_manifest && rec.input_manifest.duration_s || null, creatorProfile, async: true }) });
-                    } finally {
-                        window.clearInterval(tick);
-                    }
-                    j.source = 'saved';
-                    j.savedId = id;
-                    j.genFrames = rec.frames || [];
-                    j.montageDataUrl = j.montage
-                        ? 'data:image/jpeg;base64,' + j.montage
-                        : montage;
-                    j._uploadWarning = (
-                        'This is a new transient score for an unscored '
-                        + 'saved idea. The original record was not changed; '
-                        + 'use Save this hook to create a ledger-bound score.'
+                if (!montage) {
+                    throw new Error(
+                        'This unscored saved idea has no durable montage to score.'
                     );
-                    st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
-                    st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
                 }
+                stored.montage = montage; stored.reconstructed = reconstructed;
+                const tick = window.setInterval(() => { if (st.rawUpStage < 4) { st.rawUpStage++; rtgUpdateExp(); } }, 1200);
+                let j;
+                try {
+                    j = await rtJob('/api/raw/embed-montage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montage, text: rec.text || rec.title || '', title: (rec.title || 'Saved hook').slice(0, 40), duration: rec.input_manifest && rec.input_manifest.duration_s || null, creatorProfile, async: true }) });
+                } finally {
+                    window.clearInterval(tick);
+                }
+                j.source = 'saved';
+                j.savedId = id;
+                j.genFrames = rec.frames || [];
+                j.montageDataUrl = j.montage
+                    ? 'data:image/jpeg;base64,' + j.montage
+                    : montage;
+                j._uploadWarning = (
+                    'This is a new transient score for an unscored '
+                    + 'saved idea. The original record was not changed; '
+                    + 'use Save this hook to create a ledger-bound score.'
+                );
+                st.rawUploads = (st.rawUploads || []).filter(row => !(row && row.source === 'saved'));
+                st.rawUploads.push(j); st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
             }
         } catch (e) { st.rawUpErr = fetchFail(e); }
         st.rawUploading = false; st.rawUpStage = 0; rtgUpdateExp();
@@ -6774,8 +7225,14 @@ const JarvisRetention = (function () {
     }
     function savedDetail() {
         if (!st.savedSel) return '';
-        const msg = st.rawUploading ? '⏳ scoring this hook — the full embedding read-out will appear above ↑'
-            : '✓ Scored — the full embedding read-out (every indicator + embedded-space placement) is shown above ↑';
+        const selected = selectedRawScoreUpload();
+        const msg = st.rawUploading
+            ? 'Loading this saved hook and validating its exact persisted score ledger…'
+            : st.rawUpErr
+                ? 'This saved hook was not opened. Its stored score was not recalculated.'
+                : selected
+                    ? 'Exact persisted score loaded. Every scalar above comes from this card’s canonical ledger.'
+                    : 'No canonical score is selected for this saved hook.';
         return `<div style="background:${C.accent}14;border:1px solid ${C.accent}55;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:${C.accent};display:flex;justify-content:space-between;align-items:center"><span>${msg}</span><span data-savedclose style="cursor:pointer;color:${C.dim};font-weight:700">✕</span></div>`;
     }
     function scheduleSavedChannelPoll() {
@@ -6975,16 +7432,24 @@ const JarvisRetention = (function () {
             return;
         }
         const persistedRecordMatchesManifest = record => {
+            const recordLedgerState = shortsLedgerState(record);
+            const manifestLedgerState =
+                shortsLedgerState(manifestVideo);
             if (
                 !record
-                || !record.score_ledger_validation
-                || record.score_ledger_validation.valid !== true
+                || !recordLedgerState.valid
+                || !manifestLedgerState.valid
                 || !record.manifest_row_validation
                 || record.manifest_row_validation.valid !== true
                 || !record.record_artifact_validation
                 || record.record_artifact_validation.valid !== true
-                || !record.input_binding_validation
-                || record.input_binding_validation.valid !== true
+                || (
+                    record.predictor_eligible === true
+                    && (
+                        !record.input_binding_validation
+                        || record.input_binding_validation.valid !== true
+                    )
+                )
             ) return false;
             const manifestLedgerSha = manifestVideo.score_ledger
                 && manifestVideo.score_ledger.ledger_sha256 || null;
@@ -6995,16 +7460,17 @@ const JarvisRetention = (function () {
             const recordRevision = record.input_manifest
                 && record.input_manifest.revision_fingerprint || null;
             return !!(
-                manifestVideo.score_ledger_validation
-                && manifestVideo.score_ledger_validation.valid === true
-                && manifestLedgerSha
+                manifestLedgerSha
                 && manifestLedgerSha === recordLedgerSha
                 && (
                     !manifestRevision
                     || manifestRevision === recordRevision
                 )
-                && manifestVideo.score_record_sha256
-                    === record.score_record_sha256
+                && (
+                    !manifestVideo.score_record_sha256
+                    || manifestVideo.score_record_sha256
+                        === record.score_record_sha256
+                )
                 && manifestVideo.manifest_row_sha256
                     === record.manifest_row_validation.recorded_sha256
                 && manifestVideo.record_artifact_sha256
@@ -7094,7 +7560,36 @@ const JarvisRetention = (function () {
             st.rawUploads = st.rawUploads || []; st.rawUploads.push(record);
             st.rawUpSel = st.rawUploads.length - 1; st.rawSel = null;
             opened = true;
-        } catch (e) { st.rawUpErr = 'Saved channel: ' + (e.message || e); }
+        } catch (e) {
+            const manifestLedgerState =
+                shortsLedgerState(manifestVideo);
+            if (manifestLedgerState.valid) {
+                const record = {
+                    ...manifestVideo,
+                    montageDataUrl:
+                        `/api/raw/saved-channel/${channelId}/montage/${videoId}`,
+                    source: 'saved-channel-manifest',
+                    savedChannelId: channelId,
+                    savedChannelVideoId: videoId,
+                    _uploadWarning: (
+                        'The exact persisted score ledger is shown from the '
+                        + 'hash-bound channel manifest. The heavier detail '
+                        + 'artifact could not be opened, so embedding '
+                        + 'geometry and record-bound derived forecasts may '
+                        + `be unavailable: ${String(
+                            e && e.message || e
+                        ).slice(0, 180)}`
+                    ),
+                };
+                st.rawUploads = st.rawUploads || [];
+                st.rawUploads.push(record);
+                st.rawUpSel = st.rawUploads.length - 1;
+                st.rawSel = null;
+                opened = true;
+            } else {
+                st.rawUpErr = 'Saved channel: ' + (e.message || e);
+            }
+        }
         st.savedChannelVideoBusy = null;
         if (opened) showLoadedVideo();
         else rtgUpdateExp();
@@ -7112,27 +7607,77 @@ const JarvisRetention = (function () {
                 errors: state.errors,
             };
         }
+        const coordinateId = `shorts.stored.${key}`;
         const coordinate = shortsRegisteredCoordinate(
             video,
-            `shorts.stored.${key}`
+            coordinateId
         );
         if (coordinate) return {
             ...coordinate,
             percentile: coordinate.percentile100,
         };
+        const entry = state.valid
+            ? state.entriesById.get(coordinateId)
+            : null;
+        if (entry && entry.available !== true) {
+            return {
+                coordinateId,
+                ledgerSha256: state.ledgerSha256,
+                value: null,
+                percentile: null,
+                unavailableReason: String(
+                    entry.unavailable_reason
+                    || 'canonical scorer did not produce this coordinate'
+                ),
+            };
+        }
         return {
+            coordinateId,
+            ledgerSha256: state.ledgerSha256,
             value: null,
             percentile: null,
             missingLedger: true,
         };
     }
     function savedChannelFeatureDisplay(definition, cell) {
-        if (!cell || cell.value == null || !isFinite(cell.value)) return '—';
+        if (!cell || cell.value == null || !isFinite(cell.value)) {
+            return 'Not scored';
+        }
         if (definition.unit === 'views') return fv(cell.value);
         if (definition.unit === 'log10_views') return fv(Math.max(0, Math.pow(10, cell.value) - 1));
         if (definition.unit === 'probability') return (cell.value * 100).toFixed(0) + '%';
         if (definition.unit === 'percent') return cell.value.toFixed(0) + '%';
         return Math.abs(cell.value) >= 100 ? cell.value.toFixed(0) : cell.value.toFixed(2);
+    }
+    function savedChannelFeatureStatus(cell) {
+        if (!cell) {
+            return 'Not scored: canonical score coordinate is absent.';
+        }
+        if (cell.invalidLedger) {
+            const detail = (cell.errors || []).join('; ');
+            return `Not scored: invalid persisted score ledger${
+                detail ? ` (${detail})` : ''
+            }.`;
+        }
+        if (cell.unavailableReason) {
+            return `Not scored: ${cell.unavailableReason}.`;
+        }
+        if (cell.missingLedger) {
+            return 'Not scored: canonical score coordinate is absent.';
+        }
+        return (
+            'Exact persisted score-ledger value'
+            + (
+                cell.coordinateId
+                    ? ` · ${cell.coordinateId}`
+                    : ''
+            )
+            + (
+                cell.ledgerSha256
+                    ? ` · ledger ${cell.ledgerSha256}`
+                    : ''
+            )
+        );
     }
     function savedChannelFeatureAttrs(channelId, video, definition, cell) {
         if (!definition || !cell || cell.value == null || !isFinite(cell.value)) return '';
@@ -8138,7 +8683,7 @@ const JarvisRetention = (function () {
             if (group === 'views') return '';
             return groupDefs.map(item => {
                 const cell = savedChannelFeatureCell(video, item.key), score = cell.percentile;
-                return `<span${savedChannelFeatureAttrs(detail.id, video, item, cell)} title="${esc(item.label)} · exact stored value${score == null ? ' · corpus percentile unavailable' : ' · reference-corpus percentile'}" style="border:1px solid ${C.border};border-radius:4px;padding:2px 4px;font-size:8px;color:${C.dim}">${esc(item.label.replace('Views (', '').replace(')', ''))} <b style="color:${score >= 80 ? C.green : C.text}">${savedChannelFeatureDisplay(item, cell)}</b>${score != null ? ` <span style="color:${C.faint}">${Math.round(score)}th corpus</span>` : ` <span style="color:${C.faint}">no corpus %ile</span>`}</span>`;
+                return `<span${savedChannelFeatureAttrs(detail.id, video, item, cell)} title="${esc(item.label)} · ${esc(savedChannelFeatureStatus(cell))}${score == null ? ' · corpus percentile unavailable' : ' · reference-corpus percentile'}" style="border:1px solid ${C.border};border-radius:4px;padding:2px 4px;font-size:8px;color:${C.dim}">${esc(item.label.replace('Views (', '').replace(')', ''))} <b style="color:${score >= 80 ? C.green : C.text}">${savedChannelFeatureDisplay(item, cell)}</b>${score != null ? ` <span style="color:${C.faint}">${Math.round(score)}th corpus</span>` : ` <span style="color:${C.faint}">no corpus %ile</span>`}</span>`;
             }).join('');
         };
         const card = video => {
@@ -8150,7 +8695,7 @@ const JarvisRetention = (function () {
               ${hasStoredImage ? `<div style="width:100%;aspect-ratio:5/1;position:relative;border-radius:5px;overflow:hidden;background:#020617"><img src="${esc(montageUrl)}" data-savedchannelmontage-channel="${detail.id}" data-savedchannelmontage-video="${video.id}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;opacity:0;transition:opacity .15s"/><span data-savedchannelimagestate style="position:absolute;inset:0;align-items:center;justify-content:center;padding:4px;text-align:center;color:${C.mute};font-size:8px;display:flex">loading stored image…</span></div>` : `<div style="width:100%;aspect-ratio:5/1;border-radius:5px;background:${C.card};display:flex;align-items:center;justify-content:center;color:${color};font-size:9px;font-weight:800">${active ? 'loading stored score…' : esc(video.status || 'queued')}</div>`}
               <div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.3;min-height:26px">${esc(video.title || video.id)}</div>
               <div style="display:flex;justify-content:space-between;gap:5px;align-items:center"><span style="font-size:10px;color:${C.green};font-weight:900">${video.views != null ? fv(video.views) + ' views' : 'views unavailable'}</span>${complete ? `<a href="${esc(video.sourceUrl || ('https://youtube.com/watch?v=' + video.id))}" target="_blank" onclick="event.stopPropagation()" style="font-size:8px;color:${C.accent}">YouTube ↗</a>` : `<span style="font-size:8px;color:${color}">${esc(video.status)}</span>`}</div>
-              ${definition ? `<div${savedChannelFeatureAttrs(detail.id, video, definition, selectedCell)} style="font-size:9px;color:${C.dim}">${esc(definition.group === 'together' ? 'Both' : definition.group)} · ${esc(definition.label)} <b style="color:${selectedScore >= 80 ? C.green : C.cyan}">${savedChannelFeatureDisplay(definition, selectedCell)}</b>${selectedScore != null ? ` · ${Math.round(selectedScore)}th corpus` : ' · corpus percentile unavailable'}</div>` : ''}
+              ${definition ? `<div${savedChannelFeatureAttrs(detail.id, video, definition, selectedCell)} title="${esc(savedChannelFeatureStatus(selectedCell))}" style="font-size:9px;color:${C.dim}">${esc(definition.group === 'together' ? 'Both' : definition.group)} · ${esc(definition.label)} <b style="color:${selectedScore >= 80 ? C.green : C.cyan}">${savedChannelFeatureDisplay(definition, selectedCell)}</b>${selectedScore != null ? ` · ${Math.round(selectedScore)}th corpus` : ' · corpus percentile unavailable'}</div>` : ''}
               <div style="display:flex;gap:3px;flex-wrap:wrap">${featureGroupChips(video)}</div>
               ${video.error ? `<div style="font-size:8px;color:${C.red};line-height:1.25">${esc(String(video.error).slice(0, 130))}</div>` : ''}</div>`;
         };
@@ -9992,12 +10537,47 @@ const JarvisRetention = (function () {
         const METRICS = [['keep', 'keep-rate %ile', 100, ''], ['ret5', 'past-5s %ile', 100, ''], ['views', 'embed views ≥', 50, 'M'], ['sviews', 'scaled views ≥', 50, 'M'], ['gt10M', 'chance >10M', 100, '%'], ['outlier', 'outlier %ile', 100, '']];
         const thr = k => F[k] || 0;
         const metricIdentity = (hook, key) => {
-            if (!hook || hook.predictor_eligible === false
-                || hook.evidence_state === 'legacy_unbound_evidence') return null;
-            const identities = hook.m_identity || {};
+            if (!hook) return null;
+            const historical = hook.evidence_state
+                === 'legacy_unbound_evidence'
+                ? hook.historical_display
+                : null;
+            const historicalValid = !!(
+                historical
+                && historical.schema
+                    === 'saved-hook-historical-display-v1'
+                && historical.version === 1
+                && historical.record_id === String(hook.id)
+                && historical.score_domain === hook.score_domain
+                && SHORTS_LEDGER_SHA256.test(
+                    String(historical.score_ledger_sha256 || '')
+                )
+                && SHORTS_LEDGER_SHA256.test(
+                    String(historical.display_sha256 || '')
+                )
+                && historical.selection_policy
+                && historical.selection_policy.role
+                    === 'historical_display_only_hash_bound_materialized_view'
+                && historical.selection_policy.source_ledger_sha256
+                    === historical.score_ledger_sha256
+            );
+            if (
+                historical
+                && !historicalValid
+            ) return null;
+            const identities = historicalValid
+                ? historical.m_identity || {}
+                : hook.predictor_eligible === false
+                    ? {}
+                    : hook.m_identity || {};
             const identity = identities[key === 'sviews' ? 'realviews' : key];
             return identity
                 && SHORTS_LEDGER_SHA256.test(String(identity.ledgerSha256 || ''))
+                && (
+                    !historicalValid
+                    || identity.ledgerSha256
+                        === historical.score_ledger_sha256
+                )
                 && /^shorts\.stored\./.test(String(identity.coordinateId || ''))
                 && identity.value != null
                 && isFinite(+identity.value)
@@ -10068,6 +10648,8 @@ const JarvisRetention = (function () {
                 && SCORECONTRACT.live.revision_fingerprint || '';
             const storedRevision = h.score_revision_fingerprint
                 || h.input_manifest && h.input_manifest.revision_fingerprint
+                || h.historical_display
+                    && h.historical_display.score_revision_fingerprint
                 || '';
             const revisionStatus = storedRevision && liveRevision
                 ? (storedRevision === liveRevision ? 'current' : 'stale')
@@ -10078,7 +10660,13 @@ const JarvisRetention = (function () {
             const coordinateLine = coordinateId
                 ? esc(coordinateId)
                 : 'legacy coordinate unavailable';
-            const badge = (kpct != null || kraw != null) ? `<span${embeddingIdentityAttrs(canonicalKeepIdentity, `saved:${h.id}`)} title="${esc(canonicalKeepIdentity.sourceKey || coordinateId)} · ${esc(canonicalKeepIdentity.input)} · ${esc(canonicalKeepIdentity.valueUnit)} · ledger ${esc(canonicalKeepIdentity.ledgerSha256)}" style="font-size:8.5px;font-weight:700;color:${heatCol((kpct || 0) / 100)}">${canonicalKeepIdentity.channel === 'together' ? 'Both' : canonicalKeepIdentity.channel} keep ${kraw == null ? 'raw unavailable' : `${fmtv(kraw, 1)}%`}<small style="display:block;font-size:6.8px;color:${C.faint};font-weight:500">${kpct == null ? 'rank unavailable' : `${Math.round(kpct)}th ${canonicalKeepIdentity.percentileUnit}`} · ${coordinateLine} · ${canonicalKeepIdentity.ledgerSha256.slice(0, 10)}…</small><small style="display:block;font-size:6.6px;color:${revisionColor};font-weight:850">${revisionStatus} scorer revision${storedRevision ? ` ${esc(shortFingerprint(storedRevision))}` : ''}</small></span>` : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'score hidden: canonical ledger binding unavailable' : 'idea'}<small style="display:block;color:${revisionColor}">${revisionStatus} scorer revision</small></span>`;
+            const historicalDisplay = h.evidence_state
+                === 'legacy_unbound_evidence'
+                && h.historical_display;
+            const evidenceLabel = historicalDisplay
+                ? 'Historical display · '
+                : '';
+            const badge = (kpct != null || kraw != null) ? `<span${embeddingIdentityAttrs(canonicalKeepIdentity, `saved:${h.id}`)} title="${esc(canonicalKeepIdentity.sourceKey || coordinateId)} · ${esc(canonicalKeepIdentity.input)} · ${esc(canonicalKeepIdentity.valueUnit)} · ledger ${esc(canonicalKeepIdentity.ledgerSha256)}" style="font-size:8.5px;font-weight:700;color:${heatCol((kpct || 0) / 100)}">${evidenceLabel}${canonicalKeepIdentity.channel === 'together' ? 'Both' : canonicalKeepIdentity.channel} keep ${kraw == null ? 'raw unavailable' : `${fmtv(kraw, 1)}%`}<small style="display:block;font-size:6.8px;color:${C.faint};font-weight:500">${kpct == null ? 'rank unavailable' : `${Math.round(kpct)}th ${canonicalKeepIdentity.percentileUnit}`} · ${coordinateLine} · ${canonicalKeepIdentity.ledgerSha256.slice(0, 10)}…</small><small style="display:block;font-size:6.6px;color:${historicalDisplay ? C.amber : revisionColor};font-weight:850">${historicalDisplay ? 'display-only · not predictor-eligible' : `${revisionStatus} scorer revision${storedRevision ? ` ${esc(shortFingerprint(storedRevision))}` : ''}`}</small></span>` : `<span style="font-size:9px;color:${C.mute}">${h.kind === 'scored' ? 'No valid persisted score ledger' : 'idea'}<small style="display:block;color:${revisionColor}">${revisionStatus} scorer revision</small></span>`;
             const sel = st.savedSel === h.id;
             return `<div data-savedopen="${h.id}" style="border:1px solid ${sel ? C.accent : C.border};border-radius:8px;padding:7px;background:${C.card2};width:152px;position:relative;cursor:pointer">
               <span data-savedel="${h.id}" title="delete" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer;z-index:2">✕</span>
@@ -10105,6 +10693,12 @@ const JarvisRetention = (function () {
         root = el;
         mountMode = options && options.mode === 'experiment' ? 'experiment' : 'full';
         if (mountMode === 'experiment') st.sec = 'experiment';
+        try {
+            await ensureShortsLedgerRuntime();
+            st.scoreLedgerRuntimeError = null;
+        } catch (error) {
+            st.scoreLedgerRuntimeError = fetchFail(error);
+        }
         if (!root.__rb) {
             root.addEventListener('click', onClick); root.addEventListener('input', onInput); root.addEventListener('change', onChange); root.addEventListener('keydown', onKeyDown);
             // clicking into the Generate box pre-warms the idea GPU — the cold boot overlaps typing

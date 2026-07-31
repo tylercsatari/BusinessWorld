@@ -216,6 +216,7 @@ this.graphApi = {
     lqxMetricOrigin,
     lqxPrimaryMetric,
     lqxPrimaryPct01,
+    lqxScoreDecisionEligible,
     lqxGeometryChannel,
     lqxGeometryChannels,
     lqxRegisteredCoordinate,
@@ -531,7 +532,10 @@ assert.equal(
 assert(
     summary.includes('canonical Long ledger')
         && compactSummary.includes('10/21 scalar values')
-        && compactSummary.includes('21 addresses verified'),
+        && compactSummary.includes('ledger structurally verified')
+        && compactSummary.includes(
+            '11 registered addresses remain explicitly unavailable'
+        ),
     'Long summary does not disclose canonical inventory and availability'
 );
 assert(
@@ -624,8 +628,29 @@ const definitionTamper = JSON.parse(JSON.stringify(completeScore));
 definitionTamper.output_contract.metric_definitions[0].target = 'views';
 assert.equal(
     api.lqxHasCanonicalLedger(definitionTamper),
+    true,
+    'a wrapper-contract mismatch must not hide an independently valid ledger scalar'
+);
+assert.equal(
+    api.lqxLedgerState(definitionTamper).contractValid,
     false,
-    'mutated metric definition was accepted'
+    'a mutated metric definition must invalidate the wrapper contract'
+);
+assert.equal(
+    api.lqxScoreDecisionEligible(definitionTamper),
+    false,
+    'a wrapper-contract mismatch must remain excluded from prediction and ranking'
+);
+assert.equal(
+    api.lqxRegisteredCoordinate(
+        definitionTamper,
+        'visual',
+        'ctrviews'
+    ).value,
+    completeScore.long_score_ledger.values_by_id[
+        'long.output.visual.ctrviews'
+    ],
+    'the exact immutable ledger scalar must survive a wrapper-contract mismatch'
 );
 assert.equal(
     api.lqxRegisteredCoordinate({}, 'visual', 'ctrviews'),

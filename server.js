@@ -117,6 +117,48 @@ const savedChannelFeatureContractSha256 =
     shortsScoreLedger.FEATURE_CONTRACT_SHA256;
 const canonicalShortsStoredCoordinates =
     shortsScoreLedger.FEATURE_DEFINITIONS;
+const shortsScoreLedgerRuntime = Object.freeze({
+    schema: 'shorts-score-ledger-browser-runtime-v1',
+    schemaVersion: 1,
+    ledgerSchema: 'shorts-stored-score-ledger-v1',
+    ledgerSchemaVersion: 1,
+    ledgerVersion: shortsScoreLedger.GOVERNANCE.ledgerVersion,
+    percentileUnit:
+        shortsScoreLedger.GOVERNANCE.percentileStorageUnit,
+    featureIdentitySchemaVersion:
+        shortsScoreLedger.FEATURE_CONTRACT_IDENTITY_SCHEMA_VERSION,
+    featureContractSha256:
+        shortsScoreLedger.FEATURE_CONTRACT_SHA256,
+    featureContractDocumentSha256:
+        shortsScoreLedger.FEATURE_CONTRACT_DOCUMENT_SHA256,
+    governanceVersion:
+        shortsScoreLedger.GOVERNANCE.schemaVersion,
+    governanceSha256:
+        shortsScoreLedger.GOVERNANCE_SHA256,
+    expectedCoordinateIds:
+        shortsScoreLedger.EXPECTED_COORDINATE_IDS,
+    unitBounds: Object.fromEntries(
+        Object.entries(
+            shortsScoreLedger.GOVERNANCE.valueUnits
+        ).map(([unit, definition]) => [unit, {
+            min: definition.minimumInclusive,
+            max: definition.maximumInclusive,
+        }])
+    ),
+    definitions: canonicalShortsStoredCoordinates.map(
+        definition => ({
+            coordinateId: definition.coordinateId,
+            featureKey: definition.key,
+            group: definition.group,
+            target: definition.target,
+            source: definition.source,
+            sourceKey:
+                definition.sourceKey || definition.key,
+            unit: definition.unit,
+            displayUnit: definition.displayUnit ?? null,
+        })
+    ),
+});
 const {
     SAVED_HOOK_INDEX_VERSION,
     compactSavedHookBindingPayload,
@@ -1807,12 +1849,13 @@ function validateRawScoreResult(result, options = {}) {
     if (result.error) throw new Error(result.error);
     const requireCompatibilityCaches =
         options.requireCompatibilityCaches !== false;
-    const missing = [];
+    const fatal = [];
+    const warnings = [];
     const ledger = result.score_ledger;
     const ledgerValidation = shortsScoreLedger.validateScoreLedger(ledger);
     const ledgerEntries = ledgerValidation.entries;
     if (!ledgerValidation.valid) {
-        missing.push(
+        fatal.push(
             `canonical 21-coordinate score ledger: ${
                 ledgerValidation.errors.join('; ')
             }`
@@ -1842,7 +1885,7 @@ function validateRawScoreResult(result, options = {}) {
                 )
             )
         ) {
-            missing.push('denormalized feature cache inventory');
+            warnings.push('denormalized feature cache inventory');
         }
         canonicalShortsStoredCoordinates.forEach((definition, index) => {
             const entry = ledgerEntries[index] || {};
@@ -1859,7 +1902,7 @@ function validateRawScoreResult(result, options = {}) {
                 || transcriptUsed
             );
             if (required && !available) {
-                missing.push(
+                fatal.push(
                     `${definition.coordinateId} (${entry.unavailable_reason || 'unavailable'})`
                 );
             }
@@ -1873,7 +1916,7 @@ function validateRawScoreResult(result, options = {}) {
                 || entry.unit !== definition.unit
                 || Boolean(entry.available) !== finiteValue
             ) {
-                missing.push(`${definition.coordinateId} ledger identity`);
+                fatal.push(`${definition.coordinateId} ledger identity`);
             }
             const mapValue = valuesById[definition.coordinateId];
             const mapPercentile = percentilesById[definition.coordinateId];
@@ -1908,7 +1951,7 @@ function validateRawScoreResult(result, options = {}) {
                     || !percentileMatches
                 )
             ) {
-                missing.push(`${definition.coordinateId} materialization parity`);
+                fatal.push(`${definition.coordinateId} materialization parity`);
             }
             if (
                 requireCompatibilityCaches
@@ -1927,7 +1970,7 @@ function validateRawScoreResult(result, options = {}) {
                         && Number(output.est) !== value
                     )
                 ) {
-                    missing.push(`${definition.coordinateId} producer address`);
+                    warnings.push(`${definition.coordinateId} producer address`);
                 }
             }
         });
@@ -1943,17 +1986,17 @@ function validateRawScoreResult(result, options = {}) {
             || result.input_manifest.coordinate_governance_sha256
                 !== quantCoordinateGovernanceSha256
         ) {
-            missing.push('score manifest ledger revisions');
+            warnings.push('score manifest ledger revisions');
         }
     }
     const validPreview = value => Array.isArray(value) && value.length === 48 && value.every(Number.isFinite);
     const validPlacement = channel => channel && Array.isArray(channel.neighbors)
         && channel.neighbors.length > 0
         && channel.neighbors.every(item => item && item.id != null && Number.isFinite(Number(item.sim)));
-    if (!result.montage) missing.push('5-frame montage');
-    if (!result.emb_preview || !validPreview(result.emb_preview.visual)) missing.push('visual embedding');
-    if (!result.emb_preview || !validPreview(result.emb_preview.together)) missing.push('combined embedding');
-    if (!result.indicators || !Object.keys(result.indicators).length) missing.push('indicator outputs');
+    if (!result.montage) warnings.push('5-frame montage');
+    if (!result.emb_preview || !validPreview(result.emb_preview.visual)) warnings.push('visual embedding');
+    if (!result.emb_preview || !validPreview(result.emb_preview.together)) warnings.push('combined embedding');
+    if (!result.indicators || !Object.keys(result.indicators).length) warnings.push('indicator outputs');
     const visualKeepForecast = result.visual_keep_forecast;
     const visualKeepManifestRevision = result.input_manifest
         && result.input_manifest.scorer_revisions
@@ -1978,7 +2021,7 @@ function validateRawScoreResult(result, options = {}) {
             }
         );
     if (!visualKeepAudit.valid) {
-        missing.push('frozen visual keep forecast');
+        warnings.push('frozen visual keep forecast');
     }
     const requestedCreatorProfile = String(
         result.input_manifest && result.input_manifest.creator_profile || ''
@@ -2019,7 +2062,7 @@ function validateRawScoreResult(result, options = {}) {
         requestedCreatorProfile
         && (!creatorForecastAudit || !creatorForecastAudit.valid)
     ) {
-        missing.push(
+        warnings.push(
             'creator-adaptive keep forecast'
             + (
                 creatorForecastAudit
@@ -2032,14 +2075,18 @@ function validateRawScoreResult(result, options = {}) {
                 : '')
         );
     } else if (!requestedCreatorProfile && creatorForecast) {
-        missing.push(
+        warnings.push(
             'unexpected creator-adaptive forecast without an explicit profile'
         );
     }
-    if (!result.channels || !validPlacement(result.channels.visual)) missing.push('visual map placement');
-    if (!result.channels || !validPlacement(result.channels.together)) missing.push('combined map placement');
-    if (missing.length) {
-        throw new Error(`scoring dependencies returned an incomplete result (${missing.join(', ')}); check Gemini credit/billing and /api/raw/upload-health`);
+    if (!result.channels || !validPlacement(result.channels.visual)) warnings.push('visual map placement');
+    if (!result.channels || !validPlacement(result.channels.together)) warnings.push('combined map placement');
+    if (fatal.length) {
+        throw new Error(
+            'scorer returned an invalid canonical score ledger ('
+            + `${fatal.join(', ')}); check Gemini credit/billing and `
+            + '/api/raw/upload-health'
+        );
     }
     result.score_ledger_validation = {
         state: 'canonical-valid',
@@ -2047,6 +2094,18 @@ function validateRawScoreResult(result, options = {}) {
         ledger_sha256: ledger.ledger_sha256,
         errors: [],
         note: 'All displayed stored coordinates are read from this validated ledger.',
+    };
+    result.score_display_eligible = true;
+    result.score_runtime_validation = {
+        state: warnings.length
+            ? 'canonical-ledger-with-optional-evidence-gaps'
+            : 'complete',
+        complete: warnings.length === 0,
+        warnings: [...new Set(warnings)],
+        note: (
+            'Optional forecasts, denormalized caches, previews, and map '
+            + 'geometry never replace or suppress canonical ledger scalars.'
+        ),
     };
     // These are producer compatibility projections of the same 21 values.
     // Validate their parity above, then remove them at the API boundary so the
@@ -3432,17 +3491,6 @@ function withPersistedShortsLedgerValidation(record) {
         ? recordedRecordSha256 === calculatedRecordSha256
         : null;
     const ledgerValidation = persistedShortsLedgerValidation(record);
-    if (recordBindingValid === false) {
-        ledgerValidation.state = 'canonical-invalid';
-        ledgerValidation.valid = false;
-        ledgerValidation.ledger_sha256 = null;
-        ledgerValidation.errors = [
-            'persisted score record binding does not match its scored fields',
-        ];
-        ledgerValidation.note = (
-            'The stored score record was modified after its score binding was written.'
-        );
-    }
     return {
         ...record,
         score_record_validation: {
@@ -3489,7 +3537,7 @@ function withPersistedLongLedgerValidation(record) {
             : longSavedThumbnailRecord.validateGeometry(
                 score.non_authoritative_geometry
             );
-    const valid = (
+    const predictorValid = (
         recordBindingValid !== false
         && ledgerValidation.valid
         && contractValidation.valid
@@ -3510,10 +3558,29 @@ function withPersistedLongLedgerValidation(record) {
             calculated_sha256: calculatedRecordSha256,
         },
         long_score_ledger_validation: {
-            state: valid ? 'canonical-valid' : 'canonical-invalid',
-            valid,
+            state: ledgerValidation.valid
+                ? 'canonical-valid'
+                : 'canonical-invalid',
+            valid: ledgerValidation.valid,
             ledger_sha256:
-                valid ? score.long_score_ledger.ledger_sha256 : null,
+                ledgerValidation.valid
+                    ? score.long_score_ledger.ledger_sha256
+                    : null,
+            errors: [].concat(ledgerValidation.errors),
+            note: (
+                'Ledger validity controls exact scalar display only. '
+                + 'Prediction eligibility is reported separately.'
+            ),
+        },
+        long_score_predictor_validation: {
+            state: predictorValid
+                ? 'predictor-eligible'
+                : 'display-only',
+            valid: predictorValid,
+            ledger_sha256:
+                ledgerValidation.valid
+                    ? score.long_score_ledger.ledger_sha256
+                    : null,
             errors: []
                 .concat(ledgerValidation.errors)
                 .concat(contractValidation.errors)
@@ -5338,6 +5405,38 @@ async function handleHttpRequest(req, res) {
     // directly from the canonical registry so browser code cannot carry a
     // copied coordinate inventory, unit, version, or registry hash.
     if (
+        pathname === '/api/quant-coordinate-governance.json'
+        && req.method === 'GET'
+    ) {
+        const payload = Buffer.from(JSON.stringify({
+            governance: quantCoordinateGovernance,
+            governanceSha256: quantCoordinateGovernanceSha256,
+            shortsScoreLedgerRuntime,
+        }));
+        const etag = `"${sha256Bytes(payload)}"`;
+        if (req.headers['if-none-match'] === etag) {
+            res.writeHead(304, {
+                ETag: etag,
+                'Cache-Control':
+                    'public, max-age=300, stale-while-revalidate=86400, '
+                    + 'stale-if-error=604800',
+            });
+            res.end();
+            return;
+        }
+        res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Content-Length': payload.length,
+            'Cache-Control':
+                'public, max-age=300, stale-while-revalidate=86400, '
+                + 'stale-if-error=604800',
+            ETag: etag,
+            'X-Content-Type-Options': 'nosniff',
+        });
+        res.end(payload);
+        return;
+    }
+    if (
         pathname === '/api/quant-coordinate-governance.js'
         && req.method === 'GET'
     ) {
@@ -5356,11 +5455,28 @@ async function handleHttpRequest(req, res) {
             '  Object.defineProperty(root, "__QUANT_COORDINATE_GOVERNANCE_SHA256__", {',
             `    value: "${quantCoordinateGovernanceSha256}", writable: false, configurable: false`,
             '  });',
+            '  Object.defineProperty(root, "__SHORTS_SCORE_LEDGER_RUNTIME__", {',
+            `    value: deepFreeze(${JSON.stringify(shortsScoreLedgerRuntime)}), writable: false, configurable: false`,
+            '  });',
             '}(globalThis));',
         ].join('\n');
+        const etag = `"${sha256Bytes(Buffer.from(script))}"`;
+        if (req.headers['if-none-match'] === etag) {
+            res.writeHead(304, {
+                ETag: etag,
+                'Cache-Control':
+                    'public, max-age=300, stale-while-revalidate=86400, '
+                    + 'stale-if-error=604800',
+            });
+            res.end();
+            return;
+        }
         res.writeHead(200, {
             'Content-Type': 'application/javascript; charset=utf-8',
-            'Cache-Control': 'no-store',
+            'Cache-Control':
+                'public, max-age=300, stale-while-revalidate=86400, '
+                + 'stale-if-error=604800',
+            ETag: etag,
             'X-Content-Type-Options': 'nosniff',
         });
         res.end(script);
@@ -8833,6 +8949,24 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const scoreDomain = pathname === '/api/raw-long/hook-save'
                 ? 'longquant'
                 : 'shorts';
+            if (
+                scoreDomain === 'shorts'
+                && body.kind === 'scored'
+            ) {
+                const submittedLedgerSha256 =
+                    body.score_ledger
+                    && body.score_ledger.ledger_sha256;
+                if (
+                    !exactSha256(body.score_ledger_sha256)
+                    || body.score_ledger_sha256
+                        !== submittedLedgerSha256
+                ) {
+                    throw new Error(
+                        'saved score does not bind the ledger SHA shown '
+                        + 'on the selected score card'
+                    );
+                }
+            }
             const id = 'hk' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
             const montageBytes = decodeSavedHookMontage(body.montage);
             const rec = canonicalSavedHookRecord({
@@ -9482,6 +9616,32 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 score_record_sha256:
                     stored.score_record_sha256 || null,
             };
+            const scoreDomain = scoreDomainForRecord(record);
+            const scalarLedgerValid = scoreDomain === 'longquant'
+                ? !!(
+                    record.long_score_ledger_validation
+                    && record.long_score_ledger_validation.valid === true
+                )
+                : !!(
+                    record.score_ledger_validation
+                    && record.score_ledger_validation.valid === true
+                );
+            const sidecarsValid = scoreDomain === 'longquant'
+                ? !!(
+                    record.long_score_predictor_validation
+                    && record.long_score_predictor_validation.valid === true
+                )
+                : true;
+            record.score_display_eligible =
+                stored.kind === 'scored' && scalarLedgerValid;
+            record.predictor_eligible = !!(
+                canonicalCandidate
+                && recordBindingValid
+                && compactSourceValid
+                && inputValidation.valid
+                && scalarLedgerValid
+                && sidecarsValid
+            );
             const status = (
                     record.evidence_state === 'canonical_invalid'
                 ) || (
@@ -9501,8 +9661,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     : 200;
             if (status === 409) {
                 record.error = (
-                    'Saved-hook evidence failed canonical ledger '
-                    + 'validation.'
+                    'Saved-hook scalar ledger or record binding failed '
+                    + 'canonical validation.'
                 );
                 record.code = 'saved_hook_evidence_invalid';
             }
@@ -9967,8 +10127,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 !persisted.score_record_validation
                 || persisted.score_record_validation.valid
                     !== true
-                || !persisted.long_score_ledger_validation
-                || persisted.long_score_ledger_validation.valid
+                || !persisted.long_score_predictor_validation
+                || persisted.long_score_predictor_validation.valid
                     !== true
             ) {
                 throw new Error(
@@ -10131,7 +10291,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 if (
                     indexRow.evidence_state === 'canonical_bound'
                     && storedValidation
-                        .long_score_ledger_validation
+                        .long_score_predictor_validation
                         .valid === true
                 ) {
                     record.score = longQuantPublicTextScore(record.score);
@@ -10168,6 +10328,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 record.long_score_ledger_validation =
                     storedValidation
                         .long_score_ledger_validation;
+                record.long_score_predictor_validation =
+                    storedValidation
+                        .long_score_predictor_validation;
                 record.source_of_truth = {
                     index_key: LONG_HOOK_LIBRARY_INDEX_KEY,
                     index_sha256: index.index_sha256,
@@ -18941,11 +19104,38 @@ function longQuantContractFailure(score, prefix, errors) {
         output_contract: longQuantOutputContract(score),
     };
 }
+function longQuantCompatibilityEnvelope(
+    score,
+    prefix,
+    errors
+) {
+    const output = JSON.parse(JSON.stringify(score || {}));
+    delete output.error;
+    delete output.score_contract_error;
+    output.long_score_ledger = score.long_score_ledger;
+    output.output_contract = longQuantOutputContract(score);
+    output.compatibility_validation = {
+        valid: false,
+        display_eligible: true,
+        predictor_eligible: false,
+        ledger_sha256:
+            score.long_score_ledger.ledger_sha256,
+        errors: [...new Set(errors || [])],
+        note: (
+            `${prefix}. Exact immutable ledger scalars remain visible; `
+            + 'this wrapper is excluded from predictor decisions until '
+            + 'its sidecars validate.'
+        ),
+    };
+    return output;
+}
 function longQuantCanonicalPublicEnvelope(
     score,
     { requireRewardContract = true } = {}
 ) {
-    if (!score || score.error) return score || null;
+    if (!score) return null;
+    const ledgerValidation = longQuantLedgerValidation(score);
+    if (score.error && !ledgerValidation.valid) return score;
     if (
         score.schema === longSavedThumbnailRecord.SCORE_SCHEMA
         && score.scalar_score_authority
@@ -18955,13 +19145,12 @@ function longQuantCanonicalPublicEnvelope(
             longSavedThumbnailRecord.validateScore(score);
         return validation.valid
             ? JSON.parse(JSON.stringify(score))
-            : longQuantContractFailure(
+            : longQuantCompatibilityEnvelope(
                 score,
                 'Long Quant canonical score envelope differs',
                 validation.errors
             );
     }
-    const ledgerValidation = longQuantLedgerValidation(score);
     if (!ledgerValidation.valid) {
         return longQuantContractFailure(
             score,
@@ -18972,7 +19161,7 @@ function longQuantCanonicalPublicEnvelope(
     const inputValidation =
         longScoreLedger.validateLongInputManifest(score);
     if (!inputValidation.valid) {
-        return longQuantContractFailure(
+        return longQuantCompatibilityEnvelope(
             score,
             'Long Quant scorer input binding differs',
             inputValidation.errors
@@ -18988,7 +19177,7 @@ function longQuantCanonicalPublicEnvelope(
         !aliasValidation.valid
         || !rewardValidation.valid
     ) {
-        return longQuantContractFailure(
+        return longQuantCompatibilityEnvelope(
             score,
             'Long Quant producer compatibility checks failed',
             aliasValidation.errors.concat(
@@ -19003,7 +19192,7 @@ function longQuantCanonicalPublicEnvelope(
                 longQuantOutputContract(score),
         });
     } catch (error) {
-        return longQuantContractFailure(
+        return longQuantCompatibilityEnvelope(
             score,
             'Long Quant canonical score construction failed',
             [error.message]
@@ -19020,6 +19209,42 @@ function longQuantPublicTextScore(score) {
         requireRewardContract: false,
     });
 }
+function longQuantScorePredictorValidation(score) {
+    const errors = [];
+    if (!score || typeof score !== 'object' || score.error) {
+        errors.push(
+            score && score.error
+                ? String(score.error)
+                : 'Long score is missing'
+        );
+        return { valid: false, errors };
+    }
+    if (
+        score.compatibility_validation
+        && score.compatibility_validation.valid === false
+    ) {
+        errors.push(
+            ...(
+                score.compatibility_validation.errors
+                || ['Long score compatibility sidecars are invalid']
+            )
+        );
+    }
+    const scoreValidation =
+        longSavedThumbnailRecord.validateScore(score);
+    if (!scoreValidation.valid) {
+        errors.push(...scoreValidation.errors);
+    }
+    const inputValidation =
+        longScoreLedger.validateLongInputManifest(score);
+    if (!inputValidation.valid) {
+        errors.push(...inputValidation.errors);
+    }
+    return {
+        valid: errors.length === 0,
+        errors: [...new Set(errors)],
+    };
+}
 async function longQuantScoreThumbnail(buf, title, idea, interactive) {
     const scoreTitle = String(title || idea || '').replace(/\s+/g, ' ').trim().slice(0, 500);
     const scoreIdea = String(idea || scoreTitle).replace(/\s+/g, ' ').trim().slice(0, 500);
@@ -19035,7 +19260,15 @@ async function longQuantScoreThumbnail(buf, title, idea, interactive) {
             }`
         );
     }
-    if (longQuantPrimaryPercentile(score) == null) {
+    const predictorValidation =
+        longQuantScorePredictorValidation(score);
+    if (!predictorValidation.valid) {
+        throw new Error(
+            'Long Quant score is display-only and cannot drive ranking: '
+            + predictorValidation.errors.join('; ')
+        );
+    }
+    if (longQuantDecisionPrimaryPercentile(score) == null) {
         throw new Error('Long Quant score has no visual percentile — the primary threshold axis is required');
     }
     return score;
@@ -19103,7 +19336,7 @@ function longQuantNormalizeRunScores(run) {
     return clean;
 }
 function longQuantThumbPercentile100(thumb) {
-    return thumb && thumb.score && !thumb.score.error
+    return thumb && thumb.score
         ? lqScorePct(thumb.score)
         : null;
 }
@@ -19146,6 +19379,11 @@ function longQuantPrimaryPercentile(score) {
         ? longQuantLedgerPercentileFraction(metric.pctile)
         : null;
 }
+function longQuantDecisionPrimaryPercentile(score) {
+    return longQuantScorePredictorValidation(score).valid
+        ? longQuantPrimaryPercentile(score)
+        : null;
+}
 function longQuantDecisionObservation(score, name) {
     const trace = score && score.decision_trace;
     const value = trace && trace.observations
@@ -19155,7 +19393,7 @@ function longQuantDecisionObservation(score, name) {
         : Number(value);
 }
 function longQuantDecisionReward(score) {
-    const percentile = longQuantPrimaryPercentile(score);
+    const percentile = longQuantDecisionPrimaryPercentile(score);
     if (percentile == null) return null;
     const trace = score && score.decision_trace;
     if (!trace) return percentile;
@@ -19581,45 +19819,113 @@ function updateLongSavedThumbnailIndex(mutator) {
         return index;
     });
 }
+function longQuantSavedScoreInputCandidates(
+    body,
+    displayTitle,
+    context,
+    sourceVideo
+) {
+    const candidates = [];
+    const seen = new Set();
+    const add = value => {
+        if (!value || typeof value !== 'object') return;
+        const title = String(value.title || '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 500);
+        const idea = String(
+            value.idea == null ? title : value.idea
+        )
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 500);
+        const scoreText = String(
+            value.scoreText == null ? title : value.scoreText
+        )
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 500);
+        if (!title) return;
+        const identity = JSON.stringify([
+            title,
+            idea,
+            scoreText,
+        ]);
+        if (seen.has(identity)) return;
+        seen.add(identity);
+        candidates.push({ title, idea, scoreText });
+    };
+    add(body.scoreInput || body.score_input);
+    if (
+        body.scoreTitle != null
+        || body.scoreIdea != null
+        || body.scoreText != null
+    ) {
+        add({
+            title: body.scoreTitle || displayTitle,
+            idea: body.scoreIdea,
+            scoreText: body.scoreText,
+        });
+    }
+    const candidateIdea = String(
+        body.idea || displayTitle || ''
+    )
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 500);
+    const sourceTitle = String(
+        (sourceVideo && sourceVideo.title)
+        || displayTitle
+        || candidateIdea
+    )
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 500);
+    const contextualIdea = longQuantScoreText(
+        sourceTitle || candidateIdea,
+        candidateIdea,
+        context,
+        sourceVideo
+    );
+    add({
+        title: candidateIdea,
+        idea: contextualIdea || candidateIdea,
+        scoreText: candidateIdea,
+    });
+    add({
+        title: displayTitle,
+        idea: body.idea || displayTitle,
+        scoreText: displayTitle,
+    });
+    add({
+        title: displayTitle,
+        idea: displayTitle,
+        scoreText: displayTitle,
+    });
+    return candidates;
+}
 async function longQuantSaveThumbRecord(body = {}) {
     const jpg = body.jpg || null;
     if (!jpg) throw new Error('no image');
     const id = 'lt' + Date.now().toString(36) + Math.floor(Math.random() * 1e5).toString(36);
-    const title = String(body.title || body.idea || '').replace(/\s+/g, ' ').trim().slice(0, 220);
-    if (!title) throw new Error('saved thumbnail title is required');
-    const prompt = String(body.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 1200);
-    const context = longQuantCleanContext(body.context || body.transcript30 || (body.meta && (body.meta.context || body.meta.transcript30)) || '');
-    const scoreText = String(body.scoreText || longQuantScoreText(title, body.idea || title, context, body.sourceVideo || (body.meta && body.meta.sourceVideo)) || body.idea || context || title || '').slice(0, LONGQUANT_SCORE_TEXT_CHARS);
-    const scoreIdea = String(scoreText || title)
+    const displayTitle = String(body.title || body.idea || '')
         .replace(/\s+/g, ' ')
         .trim()
         .slice(0, 500);
-    let savedScore = (body.score && typeof body.score === 'object' && !body.score.loading && !body.score.error) ? body.score : null;
-    if (savedScore) {
-        savedScore = longQuantPublicScore(savedScore);
-        const submittedInput = savedScore && !savedScore.error
-            ? longScoreLedger.validateLongInputManifest(
-                savedScore,
-                {
-                    imageBytes: jpg,
-                    title,
-                    idea: scoreIdea,
-                    scoreText: title,
-                }
-            )
-            : { valid: false };
-        if (!submittedInput.valid) savedScore = null;
+    if (!displayTitle) {
+        throw new Error('saved thumbnail title is required');
     }
-    if (
-        !savedScore
-        || savedScore.error
-        || !savedScore.output_contract
-        || !savedScore.output_contract.complete
-    ) {
-        savedScore = await longQuantScoreThumbnail(
-            jpg,
-            title,
-            scoreIdea
+    const prompt = String(body.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 1200);
+    const context = longQuantCleanContext(body.context || body.transcript30 || (body.meta && (body.meta.context || body.meta.transcript30)) || '');
+    const sourceVideo = longQuantCompactSourceVideo(body.sourceVideo || (body.meta && body.meta.sourceVideo));
+    let savedScore = (
+        body.score
+        && typeof body.score === 'object'
+        && !body.score.loading
+    ) ? body.score : null;
+    if (!savedScore) {
+        throw new Error(
+            'saved thumbnail requires its existing canonical Long score; silent re-scoring is forbidden'
         );
     }
     savedScore = longQuantPublicScore(savedScore);
@@ -19630,13 +19936,60 @@ async function longQuantSaveThumbRecord(body = {}) {
                 : 'saved thumbnail has no canonical Long Quant score'
         );
     }
+    const predictorValidation =
+        longQuantScorePredictorValidation(savedScore);
+    if (!predictorValidation.valid) {
+        throw new Error(
+            'saved thumbnail score is display-only and cannot be persisted '
+            + `as predictor evidence: ${
+                predictorValidation.errors.join('; ')
+            }`
+        );
+    }
+    const submittedLedgerSha =
+        String(body.score_ledger_sha256 || '');
+    const ledgerValidation =
+        longQuantLedgerValidation(savedScore);
+    if (
+        !exactSha256(submittedLedgerSha)
+        || !ledgerValidation.valid
+        || submittedLedgerSha
+            !== savedScore.long_score_ledger.ledger_sha256
+    ) {
+        throw new Error(
+            'saved thumbnail ledger SHA is missing or differs from the displayed score'
+        );
+    }
+    const matchedInput =
+        longQuantSavedScoreInputCandidates(
+            body,
+            displayTitle,
+            context,
+            sourceVideo
+        ).find(candidate => (
+            longScoreLedger.validateLongInputManifest(
+                savedScore,
+                {
+                    imageBytes: jpg,
+                    title: candidate.title,
+                    idea: candidate.idea,
+                    scoreText: candidate.scoreText,
+                }
+            ).valid
+        ));
+    if (!matchedInput) {
+        throw new Error(
+            'saved thumbnail score input differs from the submitted image/title; silent re-scoring is forbidden'
+        );
+    }
+    const title = matchedInput.title;
     const exactInput = longScoreLedger.validateLongInputManifest(
         savedScore,
         {
             imageBytes: jpg,
             title,
-            idea: scoreIdea,
-            scoreText: title,
+            idea: matchedInput.idea,
+            scoreText: matchedInput.scoreText,
         }
     );
     if (!exactInput.valid) {
@@ -19646,12 +19999,11 @@ async function longQuantSaveThumbRecord(body = {}) {
             }`
         );
     }
-    if (longQuantPrimaryPercentile(savedScore) == null) {
+    if (longQuantDecisionPrimaryPercentile(savedScore) == null) {
         throw new Error(
             'saved thumbnail has no canonical visual CTR+views percentile'
         );
     }
-    const sourceVideo = longQuantCompactSourceVideo(body.sourceVideo || (body.meta && body.meta.sourceVideo));
     const meta = (body.meta && typeof body.meta === 'object') ? body.meta : {};
     const thumbnailSha256 =
         exactInput.query.thumbnail.sha256;
@@ -19661,6 +20013,7 @@ async function longQuantSaveThumbRecord(body = {}) {
         id,
         savedAt: Date.now(),
         title,
+        displayTitle,
         prompt,
         source: String(body.source || meta.source || '').slice(0, 80),
         score: savedScore,
@@ -19875,6 +20228,11 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
             );
             await checkStop();
             att.score = score;
+            att.score_input = {
+                title: idea,
+                idea: scoreText || idea,
+                scoreText: idea,
+            };
             att.status = 'done';
         } catch (e) {
             if (isQueueLeaseOwnershipError(e)) throw e;
@@ -19904,7 +20262,7 @@ async function longQuantBuildThumbGroup(rid, idea, count, opts = {}) {
     });
     const doneAttempts = group.attempts.filter(a => a && a.status === 'done');
     const potentialValues = doneAttempts
-        .map(a => longQuantPrimaryPercentile(a.score))
+        .map(a => longQuantDecisionPrimaryPercentile(a.score))
         .filter(Number.isFinite);
     const rewardValues = doneAttempts
         .map(a => longQuantDecisionReward(a.score))
@@ -20006,7 +20364,7 @@ setInterval(() => {
     longQuantDemoQueue().catch(e => console.warn('longquant generation queue:', e.message || e));
 }, 4000);
 function lqScorePct(score) {
-    const p = longQuantPrimaryPercentile(score);
+    const p = longQuantDecisionPrimaryPercentile(score);
     if (p == null) return null;
     const n = Number(p);
     return n <= 1 ? Math.round(n * 1000) / 10 : Math.round(n * 10) / 10;
@@ -20431,7 +20789,24 @@ async function longQuantGrindProcess(rid, req0, ownership) {
                                 : 'thumbnail worker returned no canonical Long Quant ledger'
                         );
                     }
+                    const predictorValidation =
+                        longQuantScorePredictorValidation(
+                            canonicalScore
+                        );
+                    if (!predictorValidation.valid) {
+                        throw new Error(
+                            'thumbnail worker score is display-only and '
+                            + `cannot enter the grind: ${
+                                predictorValidation.errors.join('; ')
+                            }`
+                        );
+                    }
                     t.score = canonicalScore;
+                    t.score_input = s.score_input || {
+                        title: idea,
+                        idea: scoreText || idea,
+                        scoreText: idea,
+                    };
                     if (longQuantThumbPercentile100(t) == null) {
                         throw new Error(
                             'thumbnail worker score lacks canonical visual CTR+views percentile'
@@ -20512,6 +20887,19 @@ async function longQuantGrindProcess(rid, req0, ownership) {
                             ),
                             montageKey: key, source: source || 'channel-grind',
                             score: bestHit.score || null, context, transcript30: context,
+                            scoreInput: bestHit.score_input || {
+                                title: bestAttempt.idea || seed,
+                                idea: scoreText
+                                    || bestAttempt.idea
+                                    || seed,
+                                scoreText:
+                                    bestAttempt.idea || seed,
+                            },
+                            score_ledger_sha256:
+                                bestHit.score
+                                && bestHit.score.long_score_ledger
+                                && bestHit.score.long_score_ledger
+                                    .ledger_sha256,
                             sourceVideo, batchId, runRid: rid, attemptK: bestAttempt.k, thumbI: bestHit.i,
                             meta: {
                                 source,

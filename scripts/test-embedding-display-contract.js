@@ -415,6 +415,32 @@ async function main() {
     assert.strictEqual(compact.m_identity.keep.coordinateId, 'shorts.stored.together.keep');
     assert.strictEqual(compact.m_identity.views.value, 12_000_000, 'saved identity must persist the exact raw value');
     assert.strictEqual(compact.m_identity.views.coordinateId, 'shorts.stored.together.views');
+    const historicalDisplay =
+        contract.historicalSavedHookDisplay(shortRecord);
+    assert(
+        contract.validateHistoricalSavedHookDisplay(
+            historicalDisplay
+        ),
+        'valid score ledger did not produce a historical display view'
+    );
+    assert.strictEqual(
+        historicalDisplay.m_identity.keep.value,
+        compact.m_identity.keep.value
+    );
+    assert.strictEqual(
+        historicalDisplay.m_identity.keep.ledgerSha256,
+        compact.score_ledger_sha256
+    );
+    const tamperedHistoricalDisplay =
+        JSON.parse(JSON.stringify(historicalDisplay));
+    tamperedHistoricalDisplay.m_identity.keep.value += 1;
+    assert.strictEqual(
+        contract.validateHistoricalSavedHookDisplay(
+            tamperedHistoricalDisplay
+        ),
+        false,
+        'historical display accepted a value changed after binding'
+    );
     assert.strictEqual(compact.selection_policy.id, 'policy.shorts.display-preference.v1');
     assert.deepStrictEqual(compact.selection_policy.preference, ['together', 'text', 'visual']);
     assert.strictEqual(

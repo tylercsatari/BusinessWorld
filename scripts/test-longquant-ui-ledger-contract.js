@@ -5,10 +5,17 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const longScoreLedgerContract = require(
+    '../buildings/jarvis/long-score-ledger'
+);
 
 const root = path.resolve(__dirname, '..');
 const uiPath = path.join(root, 'buildings/jarvis/jarvis-longquant.js');
 const source = fs.readFileSync(uiPath, 'utf8');
+const serverSource = fs.readFileSync(
+    path.join(root, 'server.js'),
+    'utf8'
+);
 const governanceBytes = fs.readFileSync(
     path.join(
         root,
@@ -44,11 +51,17 @@ const instrumented = source.replace(marker, `    return {
             LQ_GOVERNANCE_SCHEMA_VERSION,
             LQ_GOVERNANCE_SHA256,
             LQ_PERCENTILE_STORAGE_UNIT,
+            LQ_SCORER_SOURCE_SHA256,
             lqxCanonicalJson,
             lqxSha256,
+            lqxScoreFromPayload,
+            lqxInputState,
             lqxLedgerState,
             lqxRegisteredCoordinate,
+            lqxScoreDecisionEligible,
+            lqxScoreFor,
             lqxPrimaryPct100,
+            lqxDecisionPct100,
             lqxPrimaryAttrs,
             lqxCanonicalThumbDecision,
             lqxSavedMediaRef,
@@ -63,6 +76,8 @@ const sandbox = {
     clearTimeout,
     setInterval,
     clearInterval,
+    atob: value => Buffer.from(value, 'base64').toString('binary'),
+    btoa: value => Buffer.from(value, 'binary').toString('base64'),
     __QUANT_COORDINATE_GOVERNANCE__: governance,
     __QUANT_COORDINATE_GOVERNANCE_SHA256__: governanceSha256,
 };
@@ -104,7 +119,7 @@ function makeScore(primaryPercentile = 87) {
             byte_length: thumbnailBytes.length,
         },
         title: textRevision(scoreText),
-        idea: textRevision(''),
+        idea: textRevision(scoreText),
         score_text: textRevision(scoreText),
         selected_text_source: 'title',
     };
@@ -178,7 +193,7 @@ function makeScore(primaryPercentile = 87) {
         contract_valid: true,
     };
     ledger.ledger_sha256 = api.lqxSha256(api.lqxCanonicalJson(ledger));
-    return {
+    const score = {
         long_score_ledger: ledger,
         output_contract: {
             version: 3,
@@ -186,6 +201,11 @@ function makeScore(primaryPercentile = 87) {
             percentile_unit: api.LQ_PERCENTILE_STORAGE_UNIT,
             ledger_sha256: ledger.ledger_sha256,
             channels: [...api.LQ_OUTPUT_CHANNELS],
+            channel_inputs: {
+                visual: 'thumbnail image only',
+                text: 'title or idea text only',
+                together: 'thumbnail image plus title or idea',
+            },
             metrics: [...api.LQ_OUTPUT_METRICS],
             metric_definitions: api.LQ_METRIC_DEFINITIONS.map(item => ({ ...item })),
             coordinates: [...api.LQ_OUTPUT_COORDINATES],
@@ -200,14 +220,30 @@ function makeScore(primaryPercentile = 87) {
         },
         input_manifest: {
             domain: 'longquant',
-            embedding_model: 'fixture',
-            scorer: 'fixture',
+            embedding_model: 'gemini-embedding-2',
+            embedding_dimensions: 1536,
+            scorer: 'longquant_score.py',
+            scorer_sha256: api.LQ_SCORER_SOURCE_SHA256,
+            display_contract_version: 2,
+            coordinate_governance_schema_version:
+                api.LQ_GOVERNANCE_SCHEMA_VERSION,
+            coordinate_governance_sha256:
+                api.LQ_GOVERNANCE_SHA256,
             query_input: queryInput,
             query_input_fingerprint: queryInput.fingerprint_sha256,
             thumbnail_sha256: queryInput.thumbnail.sha256,
             score_text_sha256: queryInput.score_text.sha256,
         },
     };
+    Object.defineProperties(score, {
+        _fixtureImageData: {
+            value: `data:image/jpeg;base64,${
+                thumbnailBytes.toString('base64')
+            }`,
+        },
+        _fixtureScoreText: { value: scoreText },
+    });
+    return score;
 }
 
 const score = makeScore(87);
@@ -216,7 +252,106 @@ score.pct = 0.01;
 score.pctile = 0.02;
 score.visual_pctile = 0.03;
 assert.equal(api.lqxLedgerState(score).valid, true, 'valid fixture ledger should validate');
+assert.equal(
+    api.lqxLedgerState(score).predictorEligible,
+    true,
+    'a complete ledger with valid sidecars should be predictor eligible'
+);
 assert.equal(api.lqxPrimaryPct100(score), 87, 'legacy aliases must not alter the primary percentile');
+const wrapperWarningScore = makeScore(86);
+wrapperWarningScore.error = 'stale compatibility wrapper warning';
+assert.equal(
+    api.lqxLedgerState(wrapperWarningScore).valid,
+    true,
+    'a wrapper warning must not suppress a self-validating immutable ledger'
+);
+assert.equal(
+    api.lqxPrimaryPct100(wrapperWarningScore),
+    86,
+    'a wrapper warning must not replace an exact ledger scalar'
+);
+
+const readOnlyCacheId = 'read-only-card';
+assert.equal(
+    api.lqxScoreFor(
+        readOnlyCacheId,
+        'immutable/card.jpg',
+        score._fixtureScoreText,
+        '',
+        score,
+        true,
+        score._fixtureImageData
+    ),
+    score,
+    'opening an existing Long score card must return its owned ledger'
+);
+const mismatchedCardId = 'read-only-card-mismatched-display-text';
+assert.equal(
+    api.lqxScoreFor(
+        mismatchedCardId,
+        'immutable/card.jpg',
+        'Reconstructed display title that was never scored',
+        '',
+        score,
+        true,
+        score._fixtureImageData
+    ),
+    score,
+    'reconstructed display text must not replace the ledger owned by a card'
+);
+assert.equal(
+    api.lqxScoreFor(
+        'missing-read-only-card',
+        'immutable/missing.jpg',
+        'Any display title',
+        '',
+        null,
+        true,
+        'data:image/jpeg;base64,bWlzc2luZw=='
+    ),
+    null,
+    'a passive card read must not create a score when persisted evidence is missing'
+);
+const saveFunctionStart = serverSource.indexOf(
+    'async function longQuantSaveThumbRecord(body = {})'
+);
+const saveFunctionEnd = serverSource.indexOf(
+    'async function longQuantBuildThumbGroup',
+    saveFunctionStart
+);
+assert(
+    saveFunctionStart >= 0 && saveFunctionEnd > saveFunctionStart,
+    'Long saved-thumbnail function boundary changed'
+);
+const saveFunction = serverSource.slice(
+    saveFunctionStart,
+    saveFunctionEnd
+);
+assert.doesNotMatch(
+    saveFunction,
+    /longQuantScoreThumbnail\s*\(/,
+    'saving an existing Long score card must never score it again'
+);
+assert.match(
+    saveFunction,
+    /score_ledger_sha256/,
+    'Long save must require the exact displayed ledger SHA'
+);
+assert.match(
+    saveFunction,
+    /validateLongInputManifest/,
+    'Long save must bind the submitted image and text to the score-time input'
+);
+assert.match(
+    saveFunction,
+    /silent re-scoring is forbidden/,
+    'Long save must fail closed instead of substituting another score'
+);
+assert.match(
+    source,
+    /return percentile100 == null\s*\?\s*'Not scored'/,
+    'missing Long coordinates must be labeled explicitly instead of rendered as a dash'
+);
 
 const primary = api.lqxRegisteredCoordinate(score, 'visual', 'ctrviews');
 assert.deepEqual(
@@ -237,6 +372,11 @@ assert.deepEqual(
         ledgerSha256: score.long_score_ledger.ledger_sha256,
     },
     'registered coordinate must expose explicit identity, value, units, and ledger hash'
+);
+assert.equal(
+    primary.predictorEligible,
+    true,
+    'a canonical registered coordinate should retain decision eligibility'
 );
 const attrs = api.lqxPrimaryAttrs(score, 'fixture:asset');
 assert.match(attrs, /data-coordinate-id="long\.output\.visual\.ctrviews"/);
@@ -259,6 +399,137 @@ tampered.long_score_ledger.entries[0].percentile = 99;
 tampered.pctile = 0.99;
 assert.equal(api.lqxLedgerState(tampered).valid, false, 'tampered ledger must fail validation');
 assert.equal(api.lqxPrimaryPct100(tampered), null, 'tampered ledger must be non-rankable');
+
+const withoutOutputContract = makeScore(84);
+delete withoutOutputContract.output_contract;
+assert.equal(
+    api.lqxLedgerState(withoutOutputContract).valid,
+    true,
+    'a missing output sidecar must not hide a self-validating ledger'
+);
+assert.equal(
+    api.lqxScoreDecisionEligible(withoutOutputContract),
+    false,
+    'a missing output sidecar must prevent predictor use'
+);
+assert.equal(
+    api.lqxRegisteredCoordinate(
+        withoutOutputContract,
+        'visual',
+        'ctrviews'
+    ).value,
+    12.5,
+    'the exact persisted scalar should remain displayable'
+);
+
+const withoutInputManifest = makeScore(82);
+delete withoutInputManifest.input_manifest;
+const inputlessState = api.lqxLedgerState(withoutInputManifest);
+assert.equal(
+    inputlessState.valid,
+    true,
+    'a missing input sidecar must not invalidate ledger content'
+);
+assert.equal(
+    inputlessState.predictorEligible,
+    false,
+    'a missing input sidecar must prevent predictor use'
+);
+const inputlessCoordinate = api.lqxRegisteredCoordinate(
+    withoutInputManifest,
+    'visual',
+    'ctrviews'
+);
+assert.equal(inputlessCoordinate.value, 12.5);
+assert.equal(inputlessCoordinate.inputPresent, false);
+assert.equal(inputlessCoordinate.predictorEligible, false);
+assert.equal(
+    api.lqxPrimaryPct100(withoutInputManifest),
+    82,
+    'an exact persisted scalar remains visible when its input binding is unavailable'
+);
+assert.equal(
+    api.lqxDecisionPct100(withoutInputManifest),
+    null,
+    'an input-unbound scalar must never be used for ranking or thresholds'
+);
+assert.equal(
+    api.lqxCanonicalThumbDecision({
+        score: withoutInputManifest,
+        image: 'inputless.jpg',
+    }, 0, 0).eligible,
+    false,
+    'an input-unbound thumbnail must be excluded from every decision surface'
+);
+
+const fingerprintOnlyProvenance = makeScore(80);
+for (const entry of fingerprintOnlyProvenance.long_score_ledger.entries) {
+    entry.provenance.query_input = {
+        fingerprint_sha256:
+            fingerprintOnlyProvenance.input_manifest
+                .query_input_fingerprint,
+    };
+}
+delete fingerprintOnlyProvenance.long_score_ledger.ledger_sha256;
+fingerprintOnlyProvenance.long_score_ledger.ledger_sha256 =
+    api.lqxSha256(
+        api.lqxCanonicalJson(
+            fingerprintOnlyProvenance.long_score_ledger
+        )
+    );
+fingerprintOnlyProvenance.output_contract.ledger_sha256 =
+    fingerprintOnlyProvenance.long_score_ledger.ledger_sha256;
+assert.equal(
+    longScoreLedgerContract.validateLongScoreLedger(
+        fingerprintOnlyProvenance.long_score_ledger
+    ).valid,
+    true,
+    'canonical ledger validator should accept fingerprint-only provenance'
+);
+assert.equal(
+    longScoreLedgerContract.validateLongInputManifest(
+        fingerprintOnlyProvenance
+    ).valid,
+    true,
+    'canonical input validator should accept fingerprint-only provenance'
+);
+assert.equal(
+    api.lqxInputState(fingerprintOnlyProvenance).valid,
+    true,
+    'browser input validation must match the canonical validator'
+);
+assert.equal(
+    api.lqxLedgerState(fingerprintOnlyProvenance).predictorEligible,
+    true,
+    'browser decision eligibility must match canonical validation'
+);
+
+const outerAuthority = makeScore(78);
+const normalizedEnvelope = api.lqxScoreFromPayload({
+    score: {
+        ...outerAuthority,
+        long_score_ledger: null,
+        output_contract: null,
+        input_manifest: null,
+    },
+    long_score_ledger: outerAuthority.long_score_ledger,
+    output_contract: outerAuthority.output_contract,
+    input_manifest: outerAuthority.input_manifest,
+});
+assert.equal(
+    api.lqxLedgerState(normalizedEnvelope).predictorEligible,
+    true,
+    'valid envelope sidecars must override nested null compatibility copies'
+);
+assert.equal(
+    api.lqxRegisteredCoordinate(
+        normalizedEnvelope,
+        'visual',
+        'ctrviews'
+    ).percentile100,
+    78,
+    'envelope normalization must preserve the exact coordinate'
+);
 
 const mediaSha = 'd'.repeat(64);
 const validMediaRecord = {

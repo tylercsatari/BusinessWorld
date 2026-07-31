@@ -450,13 +450,7 @@ const JarvisLongQuant = (function () {
     // or decision value.
     const STEER_KEY = { views: 'views', rawviews: 'views', realviews: 'realviews', outlier: 'outlier', hi10m: 'gt10M', keep: 'keep', ret5: 'ret5', ctr: 'ctr', ret30: 'ret30', ctrviews: 'ctrviews' };
     function steerOf(up, mod, tn) {
-        const longScore = up && up.lqScore
-            ? lqxScoreFromPayload({
-                score: up.lqScore,
-                long_score_ledger: up.long_score_ledger,
-                output_contract: up.output_contract,
-            })
-            : lqxScoreFromPayload(up);
+        const longScore = lqxScoreFromPayload(up);
         if (longScore) {
             const metric = {
                 outlier: 'scaled_views',
@@ -530,16 +524,7 @@ const JarvisLongQuant = (function () {
     function steerDisp(tn, v) { if (v == null) return null; return (tn === 'views' || tn === 'realviews') ? fv(+v) : tn === 'outlier' ? (+v).toFixed(1) + '×' : tn === 'gt10M' ? (+v * 100).toFixed(0) + '%' : tn === 'ctrviews' ? (+v).toFixed(2) : (+v).toFixed(0) + '%'; }
     function steerLabel(tn) { return tn === 'realviews' ? 'est. views (your scale)' : tn === 'views' ? 'view-equivalent (corpus quantile)' : tn === 'outlier' ? 'est. outlier' : tn === 'gt10M' ? 'chance >10M' : tn === 'ctr' ? 'est. CTR' : tn === 'ret30' ? 'est. 30s retention' : tn === 'ctrviews' ? 'CTR+views score' : tn === 'keep' ? 'est. keep-rate' : 'est. past-5s'; }
     function rawGeometryChannel(up, ch) {
-        const longScore = up && up.lqScore
-            ? lqxScoreFromPayload({
-                score: up.lqScore,
-                long_score_ledger: up.long_score_ledger,
-                output_contract: up.output_contract,
-                input_manifest: up.input_manifest,
-                non_authoritative_geometry:
-                    up.non_authoritative_geometry,
-            })
-            : lqxScoreFromPayload(up);
+        const longScore = lqxScoreFromPayload(up);
         if (longScore) return lqxGeometryChannel(longScore, ch);
         const geometry = up && up.non_authoritative_geometry;
         if (
@@ -561,14 +546,7 @@ const JarvisLongQuant = (function () {
             : {};
     }
     function rawInputChannel(up, ch) {
-        const longScore = up && up.lqScore
-            ? lqxScoreFromPayload({
-                score: up.lqScore,
-                long_score_ledger: up.long_score_ledger,
-                output_contract: up.output_contract,
-                input_manifest: up.input_manifest,
-            })
-            : lqxScoreFromPayload(up);
+        const longScore = lqxScoreFromPayload(up);
         if (longScore) return lqxInputChannel(longScore, ch);
         const im = up && up.input_manifest && up.input_manifest.channels && up.input_manifest.channels[ch];
         if (im) return im;
@@ -1602,50 +1580,14 @@ const JarvisLongQuant = (function () {
         }
         throw new Error('scoring job still running after 15 minutes — give up and retry');
     }
-    function lqxScoreKey(id, key, title, idea, request) {
-        if (!id || !key || !request) return;
-        const existing = lqxScoreCacheRead(id, request);
-        if (existing) return;
-        lqxScoreCacheWrite(id, request, { loading: 1 }, key);
-        const requestSequence =
-            LQSCORECACHEMETA[id]
-            && LQSCORECACHEMETA[id].sequence;
-        lqxJob('/api/longquant/exp/score-key', {
-            key,
-            title: request.normalized.title,
-            idea: request.normalized.idea,
-        })
-            .then(score => {
-                if (!lqxScoreCacheRequestIsCurrent(
-                    id,
-                    request,
-                    requestSequence
-                )) return;
-                const validation = lqxScoreMatchesCacheRequest(score, request);
-                if (!validation.valid) {
-                    lqxScoreCacheWrite(id, request, {
-                        error: `score response identity mismatch: ${validation.errors.join(', ')}`,
-                        at: Date.now(),
-                    }, key);
-                    return;
-                }
-                lqxScoreCacheWrite(id, request, score, key, validation);
-                rtgUpdateLqExp();
-                rtgUpdateGuessesL();
-            })
-            .catch(e => {
-                if (!lqxScoreCacheRequestIsCurrent(
-                    id,
-                    request,
-                    requestSequence
-                )) return;
-                lqxScoreCacheWrite(id, request, {
-                    error: e.message,
-                    at: Date.now(),
-                }, key);
-                rtgUpdateLqExp();
-                rtgUpdateGuessesL();
-            });
+    function lqxSavedEvidenceFingerprint(record) {
+        const integrity = record && record.integrity || {};
+        return [
+            integrity.record_content_sha256,
+            integrity.score_record_sha256,
+            integrity.ledger_sha256,
+            integrity.thumbnail_sha256,
+        ].map(value => String(value || '')).join('|');
     }
     function lqxSavedDetail(id, force) {
         if (!id) return;
@@ -1672,7 +1614,13 @@ const JarvisLongQuant = (function () {
         }
         const current = LQDETAILS[id];
         if (current && current.loading) return;
-        if (!force && current && !current.error) return;
+        if (
+            !force
+            && current
+            && !current.error
+            && lqxSavedEvidenceFingerprint(current)
+                === lqxSavedEvidenceFingerprint(row)
+        ) return;
         if (!force && current && current.error && Date.now() - (current.at || 0) < 2500) return;
         LQDETAILS[id] = { ...(current || {}), loading: 1, error: null };
         lqxJson('/api/longquant/thumbs/detail/' + id).then(j => {
@@ -1807,14 +1755,16 @@ const JarvisLongQuant = (function () {
     async function lqxSave(payload, flashKey) {
         try {
             const score = payload && payload.score;
-            if (!lqxHasCanonicalLedger(score)) {
+            if (!lqxScoreDecisionEligible(score)) {
                 throw new Error(
-                    'canonical Long score ledger is missing or invalid; this thumbnail was not saved'
+                    'the Long score is not fully input-bound and contract-validated; this thumbnail was not saved'
                 );
             }
             const canonicalPayload = Object.assign({}, payload, {
                 score,
                 input_manifest: score.input_manifest,
+                score_ledger_sha256:
+                    score.long_score_ledger.ledger_sha256,
             });
             // Historical scalar aliases are display-only. The save endpoint receives the
             // bound score ledger and derives every persisted decision from that ledger.
@@ -1854,15 +1804,25 @@ const JarvisLongQuant = (function () {
     }
     function lqxScoreFromPayload(payload) {
         if (!payload || typeof payload !== 'object') return null;
-        if (payload.score && typeof payload.score === 'object') {
-            const score = Object.assign({}, payload.score);
+        const nestedScore = payload.score
+            && typeof payload.score === 'object'
+            ? payload.score
+            : payload.lqScore
+                && typeof payload.lqScore === 'object'
+                ? payload.lqScore
+                : null;
+        if (nestedScore) {
+            const score = Object.assign({}, nestedScore);
             [
                 'long_score_ledger',
                 'output_contract',
                 'input_manifest',
                 'non_authoritative_geometry',
+                'compatibility_validation',
             ].forEach(key => {
-                if (score[key] === undefined && payload[key] !== undefined) {
+                // Envelope sidecars are the API record authority. A nested
+                // null/stale compatibility copy must never shadow them.
+                if (payload[key] !== undefined && payload[key] !== null) {
                     score[key] = payload[key];
                 }
             });
@@ -1881,7 +1841,11 @@ const JarvisLongQuant = (function () {
             return {
                 domain: 'longquant',
                 display_preference: ['visual', 'together', 'text'],
-                note: `No scalar can be attributed to an inferred title or image. ${reason}.`,
+                note: (
+                    'Persisted ledger scalars remain displayable, but their '
+                    + 'thumbnail/title attribution is unverified and they are '
+                    + `not predictor-eligible. ${reason}.`
+                ),
                 valid: false,
                 channels: Object.fromEntries(
                     ['visual', 'text', 'together'].map(channel => [
@@ -1920,7 +1884,7 @@ const JarvisLongQuant = (function () {
         return im.input || (ch === 'visual' ? 'thumbnail image only' : ch === 'text' ? 'title or idea text only' : 'thumbnail image plus title or idea text');
     }
     function lqxInputSummary(score, title, img, prompt) {
-        if (!score || score.loading || score.error) return '';
+        if (!score || score.loading || !lqxLedgerState(score).valid) return '';
         const im = lqxInputManifest(score);
         const rows = ['visual', 'text', 'together'].map(ch => {
             const c = im.channels && im.channels[ch] ? im.channels[ch] : {};
@@ -1933,7 +1897,7 @@ const JarvisLongQuant = (function () {
         return `<div style="margin-top:8px;background:${C.card};border:1px solid ${im.valid ? C.border : C.red + '66'};border-radius:7px;padding:8px"><div style="font-size:9px;color:${im.valid ? C.mute : C.red};text-transform:uppercase;font-weight:900;margin-bottom:5px">${im.valid ? 'canonical embedded inputs by channel' : 'unverified input identity'}</div>${rows}<div style="font-size:9px;color:${C.faint};margin-top:5px"><b style="color:${C.cyan}">Threshold and headline: visual only.</b> Metric chips and graph boxes show their source channel; diagnostic fallback order is ${esc(pref)}.</div>${note}${promptNote}</div>`;
     }
     function lqxScoreContract(score, assetId) {
-        if (!score || score.loading || score.error) return '';
+        if (!score || score.loading) return '';
         const state = lqxLedgerState(score);
         if (!state.valid) {
             const reason = state.present
@@ -1965,9 +1929,6 @@ const JarvisLongQuant = (function () {
             : `${LQ_VISUAL_THRESHOLD_COORDINATE} is unavailable in the canonical ledger`;
         return `<div style="margin-top:8px;border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};padding:9px 0"><div style="font-size:9px;color:${C.cyan};font-weight:900;text-transform:uppercase;margin-bottom:7px">Canonical score contract</div><div style="display:flex;gap:8px;flex-wrap:wrap">${box('Thumbnail potential', primary ? lqxFormatPercentile100(primary.percentile100) : 'unavailable', primaryDetail, primary ? C.green : C.red, primary ? lqxPrimaryAttrs(score, assetId) : '')}</div><div style="margin-top:8px;font-size:9px;line-height:1.45;color:${C.faint}"><div><b style="color:${C.text}">Title + thumbnail diagnostics:</b> ${esc(metricLine('together'))} · registered coordinates only; never used for the threshold</div><div style="margin-top:2px"><b style="color:${C.text}">Title-only diagnostics:</b> ${esc(metricLine('text'))} · registered coordinates only; never used for the threshold</div><div style="margin-top:4px"><b style="color:${C.green}">Ranking identity:</b> coordinate <code>${esc(LQ_VISUAL_THRESHOLD_COORDINATE)}</code> · percentile unit <code>${esc(LQ_PERCENTILE_STORAGE_UNIT)}</code>. Training reward aliases are deliberately not displayed or consumed.</div></div></div>`;
     }
-    const LQSCORETRIES = {};
-    const LQSCORECACHEMETA = {};
-    let LQSCORECACHESEQUENCE = 0;
     function lqxScoreFor(
         cacheId,
         key,
@@ -1980,98 +1941,14 @@ const JarvisLongQuant = (function () {
         const canonicalLocal = lqxHasCanonicalLedger(localScore)
             ? localScore
             : null;
-        if (!autoScore && !imageSource) {
-            // A score embedded in a run/record is already bound to that record.
-            // Return it directly instead of creating a second browser copy whose
-            // title/idea text may not be recoverable from historical compact rows.
+        if (canonicalLocal) {
+            // A score embedded in a run/record is immutable evidence.
             return canonicalLocal;
         }
-        let imageRevision = null;
-        const exactImageSource = imageSource
-            || (autoScore ? lqxScoreImageSource(key) : '');
-        if (exactImageSource) {
-            const imageCacheId = `${cacheId}:fullimg`;
-            const imageData = /^data:image\//i.test(exactImageSource)
-                ? exactImageSource
-                : lqxImgData(exactImageSource, imageCacheId);
-            imageRevision = imageData
-                ? lqxImageRevisionFromData(imageData)
-                : null;
-            if (!imageRevision) {
-                lqxScoreCacheClear(cacheId);
-                const imageState = LQIMGS[imageCacheId];
-                return imageState && imageState.error
-                    ? {
-                        error: `exact image bytes unavailable: ${imageState.error}`,
-                        at: imageState.at || Date.now(),
-                    }
-                    : {
-                        loading: 1,
-                        verifying_input_bytes: true,
-                    };
-            }
-        } else if (canonicalLocal) {
-            imageRevision = lqxScoreImageRevision(canonicalLocal);
-        }
-        if (!imageRevision) {
-            lqxScoreCacheClear(cacheId);
-            return autoScore && key
-                ? {
-                    error: 'exact image bytes unavailable; score cache reuse is blocked',
-                    at: Date.now(),
-                }
-                : null;
-        }
-        const request = lqxScoreCacheRequest(
-            imageRevision,
-            title,
-            idea
-        );
-        if (!request) {
-            lqxScoreCacheClear(cacheId);
-            return {
-                error: 'exact Long Quant score request identity could not be constructed',
-                at: Date.now(),
-            };
-        }
-        if (canonicalLocal) {
-            const localValidation = lqxScoreMatchesCacheRequest(
-                canonicalLocal,
-                request
-            );
-            if (localValidation.valid) {
-                lqxScoreCacheWrite(
-                    cacheId,
-                    request,
-                    canonicalLocal,
-                    key,
-                    localValidation
-                );
-                return canonicalLocal;
-            }
-        }
-        let cached = lqxScoreCacheRead(cacheId, request);
-        const triesKey = `${cacheId}:${request.identity}`;
-        LQSCORETRIES[triesKey] = LQSCORETRIES[triesKey]
-            || { error: 0 };
-        const tries = LQSCORETRIES[triesKey];
-        if (
-            cached
-            && cached.error
-            && key
-            && autoScore
-            && Date.now() - (cached.at || 0) > 5000
-            && tries.error < 3
-        ) {
-            tries.error++;
-            lqxScoreCacheClear(cacheId);
-            lqxScoreKey(cacheId, key, title, idea, request);
-            cached = lqxScoreCacheRead(cacheId, request);
-        } else if (!cached && key && autoScore) {
-            lqxScoreKey(cacheId, key, title, idea, request);
-            cached = lqxScoreCacheRead(cacheId, request);
-        }
-        return cached || null;
+        // Opening a card is read-only. Missing or invalid persisted evidence
+        // stays explicitly unavailable; only the dedicated score controls may
+        // create a new score.
+        return null;
     }
     function lqxEmbHeat(score) {
         const channels = lqxGeometryChannels(score);
@@ -2172,396 +2049,6 @@ const JarvisLongQuant = (function () {
     const LQ_SCORER_SOURCE_SHA256 =
         '02c977a89a1721ef526c3de5fd21892b943495e8c28e6dbfd5407b3f274be297';
     const LQ_LEDGER_STATE_CACHE = new WeakMap();
-    const LQ_SCORE_CACHE_SCHEMA = 'longquant-browser-score-cache-v1';
-    let LQ_SCORE_CACHE_CONTRACT_STATE = null;
-    function lqxCanonicalCacheTextInputs(title, idea) {
-        const endpointText = value => String(
-            value == null ? '' : value
-        ).slice(0, 500).trim();
-        const collapse = value => String(value || '')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .slice(0, 500);
-        const endpointTitle = endpointText(title);
-        const endpointIdea = endpointText(idea || endpointTitle);
-        const normalizedTitle = collapse(
-            endpointTitle || endpointIdea
-        );
-        const normalizedIdea = collapse(
-            endpointIdea || normalizedTitle
-        );
-        return Object.freeze({
-            title: normalizedTitle,
-            idea: normalizedIdea,
-        });
-    }
-    function lqxTextInputRevision(value) {
-        const exact = String(value == null ? '' : value);
-        const bytes = lqxUtf8Bytes(exact);
-        return Object.freeze({
-            present: exact.length > 0,
-            sha256: lqxSha256Bytes(bytes),
-            utf8_byte_length: bytes.length,
-        });
-    }
-    function lqxImageRevisionFromData(imageData) {
-        if (
-            typeof imageData !== 'string'
-            || !/^data:image\//i.test(imageData)
-        ) return null;
-        const comma = imageData.indexOf(',');
-        if (comma < 0) return null;
-        const header = imageData.slice(0, comma);
-        if (!/;base64(?:;|$)/i.test(header)) return null;
-        try {
-            const encoded = imageData.slice(comma + 1)
-                .replace(/\s+/g, '');
-            const decode = (
-                typeof globalThis !== 'undefined'
-                && typeof globalThis.atob === 'function'
-            )
-                ? globalThis.atob.bind(globalThis)
-                : null;
-            if (!decode) return null;
-            const binary = decode(encoded);
-            const bytes = new Uint8Array(binary.length);
-            for (let index = 0; index < binary.length; index++) {
-                bytes[index] = binary.charCodeAt(index) & 255;
-            }
-            if (!bytes.length) return null;
-            return Object.freeze({
-                sha256: lqxSha256Bytes(bytes),
-                byte_length: bytes.length,
-            });
-        } catch (error) {
-            return null;
-        }
-    }
-    function lqxScoreImageRevision(score) {
-        const input = lqxInputState(score);
-        const thumbnail = input.valid
-            && input.query
-            && input.query.thumbnail;
-        if (
-            !thumbnail
-            || thumbnail.present !== true
-            || !lqxExactSha256(thumbnail.sha256)
-            || !Number.isInteger(thumbnail.byte_length)
-            || thumbnail.byte_length <= 0
-        ) return null;
-        return Object.freeze({
-            sha256: thumbnail.sha256,
-            byte_length: thumbnail.byte_length,
-        });
-    }
-    function lqxScoreImageSource(key) {
-        const normalized = String(key || '').replace(/^\/+/, '');
-        let match = normalized.match(
-            /^longform\/guesses\/([^/]+)\/montages\/([^/]+)\.jpg$/i
-        );
-        if (match) {
-            return `/api/longquant/guesses/montage/${
-                encodeURIComponent(match[1])
-            }/${encodeURIComponent(match[2])}`;
-        }
-        match = normalized.match(
-            /^longform\/grind\/montages\/([^/]+)\.jpg$/i
-        );
-        if (match) {
-            return `/api/longquant/grind/img/${
-                encodeURIComponent(match[1])
-            }`;
-        }
-        match = normalized.match(
-            /^longform\/ideas\/([^/]+)\/montages\/([^/]+)\.jpg$/i
-        );
-        if (match) {
-            return `/api/longquant/ideas/montage/${
-                encodeURIComponent(match[1])
-            }/${encodeURIComponent(match[2])}`;
-        }
-        return '';
-    }
-    function lqxScoreCacheContractState() {
-        if (LQ_SCORE_CACHE_CONTRACT_STATE) {
-            return LQ_SCORE_CACHE_CONTRACT_STATE;
-        }
-        const payload = {
-            schema: 'longquant-browser-score-contract-v1',
-            query_input: {
-                generation: LQ_QUERY_INPUT_GENERATION,
-                schema_version: LQ_QUERY_INPUT_SCHEMA_VERSION,
-                normalization:
-                    'server score-key slice-500/trim then scorer whitespace-collapse/trim/slice-500',
-                selected_text_source: 'title',
-            },
-            scorer: {
-                implementation: 'longquant_score.py',
-                source_sha256: LQ_SCORER_SOURCE_SHA256,
-                embedding_model: 'gemini-embedding-2',
-                embedding_dimensions: 1536,
-                display_contract_version: 2,
-            },
-            ledger: {
-                schema: 'long-stored-score-ledger-v1',
-                schema_version: 1,
-                output_contract_version: 3,
-                ledger_version: LQ_LEDGER_VERSION,
-                governance_schema_version:
-                    LQ_GOVERNANCE_SCHEMA_VERSION,
-                governance_sha256: LQ_GOVERNANCE_SHA256,
-                percentile_unit: LQ_PERCENTILE_STORAGE_UNIT,
-                coordinate_ids: [...LQ_OUTPUT_COORDINATES],
-            },
-            visual_release: {
-                artifact_key: LQ_VISUAL_ARTIFACT_KEY,
-                manifest_key: LQ_VISUAL_MANIFEST_KEY,
-                archive_prefix: LQ_VISUAL_ARCHIVE_PREFIX,
-                exact_immutable_lineage_required: true,
-            },
-        };
-        LQ_SCORE_CACHE_CONTRACT_STATE = Object.freeze({
-            payload: Object.freeze(payload),
-            sha256: lqxSha256(lqxCanonicalJson(payload)),
-        });
-        return LQ_SCORE_CACHE_CONTRACT_STATE;
-    }
-    function lqxScoreCacheRequest(imageRevision, title, idea) {
-        if (
-            !imageRevision
-            || !lqxExactSha256(imageRevision.sha256)
-            || !Number.isInteger(imageRevision.byte_length)
-            || imageRevision.byte_length <= 0
-        ) return null;
-        const normalized = lqxCanonicalCacheTextInputs(title, idea);
-        if (!normalized.title) return null;
-        const titleRevision = lqxTextInputRevision(normalized.title);
-        const ideaRevision = lqxTextInputRevision(normalized.idea);
-        const contract = lqxScoreCacheContractState();
-        const payload = {
-            schema: LQ_SCORE_CACHE_SCHEMA,
-            image: {
-                sha256: imageRevision.sha256,
-                byte_length: imageRevision.byte_length,
-            },
-            title: {
-                value: normalized.title,
-                ...titleRevision,
-            },
-            idea: {
-                value: normalized.idea,
-                ...ideaRevision,
-            },
-            scorer_ledger_contract_sha256: contract.sha256,
-        };
-        return Object.freeze({
-            identity: lqxSha256(lqxCanonicalJson(payload)),
-            payload: Object.freeze(payload),
-            normalized,
-            image: payload.image,
-            title: payload.title,
-            idea: payload.idea,
-            contractSha256: contract.sha256,
-        });
-    }
-    function lqxScoreResponseContractIdentity(score) {
-        const manifest = score && score.input_manifest;
-        const ledger = score && score.long_score_ledger;
-        if (
-            !manifest
-            || manifest.scorer !== 'longquant_score.py'
-            || manifest.scorer_sha256 !== LQ_SCORER_SOURCE_SHA256
-            || manifest.embedding_model !== 'gemini-embedding-2'
-            || manifest.embedding_dimensions !== 1536
-            || manifest.display_contract_version !== 2
-            || manifest.coordinate_governance_schema_version
-                !== LQ_GOVERNANCE_SCHEMA_VERSION
-            || manifest.coordinate_governance_sha256
-                !== LQ_GOVERNANCE_SHA256
-            || !ledger
-        ) return null;
-        const revisions = (ledger.entries || []).map(entry => ({
-            coordinate_id: entry && entry.coordinate_id || null,
-            available: entry && entry.available === true,
-            projection: entry && entry.projection || null,
-            artifact_revision: entry
-                && entry.provenance
-                && entry.provenance.artifact_revision
-                || null,
-            scorer: entry
-                && entry.provenance
-                && entry.provenance.scorer
-                || null,
-        }));
-        const payload = {
-            browser_contract_sha256:
-                lqxScoreCacheContractState().sha256,
-            scorer_sha256: manifest.scorer_sha256,
-            visual_ctrviews_artifact_sha256:
-                manifest.visual_ctrviews_artifact_sha256 || null,
-            visual_ctrviews_release_manifest_sha256:
-                manifest.visual_ctrviews_release_manifest_sha256 || null,
-            ledger_sha256: ledger.ledger_sha256,
-            output_contract_version:
-                score.output_contract
-                && score.output_contract.version,
-            revisions,
-        };
-        return lqxSha256(lqxCanonicalJson(payload));
-    }
-    function lqxScoreMatchesCacheRequest(score, request) {
-        const errors = [];
-        if (!request || !request.identity) {
-            errors.push('expected request identity missing');
-        }
-        if (!lqxHasCanonicalLedger(score)) {
-            errors.push('canonical Long ledger invalid');
-        }
-        const input = lqxInputState(score);
-        const query = input && input.query;
-        if (!input.valid || !query) {
-            errors.push('canonical query input invalid');
-        } else if (request) {
-            if (
-                !query.thumbnail
-                || query.thumbnail.present !== true
-                || query.thumbnail.sha256 !== request.image.sha256
-                || query.thumbnail.byte_length
-                    !== request.image.byte_length
-            ) errors.push('image bytes differ');
-            if (
-                lqxCanonicalJson(query.title)
-                    !== lqxCanonicalJson(
-                        lqxTextInputRevision(
-                            request.normalized.title
-                        )
-                    )
-            ) errors.push('normalized title differs');
-            if (
-                lqxCanonicalJson(query.idea)
-                    !== lqxCanonicalJson(
-                        lqxTextInputRevision(
-                            request.normalized.idea
-                        )
-                    )
-            ) errors.push('normalized idea differs');
-            if (
-                lqxCanonicalJson(query.score_text)
-                    !== lqxCanonicalJson(
-                        lqxTextInputRevision(
-                            request.normalized.title
-                        )
-                    )
-                || query.selected_text_source !== 'title'
-            ) errors.push('effective scorer text differs');
-        }
-        const responseContractSha256 =
-            lqxScoreResponseContractIdentity(score);
-        if (!responseContractSha256) {
-            errors.push('scorer/ledger contract differs');
-        }
-        return Object.freeze({
-            valid: errors.length === 0,
-            errors: Object.freeze([...new Set(errors)]),
-            responseContractSha256,
-        });
-    }
-    function lqxScoreCacheClear(cacheId) {
-        delete LQSCORES[cacheId];
-        delete LQSCORECACHEMETA[cacheId];
-    }
-    function lqxScoreCacheWrite(
-        cacheId,
-        request,
-        value,
-        sourceKey,
-        priorValidation
-    ) {
-        if (!cacheId || !request || !request.identity) return null;
-        const completed = value
-            && !value.loading
-            && !value.error;
-        const validation = completed
-            ? priorValidation
-                || lqxScoreMatchesCacheRequest(value, request)
-            : null;
-        if (completed && (!validation || !validation.valid)) {
-            lqxScoreCacheClear(cacheId);
-            return null;
-        }
-        LQSCORES[cacheId] = value;
-        LQSCORECACHEMETA[cacheId] = Object.freeze({
-            schema: LQ_SCORE_CACHE_SCHEMA,
-            sequence: ++LQSCORECACHESEQUENCE,
-            request_identity: request.identity,
-            scorer_ledger_contract_sha256:
-                request.contractSha256,
-            image_sha256: request.image.sha256,
-            image_byte_length: request.image.byte_length,
-            title_sha256: request.title.sha256,
-            idea_sha256: request.idea.sha256,
-            response_contract_sha256:
-                validation
-                && validation.responseContractSha256
-                || null,
-            source_key: String(sourceKey || ''),
-        });
-        return value;
-    }
-    function lqxScoreCacheRequestIsCurrent(
-        cacheId,
-        request,
-        sequence
-    ) {
-        const meta = LQSCORECACHEMETA[cacheId];
-        return !!(
-            meta
-            && request
-            && meta.request_identity === request.identity
-            && meta.scorer_ledger_contract_sha256
-                === request.contractSha256
-            && (
-                sequence == null
-                || meta.sequence === sequence
-            )
-        );
-    }
-    function lqxScoreCacheRead(cacheId, request) {
-        const value = LQSCORES[cacheId];
-        const meta = LQSCORECACHEMETA[cacheId];
-        if (!value && !meta) return null;
-        if (
-            !value
-            || !meta
-            || !request
-            || meta.schema !== LQ_SCORE_CACHE_SCHEMA
-            || meta.request_identity !== request.identity
-            || meta.scorer_ledger_contract_sha256
-                !== request.contractSha256
-            || meta.image_sha256 !== request.image.sha256
-            || meta.image_byte_length !== request.image.byte_length
-            || meta.title_sha256 !== request.title.sha256
-            || meta.idea_sha256 !== request.idea.sha256
-        ) {
-            lqxScoreCacheClear(cacheId);
-            return null;
-        }
-        if (!value.loading && !value.error) {
-            const validation = lqxScoreMatchesCacheRequest(
-                value,
-                request
-            );
-            if (
-                !validation.valid
-                || validation.responseContractSha256
-                    !== meta.response_contract_sha256
-            ) {
-                lqxScoreCacheClear(cacheId);
-                return null;
-            }
-        }
-        return value;
-    }
     const lqxProjName = metric => ({
         ctrviews: 'ctrviews',
         ctr: 'ctr',
@@ -2786,9 +2273,6 @@ const JarvisLongQuant = (function () {
                         || entry.provenance.query_input
                             .fingerprint_sha256
                             !== query.fingerprint_sha256
-                        || lqxCanonicalJson(
-                            entry.provenance.query_input
-                        ) !== lqxCanonicalJson(query)
                     )
                 ) {
                     errors.push(
@@ -2898,11 +2382,16 @@ const JarvisLongQuant = (function () {
                 available: 0,
                 errors: [],
                 inputState: lqxInputState(score),
+                contractValid: false,
+                contractErrors: ['output contract unavailable'],
+                predictorEligible: false,
                 ledgerSha256: null,
             };
         }
         const contract = score && score.output_contract;
         const inputManifest = score && score.input_manifest;
+        const compatibilityValidation =
+            score && score.compatibility_validation;
         const cached = score && typeof score === 'object'
             ? LQ_LEDGER_STATE_CACHE.get(score)
             : null;
@@ -2911,19 +2400,21 @@ const JarvisLongQuant = (function () {
             && cached.ledger === ledger
             && cached.contract === contract
             && cached.inputManifest === inputManifest
+            && cached.compatibilityValidation
+                === compatibilityValidation
         ) {
             return cached.state;
         }
-        const errors = [], entries = Array.isArray(ledger.entries) ? ledger.entries : [];
+        const errors = [];
+        const contractErrors = [];
+        const entries = Array.isArray(ledger.entries)
+            ? ledger.entries
+            : [];
         const inputState = lqxInputState(score);
-        if (!inputState.valid) {
-            inputState.errors.forEach(error => {
-                errors.push(`input ${error}`);
-            });
-        }
         const ids = entries.map(entry => entry && entry.coordinate_id);
         const values = ledger.values_by_id, percentiles = ledger.percentiles_by_id;
         if (ledger.schema !== 'long-stored-score-ledger-v1' || ledger.schema_version !== 1) errors.push('schema');
+        if (Object.prototype.hasOwnProperty.call(ledger, 'migration_provenance')) errors.push('migration provenance');
         if (ledger.percentile_unit !== LQ_PERCENTILE_STORAGE_UNIT) errors.push('percentile unit');
         if (ledger.ledger_version !== LQ_LEDGER_VERSION) errors.push('ledger version');
         if (ledger.governance_schema_version !== LQ_GOVERNANCE_SCHEMA_VERSION || ledger.governance_sha256 !== LQ_GOVERNANCE_SHA256) errors.push('governance');
@@ -2934,19 +2425,6 @@ const JarvisLongQuant = (function () {
         delete hashPayload.ledger_sha256;
         const contentHash = lqxSha256(lqxCanonicalJson(hashPayload));
         if (typeof ledger.ledger_sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(ledger.ledger_sha256) || ledger.ledger_sha256 !== contentHash) errors.push('content hash');
-        if (
-            !contract
-            || contract.version !== 3
-            || contract.ledger_version !== LQ_LEDGER_VERSION
-            || contract.percentile_unit !== LQ_PERCENTILE_STORAGE_UNIT
-            || contract.contract_valid !== true
-            || contract.complete !== true
-            || contract.ledger_sha256 !== ledger.ledger_sha256
-            || !lqxExactArray(contract.channels, LQ_OUTPUT_CHANNELS)
-            || !lqxExactArray(contract.metrics, LQ_OUTPUT_METRICS)
-            || !lqxExactArray(contract.coordinates, LQ_OUTPUT_COORDINATES)
-            || !lqxMetricDefinitionsMatch(contract.metric_definitions)
-        ) errors.push('server contract identity');
         let available = 0;
         const entriesById = new Map();
         LQ_OUTPUT_COORDINATES.forEach((coordinate, index) => {
@@ -2959,10 +2437,6 @@ const JarvisLongQuant = (function () {
             if ((entry.available === true) !== finiteValue) errors.push(`${coordinate} availability`);
             if (entry.available === true) {
                 available++;
-                const input = inputState.channels[parts[2]];
-                if (!input || input.present !== true) {
-                    errors.push(`${coordinate} input unavailable`);
-                }
                 if (!values || Number(values[coordinate]) !== Number(entry.value)) errors.push(`${coordinate} value`);
                 const percentile100 = entry.percentile == null
                     ? null
@@ -2984,7 +2458,10 @@ const JarvisLongQuant = (function () {
             coordinate: entry.coordinate_id,
             reason: entry.unavailable_reason || 'unavailable',
         }));
-        const contractUnavailable = contract && Array.isArray(contract.unavailable) ? contract.unavailable : [];
+        const contractUnavailable = contract
+            && Array.isArray(contract.unavailable)
+            ? contract.unavailable
+            : [];
         const unavailableMatches = contractUnavailable.length === expectedUnavailable.length
             && contractUnavailable.every((item, index) => item
                 && item.coordinate === expectedUnavailable[index].coordinate
@@ -2997,15 +2474,38 @@ const JarvisLongQuant = (function () {
             || !Array.isArray(ledger.producer_errors)
             || ledger.producer_errors.length !== 0
             || ledger.contract_valid !== true
-            || !contract
+        ) errors.push('summary');
+        const expectedChannelInputs = {
+            visual: 'thumbnail image only',
+            text: 'title or idea text only',
+            together: 'thumbnail image plus title or idea',
+        };
+        if (
+            !contract
+            || contract.version !== 3
+            || contract.ledger_version !== LQ_LEDGER_VERSION
+            || contract.percentile_unit !== LQ_PERCENTILE_STORAGE_UNIT
+            || contract.ledger_sha256 !== ledger.ledger_sha256
             || contract.expected !== LQ_OUTPUT_COORDINATES.length
             || contract.available !== available
             || contract.schema_complete !== true
-            || contract.all_values_available !== (available === LQ_OUTPUT_COORDINATES.length)
+            || contract.all_values_available
+                !== (available === LQ_OUTPUT_COORDINATES.length)
+            || contract.contract_valid !== true
+            || contract.complete !== true
+            || !lqxExactArray(contract.channels, LQ_OUTPUT_CHANNELS)
+            || !lqxExactArray(contract.metrics, LQ_OUTPUT_METRICS)
+            || !lqxExactArray(
+                contract.coordinates,
+                LQ_OUTPUT_COORDINATES
+            )
+            || !lqxMetricDefinitionsMatch(contract.metric_definitions)
+            || lqxCanonicalJson(contract.channel_inputs)
+                !== lqxCanonicalJson(expectedChannelInputs)
             || !Array.isArray(contract.producer_errors)
             || contract.producer_errors.length !== 0
             || !unavailableMatches
-        ) errors.push('summary');
+        ) contractErrors.push('output contract identity');
         const state = {
             present: true,
             valid: errors.length === 0,
@@ -3013,9 +2513,25 @@ const JarvisLongQuant = (function () {
             available,
             errors: [...new Set(errors)],
             inputState,
+            contractValid:
+                errors.length === 0
+                && contractErrors.length === 0,
+            contractErrors: [...new Set(contractErrors)],
+            predictorEligible:
+                errors.length === 0
+                && inputState.valid
+                && contractErrors.length === 0
+                && !(
+                    compatibilityValidation
+                    && compatibilityValidation.valid === false
+                ),
             ledgerSha256: ledger.ledger_sha256 || null,
         };
-        if (state.valid && score && typeof score === 'object') {
+        if (
+            state.predictorEligible
+            && score
+            && typeof score === 'object'
+        ) {
             lqxDeepFreeze(ledger);
             lqxDeepFreeze(contract);
             lqxDeepFreeze(inputManifest);
@@ -3023,6 +2539,7 @@ const JarvisLongQuant = (function () {
                 ledger,
                 contract,
                 inputManifest,
+                compatibilityValidation,
                 state,
             });
         }
@@ -3084,7 +2601,6 @@ const JarvisLongQuant = (function () {
             const input = state.inputState
                 && state.inputState.channels
                 && state.inputState.channels[ch];
-            if (!input || input.present !== true) return null;
             const percentile100 = entry.percentile == null
                 ? null
                 : lqxPercentile100(entry.percentile);
@@ -3100,9 +2616,25 @@ const JarvisLongQuant = (function () {
                 percentileUnit: LQ_PERCENTILE_STORAGE_UNIT,
                 ledgerSha256: score.long_score_ledger.ledger_sha256,
                 target: definition.target,
-                modality: input.modality,
-                input: `${input.input}; ${input.identity}`,
-                inputPresent: true,
+                modality: input && input.modality
+                    || (
+                        ch === 'together'
+                            ? 'multimodal'
+                            : ch
+                    ),
+                input: input && input.present === true
+                    ? `${input.input}; ${input.identity}`
+                    : (
+                        'exact persisted scalar; query input identity '
+                        + 'is unavailable or invalid'
+                    ),
+                inputPresent: !!(
+                    state.inputState
+                    && state.inputState.valid
+                    && input
+                    && input.present === true
+                ),
+                predictorEligible: state.predictorEligible,
                 kind: entry.kind || null,
                 projection: entry.projection || null,
                 provenance: entry.provenance || null,
@@ -3123,8 +2655,14 @@ const JarvisLongQuant = (function () {
         return !!(
             score
             && !score.loading
-            && !score.error
             && lqxLedgerState(score).valid
+        );
+    }
+    function lqxScoreDecisionEligible(score) {
+        return !!(
+            score
+            && !score.loading
+            && lqxLedgerState(score).predictorEligible
         );
     }
     function lqxMetricEstimate(metric, m) {
@@ -3137,10 +2675,12 @@ const JarvisLongQuant = (function () {
         return n.toFixed(2);
     }
     function lqxChannelMetricHtml(score, compact, assetId) {
-        if (score && score.error) return `<div style="margin-top:5px;font-size:${compact ? '9px' : '10px'};color:${C.red};border:1px solid ${C.red}44;border-radius:6px;padding:4px 7px">⚠ scoring failed: ${esc(String(score.error).slice(0, 160))}</div>`;
         if (!score) return '';
         const ledgerState = lqxLedgerState(score);
         if (!ledgerState.valid) {
+            if (score.error) {
+                return `<div style="margin-top:5px;font-size:${compact ? '9px' : '10px'};color:${C.red};border:1px solid ${C.red}44;border-radius:6px;padding:4px 7px">scoring failed: ${esc(String(score.error).slice(0, 160))}</div>`;
+            }
             const reason = ledgerState.present
                 ? ledgerState.errors.join(', ')
                 : 'long_score_ledger is missing';
@@ -3154,17 +2694,55 @@ const JarvisLongQuant = (function () {
             }
         }
         const found = lqxStoredOutputCount(score);
-        const expected = score.output_contract && Number(score.output_contract.expected) || 21;
+        const expected = LQ_OUTPUT_COORDINATES.length;
         const unavailableCount = Math.max(0, expected - found);
         const availabilityWarning = unavailableCount
             ? `${found}/${expected} scalar values are materialized; ${unavailableCount} registered addresses remain explicitly unavailable`
             : '';
+        const sidecarWarnings = [];
+        if (score.error) {
+            sidecarWarnings.push(
+                `wrapper warning: ${String(score.error).slice(0, 160)}`
+            );
+        }
+        if (!ledgerState.inputState.valid) {
+            sidecarWarnings.push(
+                'query input binding: '
+                + ledgerState.inputState.errors.join(', ')
+            );
+        }
+        if (!ledgerState.contractValid) {
+            sidecarWarnings.push(
+                'output contract: '
+                + ledgerState.contractErrors.join(', ')
+            );
+        }
+        if (
+            score.compatibility_validation
+            && score.compatibility_validation.valid === false
+        ) {
+            sidecarWarnings.push(
+                'compatibility: '
+                + (
+                    score.compatibility_validation.errors || []
+                ).join(', ')
+            );
+        }
+        const sidecarWarning = sidecarWarnings.length
+            ? (
+                'Exact persisted scalar values are shown, but this record is '
+                + 'display-only and excluded from ranking/saving because '
+                + sidecarWarnings.join(' · ')
+            )
+            : '';
         const row = ch => {
             const inputState = ledgerState.inputState
                 && ledgerState.inputState.channels[ch];
-            const input = inputState && inputState.present
+            const input = ledgerState.inputState.valid
+                && inputState
+                && inputState.present
                 ? `${inputState.input}; ${inputState.identity}`
-                : 'canonical input unavailable';
+                : 'input identity unverified; exact ledger scalar only';
             const cells = LQ_COMPARE_METRICS.map(([metric, label]) => {
                 const m = outputs[ch][metric];
                 const placement = lqxRegisteredMapPlacement(score, ch, metric);
@@ -3177,9 +2755,9 @@ const JarvisLongQuant = (function () {
                 return `<span${lqxEmbeddingAttrs(score, ch, metric, m, origin, assetId)} title="${esc(title)}" style="border:1px solid ${ch === 'visual' ? C.green + '66' : ch === 'text' ? C.purple + '66' : C.accent + '66'};border-radius:6px;padding:${compact ? '2px 5px' : '3px 6px'};background:${C.card};font-size:${compact ? '8px' : '9px'};color:${C.dim}"><b style="color:${C.text}">${esc(label)}</b> ${lqxFormatPercentile100(pct)} scalar${!compact && est ? ` · ${esc(est)} (${esc(m.valueUnit)})` : ''}${compact ? '' : ` · ${esc(m.ledgerSha256.slice(0, 10))}…`}</span>`;
             }).join('');
             const accent = ch === 'visual' ? C.green : ch === 'text' ? C.purple : C.accent;
-            return `<div style="display:grid;grid-template-columns:${compact ? '58px' : '76px'} minmax(0,1fr);gap:${compact ? '5px' : '7px'};align-items:start;margin-top:${compact ? '4px' : '6px'}"><div><div style="font-size:${compact ? '8px' : '9px'};color:${accent};font-weight:900;text-transform:uppercase">${ch}</div><div title="${esc(input)}" style="font-size:${compact ? '7px' : '8px'};color:${C.faint};line-height:1.25;overflow-wrap:anywhere">${esc(compact ? (inputState && inputState.input || 'unverified input') : input)}</div></div><div style="display:flex;gap:${compact ? '3px' : '4px'};flex-wrap:wrap">${cells}</div></div>`;
+            return `<div style="display:grid;grid-template-columns:${compact ? '58px' : '76px'} minmax(0,1fr);gap:${compact ? '5px' : '7px'};align-items:start;margin-top:${compact ? '4px' : '6px'}"><div><div style="font-size:${compact ? '8px' : '9px'};color:${accent};font-weight:900;text-transform:uppercase">${ch}</div><div title="${esc(input)}" style="font-size:${compact ? '7px' : '8px'};color:${C.faint};line-height:1.25;overflow-wrap:anywhere">${esc(compact ? (ledgerState.inputState.valid && inputState && inputState.input || 'unverified input') : input)}</div></div><div style="display:flex;gap:${compact ? '3px' : '4px'};flex-wrap:wrap">${cells}</div></div>`;
         };
-        return `<div style="margin-top:${compact ? '6px' : '8px'};border-top:1px solid ${C.border};padding-top:${compact ? '5px' : '7px'}"><div style="display:flex;justify-content:space-between;gap:6px;font-size:${compact ? '8px' : '9px'};font-weight:900;text-transform:uppercase"><span style="color:${C.mute}">canonical Long ledger · <code>${esc(ledgerState.ledgerSha256.slice(0, 12))}…</code></span><span style="color:${lqxHasCanonicalLedger(score) ? C.green : C.red}">${found}/${expected} scalar values · ${lqxHasCanonicalLedger(score) ? '21 addresses verified' : 'ledger invalid'}</span></div>${availabilityWarning ? `<div style="font-size:8.5px;color:${C.amber};margin-top:3px">⚠ ${esc(availabilityWarning)}</div>` : ''}${LQ_OUTPUT_CHANNELS.map(row).join('')}</div>`;
+        return `<div style="margin-top:${compact ? '6px' : '8px'};border-top:1px solid ${C.border};padding-top:${compact ? '5px' : '7px'}"><div style="display:flex;justify-content:space-between;gap:6px;font-size:${compact ? '8px' : '9px'};font-weight:900;text-transform:uppercase"><span style="color:${C.mute}">canonical Long ledger · <code>${esc(ledgerState.ledgerSha256.slice(0, 12))}…</code></span><span style="color:${lqxHasCanonicalLedger(score) ? C.green : C.red}">${found}/${expected} scalar values · ${lqxHasCanonicalLedger(score) ? 'ledger structurally verified' : 'ledger invalid'}</span></div>${availabilityWarning ? `<div style="font-size:8.5px;color:${C.amber};margin-top:3px">⚠ ${esc(availabilityWarning)}</div>` : ''}${sidecarWarning ? `<div style="font-size:8.5px;color:${C.amber};margin-top:3px">⚠ ${esc(sidecarWarning)}</div>` : `<div style="font-size:8.5px;color:${C.green};margin-top:3px">Input binding and output contract verified · predictor-eligible</div>`}${LQ_OUTPUT_CHANNELS.map(row).join('')}</div>`;
     }
     function lqxMetricGraph(score, metric, label, ch, cacheId) {
         if (!lqxHasCanonicalLedger(score)) return '';
@@ -3219,6 +2797,7 @@ const JarvisLongQuant = (function () {
     }
     function lqxGraphGrid(score, cacheId) {
         if (!lqxHasCanonicalLedger(score)) return '';
+        const ledgerState = lqxLedgerState(score);
         const presentChannels = LQ_OUTPUT_CHANNELS.filter(
             ch => LQ_COMPARE_METRICS.some(
                 ([metric]) => lqxRegisteredCoordinate(score, ch, metric)
@@ -3232,14 +2811,35 @@ const JarvisLongQuant = (function () {
         const sig = presentChannels.map(ch => {
             const src = lqxGeometryChannel(score, ch);
             const nn = (src.neighbors || [])[0] || {};
-            return `${ch}:${LQ_COMPARE_METRICS.map(([k]) => {
+            const geometryRevision = lqxSha256(lqxCanonicalJson({
+                embedding_preview: src.embedding_preview || null,
+                map_placements: src.map_placements || null,
+                release: src.release || null,
+                provenance: src.provenance || null,
+                first_neighbor: {
+                    id: nn.id || null,
+                    sim: nn.sim == null ? null : nn.sim,
+                },
+            }));
+            return `${ch}:${geometryRevision}:${LQ_COMPARE_METRICS.map(([k]) => {
                 const coordinate = lqxRegisteredCoordinate(score, ch, k);
                 return coordinate && coordinate.percentile100 != null
                     ? coordinate.percentile100
                     : '';
             }).join(',')}:${nn.id || ''}:${nn.sim || ''}`;
         }).join('|');
-        const graphKey = `${cacheId || 'inline'}|${sig}|${ready ? 'ready' : 'loading'}`;
+        const inputFingerprint = ledgerState.inputState
+            && ledgerState.inputState.query
+            && ledgerState.inputState.query.fingerprint_sha256 || '';
+        const graphKey = [
+            cacheId || 'inline',
+            ledgerState.ledgerSha256 || '',
+            inputFingerprint,
+            score.output_contract
+                && score.output_contract.ledger_sha256 || '',
+            sig,
+            ready ? 'ready' : 'loading',
+        ].join('|');
         if (ready && LQGRAPHHTML[graphKey]) return LQGRAPHHTML[graphKey];
         const section = ch => {
             const example = LQ_COMPARE_METRICS.map(
@@ -3298,10 +2898,12 @@ const JarvisLongQuant = (function () {
     }
     function lqxFormatPercentile100(v) {
         const percentile100 = lqxPercentile100(v);
-        return percentile100 == null ? '—' : `${percentile100.toFixed(1)}th`;
+        return percentile100 == null
+            ? 'Not scored'
+            : `${percentile100.toFixed(1)}th`;
     }
     function lqxPrimaryMetric(score) {
-        if (!score || score.loading || score.error) return null;
+        if (!score || score.loading) return null;
         return lqxRegisteredCoordinate(score, 'visual', 'ctrviews');
     }
     function lqxPrimaryPct100(score) {
@@ -3311,13 +2913,18 @@ const JarvisLongQuant = (function () {
     function lqxPrimaryPct01(score) {
         return lqxPercentileFractionFrom100(lqxPrimaryPct100(score));
     }
+    function lqxDecisionPct100(score) {
+        return lqxScoreDecisionEligible(score)
+            ? lqxPrimaryPct100(score)
+            : null;
+    }
     function lqxPrimaryAttrs(score, assetId) {
         const metric = lqxPrimaryMetric(score);
         return metric ? lqxEmbeddingAttrs(score, 'visual', 'ctrviews', metric, 'canonical-scalar-output', assetId) : '';
     }
     function lqxCanonicalThumbDecision(thumb, attemptIndex, thumbIndex) {
         const score = thumb && thumb.score;
-        const percentile100 = lqxPrimaryPct100(score);
+        const percentile100 = lqxDecisionPct100(score);
         const evidenceExpected = !!(
             score
             || (thumb && thumb.image)
@@ -3543,7 +3150,9 @@ const JarvisLongQuant = (function () {
         const p = primary;
         const col = p == null ? C.dim : p >= 0.8 ? C.green : p >= 0.7 ? C.amber : C.red;
         if (score && score.loading) return `<div style="font-size:11px;color:${C.cyan};padding:12px">embedding and scoring this thumbnail…</div>`;
-        if (score && score.error) return `<div style="font-size:11px;color:${C.red};padding:12px">${esc(score.error)}</div>`;
+        if (score && score.error && !lqxHasCanonicalLedger(score)) {
+            return `<div style="font-size:11px;color:${C.red};padding:12px">${esc(score.error)}</div>`;
+        }
         const rawBtn = lqxRawButton(score, cacheId, o.title || (score && score.title) || '', imgSrc || o.img || '');
         const traceTitle = Object.keys(
             lqxGeometryChannels(score)
@@ -3802,7 +3411,7 @@ const JarvisLongQuant = (function () {
                     fk,
                     score,
                     canonicalScore,
-                    percentile100: lqxPrimaryPct100(canonicalScore),
+                    percentile100: lqxDecisionPct100(canonicalScore),
                 };
             }).sort((left, right) => {
                 const leftRank = left.percentile100;
@@ -3819,8 +3428,16 @@ const JarvisLongQuant = (function () {
                   const a = row.attempt, fk = row.fk;
                   const shownPct100 = row.percentile100;
                   const shownPct01 = shownPct100 == null ? null : shownPct100 / 100;
-                  const verified = !!row.canonicalScore;
-                  return `<div data-lqxopen="gen:${fk}" style="cursor:pointer;border:1px solid ${shownPct01 != null && shownPct01 >= 0.8 ? C.green : verified ? C.border : C.red};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/guesses/montage/demo/${fk}`, `genimg:${fk}`, `width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}`)}<div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;align-items:center;font-size:10px"><span${verified ? lqxPrimaryAttrs(row.canonicalScore, 'gen:' + fk) : ''} title="${verified ? esc(`${LQ_VISUAL_THRESHOLD_COORDINATE} · ${LQ_PERCENTILE_STORAGE_UNIT} · image-only thumbnail potential`) : 'canonical Long score ledger missing or invalid'}" style="font-weight:800;color:${shownPct01 != null && shownPct01 >= 0.8 ? C.green : shownPct01 != null && shownPct01 >= 0.7 ? C.amber : verified ? C.text : C.red}">${verified ? lqxFormatPercentile100(shownPct100) + ' thumbnail' : 'unverified · non-rankable'}</span>${verified ? `<span data-lqxsave="${a.k}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === fk ? C.green : C.accent};color:${st.lqxSaveFlash === fk ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-weight:700">${st.lqxSaveFlash === fk ? '✅ Saved' : '💾 Save'}</span>` : ''}</div>${a.status === 'error' || a.error ? `<div style="font-size:9px;color:${C.red};margin-top:4px;border:1px solid ${C.red}44;border-radius:5px;padding:3px 6px">⚠ ${esc(String(a.error || 'render failed').slice(0, 160))}</div>` : ''}${lqxChannelMetricHtml(row.score || a.score, true, 'gen:' + fk)}${row.score && row.score.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">building the canonical Long ledger…</div>` : ''}<div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:40px;overflow:hidden">${esc((a.prompt || '').slice(0, 130))}</div>${lqxRawButton(row.canonicalScore, 'gen:' + fk, R.title || st.lqxTitle || '', `/api/longquant/guesses/montage/demo/${fk}`)}</div></div>`;
+                  const hasExactScore = !!row.canonicalScore;
+                  const decisionEligible = shownPct100 != null;
+                  const exactPct100 = lqxPrimaryPct100(row.canonicalScore);
+                  const exactPct01 = exactPct100 == null ? null : exactPct100 / 100;
+                  const label = decisionEligible
+                      ? `${lqxFormatPercentile100(shownPct100)} thumbnail`
+                      : exactPct100 != null
+                          ? `${lqxFormatPercentile100(exactPct100)} · display-only`
+                          : 'unverified · non-rankable';
+                  return `<div data-lqxopen="gen:${fk}" style="cursor:pointer;border:1px solid ${shownPct01 != null && shownPct01 >= 0.8 ? C.green : decisionEligible ? C.border : hasExactScore ? C.amber : C.red};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/guesses/montage/demo/${fk}`, `genimg:${fk}`, `width:100%;aspect-ratio:16/9;object-fit:cover;background:${C.card}`)}<div style="padding:6px 8px"><div style="display:flex;justify-content:space-between;align-items:center;font-size:10px"><span${hasExactScore ? lqxPrimaryAttrs(row.canonicalScore, 'gen:' + fk) : ''} title="${decisionEligible ? esc(`${LQ_VISUAL_THRESHOLD_COORDINATE} · ${LQ_PERCENTILE_STORAGE_UNIT} · image-only thumbnail potential`) : exactPct100 != null ? 'exact persisted scalar; input or output sidecar binding is invalid, so this record cannot rank or save' : 'canonical Long score ledger missing or invalid'}" style="font-weight:800;color:${shownPct01 != null && shownPct01 >= 0.8 ? C.green : shownPct01 != null && shownPct01 >= 0.7 ? C.amber : decisionEligible ? C.text : exactPct01 != null ? C.amber : C.red}">${label}</span>${decisionEligible ? `<span data-lqxsave="${a.k}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === fk ? C.green : C.accent};color:${st.lqxSaveFlash === fk ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-weight:700">${st.lqxSaveFlash === fk ? '✅ Saved' : '💾 Save'}</span>` : ''}</div>${a.status === 'error' || a.error ? `<div style="font-size:9px;color:${C.red};margin-top:4px;border:1px solid ${C.red}44;border-radius:5px;padding:3px 6px">⚠ ${esc(String(a.error || 'render failed').slice(0, 160))}</div>` : ''}${lqxChannelMetricHtml(row.score || a.score, true, 'gen:' + fk)}${row.score && row.score.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">building the canonical Long ledger…</div>` : ''}<div style="font-size:9px;color:${C.mute};margin-top:3px;line-height:1.4;max-height:40px;overflow:hidden">${esc((a.prompt || '').slice(0, 130))}</div>${lqxRawButton(row.canonicalScore, 'gen:' + fk, R.title || st.lqxTitle || '', `/api/longquant/guesses/montage/demo/${fk}`)}</div></div>`;
               }).join('')}</div>`;
             if (st.lqxOpen && String(st.lqxOpen).indexOf('gen:') === 0) {
                 const fk = st.lqxOpen.slice(4), a = R.attempts.find(x => fk === rid + '_' + x.k), mk = `longform/guesses/demo/montages/${fk}.jpg`;
@@ -3838,7 +3455,7 @@ const JarvisLongQuant = (function () {
                             R.title || st.lqxTitle || '',
                             R.title || st.lqxTitle || '',
                             a.score,
-                            true,
+                            false,
                             imageSource
                         ),
                     }));
@@ -3854,7 +3471,12 @@ const JarvisLongQuant = (function () {
           ${st.lqxScoreLoading ? `<div style="font-size:10px;color:${C.cyan};margin-top:7px">Reading and preparing the selected image…</div>` : ''}
           ${st.lqxScoreLoadError ? `<div style="font-size:10px;color:${C.red};margin-top:7px">${esc(st.lqxScoreLoadError)}</div>` : ''}
           ${st.lqxScoreImg && st.lqxScoreLoadMeta ? `<div style="font-size:10px;color:${C.green};margin-top:7px">${esc(st.lqxScoreFileName || 'thumbnail')} · ${esc(st.lqxScoreLoadMeta)} · ready to score</div>` : ''}`;
-        if (st.lqxScoreImg) sc += st.lqxScore ? (st.lqxScore.error ? `<div style="font-size:11px;color:${C.red};max-width:340px;margin-top:9px">${esc(String(st.lqxScore.error).slice(0, 220))}</div>` : `${lqxHasCanonicalLedger(st.lqxScore) ? `<div style="text-align:right;margin-top:8px"><span data-lqxsaveupload style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:800">${st.lqxSaveFlash === 'upload' ? 'saved' : 'save this scored thumbnail'}</span></div>` : `<div style="font-size:10px;color:${C.red};margin-top:8px;text-align:right">unverified · non-rankable · saving disabled</div>`}${lqxFullReadout({ cacheId: 'upload:' + lqxHash(st.lqxScoreImg), title: st.lqxScoreTitle || '', img: st.lqxScoreImg, score: st.lqxScore })}`) : `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;align-items:flex-start"><img src="${st.lqxScoreImg}" style="width:260px;max-width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;border:1px solid ${C.border}"/><div style="font-size:10px;color:${C.mute}">image loaded — hit Score</div></div>`;
+        if (st.lqxScoreImg) sc += st.lqxScore ? (
+            st.lqxScore.error
+            && !lqxHasCanonicalLedger(st.lqxScore)
+                ? `<div style="font-size:11px;color:${C.red};max-width:340px;margin-top:9px">${esc(String(st.lqxScore.error).slice(0, 220))}</div>`
+                : `${lqxScoreDecisionEligible(st.lqxScore) ? `<div style="text-align:right;margin-top:8px"><span data-lqxsaveupload style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 10px;font-size:10px;font-weight:800">${st.lqxSaveFlash === 'upload' ? 'saved' : 'save this scored thumbnail'}</span></div>` : `<div style="font-size:10px;color:${C.amber};margin-top:8px;text-align:right">stored scalars can be inspected · ranking/saving disabled until input and output-contract binding validate</div>`}${lqxFullReadout({ cacheId: 'upload:' + lqxHash(st.lqxScoreImg), title: st.lqxScoreTitle || '', img: st.lqxScoreImg, score: st.lqxScore })}`
+        ) : `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;align-items:flex-start"><img src="${st.lqxScoreImg}" style="width:260px;max-width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;border:1px solid ${C.border}"/><div style="font-size:10px;color:${C.mute}">image loaded — hit Score</div></div>`;
         // GRIND card
         const gr = st.lqxGrindRun || {};
         const grAttempts = Array.isArray(gr.attempts) ? gr.attempts : [];
@@ -3886,12 +3508,18 @@ const JarvisLongQuant = (function () {
                 const cid = t.image || `${a.k}_${t.i}`, key = t.image ? `longform/grind/montages/${t.image}.jpg` : '', sc2 = t.image ? lqxScoreFor('grind:' + cid, key, a.idea || gr.idea || '', a.idea || gr.idea || '', t.score, false) : (t.score || t);
                 const displayScore = sc2 && !sc2.loading && !sc2.error ? sc2 : t.score;
                 const shownPct100 = lqxPrimaryPct100(displayScore);
+                const decisionPct100 = lqxDecisionPct100(displayScore);
                 const thumbWon = !!(
                     grindThreshold100 != null
-                    && shownPct100 != null
-                    && shownPct100 >= grindThreshold100
+                    && decisionPct100 != null
+                    && decisionPct100 >= grindThreshold100
                 );
-                return `<div data-lqxopen="grind:${cid}" style="cursor:${t.image ? 'pointer' : 'default'};border:1px solid ${thumbWon ? C.green : shownPct100 == null && t.image ? C.red : C.border};border-radius:7px;overflow:hidden;background:${C.card}">${t.image ? lqxImg(`/api/longquant/grind/img/${t.image}`, `grindimg:${t.image}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000') : `<div style="aspect-ratio:16/9;background:${C.card};display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px">${esc(t.status || 'queued')}</div>`}<div style="padding:5px 6px"><div style="display:flex;justify-content:space-between;gap:4px;align-items:center"><div${lqxPrimaryAttrs(displayScore, 'grind:' + cid)} title="${shownPct100 == null ? 'canonical Long score ledger missing or invalid' : esc(`${LQ_VISUAL_THRESHOLD_COORDINATE} · ${LQ_PERCENTILE_STORAGE_UNIT} · image-only thumbnail potential`)}" style="font-size:10px;font-weight:800;color:${thumbWon ? C.green : shownPct100 == null ? C.red : C.text}">${shownPct100 == null ? 'unverified · non-rankable' : lqxFormatPercentile100(shownPct100)}</div>${t.image && shownPct100 != null ? `<span data-lqxgrindsave="${cid}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:4px;padding:1px 5px;font-size:8px;font-weight:800">save</span>` : ''}</div>${lqxChannelMetricHtml(sc2 || t.score, true, 'grind:' + cid)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">building the canonical Long ledger…</div>` : ''}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:34px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 110))}</div>${t.image ? lqxRawButton(lqxHasCanonicalLedger(displayScore) ? displayScore : null, 'grind:' + cid, a.idea || gr.idea || '', `/api/longquant/grind/img/${t.image}`) : ''}${t.error ? `<div style="font-size:9px;color:${C.red};margin-top:3px">${esc(t.error)}</div>` : ''}</div></div>`;
+                const displayLabel = decisionPct100 != null
+                    ? lqxFormatPercentile100(decisionPct100)
+                    : shownPct100 != null
+                        ? `${lqxFormatPercentile100(shownPct100)} · display-only`
+                        : 'unverified · non-rankable';
+                return `<div data-lqxopen="grind:${cid}" style="cursor:${t.image ? 'pointer' : 'default'};border:1px solid ${thumbWon ? C.green : decisionPct100 == null && shownPct100 != null ? C.amber : shownPct100 == null && t.image ? C.red : C.border};border-radius:7px;overflow:hidden;background:${C.card}">${t.image ? lqxImg(`/api/longquant/grind/img/${t.image}`, `grindimg:${t.image}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000') : `<div style="aspect-ratio:16/9;background:${C.card};display:flex;align-items:center;justify-content:center;color:${C.mute};font-size:10px">${esc(t.status || 'queued')}</div>`}<div style="padding:5px 6px"><div style="display:flex;justify-content:space-between;gap:4px;align-items:center"><div${lqxPrimaryAttrs(displayScore, 'grind:' + cid)} title="${decisionPct100 != null ? esc(`${LQ_VISUAL_THRESHOLD_COORDINATE} · ${LQ_PERCENTILE_STORAGE_UNIT} · image-only thumbnail potential`) : shownPct100 != null ? 'exact persisted scalar; input or output sidecar binding is invalid, so this record cannot rank or save' : 'canonical Long score ledger missing or invalid'}" style="font-size:10px;font-weight:800;color:${thumbWon ? C.green : decisionPct100 == null && shownPct100 != null ? C.amber : shownPct100 == null ? C.red : C.text}">${displayLabel}</div>${t.image && decisionPct100 != null ? `<span data-lqxgrindsave="${cid}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:4px;padding:1px 5px;font-size:8px;font-weight:800">save</span>` : ''}</div>${lqxChannelMetricHtml(sc2 || t.score, true, 'grind:' + cid)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">building the canonical Long ledger…</div>` : ''}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:34px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 110))}</div>${t.image ? lqxRawButton(lqxHasCanonicalLedger(displayScore) ? displayScore : null, 'grind:' + cid, a.idea || gr.idea || '', `/api/longquant/grind/img/${t.image}`) : ''}${t.error ? `<div style="font-size:9px;color:${C.red};margin-top:3px">${esc(t.error)}</div>` : ''}</div></div>`;
                 }).join('')}</div>${a.error ? `<div style="font-size:10px;color:${C.red};margin-top:5px">${esc(a.error)}</div>` : ''}</div>`;
             }).join('');
             if (st.lqxOpen && String(st.lqxOpen).indexOf('grind:') === 0) {
@@ -3912,7 +3540,7 @@ const JarvisLongQuant = (function () {
                             idea,
                             idea,
                             hit.score,
-                            true,
+                            false,
                             imageSource
                         ),
                     }));
@@ -4164,10 +3792,13 @@ const JarvisLongQuant = (function () {
             const progress = grindProgressText(r);
             const stopBtn = grindCtlBtns(evidence);
             const thumbRow = thumbs.length ? `<div style="display:flex;gap:6px;overflow:auto;margin-top:7px;padding-bottom:2px">${thumbs.map(t => {
-                const canonicalPct100 = lqxPrimaryPct100(t && t.score);
-                const label = canonicalPct100 == null
+                const exactPct100 = lqxPrimaryPct100(t && t.score);
+                const decisionPct100 = lqxDecisionPct100(t && t.score);
+                const label = exactPct100 == null
                     ? (t.status === 'done' || t.image ? 'unverified score' : (t.status || 'working'))
-                    : lqxFormatPercentile100(canonicalPct100);
+                    : decisionPct100 == null
+                        ? `${lqxFormatPercentile100(exactPct100)} · display-only`
+                        : lqxFormatPercentile100(decisionPct100);
                 return `<div style="flex:0 0 112px;border:1px solid ${t.status === 'error' ? C.red : t.image ? C.border : C.border2};border-radius:6px;overflow:hidden;background:${C.card}">${t.image ? lqxImg(`/api/longquant/grind/img/${t.image}`, `livegrind:${t.image}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000') : `<div style="height:63px;display:flex;align-items:center;justify-content:center;color:${t.status === 'error' ? C.red : C.dim};font-size:9px;text-align:center;padding:5px;box-sizing:border-box">${esc(t.status || 'queued')}</div>`}<div style="font-size:9px;color:${t.status === 'error' ? C.red : C.mute};padding:3px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(label)}</div></div>`;
             }).join('')}</div>` : `<div style="font-size:9px;color:${C.dim};margin-top:6px">${grindExecState(evidence) === 'running' ? 'waiting for the next thumbnail update' : grindExecState(evidence) === 'queued' ? 'never started - waiting for its first worker' : grindExecState(evidence) === 'recovering' ? 'started earlier - resume ticket is ahead of fresh queue work' : grindExecState(evidence) === 'verifying' ? 'loading canonical score evidence before declaring a winner' : 'no live thumbnail work'}</div>`;
             return `<div style="border:1px solid ${col};background:${col}10;border-radius:8px;padding:8px;min-width:260px;flex:1 1 300px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="min-width:0"><div style="font-size:11px;font-weight:900;color:${C.text};line-height:1.3;max-height:34px;overflow:hidden">${esc(title.slice(0, 120))}</div><div style="font-size:9px;color:${col};margin-top:3px;font-weight:900">${esc(shownStatus)}</div><div style="font-size:9px;color:${C.mute};margin-top:2px">${progress} · updated ${ageTxt(r.lastWriteAgeSec)}</div></div><div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end">${stopBtn}<span data-lqxchannelrun="${esc(r.rid || '')}" style="cursor:pointer;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:2px 7px;font-size:9px;font-weight:800;white-space:nowrap">view</span></div></div>${r.note ? `<div style="font-size:9px;color:${C.faint};line-height:1.35;margin-top:5px"><span style="text-transform:uppercase">worker note · </span>${esc(String(r.note).slice(0, 170))}</div>` : ''}${thumbRow}</div>`;
@@ -4197,7 +3828,7 @@ const JarvisLongQuant = (function () {
           ].map(([k, lab, cnt, col]) => chip(k, lab, cnt, col)).join('')}</div>
         </div>${st.lqxChannelStopStatus ? `<div style="font-size:10px;color:${String(st.lqxChannelStopStatus).indexOf('fail') >= 0 ? C.red : C.amber};margin-top:8px">${esc(st.lqxChannelStopStatus)}</div>` : ''}${grLive.orphanedRunning ? `<div style="font-size:10px;color:${C.amber};margin-top:8px">${grLive.orphanedRunning} interrupted run${grLive.orphanedRunning === 1 ? ' is' : 's are'} waiting to resume ahead of untouched queue work.</div>` : ''}${grLive.staleRunning ? `<div style="font-size:10px;color:${C.red};margin-top:8px">${grLive.staleRunning} attached worker${grLive.staleRunning === 1 ? '' : 's'} stopped writing recently and will be resumed.</div>` : ''}${lane(`Running now (${runningNow.length})`, runningNow, 'No attached worker is generating thumbnails right now.')}${recoveringNow.length ? lane(`Resuming interrupted runs (${recoveringNow.length})`, recoveringNow, 'No interrupted runs are waiting.', 6) : ''}${lane(`Never-started queue (${queuedNext.length})`, queuedNext, 'Nothing untouched is waiting for its first worker.', 6)}`, 12) : '';
         const channelHistoryHtml = channelRuns.length ? (() => {
-            const thumbPct = t => lqxPrimaryPct100(t && t.score);
+            const thumbPct = t => lqxDecisionPct100(t && t.score);
             const pctCol = p => p == null ? C.dim : p >= 90 ? C.green : p >= 75 ? C.amber : C.text;
             const filteredChannelRuns = channelRuns.filter(r => channelRunMatches(r, channelFilter));
             const livePick = liveActive.find(r => r && filteredChannelRuns.find(c => c.rid === r.rid));
@@ -4244,24 +3875,37 @@ const JarvisLongQuant = (function () {
                 thumbs.sort((x, y) => (thumbPct(y.t) == null ? -1 : thumbPct(y.t)) - (thumbPct(x.t) == null ? -1 : thumbPct(x.t)));
                 const bestPct = thumbs.length ? thumbPct(thumbs[0].t) : null;
                 const baseline = det.baseline || null;
-                const baselineScore = baseline && baseline.score && !baseline.score.error ? baseline.score : null;
+                const baselineScore = baseline && lqxHasCanonicalLedger(baseline.score)
+                    ? baseline.score
+                    : null;
                 const baselineDisplayScore = baselineScore;
                 const baselineShownPct = lqxPrimaryPct100(baselineDisplayScore);
-                const baselineHtml = baseline && baseline.image ? `<div style="border:1px solid ${C.border};border-radius:8px;background:${C.card2};overflow:hidden;width:220px;flex:0 0 220px">${lqxImg(`/api/longquant/grind/original/${selRid}`, `grindorig:${selRid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:7px 8px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;font-weight:800">current thumbnail baseline</div><div${lqxPrimaryAttrs(baselineDisplayScore, 'grind-original:' + selRid)} title="Visual CTR+views · exact image-only thumbnail potential" style="font-size:13px;font-weight:900;color:${pctCol(baselineShownPct)};margin-top:2px">${baselineShownPct == null ? 'unverified score' : lqxFormatPercentile100(baselineShownPct) + ' thumbnail-only'}</div>${lqxChannelMetricHtml(baselineDisplayScore, true, 'grind-original:' + selRid)}${baselineScore ? lqxRawButton(baselineScore, 'grind-original:' + selRid, runTitle, `/api/longquant/grind/original/${selRid}`) : ''}${baseline.error ? `<div style="font-size:9px;color:${C.red};margin-top:4px">${esc(baseline.error)}</div>` : ''}</div></div>` : '';
+                const baselineDecisionPct = lqxDecisionPct100(
+                    baselineDisplayScore
+                );
+                const baselineHtml = baseline && baseline.image ? `<div style="border:1px solid ${baselineShownPct != null && baselineDecisionPct == null ? C.amber : C.border};border-radius:8px;background:${C.card2};overflow:hidden;width:220px;flex:0 0 220px">${lqxImg(`/api/longquant/grind/original/${selRid}`, `grindorig:${selRid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:7px 8px"><div style="font-size:9px;color:${C.mute};text-transform:uppercase;font-weight:800">current thumbnail baseline</div><div${lqxPrimaryAttrs(baselineDisplayScore, 'grind-original:' + selRid)} title="${baselineDecisionPct == null && baselineShownPct != null ? 'exact persisted scalar; input or output sidecar binding is invalid, so this baseline cannot enter decisions' : 'Visual CTR+views · exact image-only thumbnail potential'}" style="font-size:13px;font-weight:900;color:${baselineDecisionPct == null && baselineShownPct != null ? C.amber : pctCol(baselineShownPct)};margin-top:2px">${baselineShownPct == null ? 'unverified score' : lqxFormatPercentile100(baselineShownPct) + (baselineDecisionPct == null ? ' · display-only' : ' thumbnail-only')}</div>${lqxChannelMetricHtml(baselineDisplayScore, true, 'grind-original:' + selRid)}${baselineScore ? lqxRawButton(baselineScore, 'grind-original:' + selRid, runTitle, `/api/longquant/grind/original/${selRid}`) : ''}${baseline.error ? `<div style="font-size:9px;color:${C.red};margin-top:4px">${esc(baseline.error)}</div>` : ''}</div></div>` : '';
                 const thumbGrid = thumbs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px">${thumbs.map((h, idx) => {
                     const t = h.t, a = h.a, cid = t.image, idea = h.idea || runTitle;
                     const key = `longform/grind/montages/${cid}.jpg`;
                     const score = lqxScoreFor('grind:' + cid, key, idea, idea, t.score, false);
-                    const displayScore = score && !score.loading && !score.error ? score : t.score;
+                    const displayScore = lqxHasCanonicalLedger(score)
+                        ? score
+                        : t.score;
                     const shownPct = lqxPrimaryPct100(displayScore);
+                    const decisionPct = lqxDecisionPct100(displayScore);
                     const att = a.k != null ? Number(a.k) + 1 : '';
                     const threshold100 = lqxPercentile100(det.threshold);
                     const hitThreshold = !!(
-                        shownPct != null
+                        decisionPct != null
                         && threshold100 != null
-                        && shownPct >= threshold100
+                        && decisionPct >= threshold100
                     );
-                    return `<div data-lqxopen="history:${esc(cid)}" style="cursor:pointer;border:1px solid ${hitThreshold ? C.green : shownPct == null ? C.red : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/grind/img/${cid}`, `grindhist:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:7px 8px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div${lqxPrimaryAttrs(displayScore, 'grind:' + cid)} title="${shownPct == null ? 'canonical Long score ledger missing or invalid' : esc(`${LQ_VISUAL_THRESHOLD_COORDINATE} · ${LQ_PERCENTILE_STORAGE_UNIT} · image-only thumbnail potential`)}" style="font-size:10px;font-weight:900;color:${shownPct == null ? C.red : pctCol(shownPct)}">#${idx + 1} · ${shownPct == null ? 'unverified · non-rankable' : lqxFormatPercentile100(shownPct) + ' thumbnail'}</div>${shownPct == null ? '' : `<span data-lqxhistSave="${esc(cid)}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === cid ? C.green : C.accent};color:${st.lqxSaveFlash === cid ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-size:9px;font-weight:800">${st.lqxSaveFlash === cid ? 'saved' : 'save'}</span>`}</div><div style="font-size:9px;color:${C.mute};margin-top:3px">attempt ${att || '—'}${a.distSeed == null ? '' : ' · seed dist ' + a.distSeed}${a.topic == null ? '' : ' · topical ' + a.topic}</div>${lqxChannelMetricHtml(score || t.score, true, 'grind:' + cid)}${score && score.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">building visual, text, and together ledger entries…</div>` : ''}<div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.3;max-height:38px;overflow:hidden;margin-top:5px">${esc((idea || '').slice(0, 120))}</div><div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:42px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 150))}</div>${lqxRawButton(lqxHasCanonicalLedger(displayScore) ? displayScore : null, 'grind:' + cid, idea, `/api/longquant/grind/img/${cid}`)}${t.error ? `<div style="font-size:9px;color:${C.red};margin-top:3px">${esc(t.error)}</div>` : ''}</div></div>`;
+                    const scoreLabel = decisionPct != null
+                        ? `${lqxFormatPercentile100(decisionPct)} thumbnail`
+                        : shownPct != null
+                            ? `${lqxFormatPercentile100(shownPct)} · display-only`
+                            : 'unverified · non-rankable';
+                    return `<div data-lqxopen="history:${esc(cid)}" style="cursor:pointer;border:1px solid ${hitThreshold ? C.green : decisionPct == null && shownPct != null ? C.amber : shownPct == null ? C.red : C.border};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/grind/img/${cid}`, `grindhist:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:7px 8px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div${lqxPrimaryAttrs(displayScore, 'grind:' + cid)} title="${decisionPct != null ? esc(`${LQ_VISUAL_THRESHOLD_COORDINATE} · ${LQ_PERCENTILE_STORAGE_UNIT} · image-only thumbnail potential`) : shownPct != null ? 'exact persisted scalar; input or output sidecar binding is invalid, so this record cannot rank or save' : 'canonical Long score ledger missing or invalid'}" style="font-size:10px;font-weight:900;color:${decisionPct == null && shownPct != null ? C.amber : shownPct == null ? C.red : pctCol(shownPct)}">#${idx + 1} · ${scoreLabel}</div>${decisionPct == null ? '' : `<span data-lqxhistSave="${esc(cid)}" style="cursor:pointer;border:1px solid ${st.lqxSaveFlash === cid ? C.green : C.accent};color:${st.lqxSaveFlash === cid ? C.green : C.accent};border-radius:5px;padding:1px 7px;font-size:9px;font-weight:800">${st.lqxSaveFlash === cid ? 'saved' : 'save'}</span>`}</div><div style="font-size:9px;color:${C.mute};margin-top:3px">attempt ${att || '—'}${a.distSeed == null ? '' : ' · seed dist ' + a.distSeed}${a.topic == null ? '' : ' · topical ' + a.topic}</div>${lqxChannelMetricHtml(score || t.score, true, 'grind:' + cid)}${score && score.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">building visual, text, and together ledger entries…</div>` : ''}<div style="font-size:10px;color:${C.text};font-weight:800;line-height:1.3;max-height:38px;overflow:hidden;margin-top:5px">${esc((idea || '').slice(0, 120))}</div><div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:42px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 150))}</div>${lqxRawButton(lqxHasCanonicalLedger(displayScore) ? displayScore : null, 'grind:' + cid, idea, `/api/longquant/grind/img/${cid}`)}${t.error ? `<div style="font-size:9px;color:${C.red};margin-top:3px">${esc(t.error)}</div>` : ''}</div></div>`;
                 }).join('')}</div>` : `<div style="font-size:11px;color:${C.dim};padding:16px;background:${C.card2};border:1px solid ${C.border};border-radius:8px">No generated thumbnails are stored for this run yet. If it is still queued or rendering, this fills in as attempts finish.</div>`;
                 if (st.lqxOpen && String(st.lqxOpen).indexOf('history:') === 0) {
                     const imgId = st.lqxOpen.slice(8);
@@ -4281,7 +3925,7 @@ const JarvisLongQuant = (function () {
                                 idea,
                                 idea,
                                 hit.t.score,
-                                true,
+                                false,
                                 imageSource
                             ),
                         }));
@@ -4328,8 +3972,8 @@ const JarvisLongQuant = (function () {
                     : null;
                 const thumbs = group && Array.isArray(group.thumbs)
                     ? group.thumbs.slice().sort((left, right) => {
-                        const leftPct = lqxPrimaryPct100(left && left.score);
-                        const rightPct = lqxPrimaryPct100(right && right.score);
+                        const leftPct = lqxDecisionPct100(left && left.score);
+                        const rightPct = lqxDecisionPct100(right && right.score);
                         if (leftPct == null && rightPct == null) return 0;
                         if (leftPct == null) return 1;
                         if (rightPct == null) return -1;
@@ -4337,7 +3981,7 @@ const JarvisLongQuant = (function () {
                     })
                     : [];
                 const bestThumb = thumbs.find(
-                    thumb => lqxPrimaryPct100(thumb && thumb.score) != null
+                    thumb => lqxDecisionPct100(thumb && thumb.score) != null
                 ) || null;
                 return {
                     row,
@@ -4346,7 +3990,7 @@ const JarvisLongQuant = (function () {
                     thumbs,
                     bestThumb,
                     percentile100: bestThumb
-                        ? lqxPrimaryPct100(bestThumb.score)
+                        ? lqxDecisionPct100(bestThumb.score)
                         : null,
                 };
             }).sort((left, right) => {
@@ -4365,11 +4009,11 @@ const JarvisLongQuant = (function () {
                     lqIdeaGrp(irun, sel.id);
                     const G = LQIDEAGRP[irun + '/' + sel.id];
                     const thumbs = G && G.thumbs ? G.thumbs.slice().sort((a, b) => (
-                        (lqxPrimaryPct100(b.score) ?? -1)
-                        - (lqxPrimaryPct100(a.score) ?? -1)
+                        (lqxDecisionPct100(b.score) ?? -1)
+                        - (lqxDecisionPct100(a.score) ?? -1)
                     )) : [];
                     const selectedBest100 = thumbs.reduce((best, thumb) => {
-                        const percentile100 = lqxPrimaryPct100(thumb && thumb.score);
+                        const percentile100 = lqxDecisionPct100(thumb && thumb.score);
                         return percentile100 != null
                             && (best == null || percentile100 > best)
                             ? percentile100
@@ -4380,7 +4024,13 @@ const JarvisLongQuant = (function () {
                         const img = lqxImgData(`/api/longquant/ideas/montage/${irun}/${cid}`, `ideaimg:${irun}:${cid}`) || `/api/longquant/ideas/montage/${irun}/${cid}`;
                         const displayScore = lqxHasCanonicalLedger(sc2) ? sc2 : null;
                         const shownPct100 = lqxPrimaryPct100(displayScore);
-                        return `<div data-lqxopen="idea:${irun}:${cid}" style="cursor:pointer;border:1px solid ${shownPct100 != null && shownPct100 >= 80 ? C.green : displayScore ? C.border : C.red};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/ideas/montage/${irun}/${cid}`, `ideaimg:${irun}:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:6px 8px"><div${displayScore ? lqxPrimaryAttrs(displayScore, cardId) : ''} title="${displayScore ? esc(`${LQ_VISUAL_THRESHOLD_COORDINATE} · ${LQ_PERCENTILE_STORAGE_UNIT} · image-only thumbnail potential`) : 'canonical Long score ledger missing or invalid'}" style="font-size:10px;font-weight:800;color:${shownPct100 != null && shownPct100 >= 80 ? C.green : displayScore ? C.text : C.red}">${displayScore ? lqxFormatPercentile100(shownPct100) : 'unverified · non-rankable'} · rel ${t.rel != null ? t.rel.toFixed(2) : '—'}</div>${lqxChannelMetricHtml(sc2 || t.score, true, cardId)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">building the canonical Long ledger…</div>` : ''}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:36px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 120))}</div>${lqxRawButton(displayScore, cardId, sel.idea || '', img)}</div></div>`;
+                        const decisionPct100 = lqxDecisionPct100(displayScore);
+                        const scoreLabel = decisionPct100 != null
+                            ? lqxFormatPercentile100(decisionPct100)
+                            : shownPct100 != null
+                                ? `${lqxFormatPercentile100(shownPct100)} · display-only`
+                                : 'unverified · non-rankable';
+                        return `<div data-lqxopen="idea:${irun}:${cid}" style="cursor:pointer;border:1px solid ${decisionPct100 != null && decisionPct100 >= 80 ? C.green : decisionPct100 == null && shownPct100 != null ? C.amber : displayScore ? C.border : C.red};border-radius:8px;overflow:hidden;background:${C.card2}">${lqxImg(`/api/longquant/ideas/montage/${irun}/${cid}`, `ideaimg:${irun}:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000')}<div style="padding:6px 8px"><div${displayScore ? lqxPrimaryAttrs(displayScore, cardId) : ''} title="${decisionPct100 != null ? esc(`${LQ_VISUAL_THRESHOLD_COORDINATE} · ${LQ_PERCENTILE_STORAGE_UNIT} · image-only thumbnail potential`) : shownPct100 != null ? 'exact persisted scalar; input or output sidecar binding is invalid, so this record cannot rank or save' : 'canonical Long score ledger missing or invalid'}" style="font-size:10px;font-weight:800;color:${decisionPct100 != null && decisionPct100 >= 80 ? C.green : decisionPct100 == null && shownPct100 != null ? C.amber : displayScore ? C.text : C.red}">${scoreLabel} · rel ${t.rel != null ? t.rel.toFixed(2) : '—'}</div>${lqxChannelMetricHtml(sc2 || t.score, true, cardId)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">building the canonical Long ledger…</div>` : ''}<div style="font-size:9px;color:${C.mute};line-height:1.35;max-height:36px;overflow:hidden;margin-top:3px">${esc((t.prompt || '').slice(0, 120))}</div>${lqxRawButton(displayScore, cardId, sel.idea || '', img)}</div></div>`;
                     }).join('')}</div>` : `<div style="font-size:11px;color:${C.dim}">no thumbnail group found for this idea yet</div>`}</div>`;
                     if (st.lqxOpen && String(st.lqxOpen).indexOf('idea:' + irun + ':') === 0) {
                         const cid = st.lqxOpen.split(':').slice(2).join(':'), t = thumbs.find(x => cid === `${sel.id}_${x.k}`);
@@ -4399,7 +4049,7 @@ const JarvisLongQuant = (function () {
                                     sel.idea || '',
                                     sel.idea || '',
                                     t.score,
-                                    true,
+                                    false,
                                     imageSource
                                 ),
                             }));
@@ -4415,10 +4065,16 @@ const JarvisLongQuant = (function () {
                     const key = t ? `longform/ideas/${irun}/montages/${cid}.jpg` : '';
                     const sc2 = t ? lqxScoreFor(cardId, key, r.idea || '', r.idea || '', t.score, false) : null;
                     const displayScore = lqxHasCanonicalLedger(sc2) ? sc2 : null;
-                    const percentile100 = lqxPrimaryPct100(displayScore);
-                    return `<div data-lqxidea="${esc(r.id || '')}" data-lqxidearun="${esc(irun || '')}" style="cursor:pointer;border:1px solid ${st.lqxIdeaSel === r.id ? C.accent : percentile100 != null && percentile100 >= 80 ? C.green : displayScore ? C.border : C.red};border-radius:8px;overflow:hidden;background:${st.lqxIdeaSel === r.id ? C.accent + '18' : C.card2};width:220px">
+                    const exactPercentile100 = lqxPrimaryPct100(displayScore);
+                    const percentile100 = lqxDecisionPct100(displayScore);
+                    const scoreLabel = percentile100 != null
+                        ? lqxFormatPercentile100(percentile100)
+                        : exactPercentile100 != null
+                            ? `${lqxFormatPercentile100(exactPercentile100)} · display-only`
+                            : 'unverified · non-rankable';
+                    return `<div data-lqxidea="${esc(r.id || '')}" data-lqxidearun="${esc(irun || '')}" style="cursor:pointer;border:1px solid ${st.lqxIdeaSel === r.id ? C.accent : percentile100 != null && percentile100 >= 80 ? C.green : percentile100 == null && exactPercentile100 != null ? C.amber : displayScore ? C.border : C.red};border-radius:8px;overflow:hidden;background:${st.lqxIdeaSel === r.id ? C.accent + '18' : C.card2};width:220px">
                       ${t ? lqxImg(`/api/longquant/ideas/montage/${irun}/${cid}`, `ideabest:${irun}:${cid}`, 'width:100%;aspect-ratio:16/9;object-fit:cover;background:#000') : `<div style="width:100%;aspect-ratio:16/9;background:${C.card};display:flex;align-items:center;justify-content:center;color:${G && G.error ? C.red : C.cyan};font-size:10px;text-align:center;padding:8px;box-sizing:border-box">${G && G.error ? 'thumbnail group unavailable' : 'loading thumbnails…'}</div>`}
-                      <div style="padding:7px 8px"><div${displayScore ? lqxPrimaryAttrs(displayScore, cardId) : ''} style="font-size:10px;font-weight:800;color:${percentile100 != null && percentile100 >= 80 ? C.green : displayScore ? C.text : C.red};margin-bottom:3px">${displayScore ? lqxFormatPercentile100(percentile100) : 'unverified · non-rankable'}${t && t.rel != null ? ` · rel ${Number(t.rel).toFixed(2)}` : ''}</div><div style="font-size:11px;color:${C.text};font-weight:800;line-height:1.3;max-height:42px;overflow:hidden">${esc((r.idea || '').slice(0, 105))}</div>${lqxChannelMetricHtml(sc2 || (t && t.score), true, cardId)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">building visual, text, and together ledger entries…</div>` : ''}${lqxRawButton(displayScore, cardId, r.idea || '', t ? `/api/longquant/ideas/montage/${irun}/${cid}` : '')}</div>
+                      <div style="padding:7px 8px"><div${displayScore ? lqxPrimaryAttrs(displayScore, cardId) : ''} style="font-size:10px;font-weight:800;color:${percentile100 != null && percentile100 >= 80 ? C.green : percentile100 == null && exactPercentile100 != null ? C.amber : displayScore ? C.text : C.red};margin-bottom:3px">${scoreLabel}${t && t.rel != null ? ` · rel ${Number(t.rel).toFixed(2)}` : ''}</div><div style="font-size:11px;color:${C.text};font-weight:800;line-height:1.3;max-height:42px;overflow:hidden">${esc((r.idea || '').slice(0, 105))}</div>${lqxChannelMetricHtml(sc2 || (t && t.score), true, cardId)}${sc2 && sc2.loading ? `<div style="font-size:9px;color:${C.cyan};margin-top:4px">building visual, text, and together ledger entries…</div>` : ''}${lqxRawButton(displayScore, cardId, r.idea || '', t ? `/api/longquant/ideas/montage/${irun}/${cid}` : '')}</div>
                     </div>`;
                 }).join('');
                 ideas = cardc(`<div style="font-size:12px;font-weight:800;color:${C.text};margin-bottom:8px">💡 Idea thumbnail evidence <span style="font-size:10px;color:${C.mute};font-weight:600">— loaded groups rank only on coordinate ${esc(LQ_VISUAL_THRESHOLD_COORDINATE)} (${esc(LQ_PERCENTILE_STORAGE_UNIT)}); historical idea aliases never rank these cards</span></div><div style="display:flex;gap:10px;flex-wrap:wrap">${bestCards}</div>${ideaDetail}`, 12);
@@ -4460,6 +4116,7 @@ const JarvisLongQuant = (function () {
                   ? baseScore
                   : null;
               const primary100 = lqxPrimaryPct100(score);
+              const decisionPrimary100 = lqxDecisionPct100(score);
               const mediaRef = legacyUnbound
                   ? null
                   : lqxSavedMediaRef(t);
@@ -4468,10 +4125,12 @@ const JarvisLongQuant = (function () {
                   ? 'legacy evidence · read-only · unverified'
                   : !score
                       ? 'invalid/missing long_score_ledger · non-rankable'
+                      : decisionPrimary100 == null
+                          ? 'exact persisted ledger · display-only · input or output sidecar binding invalid'
                       : !mediaRef
                           ? 'score verified · content-addressed media_ref unavailable'
                           : '';
-              return `<div data-lqxsaved="${t.id}" style="cursor:pointer;border:1px solid ${st.lqxSavedSel === t.id ? C.accent : legacyUnbound || !score ? C.red : primary100 != null && primary100 >= 80 ? C.green : C.border};border-radius:8px;padding:6px;background:${st.lqxSavedSel === t.id ? C.accent + '18' : C.card2};width:210px;position:relative">${legacyUnbound ? '' : `<span data-lqxdel="${t.id}" title="delete this validated saved record" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer;z-index:2">✕</span>`}${lqxSavedMediaHtml(t, t.id, 'width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:5px;background:#000')}<div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;margin-top:5px"><div style="font-size:10px;color:${C.text};font-weight:800;max-height:32px;overflow:hidden;line-height:1.3;flex:1">${esc((t.title || '').slice(0, 78))}</div>${score && primary100 != null ? `<div${lqxPrimaryAttrs(score, 'saved:' + t.id)} title="${esc(`${LQ_VISUAL_THRESHOLD_COORDINATE} · ${LQ_PERCENTILE_STORAGE_UNIT} · canonical ledger ${score.long_score_ledger.ledger_sha256}`)}" style="font-size:10px;font-weight:900;color:${primary100 >= 80 ? C.green : C.dim};white-space:nowrap">${lqxFormatPercentile100(primary100)}</div>` : ''}</div>${state ? `<div style="font-size:8px;color:${legacyUnbound || !score ? C.red : C.amber};line-height:1.3;margin-top:4px">${esc(state)}</div>` : ''}${src}${score ? lqxChannelMetricHtml(score, true, 'saved:' + t.id) : ''}${lqxRawButton(score, 'saved:' + t.id, t.title || '', mediaRef ? mediaRef.url : '')}</div>`;
+              return `<div data-lqxsaved="${t.id}" style="cursor:pointer;border:1px solid ${st.lqxSavedSel === t.id ? C.accent : legacyUnbound || !score ? C.red : decisionPrimary100 == null ? C.amber : decisionPrimary100 >= 80 ? C.green : C.border};border-radius:8px;padding:6px;background:${st.lqxSavedSel === t.id ? C.accent + '18' : C.card2};width:210px;position:relative">${legacyUnbound ? '' : `<span data-lqxdel="${t.id}" title="delete this validated saved record" style="position:absolute;top:-6px;right:-6px;background:${C.card};border:1px solid ${C.border};color:${C.dim};border-radius:50%;width:16px;height:16px;line-height:14px;text-align:center;font-size:9px;cursor:pointer;z-index:2">✕</span>`}${lqxSavedMediaHtml(t, t.id, 'width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:5px;background:#000')}<div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;margin-top:5px"><div style="font-size:10px;color:${C.text};font-weight:800;max-height:32px;overflow:hidden;line-height:1.3;flex:1">${esc((t.title || '').slice(0, 78))}</div>${score && primary100 != null ? `<div${lqxPrimaryAttrs(score, 'saved:' + t.id)} title="${decisionPrimary100 == null ? 'exact persisted scalar; input or output sidecar binding is invalid, so this record cannot rank' : esc(`${LQ_VISUAL_THRESHOLD_COORDINATE} · ${LQ_PERCENTILE_STORAGE_UNIT} · canonical ledger ${score.long_score_ledger.ledger_sha256}`)}" style="font-size:10px;font-weight:900;color:${decisionPrimary100 == null ? C.amber : decisionPrimary100 >= 80 ? C.green : C.dim};white-space:nowrap">${lqxFormatPercentile100(primary100)}${decisionPrimary100 == null ? ' · display-only' : ''}</div>` : ''}</div>${state ? `<div style="font-size:8px;color:${legacyUnbound || !score ? C.red : C.amber};line-height:1.3;margin-top:4px">${esc(state)}</div>` : ''}${src}${score ? lqxChannelMetricHtml(score, true, 'saved:' + t.id) : ''}${lqxRawButton(score, 'saved:' + t.id, t.title || '', mediaRef ? mediaRef.url : '')}</div>`;
           }).join('')}</div>
           ${saved.length > show ? `<div style="text-align:center;margin-top:10px"><span data-lqxmore style="cursor:pointer;border:1px solid ${C.accent};background:${C.accent}18;color:${C.accent};border-radius:8px;padding:5px 16px;font-size:11px;font-weight:700">Load 30 more · ${saved.length - show} left</span></div>` : ''}${savedDetail}`, 12) : '';
         // ── 🔤 Title test: text-only embedding on every latent projection ──
@@ -4481,7 +4140,7 @@ const JarvisLongQuant = (function () {
           <div style="font-size:10px;color:${C.mute};margin-bottom:7px">Type a title and it is embedded on its own — no thumbnail — then placed in the raw-long <b style="color:${C.purple}">text</b> latent space by nearest neighbors, the same way thumbnails are placed in the visual space. Every latent projection below is the text space recoloured by that metric.</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input data-lqxtitletestinput value="${esc(st.lqxTitleTestInput || '')}" placeholder="type a video title to embed just the text…" style="flex:1;min-width:230px;background:${C.card};border:1px solid ${C.border};color:${C.text};border-radius:6px;padding:7px 10px;font-size:12px"/><span data-lqxtitletest style="cursor:pointer;border:1px solid ${C.purple};background:${C.purple}22;color:${C.purple};border-radius:6px;padding:7px 14px;font-size:11px;font-weight:800;white-space:nowrap">🔤 Embed title</span></div>`;
         if (ttRows.length > 1 || (ttRows.length === 1 && ttSel !== ttRows[0])) titleTest += `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${ttRows.slice(0, 20).map(r => {
-            const headline = r.score && !r.score.error
+            const headline = lqxHasCanonicalLedger(r.score)
                 ? lqxRegisteredCoordinate(r.score, 'text', 'ctrviews')
                     || lqxRegisteredCoordinate(r.score, 'text', 'views')
                 : null;
@@ -4493,7 +4152,14 @@ const JarvisLongQuant = (function () {
         }).join('')}</div>`;
         if (ttSel) {
             if (ttSel.loading) titleTest += `<div style="font-size:11px;color:${C.cyan};margin-top:10px">embedding “${esc(ttSel.title.slice(0, 90))}” and placing it on every text-space projection…</div>`;
-            else if (ttSel.error || (ttSel.score && ttSel.score.error)) titleTest += `<div style="font-size:11px;color:${C.red};margin-top:10px">${esc(String(ttSel.error || ttSel.score.error).slice(0, 220))}</div>`;
+            else if (
+                ttSel.error
+                || (
+                    ttSel.score
+                    && ttSel.score.error
+                    && !lqxHasCanonicalLedger(ttSel.score)
+                )
+            ) titleTest += `<div style="font-size:11px;color:${C.red};margin-top:10px">${esc(String(ttSel.error || ttSel.score.error).slice(0, 220))}</div>`;
             else if (lqxHasCanonicalLedger(ttSel.score)) {
                 const S2 = ttSel.score, cacheId = 'titletest:' + ttSel.id;
                 if (!RAW.text) rawEnsure('text');
@@ -6553,7 +6219,7 @@ const JarvisLongQuant = (function () {
         if (e.target.closest('[data-lqxgen]')) { lqxGenerate(); return; }
         const xs = e.target.closest('[data-lqxsave]'); if (xs) {
             const k = +xs.getAttribute('data-lqxsave'), R = st.lqxResult, rid = st.lqxRid;
-            if (R && R.attempts) { const a = R.attempts.find(x => x.k === k) || R.attempts[k]; if (a) { const fk = rid + '_' + a.k, title = R.title || st.lqxTitle || '', canonicalScore = lqxScoreFor('gen:' + fk, `longform/guesses/demo/montages/${fk}.jpg`, title, title, a.score, false); if (canonicalScore) lqxSave({ title, prompt: a.prompt || '', relevance: canonicalScore.relevance, montageKey: `longform/guesses/demo/montages/${fk}.jpg`, source: 'generated', score: canonicalScore }, fk); else { st.lqxStatus = 'save blocked: canonical Long score ledger is missing or invalid'; rtgUpdateLqExp(); } } }
+            if (R && R.attempts) { const a = R.attempts.find(x => x.k === k) || R.attempts[k]; if (a) { const fk = rid + '_' + a.k, title = R.title || st.lqxTitle || '', canonicalScore = lqxScoreFor('gen:' + fk, `longform/guesses/demo/montages/${fk}.jpg`, title, title, a.score, false); if (canonicalScore) lqxSave({ title, prompt: a.prompt || '', relevance: canonicalScore.relevance, montageKey: `longform/guesses/demo/montages/${fk}.jpg`, source: 'generated', score: canonicalScore, scoreInput: a.score_input || null }, fk); else { st.lqxStatus = 'save blocked: canonical Long score ledger is missing or invalid'; rtgUpdateLqExp(); } } }
             return;
         }
         const xgs = e.target.closest('[data-lqxgrindsave]'); if (xgs) {
@@ -6569,7 +6235,7 @@ const JarvisLongQuant = (function () {
                     false
                 );
                 if (canonicalScore) {
-                    lqxSave({ title: idea, prompt: hit.prompt || '', montageKey: `longform/grind/montages/${hit.image}.jpg`, source: 'grind', score: canonicalScore }, hit.image);
+                    lqxSave({ title: idea, prompt: hit.prompt || '', montageKey: `longform/grind/montages/${hit.image}.jpg`, source: 'grind', score: canonicalScore, scoreInput: hit.score_input || null }, hit.image);
                 } else {
                     st.lqxGrindStatus = 'save blocked: canonical Long score ledger is missing or invalid';
                     rtgUpdateLqExp();
@@ -6597,6 +6263,7 @@ const JarvisLongQuant = (function () {
                     montageKey: `longform/grind/montages/${hit.image}.jpg`,
                     source: det.source || 'channel-grind-history',
                     score: canonicalScore,
+                    scoreInput: hit.score_input || null,
                     context: det.context || '',
                     transcript30: det.transcript30 || det.context || '',
                     sourceVideo: det.sourceVideo || null,
@@ -6635,7 +6302,22 @@ const JarvisLongQuant = (function () {
             return;
         }
         if (e.target.closest('[data-lqxsaveupload]')) {
-            if (st.lqxScoreImg && lqxHasCanonicalLedger(st.lqxScore)) lqxSave({ title: st.lqxScoreTitle || '', prompt: '', relevance: st.lqxScore.relevance, image: st.lqxScoreImg, source: 'upload', score: st.lqxScore }, 'upload');
+            if (st.lqxScoreImg && lqxScoreDecisionEligible(st.lqxScore)) {
+                const title = st.lqxScoreTitle || '';
+                lqxSave({
+                    title,
+                    prompt: '',
+                    relevance: st.lqxScore.relevance,
+                    image: st.lqxScoreImg,
+                    source: 'upload',
+                    score: st.lqxScore,
+                    scoreInput: {
+                        title,
+                        idea: title,
+                        scoreText: title,
+                    },
+                }, 'upload');
+            }
             return;
         }
         const xraw = e.target.closest('[data-lqxraw]'); if (xraw) {

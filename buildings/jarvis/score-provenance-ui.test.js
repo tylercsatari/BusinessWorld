@@ -17,6 +17,41 @@ const governanceSha256 = crypto
     .createHash('sha256')
     .update(governanceBytes)
     .digest('hex');
+const shortsBrowserRuntime = {
+    schema: 'shorts-score-ledger-browser-runtime-v1',
+    schemaVersion: 1,
+    ledgerSchema: 'shorts-stored-score-ledger-v1',
+    ledgerSchemaVersion: 1,
+    ledgerVersion: shortsLedger.GOVERNANCE.ledgerVersion,
+    percentileUnit: shortsLedger.GOVERNANCE.percentileStorageUnit,
+    featureIdentitySchemaVersion:
+        shortsLedger.FEATURE_CONTRACT_IDENTITY_SCHEMA_VERSION,
+    featureContractSha256: shortsLedger.FEATURE_CONTRACT_SHA256,
+    featureContractDocumentSha256:
+        shortsLedger.FEATURE_CONTRACT_DOCUMENT_SHA256,
+    governanceVersion: shortsLedger.GOVERNANCE.schemaVersion,
+    governanceSha256: shortsLedger.GOVERNANCE_SHA256,
+    expectedCoordinateIds: shortsLedger.EXPECTED_COORDINATE_IDS,
+    unitBounds: Object.fromEntries(
+        Object.entries(shortsLedger.GOVERNANCE.valueUnits)
+            .map(([unit, definition]) => [unit, {
+                min: definition.minimumInclusive,
+                max: definition.maximumInclusive,
+            }])
+    ),
+    definitions: shortsLedger.FEATURE_DEFINITIONS.map(
+        definition => ({
+            coordinateId: definition.coordinateId,
+            featureKey: definition.key,
+            group: definition.group,
+            target: definition.target,
+            source: definition.source,
+            sourceKey: definition.sourceKey || definition.key,
+            unit: definition.unit,
+            displayUnit: definition.displayUnit ?? null,
+        })
+    ),
+};
 
 function loadUi(file, marker, replacement, globals = {}) {
     const source = fs.readFileSync(file, 'utf8');
@@ -125,7 +160,10 @@ const shortsUi = loadUi(
             shortsRegisteredCoordinate,
             steerOf,
         },
-    };`
+    };`,
+    {
+        __SHORTS_SCORE_LEDGER_RUNTIME__: shortsBrowserRuntime,
+    }
 );
 const shortsApi = shortsUi.api;
 const shortsCoordinate = shortsApi.shortsRegisteredCoordinate(

@@ -4,6 +4,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 const { execFileSync } = require('child_process');
 const ledgerContract = require(
     '../buildings/jarvis/shorts-score-ledger'
@@ -90,6 +91,138 @@ const bundle = JSON.parse(execFileSync(
 const ledger = bundle.score_ledger;
 const validation = ledgerContract.validateScoreLedger(ledger);
 
+function shortsBrowserRuntime() {
+    return {
+        schema: 'shorts-score-ledger-browser-runtime-v1',
+        schemaVersion: 1,
+        ledgerSchema: 'shorts-stored-score-ledger-v1',
+        ledgerSchemaVersion: 1,
+        ledgerVersion: ledgerContract.GOVERNANCE.ledgerVersion,
+        percentileUnit:
+            ledgerContract.GOVERNANCE.percentileStorageUnit,
+        featureIdentitySchemaVersion:
+            ledgerContract.FEATURE_CONTRACT_IDENTITY_SCHEMA_VERSION,
+        featureContractSha256:
+            ledgerContract.FEATURE_CONTRACT_SHA256,
+        featureContractDocumentSha256:
+            ledgerContract.FEATURE_CONTRACT_DOCUMENT_SHA256,
+        governanceVersion:
+            ledgerContract.GOVERNANCE.schemaVersion,
+        governanceSha256:
+            ledgerContract.GOVERNANCE_SHA256,
+        expectedCoordinateIds:
+            ledgerContract.EXPECTED_COORDINATE_IDS,
+        unitBounds: Object.fromEntries(
+            Object.entries(
+                ledgerContract.GOVERNANCE.valueUnits
+            ).map(([unit, definition]) => [unit, {
+                min: definition.minimumInclusive,
+                max: definition.maximumInclusive,
+            }])
+        ),
+        definitions: ledgerContract.FEATURE_DEFINITIONS.map(
+            definition => ({
+                coordinateId: definition.coordinateId,
+                featureKey: definition.key,
+                group: definition.group,
+                target: definition.target,
+                source: definition.source,
+                sourceKey:
+                    definition.sourceKey || definition.key,
+                unit: definition.unit,
+                displayUnit: definition.displayUnit ?? null,
+            })
+        ),
+    };
+}
+
+function shortsBrowserLedgerApi() {
+    const uiPath = path.join(
+        ROOT,
+        'buildings/jarvis/jarvis-retention.js'
+    );
+    const marker =
+        '    return { mount, mountExperiment, __st: () => st };';
+    const source = fs.readFileSync(uiPath, 'utf8');
+    assert(
+        source.includes(marker),
+        'Shorts UI test export insertion point changed'
+    );
+    const instrumented = source.replace(
+        marker,
+        `    return {
+            mount,
+            mountExperiment,
+            __st: () => st,
+            __test: {
+                shortsLedgerState,
+                shortsRegisteredCoordinate,
+                savedChannelFeatureCell,
+                savedChannelFeatureDisplay,
+                savedChannelFeatureStatus,
+            },
+        };`
+    );
+    const noTimer = () => 0;
+    const document = {
+        addEventListener() {},
+        removeEventListener() {},
+        visibilityState: 'visible',
+    };
+    const window = {
+        addEventListener() {},
+        removeEventListener() {},
+        setInterval: noTimer,
+        clearInterval() {},
+        setTimeout: noTimer,
+        clearTimeout() {},
+        document,
+        location: { href: 'http://localhost/' },
+        innerWidth: 1024,
+    };
+    window.window = window;
+    const sandbox = {
+        module: { exports: {} },
+        exports: {},
+        console,
+        setTimeout: noTimer,
+        clearTimeout() {},
+        setInterval: noTimer,
+        clearInterval() {},
+        TextEncoder,
+        URLSearchParams,
+        fetch: async () => {
+            throw new Error('network disabled in ledger test');
+        },
+        window,
+        document,
+        __SHORTS_SCORE_LEDGER_RUNTIME__: shortsBrowserRuntime(),
+    };
+    vm.runInNewContext(instrumented, sandbox, {
+        filename: uiPath,
+    });
+    return sandbox.module.exports.__test;
+}
+
+const browserLedgerApi = shortsBrowserLedgerApi();
+const browserLedgerWithoutWrapper = JSON.parse(JSON.stringify(ledger));
+const browserValidState = browserLedgerApi.shortsLedgerState({
+    score_ledger: browserLedgerWithoutWrapper,
+});
+assert.strictEqual(
+    browserValidState.valid,
+    true,
+    browserValidState.errors.join('; ')
+);
+assert.strictEqual(
+    browserLedgerApi.shortsRegisteredCoordinate(
+        { score_ledger: browserLedgerWithoutWrapper },
+        'shorts.stored.visual.keep'
+    ).value,
+    ledger.values_by_id['shorts.stored.visual.keep'],
+    'browser and canonical readers must return the exact same scalar'
+);
+
 assert.strictEqual(ledgerContract.FEATURE_CONTRACT.version, 10);
 assert.strictEqual(ledgerContract.GOVERNANCE.schemaVersion, 4);
 assert.strictEqual(ledgerContract.GOVERNANCE.ledgerVersion, 11);
@@ -153,6 +286,90 @@ function rehashLedger(candidate) {
     return candidate;
 }
 
+function ledgerWithUnavailable(coordinateId, reason) {
+    const candidate = JSON.parse(JSON.stringify(ledger));
+    const entry = candidate.entries.find(
+        item => item.coordinate_id === coordinateId
+    );
+    assert(entry, `missing fixture coordinate ${coordinateId}`);
+    entry.available = false;
+    entry.value = null;
+    entry.percentile = null;
+    entry.unavailable_reason = reason;
+    candidate.values_by_id[coordinateId] = null;
+    candidate.percentiles_by_id[coordinateId] = null;
+    candidate.available_count = candidate.entries.filter(
+        item => item.available === true
+    ).length;
+    candidate.all_values_available = (
+        candidate.available_count === candidate.entries.length
+    );
+    candidate.unavailable = candidate.entries
+        .filter(item => item.available !== true)
+        .map(item => ({
+            coordinate_id: item.coordinate_id,
+            reason: item.unavailable_reason,
+        }));
+    return rehashLedger(candidate);
+}
+
+const unavailableReason =
+    'visual embedding was not produced for the canonical five-frame input';
+const unavailableCoordinateId = 'shorts.stored.visual.keep';
+const unavailableLedger = ledgerWithUnavailable(
+    unavailableCoordinateId,
+    unavailableReason
+);
+const unavailableRecord = { score_ledger: unavailableLedger };
+const unavailableState = browserLedgerApi.shortsLedgerState(
+    unavailableRecord
+);
+assert.strictEqual(
+    unavailableState.valid,
+    true,
+    unavailableState.errors.join('; ')
+);
+const unavailableCell = browserLedgerApi.savedChannelFeatureCell(
+    unavailableRecord,
+    'visual.keep'
+);
+assert.strictEqual(unavailableCell.value, null);
+assert.strictEqual(
+    unavailableCell.unavailableReason,
+    unavailableReason,
+    'saved-channel cards must preserve the ledger reason for an unavailable coordinate'
+);
+assert.strictEqual(
+    browserLedgerApi.savedChannelFeatureDisplay(
+        ledgerContract.FEATURE_DEFINITIONS.find(
+            definition => definition.key === 'visual.keep'
+        ),
+        unavailableCell
+    ),
+    'Not scored',
+    'saved-channel score cards must never collapse an unavailable coordinate to a dash'
+);
+assert(
+    browserLedgerApi.savedChannelFeatureStatus(
+        unavailableCell
+    ).includes(unavailableReason),
+    'saved-channel score cards must explain why a coordinate was not scored'
+);
+const availableCell = browserLedgerApi.savedChannelFeatureCell(
+    { score_ledger: browserLedgerWithoutWrapper },
+    'visual.keep'
+);
+assert.strictEqual(
+    availableCell.value,
+    ledger.values_by_id[unavailableCoordinateId],
+    'saved-channel cards must read the same canonical scalar as the normal score card'
+);
+assert.strictEqual(
+    availableCell.ledgerSha256,
+    ledger.ledger_sha256,
+    'saved-channel cards must retain the immutable ledger identity'
+);
+
 function ledgerWithValue(coordinateId, value) {
     const candidate = JSON.parse(JSON.stringify(ledger));
     const entry = candidate.entries.find(
@@ -174,6 +391,121 @@ function ledgerWithPercentile(coordinateId, percentile) {
     candidate.percentiles_by_id[coordinateId] = percentile;
     return rehashLedger(candidate);
 }
+
+function mutatedLedger(mutate) {
+    const candidate = JSON.parse(JSON.stringify(ledger));
+    mutate(candidate);
+    return rehashLedger(candidate);
+}
+
+const browserMutationMatrix = [
+    {
+        name: 'feature contract hash',
+        ledger: mutatedLedger(candidate => {
+            candidate.feature_contract_sha256 = 'f'.repeat(64);
+        }),
+    },
+    {
+        name: 'feature contract document hash',
+        ledger: mutatedLedger(candidate => {
+            candidate.feature_contract_document_sha256 =
+                'a'.repeat(64);
+        }),
+    },
+    {
+        name: 'coordinate target label',
+        ledger: mutatedLedger(candidate => {
+            candidate.entries[0].target = 'ret5';
+        }),
+    },
+    {
+        name: 'keep value outside percent bounds',
+        ledger: mutatedLedger(candidate => {
+            const coordinateId = 'shorts.stored.visual.keep';
+            candidate.entries[0].value = 150;
+            candidate.values_by_id[coordinateId] = 150;
+        }),
+    },
+    {
+        name: 'coordinate governance hash',
+        ledger: mutatedLedger(candidate => {
+            candidate.coordinate_governance_sha256 =
+                'e'.repeat(64);
+        }),
+    },
+    {
+        name: 'summary available count',
+        ledger: mutatedLedger(candidate => {
+            candidate.available_count--;
+        }),
+    },
+    {
+        name: 'unavailable inventory',
+        ledger: mutatedLedger(candidate => {
+            candidate.unavailable = [{
+                coordinate_id: 'shorts.stored.visual.keep',
+                reason: 'fabricated',
+            }];
+        }),
+    },
+];
+
+for (const testCase of browserMutationMatrix) {
+    const canonical =
+        ledgerContract.validateScoreLedger(testCase.ledger);
+    const browser = browserLedgerApi.shortsLedgerState({
+        score_ledger: testCase.ledger,
+    });
+    assert.strictEqual(
+        canonical.valid,
+        false,
+        `${testCase.name} must fail the canonical validator`
+    );
+    assert.strictEqual(
+        browser.valid,
+        canonical.valid,
+        `${testCase.name} must have browser/canonical parity`
+    );
+}
+
+const repairableLedger = mutatedLedger(candidate => {
+    candidate.feature_contract_sha256 = 'd'.repeat(64);
+});
+assert.strictEqual(
+    browserLedgerApi.shortsLedgerState({
+        score_ledger: repairableLedger,
+    }).valid,
+    false
+);
+repairableLedger.feature_contract_sha256 =
+    ledgerContract.FEATURE_CONTRACT_SHA256;
+rehashLedger(repairableLedger);
+assert.strictEqual(
+    browserLedgerApi.shortsLedgerState({
+        score_ledger: repairableLedger,
+    }).valid,
+    true,
+    'an invalid ledger object must not be cached by identity after repair'
+);
+
+const staleDiagnosticWrapperState =
+    browserLedgerApi.shortsLedgerState({
+        score_ledger: JSON.parse(JSON.stringify(ledger)),
+        score_ledger_validation: {
+            valid: false,
+            ledger_sha256: null,
+            errors: ['stale wrapper fixture'],
+        },
+    });
+assert.strictEqual(
+    staleDiagnosticWrapperState.valid,
+    true,
+    'a stale diagnostic wrapper must not hide a self-valid ledger'
+);
+assert.match(
+    staleDiagnosticWrapperState.validationWarning,
+    /stale wrapper fixture/
+);
 
 const unitBoundaryCases = [
     {
@@ -1128,10 +1460,16 @@ for (const [name, source] of [
         `${name} must use the shared ledger reader`
     );
 }
-assert.match(
+assert(
+    retentionUi.includes(
+        'ledgerSha256 !== computedLedgerSha256'
+    ),
+    'browser records must independently verify the canonical ledger content hash'
+);
+assert.doesNotMatch(
     retentionUi,
     /!validation\s*\|\|\s*validation\.valid\s*!==\s*true/,
-    'browser records must require an affirmative server validation proof for every present ledger'
+    'an omitted diagnostic wrapper must not suppress a self-validated ledger'
 );
 assert(
     server.includes("state: 'canonical-valid'")
@@ -1139,8 +1477,51 @@ assert(
     'fresh scorer responses must carry the same validation proof as persisted records'
 );
 assert(
+    server.includes(
+        'result.score_record_sha256 =\n'
+        + '        savedHookScoreRecordSha256(result);'
+    )
+        && server.includes("state: 'verified'")
+        && server.includes(
+            'calculated_sha256: result.score_record_sha256'
+        ),
+    'fresh scorer responses must be bound to the same immutable score-record identity as persisted cards'
+);
+assert(
     retentionUi.includes('score_ledger_validation: rec.score_ledger_validation || null'),
     'saved-hook detail must preserve the persisted ledger validation state'
+);
+assert(
+    retentionUi.includes(
+        'This saved score has invalid persisted ledger '
+    )
+        && retentionUi.includes(
+            "'silently recalculated.'"
+        ),
+    'an invalid persisted saved score must fail closed instead of being re-scored'
+);
+assert.doesNotMatch(
+    retentionUi,
+    /uploads\.filter\(rawUploadIsScored\)\.slice\(-1\)/,
+    'an explicit score-card selection must never fall back to another upload'
+);
+assert(
+    retentionUi.includes(
+        'let scoreIndex = generatedScores.length - 1;'
+    ),
+    'saving a regenerated attempt must select its newest exact score'
+);
+assert.doesNotMatch(
+    retentionUi,
+    /const scored = \(st\.rawUploads \|\| \[\]\)\.find/,
+    'generated saves must not select the oldest matching score'
+);
+assert(
+    server.includes(
+        'if (required && !available) {\n'
+        + '                fatal.push('
+    ),
+    'fresh scorer responses must fail closed when a required coordinate is unavailable'
 );
 
 console.log(JSON.stringify({

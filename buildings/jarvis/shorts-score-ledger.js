@@ -887,6 +887,11 @@ function validateScoreLedger(ledger) {
             )
         ) {
             errors.push('score ledger feature contract document hash is missing');
+        } else if (
+            ledger.feature_contract_document_sha256
+                !== FEATURE_CONTRACT_DOCUMENT_SHA256
+        ) {
+            errors.push('score ledger feature contract document hash does not match');
         }
         if (
             ledger.coordinate_governance_version !== GOVERNANCE.schemaVersion

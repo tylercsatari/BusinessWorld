@@ -11,7 +11,13 @@ const {
     scoreLedgerFromFeatures,
 } = require('./fixtures/score-ledger-fixture');
 const {
+    EXPECTED_COORDINATE_IDS,
+    FEATURE_CONTRACT_DOCUMENT_SHA256,
+    FEATURE_CONTRACT_IDENTITY_SCHEMA_VERSION,
     FEATURE_CONTRACT_SHA256,
+    FEATURE_DEFINITIONS,
+    GOVERNANCE,
+    GOVERNANCE_SHA256,
     scoreRecordBindingSha256,
     scoreLedgerValidationSummary,
 } = require('../buildings/jarvis/shorts-score-ledger');
@@ -25,6 +31,10 @@ const {
 const {
     canonicalArtifactIdentity,
 } = require('../buildings/jarvis/canonical-json-artifact');
+const displayContract = require('../embedding-display-contract');
+const savedHookRuntimeIndex = require(
+    '../buildings/jarvis/saved-hook-runtime-index'
+);
 
 const ROOT = path.resolve(__dirname, '..');
 const ORIGIN = process.env.EXPERIMENT_LAB_ORIGIN || 'http://127.0.0.1:8002';
@@ -32,6 +42,39 @@ const coordinateGovernance = JSON.parse(fs.readFileSync(
     path.join(ROOT, 'buildings/jarvis/quant-coordinate-governance.json'),
     'utf8'
 ));
+const shortsScoreLedgerRuntime = {
+    schema: 'shorts-score-ledger-browser-runtime-v1',
+    schemaVersion: 1,
+    ledgerSchema: 'shorts-stored-score-ledger-v1',
+    ledgerSchemaVersion: 1,
+    ledgerVersion: GOVERNANCE.ledgerVersion,
+    percentileUnit: GOVERNANCE.percentileStorageUnit,
+    featureIdentitySchemaVersion:
+        FEATURE_CONTRACT_IDENTITY_SCHEMA_VERSION,
+    featureContractSha256: FEATURE_CONTRACT_SHA256,
+    featureContractDocumentSha256:
+        FEATURE_CONTRACT_DOCUMENT_SHA256,
+    governanceVersion: GOVERNANCE.schemaVersion,
+    governanceSha256: GOVERNANCE_SHA256,
+    expectedCoordinateIds: EXPECTED_COORDINATE_IDS,
+    unitBounds: Object.fromEntries(
+        Object.entries(GOVERNANCE.valueUnits)
+            .map(([unit, definition]) => [unit, {
+                min: definition.minimumInclusive,
+                max: definition.maximumInclusive,
+            }])
+    ),
+    definitions: FEATURE_DEFINITIONS.map(definition => ({
+        coordinateId: definition.coordinateId,
+        featureKey: definition.key,
+        group: definition.group,
+        target: definition.target,
+        source: definition.source,
+        sourceKey: definition.sourceKey || definition.key,
+        unit: definition.unit,
+        displayUnit: definition.displayUnit ?? null,
+    })),
+};
 const CREATOR_ADAPTIVE_BENCHMARK_ID = 'shorts.causal-keep-mixture-benchmark.v1';
 const CREATOR_ADAPTIVE_BENCHMARK_COORDINATE_ID = 'shorts.causal-keep-mixture.v1';
 const CREATOR_ADAPTIVE_CANDIDATE_COUNT = 43360;
@@ -510,6 +553,43 @@ async function main() {
                 scoreLedgerFromFeatures(video.features);
             bindSavedChannelFixtureRow(video);
         });
+        // The ledger is the scalar authority. API summaries are diagnostics,
+        // so an omitted or stale wrapper must never turn valid coordinates
+        // into dashes on a saved card.
+        delete videos[2].score_ledger_validation;
+        videos[3].score_ledger_validation = {
+            state: 'stale-wrapper-fixture',
+            valid: false,
+            ledger_sha256: null,
+            errors: ['fixture wrapper is intentionally stale'],
+        };
+        const historicalSavedHookId = 'hkhistoricaldisplay';
+        const historicalSavedHookRecord = JSON.parse(
+            JSON.stringify(videos[0].__record)
+        );
+        historicalSavedHookRecord.id = historicalSavedHookId;
+        historicalSavedHookRecord.title =
+            'Historical ledger display parity';
+        historicalSavedHookRecord.savedAt = Date.now();
+        historicalSavedHookRecord.hasMontage = false;
+        historicalSavedHookRecord.evidence_state =
+            'legacy_unbound_evidence';
+        historicalSavedHookRecord.canonical = false;
+        historicalSavedHookRecord.predictor_eligible = false;
+        historicalSavedHookRecord.evidence_warning =
+            'Historical display only.';
+        delete historicalSavedHookRecord.score_ledger_validation;
+        const historicalSavedHookRow =
+            savedHookRuntimeIndex.legacyRow(
+                historicalSavedHookRecord
+            );
+        assert(
+            historicalSavedHookRow.historical_display,
+            'fixture must contain a hash-bound historical display'
+        );
+        const historicalSavedHookKeep =
+            historicalSavedHookRow.historical_display
+                .m_identity.keep;
         const unfinishedVideo = { id: 'vid99999999', title: 'Retry this Short', status: 'error', views: 0, error: 'temporary worker failure', hasMontage: false };
         const singles = featureContract.features.map((feature, index) => ({
             key: feature.key,
@@ -1184,7 +1264,18 @@ async function main() {
         const replies = {
             '/api/retention/channels': { channels: [], active: 'tyler' },
             '/api/indicators/registry': { indicators: [], meta: { targets: [] } },
-            '/api/raw/saved-hooks': { hooks: [] },
+            '/api/raw/saved-hooks': {
+                hooks: [historicalSavedHookRow],
+            },
+            [`/api/raw/saved-hook/${historicalSavedHookId}`]: {
+                ...historicalSavedHookRecord,
+                score_record_validation: {
+                    state: 'unverified-legacy',
+                    valid: null,
+                    recorded_sha256: null,
+                    calculated_sha256: null,
+                },
+            },
             '/api/raw/saved-channels': { channels: [{ id: channelId, name: 'Mobile Risk Channel', url: 'https://youtube.com/@risk', status: 'partial', discovered: 21, completed: 20, failed: 1 }], featureContract },
             [`/api/raw/saved-channel/${channelId}`]: { id: channelId, name: 'Mobile Risk Channel', url: 'https://youtube.com/@risk', status: 'partial', discovered: 21, completed: 20, failed: 1, queued: 0, videos: videos.concat(unfinishedVideo), featureContract },
             [`/api/raw/saved-channel/${channelId}/analysis`]: riskAnalysis,
@@ -1254,6 +1345,7 @@ async function main() {
             };
         });
         await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><base href="${ORIGIN}/"><link rel="stylesheet" href="/buildings/experimentlab/experimentlab.css"><style>html,body,#root{margin:0;width:100%;height:100%;overflow:hidden;background:#080d14}</style></head><body><main id="root"></main>
+<script>Object.defineProperty(globalThis,"__SHORTS_SCORE_LEDGER_RUNTIME__",{value:${JSON.stringify(shortsScoreLedgerRuntime)},writable:false,configurable:false});</script>
 <script src="/buildings/building-registry.js"></script><script src="/buildings/jarvis/jarvis-upload-utils.js"></script>
 <script>
 const nativeFetch=window.fetch.bind(window);
@@ -1303,6 +1395,57 @@ window.fetch=function(url,options){
             console.error('INITIAL ROOT:', (await page.locator('#root').innerText()).slice(0, 1500));
             throw error;
         }
+        const historicalSavedHookCard = page.locator(
+            `[data-savedopen="${historicalSavedHookId}"]`
+        );
+        await historicalSavedHookCard.waitFor();
+        const historicalSavedHookCardText =
+            await historicalSavedHookCard.innerText();
+        assert(
+            historicalSavedHookCardText.includes(
+                `keep ${historicalSavedHookKeep.value.toFixed(1)}%`
+            ),
+            'historical saved-card summary must expose the exact '
+                + 'persisted ledger value'
+        );
+        assert(
+            historicalSavedHookCardText.includes(
+                'display-only · not predictor-eligible'
+            ),
+            'historical saved-card score must disclose its evidence '
+                + 'boundary'
+        );
+        assert(
+            !historicalSavedHookCardText.includes('No valid persisted'),
+            'valid historical ledger was rendered as a missing score'
+        );
+        await historicalSavedHookCard.click();
+        const openedHistoricalCoordinate = page.locator(
+            '#rtg-exppanel '
+                + '[data-coordinate-id="shorts.stored.together.keep"]'
+                + `[data-coordinate-ledger-sha256="`
+                + `${historicalSavedHookKeep.ledgerSha256}"]`
+        ).first();
+        await openedHistoricalCoordinate.waitFor();
+        assert.strictEqual(
+            Number(
+                await openedHistoricalCoordinate.getAttribute(
+                    'data-coordinate-value'
+                )
+            ),
+            historicalSavedHookKeep.value,
+            'saved grid and opened score card must render the same '
+                + 'ledger value'
+        );
+        assert.strictEqual(
+            await page.evaluate(
+                () => window.__fetchCounts[
+                    '/api/raw/embed-montage'
+                ] || 0
+            ),
+            0,
+            'opening a persisted historical score must not re-embed'
+        );
         await page.locator('[data-savedbank="channels"]').click();
         assert.strictEqual(await page.getByPlaceholder('type a video idea — or leave blank and the model invents one…').count(), 1);
         assert.strictEqual(await page.getByPlaceholder("the hook you're writing — every variant stays grounded on this…").count(), 1);
@@ -1361,7 +1504,9 @@ window.fetch=function(url,options){
         const storedPanelText =
             await page.locator('#rtg-exppanel').innerText();
         assert(
-            storedPanelText.includes('graphs — every channel'),
+            storedPanelText.includes(
+                'All 18 registered channel coordinates'
+            ),
             `stored score must open the complete graph read-out: ${
                 storedPanelText.slice(0, 500)
             }`
@@ -1407,6 +1552,47 @@ window.fetch=function(url,options){
         assert(lineageText.includes('artifact 0123456789ab'), 'score detail must expose the exact persisted steer artifact');
         const parityAfterStoredOpen = await page.evaluate(() => window.BusinessWorldEmbeddingParityAudit(document));
         assert(parityAfterStoredOpen.ok, `stored card/detail parity failed: ${JSON.stringify(parityAfterStoredOpen.conflicts)}`);
+        for (const entry of videos[1].score_ledger.entries) {
+            assert.strictEqual(
+                entry.available,
+                true,
+                `fixture coordinate ${entry.coordinate_id} must be available`
+            );
+            const rendered = await page.locator(
+                `[data-embedding-asset="${channelId}:vid00000002"]`
+                + `[data-coordinate-id="${entry.coordinate_id}"]`
+            ).evaluateAll(nodes => nodes.map(node => ({
+                value: node.getAttribute('data-coordinate-value'),
+                percentile: node.getAttribute(
+                    'data-coordinate-percentile-0-100'
+                ),
+                ledgerSha256: node.getAttribute(
+                    'data-coordinate-ledger-sha256'
+                ),
+            })));
+            assert(
+                rendered.length >= 1,
+                `score card omitted available coordinate ${entry.coordinate_id}`
+            );
+            assert(
+                rendered.every(value => (
+                    Number(value.value) === Number(entry.value)
+                    && Number(value.percentile) === Number(entry.percentile)
+                    && value.ledgerSha256
+                        === videos[1].score_ledger.ledger_sha256
+                )),
+                `score card changed ${entry.coordinate_id}: ${
+                    JSON.stringify(rendered)
+                }`
+            );
+        }
+        assert.strictEqual(
+            await page.locator(
+                '#rtg-exppanel [data-coordinate-unavailable]'
+            ).count(),
+            0,
+            'a complete 21-coordinate ledger must not render a missing-value card'
+        );
         const selectedTextKeepValues = await page.locator(`[data-embedding-asset="${channelId}:vid00000002"][data-embedding-id="shorts_raw:shorts.stored.text.keep:text_keep"]`).evaluateAll(nodes => nodes.map(node => ({
             estimate: node.getAttribute('data-embedding-est'),
             percentile: node.getAttribute('data-embedding-percentile'),
@@ -1431,6 +1617,32 @@ window.fetch=function(url,options){
         ), 'the same Text.keep asset must retain an identical raw estimate, percentile, and source key everywhere');
         await page.locator(`[data-savedchannelvideo="${channelId}:vid00000002"]`).click();
         assert.strictEqual(await page.evaluate(pathname => window.__fetchCounts[pathname], videoPath), 1, 'opening the same saved Short again must use the in-memory stored-artifact cache');
+
+        for (const wrapperCase of [videos[2], videos[3]]) {
+            await page.locator(
+                `[data-savedchannelvideo="${channelId}:${wrapperCase.id}"]`
+            ).click();
+            const coordinate = page.locator(
+                `#rtg-exppanel [data-embedding-asset="${channelId}:${wrapperCase.id}"]`
+                + '[data-coordinate-id="shorts.stored.visual.keep"]'
+            ).first();
+            await coordinate.waitFor();
+            assert.strictEqual(
+                Number(await coordinate.getAttribute('data-coordinate-value')),
+                wrapperCase.features['visual.keep'][0],
+                'a missing or stale score_ledger_validation wrapper must not '
+                    + 'replace a self-validated ledger coordinate with a dash'
+            );
+            assert.strictEqual(
+                await page.evaluate(
+                    pathname => window.__fetchCounts[pathname],
+                    `/api/raw/saved-channel/${channelId}/video/${wrapperCase.id}`
+                ),
+                1,
+                'wrapper diagnostic cases must open their persisted detail '
+                    + 'once without re-embedding'
+            );
+        }
 
         await page.locator(`[data-savedchannelresume="${channelId}"]`).click();
         const resumePath = `/api/raw/saved-channel/${channelId}/resume`;

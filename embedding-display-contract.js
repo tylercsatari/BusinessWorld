@@ -5,15 +5,34 @@ const {
     ledgerFeatureCell,
     scoreRecordBindingSha256,
     sha256Canonical,
+    validateScoreLedger,
 } = require('./buildings/jarvis/shorts-score-ledger');
 const longScoreLedger = require(
     './buildings/jarvis/long-score-ledger'
 );
-const SAVED_HOOK_INDEX_VERSION = 9;
+const SAVED_HOOK_INDEX_VERSION = 10;
+const HISTORICAL_SAVED_HOOK_DISPLAY_SCHEMA =
+    'saved-hook-historical-display-v1';
+const HISTORICAL_SAVED_HOOK_DISPLAY_VERSION = 1;
 const SHORTS_DISPLAY_PREFERENCE = Object.freeze(['together', 'text', 'visual']);
 const LONGQUANT_DISPLAY_PREFERENCE = Object.freeze(['visual', 'together', 'text']);
 const SAVED_HOOK_METRICS = Object.freeze(['keep', 'ret5', 'views', 'realviews', 'gt10M', 'outlier']);
 const LONGQUANT_SAVED_METRICS = longScoreLedger.OUTPUT_METRICS;
+
+function exactSha256(value) {
+    return (
+        typeof value === 'string'
+        && /^[a-f0-9]{64}$/.test(value)
+    );
+}
+
+function exactObjectKeys(value, keys) {
+    return !!value
+        && typeof value === 'object'
+        && !Array.isArray(value)
+        && JSON.stringify(Object.keys(value).sort())
+            === JSON.stringify(keys.slice().sort());
+}
 
 function savedHookScoreRecordSha256(record) {
     return scoreRecordBindingSha256(record);
@@ -197,6 +216,220 @@ function validateCompactSavedHookSource(compact, sourceRecord) {
             compactSavedHookBindingPayload(compact)
         )
     );
+}
+
+function historicalSavedHookDisplayBindingPayload(display) {
+    return {
+        schema: HISTORICAL_SAVED_HOOK_DISPLAY_SCHEMA,
+        version: HISTORICAL_SAVED_HOOK_DISPLAY_VERSION,
+        record_id: display && display.record_id || null,
+        score_domain: display && display.score_domain || null,
+        score_ledger_sha256:
+            display && display.score_ledger_sha256 || null,
+        score_revision_fingerprint:
+            display && display.score_revision_fingerprint || null,
+        m_identity: display && display.m_identity || null,
+        selection_policy: display && display.selection_policy || null,
+    };
+}
+
+function historicalIdentityValid(
+    identity,
+    target,
+    domain,
+    ledgerSha256
+) {
+    if (identity == null) return true;
+    if (
+        !identity
+        || typeof identity !== 'object'
+        || Array.isArray(identity)
+        || Object.prototype.hasOwnProperty.call(identity, 'est')
+        || Object.prototype.hasOwnProperty.call(identity, 'pctile')
+        || !['visual', 'text', 'together'].includes(identity.channel)
+        || identity.target !== target
+        || !Number.isFinite(Number(identity.value))
+        || typeof identity.valueUnit !== 'string'
+        || !identity.valueUnit
+        || (
+            identity.percentile100 != null
+            && (
+                !Number.isFinite(Number(identity.percentile100))
+                || Number(identity.percentile100) < 0
+                || Number(identity.percentile100) > 100
+            )
+        )
+        || identity.percentileUnit
+            !== (
+                domain === 'longquant'
+                    ? longScoreLedger.PERCENTILE_STORAGE_UNIT
+                    : coordinateGovernance.percentileStorageUnit
+            )
+        || typeof identity.modality !== 'string'
+        || typeof identity.input !== 'string'
+        || !identity.input
+        || identity.ledgerSha256 !== ledgerSha256
+    ) {
+        return false;
+    }
+    const expectedCoordinate = domain === 'longquant'
+        ? `long.output.${identity.channel}.${target}`
+        : `shorts.stored.${identity.channel}.${target}`;
+    return identity.coordinateId === expectedCoordinate;
+}
+
+function validateHistoricalSavedHookDisplay(display) {
+    const keys = [
+        'schema',
+        'version',
+        'record_id',
+        'score_domain',
+        'score_ledger_sha256',
+        'score_revision_fingerprint',
+        'm_identity',
+        'selection_policy',
+        'display_sha256',
+    ];
+    if (
+        !exactObjectKeys(display, keys)
+        || display.schema !== HISTORICAL_SAVED_HOOK_DISPLAY_SCHEMA
+        || display.version !== HISTORICAL_SAVED_HOOK_DISPLAY_VERSION
+        || !String(display.record_id || '')
+        || !['shorts', 'longquant'].includes(display.score_domain)
+        || !exactSha256(display.score_ledger_sha256)
+        || (
+            display.score_revision_fingerprint != null
+            && !exactSha256(display.score_revision_fingerprint)
+        )
+        || !exactSha256(display.display_sha256)
+    ) {
+        return false;
+    }
+    const targets = display.score_domain === 'longquant'
+        ? LONGQUANT_SAVED_METRICS
+        : SAVED_HOOK_METRICS;
+    if (
+        !exactObjectKeys(display.m_identity, targets)
+        || !Object.entries(display.m_identity).every(
+            ([target, identity]) => historicalIdentityValid(
+                identity,
+                target,
+                display.score_domain,
+                display.score_ledger_sha256
+            )
+        )
+        || !Object.values(display.m_identity).some(Boolean)
+    ) {
+        return false;
+    }
+    const policy = display.selection_policy;
+    const expectedPolicyId = display.score_domain === 'longquant'
+        ? 'policy.longquant.display-preference.v1'
+        : 'policy.shorts.display-preference.v1';
+    if (
+        !exactObjectKeys(policy, [
+            'id',
+            'preference',
+            'role',
+            'source_ledger_sha256',
+            'meaning',
+        ])
+        || policy.id !== expectedPolicyId
+        || !Array.isArray(policy.preference)
+        || policy.preference.some(
+            channel => !['visual', 'text', 'together'].includes(channel)
+        )
+        || new Set(policy.preference).size !== policy.preference.length
+        || policy.role
+            !== 'historical_display_only_hash_bound_materialized_view'
+        || policy.source_ledger_sha256
+            !== display.score_ledger_sha256
+        || typeof policy.meaning !== 'string'
+        || !policy.meaning
+    ) {
+        return false;
+    }
+    return display.display_sha256 === sha256Canonical(
+        historicalSavedHookDisplayBindingPayload(display)
+    );
+}
+
+function historicalSavedHookDisplay(record, options = {}) {
+    if (!record || typeof record !== 'object' || !record.id) {
+        return null;
+    }
+    const scoreDomain = scoreDomainForRecord(
+        record,
+        options.scoreDomain
+    );
+    const ledger = scoreDomain === 'longquant'
+        ? record.long_score_ledger
+        : record.score_ledger;
+    const ledgerValidation = scoreDomain === 'longquant'
+        ? longScoreLedger.validateLongOutputContract(record)
+        : validateScoreLedger(ledger);
+    if (!ledgerValidation.valid || !exactSha256(
+        ledger && ledger.ledger_sha256
+    )) {
+        return null;
+    }
+    const targets = scoreDomain === 'longquant'
+        ? LONGQUANT_SAVED_METRICS
+        : SAVED_HOOK_METRICS;
+    const selected = {};
+    for (const target of targets) {
+        selected[target] = scoreDomain === 'longquant'
+            ? longQuantEmbeddingSelection(record, target)
+            : embeddingSteerSelection(
+                record,
+                target,
+                'shorts_raw'
+            );
+    }
+    if (!Object.values(selected).some(Boolean)) return null;
+    const manifest = record.input_manifest
+        && typeof record.input_manifest === 'object'
+        ? record.input_manifest
+        : {};
+    const revisionFingerprint = exactSha256(
+        manifest.revision_fingerprint
+    )
+        ? manifest.revision_fingerprint
+        : null;
+    const display = {
+        schema: HISTORICAL_SAVED_HOOK_DISPLAY_SCHEMA,
+        version: HISTORICAL_SAVED_HOOK_DISPLAY_VERSION,
+        record_id: String(record.id),
+        score_domain: scoreDomain,
+        score_ledger_sha256: ledger.ledger_sha256,
+        score_revision_fingerprint: revisionFingerprint,
+        m_identity: selected,
+        selection_policy: {
+            id: scoreDomain === 'longquant'
+                ? 'policy.longquant.display-preference.v1'
+                : 'policy.shorts.display-preference.v1',
+            preference: embeddingDisplayPreference(
+                record,
+                scoreDomain === 'longquant'
+                    ? 'longquant'
+                    : 'shorts_raw'
+            ),
+            role:
+                'historical_display_only_hash_bound_materialized_view',
+            source_ledger_sha256: ledger.ledger_sha256,
+            meaning:
+                'Display and navigation only. Values are copied exactly '
+                + 'from the persisted score ledger and remain excluded '
+                + 'from fitting, validation, and predictor eligibility '
+                + 'because the historical input bytes are not jointly bound.',
+        },
+    };
+    display.display_sha256 = sha256Canonical(
+        historicalSavedHookDisplayBindingPayload(display)
+    );
+    return validateHistoricalSavedHookDisplay(display)
+        ? display
+        : null;
 }
 
 function scoreDomainForRecord(record, requestedDomain) {
@@ -520,6 +753,8 @@ function compactSavedHookRecord(record, options = {}) {
 
 module.exports = {
     SAVED_HOOK_INDEX_VERSION,
+    HISTORICAL_SAVED_HOOK_DISPLAY_SCHEMA,
+    HISTORICAL_SAVED_HOOK_DISPLAY_VERSION,
     SHORTS_DISPLAY_PREFERENCE,
     LONGQUANT_DISPLAY_PREFERENCE,
     LONGQUANT_SAVED_METRICS,
@@ -531,6 +766,9 @@ module.exports = {
     compactSavedHookRecord,
     scoreDomainForRecord,
     savedHookScoreRecordSha256,
+    historicalSavedHookDisplay,
+    historicalSavedHookDisplayBindingPayload,
     validateCompactSavedHookRecord,
     validateCompactSavedHookSource,
+    validateHistoricalSavedHookDisplay,
 };

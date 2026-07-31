@@ -56,6 +56,7 @@ const LEGACY_ROW_KEYS = Object.freeze([
     'canonical',
     'predictor_eligible',
     'evidence_warning',
+    'historical_display',
 ]);
 const FOLDER_KEYS = Object.freeze(['id', 'name']);
 
@@ -80,6 +81,7 @@ function legacyRow(row) {
         frame_imgs: Array.isArray(source.frame_imgs)
             ? clone(source.frame_imgs)
             : [],
+        historical_display: null,
     };
     output.score_domain = output.score_domain
         || (
@@ -95,6 +97,30 @@ function legacyRow(row) {
         'Historical display cache only. The exact JPEG, text, input '
         + 'manifest, and score ledger were not jointly bound.'
     );
+    const currentLedger = output.score_domain === 'longquant'
+        ? source.long_score_ledger
+        : source.score_ledger;
+    const currentLedgerSha256 = currentLedger
+        && currentLedger.ledger_sha256;
+    const generatedDisplay =
+        displayContract.historicalSavedHookDisplay(
+            source,
+            { scoreDomain: output.score_domain }
+        );
+    const preservedDisplay = source.historical_display;
+    if (generatedDisplay) {
+        output.historical_display = generatedDisplay;
+    } else if (
+        !currentLedgerSha256
+        &&
+        displayContract.validateHistoricalSavedHookDisplay(
+            preservedDisplay
+        )
+        && preservedDisplay.record_id === String(output.id)
+        && preservedDisplay.score_domain === output.score_domain
+    ) {
+        output.historical_display = clone(preservedDisplay);
+    }
     return output;
 }
 
@@ -273,6 +299,19 @@ function validateIndex(index) {
             || row.derived_identity !== undefined
             || row.score_ledger_sha256 !== undefined
             || row.output_contract_sha256 !== undefined
+            || (
+                row.historical_display !== null
+                && (
+                    !displayContract
+                        .validateHistoricalSavedHookDisplay(
+                            row.historical_display
+                        )
+                    || row.historical_display.record_id
+                        !== String(row.id)
+                    || row.historical_display.score_domain
+                        !== row.score_domain
+                )
+            )
         ))
     ) {
         errors.push(

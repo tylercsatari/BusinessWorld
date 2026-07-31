@@ -67,6 +67,14 @@ function legacyRecord() {
     };
 }
 
+function historicalLedgerRecord() {
+    const record = legacyRecord();
+    record.score_domain = 'shorts';
+    record.score_ledger =
+        shortsScoreLedger.materializeHistoricalScoreLedger(record);
+    return record;
+}
+
 function canonicalRecord() {
     const record = legacyRecord();
     const mediaBytes = jpegFixture();
@@ -220,7 +228,7 @@ function memoryStorage(seed) {
 }
 
 async function main() {
-    const source = legacyRecord();
+    const source = historicalLedgerRecord();
     const priorIndex = {
         version: 7,
         hooks: [{
@@ -283,6 +291,51 @@ async function main() {
     );
     assert.equal(index.hooks.length, 0);
     assert.equal(index.legacy_hooks.length, 1);
+    const historicalDisplay =
+        index.legacy_hooks[0].historical_display;
+    assert.equal(
+        displayContract.validateHistoricalSavedHookDisplay(
+            historicalDisplay
+        ),
+        true,
+        'legacy index did not retain a hash-bound ledger display'
+    );
+    assert.equal(
+        historicalDisplay.m_identity.keep.value,
+        72
+    );
+    assert.equal(
+        historicalDisplay.m_identity.keep.coordinateId,
+        'shorts.stored.together.keep'
+    );
+    assert.equal(
+        historicalDisplay.m_identity.keep.ledgerSha256,
+        source.score_ledger.ledger_sha256
+    );
+    const staleSource = historicalLedgerRecord();
+    const staleDisplay =
+        displayContract.historicalSavedHookDisplay(staleSource, {
+            scoreDomain: 'shorts',
+        });
+    staleSource.steer.together_keep.est = 91;
+    delete staleSource.score_ledger;
+    staleSource.score_ledger =
+        shortsScoreLedger.materializeHistoricalScoreLedger(
+            staleSource
+        );
+    staleSource.historical_display = staleDisplay;
+    const refreshedLegacy = runtimeIndex.legacyRow(staleSource);
+    assert.notEqual(
+        refreshedLegacy.historical_display.display_sha256,
+        staleDisplay.display_sha256,
+        'a self-consistent historical cache from an older ledger was preserved'
+    );
+    assert.equal(
+        refreshedLegacy.historical_display.score_ledger_sha256,
+        staleSource.score_ledger.ledger_sha256,
+        'legacy display was not regenerated from the current source ledger'
+    );
+    assert.equal(index.legacy_hooks[0].predictor_eligible, false);
     const scoreInjectedIndex = JSON.parse(JSON.stringify(index));
     scoreInjectedIndex.legacy_hooks[0].predictedKeep = 99;
     scoreInjectedIndex.index_sha256 =
@@ -293,6 +346,19 @@ async function main() {
         runtimeIndex.validateIndex(scoreInjectedIndex).valid,
         false,
         'runtime index accepted an ad hoc duplicate score field'
+    );
+    const tamperedDisplayIndex = JSON.parse(JSON.stringify(index));
+    tamperedDisplayIndex.legacy_hooks[0]
+        .historical_display.m_identity.keep.value = 99;
+    tamperedDisplayIndex.index_sha256 =
+        shortsScoreLedger.sha256Canonical(
+            runtimeIndex.bindingPayload(tamperedDisplayIndex)
+        );
+    assert.equal(
+        runtimeIndex.validateIndex(tamperedDisplayIndex).valid,
+        false,
+        'runtime index accepted a historical value that no longer '
+            + 'matched its display hash'
     );
 
     const historicalBefore = Buffer.from(
@@ -342,6 +408,102 @@ async function main() {
         1
     );
 
+    const prettySourceBytes = Buffer.from(
+        JSON.stringify(exact.record, null, 2)
+    );
+    const preservedStorage = memoryStorage({
+        'raw/saved-hooks/index.json':
+            runtimeIndex.canonicalIndexBytes(exactIndex),
+        'raw/saved-hooks/legacy-1.json':
+            prettySourceBytes,
+        [exact.record.montage_ref.key]: exact.mediaBytes,
+    });
+    const preservedResult = await migrateSavedHookRuntimeIndex({
+        storage: preservedStorage,
+        write: true,
+    });
+    assert.equal(
+        preservedResult.canonical.canonical_source_preserved_rows,
+        1,
+        'non-canonical JSON bytes were not reported as preserved'
+    );
+    assert.equal(
+        preservedStorage.objects.get(
+            'raw/saved-hooks/legacy-1.json'
+        ).equals(prettySourceBytes),
+        true,
+        'runtime-index migration rewrote a source score record'
+    );
+    assert.equal(
+        preservedStorage.writes.some(
+            write => write.key === 'raw/saved-hooks/legacy-1.json'
+        ),
+        false,
+        'runtime-index migration issued a mutable source-record write'
+    );
+
+    const outageStorage = memoryStorage({
+        'raw/saved-hooks/index.json':
+            runtimeIndex.canonicalIndexBytes(exactIndex),
+        'raw/saved-hooks/legacy-1.json':
+            canonicalJsonBytes(exact.record),
+        [exact.record.montage_ref.key]: exact.mediaBytes,
+    });
+    const outageGet = outageStorage.get.bind(outageStorage);
+    outageStorage.get = async key => {
+        if (key === exact.record.montage_ref.key) {
+            throw new Error('simulated media storage outage');
+        }
+        return outageGet(key);
+    };
+    await assert.rejects(
+        migrateSavedHookRuntimeIndex({
+            storage: outageStorage,
+            write: true,
+        }),
+        /simulated media storage outage/,
+        'a transient storage failure was silently converted to legacy evidence'
+    );
+    assert.equal(
+        outageStorage.writes.length,
+        0,
+        'a failed source audit wrote migration output'
+    );
+
+    const racingStorage = memoryStorage({
+        'raw/saved-hooks/index.json':
+            runtimeIndex.canonicalIndexBytes(exactIndex),
+        'raw/saved-hooks/legacy-1.json':
+            prettySourceBytes,
+        [exact.record.montage_ref.key]: exact.mediaBytes,
+    });
+    const racingGet = racingStorage.get.bind(racingStorage);
+    let indexReads = 0;
+    racingStorage.get = async key => {
+        if (key === 'raw/saved-hooks/index.json') {
+            indexReads += 1;
+            if (indexReads > 1) {
+                return Buffer.from('{"changed":true}');
+            }
+        }
+        return racingGet(key);
+    };
+    await assert.rejects(
+        migrateSavedHookRuntimeIndex({
+            storage: racingStorage,
+            write: true,
+        }),
+        /changed during offline migration/,
+        'a concurrent index update was not detected'
+    );
+    assert.equal(
+        racingStorage.writes.some(
+            write => write.key === 'raw/saved-hooks/legacy-1.json'
+        ),
+        false,
+        'a failed index compare-and-swap partially rewrote source evidence'
+    );
+
     exactStorage.objects.delete(exact.record.montage_ref.key);
     const missingMedia = await migrateSavedHookRuntimeIndex({
         storage: exactStorage,
@@ -373,6 +535,8 @@ async function main() {
         ok: true,
         canonicalRows: exactResult.canonical.canonical_rows,
         historicalRows: index.legacy_hooks.length,
+        historicalDisplay:
+            historicalDisplay.display_sha256,
         ledgerSha256:
             exact.record.score_ledger.ledger_sha256,
         scoreRecordSha256:

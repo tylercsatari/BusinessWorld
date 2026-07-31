@@ -531,15 +531,8 @@ function clientScoreCacheApi(options = {}) {
         'function lqxImg(',
         imageStart
     );
-    const scoreKeyStart = clientSource.indexOf(
-        'function lqxScoreKey('
-    );
-    const scoreKeyEnd = clientSource.indexOf(
-        'function lqxSavedDetail',
-        scoreKeyStart
-    );
     const cacheStart = clientSource.indexOf(
-        'const LQSCORETRIES'
+        'function lqxScoreFor('
     );
     const cacheEnd = clientSource.indexOf(
         'function lqxEmbHeat',
@@ -555,8 +548,6 @@ function clientScoreCacheApi(options = {}) {
     if (
         imageStart < 0
         || imageEnd <= imageStart
-        || scoreKeyStart < 0
-        || scoreKeyEnd <= scoreKeyStart
         || cacheStart < 0
         || cacheEnd <= cacheStart
         || governanceStart < 0
@@ -600,7 +591,6 @@ function clientScoreCacheApi(options = {}) {
     vm.createContext(context);
     vm.runInContext(
         clientSource.slice(imageStart, imageEnd)
-            + clientSource.slice(scoreKeyStart, scoreKeyEnd)
             + clientSource.slice(cacheStart, cacheEnd)
             + clientSource.slice(
                 governanceStart,
@@ -608,17 +598,9 @@ function clientScoreCacheApi(options = {}) {
             )
             + `
 this.clientScoreCacheApi = {
-    LQSCORES,
-    LQSCORECACHEMETA,
     LQIMGS,
     lqxImgData,
-    lqxImageRevisionFromData,
-    lqxCanonicalCacheTextInputs,
-    lqxScoreCacheContractState,
-    lqxScoreCacheRead,
-    lqxScoreCacheRequest,
     lqxScoreFor,
-    lqxScoreMatchesCacheRequest,
 };`,
         context
     );
@@ -752,36 +734,7 @@ async function main() {
             && pinnedScorerMatch[1] === scorerSourceSha256,
         'browser cache scorer-source pin drifted from longquant_score.py'
     );
-    const cacheApi = clientScoreCacheApi();
-    const fixtureImageData = `data:image/jpeg;base64,${
-        fixtureImage.toString('base64')
-    }`;
-    const fixtureImageRevision =
-        cacheApi.lqxImageRevisionFromData(fixtureImageData);
-    assert(
-        JSON.stringify(JSON.parse(JSON.stringify(fixtureImageRevision)))
-            === JSON.stringify({
-            sha256: crypto
-                .createHash('sha256')
-                .update(fixtureImage)
-                .digest('hex'),
-            byte_length: fixtureImage.length,
-        }),
-        'browser cache did not hash exact image bytes'
-    );
-    const binaryImage = Buffer.from([
-        0, 255, 128, 1, 254, 127, 64, 192,
-    ]);
-    const binaryRevision = cacheApi.lqxImageRevisionFromData(
-        `data:image/jpeg;base64,${binaryImage.toString('base64')}`
-    );
-    assert(
-        binaryRevision.sha256
-            === crypto.createHash('sha256')
-                .update(binaryImage)
-                .digest('hex'),
-        'browser cache hashed a binary string instead of exact image bytes'
-    );
+    const readOnlyApi = clientScoreCacheApi();
     const pendingImages = {};
     const imageRaceApi = clientScoreCacheApi({
         urlToDataUrl: url => new Promise(resolve => {
@@ -817,297 +770,27 @@ async function main() {
         ) === 'data:image/jpeg;base64,Yg==',
         'image cache did not bind bytes to their source URL'
     );
-    const exactRequest = cacheApi.lqxScoreCacheRequest(
-        fixtureImageRevision,
-        'Fixture title',
-        'Fixture idea'
-    );
-    const whitespaceEquivalentRequest =
-        cacheApi.lqxScoreCacheRequest(
-            fixtureImageRevision,
-            '  Fixture   title  ',
-            'Fixture\nidea'
-        );
     assert(
-        exactRequest.identity
-            === whitespaceEquivalentRequest.identity,
-        'server-equivalent text normalization changed cache identity'
-    );
-    const differentImageData = `data:image/jpeg;base64,${
-        Buffer.from('different-image-bytes').toString('base64')
-    }`;
-    const differentImageRequest =
-        cacheApi.lqxScoreCacheRequest(
-            cacheApi.lqxImageRevisionFromData(
-                differentImageData
-            ),
-            'Fixture title',
-            'Fixture idea'
-        );
-    const differentTitleRequest =
-        cacheApi.lqxScoreCacheRequest(
-            fixtureImageRevision,
-            'Different title',
-            'Fixture idea'
-        );
-    const differentIdeaRequest =
-        cacheApi.lqxScoreCacheRequest(
-            fixtureImageRevision,
-            'Fixture title',
-            'Different idea'
-        );
-    assert(
-        exactRequest.identity !== differentImageRequest.identity,
-        'different image bytes reused one request identity'
-    );
-    assert(
-        exactRequest.identity !== differentTitleRequest.identity,
-        'different normalized titles reused one request identity'
-    );
-    assert(
-        exactRequest.identity !== differentIdeaRequest.identity,
-        'different normalized ideas reused one request identity'
-    );
-    const changedGovernance = JSON.parse(
-        JSON.stringify(quantCoordinateGovernance)
-    );
-    changedGovernance.ledgerVersion += 1;
-    const changedGovernanceSha256 = crypto
-        .createHash('sha256')
-        .update(JSON.stringify(changedGovernance))
-        .digest('hex');
-    const changedContractApi = clientScoreCacheApi({
-        governance: changedGovernance,
-        governanceSha256: changedGovernanceSha256,
-    });
-    const changedContractRequest =
-        changedContractApi.lqxScoreCacheRequest(
-            changedContractApi.lqxImageRevisionFromData(
-                fixtureImageData
-            ),
-            'Fixture title',
-            'Fixture idea'
-        );
-    assert(
-        exactRequest.identity !== changedContractRequest.identity,
-        'different scorer/ledger contracts reused one request identity'
-    );
-    const matchingValidation =
-        cacheApi.lqxScoreMatchesCacheRequest(
+        readOnlyApi.lqxScoreFor(
+            'persisted-card',
+            'longform/guesses/demo/montages/fixture.jpg',
+            'Reconstructed title',
+            'Reconstructed idea',
             canonicalScore,
-            exactRequest
-        );
-    assert(
-        matchingValidation.valid,
-        `matching score failed cache validation: ${
-            matchingValidation.errors.join(', ')
-        }`
-    );
-    const cachedScore = cacheApi.lqxScoreFor(
-        'same-ui-slot',
-        'longform/guesses/demo/montages/fixture.jpg',
-        'Fixture title',
-        'Fixture idea',
-        canonicalScore,
-        true,
-        fixtureImageData
+            true
+        ) === canonicalScore,
+        'a passive card read did not return its persisted canonical score'
     );
     assert(
-        cachedScore === canonicalScore,
-        'exact score was not stored under its request identity'
-    );
-    assert(
-        cacheApi.LQSCORECACHEMETA['same-ui-slot']
-            .request_identity === exactRequest.identity,
-        'cache metadata did not persist the exact request identity'
-    );
-    assert(
-        cacheApi.lqxScoreFor(
-            'same-ui-slot',
-            'longform/guesses/demo/montages/fixture.jpg',
-            'Fixture title',
-            'Fixture idea',
-            canonicalScore,
-            false
-        ) === canonicalScore
-            && cacheApi.LQSCORECACHEMETA['same-ui-slot']
-                .request_identity === exactRequest.identity,
-        'record rendering erased or consumed the interactive cache'
-    );
-    const mismatchedTitleRead = cacheApi.lqxScoreFor(
-        'same-ui-slot',
-        'longform/guesses/demo/montages/fixture.jpg',
-        'Different title',
-        'Fixture idea',
-        null,
-        false,
-        fixtureImageData
-    );
-    assert(
-        mismatchedTitleRead === null,
-        'same UI slot reused a score for a different title'
-    );
-    assert(
-        !cacheApi.LQSCORES['same-ui-slot']
-            && !cacheApi.LQSCORECACHEMETA['same-ui-slot'],
-        'mismatched cache entry did not fail closed'
-    );
-    cacheApi.lqxScoreFor(
-        'same-ui-slot',
-        'longform/guesses/demo/montages/fixture.jpg',
-        'Fixture title',
-        'Fixture idea',
-        canonicalScore,
-        true,
-        fixtureImageData
-    );
-    assert(
-        cacheApi.lqxScoreFor(
-            'same-ui-slot',
-            'longform/guesses/demo/montages/fixture.jpg',
-            'Fixture title',
-            'Fixture idea',
+        readOnlyApi.lqxScoreFor(
+            'missing-card',
+            'longform/guesses/demo/montages/missing.jpg',
+            'Any title',
+            'Any idea',
             null,
-            false,
-            differentImageData
-        ) === null
-            && !cacheApi.LQSCORES['same-ui-slot'],
-        'same UI slot reused a score for different image bytes'
-    );
-    cacheApi.lqxScoreFor(
-        'same-ui-slot',
-        'longform/guesses/demo/montages/fixture.jpg',
-        'Fixture title',
-        'Fixture idea',
-        canonicalScore,
-        true,
-        fixtureImageData
-    );
-    assert(
-        cacheApi.lqxScoreFor(
-            'same-ui-slot',
-            'longform/guesses/demo/montages/fixture.jpg',
-            'Fixture title',
-            'Different idea',
-            null,
-            false,
-            fixtureImageData
-        ) === null
-            && !cacheApi.LQSCORES['same-ui-slot'],
-        'same UI slot reused a score for a different idea'
-    );
-    const wrongContractScore = JSON.parse(
-        JSON.stringify(canonicalScore)
-    );
-    wrongContractScore.input_manifest.scorer_sha256 =
-        'e'.repeat(64);
-    const wrongContractValidation =
-        cacheApi.lqxScoreMatchesCacheRequest(
-            wrongContractScore,
-            exactRequest
-        );
-    assert(
-        !wrongContractValidation.valid
-            && wrongContractValidation.errors.includes(
-                'scorer/ledger contract differs'
-            ),
-        'score from a different scorer contract was accepted'
-    );
-    const mismatchResponseApi = clientScoreCacheApi({
-        job: async () => canonicalScore,
-    });
-    mismatchResponseApi.lqxScoreFor(
-        'mismatched-response',
-        'longform/guesses/demo/montages/fixture.jpg',
-        'Different title',
-        'Fixture idea',
-        null,
-        true,
-        fixtureImageData
-    );
-    await new Promise(resolve => setImmediate(resolve));
-    assert(
-        mismatchResponseApi.LQSCORES['mismatched-response']
-            .error
-            .includes('normalized title differs'),
-        'server response with different inputs entered the cache'
-    );
-    const pendingJobs = [];
-    const raceApi = clientScoreCacheApi({
-        job: () => new Promise(resolve => {
-            pendingJobs.push(resolve);
-        }),
-    });
-    raceApi.lqxScoreFor(
-        'race-slot',
-        'longform/guesses/demo/montages/fixture.jpg',
-        'Fixture title',
-        'Fixture idea',
-        null,
-        true,
-        fixtureImageData
-    );
-    raceApi.lqxScoreFor(
-        'race-slot',
-        'longform/guesses/demo/montages/fixture.jpg',
-        'Different title',
-        'Fixture idea',
-        null,
-        true,
-        fixtureImageData
-    );
-    assert(
-        pendingJobs.length === 2,
-        'new request identity did not submit independently'
-    );
-    pendingJobs[0](canonicalScore);
-    await new Promise(resolve => setImmediate(resolve));
-    assert(
-        raceApi.LQSCORES['race-slot'].loading === 1
-            && raceApi.LQSCORECACHEMETA['race-slot']
-                .request_identity
-                === differentTitleRequest.identity,
-        'stale async response overwrote a newer request identity'
-    );
-    pendingJobs[1](canonicalScore);
-    await new Promise(resolve => setImmediate(resolve));
-    assert(
-        raceApi.LQSCORES['race-slot'].error
-            .includes('normalized title differs'),
-        'new request did not independently validate its response'
-    );
-    let sameRequestResolver;
-    const sameRequestRaceApi = clientScoreCacheApi({
-        job: () => new Promise(resolve => {
-            sameRequestResolver = resolve;
-        }),
-    });
-    sameRequestRaceApi.lqxScoreFor(
-        'same-request-race',
-        'longform/guesses/demo/montages/fixture.jpg',
-        'Fixture title',
-        'Fixture idea',
-        null,
-        true,
-        fixtureImageData
-    );
-    sameRequestRaceApi.lqxScoreFor(
-        'same-request-race',
-        'longform/guesses/demo/montages/fixture.jpg',
-        'Fixture title',
-        'Fixture idea',
-        canonicalScore,
-        true,
-        fixtureImageData
-    );
-    sameRequestResolver(
-        JSON.parse(JSON.stringify(canonicalScore))
-    );
-    await new Promise(resolve => setImmediate(resolve));
-    assert(
-        sameRequestRaceApi.LQSCORES['same-request-race']
-            === canonicalScore,
-        'older same-input response overwrote newer bound score evidence'
+            true
+        ) === null,
+        'a passive card read silently generated a missing score'
     );
     const clientDecisionSource = [
         clientApi.lqxCanonicalAttemptDecision,
